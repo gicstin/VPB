@@ -318,6 +318,41 @@
     <Compile Include="src\Properties\AssemblyInfo.cs" />
     <Compile Include="src\VamHookPlugin_Interface.cs" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="$(IntermediateOutputPath)PluginVersion.g.cs" />
+  </ItemGroup>
+
+  <Target Name="GeneratePluginVersion" BeforeTargets="BeforeCompile">
+    <PropertyGroup>
+      <PluginVersionFile>$(MSBuildProjectDirectory)\plugin_version.txt</PluginVersionFile>
+      <PluginVersionGeneratedFile>$(IntermediateOutputPath)PluginVersion.g.cs</PluginVersionGeneratedFile>
+    </PropertyGroup>
+
+    <ReadLinesFromFile File="$(PluginVersionFile)">
+      <Output TaskParameter="Lines" ItemName="_PluginVersionLines" />
+    </ReadLinesFromFile>
+
+    <PropertyGroup>
+      <PluginVersion>$([System.Text.RegularExpressions.Regex]::Replace('%(_PluginVersionLines.Identity)', '\\s+', ''))</PluginVersion>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+
+    <ItemGroup>
+      <_PluginVersionSourceLines Include="namespace var_browser {" />
+      <_PluginVersionSourceLines Include="    internal static class PluginVersionInfo {" />
+      <_PluginVersionSourceLines Include="        public const string Version = &quot;$(PluginVersion)&quot;%3B" />
+      <_PluginVersionSourceLines Include="    }" />
+      <_PluginVersionSourceLines Include="}" />
+    </ItemGroup>
+
+    <WriteLinesToFile
+      File="$(PluginVersionGeneratedFile)"
+      Overwrite="true"
+      Lines="@(_PluginVersionSourceLines)" />
+  </Target>
+
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>copy $(TargetPath) "$(VaMPath)\BepInEx\plugins"</PostBuildEvent>

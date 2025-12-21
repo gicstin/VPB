@@ -795,11 +795,11 @@ namespace var_browser
 
                         const float headerInsetY = 4f;
                         const float headerHeight = 24f;
-                        var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 90f, headerHeight);
+                        var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 150f, headerHeight);
                         GUI.color = new Color(1f, 1f, 1f, 1f);
                         GUI.contentColor = new Color(1f, 1f, 1f, 1f);
                         var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
-                        GUI.Label(tagRect, string.Format("VPB ({0:0.0}s)", startupSeconds), m_TitleTagStyle);
+                        GUI.Label(tagRect, string.Format("VPB {0} ({1:0.0}s)", PluginVersionInfo.Version, startupSeconds), m_TitleTagStyle);
 
                         var titleStyle = new GUIStyle(GUI.skin.label);
                         titleStyle.font = GUI.skin.window.font;
@@ -815,7 +815,7 @@ namespace var_browser
                         titleStyle.padding = new RectOffset(0, 0, 0, 0);
 
                         const float titleRightPadding = 6f;
-                        var titleText = "dragable area";
+                        var titleText = "drag area";
                         var maxTitleWidth = (m_Rect.xMax - titleRightPadding) - (tagRect.xMax + 4f);
                         if (maxTitleWidth > 10f)
                         {
