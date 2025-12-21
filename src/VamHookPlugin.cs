@@ -10,9 +10,9 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 namespace var_browser
 {
-    //插件描述特性 分别为 插件ID 插件名字 插件版本(必须为数字)
+    // Plugin metadata attribute: plugin ID, plugin name, plugin version (must be numeric)
     [BepInPlugin("vam_var_browser", "var_browser", "0.15")]
-    public partial class VamHookPlugin : BaseUnityPlugin //继承BaseUnityPlugin
+    public partial class VamHookPlugin : BaseUnityPlugin // Inherits BaseUnityPlugin
     {
         private KeyUtil UIKey;
         private KeyUtil CustomSceneKey;
@@ -59,6 +59,7 @@ namespace var_browser
 
         private void EnsureStyles()
         {
+            // Lazily initialize GUI styles once the Unity GUI skin is available.
             if (m_StylesInited)
                 return;
             if (GUI.skin == null)
@@ -209,6 +210,7 @@ namespace var_browser
             this.Config.SaveOnConfigSet = false;
             Debug.Log("var browser hook start");
             var harmony = new Harmony("var_browser_hook");
+            // Patch VaM/Harmony hook points.
             harmony.PatchAll();
             harmony.PatchAll(typeof(AtomHook));
             harmony.PatchAll(typeof(HubResourcePackageHook));
@@ -243,7 +245,7 @@ namespace var_browser
 
             this.Config.Save();
         }
-        //硬重启会进来
+        // Called on (hard) restart as well.
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             LogUtil.LogWarning("OnSceneLoaded " + scene.name + " " + mode.ToString());
@@ -288,19 +290,19 @@ namespace var_browser
                 m_HubBrowse.Hide();
             }
         }
-        static bool m_Show = true;//liu修改 改成静态外部消息方法调用
+        static bool m_Show = true; // Made static so it can be toggled via external message calls.
         void Update()
         {
             if (UIKey.TestKeyDown())
             {
                 m_Show = !m_Show;
             }
-            //快捷键
+            // Hotkeys
             if (m_Inited && m_FileManagerInited)
             {
                 if (CustomSceneKey.TestKeyDown())
                 {
-                    //自定义的不需要安装
+                    // Custom entries do not require installation.
                     m_FileBrowser.onlyInstalled = false;
                     ShowFileBrowser("Custom Scene", "json", "Saves/scene", true);
                 }
@@ -332,7 +334,7 @@ namespace var_browser
 
 
         bool AutoInstalled = false;
-        //进入游戏先处理一下autoinstall的包
+        // On entering the game, process AutoInstall packages once.
         void TryAutoInstall()
         {
             if (AutoInstalled) return;
@@ -463,7 +465,7 @@ namespace var_browser
             m_HubBrowse.InitUI();
             m_HubBrowse.HubEnabled = true;
             m_HubBrowse.WebBrowserEnabled = true;
-            //关闭按钮
+            // Close button
 
             var close = Tools.GetChild(newgo.transform, "CloseButton");
             if (close != null)
@@ -476,7 +478,7 @@ namespace var_browser
                     m_HubBrowse.Hide();
                 });
             }
-            //不显示包管理器
+            // Hide the built-in package manager button
             var openPackageButton = Tools.GetChild(newgo.transform, "OpenPackageManager");
             //var openPackageButton = newgo.transform.Find("LeftBar/OpenPackageManager").GetComponent<Button>();
             if (openPackageButton != null)
@@ -532,7 +534,7 @@ namespace var_browser
                 GUILayout.BeginHorizontal();
                 if (GUILayout.Button("1.Scene", m_StyleButton))
                 {
-                    //自定义的不需要安装
+                    // Custom entries do not require installation.
                     m_FileBrowser.onlyInstalled = false;
                     ShowFileBrowser("Custom Scene", "json", "Saves/scene", true);
                 }
@@ -696,7 +698,7 @@ namespace var_browser
         void ShowFileBrowser(string title, string fileFormat, string path, bool inGame = false, bool selectOnClick = true)
         {
             SuperController.singleton.ActivateWorldUI();
-            //隐藏hub browse
+            // Hide Hub Browse while the file browser is open.
             m_HubBrowse.Hide();
 
             m_FileBrowser.Hide();
@@ -709,7 +711,7 @@ namespace var_browser
 
             m_FileBrowser.Show(fileFormat, path, LoadFromSceneWorldDialog, true, inGame);
 
-            //刷新一下favorite和autoinstall的状态
+            // Refresh favorite and AutoInstall state.
             MessageKit.post(MessageDef.FileManagerRefresh);
         }
         void OnGUI()
@@ -717,6 +719,7 @@ namespace var_browser
             if (!m_Show)
                 return;
             var pre = GUI.matrix;
+            // Apply UI scaling by scaling the entire GUI matrix.
             GUI.matrix = Matrix4x4.TRS(new Vector3(0, 0, 0), Quaternion.identity, new Vector3(m_UIScale, m_UIScale, 1));
 
             if (m_Inited)
@@ -727,7 +730,7 @@ namespace var_browser
                 //}
                 //else
                 bool show = true;
-                //打开预览界面的时候不显示这个界面
+                // Hide this window while the preview/file browser UI is open.
                 if (m_FileBrowser != null && m_FileBrowser.window.activeSelf)
                 {
                     show = false;
@@ -861,7 +864,7 @@ namespace var_browser
             m_Rect.x = Mathf.Clamp(m_Rect.x, minX, maxX);
             m_Rect.y = Mathf.Clamp(m_Rect.y, minY, maxY);
         }
-        //点击预览界面item之后的回调
+        // Callback invoked after clicking an item in the preview/file browser UI.
         protected void LoadFromSceneWorldDialog(string saveName)
         {
             LogUtil.LogWarning("LoadFromSceneWorldDialog " + saveName);
@@ -875,7 +878,7 @@ namespace var_browser
             MethodInfo loadInternalMethod = typeof(SuperController).GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             loadInternalMethod.Invoke(SuperController.singleton, new object[3] { saveName, false, false });
 
-            //加载场景的时候把界面隐藏掉
+            // Hide UI while loading a scene.
             if (m_FileBrowser != null)
             {
                 m_FileBrowser.Hide();
