@@ -779,6 +779,7 @@ namespace var_browser
                         m_TitleTagStyle.fontStyle = FontStyle.Bold;
                         m_TitleTagStyle.font = GUI.skin.window.font;
                         m_TitleTagStyle.fontSize = GUI.skin.window.fontSize;
+                        m_TitleTagStyle.wordWrap = false;
                         m_TitleTagStyle.padding = new RectOffset(0, 0, 0, 0);
                     }
 
@@ -791,10 +792,11 @@ namespace var_browser
 
                         const float headerInsetY = 4f;
                         const float headerHeight = 24f;
-                        var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 40f, headerHeight);
+                        var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 90f, headerHeight);
                         GUI.color = new Color(1f, 1f, 1f, 1f);
                         GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                        GUI.Label(tagRect, "VPB", m_TitleTagStyle);
+                        var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
+                        GUI.Label(tagRect, string.Format("VPB ({0:0.0}s)", startupSeconds), m_TitleTagStyle);
 
                         var titleStyle = new GUIStyle(GUI.skin.label);
                         titleStyle.font = GUI.skin.window.font;
