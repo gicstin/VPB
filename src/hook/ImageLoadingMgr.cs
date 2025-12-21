@@ -269,6 +269,8 @@ namespace var_browser
             //这里记录原始的贴图大小
             jSONClass["width"].AsInt = qi.tex.width;
             jSONClass["height"].AsInt = qi.tex.height;
+            jSONClass["resizedWidth"].AsInt = width;
+            jSONClass["resizedHeight"].AsInt = height;
             jSONClass["format"] = resultTexture.format.ToString();
             string contents = jSONClass.ToString(string.Empty);
             File.WriteAllText(diskCachePath + ".meta", contents);
@@ -283,13 +285,31 @@ namespace var_browser
 
         void GetResizedSize(ref int width,ref int height)
         {
+            int originalWidth = width;
+            int originalHeight = height;
+
             width = ClosestPowerOfTwo(width / 2);
             height = ClosestPowerOfTwo(height / 2);
+
+            int minSize = Settings.Instance.MinTextureSize != null ? Settings.Instance.MinTextureSize.Value : 1024;
+            minSize = Mathf.Clamp(minSize, 1024, 4096);
+
+            if (originalWidth >= minSize)
+                width = Mathf.Max(width, minSize);
+            if (originalHeight >= minSize)
+                height = Mathf.Max(height, minSize);
+
             int maxSize = Settings.Instance.MaxTextureSize.Value;
+            if (maxSize < minSize) maxSize = minSize;
             while (width > maxSize || height > maxSize)
             {
                 width /= 2;
                 height /= 2;
+            }
+
+            if (originalWidth != width || originalHeight != height)
+            {
+                LogUtil.Log(string.Format("GetResizedSize {0}x{1} min:{2} max:{3} -> {4}x{5}", originalWidth, originalHeight, minSize, maxSize, width, height));
             }
         }
 

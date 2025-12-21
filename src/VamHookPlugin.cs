@@ -580,6 +580,18 @@ namespace var_browser
 
                     Settings.Instance.ReduceTextureSize.Value = GUILayout.Toggle(Settings.Instance.ReduceTextureSize.Value, "Reduce Texture Size", m_StyleToggle);
 
+                    if (Settings.Instance.ReduceTextureSize.Value)
+                    {
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Space(20);
+                        GUILayout.Label("Min Resize", GUILayout.Width(90));
+                        int minTextureSize = Settings.Instance.MinTextureSize.Value;
+                        int selectedIndex = (minTextureSize == 4096) ? 2 : (minTextureSize == 2048) ? 1 : 0;
+                        selectedIndex = GUILayout.SelectionGrid(selectedIndex, new string[] { "1K", "2K", "4K" }, 3, m_StyleButton);
+                        Settings.Instance.MinTextureSize.Value = (selectedIndex == 2) ? 4096 : (selectedIndex == 1) ? 2048 : 1024;
+                        GUILayout.EndHorizontal();
+                    }
+
                     //if (GUILayout.Button("HeapDump"))
                     //{
                     //    //UnityHeapDump.Create();

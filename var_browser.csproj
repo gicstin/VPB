@@ -323,6 +323,13 @@
     <Compile Include="$(IntermediateOutputPath)PluginVersion.g.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="_vam_patch\**" />
+    <EmbeddedResource Remove="vam_patch\**" />
+    <None Remove="vam_patch\**" />
+    <Page Remove="vam_patch\**" />
+  </ItemGroup>
+
   <Target Name="GeneratePluginVersion" BeforeTargets="BeforeCompile">
     <PropertyGroup>
       <PluginVersionFile>$(MSBuildProjectDirectory)\plugin_version.txt</PluginVersionFile>

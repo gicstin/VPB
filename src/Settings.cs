@@ -24,6 +24,7 @@ namespace var_browser
         public ConfigEntry<bool> PluginsAlwaysEnabled;
         public ConfigEntry<int> CodePage;
         public ConfigEntry<bool> ReduceTextureSize;
+        public ConfigEntry<int> MinTextureSize;
         public ConfigEntry<bool> CacheAssetBundle;
         public ConfigEntry<int> ThumbnailSize;
         public ConfigEntry<int> MaxTextureSize;
@@ -34,7 +35,7 @@ namespace var_browser
         }
         private void Load(ConfigFile config)
         {
-            UIKey = config.Bind<string>("UI", "UIKey", "Ctrl+Shift+V", "Shortcut key for Show/Hide Var Browser.");
+            UIKey = config.Bind<string>("UI", "UIKey", "Ctrl+V", "Shortcut key for Show/Hide Var Browser.");
             CustomSceneKey = config.Bind<string>("UI", "CustomSceneKey", "Ctrl+Shift+Alpha1", "Shortcut key for open Custom Scene.");
             CategorySceneKey = config.Bind<string>("UI", "CategorySceneKey", "Ctrl+Shift+Alpha2", "Shortcut key for open Category Scene.");
             UIScale = config.Bind<float>("UI", "Scale", 1, "Set UI Scale.");
@@ -45,7 +46,8 @@ namespace var_browser
             ThumbnailSize = config.Bind<int>("Settings", "ThumbnailSize", 256, "Thumbnail size.");
             
             ReduceTextureSize = config.Bind<bool>("Optimze", "ReduceTextureSize", false, "reduce texture size.");
-            MaxTextureSize = config.Bind<int>("Optimze", "MaxTextureSize", 1024, "max size for texture.");
+            MinTextureSize = config.Bind<int>("Optimze", "MinTextureSize", 1024, "min size for resized texture.");
+            MaxTextureSize = config.Bind<int>("Optimze", "MaxTextureSize", 4096, "max size for texture.");
             CacheAssetBundle = config.Bind<bool>("Optimze", "CacheAssetBundle", true, "cache assetbundle.");
         }
     }
