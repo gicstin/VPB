@@ -362,6 +362,7 @@
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy $(TargetPath) "$(VaMPath)\BepInEx\plugins"</PostBuildEvent>
+    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\plugins\var_browser.dll"
+copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\var_browser.dll"</PostBuildEvent>
   </PropertyGroup>
 </Project>

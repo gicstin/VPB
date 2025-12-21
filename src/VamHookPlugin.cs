@@ -19,8 +19,16 @@ namespace var_browser
         private KeyUtil CategorySceneKey;
         private Vector2 UIPosition;
         private bool MiniMode;
+        private bool m_ShowDownscaleTexturesInfo;
+        private bool m_Collapsed;
+        private float m_ExpandedHeight;
+        private bool m_ToggleCollapseRequested;
         float m_UIScale = 1;
-        Rect m_Rect = new Rect(0, 0, 160, 50);
+        Rect m_Rect = new Rect(0, 0, 240, 50);
+
+        private const float MinUiScale = 0.6f;
+        private const float MaxUiScale = 2.4f;
+        private const float MiniModeHeight = 50f;
 
         private GUIStyle m_TitleTagStyle;
         private bool m_StylesInited;
@@ -34,6 +42,9 @@ namespace var_browser
         private Texture2D m_TexBtnDangerBgActive;
         private Texture2D m_TexWindowBorder;
         private Texture2D m_TexWindowBorderActive;
+        private Texture2D m_TexInfoCardBg;
+        private Texture2D m_TexFpsBadgeBg;
+        private Texture2D m_TexFpsBadgeOuterBg;
         private GUIStyle m_StylePanel;
         private GUIStyle m_StyleSection;
         private GUIStyle m_StyleHeader;
@@ -44,6 +55,13 @@ namespace var_browser
         private GUIStyle m_StyleToggle;
         private GUIStyle m_StyleWindow;
         private GUIStyle m_StyleWindowBorder;
+        private GUIStyle m_StyleInfoIcon;
+        private GUIStyle m_StyleInfoCard;
+        private GUIStyle m_StyleInfoCardTitle;
+        private GUIStyle m_StyleInfoCardText;
+        private GUIStyle m_StyleInfoClose;
+        private GUIStyle m_StyleFpsBadge;
+        private GUIStyle m_StyleFpsBadgeOuter;
 
         private bool m_WindowActive;
 
@@ -57,6 +75,21 @@ namespace var_browser
             return tex;
         }
 
+        private static Texture2D MakeBorderedTex(int width, int height, Color fill, Color border, int borderPx = 1)
+        {
+            var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    bool isBorder = x < borderPx || y < borderPx || x >= (width - borderPx) || y >= (height - borderPx);
+                    tex.SetPixel(x, y, isBorder ? border : fill);
+                }
+            }
+            tex.Apply(false, true);
+            return tex;
+        }
+
         private void EnsureStyles()
         {
             // Lazily initialize GUI styles once the Unity GUI skin is available.
@@ -65,23 +98,35 @@ namespace var_browser
             if (GUI.skin == null)
                 return;
 
-            const float windowAlpha = 0.62f;
-            const float sectionAlpha = 0.58f;
-            const float buttonAlpha = 0.54f;
-            const float borderAlpha = 0.66f;
+            const float windowAlpha = 0.70f;
+            const float sectionAlpha = 0.62f;
+            const float buttonAlpha = 0.84f;
+            const float borderAlpha = 0.72f;
 
-            m_TexPanelBg = MakeTex(new Color(0.12f, 0.13f, 0.15f, windowAlpha));
-            m_TexSectionBg = MakeTex(new Color(0.16f, 0.17f, 0.20f, sectionAlpha));
-            m_TexBtnBg = MakeTex(new Color(0.20f, 0.22f, 0.26f, buttonAlpha));
-            m_TexBtnBgHover = MakeTex(new Color(0.25f, 0.27f, 0.32f, buttonAlpha));
-            m_TexBtnBgActive = MakeTex(new Color(0.12f, 0.50f, 0.85f, 0.90f));
+            var panelFill = new Color(0.11f, 0.12f, 0.14f, windowAlpha);
+            var panelBorder = new Color(0.42f, 0.45f, 0.50f, 0.35f);
+            var sectionFill = new Color(0.16f, 0.17f, 0.20f, sectionAlpha);
+            var sectionBorder = new Color(0.38f, 0.41f, 0.46f, 0.30f);
+            var btnFill = new Color(0.22f, 0.24f, 0.29f, buttonAlpha);
+            var btnBorder = new Color(0.70f, 0.74f, 0.80f, 0.22f);
+            var btnHoverFill = new Color(0.27f, 0.30f, 0.36f, Mathf.Clamp01(buttonAlpha + 0.06f));
+            var btnActiveFill = new Color(0.12f, 0.50f, 0.85f, 0.95f);
 
-            m_TexBtnDangerBg = MakeTex(new Color(0.35f, 0.12f, 0.12f, 0.80f));
-            m_TexBtnDangerBgHover = MakeTex(new Color(0.45f, 0.15f, 0.15f, 0.85f));
-            m_TexBtnDangerBgActive = MakeTex(new Color(0.65f, 0.18f, 0.18f, 0.90f));
+            m_TexPanelBg = MakeBorderedTex(12, 12, panelFill, panelBorder, 1);
+            m_TexSectionBg = MakeBorderedTex(12, 12, sectionFill, sectionBorder, 1);
+            m_TexBtnBg = MakeBorderedTex(12, 12, btnFill, btnBorder, 1);
+            m_TexBtnBgHover = MakeBorderedTex(12, 12, btnHoverFill, btnBorder, 1);
+            m_TexBtnBgActive = MakeBorderedTex(12, 12, btnActiveFill, new Color(0.12f, 0.50f, 0.85f, 0.95f), 1);
+
+            m_TexBtnDangerBg = MakeBorderedTex(12, 12, new Color(0.35f, 0.12f, 0.12f, 0.90f), new Color(1f, 1f, 1f, 0.12f), 1);
+            m_TexBtnDangerBgHover = MakeBorderedTex(12, 12, new Color(0.45f, 0.15f, 0.15f, 0.92f), new Color(1f, 1f, 1f, 0.12f), 1);
+            m_TexBtnDangerBgActive = MakeBorderedTex(12, 12, new Color(0.65f, 0.18f, 0.18f, 0.96f), new Color(1f, 1f, 1f, 0.14f), 1);
 
             m_TexWindowBorder = MakeTex(new Color(0.20f, 0.22f, 0.26f, borderAlpha));
-            m_TexWindowBorderActive = MakeTex(new Color(0.12f, 0.50f, 0.85f, 0.80f));
+            m_TexWindowBorderActive = MakeTex(new Color(0.12f, 0.50f, 0.85f, 0.88f));
+            m_TexInfoCardBg = MakeBorderedTex(12, 12, new Color(0.12f, 0.14f, 0.18f, 0.82f), new Color(0.60f, 0.75f, 0.95f, 0.12f), 1);
+            m_TexFpsBadgeBg = MakeBorderedTex(12, 12, new Color(0.10f, 0.11f, 0.13f, 0.90f), new Color(0.70f, 0.74f, 0.80f, 0.32f), 1);
+            m_TexFpsBadgeOuterBg = MakeBorderedTex(12, 12, new Color(0f, 0f, 0f, 0f), new Color(0.12f, 0.50f, 0.85f, 0.92f), 2);
             var texTransparent = MakeTex(new Color(0f, 0f, 0f, 0f));
 
             m_StyleWindowBorder = new GUIStyle(GUI.skin.box);
@@ -130,9 +175,17 @@ namespace var_browser
             m_StyleButton.normal.background = m_TexBtnBg;
             m_StyleButton.hover.background = m_TexBtnBgHover;
             m_StyleButton.active.background = m_TexBtnBgActive;
+            m_StyleButton.onNormal.background = m_TexBtnBgActive;
+            m_StyleButton.onHover.background = m_TexBtnBgActive;
+            m_StyleButton.onActive.background = m_TexBtnBgActive;
+            m_StyleButton.onFocused.background = m_TexBtnBgActive;
             m_StyleButton.normal.textColor = Color.white;
             m_StyleButton.hover.textColor = Color.white;
             m_StyleButton.active.textColor = Color.white;
+            m_StyleButton.onNormal.textColor = Color.white;
+            m_StyleButton.onHover.textColor = Color.white;
+            m_StyleButton.onActive.textColor = Color.white;
+            m_StyleButton.onFocused.textColor = Color.white;
             m_StyleButton.fontStyle = FontStyle.Bold;
             m_StyleButton.padding = new RectOffset(10, 10, 7, 7);
 
@@ -144,6 +197,10 @@ namespace var_browser
             m_StyleButtonDanger.normal.background = m_TexBtnDangerBg;
             m_StyleButtonDanger.hover.background = m_TexBtnDangerBgHover;
             m_StyleButtonDanger.active.background = m_TexBtnDangerBgActive;
+            m_StyleButtonDanger.onNormal.background = m_TexBtnDangerBgActive;
+            m_StyleButtonDanger.onHover.background = m_TexBtnDangerBgActive;
+            m_StyleButtonDanger.onActive.background = m_TexBtnDangerBgActive;
+            m_StyleButtonDanger.onFocused.background = m_TexBtnDangerBgActive;
 
             m_StyleToggle = new GUIStyle(GUI.skin.toggle);
             m_StyleToggle.normal.textColor = new Color(0.92f, 0.94f, 0.96f, 1f);
@@ -155,6 +212,59 @@ namespace var_browser
             m_StyleToggle.clipping = TextClipping.Clip;
             m_StyleToggle.padding = new RectOffset(20, 0, 2, 2);
             m_StyleToggle.contentOffset = new Vector2(0f, -1f);
+
+            m_StyleInfoIcon = new GUIStyle(GUI.skin.button);
+            m_StyleInfoIcon.normal.background = texTransparent;
+            m_StyleInfoIcon.hover.background = MakeBorderedTex(12, 12, new Color(0.27f, 0.30f, 0.36f, 0.70f), new Color(0.70f, 0.74f, 0.80f, 0.18f), 1);
+            m_StyleInfoIcon.active.background = MakeBorderedTex(12, 12, new Color(0.12f, 0.50f, 0.85f, 0.80f), new Color(0.12f, 0.50f, 0.85f, 0.80f), 1);
+            m_StyleInfoIcon.normal.textColor = new Color(0.65f, 0.85f, 1f, 1f);
+            m_StyleInfoIcon.hover.textColor = Color.white;
+            m_StyleInfoIcon.active.textColor = Color.white;
+            m_StyleInfoIcon.fontStyle = FontStyle.Bold;
+            m_StyleInfoIcon.padding = new RectOffset(0, 0, 0, 0);
+            m_StyleInfoIcon.margin = new RectOffset(0, 0, 0, 0);
+            m_StyleInfoIcon.alignment = TextAnchor.MiddleCenter;
+
+            m_StyleInfoCard = new GUIStyle(GUI.skin.box);
+            m_StyleInfoCard.normal.background = m_TexInfoCardBg;
+            m_StyleInfoCard.normal.textColor = Color.white;
+            m_StyleInfoCard.padding = new RectOffset(10, 10, 8, 10);
+            m_StyleInfoCard.margin = new RectOffset(0, 0, 6, 2);
+
+            m_StyleInfoCardTitle = new GUIStyle(GUI.skin.label);
+            m_StyleInfoCardTitle.fontStyle = FontStyle.Bold;
+            m_StyleInfoCardTitle.normal.textColor = Color.white;
+            m_StyleInfoCardTitle.wordWrap = true;
+
+            m_StyleInfoCardText = new GUIStyle(GUI.skin.label);
+            m_StyleInfoCardText.normal.textColor = new Color(0.90f, 0.93f, 0.97f, 1f);
+            m_StyleInfoCardText.wordWrap = true;
+
+            m_StyleInfoClose = new GUIStyle(GUI.skin.button);
+            m_StyleInfoClose.normal.background = texTransparent;
+            m_StyleInfoClose.hover.background = texTransparent;
+            m_StyleInfoClose.active.background = texTransparent;
+            m_StyleInfoClose.normal.textColor = new Color(1f, 1f, 1f, 0.85f);
+            m_StyleInfoClose.hover.textColor = Color.white;
+            m_StyleInfoClose.active.textColor = Color.white;
+            m_StyleInfoClose.fontStyle = FontStyle.Bold;
+            m_StyleInfoClose.padding = new RectOffset(0, 0, 0, 0);
+            m_StyleInfoClose.margin = new RectOffset(0, 0, 0, 0);
+            m_StyleInfoClose.alignment = TextAnchor.MiddleCenter;
+
+            m_StyleFpsBadge = new GUIStyle(GUI.skin.box);
+            m_StyleFpsBadge.normal.background = m_TexFpsBadgeBg;
+            m_StyleFpsBadge.normal.textColor = Color.white;
+            m_StyleFpsBadge.fontStyle = FontStyle.Bold;
+            m_StyleFpsBadge.alignment = TextAnchor.MiddleCenter;
+            m_StyleFpsBadge.padding = new RectOffset(8, 8, 2, 2);
+            m_StyleFpsBadge.margin = new RectOffset(0, 0, 0, 0);
+
+            m_StyleFpsBadgeOuter = new GUIStyle(GUI.skin.box);
+            m_StyleFpsBadgeOuter.normal.background = m_TexFpsBadgeOuterBg;
+            m_StyleFpsBadgeOuter.normal.textColor = Color.clear;
+            m_StyleFpsBadgeOuter.padding = new RectOffset(0, 0, 0, 0);
+            m_StyleFpsBadgeOuter.margin = new RectOffset(0, 0, 0, 0);
 
             m_StylesInited = true;
         }
@@ -199,11 +309,12 @@ namespace var_browser
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
 
-            m_Rect = new Rect(UIPosition.x, UIPosition.y, 160, 50);
+            m_Rect = new Rect(UIPosition.x, UIPosition.y, 240, 50);
             if (MiniMode)
             {
-                m_Rect.height = 50;
+                m_Rect.height = MiniModeHeight;
             }
+            m_ExpandedHeight = Mathf.Max(m_Rect.height, MiniModeHeight);
             ZipConstants.DefaultCodePage = Settings.Instance.CodePage.Value;
 
 
@@ -218,6 +329,38 @@ namespace var_browser
             harmony.PatchAll(typeof(PatchAssetLoader));
             //harmony.PatchAll(typeof(PatchHairLODSettings));
 
+        }
+
+        private void SetMiniMode(bool enabled)
+        {
+            if (MiniMode == enabled)
+            {
+                return;
+            }
+
+            // Preserve the expanded height so we can restore it when leaving mini mode.
+            if (!MiniMode)
+            {
+                m_ExpandedHeight = Mathf.Max(m_Rect.height, MiniModeHeight);
+            }
+
+            MiniMode = enabled;
+            Settings.Instance.MiniMode.Value = MiniMode;
+
+            if (MiniMode)
+            {
+                m_Rect.height = MiniModeHeight;
+            }
+            else
+            {
+                // Restore height (unless the window is collapsed; collapsed height is handled in OnGUI).
+                if (!m_Collapsed)
+                {
+                    m_Rect.height = Mathf.Max(m_ExpandedHeight, MiniModeHeight);
+                }
+            }
+
+            RestrcitUIRect();
         }
         void Start()
         {
@@ -275,6 +418,9 @@ namespace var_browser
         }
 
         string prograssText = "";
+        float m_FpsSmoothedDelta = 0f;
+        float m_FpsUpdateTimer = 0f;
+        string m_FpsText = "";
         void OnPrograss(string text)
         {
             prograssText = text;
@@ -293,6 +439,32 @@ namespace var_browser
         static bool m_Show = true; // Made static so it can be toggled via external message calls.
         void Update()
         {
+            if (!m_UIInited || !m_FileManagerInited)
+            {
+                m_FpsSmoothedDelta = 0f;
+                m_FpsUpdateTimer = 0f;
+                m_FpsText = "";
+            }
+            else
+            {
+                float unscaledDt = Time.unscaledDeltaTime;
+                if (unscaledDt > 0f)
+                {
+                    if (m_FpsSmoothedDelta <= 0f)
+                        m_FpsSmoothedDelta = unscaledDt;
+                    else
+                        m_FpsSmoothedDelta = Mathf.Lerp(m_FpsSmoothedDelta, unscaledDt, 0.08f);
+
+                    m_FpsUpdateTimer += unscaledDt;
+                    if (m_FpsUpdateTimer >= 0.25f)
+                    {
+                        m_FpsUpdateTimer = 0f;
+                        float fps = 1f / Mathf.Max(0.00001f, m_FpsSmoothedDelta);
+                        m_FpsText = string.Format("{0:0} FPS", fps);
+                    }
+                }
+            }
+
             if (UIKey.TestKeyDown())
             {
                 m_Show = !m_Show;
@@ -492,7 +664,18 @@ namespace var_browser
         void DragWnd(int windowsid)
         {
             EnsureStyles();
+
+            var titleBarLocalRect = new Rect(0f, 0f, m_Rect.width, 28f);
+            if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && Event.current.clickCount == 2 && titleBarLocalRect.Contains(Event.current.mousePosition))
+            {
+                m_ToggleCollapseRequested = true;
+                Event.current.Use();
+            }
+
             GUI.DragWindow(new Rect(0, 0, m_Rect.width, 28));
+
+    	        if (m_Collapsed)
+                return;
 
             GUILayout.BeginVertical(m_StylePanel);
 
@@ -501,31 +684,20 @@ namespace var_browser
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("+", m_StyleButtonSmall, GUILayout.Width(28)))
             {
-                if (MiniMode)
-                {
-                    m_UIScale = 1;
-                    MiniMode = false;
-                    //m_Rect.height = 450;
-                }
-                else
-                {
-                    m_UIScale += 0.2f;
-                }
+		        m_UIScale = Mathf.Clamp(m_UIScale + 0.2f, MinUiScale, MaxUiScale);
                 Settings.Instance.UIScale.Value = m_UIScale;
                 RestrcitUIRect();
             }
             if (GUILayout.Button("-", m_StyleButtonSmall, GUILayout.Width(28)))
             {
-                m_UIScale -= 0.2f;
-                if (m_UIScale < 1)
-                {
-                    MiniMode = true;
-                    m_Rect.height = 50;
-                }
-                m_UIScale = Mathf.Max(m_UIScale, 1);
-
+		        m_UIScale = Mathf.Clamp(m_UIScale - 0.2f, MinUiScale, MaxUiScale);
                 Settings.Instance.UIScale.Value = m_UIScale;
                 RestrcitUIRect();
+            }
+
+            if (GUILayout.Button(MiniMode ? "Full" : "Mini", m_StyleButtonSmall, GUILayout.Width(44)))
+            {
+                SetMiniMode(!MiniMode);
             }
             GUILayout.EndHorizontal();
 
@@ -567,9 +739,6 @@ namespace var_browser
                     }
                     if (GUILayout.Button("GC", m_StyleButton))
                     {
-                        //MethodInfo onDestroyMethod = typeof(ImageLoaderThreaded).GetMethod("OnDestroy", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        //onDestroyMethod.Invoke(ImageLoaderThreaded.singleton, new object[0] { });
-                        //CustomImageLoaderThreaded.singleton.OnDestroy();
                         DAZMorphMgr.singleton.cache.Clear();
                         ImageLoadingMgr.singleton.ClearCache();
 
@@ -578,7 +747,36 @@ namespace var_browser
                     }
                     GUILayout.EndHorizontal();
 
-                    Settings.Instance.ReduceTextureSize.Value = GUILayout.Toggle(Settings.Instance.ReduceTextureSize.Value, "Reduce Texture Size", m_StyleToggle);
+                    GUILayout.BeginHorizontal();
+                    Settings.Instance.ReduceTextureSize.Value = GUILayout.Toggle(Settings.Instance.ReduceTextureSize.Value, "Downscale Textures", m_StyleToggle);
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("i", m_StyleInfoIcon, GUILayout.Width(18), GUILayout.Height(18)))
+                    {
+                        m_ShowDownscaleTexturesInfo = !m_ShowDownscaleTexturesInfo;
+                    }
+                    GUILayout.EndHorizontal();
+                    if (m_ShowDownscaleTexturesInfo)
+                    {
+                        GUILayout.BeginVertical(m_StyleInfoCard);
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Label("Downscale Textures", m_StyleInfoCardTitle);
+                        GUILayout.FlexibleSpace();
+                        if (GUILayout.Button("x", m_StyleInfoClose, GUILayout.Width(18), GUILayout.Height(18)))
+                        {
+                            m_ShowDownscaleTexturesInfo = false;
+                        }
+                        GUILayout.EndHorizontal();
+                        GUILayout.Space(4);
+                        GUILayout.Label("When enabled, images loaded by VaM are resized to smaller, power-of-two textures and cached.", m_StyleInfoCardText);
+                        GUILayout.Space(2);
+                        GUILayout.Label("This reduces VRAM/RAM usage and can improve performance, at the cost of some texture sharpness.", m_StyleInfoCardText);
+                        GUILayout.Space(6);
+                        GUILayout.Label("Min Resize: textures larger than this will be scaled down (2K/4K/8K).", m_StyleInfoCardText);
+                        GUILayout.Label("Force all to minimum size: clamps both width/height to the minimum (more aggressive).", m_StyleInfoCardText);
+                        GUILayout.Space(6);
+                        GUILayout.Label("Notes: textures smaller than the limit are not upscaled; first load may take longer while the cache is created; web-loaded textures are ignored.", m_StyleInfoCardText);
+                        GUILayout.EndVertical();
+                    }
 
                     if (Settings.Instance.ReduceTextureSize.Value)
                     {
@@ -586,9 +784,14 @@ namespace var_browser
                         GUILayout.Space(20);
                         GUILayout.Label("Min Resize", GUILayout.Width(90));
                         int minTextureSize = Settings.Instance.MinTextureSize.Value;
-                        int selectedIndex = (minTextureSize == 4096) ? 2 : (minTextureSize == 2048) ? 1 : 0;
-                        selectedIndex = GUILayout.SelectionGrid(selectedIndex, new string[] { "1K", "2K", "4K" }, 3, m_StyleButton);
-                        Settings.Instance.MinTextureSize.Value = (selectedIndex == 2) ? 4096 : (selectedIndex == 1) ? 2048 : 1024;
+                        int selectedIndex = (minTextureSize == 8192) ? 2 : (minTextureSize == 4096) ? 1 : 0;
+                        selectedIndex = GUILayout.SelectionGrid(selectedIndex, new string[] { "2K", "4K", "8K" }, 3, m_StyleButton);
+                        Settings.Instance.MinTextureSize.Value = (selectedIndex == 2) ? 8192 : (selectedIndex == 1) ? 4096 : 2048;
+                        GUILayout.EndHorizontal();
+
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Space(20);
+                        Settings.Instance.ForceTextureToMinSize.Value = GUILayout.Toggle(Settings.Instance.ForceTextureToMinSize.Value, "Force all to minimum size", m_StyleToggle);
                         GUILayout.EndHorizontal();
                     }
 
@@ -755,10 +958,33 @@ namespace var_browser
                     const float borderPx = 1f;
 
                     var windowRect = m_Rect;
-                    if (!MiniMode)
+                    if (m_Collapsed)
+                    {
+                        windowRect.height = 28f;
+                        windowRect.width = 120f;
+                    }
+                    else if (!MiniMode)
+                    {
                         windowRect.height = 0f;
+                    }
 
                     m_Rect = GUILayout.Window(0, windowRect, DragWnd, "", m_StyleWindow);
+
+                    if (m_ToggleCollapseRequested)
+                    {
+                        m_ToggleCollapseRequested = false;
+                        m_Collapsed = !m_Collapsed;
+                        if (m_Collapsed)
+                        {
+                            if (!MiniMode)
+                                m_ExpandedHeight = Mathf.Max(m_Rect.height, 50f);
+                        }
+                        else
+                        {
+                            if (!MiniMode)
+                                m_Rect.height = Mathf.Max(m_ExpandedHeight, 50f);
+                        }
+                    }
 
                     var borderRect = new Rect(m_Rect.x - borderPx, m_Rect.y - borderPx, m_Rect.width + (borderPx * 2f), m_Rect.height + (borderPx * 2f));
 
@@ -807,48 +1033,102 @@ namespace var_browser
 
                         const float headerInsetY = 4f;
                         const float headerHeight = 24f;
-                        var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 150f, headerHeight);
-                        GUI.color = new Color(1f, 1f, 1f, 1f);
-                        GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                        var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
-                        GUI.Label(tagRect, string.Format("VPB {0} ({1:0.0}s)", PluginVersionInfo.Version, startupSeconds), m_TitleTagStyle);
 
-                        var titleStyle = new GUIStyle(GUI.skin.label);
-                        titleStyle.font = GUI.skin.window.font;
-                        titleStyle.fontSize = GUI.skin.window.fontSize;
-                        titleStyle.fontStyle = GUI.skin.window.fontStyle;
-                        titleStyle.normal.textColor = Color.white;
-                        titleStyle.hover.textColor = Color.white;
-                        titleStyle.active.textColor = Color.white;
-                        titleStyle.focused.textColor = Color.white;
-                        titleStyle.alignment = TextAnchor.MiddleLeft;
-                        titleStyle.wordWrap = false;
-                        titleStyle.clipping = TextClipping.Clip;
-                        titleStyle.padding = new RectOffset(0, 0, 0, 0);
-
-                        const float titleRightPadding = 6f;
-                        var titleText = "drag area";
-                        var maxTitleWidth = (m_Rect.xMax - titleRightPadding) - (tagRect.xMax + 4f);
-                        if (maxTitleWidth > 10f)
+                        if (m_Collapsed)
                         {
-                            var drawText = titleText;
-                            var textSize = titleStyle.CalcSize(new GUIContent(drawText));
-                            if (textSize.x > maxTitleWidth)
+                            if (!string.IsNullOrEmpty(m_FpsText))
                             {
-                                const string ellipsis = "...";
-                                drawText = titleText;
-                                while (drawText.Length > 0 && titleStyle.CalcSize(new GUIContent(drawText + ellipsis)).x > maxTitleWidth)
-                                {
-                                    drawText = drawText.Substring(0, drawText.Length - 1);
-                                }
-                                drawText = (drawText.Length > 0) ? (drawText + ellipsis) : ellipsis;
-                            }
+                                const float titleBarHeight = 28f;
+                                var fpsContent = new GUIContent(m_FpsText);
+                                var badgeSize = m_StyleFpsBadge.CalcSize(fpsContent);
+                                badgeSize.y = Mathf.Min(badgeSize.y, titleBarHeight - 2f);
 
-                            var finalSize = titleStyle.CalcSize(new GUIContent(drawText));
-                            var titleRect = new Rect(m_Rect.xMax - titleRightPadding - finalSize.x, m_Rect.y + headerInsetY, finalSize.x, headerHeight);
+                                var badgeRect = new Rect(
+                                    m_Rect.x + (m_Rect.width - badgeSize.x) * 0.5f,
+                                    m_Rect.y + (titleBarHeight - badgeSize.y) * 0.5f,
+                                    badgeSize.x,
+                                    badgeSize.y);
+
+                                const float outerPadX = 4f;
+                                const float outerPadY = 3f;
+                                var outerRect = new Rect(badgeRect.x - outerPadX, badgeRect.y - outerPadY, badgeRect.width + (outerPadX * 2f), badgeRect.height + (outerPadY * 2f));
+                                GUI.color = new Color(1f, 1f, 1f, 1f);
+                                GUI.contentColor = new Color(1f, 1f, 1f, 1f);
+                                GUI.Box(outerRect, GUIContent.none, m_StyleFpsBadgeOuter);
+                                GUI.Label(badgeRect, fpsContent, m_StyleFpsBadge);
+                            }
+                        }
+                        else
+                        {
+                            var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 150f, headerHeight);
                             GUI.color = new Color(1f, 1f, 1f, 1f);
                             GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                            GUI.Label(titleRect, drawText, titleStyle);
+                            var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
+                            GUI.Label(tagRect, string.Format("VPB {0} ({1:0.0}s)", PluginVersionInfo.Version, startupSeconds), m_TitleTagStyle);
+
+                            var titleStyle = new GUIStyle(GUI.skin.label);
+                            titleStyle.font = GUI.skin.window.font;
+                            titleStyle.fontSize = GUI.skin.window.fontSize;
+                            titleStyle.fontStyle = GUI.skin.window.fontStyle;
+                            titleStyle.normal.textColor = Color.white;
+                            titleStyle.hover.textColor = Color.white;
+                            titleStyle.active.textColor = Color.white;
+                            titleStyle.focused.textColor = Color.white;
+                            titleStyle.alignment = TextAnchor.MiddleLeft;
+                            titleStyle.wordWrap = false;
+                            titleStyle.clipping = TextClipping.Clip;
+                            titleStyle.padding = new RectOffset(0, 0, 0, 0);
+
+                            const float titleRightPadding = 6f;
+                            var fpsText = m_FpsText;
+                            float fpsWidth = 0f;
+                            if (!string.IsNullOrEmpty(fpsText))
+                            {
+                                fpsWidth = titleStyle.CalcSize(new GUIContent(fpsText)).x;
+                            }
+
+                            const float titleLeftGap = 4f;
+                            const float titleRightGap = 6f;
+
+                            var leftEdge = tagRect.xMax + titleLeftGap;
+                            var rightEdge = m_Rect.xMax - titleRightPadding;
+
+                            var fpsRect = new Rect(rightEdge - fpsWidth, m_Rect.y + headerInsetY, fpsWidth, headerHeight);
+                            var middleRect = new Rect(leftEdge, m_Rect.y + headerInsetY, Mathf.Max(0f, (fpsRect.xMin - titleRightGap) - leftEdge), headerHeight);
+
+                            if (!string.IsNullOrEmpty(fpsText) && fpsRect.width > 4f)
+                            {
+                                var fpsStyle = new GUIStyle(titleStyle);
+                                fpsStyle.alignment = TextAnchor.MiddleLeft;
+                                GUI.color = new Color(1f, 1f, 1f, 1f);
+                                GUI.contentColor = new Color(1f, 1f, 1f, 1f);
+                                GUI.Label(fpsRect, fpsText, fpsStyle);
+                            }
+
+                            if (middleRect.width > 10f)
+                            {
+                                var dragText = "drag area";
+                                var drawText = dragText;
+                                var maxTitleWidth = middleRect.width;
+
+                                var textSize = titleStyle.CalcSize(new GUIContent(drawText));
+                                if (textSize.x > maxTitleWidth)
+                                {
+                                    const string ellipsis = "...";
+                                    drawText = dragText;
+                                    while (drawText.Length > 0 && titleStyle.CalcSize(new GUIContent(drawText + ellipsis)).x > maxTitleWidth)
+                                    {
+                                        drawText = drawText.Substring(0, drawText.Length - 1);
+                                    }
+                                    drawText = (drawText.Length > 0) ? (drawText + ellipsis) : ellipsis;
+                                }
+
+                                var dragStyle = new GUIStyle(titleStyle);
+                                dragStyle.alignment = TextAnchor.MiddleCenter;
+                                GUI.color = new Color(1f, 1f, 1f, 1f);
+                                GUI.contentColor = new Color(1f, 1f, 1f, 1f);
+                                GUI.Label(middleRect, drawText, dragStyle);
+                            }
                         }
                     }
 
