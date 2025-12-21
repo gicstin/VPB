@@ -22,7 +22,141 @@ namespace var_browser
         float m_UIScale = 1;
         Rect m_Rect = new Rect(0, 0, 160, 50);
 
+        private GUIStyle m_TitleTagStyle;
+        private bool m_StylesInited;
+        private Texture2D m_TexPanelBg;
+        private Texture2D m_TexSectionBg;
+        private Texture2D m_TexBtnBg;
+        private Texture2D m_TexBtnBgHover;
+        private Texture2D m_TexBtnBgActive;
+        private Texture2D m_TexBtnDangerBg;
+        private Texture2D m_TexBtnDangerBgHover;
+        private Texture2D m_TexBtnDangerBgActive;
+        private Texture2D m_TexWindowBorder;
+        private Texture2D m_TexWindowBorderActive;
+        private GUIStyle m_StylePanel;
+        private GUIStyle m_StyleSection;
+        private GUIStyle m_StyleHeader;
+        private GUIStyle m_StyleSubHeader;
+        private GUIStyle m_StyleButton;
+        private GUIStyle m_StyleButtonSmall;
+        private GUIStyle m_StyleButtonDanger;
+        private GUIStyle m_StyleToggle;
+        private GUIStyle m_StyleWindow;
+        private GUIStyle m_StyleWindowBorder;
+
+        private bool m_WindowActive;
+
         public static VamHookPlugin singleton;
+
+        private static Texture2D MakeTex(Color color)
+        {
+            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            tex.SetPixel(0, 0, color);
+            tex.Apply(false, true);
+            return tex;
+        }
+
+        private void EnsureStyles()
+        {
+            if (m_StylesInited)
+                return;
+            if (GUI.skin == null)
+                return;
+
+            const float windowAlpha = 0.62f;
+            const float sectionAlpha = 0.58f;
+            const float buttonAlpha = 0.54f;
+            const float borderAlpha = 0.66f;
+
+            m_TexPanelBg = MakeTex(new Color(0.12f, 0.13f, 0.15f, windowAlpha));
+            m_TexSectionBg = MakeTex(new Color(0.16f, 0.17f, 0.20f, sectionAlpha));
+            m_TexBtnBg = MakeTex(new Color(0.20f, 0.22f, 0.26f, buttonAlpha));
+            m_TexBtnBgHover = MakeTex(new Color(0.25f, 0.27f, 0.32f, buttonAlpha));
+            m_TexBtnBgActive = MakeTex(new Color(0.12f, 0.50f, 0.85f, 0.90f));
+
+            m_TexBtnDangerBg = MakeTex(new Color(0.35f, 0.12f, 0.12f, 0.80f));
+            m_TexBtnDangerBgHover = MakeTex(new Color(0.45f, 0.15f, 0.15f, 0.85f));
+            m_TexBtnDangerBgActive = MakeTex(new Color(0.65f, 0.18f, 0.18f, 0.90f));
+
+            m_TexWindowBorder = MakeTex(new Color(0.20f, 0.22f, 0.26f, borderAlpha));
+            m_TexWindowBorderActive = MakeTex(new Color(0.12f, 0.50f, 0.85f, 0.80f));
+            var texTransparent = MakeTex(new Color(0f, 0f, 0f, 0f));
+
+            m_StyleWindowBorder = new GUIStyle(GUI.skin.box);
+            m_StyleWindowBorder.normal.background = m_TexWindowBorder;
+            m_StyleWindowBorder.normal.textColor = Color.white;
+            m_StyleWindowBorder.padding = new RectOffset(0, 0, 0, 0);
+            m_StyleWindowBorder.margin = new RectOffset(0, 0, 0, 0);
+
+            m_StyleWindow = new GUIStyle(GUI.skin.window);
+            m_StyleWindow.normal.background = texTransparent;
+            m_StyleWindow.hover.background = texTransparent;
+            m_StyleWindow.active.background = texTransparent;
+            m_StyleWindow.focused.background = texTransparent;
+            m_StyleWindow.onNormal.background = texTransparent;
+            m_StyleWindow.onHover.background = texTransparent;
+            m_StyleWindow.onActive.background = texTransparent;
+            m_StyleWindow.onFocused.background = texTransparent;
+            m_StyleWindow.padding = new RectOffset(6, 6, 30, 6);
+            m_StyleWindow.margin = new RectOffset(0, 0, 0, 0);
+            m_StyleWindow.border = new RectOffset(0, 0, 0, 0);
+
+            m_StylePanel = new GUIStyle(GUI.skin.box);
+            m_StylePanel.normal.background = m_TexPanelBg;
+            m_StylePanel.normal.textColor = Color.white;
+            m_StylePanel.padding = new RectOffset(10, 10, 10, 10);
+            m_StylePanel.margin = new RectOffset(6, 6, 6, 6);
+
+            m_StyleSection = new GUIStyle(GUI.skin.box);
+            m_StyleSection.normal.background = m_TexSectionBg;
+            m_StyleSection.normal.textColor = Color.white;
+            m_StyleSection.padding = new RectOffset(10, 10, 8, 8);
+            m_StyleSection.margin = new RectOffset(0, 0, 6, 6);
+
+            m_StyleHeader = new GUIStyle(GUI.skin.label);
+            m_StyleHeader.fontStyle = FontStyle.Bold;
+            m_StyleHeader.normal.textColor = Color.white;
+            m_StyleHeader.alignment = TextAnchor.MiddleLeft;
+            m_StyleHeader.wordWrap = false;
+
+            m_StyleSubHeader = new GUIStyle(GUI.skin.label);
+            m_StyleSubHeader.fontStyle = FontStyle.Bold;
+            m_StyleSubHeader.normal.textColor = new Color(0.85f, 0.88f, 0.92f, 1f);
+            m_StyleSubHeader.alignment = TextAnchor.MiddleLeft;
+
+            m_StyleButton = new GUIStyle(GUI.skin.button);
+            m_StyleButton.normal.background = m_TexBtnBg;
+            m_StyleButton.hover.background = m_TexBtnBgHover;
+            m_StyleButton.active.background = m_TexBtnBgActive;
+            m_StyleButton.normal.textColor = Color.white;
+            m_StyleButton.hover.textColor = Color.white;
+            m_StyleButton.active.textColor = Color.white;
+            m_StyleButton.fontStyle = FontStyle.Bold;
+            m_StyleButton.padding = new RectOffset(10, 10, 7, 7);
+
+            m_StyleButtonSmall = new GUIStyle(m_StyleButton);
+            m_StyleButtonSmall.fontStyle = FontStyle.Bold;
+            m_StyleButtonSmall.padding = new RectOffset(8, 8, 4, 4);
+
+            m_StyleButtonDanger = new GUIStyle(m_StyleButton);
+            m_StyleButtonDanger.normal.background = m_TexBtnDangerBg;
+            m_StyleButtonDanger.hover.background = m_TexBtnDangerBgHover;
+            m_StyleButtonDanger.active.background = m_TexBtnDangerBgActive;
+
+            m_StyleToggle = new GUIStyle(GUI.skin.toggle);
+            m_StyleToggle.normal.textColor = new Color(0.92f, 0.94f, 0.96f, 1f);
+            m_StyleToggle.hover.textColor = Color.white;
+            m_StyleToggle.active.textColor = Color.white;
+            m_StyleToggle.focused.textColor = Color.white;
+            m_StyleToggle.alignment = TextAnchor.MiddleLeft;
+            m_StyleToggle.wordWrap = false;
+            m_StyleToggle.clipping = TextClipping.Clip;
+            m_StyleToggle.padding = new RectOffset(20, 0, 2, 2);
+            m_StyleToggle.contentOffset = new Vector2(0f, -1f);
+
+            m_StylesInited = true;
+        }
 
         static string cacheDir;
         public static string GetCacheDir()
@@ -53,6 +187,8 @@ namespace var_browser
         void Awake()
         {
             singleton = this;
+
+            LogUtil.MarkPluginAwake();
 
             Settings.Init(this.Config);
             UIKey = KeyUtil.Parse(Settings.Instance.UIKey.Value);
@@ -189,6 +325,7 @@ namespace var_browser
                     CreateHubBrowse();
                     CreateFileBrowser();
                     m_UIInited = true;
+                    LogUtil.LogReadyOnce("UI initialized");
                 }
             }
         }
@@ -350,13 +487,17 @@ namespace var_browser
             }
             newgo.SetActive(false);
         }
-        private void DragWnd(int windowsid)
+        void DragWnd(int windowsid)
         {
-            GUI.DragWindow(new Rect(0, 0, m_Rect.width, 20));
+            EnsureStyles();
+            GUI.DragWindow(new Rect(0, 0, m_Rect.width, 28));
+
+            GUILayout.BeginVertical(m_StylePanel);
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label(string.Format("<color=#00FF00><b>{0}</b></color> {1}", FileManager.s_InstalledCount, prograssText));
-            if (GUILayout.Button("+", GUILayout.Width(20)))
+            GUILayout.Label(string.Format("<color=#00FF00><b>{0}</b></color> {1}", FileManager.s_InstalledCount, prograssText), m_StyleHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("+", m_StyleButtonSmall, GUILayout.Width(28)))
             {
                 if (MiniMode)
                 {
@@ -371,7 +512,7 @@ namespace var_browser
                 Settings.Instance.UIScale.Value = m_UIScale;
                 RestrcitUIRect();
             }
-            if (GUILayout.Button("-", GUILayout.Width(20)))
+            if (GUILayout.Button("-", m_StyleButtonSmall, GUILayout.Width(28)))
             {
                 m_UIScale -= 0.2f;
                 if (m_UIScale < 1)
@@ -382,27 +523,31 @@ namespace var_browser
                 m_UIScale = Mathf.Max(m_UIScale, 1);
 
                 Settings.Instance.UIScale.Value = m_UIScale;
+                RestrcitUIRect();
             }
             GUILayout.EndHorizontal();
+
             if (MiniMode)
             {
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button("1.Scene"))
+                if (GUILayout.Button("1.Scene", m_StyleButton))
                 {
                     //自定义的不需要安装
                     m_FileBrowser.onlyInstalled = false;
                     ShowFileBrowser("Custom Scene", "json", "Saves/scene", true);
                 }
-                if (GUILayout.Button("2.Scene"))
+                if (GUILayout.Button("2.Scene", m_StyleButton))
                 {
                     ShowFileBrowser("Category Scene", "json", "Saves/scene");
                 }
                 GUILayout.EndHorizontal();
 
+                GUILayout.EndVertical();
                 return;
             }
 
-            GUILayout.Label(string.Format("Show/Hide:{0}", UIKey.keyPattern));
+            GUILayout.Space(4);
+            GUILayout.Label(string.Format("Show/Hide: {0}", UIKey.keyPattern), m_StyleSubHeader);
 
             if (m_FileManagerInited && m_UIInited)
             {
@@ -410,12 +555,15 @@ namespace var_browser
                     GUI.enabled = false;
 
                 {
+                    GUILayout.BeginVertical(m_StyleSection);
+                    GUILayout.Label("System", m_StyleSubHeader);
+
                     GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Refresh"))
+                    if (GUILayout.Button("Refresh", m_StyleButton))
                     {
                         Refresh();
                     }
-                    if (GUILayout.Button("GC"))
+                    if (GUILayout.Button("GC", m_StyleButton))
                     {
                         //MethodInfo onDestroyMethod = typeof(ImageLoaderThreaded).GetMethod("OnDestroy", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                         //onDestroyMethod.Invoke(ImageLoaderThreaded.singleton, new object[0] { });
@@ -427,110 +575,123 @@ namespace var_browser
                         Resources.UnloadUnusedAssets();
                     }
                     GUILayout.EndHorizontal();
-                    Settings.Instance.ReduceTextureSize.Value = GUILayout.Toggle(Settings.Instance.ReduceTextureSize.Value, "Reduce Texture Size");
+
+                    Settings.Instance.ReduceTextureSize.Value = GUILayout.Toggle(Settings.Instance.ReduceTextureSize.Value, "Reduce Texture Size", m_StyleToggle);
 
                     //if (GUILayout.Button("HeapDump"))
                     //{
                     //    //UnityHeapDump.Create();
                     //    new UnityHeapCrawler.HeapSnapshotCollector().Start();
                     //}
-                    if (GUILayout.Button("Remove Invalid Vars"))
+                    if (GUILayout.Button("Remove Invalid Vars", m_StyleButton))
                     {
                         RemoveInvalidVars();
                     }
-                    Color color = GUI.contentColor;
-                    GUI.contentColor = Color.red;
-                    if (GUILayout.Button("Remove Old Version"))
+                    if (GUILayout.Button("Remove Old Version", m_StyleButtonDanger))
                     {
                         RemoveOldVersion();
                     }
-                    GUI.contentColor = color;
-
-                    if (GUILayout.Button("Uninstall All"))
+                    if (GUILayout.Button("Uninstall All", m_StyleButtonDanger))
                     {
                         UninstallAll();
                     }
-                    if (GUILayout.Button("Hub Browse"))
+                    if (GUILayout.Button("Hub Browse", m_StyleButton))
                     {
                         OpenHubBrowse();
                     }
+
+                    GUILayout.EndVertical();
                 }
                 GUI.enabled = true;
 
-                GUILayout.Label("Custom");
-                if (GUILayout.Button(string.Format("Scene({0})", CustomSceneKey.keyPattern, GUILayout.MaxWidth(150))))
+                GUILayout.BeginVertical(m_StyleSection);
+                GUILayout.Label("Custom", m_StyleSubHeader);
+                if (GUILayout.Button(string.Format("Scene ({0})", CustomSceneKey.keyPattern, GUILayout.MaxWidth(150)), m_StyleButton))
                 {
                     OpenCustomScene();
                 }
-                if (GUILayout.Button("Saved Person"))
+                if (GUILayout.Button("Saved Person", m_StyleButton))
                 {
                     OpenCustomSavedPerson();
                 }
-                if (GUILayout.Button("Person Preset"))
+                if (GUILayout.Button("Person Preset", m_StyleButton))
                 {
                     OpenPersonPreset();
                 }
-                GUILayout.Label("Category");
-                if (GUILayout.Button(string.Format("Scene({0})", CategorySceneKey.keyPattern, GUILayout.MaxWidth(150))))
+                GUILayout.EndVertical();
+
+                GUILayout.BeginVertical(m_StyleSection);
+                GUILayout.Label("Category", m_StyleSubHeader);
+                if (GUILayout.Button(string.Format("Scene ({0})", CategorySceneKey.keyPattern, GUILayout.MaxWidth(150)), m_StyleButton))
                 {
                     OpenCategoryScene();
                 }
                 GUILayout.BeginHorizontal();
 
-                if (GUILayout.Button("Clothing", GUILayout.Width(75)))
+                if (GUILayout.Button("Clothing", m_StyleButton, GUILayout.Width(90)))
                 {
                     OpenCategoryClothing();
                 }
-                if (GUILayout.Button("Hair", GUILayout.Width(75)))
+                if (GUILayout.Button("Hair", m_StyleButton, GUILayout.Width(90)))
                 {
                     OpenCategoryHair();
                 }
                 GUILayout.EndHorizontal();
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Pose", GUILayout.Width(75)))
+                if (GUILayout.Button("Pose", m_StyleButton, GUILayout.Width(90)))
                 {
                     OpenCategoryPose();
                 }
-                GUILayout.Space(80);
+                GUILayout.FlexibleSpace();
                 GUILayout.EndHorizontal();
                 //GUILayout.Label("Plugin");
                 //if (GUILayout.Button("Plugin"))
                 //{
                 //    ShowFileBrowser("Select Plugins To Install", "cs", "Custom/Scripts",false, false);
                 //}
-                GUILayout.Label("Preset");
+                GUILayout.EndVertical();
+
+                GUILayout.BeginVertical(m_StyleSection);
+                GUILayout.Label("Preset", m_StyleSubHeader);
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Person", GUILayout.Width(75)))
+                if (GUILayout.Button("Person", m_StyleButton, GUILayout.Width(90)))
                 {
                     OpenPresetPerson();
                 }
-                if (GUILayout.Button("Clothing", GUILayout.Width(75)))
+                if (GUILayout.Button("Clothing", m_StyleButton, GUILayout.Width(90)))
                 {
                     OpenPresetClothing();
                 }
                 GUILayout.EndHorizontal();
 
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Hair", GUILayout.Width(75)))
+                if (GUILayout.Button("Hair", m_StyleButton, GUILayout.Width(90)))
                 {
                     OpenPresetHair();
                 }
-                if (GUILayout.Button("Other", GUILayout.Width(75)))
+                if (GUILayout.Button("Other", m_StyleButton, GUILayout.Width(90)))
                 {
                     OpenPresetOther();
                 }
                 GUILayout.EndHorizontal();
 
-                GUILayout.Label("Misc");
-                if (GUILayout.Button("AssetBundle"))
+                GUILayout.EndVertical();
+
+                GUILayout.BeginVertical(m_StyleSection);
+                GUILayout.Label("Misc", m_StyleSubHeader);
+                if (GUILayout.Button("AssetBundle", m_StyleButton))
                 {
                     OpenMiscCUA();
                 }
-                if (GUILayout.Button("All"))
+                if (GUILayout.Button("All", m_StyleButton))
                 {
                     OpenMiscAll();
                 }
+
+                GUILayout.EndVertical();
             }
+
+            GUILayout.EndVertical();
         }
         void ShowFileBrowser(string title, string fileFormat, string path, bool inGame = false, bool selectOnClick = true)
         {
@@ -574,7 +735,110 @@ namespace var_browser
                 if (show)
                 {
                     RestrcitUIRect();
-                    m_Rect = GUILayout.Window(0, m_Rect, DragWnd, "dragable area");
+
+                    EnsureStyles();
+                    const float borderPx = 1f;
+
+                    var windowRect = m_Rect;
+                    if (!MiniMode)
+                        windowRect.height = 0f;
+
+                    m_Rect = GUILayout.Window(0, windowRect, DragWnd, "", m_StyleWindow);
+
+                    var borderRect = new Rect(m_Rect.x - borderPx, m_Rect.y - borderPx, m_Rect.width + (borderPx * 2f), m_Rect.height + (borderPx * 2f));
+
+                    if (Event.current.type == EventType.MouseDown)
+                        m_WindowActive = borderRect.Contains(Event.current.mousePosition);
+
+                    if (Event.current.type == EventType.Repaint)
+                    {
+                        m_StyleWindowBorder.normal.background = m_WindowActive ? m_TexWindowBorderActive : m_TexWindowBorder;
+                        var prevDepth = GUI.depth;
+                        GUI.depth = 1;
+                        GUI.Box(borderRect, GUIContent.none, m_StyleWindowBorder);
+                        GUI.depth = prevDepth;
+                    }
+
+                    RestrcitUIRect();
+
+                    var prevGuiColor = GUI.color;
+                    var prevContentColor = GUI.contentColor;
+                    var prevBackgroundColor = GUI.backgroundColor;
+                    var prevEnabled = GUI.enabled;
+
+                    bool isRepaint = (Event.current.type == EventType.Repaint);
+
+                    if (m_TitleTagStyle == null)
+                    {
+                        m_TitleTagStyle = new GUIStyle(GUI.skin.label);
+                        m_TitleTagStyle.normal.textColor = Color.white;
+                        m_TitleTagStyle.hover.textColor = Color.white;
+                        m_TitleTagStyle.active.textColor = Color.white;
+                        m_TitleTagStyle.focused.textColor = Color.white;
+                        m_TitleTagStyle.alignment = TextAnchor.MiddleLeft;
+                        m_TitleTagStyle.fontStyle = FontStyle.Bold;
+                        m_TitleTagStyle.font = GUI.skin.window.font;
+                        m_TitleTagStyle.fontSize = GUI.skin.window.fontSize;
+                        m_TitleTagStyle.padding = new RectOffset(0, 0, 0, 0);
+                    }
+
+                    if (isRepaint)
+                    {
+                        GUI.color = Color.white;
+                        GUI.backgroundColor = Color.white;
+                        GUI.contentColor = Color.white;
+                        GUI.enabled = true;
+
+                        const float headerInsetY = 4f;
+                        const float headerHeight = 24f;
+                        var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 40f, headerHeight);
+                        GUI.color = new Color(1f, 1f, 1f, 1f);
+                        GUI.contentColor = new Color(1f, 1f, 1f, 1f);
+                        GUI.Label(tagRect, "VPB", m_TitleTagStyle);
+
+                        var titleStyle = new GUIStyle(GUI.skin.label);
+                        titleStyle.font = GUI.skin.window.font;
+                        titleStyle.fontSize = GUI.skin.window.fontSize;
+                        titleStyle.fontStyle = GUI.skin.window.fontStyle;
+                        titleStyle.normal.textColor = Color.white;
+                        titleStyle.hover.textColor = Color.white;
+                        titleStyle.active.textColor = Color.white;
+                        titleStyle.focused.textColor = Color.white;
+                        titleStyle.alignment = TextAnchor.MiddleLeft;
+                        titleStyle.wordWrap = false;
+                        titleStyle.clipping = TextClipping.Clip;
+                        titleStyle.padding = new RectOffset(0, 0, 0, 0);
+
+                        const float titleRightPadding = 6f;
+                        var titleText = "dragable area";
+                        var maxTitleWidth = (m_Rect.xMax - titleRightPadding) - (tagRect.xMax + 4f);
+                        if (maxTitleWidth > 10f)
+                        {
+                            var drawText = titleText;
+                            var textSize = titleStyle.CalcSize(new GUIContent(drawText));
+                            if (textSize.x > maxTitleWidth)
+                            {
+                                const string ellipsis = "...";
+                                drawText = titleText;
+                                while (drawText.Length > 0 && titleStyle.CalcSize(new GUIContent(drawText + ellipsis)).x > maxTitleWidth)
+                                {
+                                    drawText = drawText.Substring(0, drawText.Length - 1);
+                                }
+                                drawText = (drawText.Length > 0) ? (drawText + ellipsis) : ellipsis;
+                            }
+
+                            var finalSize = titleStyle.CalcSize(new GUIContent(drawText));
+                            var titleRect = new Rect(m_Rect.xMax - titleRightPadding - finalSize.x, m_Rect.y + headerInsetY, finalSize.x, headerHeight);
+                            GUI.color = new Color(1f, 1f, 1f, 1f);
+                            GUI.contentColor = new Color(1f, 1f, 1f, 1f);
+                            GUI.Label(titleRect, drawText, titleStyle);
+                        }
+                    }
+
+                    GUI.color = prevGuiColor;
+                    GUI.contentColor = prevContentColor;
+                    GUI.backgroundColor = prevBackgroundColor;
+                    GUI.enabled = prevEnabled;
 
                 }
             }
@@ -585,18 +849,15 @@ namespace var_browser
 
             GUI.matrix = pre;
         }
+
         void RestrcitUIRect()
         {
-            m_Rect.x = Mathf.Max(0, m_Rect.x);
-            m_Rect.y = Mathf.Max(0, m_Rect.y);
-            if ((m_Rect.x + m_Rect.width) * m_UIScale > Screen.width)
-            {
-                m_Rect.x = Math.Max(0, ((float)Screen.width / m_UIScale) - m_Rect.width);
-            }
-            if ((m_Rect.y + m_Rect.height) * m_UIScale > Screen.height)
-            {
-                m_Rect.y = Math.Max(0, ((float)Screen.height / m_UIScale) - m_Rect.height);
-            }
+            const float minX = 0f;
+            const float minY = 4f;
+            var maxX = Mathf.Max(minX, ((float)Screen.width / m_UIScale) - m_Rect.width);
+            var maxY = Mathf.Max(minY, ((float)Screen.height / m_UIScale) - m_Rect.height);
+            m_Rect.x = Mathf.Clamp(m_Rect.x, minX, maxX);
+            m_Rect.y = Mathf.Clamp(m_Rect.y, minY, maxY);
         }
         //点击预览界面item之后的回调
         protected void LoadFromSceneWorldDialog(string saveName)
