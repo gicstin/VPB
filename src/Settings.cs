@@ -29,6 +29,7 @@ namespace var_browser
         public ConfigEntry<bool> CacheAssetBundle;
         public ConfigEntry<int> ThumbnailSize;
         public ConfigEntry<int> MaxTextureSize;
+        public ConfigEntry<string> LastGalleryPage;
         
         internal static void Init(ConfigFile config)
         {
@@ -51,6 +52,8 @@ namespace var_browser
             ForceTextureToMinSize = config.Bind<bool>("Optimze", "ForceTextureToMinSize", false, "force resized textures to minimum size.");
             MaxTextureSize = config.Bind<int>("Optimze", "MaxTextureSize", 4096, "max size for texture.");
             CacheAssetBundle = config.Bind<bool>("Optimze", "CacheAssetBundle", true, "cache assetbundle.");
+
+            LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "CategoryHair", "Last opened Gallery page.");
         }
     }
 }

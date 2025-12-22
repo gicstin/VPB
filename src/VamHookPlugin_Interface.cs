@@ -7,6 +7,69 @@ namespace var_browser
 {
     public partial class VamHookPlugin
     {
+        private enum GalleryPage
+        {
+            CategoryScene,
+            CategoryClothing,
+            CategoryHair,
+            CategoryPose,
+            CustomScene,
+            CustomSavedPerson,
+            CustomPersonPreset,
+            PresetPerson,
+            PresetClothing,
+            PresetHair,
+            PresetOther,
+            MiscAssetBundle,
+            MiscAll
+        }
+
+        private void SetLastGalleryPage(GalleryPage page)
+        {
+            if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
+            {
+                Settings.Instance.LastGalleryPage.Value = page.ToString();
+            }
+        }
+
+        private GalleryPage GetLastGalleryPage()
+        {
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
+                {
+                    var v = Settings.Instance.LastGalleryPage.Value;
+                    if (!string.IsNullOrEmpty(v))
+                    {
+                        return (GalleryPage)Enum.Parse(typeof(GalleryPage), v);
+                    }
+                }
+            }
+            catch { }
+            return GalleryPage.CategoryHair;
+        }
+
+        public void OpenGallery()
+        {
+            switch (GetLastGalleryPage())
+            {
+                case GalleryPage.CategoryScene: OpenCategoryScene(); break;
+                case GalleryPage.CategoryClothing: OpenCategoryClothing(); break;
+                case GalleryPage.CategoryHair: OpenCategoryHair(); break;
+                case GalleryPage.CategoryPose: OpenCategoryPose(); break;
+                case GalleryPage.CustomScene: OpenCustomScene(); break;
+                case GalleryPage.CustomSavedPerson: OpenCustomSavedPerson(); break;
+                case GalleryPage.CustomPersonPreset: OpenPersonPreset(); break;
+                case GalleryPage.PresetPerson: OpenPresetPerson(); break;
+                case GalleryPage.PresetClothing: OpenPresetClothing(); break;
+                case GalleryPage.PresetHair: OpenPresetHair(); break;
+                case GalleryPage.PresetOther: OpenPresetOther(); break;
+                case GalleryPage.MiscAssetBundle: OpenMiscCUA(); break;
+                case GalleryPage.MiscAll: OpenMiscAll(); break;
+                default: OpenCategoryHair(); break;
+            }
+        }
+
         //liu修改 显示和隐藏
 		public void LgShow()
 		{
@@ -73,60 +136,73 @@ namespace var_browser
         }
         public void OpenCustomScene()
         {
+            SetLastGalleryPage(GalleryPage.CustomScene);
             //自定义的不需要安装
             m_FileBrowser.onlyInstalled = false;
             ShowFileBrowser("Custom Scene", "json", "Saves/scene", true);
         }
         public void OpenCustomSavedPerson()
         {
+            SetLastGalleryPage(GalleryPage.CustomSavedPerson);
             //自定义的不需要安装
             m_FileBrowser.onlyInstalled = false;
             ShowFileBrowser("Custom Saved Person", "json", "Saves/Person", true);
         }
         public void OpenPersonPreset()
         {
+            SetLastGalleryPage(GalleryPage.CustomPersonPreset);
             //自定义的不需要安装
             m_FileBrowser.onlyInstalled = false;
             ShowFileBrowser("Custom Person Preset", "vap", "Custom/Atom/Person", true, false);
         }
         public void OpenCategoryScene()
         {
+            SetLastGalleryPage(GalleryPage.CategoryScene);
             ShowFileBrowser("Category Scene", "json", "Saves/scene");
         }
         public void OpenCategoryClothing()
         {
+            SetLastGalleryPage(GalleryPage.CategoryClothing);
             ShowFileBrowser("Category Clothing", "vam", "Custom/Clothing", false, false);
         }
         public void OpenCategoryHair()
         {
+            SetLastGalleryPage(GalleryPage.CategoryHair);
             ShowFileBrowser("Category Hair", "vam", "Custom/Hair", false, false);
         }
         public void OpenCategoryPose()
         {
+            SetLastGalleryPage(GalleryPage.CategoryPose);
             ShowFileBrowser("Category Pose", "json|vap", "Custom/Atom/Person/Pose", false, false);
         }
         public void OpenPresetPerson()
         {
+            SetLastGalleryPage(GalleryPage.PresetPerson);
             ShowFileBrowser("Preset Person", "vap", "Custom/Atom/Person", false, false);
         }
         public void OpenPresetClothing()
         {
+            SetLastGalleryPage(GalleryPage.PresetClothing);
             ShowFileBrowser("Preset Clothing", "vap", "Custom/Clothing", false, false);
         }
         public void OpenPresetHair()
         {
+            SetLastGalleryPage(GalleryPage.PresetHair);
             ShowFileBrowser("Preset Hair", "vap", "Custom/Hair", false, false);
         }
         public void OpenPresetOther()
         {
+            SetLastGalleryPage(GalleryPage.PresetOther);
             ShowFileBrowser("Preset Other", "vap", "Custom", false, false);
         }
         public void OpenMiscCUA()
         {
+            SetLastGalleryPage(GalleryPage.MiscAssetBundle);
             ShowFileBrowser("AssetBundle", "assetbundle", "Custom", false, false);
         }
         public void OpenMiscAll()
         {
+            SetLastGalleryPage(GalleryPage.MiscAll);
             ShowFileBrowser("All", "var", "", false, false);
         }
     }

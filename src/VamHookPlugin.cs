@@ -20,9 +20,10 @@ namespace var_browser
         private Vector2 UIPosition;
         private bool MiniMode;
         private bool m_ShowDownscaleTexturesInfo;
-        private bool m_Collapsed;
+        private bool m_ShowRemoveInvalidVarsInfo;
+        private bool m_ShowRemoveOldVersionInfo;
+        private bool m_ShowUninstallAllInfo;
         private float m_ExpandedHeight;
-        private bool m_ToggleCollapseRequested;
         float m_UIScale = 1;
         Rect m_Rect = new Rect(0, 0, 240, 50);
 
@@ -40,6 +41,9 @@ namespace var_browser
         private Texture2D m_TexBtnDangerBg;
         private Texture2D m_TexBtnDangerBgHover;
         private Texture2D m_TexBtnDangerBgActive;
+        private Texture2D m_TexBtnPrimaryBg;
+        private Texture2D m_TexBtnPrimaryBgHover;
+        private Texture2D m_TexBtnPrimaryBgActive;
         private Texture2D m_TexWindowBorder;
         private Texture2D m_TexWindowBorderActive;
         private Texture2D m_TexInfoCardBg;
@@ -52,6 +56,7 @@ namespace var_browser
         private GUIStyle m_StyleButton;
         private GUIStyle m_StyleButtonSmall;
         private GUIStyle m_StyleButtonDanger;
+        private GUIStyle m_StyleButtonPrimary;
         private GUIStyle m_StyleToggle;
         private GUIStyle m_StyleWindow;
         private GUIStyle m_StyleWindowBorder;
@@ -121,6 +126,10 @@ namespace var_browser
             m_TexBtnDangerBg = MakeBorderedTex(12, 12, new Color(0.35f, 0.12f, 0.12f, 0.90f), new Color(1f, 1f, 1f, 0.12f), 1);
             m_TexBtnDangerBgHover = MakeBorderedTex(12, 12, new Color(0.45f, 0.15f, 0.15f, 0.92f), new Color(1f, 1f, 1f, 0.12f), 1);
             m_TexBtnDangerBgActive = MakeBorderedTex(12, 12, new Color(0.65f, 0.18f, 0.18f, 0.96f), new Color(1f, 1f, 1f, 0.14f), 1);
+
+            m_TexBtnPrimaryBg = MakeBorderedTex(12, 12, new Color(0.10f, 0.40f, 0.70f, 0.88f), new Color(1f, 1f, 1f, 0.14f), 1);
+            m_TexBtnPrimaryBgHover = MakeBorderedTex(12, 12, new Color(0.12f, 0.50f, 0.85f, 0.92f), new Color(1f, 1f, 1f, 0.16f), 1);
+            m_TexBtnPrimaryBgActive = MakeBorderedTex(12, 12, new Color(0.18f, 0.62f, 0.95f, 0.96f), new Color(1f, 1f, 1f, 0.18f), 1);
 
             m_TexWindowBorder = MakeTex(new Color(0.20f, 0.22f, 0.26f, borderAlpha));
             m_TexWindowBorderActive = MakeTex(new Color(0.12f, 0.50f, 0.85f, 0.88f));
@@ -201,6 +210,15 @@ namespace var_browser
             m_StyleButtonDanger.onHover.background = m_TexBtnDangerBgActive;
             m_StyleButtonDanger.onActive.background = m_TexBtnDangerBgActive;
             m_StyleButtonDanger.onFocused.background = m_TexBtnDangerBgActive;
+
+            m_StyleButtonPrimary = new GUIStyle(m_StyleButton);
+            m_StyleButtonPrimary.normal.background = m_TexBtnPrimaryBg;
+            m_StyleButtonPrimary.hover.background = m_TexBtnPrimaryBgHover;
+            m_StyleButtonPrimary.active.background = m_TexBtnPrimaryBgActive;
+            m_StyleButtonPrimary.onNormal.background = m_TexBtnPrimaryBgActive;
+            m_StyleButtonPrimary.onHover.background = m_TexBtnPrimaryBgActive;
+            m_StyleButtonPrimary.onActive.background = m_TexBtnPrimaryBgActive;
+            m_StyleButtonPrimary.onFocused.background = m_TexBtnPrimaryBgActive;
 
             m_StyleToggle = new GUIStyle(GUI.skin.toggle);
             m_StyleToggle.normal.textColor = new Color(0.92f, 0.94f, 0.96f, 1f);
@@ -353,11 +371,8 @@ namespace var_browser
             }
             else
             {
-                // Restore height (unless the window is collapsed; collapsed height is handled in OnGUI).
-                if (!m_Collapsed)
-                {
-                    m_Rect.height = Mathf.Max(m_ExpandedHeight, MiniModeHeight);
-                }
+                // Restore previous expanded height.
+                m_Rect.height = Mathf.Max(m_ExpandedHeight, MiniModeHeight);
             }
 
             RestrcitUIRect();
@@ -665,17 +680,7 @@ namespace var_browser
         {
             EnsureStyles();
 
-            var titleBarLocalRect = new Rect(0f, 0f, m_Rect.width, 28f);
-            if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && Event.current.clickCount == 2 && titleBarLocalRect.Contains(Event.current.mousePosition))
-            {
-                m_ToggleCollapseRequested = true;
-                Event.current.Use();
-            }
-
             GUI.DragWindow(new Rect(0, 0, m_Rect.width, 28));
-
-    	        if (m_Collapsed)
-                return;
 
             GUILayout.BeginVertical(m_StylePanel);
 
@@ -748,9 +753,15 @@ namespace var_browser
                     GUILayout.EndHorizontal();
 
                     GUILayout.BeginHorizontal();
-                    Settings.Instance.ReduceTextureSize.Value = GUILayout.Toggle(Settings.Instance.ReduceTextureSize.Value, "Downscale Textures", m_StyleToggle);
+                    const float infoBtnWidth = 28f;
+                    const float actionRowHeight = 34f;
+                    const float optionRowHeight = 28f;
+                    const float optionBtnWidth = 44f;
+                    const float optionIndent = 18f;
+
+                    Settings.Instance.ReduceTextureSize.Value = GUILayout.Toggle(Settings.Instance.ReduceTextureSize.Value, "Downscale Textures", m_StyleToggle, GUILayout.Height(optionRowHeight));
                     GUILayout.FlexibleSpace();
-                    if (GUILayout.Button("i", m_StyleInfoIcon, GUILayout.Width(18), GUILayout.Height(18)))
+                    if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(infoBtnWidth), GUILayout.Height(optionRowHeight)))
                     {
                         m_ShowDownscaleTexturesInfo = !m_ShowDownscaleTexturesInfo;
                     }
@@ -781,17 +792,22 @@ namespace var_browser
                     if (Settings.Instance.ReduceTextureSize.Value)
                     {
                         GUILayout.BeginHorizontal();
-                        GUILayout.Space(20);
-                        GUILayout.Label("Min Resize", GUILayout.Width(90));
+                        GUILayout.Space(optionIndent);
+                        GUILayout.Label("Min Resize", GUILayout.Width(80));
                         int minTextureSize = Settings.Instance.MinTextureSize.Value;
                         int selectedIndex = (minTextureSize == 8192) ? 2 : (minTextureSize == 4096) ? 1 : 0;
-                        selectedIndex = GUILayout.SelectionGrid(selectedIndex, new string[] { "2K", "4K", "8K" }, 3, m_StyleButton);
+                        selectedIndex = GUILayout.Toolbar(
+                            selectedIndex,
+                            new string[] { "2K", "4K", "8K" },
+                            m_StyleButton,
+                            GUILayout.Height(optionRowHeight)
+                        );
                         Settings.Instance.MinTextureSize.Value = (selectedIndex == 2) ? 8192 : (selectedIndex == 1) ? 4096 : 2048;
                         GUILayout.EndHorizontal();
 
                         GUILayout.BeginHorizontal();
-                        GUILayout.Space(20);
-                        Settings.Instance.ForceTextureToMinSize.Value = GUILayout.Toggle(Settings.Instance.ForceTextureToMinSize.Value, "Force all to minimum size", m_StyleToggle);
+                        GUILayout.Space(optionIndent);
+                        Settings.Instance.ForceTextureToMinSize.Value = GUILayout.Toggle(Settings.Instance.ForceTextureToMinSize.Value, "Force all to minimum size", m_StyleToggle, GUILayout.Height(optionRowHeight));
                         GUILayout.EndHorizontal();
                     }
 
@@ -800,17 +816,101 @@ namespace var_browser
                     //    //UnityHeapDump.Create();
                     //    new UnityHeapCrawler.HeapSnapshotCollector().Start();
                     //}
-                    if (GUILayout.Button("Remove Invalid Vars", m_StyleButton))
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("Remove Invalid Vars", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(actionRowHeight)))
                     {
                         RemoveInvalidVars();
                     }
-                    if (GUILayout.Button("Remove Old Version", m_StyleButtonDanger))
+                    if (GUILayout.Button("i", m_StyleButton, GUILayout.Width(infoBtnWidth), GUILayout.Height(actionRowHeight)))
+                    {
+                        m_ShowRemoveInvalidVarsInfo = !m_ShowRemoveInvalidVarsInfo;
+                        if (m_ShowRemoveInvalidVarsInfo)
+                        {
+                            m_ShowRemoveOldVersionInfo = false;
+                            m_ShowUninstallAllInfo = false;
+                        }
+                    }
+                    GUILayout.EndHorizontal();
+                    if (m_ShowRemoveInvalidVarsInfo)
+                    {
+                        GUILayout.BeginVertical(m_StyleInfoCard);
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Label("Remove Invalid Vars", m_StyleInfoCardTitle);
+                        GUILayout.FlexibleSpace();
+                        if (GUILayout.Button("x", m_StyleInfoClose, GUILayout.Width(18), GUILayout.Height(18)))
+                        {
+                            m_ShowRemoveInvalidVarsInfo = false;
+                        }
+                        GUILayout.EndHorizontal();
+                        GUILayout.Space(4);
+                        GUILayout.Label("This triggers a deep refresh that removes invalid/broken package entries from the browser database.", m_StyleInfoCardText);
+                        GUILayout.Space(2);
+                        GUILayout.Label("It does not delete your files. It just rebuilds the index so items that no longer exist (or are unreadable) stop showing up.", m_StyleInfoCardText);
+                        GUILayout.EndVertical();
+                    }
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("Remove Old Version", m_StyleButtonDanger, GUILayout.ExpandWidth(true), GUILayout.Height(actionRowHeight)))
                     {
                         RemoveOldVersion();
                     }
-                    if (GUILayout.Button("Uninstall All", m_StyleButtonDanger))
+                    if (GUILayout.Button("i", m_StyleButtonDanger, GUILayout.Width(infoBtnWidth), GUILayout.Height(actionRowHeight)))
+                    {
+                        m_ShowRemoveOldVersionInfo = !m_ShowRemoveOldVersionInfo;
+                        if (m_ShowRemoveOldVersionInfo)
+                        {
+                            m_ShowRemoveInvalidVarsInfo = false;
+                            m_ShowUninstallAllInfo = false;
+                        }
+                    }
+                    GUILayout.EndHorizontal();
+                    if (m_ShowRemoveOldVersionInfo)
+                    {
+                        GUILayout.BeginVertical(m_StyleInfoCard);
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Label("Remove Old Version", m_StyleInfoCardTitle);
+                        GUILayout.FlexibleSpace();
+                        if (GUILayout.Button("x", m_StyleInfoClose, GUILayout.Width(18), GUILayout.Height(18)))
+                        {
+                            m_ShowRemoveOldVersionInfo = false;
+                        }
+                        GUILayout.EndHorizontal();
+                        GUILayout.Space(4);
+                        GUILayout.Label("This triggers a refresh that also tries to remove older duplicates of packages when newer versions exist.", m_StyleInfoCardText);
+                        GUILayout.Space(2);
+                        GUILayout.Label("Depending on your setup, this can move packages out of AddonPackages and/or clean up package lists. It may change what is considered installed.", m_StyleInfoCardText);
+                        GUILayout.EndVertical();
+                    }
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("Unload All", m_StyleButtonPrimary, GUILayout.ExpandWidth(true), GUILayout.Height(actionRowHeight)))
                     {
                         UninstallAll();
+                    }
+                    if (GUILayout.Button("i", m_StyleButtonPrimary, GUILayout.Width(infoBtnWidth), GUILayout.Height(actionRowHeight)))
+                    {
+                        m_ShowUninstallAllInfo = !m_ShowUninstallAllInfo;
+                        if (m_ShowUninstallAllInfo)
+                        {
+                            m_ShowRemoveInvalidVarsInfo = false;
+                            m_ShowRemoveOldVersionInfo = false;
+                        }
+                    }
+                    GUILayout.EndHorizontal();
+                    if (m_ShowUninstallAllInfo)
+                    {
+                        GUILayout.BeginVertical(m_StyleInfoCard);
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Label("Unload All", m_StyleInfoCardTitle);
+                        GUILayout.FlexibleSpace();
+                        if (GUILayout.Button("x", m_StyleInfoClose, GUILayout.Width(18), GUILayout.Height(18)))
+                        {
+                            m_ShowUninstallAllInfo = false;
+                        }
+                        GUILayout.EndHorizontal();
+                        GUILayout.Space(4);
+                        GUILayout.Label("This moves all .var files from AddonPackages into AllPackages (except ones marked AutoInstall).", m_StyleInfoCardText);
+                        GUILayout.Space(2);
+                        GUILayout.Label("Result: those packages will no longer be treated as installed/active add-ons. Nothing is deleted; files are just moved.", m_StyleInfoCardText);
+                        GUILayout.EndVertical();
                     }
                     if (GUILayout.Button("Hub Browse", m_StyleButton))
                     {
@@ -822,89 +922,10 @@ namespace var_browser
                 GUI.enabled = true;
 
                 GUILayout.BeginVertical(m_StyleSection);
-                GUILayout.Label("Custom", m_StyleSubHeader);
-                if (GUILayout.Button(string.Format("Scene ({0})", CustomSceneKey.keyPattern, GUILayout.MaxWidth(150)), m_StyleButton))
+                if (GUILayout.Button("Gallery", m_StyleButton))
                 {
-                    OpenCustomScene();
+                    OpenGallery();
                 }
-                if (GUILayout.Button("Saved Person", m_StyleButton))
-                {
-                    OpenCustomSavedPerson();
-                }
-                if (GUILayout.Button("Person Preset", m_StyleButton))
-                {
-                    OpenPersonPreset();
-                }
-                GUILayout.EndVertical();
-
-                GUILayout.BeginVertical(m_StyleSection);
-                GUILayout.Label("Category", m_StyleSubHeader);
-                if (GUILayout.Button(string.Format("Scene ({0})", CategorySceneKey.keyPattern, GUILayout.MaxWidth(150)), m_StyleButton))
-                {
-                    OpenCategoryScene();
-                }
-                GUILayout.BeginHorizontal();
-
-                if (GUILayout.Button("Clothing", m_StyleButton, GUILayout.Width(90)))
-                {
-                    OpenCategoryClothing();
-                }
-                if (GUILayout.Button("Hair", m_StyleButton, GUILayout.Width(90)))
-                {
-                    OpenCategoryHair();
-                }
-                GUILayout.EndHorizontal();
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Pose", m_StyleButton, GUILayout.Width(90)))
-                {
-                    OpenCategoryPose();
-                }
-                GUILayout.FlexibleSpace();
-                GUILayout.EndHorizontal();
-                //GUILayout.Label("Plugin");
-                //if (GUILayout.Button("Plugin"))
-                //{
-                //    ShowFileBrowser("Select Plugins To Install", "cs", "Custom/Scripts",false, false);
-                //}
-                GUILayout.EndVertical();
-
-                GUILayout.BeginVertical(m_StyleSection);
-                GUILayout.Label("Preset", m_StyleSubHeader);
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Person", m_StyleButton, GUILayout.Width(90)))
-                {
-                    OpenPresetPerson();
-                }
-                if (GUILayout.Button("Clothing", m_StyleButton, GUILayout.Width(90)))
-                {
-                    OpenPresetClothing();
-                }
-                GUILayout.EndHorizontal();
-
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Hair", m_StyleButton, GUILayout.Width(90)))
-                {
-                    OpenPresetHair();
-                }
-                if (GUILayout.Button("Other", m_StyleButton, GUILayout.Width(90)))
-                {
-                    OpenPresetOther();
-                }
-                GUILayout.EndHorizontal();
-
-                GUILayout.EndVertical();
-
-                GUILayout.BeginVertical(m_StyleSection);
-                GUILayout.Label("Misc", m_StyleSubHeader);
-                if (GUILayout.Button("AssetBundle", m_StyleButton))
-                {
-                    OpenMiscCUA();
-                }
-                if (GUILayout.Button("All", m_StyleButton))
-                {
-                    OpenMiscAll();
-                }
-
                 GUILayout.EndVertical();
             }
 
@@ -958,33 +979,9 @@ namespace var_browser
                     const float borderPx = 1f;
 
                     var windowRect = m_Rect;
-                    if (m_Collapsed)
-                    {
-                        windowRect.height = 28f;
-                        windowRect.width = 120f;
-                    }
-                    else if (!MiniMode)
-                    {
-                        windowRect.height = 0f;
-                    }
+                    windowRect.height = 0f;
 
                     m_Rect = GUILayout.Window(0, windowRect, DragWnd, "", m_StyleWindow);
-
-                    if (m_ToggleCollapseRequested)
-                    {
-                        m_ToggleCollapseRequested = false;
-                        m_Collapsed = !m_Collapsed;
-                        if (m_Collapsed)
-                        {
-                            if (!MiniMode)
-                                m_ExpandedHeight = Mathf.Max(m_Rect.height, 50f);
-                        }
-                        else
-                        {
-                            if (!MiniMode)
-                                m_Rect.height = Mathf.Max(m_ExpandedHeight, 50f);
-                        }
-                    }
 
                     var borderRect = new Rect(m_Rect.x - borderPx, m_Rect.y - borderPx, m_Rect.width + (borderPx * 2f), m_Rect.height + (borderPx * 2f));
 
@@ -1034,101 +1031,74 @@ namespace var_browser
                         const float headerInsetY = 4f;
                         const float headerHeight = 24f;
 
-                        if (m_Collapsed)
+                        var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 150f, headerHeight);
+                        GUI.color = new Color(1f, 1f, 1f, 1f);
+                        GUI.contentColor = new Color(1f, 1f, 1f, 1f);
+                        var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
+                        GUI.Label(tagRect, string.Format("VPB {0} ({1:0.0}s)", PluginVersionInfo.Version, startupSeconds), m_TitleTagStyle);
+
+                        var titleStyle = new GUIStyle(GUI.skin.label);
+                        titleStyle.font = GUI.skin.window.font;
+                        titleStyle.fontSize = GUI.skin.window.fontSize;
+                        titleStyle.fontStyle = GUI.skin.window.fontStyle;
+                        titleStyle.normal.textColor = Color.white;
+                        titleStyle.hover.textColor = Color.white;
+                        titleStyle.active.textColor = Color.white;
+                        titleStyle.focused.textColor = Color.white;
+                        titleStyle.alignment = TextAnchor.MiddleLeft;
+                        titleStyle.wordWrap = false;
+                        titleStyle.clipping = TextClipping.Clip;
+                        titleStyle.padding = new RectOffset(0, 0, 0, 0);
+
+                        const float titleRightPadding = 6f;
+                        var fpsText = m_FpsText;
+                        float fpsWidth = 0f;
+                        if (!string.IsNullOrEmpty(fpsText))
                         {
-                            if (!string.IsNullOrEmpty(m_FpsText))
-                            {
-                                const float titleBarHeight = 28f;
-                                var fpsContent = new GUIContent(m_FpsText);
-                                var badgeSize = m_StyleFpsBadge.CalcSize(fpsContent);
-                                badgeSize.y = Mathf.Min(badgeSize.y, titleBarHeight - 2f);
-
-                                var badgeRect = new Rect(
-                                    m_Rect.x + (m_Rect.width - badgeSize.x) * 0.5f,
-                                    m_Rect.y + (titleBarHeight - badgeSize.y) * 0.5f,
-                                    badgeSize.x,
-                                    badgeSize.y);
-
-                                const float outerPadX = 4f;
-                                const float outerPadY = 3f;
-                                var outerRect = new Rect(badgeRect.x - outerPadX, badgeRect.y - outerPadY, badgeRect.width + (outerPadX * 2f), badgeRect.height + (outerPadY * 2f));
-                                GUI.color = new Color(1f, 1f, 1f, 1f);
-                                GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                                GUI.Box(outerRect, GUIContent.none, m_StyleFpsBadgeOuter);
-                                GUI.Label(badgeRect, fpsContent, m_StyleFpsBadge);
-                            }
+                            fpsWidth = titleStyle.CalcSize(new GUIContent(fpsText)).x;
                         }
-                        else
+
+                        const float titleLeftGap = 4f;
+                        const float titleRightGap = 6f;
+
+                        var leftEdge = tagRect.xMax + titleLeftGap;
+                        var rightEdge = m_Rect.xMax - titleRightPadding;
+
+                        var fpsRect = new Rect(rightEdge - fpsWidth, m_Rect.y + headerInsetY, fpsWidth, headerHeight);
+                        var middleRect = new Rect(leftEdge, m_Rect.y + headerInsetY, Mathf.Max(0f, (fpsRect.xMin - titleRightGap) - leftEdge), headerHeight);
+
+                        if (!string.IsNullOrEmpty(fpsText) && fpsRect.width > 4f)
                         {
-                            var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 150f, headerHeight);
+                            var fpsStyle = new GUIStyle(titleStyle);
+                            fpsStyle.alignment = TextAnchor.MiddleLeft;
                             GUI.color = new Color(1f, 1f, 1f, 1f);
                             GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                            var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
-                            GUI.Label(tagRect, string.Format("VPB {0} ({1:0.0}s)", PluginVersionInfo.Version, startupSeconds), m_TitleTagStyle);
+                            GUI.Label(fpsRect, fpsText, fpsStyle);
+                        }
 
-                            var titleStyle = new GUIStyle(GUI.skin.label);
-                            titleStyle.font = GUI.skin.window.font;
-                            titleStyle.fontSize = GUI.skin.window.fontSize;
-                            titleStyle.fontStyle = GUI.skin.window.fontStyle;
-                            titleStyle.normal.textColor = Color.white;
-                            titleStyle.hover.textColor = Color.white;
-                            titleStyle.active.textColor = Color.white;
-                            titleStyle.focused.textColor = Color.white;
-                            titleStyle.alignment = TextAnchor.MiddleLeft;
-                            titleStyle.wordWrap = false;
-                            titleStyle.clipping = TextClipping.Clip;
-                            titleStyle.padding = new RectOffset(0, 0, 0, 0);
+                        if (middleRect.width > 10f)
+                        {
+                            var dragText = "drag area";
+                            var drawText = dragText;
+                            var maxTitleWidth = middleRect.width;
 
-                            const float titleRightPadding = 6f;
-                            var fpsText = m_FpsText;
-                            float fpsWidth = 0f;
-                            if (!string.IsNullOrEmpty(fpsText))
+                            var textSize = titleStyle.CalcSize(new GUIContent(drawText));
+                            if (textSize.x > maxTitleWidth)
                             {
-                                fpsWidth = titleStyle.CalcSize(new GUIContent(fpsText)).x;
-                            }
-
-                            const float titleLeftGap = 4f;
-                            const float titleRightGap = 6f;
-
-                            var leftEdge = tagRect.xMax + titleLeftGap;
-                            var rightEdge = m_Rect.xMax - titleRightPadding;
-
-                            var fpsRect = new Rect(rightEdge - fpsWidth, m_Rect.y + headerInsetY, fpsWidth, headerHeight);
-                            var middleRect = new Rect(leftEdge, m_Rect.y + headerInsetY, Mathf.Max(0f, (fpsRect.xMin - titleRightGap) - leftEdge), headerHeight);
-
-                            if (!string.IsNullOrEmpty(fpsText) && fpsRect.width > 4f)
-                            {
-                                var fpsStyle = new GUIStyle(titleStyle);
-                                fpsStyle.alignment = TextAnchor.MiddleLeft;
-                                GUI.color = new Color(1f, 1f, 1f, 1f);
-                                GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                                GUI.Label(fpsRect, fpsText, fpsStyle);
-                            }
-
-                            if (middleRect.width > 10f)
-                            {
-                                var dragText = "drag area";
-                                var drawText = dragText;
-                                var maxTitleWidth = middleRect.width;
-
-                                var textSize = titleStyle.CalcSize(new GUIContent(drawText));
-                                if (textSize.x > maxTitleWidth)
+                                const string ellipsis = "...";
+                                drawText = dragText;
+                                while (drawText.Length > 0 && titleStyle.CalcSize(new GUIContent(drawText + ellipsis)).x > maxTitleWidth)
                                 {
-                                    const string ellipsis = "...";
-                                    drawText = dragText;
-                                    while (drawText.Length > 0 && titleStyle.CalcSize(new GUIContent(drawText + ellipsis)).x > maxTitleWidth)
-                                    {
-                                        drawText = drawText.Substring(0, drawText.Length - 1);
-                                    }
-                                    drawText = (drawText.Length > 0) ? (drawText + ellipsis) : ellipsis;
+                                    drawText = drawText.Substring(0, drawText.Length - 1);
                                 }
-
-                                var dragStyle = new GUIStyle(titleStyle);
-                                dragStyle.alignment = TextAnchor.MiddleCenter;
-                                GUI.color = new Color(1f, 1f, 1f, 1f);
-                                GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                                GUI.Label(middleRect, drawText, dragStyle);
+                                drawText = (drawText.Length > 0) ? (drawText + ellipsis) : ellipsis;
                             }
+
+                            var dragStyle = new GUIStyle(titleStyle);
+                            dragStyle.alignment = TextAnchor.MiddleCenter;
+                            GUI.color = new Color(1f, 1f, 1f, 1f);
+                            GUI.contentColor = new Color(1f, 1f, 1f, 1f);
+                            GUI.Label(middleRect, drawText, dragStyle);
                         }
                     }
 
