@@ -29,6 +29,7 @@ namespace var_browser
         public ConfigEntry<bool> CacheAssetBundle;
         public ConfigEntry<int> ThumbnailSize;
         public ConfigEntry<int> MaxTextureSize;
+        public ConfigEntry<bool> InflightDedupEnabled;
         public ConfigEntry<bool> SceneLoadWaitForImagesIdle;
         public ConfigEntry<float> SceneLoadImagesIdleSeconds;
         public ConfigEntry<string> LastGalleryPage;
@@ -54,6 +55,7 @@ namespace var_browser
             ForceTextureToMinSize = config.Bind<bool>("Optimze", "ForceTextureToMinSize", false, "force resized textures to minimum size.");
             MaxTextureSize = config.Bind<int>("Optimze", "MaxTextureSize", 4096, "max size for texture.");
             CacheAssetBundle = config.Bind<bool>("Optimze", "CacheAssetBundle", true, "cache assetbundle.");
+            InflightDedupEnabled = config.Bind<bool>("Optimze", "InflightDedupEnabled", false, "coalesce duplicate image requests while the first is still loading.");
             SceneLoadWaitForImagesIdle = config.Bind<bool>("Benchmark", "SceneLoadWaitForImagesIdle", true, "When enabled, SCENE_LOAD_TOTAL waits for image loading to become idle before ending.");
             SceneLoadImagesIdleSeconds = config.Bind<float>("Benchmark", "SceneLoadImagesIdleSeconds", 0f, "Idle window seconds required before SCENE_LOAD_TOTAL ends (when SceneLoadWaitForImagesIdle is enabled).");
 

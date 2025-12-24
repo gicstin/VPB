@@ -86,11 +86,6 @@ namespace var_browser
         {
             if (!Settings.Instance.ReduceTextureSize.Value) return;
             if (string.IsNullOrEmpty(qi.imgPath)) return;
-            if (qi.textureFormat != TextureFormat.DXT1
-                && qi.textureFormat != TextureFormat.DXT5
-                && qi.textureFormat != TextureFormat.RGB24
-                && qi.textureFormat != TextureFormat.RGBA32)
-                return;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -112,11 +107,6 @@ namespace var_browser
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
-            if (qi.textureFormat != TextureFormat.DXT1
-                && qi.textureFormat != TextureFormat.DXT5
-                && qi.textureFormat != TextureFormat.RGB24
-                && qi.textureFormat != TextureFormat.RGBA32)
-                return;
             //LogUtil.Log("PostQueueThumbnail:" + qi.imgPath + " " + qi.textureFormat);
 
             qi.isThumbnail = true;
@@ -127,19 +117,19 @@ namespace var_browser
                 var field = Traverse.Create(__instance).Field("queuedImages");
                 var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
 
-                queuedImagesListCache.Clear();
-                foreach (var item in queuedImages)
+                if (queuedImages != null)
                 {
-                    if (item.imgPath == qi.imgPath)
+                    var node = queuedImages.First;
+                    while (node != null)
                     {
-                        queuedImagesListCache.Add(item);
+                        var next = node.Next;
+                        if (object.ReferenceEquals(node.Value, qi))
+                        {
+                            queuedImages.Remove(node);
+                            break;
+                        }
+                        node = next;
                     }
-                }
-                //移除最后一个
-                int cnt = queuedImagesListCache.Count;
-                if (cnt > 0)
-                {
-                    queuedImages.Remove(queuedImagesListCache[cnt-1]);
                 }
                 return;
             }
@@ -152,11 +142,6 @@ namespace var_browser
         {
             if (!Settings.Instance.ReduceTextureSize.Value) return;
             if (string.IsNullOrEmpty(qi.imgPath)) return;
-            if (qi.textureFormat != TextureFormat.DXT1
-                && qi.textureFormat != TextureFormat.DXT5
-                && qi.textureFormat != TextureFormat.RGB24
-                && qi.textureFormat != TextureFormat.RGBA32)
-                return;
 
             //LogUtil.Log("PostQueueThumbnailImmediate:" + qi.imgPath + " " + qi.textureFormat);
 
@@ -167,19 +152,19 @@ namespace var_browser
                 var field = Traverse.Create(__instance).Field("queuedImages");
                 var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
 
-                queuedImagesListCache.Clear();
-                foreach (var item in queuedImages)
+                if (queuedImages != null)
                 {
-                    if (item.imgPath == qi.imgPath)
+                    var node = queuedImages.First;
+                    while (node != null)
                     {
-                        queuedImagesListCache.Add(item);
+                        var next = node.Next;
+                        if (object.ReferenceEquals(node.Value, qi))
+                        {
+                            queuedImages.Remove(node);
+                            break;
+                        }
+                        node = next;
                     }
-                }
-                //移除第一个
-                int cnt = queuedImagesListCache.Count;
-                if (cnt > 0)
-                {
-                    queuedImages.Remove(queuedImagesListCache[0]);
                 }
                 return;
             }
@@ -194,12 +179,6 @@ namespace var_browser
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
-
-            if (qi.textureFormat != TextureFormat.DXT1
-                && qi.textureFormat != TextureFormat.DXT5
-                && qi.textureFormat != TextureFormat.RGB24
-                && qi.textureFormat != TextureFormat.RGBA32)
-                return;
             //LogUtil.Log("PostQueueImage:" + qi.imgPath + " " + qi.textureFormat);
 
             if (ImageLoadingMgr.singleton.Request(qi))
@@ -207,20 +186,25 @@ namespace var_browser
                 qi.skipCache = true;
                 var field = Traverse.Create(__instance).Field("queuedImages");
                 var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
-                queuedImagesListCache.Clear();
-                foreach (var item in queuedImages)
+                bool removed = false;
+                if (queuedImages != null)
                 {
-                    if (item.imgPath == qi.imgPath)
+                    var node = queuedImages.First;
+                    while (node != null)
                     {
-                        queuedImagesListCache.Add(item);
-                        break;
+                        var next = node.Next;
+                        if (object.ReferenceEquals(node.Value, qi))
+                        {
+                            queuedImages.Remove(node);
+                            removed = true;
+                            break;
+                        }
+                        node = next;
                     }
                 }
-                int cnt = queuedImagesListCache.Count;
-                if (cnt > 0)
-                {
-                    queuedImages.Remove(queuedImagesListCache[cnt-1]);
 
+                if (removed)
+                {
                     var field2 = Traverse.Create(__instance).Field("numRealQueuedImages");
                     var numRealQueuedImages = (int)field2.GetValue();
                     field2.SetValue(numRealQueuedImages - 1);
@@ -240,23 +224,17 @@ namespace var_browser
             if (string.IsNullOrEmpty(__instance.imgPath)) return;
 
             //忽略hub browse
-            if (__instance.webRequest != null || __instance.useWebCache) return;
-            if (Regex.IsMatch(__instance.imgPath, "^http")) return;
+            if (__instance.tex != null)
+            {
+                ImageLoadingMgr.singleton.ResolveInflightForQueuedImage(__instance);
+            }
 
             if (__instance.tex != null)
             {
-                if (__instance.tex.format == TextureFormat.DXT1
-                    || __instance.tex.format == TextureFormat.DXT5
-                    || __instance.tex.format == TextureFormat.RGB24
-                    || __instance.tex.format == TextureFormat.RGBA32)
+                var tex = ImageLoadingMgr.singleton.GetResizedTextureFromBytes(__instance);
+                if (tex != null)
                 {
-                    //LogUtil.Log("PostFinish_QueuedImage:" + __instance.imgPath + " " + __instance.textureFormat + " " + __instance.tex.format);
-
-                    var tex = ImageLoadingMgr.singleton.GetResizedTextureFromBytes(__instance);
-                    if (tex != null)
-                    {
-                        __instance.skipCache = true;
-                    }
+                    __instance.skipCache = true;
                 }
             }
         }

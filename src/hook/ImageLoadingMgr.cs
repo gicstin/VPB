@@ -1,6 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using GPUTools.Skinner.Scripts.Kernels;
 using SimpleJSON;
 using UnityEngine;
@@ -67,6 +69,14 @@ namespace var_browser
                 }
                 catch { }
             }
+        }
+
+        public void ResolveInflightForQueuedImage(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null) return;
+            string key = GetDiskCachePath(qi, false, 0, 0);
+            if (string.IsNullOrEmpty(key)) return;
+            ResolveInflightWaiters(key, qi.tex);
         }
         public void ClearCache()
         {
@@ -150,7 +160,9 @@ namespace var_browser
                 return true;
             }
 
-            if (inflightKeys.Contains(diskCachePath))
+            bool inflightEnabled = Settings.Instance != null && Settings.Instance.InflightDedupEnabled != null && Settings.Instance.InflightDedupEnabled.Value;
+
+            if (inflightEnabled && inflightKeys.Contains(diskCachePath))
             {
                 EnqueueInflightWaiter(diskCachePath, qi);
                 qi.skipCache = true;
@@ -219,7 +231,7 @@ namespace var_browser
             LogUtil.PerfAdd("Img.Cache.Miss", 0, 0);
             LogUtil.Log("request not use cache:" + diskCachePath);
 
-            if (!inflightKeys.Contains(diskCachePath))
+            if (inflightEnabled && !inflightKeys.Contains(diskCachePath))
             {
                 inflightKeys.Add(diskCachePath);
             }
@@ -248,13 +260,17 @@ namespace var_browser
             //必须要2的n次方，否则无法生成mipmap
             //尺寸先除2
             var localFormat = qi.tex.format;
-            if (qi.tex.format == TextureFormat.RGBA32)
+            if (qi.tex.format == TextureFormat.RGBA32 || qi.tex.format == TextureFormat.ARGB32 || qi.tex.format == TextureFormat.BGRA32 || qi.tex.format == TextureFormat.DXT5)
             {
                 localFormat = TextureFormat.DXT5;
             }
-            else if (qi.tex.format == TextureFormat.RGB24)
+            else if (qi.tex.format == TextureFormat.RGB24 || qi.tex.format == TextureFormat.DXT1)
             {
                 localFormat = TextureFormat.DXT1;
+            }
+            else
+            {
+                localFormat = TextureFormat.DXT5;
             }
             //string ext = localFormat == TextureFormat.DXT1 ? ".DXT1" : ".DXT5";
 
@@ -320,7 +336,7 @@ namespace var_browser
             TextureFormat format= qi.tex.format;
             if (format == TextureFormat.DXT1)
                 format = TextureFormat.RGB24;
-            else if (format == TextureFormat.DXT5)
+            else
                 format = TextureFormat.RGBA32;
 
             resultTexture = new Texture2D(width, height, format, false, qi.linear);
@@ -499,18 +515,54 @@ namespace var_browser
             string result = null;
             var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
 
-            if (fileEntry != null && textureCacheDir != null)
+            if (textureCacheDir != null)
             {
-                string text = fileEntry.Size.ToString();
                 string basePath = textureCacheDir + "/";
+                string text = (fileEntry != null) ? fileEntry.Size.ToString() : "0";
                 string fileName = Path.GetFileName(imgPath);
+                fileName = SanitizeFileName(fileName);
                 fileName = fileName.Replace('.', '_');
                 //不加入时间戳，有一定误差
                 //有一些纯数字的是不是要特殊处理一下
-                var diskCacheSignature = fileName + "_" + text + "_" + GetDiskCacheSignature(qi, useSize, width, height);
+                string pathHash = ComputeStableHash(imgPath);
+                var diskCacheSignature = fileName + "_" + text + "_" + pathHash + "_" + GetDiskCacheSignature(qi, useSize, width, height);
                 result = basePath + diskCacheSignature;
             }
             return result;
+        }
+
+        static string SanitizeFileName(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "img";
+            var invalid = Path.GetInvalidFileNameChars();
+            var sb = new StringBuilder(value.Length);
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                bool bad = false;
+                for (int j = 0; j < invalid.Length; j++)
+                {
+                    if (c == invalid[j]) { bad = true; break; }
+                }
+                sb.Append(bad ? '_' : c);
+            }
+            return sb.ToString();
+        }
+
+        static string ComputeStableHash(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "0";
+            using (var md5 = MD5.Create())
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(value);
+                byte[] hash = md5.ComputeHash(bytes);
+                var sb = new StringBuilder(hash.Length * 2);
+                for (int i = 0; i < hash.Length; i++)
+                {
+                    sb.Append(hash[i].ToString("x2"));
+                }
+                return sb.ToString();
+            }
         }
         protected string GetDiskCacheSignature(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width,int height)
         {
