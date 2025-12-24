@@ -300,11 +300,11 @@ namespace var_browser
 		//[HideInInspector]
 		private List<string> drives;
 
-		private List<DirectoryButton> dirButtons;
+		//private List<DirectoryButton> dirButtons;
 
-		private List<ShortCutButton> shortCutButtons;
+		//private List<ShortCutButton> shortCutButtons;
 
-		private List<GameObject> dirSpacers;
+		//private List<GameObject> dirSpacers;
 
 		private FileButton selected;
 
@@ -1940,7 +1940,7 @@ namespace var_browser
 				info.button = null;
             }
         }
-		int lastSyncFrame = 0;
+		//int lastSyncFrame = 0;
 		private void SyncDisplayed()
 		{
 #if DEBUG

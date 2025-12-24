@@ -1,5 +1,6 @@
 using UnityEngine;
 
+#pragma warning disable CS0436
 public class Singleton<T> : MonoBehaviour where T : Singleton<T>
 {
 	public static T Instance

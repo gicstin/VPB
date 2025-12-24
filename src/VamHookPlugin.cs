@@ -319,6 +319,28 @@ namespace var_browser
 
             LogUtil.MarkPluginAwake();
 
+            try
+            {
+                var appType = typeof(Application);
+                var stackTraceLogTypeType = appType.Assembly.GetType("UnityEngine.StackTraceLogType");
+                var setMethod = appType.GetMethod(
+                    "SetStackTraceLogType",
+                    new Type[] { typeof(LogType), stackTraceLogTypeType }
+                );
+                if (setMethod != null && stackTraceLogTypeType != null)
+                {
+                    var noneValue = Enum.Parse(stackTraceLogTypeType, "None");
+                    setMethod.Invoke(null, new object[] { LogType.Log, noneValue });
+                    setMethod.Invoke(null, new object[] { LogType.Warning, noneValue });
+                    setMethod.Invoke(null, new object[] { LogType.Error, noneValue });
+                    setMethod.Invoke(null, new object[] { LogType.Exception, noneValue });
+                    setMethod.Invoke(null, new object[] { LogType.Assert, noneValue });
+                }
+            }
+            catch
+            {
+            }
+
             Settings.Init(this.Config);
             UIKey = KeyUtil.Parse(Settings.Instance.UIKey.Value);
             CustomSceneKey = KeyUtil.Parse(Settings.Instance.CustomSceneKey.Value);
@@ -756,7 +778,7 @@ namespace var_browser
                     const float infoBtnWidth = 28f;
                     const float actionRowHeight = 34f;
                     const float optionRowHeight = 28f;
-                    const float optionBtnWidth = 44f;
+                    //const float optionBtnWidth = 44f;
                     const float optionIndent = 18f;
 
                     Settings.Instance.ReduceTextureSize.Value = GUILayout.Toggle(Settings.Instance.ReduceTextureSize.Value, "Downscale Textures", m_StyleToggle, GUILayout.Height(optionRowHeight));

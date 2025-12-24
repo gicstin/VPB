@@ -2026,7 +2026,7 @@ namespace var_browser
                 componentInChildren.hostedOptionPopup.numPopupValues = 0;
                 hostedOptionChooser.RegisterPopup(componentInChildren.hostedOptionPopup, isAlt);
             }
-            catch(Exception e)
+            catch(Exception /*e*/)
             {
                 //LogUtil.LogError("hostedOptionPopup " + e.ToString());
             }

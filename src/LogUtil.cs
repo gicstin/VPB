@@ -37,15 +37,15 @@ namespace var_browser
 
         public static void Log(string log)
         {
-            UnityEngine.Debug.Log(DateTime.Now.ToString("HH:mm:ss")+"【var browser】" + log);
+            UnityEngine.Debug.Log(DateTime.Now.ToString("HH:mm:ss")+" (vb_log) " + log);
         }
         public static void LogError(string log)
         {
-            UnityEngine.Debug.LogError(DateTime.Now.ToString("HH:mm:ss") + "【var browser】" + log);
+            UnityEngine.Debug.LogError(DateTime.Now.ToString("HH:mm:ss") + " (vb_err) " + log);
         }
         public static void LogWarning(string log)
         {
-            UnityEngine.Debug.LogWarning(DateTime.Now.ToString("HH:mm:ss") + "【var browser】" + log);
+            UnityEngine.Debug.LogWarning(DateTime.Now.ToString("HH:mm:ss") + " (vb_warn) " + log);
         }
 
         public static void LogReadyOnce(string context)
