@@ -88,6 +88,8 @@ namespace var_browser
             var imgPath = qi.imgPath;
             if (string.IsNullOrEmpty(imgPath)) return false;
 
+            LogUtil.MarkImageActivity();
+            var swRequest = System.Diagnostics.Stopwatch.StartNew();
             var diskCachePath = GetDiskCachePath(qi,false,0,0);
 
             if (string.IsNullOrEmpty(diskCachePath)) return false;
@@ -97,9 +99,11 @@ namespace var_browser
             var cacheTexture = GetTextureFromCache(diskCachePath);
             if (cacheTexture!=null)
             {
+                LogUtil.PerfAdd("Img.Cache.MemHit", 0, 0);
                 LogUtil.Log("request use mem cache:" + diskCachePath);
                 qi.tex = cacheTexture;
                 Messager.singleton.StartCoroutine(DelayDoCallback(qi));
+                LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
                 return true;
             }
             var metaPath = diskCachePath + ".meta";
@@ -126,8 +130,11 @@ namespace var_browser
                 var realDiskCachePath = GetDiskCachePath(qi, true,width, height);
                 if (File.Exists(realDiskCachePath))
                 {
+                    LogUtil.PerfAdd("Img.Cache.DiskHit", 0, 0);
                     LogUtil.Log("request use disk cache:" + realDiskCachePath);
+                    var swRead = System.Diagnostics.Stopwatch.StartNew();
                     var bytes = File.ReadAllBytes(realDiskCachePath);
+                    LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
                     Texture2D tex = new Texture2D(width, height, textureFormat, false,qi.linear);
                     //tex.name = qi.cacheSignature;
                     bool success = true;
@@ -149,13 +156,16 @@ namespace var_browser
                         RegisterTexture(diskCachePath, tex);
 
                         Messager.singleton.StartCoroutine(DelayDoCallback(qi));
+                        LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
                         return true;
                     }
                 }
             }
 
+            LogUtil.PerfAdd("Img.Cache.Miss", 0, 0);
             LogUtil.Log("request not use cache:" + diskCachePath);
 
+            LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
             return false;
         }
         static int ClosestPowerOfTwo(int value)
@@ -197,10 +207,15 @@ namespace var_browser
             var diskCachePath = GetDiskCachePath(qi,false,0,0);
             var realDiskCachePath = GetDiskCachePath(qi,true,width,height);
 
+            LogUtil.BeginImageWork();
+            try
+            {
+
             Texture2D resultTexture = GetTextureFromCache(diskCachePath);
             //不仅需要path
             if (resultTexture!=null)
             {
+                LogUtil.PerfAdd("Img.Cache.MemHit", 0, 0);
                 LogUtil.Log("resize use mem cache:" + diskCachePath);
                 UnityEngine.Object.Destroy(qi.tex);
                 qi.tex = resultTexture;
@@ -210,8 +225,11 @@ namespace var_browser
             //var thumbnailPath = diskCachePath + ext
             if (File.Exists(realDiskCachePath))
             {
+                LogUtil.PerfAdd("Img.Resize.FromDisk", 0, 0);
                 LogUtil.Log("resize use disk cache:" + realDiskCachePath);
+                var swRead = System.Diagnostics.Stopwatch.StartNew();
                 var bytes = File.ReadAllBytes(realDiskCachePath);
+                LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
 
                 resultTexture = new Texture2D(width, height, localFormat, false, qi.linear);
                 //resultTexture.name = qi.cacheSignature;
@@ -252,7 +270,11 @@ namespace var_browser
             resultTexture.Apply();
             RenderTexture.active = previous;
 
+            var swConvert = System.Diagnostics.Stopwatch.StartNew();
+
             resultTexture.Compress(true);
+
+            LogUtil.PerfAdd("Img.Convert", swConvert.Elapsed.TotalMilliseconds, 0);
 
             RenderTexture.ReleaseTemporary(tempTexture);
 
@@ -262,7 +284,9 @@ namespace var_browser
                 resultTexture.format, width, height, resultTexture.mipmapCount));
 
             byte[] texBytes = resultTexture.GetRawTextureData();
+            var swWrite = System.Diagnostics.Stopwatch.StartNew();
             File.WriteAllBytes(realDiskCachePath, texBytes);
+            LogUtil.PerfAdd("Img.Disk.Write", swWrite.Elapsed.TotalMilliseconds, texBytes != null ? texBytes.LongLength : 0);
 
             JSONClass jSONClass = new JSONClass();
             jSONClass["type"] = "image";
@@ -281,6 +305,11 @@ namespace var_browser
             UnityEngine.Object.Destroy(qi.tex);
             qi.tex = resultTexture;
             return resultTexture;
+            }
+            finally
+            {
+                LogUtil.EndImageWork();
+            }
         }
 
         void GetResizedSize(ref int width,ref int height)

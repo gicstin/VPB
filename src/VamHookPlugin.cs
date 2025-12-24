@@ -476,6 +476,13 @@ namespace var_browser
         static bool m_Show = true; // Made static so it can be toggled via external message calls.
         void Update()
         {
+            float unscaledDt = Time.unscaledDeltaTime;
+            if (LogUtil.IsSceneLoadActive())
+            {
+                LogUtil.SceneLoadFrameTick(unscaledDt);
+                LogUtil.SceneLoadUpdate();
+            }
+
             if (!m_UIInited || !m_FileManagerInited)
             {
                 m_FpsSmoothedDelta = 0f;
@@ -484,7 +491,6 @@ namespace var_browser
             }
             else
             {
-                float unscaledDt = Time.unscaledDeltaTime;
                 if (unscaledDt > 0f)
                 {
                     if (m_FpsSmoothedDelta <= 0f)

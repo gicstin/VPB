@@ -31,6 +31,14 @@ namespace var_browser
             MessageKit.post(MessageDef.DeactivateWorldUI);
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SuperController), "ActivateWorldUI")]
+        public static void PostActivateWorldUI(SuperController __instance)
+        {
+            LogUtil.LogStartupReadyOnce("World UI activated");
+            LogUtil.EndSceneLoadTotal("WorldUI.Activate");
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SuperController), "LoadInternal", new Type[] {
             typeof(string),typeof(bool),typeof(bool)
@@ -39,6 +47,7 @@ namespace var_browser
             string saveName, bool loadMerge, bool editMode)
         {
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
+            LogUtil.BeginSceneLoad(saveName);
             if (saveName == "Saves\\scene\\MeshedVR\\default.json")
             {
                 if (File.Exists(saveName))
@@ -47,6 +56,16 @@ namespace var_browser
                     FileButton.EnsureInstalledInternal(text);
                 }
             }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SuperController), "LoadInternal", new Type[] {
+            typeof(string),typeof(bool),typeof(bool)
+        })]
+        public static void PostLoadInternal(SuperController __instance,
+            string saveName, bool loadMerge, bool editMode)
+        {
+            LogUtil.EndSceneLoadInternal("LoadInternal");
         }
 
         /// <summary>
