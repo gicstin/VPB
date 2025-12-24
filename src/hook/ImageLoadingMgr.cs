@@ -25,6 +25,49 @@ namespace var_browser
         }
 
         Dictionary<string, Texture2D> cache = new Dictionary<string, Texture2D>();
+
+        Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
+        HashSet<string> inflightKeys = new HashSet<string>();
+
+        void EnqueueInflightWaiter(string key, ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (string.IsNullOrEmpty(key) || qi == null) return;
+            List<ImageLoaderThreaded.QueuedImage> list;
+            if (!inflightWaiters.TryGetValue(key, out list) || list == null)
+            {
+                list = new List<ImageLoaderThreaded.QueuedImage>(4);
+                inflightWaiters[key] = list;
+            }
+            list.Add(qi);
+        }
+
+        void ResolveInflightWaiters(string key, Texture2D tex)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            inflightKeys.Remove(key);
+
+            List<ImageLoaderThreaded.QueuedImage> list;
+            if (!inflightWaiters.TryGetValue(key, out list) || list == null || list.Count == 0)
+            {
+                inflightWaiters.Remove(key);
+                return;
+            }
+
+            inflightWaiters.Remove(key);
+            if (tex == null) return;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var w = list[i];
+                if (w == null) continue;
+                try
+                {
+                    w.tex = tex;
+                    Messager.singleton.StartCoroutine(DelayDoCallback(w));
+                }
+                catch { }
+            }
+        }
         public void ClearCache()
         {
             cache.Clear();
@@ -106,6 +149,17 @@ namespace var_browser
                 LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
                 return true;
             }
+
+            if (inflightKeys.Contains(diskCachePath))
+            {
+                EnqueueInflightWaiter(diskCachePath, qi);
+                qi.skipCache = true;
+                qi.processed = true;
+                qi.finished = true;
+                LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
+                return true;
+            }
+
             var metaPath = diskCachePath + ".meta";
             int width = 0;
             int height = 0;
@@ -165,6 +219,11 @@ namespace var_browser
             LogUtil.PerfAdd("Img.Cache.Miss", 0, 0);
             LogUtil.Log("request not use cache:" + diskCachePath);
 
+            if (!inflightKeys.Contains(diskCachePath))
+            {
+                inflightKeys.Add(diskCachePath);
+            }
+
             LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
             return false;
         }
@@ -219,6 +278,7 @@ namespace var_browser
                 LogUtil.Log("resize use mem cache:" + diskCachePath);
                 UnityEngine.Object.Destroy(qi.tex);
                 qi.tex = resultTexture;
+                ResolveInflightWaiters(diskCachePath, resultTexture);
                 return resultTexture;
             }
 
@@ -236,6 +296,7 @@ namespace var_browser
                 resultTexture.LoadRawTextureData(bytes);
                 resultTexture.Apply();
                 RegisterTexture(diskCachePath, resultTexture);
+                ResolveInflightWaiters(diskCachePath, resultTexture);
                 return resultTexture;
             }
 
@@ -302,9 +363,16 @@ namespace var_browser
 
             RegisterTexture(diskCachePath, resultTexture);
 
+            ResolveInflightWaiters(diskCachePath, resultTexture);
+
             UnityEngine.Object.Destroy(qi.tex);
             qi.tex = resultTexture;
             return resultTexture;
+            }
+            catch
+            {
+                ResolveInflightWaiters(diskCachePath, null);
+                throw;
             }
             finally
             {

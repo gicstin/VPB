@@ -823,14 +823,18 @@ namespace var_browser
                         GUILayout.Space(optionIndent);
                         GUILayout.Label("Min Resize", GUILayout.Width(80));
                         int minTextureSize = Settings.Instance.MinTextureSize.Value;
-                        int selectedIndex = (minTextureSize == 8192) ? 2 : (minTextureSize == 4096) ? 1 : 0;
+                        int selectedIndex = (minTextureSize == 8192) ? 3 : (minTextureSize == 4096) ? 2 : (minTextureSize == 2048) ? 1 : 0;
                         selectedIndex = GUILayout.Toolbar(
                             selectedIndex,
-                            new string[] { "2K", "4K", "8K" },
+                            new string[] { "1K", "2K", "4K", "8K" },
                             m_StyleButton,
                             GUILayout.Height(optionRowHeight)
                         );
-                        Settings.Instance.MinTextureSize.Value = (selectedIndex == 2) ? 8192 : (selectedIndex == 1) ? 4096 : 2048;
+                        Settings.Instance.MinTextureSize.Value = (selectedIndex == 3) ? 8192 : (selectedIndex == 2) ? 4096 : (selectedIndex == 1) ? 2048 : 1024;
+                        if (Settings.Instance.MaxTextureSize != null)
+                        {
+                            Settings.Instance.MaxTextureSize.Value = Settings.Instance.MinTextureSize.Value;
+                        }
                         GUILayout.EndHorizontal();
 
                         GUILayout.BeginHorizontal();

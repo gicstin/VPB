@@ -35,6 +35,7 @@ namespace var_browser
         static bool sceneLoadEndArmed;
         static float sceneLoadEndArmRealtime;
         static bool sceneLoadAutoEndFailedLogged;
+        static bool sceneLoadSawImageWork;
 
         static long memAllocStart;
         static long memAllocEnd;
@@ -134,6 +135,7 @@ namespace var_browser
             sceneLoadNotBusyStableFrames = 0;
             sceneLoadEndArmed = false;
             sceneLoadEndArmRealtime = 0f;
+            sceneLoadSawImageWork = false;
 
             imageLastActivityRealtime = Time.realtimeSinceStartup;
 
@@ -208,6 +210,43 @@ namespace var_browser
             // Require not-loading for a few frames to avoid flapping.
             sceneLoadNotLoadingStableFrames++;
 
+            bool waitForImagesIdle = false;
+            try
+            {
+                waitForImagesIdle = Settings.Instance != null && Settings.Instance.SceneLoadWaitForImagesIdle != null && Settings.Instance.SceneLoadWaitForImagesIdle.Value;
+            }
+            catch { }
+
+            // If we observed any image work during this scene load, we must not end on "not loading" alone.
+            // Late image requests can arrive after the main load is finished.
+            if (sceneLoadSawImageWork)
+            {
+                waitForImagesIdle = true;
+            }
+
+            if (!waitForImagesIdle)
+            {
+                if (sceneLoadNotLoadingStableFrames >= 5)
+                {
+                    if (!sceneLoadEndArmed)
+                    {
+                        sceneLoadEndArmed = true;
+                        sceneLoadEndArmRealtime = Time.realtimeSinceStartup;
+                        return;
+                    }
+
+                    if ((Time.realtimeSinceStartup - sceneLoadEndArmRealtime) >= 0.5f)
+                    {
+                        EndSceneLoadTotal("AutoEnd.NotLoading");
+                    }
+                }
+                else
+                {
+                    sceneLoadEndArmed = false;
+                }
+                return;
+            }
+
             bool busy = IsImageLoadingBusy();
             if (busy)
             {
@@ -218,7 +257,17 @@ namespace var_browser
 
             // Require a quiet window after the last image activity.
             // Scene loads can trigger image bursts after the main load is complete.
-            const float idleSecondsRequired = 5.0f;
+            float idleSecondsRequired = 5.0f;
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.SceneLoadImagesIdleSeconds != null)
+                {
+                    idleSecondsRequired = Mathf.Clamp(Settings.Instance.SceneLoadImagesIdleSeconds.Value, 0f, 60f);
+                }
+            }
+            catch { }
+            // Prevent flapping/early end when late image bursts happen.
+            if (idleSecondsRequired <= 0f) idleSecondsRequired = 0.5f;
             if ((Time.realtimeSinceStartup - imageLastActivityRealtime) < idleSecondsRequired)
             {
                 sceneLoadNotBusyStableFrames = 0;
@@ -299,6 +348,7 @@ namespace var_browser
         public static void BeginImageWork()
         {
             MarkImageActivity();
+            sceneLoadSawImageWork = true;
             Interlocked.Increment(ref imageWorkInFlight);
         }
 
@@ -315,6 +365,12 @@ namespace var_browser
         {
             // realtimeSinceStartup is fine here; we only compare deltas.
             imageLastActivityRealtime = Time.realtimeSinceStartup;
+
+            // If any image activity happens during a scene load, we must wait for image-idle before ending.
+            if (sceneLoadActive)
+            {
+                sceneLoadSawImageWork = true;
+            }
 
             // Cancel any pending end if a new image burst starts.
             sceneLoadEndArmed = false;

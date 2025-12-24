@@ -366,7 +366,7 @@ namespace var_browser
                 var_browser.CustomAssetLoader.DoneWithAssetBundleFromFile(path);
                 return false; // 阻止原始方法执行
             }
-            return false;
+            return true;
         }
     }
 
