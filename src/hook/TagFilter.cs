@@ -18,10 +18,10 @@ namespace var_browser
         public static List<string> HairOtherTags = new List<string>()
         {
             "no tag",
-            //自定义的一些
+            // Some custom tags
 
 
-            "unknown",//剩下的一些tag
+            "unknown",// Remaining tags
         };
 
         public static List<string> ClothingRegionTags = new List<string>()
@@ -38,10 +38,10 @@ namespace var_browser
         {
             "back","costume","fantasy","heels","jeans","lingerie","sneakers","swimwear",
 
-            //自定义的一些
+            // Some custom tags
 
-            "no tag",//特殊
-            "unknown",//剩下的一些tag
+            "no tag",// Special
+            "unknown",// Remaining tags
         };
 
 

@@ -135,7 +135,7 @@ namespace var_browser
 				bool dirty=this.Package.InstallSelf();
 				return dirty;
 			}
-			//设置false的时候不会自动卸载
+			// When set to false, it will not uninstall automatically
 
 			return false;
 		}

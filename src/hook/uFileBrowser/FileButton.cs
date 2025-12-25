@@ -107,7 +107,7 @@ namespace var_browser
                 {
                     try
                     {
-                        //有些var包里的dep不是全的，所有需要确保安装
+                        // Some var packages have incomplete dependencies, so we need to ensure installation.
                         if (fullPath.EndsWith(".json"))
                         {
                             using (FileEntryStream fileEntryStream = FileManager.OpenStream(fullPath))
@@ -217,7 +217,7 @@ namespace var_browser
             if (flag)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                //刷新自己，这里会发事件出来
+                // Refresh this as well; this will raise events.
                 var_browser.FileManager.Refresh();
             }
         }
@@ -253,7 +253,7 @@ namespace var_browser
                 }
                 else
                 {
-                    //如果是因为查某个具体version的var包失败的话，尝试安装最新包
+                    // If lookup fails for a specific var version, try installing the latest.
                     if (!key.EndsWith(".latest"))
                     {
                         string newKey = key.Substring(0, key.LastIndexOf('.'))+ ".latest";
@@ -288,11 +288,11 @@ namespace var_browser
         {
             LogUtil.Log("OnInstalled " + b+" "+ fullPath);
             bool flag = false;
-            FileEntry fileEntry = FileManager.GetFileEntry(fullPath, true);//不带AllPackages路径的
+            FileEntry fileEntry = FileManager.GetFileEntry(fullPath, true);// Without the AllPackages prefix
             if (fileEntry != null && (fileEntry is VarFileEntry))
             {
                 var entry = fileEntry as VarFileEntry;
-                //卸载
+                // Uninstall
                 if (!b)
                 {
                     bool dirty=entry.Package.UninstallSelf();
@@ -331,7 +331,7 @@ namespace var_browser
             if (flag)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                //刷新自己，这里会发事件出来
+                // Refresh this as well; this will raise events.
                 var_browser.FileManager.Refresh();
             }
         }
@@ -356,7 +356,7 @@ namespace var_browser
             browser = b;
             text = txt;
             textLowerInvariant = txt.ToLowerInvariant();
-            fullPath = path;//这个路径是uid:子路径，这种格式
+            fullPath = path;// This path is in the format uid:subPath
             isDir = dir;
             label.text = text;
 
@@ -426,12 +426,12 @@ namespace var_browser
                 renameButton.onClick.AddListener(InstallInBackground);
 
                 hiddenToggle.gameObject.SetActive(false);
-                //是否喜爱
+                // Favorite
                 favoriteToggle.gameObject.SetActive(true);
                 favoriteToggle.onValueChanged.RemoveAllListeners();
                 favoriteToggle.isOn = favorite;
                 favoriteToggle.onValueChanged.AddListener(OnFavoriteChange);
-                //安装
+                // Install
                 useFileAsTemplateToggle.gameObject.SetActive(true);
                 useFileAsTemplateToggle.onValueChanged.RemoveAllListeners();
                 useFileAsTemplateToggle.isOn = isAutoInstall;
@@ -463,7 +463,7 @@ namespace var_browser
             }
             else
             {
-                //插件安装之后，路径变化了
+                // After plugin installation, the path changes
                 if (fullPath.StartsWith("AllPackages"))
                 {
                     fullPath = "AddonPackages" + fullPath.Substring("AllPackages".Length);

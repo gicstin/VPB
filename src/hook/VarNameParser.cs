@@ -5,8 +5,8 @@ using UnityEngine;
 namespace var_browser
 {
     /// <summary>
-    /// 自定义的var包id扫描器
-    /// 相比于正则表达式，有几十倍的性能提升
+    /// Custom var package ID scanner
+    /// Compared to regular expressions, this provides performance improvements by dozens of times
     /// </summary>
     class VarNameParser
     {
@@ -19,7 +19,7 @@ namespace var_browser
             //(creater).(varname).(version):
             for (int i = 0; i < text.Length - 5;)
             {
-                //清空
+                // Clear
                 s_TempBuilder.Length = 0;
                 int createrLen = ReadString(s_TempBuilder, text, ref i, 5);
                 if (createrLen > 0)
@@ -31,7 +31,7 @@ namespace var_browser
                         {
                             if (ReadDot(s_TempBuilder, text, ref i))
                             {
-                                //versionId或者latest
+                                // versionId or latest
                                 int versionLen = ReadVersion(s_TempBuilder, text, ref i, 1);
                                 if (versionLen > 0)
                                 {
@@ -69,7 +69,7 @@ namespace var_browser
                 }
                 builder.Append(peek);
                 cnt++;
-                //至少要预留这么多字节，否则后面也没法解析
+                // Must reserve at least this many characters, otherwise parsing cannot continue
                 if (text.Length <= leastLeftCntToRead + idx)
                     break;
                 idx++;
@@ -98,7 +98,7 @@ namespace var_browser
         }
         static int ReadVersion(StringBuilder builder, string text, ref int idx, int leastLeftCntToRead)
         {
-            if (text.Length > idx + 6 + leastLeftCntToRead)//预留读取latest:
+            if (text.Length > idx + 6 + leastLeftCntToRead)// Reserve space to read "latest"
             {
                 if (text[idx] == 'l'
                     && text[idx + 1] == 'a'
@@ -119,7 +119,7 @@ namespace var_browser
         {
             int cnt = 0;
             char peek = text[idx];
-            //版本号不可能0开头
+            // Version numbers cannot start with 0
             if (peek == '0')
             {
                 idx++;
@@ -129,7 +129,7 @@ namespace var_browser
             {
                 builder.Append(peek);
                 cnt++;
-                //至少要预留这么多字节，否则后面也没法解析
+                // Must reserve at least this many characters, otherwise parsing cannot continue
                 if (text.Length <= leastLeftCntToRead + idx++)
                     break;
                 peek = text[idx];

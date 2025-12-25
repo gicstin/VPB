@@ -6,7 +6,7 @@ using System.Text;
 namespace var_browser
 {
 
-    //1.不能对包名进行修正。
+    // 1. Package names cannot be corrected.
     class GlobalInfo
     {
         public static string PluginInfoDirectory = "Custom/PluginData/sfishere";

@@ -314,7 +314,7 @@ namespace var_browser
 			}
 		}
 
-		// 解压之后的形式称为simulated
+		// The extracted form is called "simulated"
 		public bool IsSimulated
 		{
 			get { return false; }
@@ -458,7 +458,7 @@ namespace var_browser
 			protected set;
 		}
 
-		//是否确认过所有的missing
+		// Whether all missing dependencies have been checked
 		public bool MissingDependenciesChecked = false;
 		public bool Scaned = false;
 		public List<string> RecursivePackageDependencies;
@@ -511,8 +511,8 @@ namespace var_browser
 		}
 		public VarPackage(string uid, string path, VarPackageGroup group, string creator, string name, int version)
 		{
-			Uid = uid;//VAM_GS.Yinping_1_3.2 这种形式
-			Path = path.Replace('\\', '/');//AllPackages/ReignMocap.RM-ActiveMaleSex.1.var 这种形式
+			Uid = uid;// e.g. VAM_GS.Yinping_1_3.2
+			Path = path.Replace('\\', '/');// e.g. AllPackages/ReignMocap.RM-ActiveMaleSex.1.var
 
 			if (Path.StartsWith("AddonPackages/"))
 				RelativePath = this.Path.Substring("AddonPackages/".Length);
@@ -645,7 +645,7 @@ namespace var_browser
                 {
                     FileInfo fileInfo = new FileInfo(Path);
                     LastWriteTime = fileInfo.LastWriteTime;
-					//new to old的排序按文件创建时间来排序
+					// Sort "new to old" by file creation time
 					CreationTime = fileInfo.CreationTime;
 					Size = fileInfo.Length;
 
@@ -775,7 +775,7 @@ namespace var_browser
 											}
 										}
 									}
-									//变形的数量太多了，2000多个包居然有8w多个变形
+									// There are too many morphs; over 2,000 packages can contain ~80k morphs
 									//else if (entryName.EndsWith(".vmi"))
          //                           {
 									//	VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
@@ -785,7 +785,7 @@ namespace var_browser
 									{
 										VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
 										FileEntries.Add(varFileEntry);
-										//liu修改  增加资产预览图片
+										// liu modification: add asset preview image
 										string entry = entryName.Substring(0, entryName.Length - 12) + ".jpg";
 										//SuperController.LogMessage("assetbundle:"+ entry);
 										if (!set.Contains(entry))
@@ -836,7 +836,7 @@ namespace var_browser
 				SyncJSONCache();
 			}
 
-            //初始化clothing tag
+            // Initialize clothing tags
             if (ClothingFileEntryNames != null && ClothingFileEntryNames.Count > 0)
             {
 				Dictionary<string, string> tags = new Dictionary<string, string>();
@@ -1007,7 +1007,7 @@ namespace var_browser
 						if (asObject != null)
 						{
                             HashSet<string> depends = new HashSet<string>();
-							//查找依赖
+							// Find dependencies
 							GetDependenciesRecursive(asObject, depends);
 							HashSet<string> scripts = new HashSet<string>();
 
@@ -1123,13 +1123,13 @@ namespace var_browser
 
 			string linkvar ="AddonPackages"+ this.Path.Substring("AllPackages".Length);
 			if (File.Exists(linkvar)) return false;
-			if (Directory.Exists(linkvar))//有可能存在同名文件夹
+			if (Directory.Exists(linkvar))// A directory with the same name may exist
             {
 				LogUtil.LogError("InstallSelf " + this.Path+" exist directory with same name");
 				return false;
-			}
+            }
 
-			//移动文件
+			// Move the file
 			string dir = System.IO.Path.GetDirectoryName(linkvar);
 			if (!Directory.Exists(dir))
 				Directory.CreateDirectory(dir);
@@ -1153,7 +1153,7 @@ namespace var_browser
 				LogUtil.LogError("Uninstall From AddonPackages Exists "+this.Path);
 				return false;
 			}
-			//移动文件
+			// Move the file
 			string dir = System.IO.Path.GetDirectoryName(linkvar);
 			if (!Directory.Exists(dir))
 				Directory.CreateDirectory(dir);

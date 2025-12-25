@@ -1,4 +1,4 @@
-﻿using ICSharpCode.SharpZipLib.Core;
+using ICSharpCode.SharpZipLib.Core;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -61,6 +61,8 @@ namespace var_browser
 		//protected static HashSet<string> userDeniedPlugins;
 
 		protected static LinkedList<string> loadDirStack;
+
+	public static int s_InstalledCount = 0;
 		public static DateTime lastPackageRefreshTime
 		{
 			get;
@@ -171,7 +173,7 @@ namespace var_browser
 						packagesByPath.Add(varPackage.Path, varPackage);
 						value.AddPackage(varPackage);
 
-						//var包disable，就是在同路径下新建一个disable的文件
+						// Disabling a var package means creating a "disable" file in the same path
 						if (varPackage.Enabled)
 						{
 							if (varPackage.FileEntries != null)
@@ -199,180 +201,180 @@ namespace var_browser
 				LogUtil.LogError("VAR file " + vpath + " is not named with convention <creator>.<name>.<version>");
 			}
 
-            //到这里说明不合法
-            if (clean)
-            {
-                if (isDuplicated)
-                {
+			// Reaching here means it is invalid
+			if (clean)
+			{
+				if (isDuplicated)
+				{
 					RemoveToInvalid(vpath, "Duplicated");
 				}
 				else
 					RemoveToInvalid(vpath,"InvalidName");
 			}
-            return null;
-        }
+			return null;
+		}
 		static void RemoveToInvalid(string vpath,string subPath=null)
         {
-			if (!Directory.Exists("InvalidPackages"))
-				Directory.CreateDirectory("InvalidPackages");
+            if (!Directory.Exists("InvalidPackages"))
+                Directory.CreateDirectory("InvalidPackages");
 
             if (!string.IsNullOrEmpty(subPath))
             {
 				if (!Directory.Exists("InvalidPackages/"+ subPath))
-					Directory.CreateDirectory("InvalidPackages/" + subPath);
-			}
+                    Directory.CreateDirectory("InvalidPackages/" + subPath);
+            }
 
-			string moveToPath = null;
+            string moveToPath = null;
             if (vpath.StartsWith("AllPackages"))
             {
-				moveToPath = "InvalidPackages" + vpath.Substring("AllPackages".Length);
-				if (!string.IsNullOrEmpty(subPath))
+                moveToPath = "InvalidPackages" + vpath.Substring("AllPackages".Length);
+                if (!string.IsNullOrEmpty(subPath))
                 {
 					moveToPath = "InvalidPackages/"+subPath+"/" + vpath.Substring("AllPackages".Length);
-				}
-			}
-			else if (vpath.StartsWith("AddonPackages"))
+                }
+            }
+            else if (vpath.StartsWith("AddonPackages"))
             {
-				moveToPath = "InvalidPackages" + vpath.Substring("AddonPackages".Length);
-				if (!string.IsNullOrEmpty(subPath))
-				{
-					moveToPath = "InvalidPackages/" + subPath + "/" + vpath.Substring("AddonPackages".Length);
-				}
-			}
-			//UnityEngine.Debug.Log(moveToPath);
-			string dir = Path.GetDirectoryName(moveToPath);
+                moveToPath = "InvalidPackages" + vpath.Substring("AddonPackages".Length);
+                if (!string.IsNullOrEmpty(subPath))
+                {
+                    moveToPath = "InvalidPackages/" + subPath + "/" + vpath.Substring("AddonPackages".Length);
+                }
+            }
+            //UnityEngine.Debug.Log(moveToPath);
+            string dir = Path.GetDirectoryName(moveToPath);
 			if(!Directory.Exists(dir))
             {
-				Directory.CreateDirectory(dir);
+                Directory.CreateDirectory(dir);
             }
-			while (File.Exists(moveToPath))
-			{
-				moveToPath += "(clone)";
-			}
-			File.Move(vpath, moveToPath);
-		}
+            while (File.Exists(moveToPath))
+            {
+                moveToPath += "(clone)";
+            }
+            File.Move(vpath, moveToPath);
+        }
 
-		public static void UnregisterPackage(VarPackage vp)
-		{
-			LogUtil.Log("UnregisterPackage " + vp.Path);
-			if (vp != null)
-			{
-				if (vp.Group != null)
-				{
-					vp.Group.RemovePackage(vp);
-				}
-				packagesByUid.Remove(vp.Uid);
-				packagesByPath.Remove(vp.Path);
+        public static void UnregisterPackage(VarPackage vp)
+        {
+            LogUtil.Log("UnregisterPackage " + vp.Path);
+            if (vp != null)
+            {
+                if (vp.Group != null)
+                {
+                    vp.Group.RemovePackage(vp);
+                }
+                packagesByUid.Remove(vp.Uid);
+                packagesByPath.Remove(vp.Path);
                 if (vp.FileEntries != null)
                 {
-					foreach (VarFileEntry fileEntry in vp.FileEntries)
-					{
-						allVarFileEntries.Remove(fileEntry);
-						uidToVarFileEntry.Remove(fileEntry.Uid);
-						pathToVarFileEntry.Remove(fileEntry.Path);
-					}
-				}
-				vp.Dispose();
-			}
-		}
+                    foreach (VarFileEntry fileEntry in vp.FileEntries)
+                    {
+                        allVarFileEntries.Remove(fileEntry);
+                        uidToVarFileEntry.Remove(fileEntry.Uid);
+                        pathToVarFileEntry.Remove(fileEntry.Path);
+                    }
+                }
+                vp.Dispose();
+            }
+        }
 
-		public static void RegisterRefreshHandler(OnRefresh refreshHandler)
-		{
-			onRefreshHandlers = (OnRefresh)Delegate.Combine(onRefreshHandlers, refreshHandler);
-		}
+        public static void RegisterRefreshHandler(OnRefresh refreshHandler)
+        {
+            onRefreshHandlers = (OnRefresh)Delegate.Combine(onRefreshHandlers, refreshHandler);
+        }
 
-		public static void UnregisterRefreshHandler(OnRefresh refreshHandler)
-		{
-			onRefreshHandlers = (OnRefresh)Delegate.Remove(onRefreshHandlers, refreshHandler);
-		}
+        public static void UnregisterRefreshHandler(OnRefresh refreshHandler)
+        {
+            onRefreshHandlers = (OnRefresh)Delegate.Remove(onRefreshHandlers, refreshHandler);
+        }
 		//public static void DoFixVarNameLog(string log)
 		//{
 		//	File.AppendAllText(GlobalInfo.FixVarNamePath, System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " : " + log + "\n");
 		//}
-		protected static void ClearAll()
-		{
-			foreach (VarPackage value in packagesByUid.Values)
-			{
-				value.Dispose();
-			}
-			if (packagesByUid != null)
-			{
-				packagesByUid.Clear();
-			}
-			if (packagesByPath != null)
-			{
-				packagesByPath.Clear();
-			}
-			if (packageGroups != null)
-			{
-				packageGroups.Clear();
-			}
-			if (allVarFileEntries != null)
-			{
-				allVarFileEntries.Clear();
-			}
-			if (uidToVarFileEntry != null)
-			{
-				uidToVarFileEntry.Clear();
-			}
-			if (pathToVarFileEntry != null)
-			{
-				pathToVarFileEntry.Clear();
-			}
-		}
+        protected static void ClearAll()
+        {
+            foreach (VarPackage value in packagesByUid.Values)
+            {
+                value.Dispose();
+            }
+            if (packagesByUid != null)
+            {
+                packagesByUid.Clear();
+            }
+            if (packagesByPath != null)
+            {
+                packagesByPath.Clear();
+            }
+            if (packageGroups != null)
+            {
+                packageGroups.Clear();
+            }
+            if (allVarFileEntries != null)
+            {
+                allVarFileEntries.Clear();
+            }
+            if (uidToVarFileEntry != null)
+            {
+                uidToVarFileEntry.Clear();
+            }
+            if (pathToVarFileEntry != null)
+            {
+                pathToVarFileEntry.Clear();
+            }
+        }
 
 		public static void Refresh(bool init = false,bool clean=false,bool removeOldVersion=false)
-		{
+        {
 #if DEBUG
-			string stackTrace = new System.Diagnostics.StackTrace().ToString();
-			LogUtil.LogWarning("Refresh " + stackTrace);
+            string stackTrace = new System.Diagnostics.StackTrace().ToString();
+            LogUtil.LogWarning("Refresh " + stackTrace);
 #endif
             //if (debug)
             {
                 LogUtil.LogWarning(string.Format("FileManager Refresh({0},{1},{2})",init,clean,removeOldVersion));
-			}
-			if (packagesByUid == null)
-			{
-				packagesByUid = new Dictionary<string, VarPackage>();
-			}
-			if (packagesByPath == null)
-			{
-				packagesByPath = new Dictionary<string, VarPackage>();
-			}
-			if (packageGroups == null)
-			{
-				packageGroups = new Dictionary<string, VarPackageGroup>();
-			}
-			if (allVarFileEntries == null)
-			{
-				allVarFileEntries = new HashSet<VarFileEntry>();
-			}
-			if (uidToVarFileEntry == null)
-			{
-				uidToVarFileEntry = new Dictionary<string, VarFileEntry>();
-			}
-			if (pathToVarFileEntry == null)
-			{
-				pathToVarFileEntry = new Dictionary<string, VarFileEntry>();
-			}
+            }
+            if (packagesByUid == null)
+            {
+                packagesByUid = new Dictionary<string, VarPackage>();
+            }
+            if (packagesByPath == null)
+            {
+                packagesByPath = new Dictionary<string, VarPackage>();
+            }
+            if (packageGroups == null)
+            {
+                packageGroups = new Dictionary<string, VarPackageGroup>();
+            }
+            if (allVarFileEntries == null)
+            {
+                allVarFileEntries = new HashSet<VarFileEntry>();
+            }
+            if (uidToVarFileEntry == null)
+            {
+                uidToVarFileEntry = new Dictionary<string, VarFileEntry>();
+            }
+            if (pathToVarFileEntry == null)
+            {
+                pathToVarFileEntry = new Dictionary<string, VarFileEntry>();
+            }
 
-			bool flag = false;
-			try
-			{
+            bool flag = false;
+            try
+            {
                 if (!Directory.Exists("Cache/AllPackagesJSON"))
                 {
-					Directory.CreateDirectory("Cache/AllPackagesJSON");
+                    Directory.CreateDirectory("Cache/AllPackagesJSON");
                 }
-				if (!Directory.Exists("AddonPackages"))
-				{
-					CreateDirectory("AddonPackages");
-				}
-				if (!Directory.Exists("AllPackages"))
-				{
-					CreateDirectory("AllPackages");
-				}
-				if (Directory.Exists("AllPackages"))
-				{
+                if (!Directory.Exists("AddonPackages"))
+                {
+                    CreateDirectory("AddonPackages");
+                }
+                if (!Directory.Exists("AllPackages"))
+                {
+                    CreateDirectory("AllPackages");
+                }
+                if (Directory.Exists("AllPackages"))
+                {
                     string[] addonVarPaths = Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories);
                     string[] allVarPaths = Directory.GetFiles("AllPackages", "*.var", SearchOption.AllDirectories);
                     string[] varPaths = new string[addonVarPaths.Length + allVarPaths.Length];
@@ -380,40 +382,40 @@ namespace var_browser
                     Array.Copy(allVarPaths, 0, varPaths, addonVarPaths.Length, allVarPaths.Length);
 
                     HashSet<string> hashSet = new HashSet<string>();
-					HashSet<string> addSet = new HashSet<string>();
-					if (varPaths != null)
-					{
-						string[] _varPaths = varPaths;
-						foreach (string _varPath in _varPaths)
-						{
-							string varPath = CleanFilePath(_varPath);
-							hashSet.Add(varPath);
+                    HashSet<string> addSet = new HashSet<string>();
+                    if (varPaths != null)
+                    {
+                        string[] _varPaths = varPaths;
+                        foreach (string _varPath in _varPaths)
+                        {
+                            string varPath = CleanFilePath(_varPath);
+                            hashSet.Add(varPath);
 
-							VarPackage value2;
-							if (packagesByPath.TryGetValue(varPath, out value2))
-							{
-							}
-							else
-							{
-								//没有，登记一下
-								addSet.Add(varPath);
-							}
-						}
-					}
+                            VarPackage value2;
+                            if (packagesByPath.TryGetValue(varPath, out value2))
+                            {
+                            }
+                            else
+                            {
+                                // Not found, register it
+                                addSet.Add(varPath);
+                            }
+                        }
+                    }
 
-					HashSet<VarPackage> removeSet = new HashSet<VarPackage>();
-					foreach (VarPackage value3 in packagesByUid.Values)
-					{
-						if (!hashSet.Contains(value3.Path))
-						{
-							removeSet.Add(value3);
-						}
-					}
+                    HashSet<VarPackage> removeSet = new HashSet<VarPackage>();
+                    foreach (VarPackage value3 in packagesByUid.Values)
+                    {
+                        if (!hashSet.Contains(value3.Path))
+                        {
+                            removeSet.Add(value3);
+                        }
+                    }
                     HashSet<string> oldVersion = new HashSet<string>();
                     if (removeOldVersion)
                     {
-						HashSet<string> referenced = GetReferencedPackage();
-						foreach (var item in packageGroups)
+                        HashSet<string> referenced = GetReferencedPackage();
+                        foreach (var item in packageGroups)
                         {
                             var group = item.Value;
                             foreach (var item2 in group.Packages)
@@ -422,15 +424,15 @@ namespace var_browser
                                 {
                                     if (!referenced.Contains(item2.Uid))
                                     {
-										removeSet.Add(item2);
-										oldVersion.Add(item2.Path);
-									}
+                                        removeSet.Add(item2);
+                                        oldVersion.Add(item2.Path);
+                                    }
                                     else
                                     {
 #if DEBUG
 										LogUtil.Log("keep old version:" + item2.Uid);
 #endif
-									}
+                                    }
                                 }
                             }
                         }
@@ -448,28 +450,28 @@ namespace var_browser
                     }
                     if (removeOldVersion)
                     {
-                        //移除旧版本
+                        // Remove old versions
                         foreach (var item in oldVersion)
                         {
                             RemoveToInvalid(item, "OldVersion");
                         }
                     }
                 }
-				if (flag)
-				{
-					//foreach (VarPackage value4 in packagesByUid.Values)
-					//{
+                if (flag)
+                {
+                    //foreach (VarPackage value4 in packagesByUid.Values)
+                    //{
 					//	UnityEngine.Profiling.Profiler.BeginSample("VarPackage LoadMetaData");
 					//	//value4.LoadMetaData();
 					//	UnityEngine.Profiling.Profiler.EndSample();
-					//}
-					//foreach (VarPackageGroup value5 in packageGroups.Values)
-					//{
+                    //}
+                    //foreach (VarPackageGroup value5 in packageGroups.Values)
+                    //{
 					//	UnityEngine.Profiling.Profiler.BeginSample("VarPackageGroup Init");
 					//	value5.Init();
 					//	UnityEngine.Profiling.Profiler.EndSample();
-					//}
-				}
+                    //}
+                }
                 if (init)
                     FileManager.singleton.StartScan(init,flag, clean, true);
                 else
@@ -477,21 +479,20 @@ namespace var_browser
 
             }
             catch (Exception arg)
-			{
-				LogUtil.LogError("Exception during package refresh " + arg);
-			}
-			lastPackageRefreshTime = DateTime.Now;
+            {
+                LogUtil.LogError("Exception during package refresh " + arg);
+            }
+            lastPackageRefreshTime = DateTime.Now;
 
-			s_InstalledCount = 0;
-			foreach (var item in packagesByUid)
-			{
+            s_InstalledCount = 0;
+            foreach (var item in packagesByUid)
+            {
                 if (item.Value.IsInstalled())
                 {
-					s_InstalledCount++;
-				}
-			}
-		}
-		public static int s_InstalledCount=0;
+                    s_InstalledCount++;
+                }
+            }
+        }
 
 		static void ScanAndRegister(VarPackage varPackage)
 		{
@@ -499,7 +500,7 @@ namespace var_browser
             
 			if (varPackage.invalid)
             {
-				//最后移除
+				// Remove invalid package later
 			}
 			//else if (varPackage.fixUid)
 			//{
@@ -572,7 +573,7 @@ namespace var_browser
 			}
             if (init)
             {
-				//init的时候，必须要刷新
+				// If initialization, call refresh handlers regardless of flag
                 if (onRefreshHandlers != null)
                     onRefreshHandlers();
             }
@@ -581,7 +582,7 @@ namespace var_browser
                 if (flag && onRefreshHandlers != null)
                     onRefreshHandlers();
             }
-            //不管有没有变化都刷新一下，因为可能文件没有移动，只是favorite或者autoinstall状态变了
+            // Post refresh message to update UI, favorites, and auto-install settings
             MessageKit.post(MessageDef.FileManagerRefresh);
 		}
 		public void StartScan(bool init,bool flag,bool clean,bool runCo)
@@ -642,7 +643,9 @@ namespace var_browser
             }
             return ret;
         }
-		//在移除老包的时候，查看所有的包引用的情况，带版本号的包需要特别记录一下，这部分包就算是老版本，也不能删掉
+		// When removing old packages, check all package references.
+		// Packages with explicit version numbers must be specially recorded;
+		// even if they are old versions, they cannot be deleted.
 		public static HashSet<string> GetReferencedPackage()
         {
 			HashSet<string> hashSet = new HashSet<string>();

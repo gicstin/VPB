@@ -100,7 +100,7 @@ namespace var_browser
 			//		FileManager.DeleteFile(hidePath);
 			//	}
 			//}
-			//else if (b)//隐藏
+			//else if (b)// Hidden
 			//{
 			//	string directoryName = FileManager.GetDirectoryName(hidePath);
 			//	if (!FileManager.DirectoryExists(directoryName))

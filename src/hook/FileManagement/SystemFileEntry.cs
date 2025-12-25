@@ -140,7 +140,7 @@ namespace var_browser
 					installPath = "AddonPackages" + Path.Substring("AllPackages".Length);
 					repoPath = Path;
 				}
-				//卸载
+				// Uninstall
 				if (File.Exists(repoPath))
 				{
 					if (!File.Exists(installPath))
@@ -160,7 +160,7 @@ namespace var_browser
 			}
             else
             {
-				//就是var包了
+				// This is a var package
             }
 			return false;
         }
@@ -181,7 +181,7 @@ namespace var_browser
 					repoPath = Path;
 				}
 
-                //卸载
+                // Uninstall
                 if (File.Exists(installPath))
                 {
                     if (!File.Exists(repoPath))

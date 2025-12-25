@@ -677,7 +677,7 @@ namespace var_browser
                         {
                             canShow = asBool;
                         }
-                        //不能下载的不显示
+                        // Do not show items that cannot be downloaded
                         if (canShow)
                         {
                             HubResourceItem hubResourceItem = new HubResourceItem(resource, this);
@@ -736,7 +736,7 @@ namespace var_browser
                 {
                     jSONClass["category"] = _payTypeFilter;
                 }
-                //如果勾选了“只有可下载”选项，则payType必然是free，减少返回的数据量
+                // If "Only Downloadable" is checked, payType must be free, reducing the returned data
                 if (onlyDownloadable.val)
                 {
                     jSONClass["category"] = "Free";
@@ -1007,13 +1007,13 @@ namespace var_browser
                 Show();
 
                 HubResourceItemDetailUI hridui;
-                //所有不在栈里的detailpanel都放在savedResourceDetailsPanels
+                // All detail panels not in the stack are stored in savedResourceDetailsPanels
                 if (savedResourceDetailsPanels.TryGetValue(resource_id, out hridui))
                 {
                     savedResourceDetailsPanels.Remove(resource_id);
                     hridui.gameObject.SetActive(true);
                     resourceDetailStack.Push(hridui);
-                    hridui.transform.SetAsLastSibling();//移动到最后的位置，保证显示是正确的
+                    hridui.transform.SetAsLastSibling();// Move to the end to ensure correct display order
                 }
                 else
                 {
@@ -1021,7 +1021,7 @@ namespace var_browser
                     rectTransform.SetParent(resourceDetailContainer, false);
                     hridui = rectTransform.GetComponent<HubResourceItemDetailUI>();
                     resourceDetailStack.Push(hridui);
-                    hridui.transform.SetAsLastSibling();//移动到最后的位置，保证显示是正确的
+                    hridui.transform.SetAsLastSibling();// Move to the end to ensure correct display order
 
                     JSONClass jSONClass = new JSONClass();
                     jSONClass["source"] = "VaM";
@@ -1053,7 +1053,7 @@ namespace var_browser
 
         public void CloseDetail(string resource_id)
         {
-            //关闭的时候，发现栈中还有数据的时候
+            // When closing, if there is still data in the stack
             if (resourceDetailStack.Count > 0)
             {
                 HubResourceItemDetailUI hubResourceItemDetailUI = resourceDetailStack.Pop();
@@ -1065,7 +1065,7 @@ namespace var_browser
                 }
                 else
                 {
-                    //如果下完了，直接移除
+                    // If the download is finished, remove it directly
                     if (resource_id != null)
                     {
                         savedResourceDetailsPanels.Remove(resource_id);
@@ -1085,28 +1085,28 @@ namespace var_browser
                 HubResourceItemDetailUI hubResourceItemDetailUI2 = resourceDetailStack.Peek();
                 if (hubResourceItemDetailUI2.connectedItem != null)
                 {
-                    //显示栈中的下一个
+                    // Display the next item in the stack
                     hubResourceItemDetailUI2.gameObject.SetActive(true);
                     hubResourceItemDetailUI2.connectedItem.NavigateToOverview();
                 }
             }
 
-            //所有没有在下载的detailpanel都应该被删掉
+            // Remove all detail panels that are not being downloaded
             List<string> removes = new List<string>();
             foreach (string key in savedResourceDetailsPanels.Keys)
             {
                 var hubResourceItemDetailUI = savedResourceDetailsPanels[key];
                 if (hubResourceItemDetailUI.connectedItem != null && hubResourceItemDetailUI.connectedItem.IsDownloading)
                 {
-                    //保留
+                    // Keep it
                 }
                 else
                 {
-                    //清除
+                    // Remove it
                     removes.Add(key);
                 }
             }
-            //没在下载的都移除
+            // Remove all detail panels that are not being downloaded
             foreach (var key in removes)
             {
                 var hubResourceItemDetailUI = savedResourceDetailsPanels[key];

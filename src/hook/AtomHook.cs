@@ -14,7 +14,7 @@ namespace var_browser
 {
     class AtomHook
     {
-        //load look功能
+        // Load-look feature
         //prefab:TabControlAtom
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Atom), "LoadAppearancePreset", new Type[] { typeof(string) })]
@@ -31,7 +31,7 @@ namespace var_browser
             }
         }
 
-        //ky1001.PresetLoader 用这种方法加载的
+        // ky1001.PresetLoader loads using this method
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Atom), "LoadPreset", new Type[] { typeof(string) })]
         public static void PreLoadPreset(Atom __instance, string saveName = "savefile")
@@ -119,15 +119,15 @@ namespace var_browser
             JSONClass newInst = null;
             if (inputJSON != null && inputJSON["storables"] != null)
             {
-                //先判断是否是包含timeline的预设
+                // First check whether this preset contains timeline
                 JSONArray array = inputJSON["storables"] as JSONArray;
                 for (int i = 0; i < array.Count; i++)
                 {
                     var node = array[i]["id"];
                     if (node != null)
                     {
-                        //如果是timeline的预设，则不处理。
-                        //不太确定这种方式好不好。
+                        // If this is a timeline preset, do not process it.
+                        // Not sure if this approach is ideal.
                         if (node.Value.EndsWith("_VamTimeline.AtomPlugin"))
                         {
                             newInst = new JSONClass();
@@ -135,7 +135,7 @@ namespace var_browser
                         }
                     }
                 }
-                //如果包含了timeline，则将timeline剔除掉，clone一个新的json文件
+                // If timeline is included, remove it and clone a new JSON
                 if (newInst != null)
                 {
                     foreach (var item in inputJSON.Keys)
@@ -154,7 +154,7 @@ namespace var_browser
                                 var node2 = array2[i]["id"];
                                 if (node2 != null)
                                 {
-                                    //剔除掉timeline的数据
+                                    // Remove timeline data
                                     if (!node2.Value.EndsWith("_VamTimeline.AtomPlugin"))
                                     {
                                         newArray.Add(array2[i]);
@@ -171,7 +171,7 @@ namespace var_browser
                 }
             }
             LogUtil.Log("[var browser hook]PresetManager PreLoadPresetPreFromJSON " + __instance.presetName);
-            //json大的时候，这一步会很慢
+            // This step can be slow when the JSON is large
             if (newInst!=null)
             {
                 string str = newInst.ToString();

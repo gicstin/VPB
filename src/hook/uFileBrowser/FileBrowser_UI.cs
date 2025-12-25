@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -48,9 +48,9 @@ namespace var_browser
 				rectTransform.anchorMin = new Vector2(0, 1);
 				rectTransform.anchorMax = new Vector2(0, 1);
 				rectTransform.pivot = new Vector2(0, 1);
-				//yOffset往负值增长
+				// yOffset grows toward negative values
 				rectTransform.anchoredPosition = new Vector2(xOffset, yOffset);
-				rectTransform.sizeDelta = new Vector2(width, height);//大小
+				rectTransform.sizeDelta = new Vector2(width, height);// Size
 				rectTransform.localScale = Vector3.one;
 
 				var layout=	rectTransform.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -153,7 +153,7 @@ namespace var_browser
 				rectTransform.anchorMin = new Vector2(0, 1);
 				rectTransform.anchorMax = new Vector2(0, 1);
 				rectTransform.pivot = new Vector2(0, 1);
-				//yOffset往负值增长
+				// yOffset grows toward negative values
 				rectTransform.anchoredPosition = new Vector2(-500, yOffset);
 				rectTransform.sizeDelta = new Vector2(500, 120);
 				rectTransform.localScale = Vector3.one;
@@ -194,7 +194,7 @@ namespace var_browser
 				rectTransform.anchorMin = new Vector2(1, 1);
 				rectTransform.anchorMax = new Vector2(1, 1);
 				rectTransform.pivot = new Vector2(0, 1);
-				//yOffset往负值增长
+				// yOffset grows toward negative values
 				rectTransform.anchoredPosition = new Vector2(0, yOffset);
 				rectTransform.sizeDelta = new Vector2(200, 50);
 				rectTransform.localScale = Vector3.one;

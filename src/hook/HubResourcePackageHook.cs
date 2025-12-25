@@ -28,7 +28,7 @@ namespace var_browser
                 str = Traverse.Create(__instance).Field("resolvedVarName").GetValue<string>();
             }
             LogUtil.Log("Hook DownloadComplete "+ str);
-            //移动到仓库目录，然后再link过来
+            // Move into the repository directory, then link it back
             var_browser.FileManager.Refresh();
         }
 

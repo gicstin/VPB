@@ -10,7 +10,7 @@ using Valve.Newtonsoft.Json.Linq;
 namespace var_browser
 {
     /// <summary>
-    /// 贴图可能需要读取，所以不能把cpu那份内存干掉
+    /// Textures may need to be read later, so we cannot discard the CPU-side memory.
     /// </summary>
     public class ImageLoadingMgr : MonoBehaviour
     {
@@ -124,13 +124,13 @@ namespace var_browser
                 LogUtil.LogError("DoCallback "+qi.imgPath+" "+ex.ToString());
             }
         }
-        //不能立刻调用。这里延迟一帧
-        //比如MacGruber.PostMagic立刻完成，这个时候还没完成初始化
+        // Cannot call immediately; delay one frame.
+        // e.g. MacGruber.PostMagic can finish immediately while initialization isn't complete yet.
         WaitForEndOfFrame waitForEndOfFrame= new WaitForEndOfFrame();
         IEnumerator DelayDoCallback(ImageLoaderThreaded.QueuedImage qi)
         {
             yield return waitForEndOfFrame;
-            //这里延迟2帧，只延迟一帧的话，decalmaker的逻辑时序会有问题。
+            // Delay 2 frames; delaying only 1 frame can break decalmaker timing.
             yield return waitForEndOfFrame;
             DoCallback(qi);
         }
@@ -249,7 +249,7 @@ namespace var_browser
             return power;
         }
         /// <summary>
-        /// 将加载完成的贴图进行resize、compress，然后存储在本地
+        /// Resize and compress the loaded texture, then store it locally.
         /// </summary>
         /// <param name="qi"></param>
         /// <returns></returns>
@@ -257,8 +257,8 @@ namespace var_browser
         {
             var path = qi.imgPath;
 
-            //必须要2的n次方，否则无法生成mipmap
-            //尺寸先除2
+            // Must be a power of two, otherwise mipmaps cannot be generated.
+            // Start by dividing the size by 2.
             var localFormat = qi.tex.format;
             if (qi.tex.format == TextureFormat.RGBA32 || qi.tex.format == TextureFormat.ARGB32 || qi.tex.format == TextureFormat.BGRA32 || qi.tex.format == TextureFormat.DXT5)
             {
@@ -287,7 +287,7 @@ namespace var_browser
             {
 
             Texture2D resultTexture = GetTextureFromCache(diskCachePath);
-            //不仅需要path
+            // Not only the path is needed
             if (resultTexture!=null)
             {
                 LogUtil.PerfAdd("Img.Cache.MemHit", 0, 0);
@@ -319,14 +319,14 @@ namespace var_browser
 
             LogUtil.Log("resize generate cache:" + realDiskCachePath);
 
-            //一张图片是否是linear，会影响qi.tex的显示效果
+            // Whether an image is linear affects how qi.tex is displayed.
             var tempTexture = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32,
                 qi.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB);
 
             Graphics.SetRenderTarget(tempTexture);
             GL.PushMatrix();
             GL.LoadPixelMatrix(0, width, height, 0);
-            //rt会复用，所以一定要先清理
+            // RenderTextures are reused, so it must be cleared first.
             GL.Clear(true, true, Color.clear);
             Graphics.Blit(qi.tex, tempTexture);
             //Graphics.DrawTexture(new Rect(0, 0, width, height), qi.tex);
@@ -367,7 +367,7 @@ namespace var_browser
 
             JSONClass jSONClass = new JSONClass();
             jSONClass["type"] = "image";
-            //这里记录原始的贴图大小
+            // Record the original texture size here.
             jSONClass["width"].AsInt = qi.tex.width;
             jSONClass["height"].AsInt = qi.tex.height;
             jSONClass["resizedWidth"].AsInt = width;
@@ -522,8 +522,8 @@ namespace var_browser
                 string fileName = Path.GetFileName(imgPath);
                 fileName = SanitizeFileName(fileName);
                 fileName = fileName.Replace('.', '_');
-                //不加入时间戳，有一定误差
-                //有一些纯数字的是不是要特殊处理一下
+                // No timestamp included, so there may be minor inaccuracies.
+                // Should we handle some purely-numeric names specially?
                 string pathHash = ComputeStableHash(imgPath);
                 var diskCacheSignature = fileName + "_" + text + "_" + pathHash + "_" + GetDiskCacheSignature(qi, useSize, width, height);
                 result = basePath + diskCacheSignature;

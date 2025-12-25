@@ -112,7 +112,7 @@ namespace var_browser
             }
             return ret;
         }
-        //一个都没选说明需要过滤服装
+        // If nothing is selected, it means we need to filter clothing
         HashSet<string> GetClothingFilter()
         {
             HashSet<string> ret = new HashSet<string>();

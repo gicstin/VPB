@@ -381,7 +381,7 @@ namespace var_browser
                 nameJSON.text = ui.nameText;
                 licenseTypeJSON.text = ui.licenseTypeText;
                 fileSizeJSON.text = ui.fileSizeText;
-                //显示范围大一点
+                // Make the display area a bit larger
                 ui.fileSizeText.GetComponent<RectTransform>().sizeDelta = new Vector2(-20,0);
 
                 notOnHubJSON.indicator = ui.notOnHubIndicator;

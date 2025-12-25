@@ -508,7 +508,7 @@ namespace var_browser
 						{
 							try
 							{
-								//从var包中加载图片
+								// Load image from a var package
 								using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
 								{
 									Stream stream = fileEntryStream.Stream;

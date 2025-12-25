@@ -62,7 +62,7 @@ namespace var_browser
 			{
 				//this.CancelButtonClicked();
 				Hide();
-				//把top界面关掉
+				// Close the top-level UI
 				SuperController.singleton.DeactivateWorldUI();
 			});
 			//this.renameContainer = ui.renameContainer;
@@ -269,12 +269,12 @@ namespace var_browser
 
 		public bool showInstallFolderInDirectoryList;
 
-		//只显示模板
+		// Only show templates
 		public bool forceOnlyShowTemplates;
 
 		public bool allowUseFileAsTemplateSelect;
 
-		//场景的肯定都是json文件
+		// Scenes are always JSON files
 		public string fileFormat = string.Empty;
 
 		public bool hideExtension;
@@ -932,8 +932,8 @@ namespace var_browser
                                         imgPath = fileEntry.Path + ".png";
                                         text4 = ".png";
                                         break;
-									//case ".vmi"://角色变形
-									case ".json":
+								//case ".vmi":// Character morphs
+								case ".json":
                                     case ".vac":
                                     case ".vap":
                                     case ".vam":
@@ -1048,7 +1048,7 @@ namespace var_browser
 
 		public void Show(string _fileFormat,string _defaultPath,FileBrowserCallback callback, bool changeDirectory = true,bool inGame=false)
 		{
-			//是否显示cloth tag过滤
+			// Whether to show clothing tag filtering
 			if(_fileFormat== "vam" && _defaultPath == "Custom/Clothing")
             {
 				SetClothTagsActive(true);
@@ -1077,7 +1077,7 @@ namespace var_browser
             if (this.inGame)
             {
                 creatorPopup.gameObject.SetActive(false);
-				//把弹出的popup隐藏掉
+				// Hide the popup that may have been shown
 				creatorPopup.GetComponent<UIPopup>().visible = false;
 			}
             else
@@ -1920,7 +1920,7 @@ namespace var_browser
 
 		protected void HideButton(FileButton fb)
 		{
-			//manageContentTransform这里是true
+			// manageContentTransform is true here
 			if (manageContentTransform && displayedFileButtons.Contains(fb))
 			{
 				fb.gameObject.SetActive(false);
@@ -2012,7 +2012,7 @@ namespace var_browser
                                 }
                                 if (!pass)
                                 {
-									//如果包含了no tag，则特殊处理
+									// If "no tag" is included, handle it specially
                                     if (includeNoTag)
                                     {
 										if (varFileEntry.ClothingTags == null||varFileEntry.ClothingTags.Count==0)
@@ -2065,7 +2065,7 @@ namespace var_browser
 								}
 								if (!pass)
 								{
-									//如果包含了no tag，则特殊处理
+									// If "no tag" is included, handle it specially
 									if (includeNoTag)
 									{
 										if (varFileEntry.HairTags == null || varFileEntry.HairTags.Count == 0)
@@ -2135,7 +2135,7 @@ namespace var_browser
 								continue;
 							}
                         }
-						//需要过滤
+						// Needs filtering
 						if (!inGame && _creatorFilter != "All")
                         {
                             string creator = _creatorFilter.Substring(0, _creatorFilter.IndexOf('('));
@@ -2290,22 +2290,22 @@ namespace var_browser
 					}
 					else if (inGame)
                     {
-						string[] files= Directory.GetFiles(defaultPath, "*.*",SearchOption.AllDirectories);
-						foreach(var item in files)
-                        {
-							//暂时写死 外观预设
+						string[] files = Directory.GetFiles(defaultPath, "*.*", SearchOption.AllDirectories);
+						foreach (var item in files)
+						{
+							// Temporarily hardcoded: appearance presets
 							if (fileFormat == "vap")
-                            {
+							{
 								if (item.EndsWith(fileFormat))//.vap
 								{
-									if (File.Exists(item.Substring(0, item.Length - 3)+"jpg"))
-                                    {
+									if (File.Exists(item.Substring(0, item.Length - 3) + "jpg"))
+									{
 										list3.Add(new SystemFileEntry(item));
 									}
 								}
 							}
 							else if (fileFormat == "json")
-                            {
+							{
 								if (item.EndsWith(fileFormat))
 								{
 									if (File.Exists(item.Substring(0, item.Length - 4) + "jpg"))
@@ -2329,7 +2329,7 @@ namespace var_browser
 						}
 					}
 
-					//在这里进行筛选
+					// Filter here
 					bool sceneFilterOther = defaultPath == "Saves" && fileFormat == "json";
 					bool presetFilterOther = defaultPath == "Custom" && fileFormat == "vap";
 					bool presetFilterPerson = defaultPath == "Custom/Atom/Person" && fileFormat == "vap";
@@ -2351,9 +2351,9 @@ namespace var_browser
 							}
 							else if (presetFilterOther)
 							{
-								//所有的预设
+								// All presets
 								if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/"))
-									continue;//pose忽略
+									continue;// ignore pose
 								else if (varFileEntry.InternalPath.StartsWith("Custom/Hair/"))
 									continue;
 								else if (varFileEntry.InternalPath.StartsWith("Custom/Clothing/"))
@@ -2364,7 +2364,7 @@ namespace var_browser
 							else if (presetFilterPerson)
 							{
 								if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/"))
-									continue;//pose忽略
+									continue;// ignore pose
 								if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Hair/"))
 									continue;
 								if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Clothing/"))
@@ -2393,8 +2393,8 @@ namespace var_browser
 				list = FilterFormat(list, true);
 			}
 
-			//这里是初始化这个页面所有的作者信息
-			//过滤创作者
+			// Initialize the creator list for this page
+			// Filter by creator
 			if (!inGame)
             {
 				string lastCreator = null;
@@ -2464,7 +2464,7 @@ namespace var_browser
 				}
                 ret.Insert(0, "All");
                 creatorFilterChooser.choices = ret;
-				//这里会调用回调函数，会有问题。只设置显示
+				// This would invoke a callback and cause issues; only set the displayed value
 				creatorFilterChooser.valNoCallback=choice;
 				_creatorFilter = choice;
 			}
@@ -2561,7 +2561,7 @@ namespace var_browser
 				int num2 = 0;
                 foreach (FileAndDirInfo cachedFile2 in cachedFiles)
                 {
-					//所有的列表项都需要创建button，太卡了
+					// Creating a button for every item is too slow
 					if (!s_OptimzeFileButton)
                     {
 						cachedFile2.button = CreateFileButton(cachedFile2.Name,
@@ -2740,19 +2740,19 @@ namespace var_browser
 			//left
 			InitTags();
 
-#region 头发
+#region Hair
             {
 
-				var container = CreateUIContainer(-420, -240-120, 200, 1460 - 120);//整个高度是1700
+				var container = CreateUIContainer(-420, -240-120, 200, 1460 - 120);// Total height is 1700
 				HairTagsUIList.Add(container);
 				var container2 = CreateUIContainer(-210, -240 - 120, 210, 1460 - 120);
 				HairTagsUIList.Add(container2);
 				var container0 = CreateUIContainer(-420, -130, 420, 100 + 120);
 				HairTagsUIList.Add(container0);
 
-				CreateLabel(container0, "Hair Tags Filter", Color.black, true);//高度40
+				CreateLabel(container0, "Hair Tags Filter", Color.black, true);// Height 40
 				hairOnlyAllowSingleFilter = new JSONStorableBool("Only Allow Single Filter", false, SetHairOnlyAllowSingleFilter);
-				CreateToggle(container0, hairOnlyAllowSingleFilter);//高度50
+				CreateToggle(container0, hairOnlyAllowSingleFilter);// Height 50
 
 				var list = new List<string>();
 				foreach (var item in TagFilter.HairUnknownTags)
@@ -2760,7 +2760,7 @@ namespace var_browser
 					list.Add(item);
 				}
 				unknownHairTagFilterChooser = new JSONStorableStringChooser("Unknown Tags", list, list[0], "Unknown Tags", SyncUnknownHairFilter);
-				CreateFilterablePopup(container0, unknownHairTagFilterChooser);//高度120
+				CreateFilterablePopup(container0, unknownHairTagFilterChooser);// Height 120
 
 				CreateLabel(container, "Region Tags", Color.black, true);
 				for (int i = 0; i < TagFilter.HairRegionTags.Count; i++)
@@ -2784,24 +2784,25 @@ namespace var_browser
 					HairTypeTagsJsonStorable[i].setJSONCallbackFunction = OnHairTagChange;
 				}
 
+
 				
 			}
 #endregion
 
-#region 衣服
+#region Clothing
 			{
 
-                //界面左侧离filebrowser的距离，越小越远。
-                var container = CreateUIContainer(-420, -240 - 120, 200, 1460 - 120);//整个高度是1700
+				// Distance from the left panel to the file browser; smaller means farther.
+				var container = CreateUIContainer(-420, -240 - 120, 200, 1460 - 120);// Total height is 1700
                 ClothingTagsUIList.Add(container);
 				var container2 = CreateUIContainer(-210, -240 - 120, 210, 1460 - 120);
 				ClothingTagsUIList.Add(container2);
 				var container0 = CreateUIContainer(-420, -130, 420, 100 + 120);
 				ClothingTagsUIList.Add(container0);
 
-				CreateLabel(container0, "Clothing Tags Filter", Color.black, true);//高度40
+				CreateLabel(container0, "Clothing Tags Filter", Color.black, true);// Height 40
 				onlyAllowSingleFilter = new JSONStorableBool("Only Allow Single Filter", false, SetClothingOnlyAllowSingleFilter);
-				CreateToggle(container0, onlyAllowSingleFilter);//高度50
+				CreateToggle(container0, onlyAllowSingleFilter);// Height 50
 
 				var list = new List<string>();
 				foreach (var item in TagFilter.ClothingUnknownTags)
@@ -2809,7 +2810,7 @@ namespace var_browser
 					list.Add(item);
 				}
 				unknownClothingTagFilterChooser = new JSONStorableStringChooser("Unknown Tags", list, list[0], "Unknown Tags", SyncUnknownClothingFilter);
-				CreateFilterablePopup(container0, unknownClothingTagFilterChooser);//高度120
+				CreateFilterablePopup(container0, unknownClothingTagFilterChooser);// Height 120
 
 				CreateLabel(container, "Region Tags", Color.black, true);
                 for (int i = 0; i < TagFilter.ClothingRegionTags.Count; i++)
@@ -2838,13 +2839,12 @@ namespace var_browser
 
 				
 			}
-
 #endregion
 
 
             {
-				//这个放最后，因为会弹出popup窗口，否则会被挡住
-				//创作者过滤
+				// Put this last because it pops a popup window; otherwise it can be occluded
+				// Creator filter
 				var createrContainter = CreateUIContainer(-420, 0, 420, 120);
 				var list = new List<string>();
 				list.Add("All");
@@ -2852,7 +2852,7 @@ namespace var_browser
 				creatorFilterChooser = new JSONStorableStringChooser("creator", choicesList4, _creatorFilter, "Creator", SyncCreatorFilter);
 				creatorFilterChooser.isStorable = false;
 				creatorFilterChooser.isRestorable = false;
-				creatorPopup = CreateFilterablePopup(createrContainter, creatorFilterChooser);//高度120
+				creatorPopup = CreateFilterablePopup(createrContainter, creatorFilterChooser);// Height 120
 
 			}
 
@@ -2872,7 +2872,7 @@ namespace var_browser
         {
             if (hairOnlyAllowSingleFilter.val && jsb.val)
             {
-                //把其他的都去掉掉
+				// Clear all other selections
                 foreach (var item in HairRegionTagsJsonStorable)
                 {
                     if (item != jsb) item.valNoCallback = false;
@@ -2893,7 +2893,7 @@ namespace var_browser
         {
             if (onlyAllowSingleFilter.val && jsb.val)
             {
-                //把其他的都去掉掉
+				// Clear all other selections
                 foreach (var item in ClothingRegionTagsJsonStorable)
                 {
                     if (item != jsb) item.valNoCallback = false;
@@ -2916,7 +2916,7 @@ namespace var_browser
             if (val)
             {
 				bool have = false;
-                //把其他的都去掉掉
+				// Clear all other selections
                 foreach (var item in ClothingRegionTagsJsonStorable)
                 {
                     if (!have)
@@ -2950,7 +2950,7 @@ namespace var_browser
                         item.valNoCallback = false;
                     }
                 }
-                // no tag优先级最低
+                // "no tag" has the lowest priority
                 //if (!have)
                 //{
                 //    if (ClothingNoTagJsonStorable.val) ClothingNoTagJsonStorable.valNoCallback = true;
@@ -2967,7 +2967,7 @@ namespace var_browser
             if (val)
             {
                 bool have = false;
-                //把其他的都去掉掉
+				// Clear all other selections
                 foreach (var item in HairRegionTagsJsonStorable)
                 {
                     if (!have)

@@ -70,7 +70,7 @@ namespace var_browser
             }
         }
 
-        //liu修改 显示和隐藏
+		// liu modification: show/hide
 		public void LgShow()
 		{
 			VamHookPlugin.m_Show = !VamHookPlugin.m_Show;
@@ -137,21 +137,21 @@ namespace var_browser
         public void OpenCustomScene()
         {
             SetLastGalleryPage(GalleryPage.CustomScene);
-            //自定义的不需要安装
+            // Custom content does not require installation
             m_FileBrowser.onlyInstalled = false;
             ShowFileBrowser("Custom Scene", "json", "Saves/scene", true);
         }
         public void OpenCustomSavedPerson()
         {
             SetLastGalleryPage(GalleryPage.CustomSavedPerson);
-            //自定义的不需要安装
+            // Custom content does not require installation
             m_FileBrowser.onlyInstalled = false;
             ShowFileBrowser("Custom Saved Person", "json", "Saves/Person", true);
         }
         public void OpenPersonPreset()
         {
             SetLastGalleryPage(GalleryPage.CustomPersonPreset);
-            //自定义的不需要安装
+            // Custom content does not require installation
             m_FileBrowser.onlyInstalled = false;
             ShowFileBrowser("Custom Person Preset", "vap", "Custom/Atom/Person", true, false);
         }

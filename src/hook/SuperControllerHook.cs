@@ -22,7 +22,7 @@ namespace var_browser
             ZipConstants.DefaultCodePage = Settings.Instance.CodePage.Value;
         }
 
-        //点击“Return To Scene View"
+        // Click "Return To Scene View"
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SuperController), "DeactivateWorldUI")]
         public static void PostDeactivateWorldUI(SuperController __instance)
@@ -69,7 +69,7 @@ namespace var_browser
         }
 
         /// <summary>
-        /// 始终设置Allow Always
+        /// Always set Allow Always
         /// </summary>
         /// <param name="__instance"></param>
         [HarmonyPostfix]
@@ -89,7 +89,7 @@ namespace var_browser
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
-                //跳过原有的逻辑
+                // Skip the original logic
                 qi.skipCache = true;
                 qi.processed = true;
                 qi.finished = true;
@@ -112,7 +112,7 @@ namespace var_browser
             qi.isThumbnail = true;
             if (ImageLoadingMgr.singleton.Request(qi))
             {
-                //跳过
+                // Skip
                 qi.skipCache = true;
                 var field = Traverse.Create(__instance).Field("queuedImages");
                 var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
@@ -147,7 +147,7 @@ namespace var_browser
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
-                //跳过
+                // Skip
                 qi.skipCache = true;
                 var field = Traverse.Create(__instance).Field("queuedImages");
                 var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
@@ -214,7 +214,7 @@ namespace var_browser
                 }
             }
         }
-        //在callback之前就会放入cache，所以需要提前一步设置skipCache
+        // It is added to cache before the callback, so we need to set skipCache one step earlier.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ImageLoaderThreaded.QueuedImage), "Finish")]
         public static void PostFinish_QueuedImage(ImageLoaderThreaded.QueuedImage __instance)
@@ -223,7 +223,7 @@ namespace var_browser
 
             if (string.IsNullOrEmpty(__instance.imgPath)) return;
 
-            //忽略hub browse
+            // Ignore hub browse
             if (__instance.tex != null)
             {
                 ImageLoadingMgr.singleton.ResolveInflightForQueuedImage(__instance);
@@ -309,7 +309,7 @@ namespace var_browser
         //static bool Start(MeshVR.AssetLoader __instance)
         //{
         //    LogUtil.Log("PatchAssetLoader Start");
-        //    return false; // 阻止原始方法执行
+        //    return false; // Prevent the original method from running
         //}
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MeshVR.AssetLoader), "QueueLoadAssetBundleFromFile")]
@@ -318,7 +318,7 @@ namespace var_browser
             if (Settings.Instance.CacheAssetBundle.Value)
             {
                 var_browser.CustomAssetLoader.QueueLoadAssetBundleFromFile(abffr);
-                return false; // 阻止原始方法执行
+                return false; // Prevent the original method from running
             }
             return true;
         }
@@ -330,7 +330,7 @@ namespace var_browser
             if (Settings.Instance.CacheAssetBundle.Value)
             {
                 var_browser.CustomAssetLoader.QueueLoadSceneIntoTransform(slr);
-                return false; // 阻止原始方法执行
+                return false; // Prevent the original method from running
             }
             return true;
         }
@@ -342,7 +342,7 @@ namespace var_browser
             if (Settings.Instance.CacheAssetBundle.Value)
             {
                 var_browser.CustomAssetLoader.DoneWithAssetBundleFromFile(path);
-                return false; // 阻止原始方法执行
+                return false; // Prevent the original method from running
             }
             return true;
         }
