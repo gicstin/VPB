@@ -73,12 +73,20 @@ namespace var_browser
 			{
 				FirstPage();
 			});
+			if (_useVirtualizedScrolling)
+			{
+				firstPageButton.gameObject.SetActive(false);
+			}
 			var leftButton = this.transform.Find("MainPanel/ShowingGroup/LeftButton").GetComponent<Button>();
 			leftButton.onClick.RemoveAllListeners();
 			leftButton.onClick.AddListener(() =>
 			{
 				PrevPage();
 			});
+			if (_useVirtualizedScrolling)
+			{
+				leftButton.gameObject.SetActive(false);
+			}
 
 			var rightButton = this.transform.Find("MainPanel/ShowingGroup/RightButton").GetComponent<Button>();
 			rightButton.onClick.RemoveAllListeners();
@@ -86,10 +94,39 @@ namespace var_browser
 			{
 				NextPage();
 			});
+			if (_useVirtualizedScrolling)
+			{
+				rightButton.gameObject.SetActive(false);
+			}
 
 			this.fileHighlightField = ui.fileHighlightField;
 			this.folderIcon = ui.folderIcon;
 			this.defaultIcon = ui.defaultIcon;
+
+			if (_useVirtualizedScrolling)
+			{
+				if (limitSlider != null)
+				{
+					if (limitSlider.transform != null && limitSlider.transform.parent != null)
+					{
+						limitSlider.transform.parent.gameObject.SetActive(false);
+					}
+					else
+					{
+						limitSlider.gameObject.SetActive(false);
+					}
+				}
+				if (limitValueText != null)
+				{
+					limitValueText.gameObject.SetActive(false);
+				}
+			}
+
+			if (!_scrollListenerAttached && filesScrollRect != null)
+			{
+				filesScrollRect.onValueChanged.AddListener(OnFilesScrollRectValueChanged);
+				_scrollListenerAttached = true;
+			}
 
         }
 
@@ -256,6 +293,19 @@ namespace var_browser
 			}
 		}
 
+		private void OnFilesScrollRectValueChanged(Vector2 v)
+		{
+			if (!_useVirtualizedScrolling)
+			{
+				return;
+			}
+			if (window == null || !window.activeSelf)
+			{
+				return;
+			}
+			SyncDisplayed();
+		}
+
 
 		public string defaultPath = string.Empty;
 
@@ -390,6 +440,35 @@ namespace var_browser
 		protected int _totalPages;
 
 		protected int _page = 1;
+
+		[SerializeField]
+		protected bool _useVirtualizedScrolling = true;
+
+		[SerializeField]
+		protected int _virtualizedBufferRows = 2;
+
+		private readonly List<FileButton> _virtualizedButtons = new List<FileButton>();
+		private readonly List<FileAndDirInfo> _virtualizedMatchedInfos = new List<FileAndDirInfo>();
+		private int _virtualizedMatchHash;
+		private int _virtualizedMatchSourceCount = -1;
+
+		private int _lastVirtualizedFirstIndex = -1;
+		private int _lastVirtualizedLastIndex = -1;
+		private int _lastVirtualizedMatchCount = -1;
+		private float _lastVirtualizedScrollPos = -1f;
+
+		private string _selectedFullPath;
+		private bool _scrollListenerAttached;
+
+		private void InvalidateVirtualizedCache()
+		{
+			_virtualizedMatchHash = 0;
+			_virtualizedMatchSourceCount = -1;
+			_lastVirtualizedFirstIndex = -1;
+			_lastVirtualizedLastIndex = -1;
+			_lastVirtualizedMatchCount = -1;
+			_lastVirtualizedScrollPos = -1f;
+		}
 
 		public Slider limitSlider;
 
@@ -735,7 +814,10 @@ namespace var_browser
 				if (_page != value && value <= _totalPages && value > 0)
 				{
 					_page = value;
-					StartCoroutine(DelaySetScroll(1f));
+					if (!_useVirtualizedScrolling)
+					{
+						StartCoroutine(DelaySetScroll(1f));
+					}
 					SyncDisplayed();
 				}
 			}
@@ -1506,6 +1588,59 @@ namespace var_browser
 		//	return pathToGoTo;
 		//}
 
+		public void GotoDirectory(string path, string pkgFilter = null, bool flatten = true, bool includeRegularDirs = false)
+		{
+			currentPackageFilter = pkgFilter;
+			useFlatten = flatten;
+			includeRegularDirsInFlatten = includeRegularDirs;
+			if (string.IsNullOrEmpty(path))
+			{
+				currentPath = string.Empty;
+			}
+			else if (!FileManager.DirectoryExists(path) && !flatten)
+			{
+				LogUtil.LogError("uFileBrowser: Directory doesn't exist:\n" + path);
+				currentPath = string.Empty;
+			}
+			else
+			{
+				currentPath = path;
+			}
+			if ((bool)currentPathField)
+			{
+				currentPathField.text = currentPath;
+			}
+			if (selectDirectory && fileEntryField != null)
+			{
+				fileEntryField.text = string.Empty;
+			}
+			selected = null;
+			_selectedFullPath = null;
+			UpdateFileList();
+			if (filesScrollRect == null)
+			{
+				return;
+			}
+			float value = 1f;
+			if (directoryScrollPositions != null)
+			{
+				if (!directoryScrollPositions.TryGetValue(SavedKey, out value))
+				{
+					value = 1f;
+				}
+			}
+			if (!_useVirtualizedScrolling && browserPage != null)
+			{
+				int p = 0;
+				if (!browserPage.TryGetValue(SavedKey, out p))
+				{
+					p = 1;
+				}
+				page = p;
+			}
+			StartCoroutine(DelaySetScroll(value));
+		}
+
 		public void OnFileClick(FileButton fb)
 		{
 			SelectFile(fb);
@@ -1571,35 +1706,62 @@ namespace var_browser
                 float verticalNormalizedPosition = filesScrollRect.verticalNormalizedPosition;
                 directoryScrollPositions.Add(key, verticalNormalizedPosition);
 
-				if (browserPage.ContainsKey(key))
-					browserPage.Remove(key);
-				browserPage.Add(key, page);
+                if (!_useVirtualizedScrolling)
+                {
+                    if (browserPage.ContainsKey(key))
+                        browserPage.Remove(key);
+                    browserPage.Add(key, page);
+                }
             }
-		}
+        }
 
-		private void ClearDirectoryScrollPos()
-		{
-			if (currentPath != null && fileFormat != null && directoryScrollPositions != null)
-			{
-				string text = currentPath;
-				if (!text.EndsWith("\\"))
-				{
-					text += "\\";
-				}
-				string key = fileFormat + ":" + text;
-				float value;
-				if (directoryScrollPositions.TryGetValue(key, out value))
-				{
-					directoryScrollPositions.Remove(key);
-				}
-			}
-		}
+        private string SavedKey
+        {
+            get
+            {
+                string text = currentPath ?? string.Empty;
+                if (!text.EndsWith("\\"))
+                {
+                    text += "\\";
+                }
+                return fileFormat + ":" + text + ":" + inGame.ToString();
+            }
+        }
+
+        private void ClearDirectoryScrollPos()
+        {
+            if (directoryScrollPositions != null)
+            {
+                float value;
+                if (directoryScrollPositions.TryGetValue(SavedKey, out value))
+                {
+                    directoryScrollPositions.Remove(SavedKey);
+                }
+            }
+            if (browserPage != null)
+            {
+                if (browserPage.ContainsKey(SavedKey))
+                {
+                    browserPage.Remove(SavedKey);
+                }
+            }
+        }
 
 		private void GoToPromotionalLink()
 		{
 			if (promotionalButtonText != null)
 			{
-				//SuperController.singleton.OpenLinkInBrowser(promotionalButtonText.text);
+				string link = promotionalButtonText.text;
+				if (!string.IsNullOrEmpty(link))
+				{
+					try
+					{
+						SuperController.singleton.OpenLinkInBrowser(link);
+					}
+					catch
+					{
+					}
+				}
 			}
 		}
 
@@ -1607,7 +1769,13 @@ namespace var_browser
 		{
 			if (currentPackageUid != null && currentPackageUid != string.Empty)
 			{
-				//SuperController.singleton.OpenPackageInManager(currentPackageUid);
+				try
+				{
+					SuperController.singleton.OpenPackageInManager(currentPackageUid);
+				}
+				catch
+				{
+				}
 			}
 		}
 
@@ -1622,80 +1790,6 @@ namespace var_browser
 				}
 			}
 		}
-
-		public void GotoDirectory(string path, string pkgFilter = null, bool flatten = true, bool includeRegularDirs = false)
-		{
-    //        if (path == currentPath
-				////&&lastCacheFileFormat==fileFormat
-				////&&lastCacheInGame== inGame
-				//&& path != string.Empty
-    //            && pkgFilter == currentPackageFilter
-    //            && useFlatten == flatten
-    //            && includeRegularDirsInFlatten == includeRegularDirs)
-    //        {
-    //            SyncDisplayed();
-    //            return;
-    //        }
-            currentPackageFilter = pkgFilter;
-			useFlatten = flatten;
-			includeRegularDirsInFlatten = includeRegularDirs;
-			//SaveDirectoryScrollPos(currentPath);
-			if (string.IsNullOrEmpty(path))
-			{
-				currentPath = string.Empty;
-			}
-			else if (!FileManager.DirectoryExists(path) && !flatten)
-			{
-				LogUtil.LogError("uFileBrowser: Directory doesn't exist:\n" + path);
-				currentPath = string.Empty;
-			}
-			else
-			{
-				currentPath = path;
-			}
-			if ((bool)currentPathField)
-			{
-				currentPathField.text = currentPath;
-			}
-			if (selectDirectory && fileEntryField != null)
-			{
-				fileEntryField.text = string.Empty;
-			}
-			selected = null;
-			UpdateFileList();
-			if (!(filesScrollRect != null))
-			{
-				return;
-			}
-			float value = 1f;
-			if (directoryScrollPositions != null)
-			{
-				if (!directoryScrollPositions.TryGetValue(SavedKey, out value))
-				{
-					value = 1f;
-				}
-				//LogUtil.Log("directoryScrollPositions " + SavedKey + " " + value);
-			}
-            if (browserPage != null)
-            {
-				int p = 0;
-				if (!browserPage.TryGetValue(SavedKey, out p))
-				{
-					p = 1;
-				}
-				page = p;
-			}
-
-			StartCoroutine(DelaySetScroll(value));
-		}
-		string SavedKey
-        {
-            get
-            {
-				string key = fileFormat + ":" + defaultPath+ ":" + inGame.ToString();
-                return key;
-			}
-        }
 
 		private void SelectFile(FileButton fb)
 		{
@@ -1714,6 +1808,7 @@ namespace var_browser
 					selected.Unselect();
 				}
 				selected = fb;
+				_selectedFullPath = fb.fullPath;
 				fb.Select();
 				if (fileEntryField != null)
 				{
@@ -1725,6 +1820,10 @@ namespace var_browser
 					else if (fileEntryField.text.EndsWith(".vac"))
 					{
 						fileEntryField.text = fileEntryField.text.Replace(".vac", string.Empty);
+					}
+					else if (fileEntryField.text.EndsWith(".vap"))
+					{
+						fileEntryField.text = fileEntryField.text.Replace(".vap", string.Empty);
 					}
 				}
 				if (selectOnClick)
@@ -1915,6 +2014,10 @@ namespace var_browser
 					}
 				}
 			}
+			if (_useVirtualizedScrolling)
+			{
+				InvalidateVirtualizedCache();
+			}
 			ResetDisplayedPage();
 		}
 
@@ -1953,7 +2056,10 @@ namespace var_browser
 			{
 				return;
 			}
-			ClearImageQueue();
+			if (!_useVirtualizedScrolling)
+			{
+				ClearImageQueue();
+			}
 			int num = 0;
 			int num2 = 0;
 			int num3 = 0;
@@ -1970,6 +2076,12 @@ namespace var_browser
 			}
 			int num5 = (_page - 1) * _limitXMultiple + 1;
 			int num6 = _page * _limitXMultiple;
+
+			if (_useVirtualizedScrolling)
+			{
+				SyncDisplayedVirtualized(vector);
+				return;
+			}
 
 			HashSet<string> clothTag = null;
 			if (this.needFilterClothing)
@@ -2241,6 +2353,543 @@ namespace var_browser
 				showingCountText.text = num5 + "-" + num6 + " of " + num;
 			}
 			_totalPages = (num - 1) / _limitXMultiple + 1;
+		}
+
+		private void SyncDisplayedVirtualized(Vector2 cellStep)
+		{
+			if (filesScrollRect == null || fileContent == null)
+			{
+				return;
+			}
+			RectTransform viewport = filesScrollRect.viewport;
+			if (viewport == null)
+			{
+				viewport = filesScrollRect.GetComponent<RectTransform>();
+			}
+			float viewportHeight = (viewport != null) ? viewport.rect.height : 0f;
+			if (viewportHeight <= 0f)
+			{
+				viewportHeight = 1000f;
+			}
+
+			HashSet<string> clothTag = null;
+			if (this.needFilterClothing)
+			{
+				clothTag = GetClothingFilter();
+			}
+			HashSet<string> hairTag = null;
+			if (this.needFilterHair)
+			{
+				hairTag = GetHairFilter();
+			}
+
+			int filterHash = ComputeVirtualizedFilterHash();
+			if (_virtualizedMatchHash != filterHash || _virtualizedMatchSourceCount != sortedFilesAndDirs.Count)
+			{
+				_virtualizedMatchedInfos.Clear();
+				foreach (FileAndDirInfo info in sortedFilesAndDirs)
+				{
+					if (InfoPassesFilters(info, clothTag, hairTag))
+					{
+						_virtualizedMatchedInfos.Add(info);
+					}
+				}
+				_virtualizedMatchHash = filterHash;
+				_virtualizedMatchSourceCount = sortedFilesAndDirs.Count;
+			}
+			int matchCount = _virtualizedMatchedInfos.Count;
+
+			int totalRows = (matchCount + columnCount - 1) / columnCount;
+			float contentHeight = (float)totalRows * cellStep.y;
+			Vector2 sizeDelta = fileContent.sizeDelta;
+			sizeDelta.y = contentHeight;
+			fileContent.sizeDelta = sizeDelta;
+
+			int firstIndex = 0;
+			int lastIndex = Math.Max(0, matchCount - 1);
+			if (matchCount > 0 && contentHeight > viewportHeight)
+			{
+				float scrollPos = filesScrollRect.verticalNormalizedPosition;
+				float topOffset = (1f - scrollPos) * (contentHeight - viewportHeight);
+				int firstRow = Mathf.FloorToInt(topOffset / cellStep.y) - _virtualizedBufferRows;
+				int lastRow = Mathf.CeilToInt((topOffset + viewportHeight) / cellStep.y) + _virtualizedBufferRows;
+				firstRow = Mathf.Clamp(firstRow, 0, Math.Max(0, totalRows - 1));
+				lastRow = Mathf.Clamp(lastRow, 0, Math.Max(0, totalRows - 1));
+				firstIndex = firstRow * columnCount;
+				lastIndex = Math.Min(matchCount - 1, (lastRow + 1) * columnCount - 1);
+			}
+
+			float currentScroll = filesScrollRect.verticalNormalizedPosition;
+			if (firstIndex == _lastVirtualizedFirstIndex
+				&& lastIndex == _lastVirtualizedLastIndex
+				&& matchCount == _lastVirtualizedMatchCount
+				&& Mathf.Abs(currentScroll - _lastVirtualizedScrollPos) < 0.0005f)
+			{
+				return;
+			}
+			_lastVirtualizedFirstIndex = firstIndex;
+			_lastVirtualizedLastIndex = lastIndex;
+			_lastVirtualizedMatchCount = matchCount;
+			_lastVirtualizedScrollPos = currentScroll;
+
+			int neededSlots = (matchCount == 0) ? 0 : (lastIndex - firstIndex + 1);
+			EnsureVirtualizedButtonPool(neededSlots);
+
+			for (int i = 0; i < _virtualizedButtons.Count; i++)
+			{
+				_virtualizedButtons[i].gameObject.SetActive(false);
+			}
+			displayedFileButtons.Clear();
+
+			int slotIndex = 0;
+			for (int matchIndex = firstIndex; matchIndex <= lastIndex; matchIndex++)
+			{
+				if (matchIndex < 0 || matchIndex >= matchCount)
+				{
+					continue;
+				}
+				if (slotIndex >= _virtualizedButtons.Count)
+				{
+					break;
+				}
+				FileAndDirInfo info = _virtualizedMatchedInfos[matchIndex];
+				FileButton button = _virtualizedButtons[slotIndex];
+				if (selected == button)
+				{
+					selected.Unselect();
+					selected = null;
+				}
+				CancelQueuedThumbnailsForRawImage(button.altIcon);
+
+				ConfigureFileButton(button, info);
+				button.transform.SetParent(fileContent, false);
+				button.gameObject.SetActive(true);
+
+				RectTransform rectTransform = button.rectTransform;
+				if (rectTransform != null)
+				{
+					rectTransform.anchorMin = new Vector2(0, 1);
+					rectTransform.anchorMax = new Vector2(0, 1);
+					rectTransform.pivot = new Vector2(0, 1);
+					rectTransform.sizeDelta = cellSize;
+					rectTransform.localRotation = Quaternion.identity;
+					rectTransform.localScale = Vector3.one;
+					int col = matchIndex % columnCount;
+					int row = matchIndex / columnCount;
+					rectTransform.anchoredPosition = new Vector2((float)col * cellStep.x, (float)(-row) * cellStep.y);
+				}
+
+				displayedFileButtons.Add(button);
+				SyncFileButtonImage(button);
+
+				if (!string.IsNullOrEmpty(_selectedFullPath) && button.fullPath == _selectedFullPath)
+				{
+					selected = button;
+					button.Select();
+				}
+
+				slotIndex++;
+			}
+			CancelQueuedThumbnailsForInvisibleButtons();
+
+			if (showingCountText != null)
+			{
+				if (matchCount == 0)
+				{
+					showingCountText.text = "0-0 of 0";
+				}
+				else
+				{
+					int start = firstIndex + 1;
+					int end = Math.Min(matchCount, lastIndex + 1);
+					showingCountText.text = start + "-" + end + " of " + matchCount;
+				}
+			}
+			_totalPages = 1;
+			_page = 1;
+		}
+
+		private int ComputeVirtualizedFilterHash()
+		{
+			unchecked
+			{
+				int h = 17;
+				h = h * 31 + (_onlyFavorites ? 1 : 0);
+				h = h * 31 + (_onlyInstalled ? 1 : 0);
+				h = h * 31 + (_onlyAutoInstall ? 1 : 0);
+				h = h * 31 + (_showHidden ? 1 : 0);
+				h = h * 31 + (inGame ? 1 : 0);
+				h = h * 31 + (searchLower == null ? 0 : searchLower.GetHashCode());
+				h = h * 31 + (_creatorFilter == null ? 0 : _creatorFilter.GetHashCode());
+				h = h * 31 + (needFilterClothing ? 1 : 0);
+				h = h * 31 + (needFilterHair ? 1 : 0);
+				if (needFilterClothing)
+				{
+					foreach (var item in ClothingRegionTagsJsonStorable)
+					{
+						if (item.val) h = h * 31 + item.name.GetHashCode();
+					}
+					foreach (var item in ClothingTypeTagsJsonStorable)
+					{
+						if (item.val) h = h * 31 + item.name.GetHashCode();
+					}
+					foreach (var item in ClothingOtherTagsJsonStorable)
+					{
+						if (item.val) h = h * 31 + item.name.GetHashCode();
+					}
+					h = h * 31 + (unknownClothingTagFilterChooser == null || unknownClothingTagFilterChooser.val == null ? 0 : unknownClothingTagFilterChooser.val.GetHashCode());
+				}
+				if (needFilterHair)
+				{
+					foreach (var item in HairRegionTagsJsonStorable)
+					{
+						if (item.val) h = h * 31 + item.name.GetHashCode();
+					}
+					foreach (var item in HairTypeTagsJsonStorable)
+					{
+						if (item.val) h = h * 31 + item.name.GetHashCode();
+					}
+					foreach (var item in HairOtherTagsJsonStorable)
+					{
+						if (item.val) h = h * 31 + item.name.GetHashCode();
+					}
+					h = h * 31 + (unknownHairTagFilterChooser == null || unknownHairTagFilterChooser.val == null ? 0 : unknownHairTagFilterChooser.val.GetHashCode());
+				}
+				h = h * 31 + (sortedFilesAndDirs == null ? 0 : sortedFilesAndDirs.Count);
+				return h;
+			}
+		}
+
+		private void CancelQueuedThumbnailsForRawImage(RawImage ri)
+		{
+			if (ri == null || queuedThumbnails == null || queuedThumbnails.Count == 0)
+			{
+				return;
+			}
+			var toRemove = new List<var_browser.CustomImageLoaderThreaded.QueuedImage>();
+			foreach (var qi in queuedThumbnails)
+			{
+				if (qi != null && qi.rawImageToLoad == ri)
+				{
+					qi.cancel = true;
+					toRemove.Add(qi);
+				}
+			}
+			foreach (var qi in toRemove)
+			{
+				queuedThumbnails.Remove(qi);
+			}
+		}
+
+		private void EnsureVirtualizedButtonPool(int neededSlots)
+		{
+			while (_virtualizedButtons.Count < neededSlots)
+			{
+				FileButton fb = CreateVirtualizedFileButton();
+				if (fb == null)
+				{
+					break;
+				}
+				fb.gameObject.SetActive(false);
+				_virtualizedButtons.Add(fb);
+			}
+		}
+
+		private FileButton CreateVirtualizedFileButton()
+		{
+			GameObject go = PoolManager.SpawnObject(fileButtonPrefab);
+			var component2 = go.GetComponent<uFileBrowser.FileButton>();
+			if (component2 != null)
+			{
+				FileButton component = go.AddComponent<FileButton>();
+				component.InitUI(component2);
+				Component.DestroyImmediate(component2);
+				return component;
+			}
+			return go.GetComponent<FileButton>();
+		}
+
+		private void ConfigureFileButton(FileButton button, FileAndDirInfo info)
+		{
+			if (button == null || info == null)
+			{
+				return;
+			}
+			string displayText = info.Name;
+			if (hideExtension)
+			{
+				displayText = Regex.Replace(displayText, "\\.[^\\.]*$", string.Empty);
+			}
+			button.Set(this, displayText, info.FullName, false, info.isHidden, info.isHiddenModifiable, info.isFavorite, info.isAutoInstall, allowUseFileAsTemplateSelect, allowUseFileAsTemplateSelect && info.isTemplate, info.isTemplateModifiable);
+			SetupFileButtonThumbnail(button, info.FullName);
+		}
+
+		private void SetupFileButtonThumbnail(FileButton component, string path)
+		{
+			component.imgPath = null;
+			if (CustomImageLoaderThreaded.singleton == null)
+			{
+				return;
+			}
+			Transform iconTransform = null;
+			if (component.fileIcon != null)
+			{
+				iconTransform = component.fileIcon.transform;
+			}
+			Transform altTransform = null;
+			if (component.altIcon != null)
+			{
+				altTransform = component.altIcon.transform;
+			}
+			if (iconTransform == null)
+			{
+				return;
+			}
+			iconTransform.gameObject.SetActive(true);
+			if (altTransform != null)
+			{
+				altTransform.gameObject.SetActive(false);
+				RawImage altIcon = component.altIcon;
+				if (altIcon != null)
+				{
+					altIcon.texture = null;
+					FileEntry fileEntry = FileManager.GetFileEntry(path);
+					if (fileEntry != null)
+					{
+						string ext = Path.GetExtension(fileEntry.Path);
+						string imgPath;
+						switch (ext)
+						{
+							case ".duf":
+								imgPath = fileEntry.Path + ".png";
+								ext = ".png";
+								break;
+							case ".json":
+							case ".vac":
+							case ".vap":
+							case ".vam":
+							case ".scene":
+							case ".assetbundle":
+								imgPath = Regex.Replace(fileEntry.Path, "\\.(json|vac|vap|vam|scene|assetbundle)$", ".jpg");
+								ext = ".jpg";
+								break;
+							default:
+								imgPath = fileEntry.Path;
+								break;
+						}
+						string extLower = ext.ToLower();
+						if (FileManager.FileExists(imgPath))
+						{
+							switch (extLower)
+							{
+								case ".jpg":
+								case ".jpeg":
+								case ".png":
+								case ".tif":
+									component.imgPath = imgPath;
+									iconTransform.gameObject.SetActive(false);
+									altTransform.gameObject.SetActive(true);
+									Texture2D cachedThumbnail = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath);
+									if (cachedThumbnail != null)
+									{
+										altIcon.texture = cachedThumbnail;
+									}
+									break;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		private bool InfoPassesFilters(FileAndDirInfo info, HashSet<string> clothTag, HashSet<string> hairTag)
+		{
+			if (info == null || info.FileEntry == null)
+			{
+				return false;
+			}
+			FileEntry fileEntry = info.FileEntry;
+
+			if (clothTag != null && clothTag.Count > 0)
+			{
+				bool includeNoTag = clothTag.Contains("no tag");
+				bool includeUnknownTag = clothTag.Contains("unknown");
+				VarFileEntry varFileEntry = fileEntry as VarFileEntry;
+				if (varFileEntry != null)
+				{
+					bool pass = false;
+					if (varFileEntry.ClothingTags != null)
+					{
+						foreach (var item in varFileEntry.ClothingTags)
+						{
+							if (clothTag.Contains(item))
+							{
+								pass = true;
+								break;
+							}
+						}
+					}
+					if (!pass && includeNoTag)
+					{
+						if (varFileEntry.ClothingTags == null || varFileEntry.ClothingTags.Count == 0)
+						{
+							pass = true;
+						}
+					}
+					if (!pass && includeUnknownTag)
+					{
+						if (varFileEntry.ClothingTags != null)
+						{
+							foreach (var item in varFileEntry.ClothingTags)
+							{
+								if (unknownClothingTagFilterChooser.val == item)
+								{
+									pass = true;
+									break;
+								}
+							}
+						}
+					}
+					if (!pass)
+					{
+						return false;
+					}
+				}
+			}
+
+			if (hairTag != null && hairTag.Count > 0)
+			{
+				bool includeNoTag = hairTag.Contains("no tag");
+				bool includeUnknownTag = hairTag.Contains("unknown");
+				VarFileEntry varFileEntry = fileEntry as VarFileEntry;
+				if (varFileEntry != null)
+				{
+					bool pass = false;
+					if (varFileEntry.HairTags != null)
+					{
+						foreach (var item in varFileEntry.HairTags)
+						{
+							if (hairTag.Contains(item))
+							{
+								pass = true;
+								break;
+							}
+						}
+					}
+					if (!pass && includeNoTag)
+					{
+						if (varFileEntry.HairTags == null || varFileEntry.HairTags.Count == 0)
+						{
+							pass = true;
+						}
+					}
+					if (!pass && includeUnknownTag)
+					{
+						if (varFileEntry.HairTags != null)
+						{
+							foreach (var item in varFileEntry.HairTags)
+							{
+								if (unknownHairTagFilterChooser.val == (item))
+								{
+									pass = true;
+									break;
+								}
+							}
+						}
+					}
+					if (!pass)
+					{
+						return false;
+					}
+				}
+			}
+
+			if (_onlyFavorites && !info.isFavorite)
+			{
+				return false;
+			}
+			if (_onlyInstalled && !info.isInstalled)
+			{
+				return false;
+			}
+			if (_onlyAutoInstall && !info.isAutoInstall)
+			{
+				return false;
+			}
+			if (!string.IsNullOrEmpty(searchLower) && !fileEntry.UidLowerInvariant.Contains(searchLower))
+			{
+				VarFileEntry varFileEntry = fileEntry as VarFileEntry;
+				if (varFileEntry == null)
+				{
+					return false;
+				}
+				if (!varFileEntry.Package.UidLowerInvariant.Contains(searchLower))
+				{
+					return false;
+				}
+			}
+			if (!inGame && _creatorFilter != "All")
+			{
+				string creator = _creatorFilter.Substring(0, _creatorFilter.IndexOf('('));
+				if (fileEntry is VarFileEntry)
+				{
+					VarFileEntry varFileEntry = fileEntry as VarFileEntry;
+					if (!varFileEntry.Package.Uid.StartsWith(creator + "."))
+					{
+						return false;
+					}
+				}
+				else if (fileEntry is SystemFileEntry)
+				{
+					var systemFileEntry = fileEntry as SystemFileEntry;
+					if (systemFileEntry.package != null)
+					{
+						if (systemFileEntry.package.Creator != creator)
+						{
+							return false;
+						}
+					}
+				}
+			}
+
+			return true;
+		}
+
+		private void CancelQueuedThumbnailsForInvisibleButtons()
+		{
+			if (queuedThumbnails == null || queuedThumbnails.Count == 0)
+			{
+				return;
+			}
+			HashSet<RawImage> visibleRawImages = null;
+			if (displayedFileButtons != null && displayedFileButtons.Count > 0)
+			{
+				visibleRawImages = new HashSet<RawImage>();
+				foreach (var b in displayedFileButtons)
+				{
+					if (b != null && b.altIcon != null)
+					{
+						visibleRawImages.Add(b.altIcon);
+					}
+				}
+			}
+			if (visibleRawImages == null)
+			{
+				return;
+			}
+			var toRemove = new List<var_browser.CustomImageLoaderThreaded.QueuedImage>();
+			foreach (var qi in queuedThumbnails)
+			{
+				if (qi != null && qi.rawImageToLoad != null && !visibleRawImages.Contains(qi.rawImageToLoad))
+				{
+					qi.cancel = true;
+					toRemove.Add(qi);
+				}
+			}
+			foreach (var qi in toRemove)
+			{
+				queuedThumbnails.Remove(qi);
+			}
 		}
 
 		protected List<FileAndDirInfo> FilterFormat(List<FileAndDirInfo> files, bool skipFileFormatCheck = false)
@@ -2553,6 +3202,10 @@ namespace var_browser
 				threadHadException = false;
 
 				UpdateFileListCacheThreadSafe();
+				if (_useVirtualizedScrolling)
+				{
+					InvalidateVirtualizedCache();
+				}
 				if (threadHadException && statusField != null)
 				{
 					statusField.text = threadException;
@@ -2633,15 +3286,36 @@ namespace var_browser
 				onlyTemplatesToggle.isOn = _onlyTemplates;
 				onlyTemplatesToggle.onValueChanged.AddListener(SetOnlyTemplates);
 			}
-			if (limitSlider != null)
+			if (!_useVirtualizedScrolling)
 			{
-				limitSlider.value = _limit;
-				limitSlider.onValueChanged.AddListener(SetLimit);
+				if (limitSlider != null)
+				{
+					limitSlider.value = _limit;
+					limitSlider.onValueChanged.AddListener(SetLimit);
+				}
+				_limitXMultiple = _limit * limitMultiple;
+				if (limitValueText != null)
+				{
+					limitValueText.text = _limitXMultiple.ToString("F0");
+				}
 			}
-			_limitXMultiple = _limit * limitMultiple;
-			if (limitValueText != null)
+			else
 			{
-				limitValueText.text = _limitXMultiple.ToString("F0");
+				if (limitSlider != null)
+				{
+					if (limitSlider.transform != null && limitSlider.transform.parent != null)
+					{
+						limitSlider.transform.parent.gameObject.SetActive(false);
+					}
+					else
+					{
+						limitSlider.gameObject.SetActive(false);
+					}
+				}
+				if (limitValueText != null)
+				{
+					limitValueText.gameObject.SetActive(false);
+				}
 			}
 			if (openPackageButton != null)
 			{
