@@ -35,6 +35,13 @@ namespace var_browser
         public ConfigEntry<bool> SceneLoadWaitForImagesIdle;
         public ConfigEntry<float> SceneLoadImagesIdleSeconds;
         public ConfigEntry<string> LastGalleryPage;
+        public ConfigEntry<int> TextureLogLevel;
+        public ConfigEntry<int> TextureLogSlowConvertMs;
+        public ConfigEntry<int> TextureLogSlowDiskMs;
+        public ConfigEntry<bool> LogImageQueueEvents;
+        public ConfigEntry<bool> LogVerboseUi;
+        public ConfigEntry<bool> CleanLogEnabled;
+        public ConfigEntry<string> CleanLogPath;
         
         internal static void Init(ConfigFile config)
         {
@@ -62,6 +69,14 @@ namespace var_browser
             PrioritizeHairTextures = config.Bind<bool>("Optimze", "PrioritizeHairTextures", true, "prioritize hair in VaM image load queue.");
             SceneLoadWaitForImagesIdle = config.Bind<bool>("Benchmark", "SceneLoadWaitForImagesIdle", true, "When enabled, SCENE_LOAD_TOTAL waits for image loading to become idle before ending.");
             SceneLoadImagesIdleSeconds = config.Bind<float>("Benchmark", "SceneLoadImagesIdleSeconds", 0f, "Idle window seconds required before SCENE_LOAD_TOTAL ends (when SceneLoadWaitForImagesIdle is enabled).");
+
+            TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 1, "0=off, 1=summary only, 2=verbose per-texture trace.");
+            TextureLogSlowConvertMs = config.Bind<int>("Logging", "TextureLogSlowConvertMs", 50, "Warn when texture compress/convert exceeds this duration (ms).");
+            TextureLogSlowDiskMs = config.Bind<int>("Logging", "TextureLogSlowDiskMs", 20, "Warn when texture disk read/write exceeds this duration (ms).");
+            LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");
+            LogVerboseUi = config.Bind<bool>("Logging", "LogVerboseUi", false, "Log verbose UI lifecycle messages (can be noisy).");
+            CleanLogEnabled = config.Bind<bool>("Logging", "CleanLogEnabled", true, "Write a separate clean var_browser log file (no Unity Filename footer).");
+            CleanLogPath = config.Bind<string>("Logging", "CleanLogPath", "BepInEx/LogOutput/var_browser_clean.log", "Path for the clean var_browser log file (relative to VaM folder).");
 
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "CategoryHair", "Last opened Gallery page.");
         }

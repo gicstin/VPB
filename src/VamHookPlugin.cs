@@ -582,7 +582,21 @@ namespace var_browser
         {
             singleton = this;
 
+            LogUtil.SetLogSource(Logger);
+
             LogUtil.MarkPluginAwake();
+
+            try
+            {
+                Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
+                Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);
+                Application.SetStackTraceLogType(LogType.Error, StackTraceLogType.None);
+                Application.SetStackTraceLogType(LogType.Exception, StackTraceLogType.None);
+                Application.SetStackTraceLogType(LogType.Assert, StackTraceLogType.None);
+            }
+            catch
+            {
+            }
 
             try
             {
@@ -607,6 +621,18 @@ namespace var_browser
             }
 
             Settings.Init(this.Config);
+
+            try
+            {
+                LogUtil.ConfigureCleanLog(
+                    Settings.Instance != null && Settings.Instance.CleanLogEnabled != null && Settings.Instance.CleanLogEnabled.Value,
+                    Settings.Instance != null && Settings.Instance.CleanLogPath != null ? Settings.Instance.CleanLogPath.Value : null
+                );
+            }
+            catch
+            {
+            }
+
             UIKey = KeyUtil.Parse(Settings.Instance.UIKey.Value);
             CustomSceneKey = KeyUtil.Parse(Settings.Instance.CustomSceneKey.Value);
             CategorySceneKey = KeyUtil.Parse(Settings.Instance.CategorySceneKey.Value);

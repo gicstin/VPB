@@ -153,7 +153,7 @@ namespace var_browser
             if (cacheTexture!=null)
             {
                 LogUtil.PerfAdd("Img.Cache.MemHit", 0, 0);
-                LogUtil.Log("request use mem cache:" + diskCachePath);
+                LogUtil.LogTextureTrace("Img.Request.MemHit:" + diskCachePath, "request use mem cache:" + diskCachePath);
                 qi.tex = cacheTexture;
                 Messager.singleton.StartCoroutine(DelayDoCallback(qi));
                 LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
@@ -197,10 +197,11 @@ namespace var_browser
                 if (File.Exists(realDiskCachePath))
                 {
                     LogUtil.PerfAdd("Img.Cache.DiskHit", 0, 0);
-                    LogUtil.Log("request use disk cache:" + realDiskCachePath);
+                    LogUtil.LogTextureTrace("Img.Request.DiskHit:" + realDiskCachePath, "request use disk cache:" + realDiskCachePath);
                     var swRead = System.Diagnostics.Stopwatch.StartNew();
                     var bytes = File.ReadAllBytes(realDiskCachePath);
                     LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
+                    LogUtil.LogTextureSlowDisk("read", realDiskCachePath, swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
                     Texture2D tex = new Texture2D(width, height, textureFormat, false,qi.linear);
                     //tex.name = qi.cacheSignature;
                     bool success = true;
@@ -229,7 +230,7 @@ namespace var_browser
             }
 
             LogUtil.PerfAdd("Img.Cache.Miss", 0, 0);
-            LogUtil.Log("request not use cache:" + diskCachePath);
+            LogUtil.LogTextureTrace("Img.Request.Miss:" + diskCachePath, "request not use cache:" + diskCachePath);
 
             if (inflightEnabled && !inflightKeys.Contains(diskCachePath))
             {
@@ -291,7 +292,7 @@ namespace var_browser
             if (resultTexture!=null)
             {
                 LogUtil.PerfAdd("Img.Cache.MemHit", 0, 0);
-                LogUtil.Log("resize use mem cache:" + diskCachePath);
+                LogUtil.LogTextureTrace("Img.Resize.MemHit:" + diskCachePath, "resize use mem cache:" + diskCachePath);
                 UnityEngine.Object.Destroy(qi.tex);
                 qi.tex = resultTexture;
                 ResolveInflightWaiters(diskCachePath, resultTexture);
@@ -302,10 +303,11 @@ namespace var_browser
             if (File.Exists(realDiskCachePath))
             {
                 LogUtil.PerfAdd("Img.Resize.FromDisk", 0, 0);
-                LogUtil.Log("resize use disk cache:" + realDiskCachePath);
+                LogUtil.LogTextureTrace("Img.Resize.DiskHit:" + realDiskCachePath, "resize use disk cache:" + realDiskCachePath);
                 var swRead = System.Diagnostics.Stopwatch.StartNew();
                 var bytes = File.ReadAllBytes(realDiskCachePath);
                 LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
+                LogUtil.LogTextureSlowDisk("read", realDiskCachePath, swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
 
                 resultTexture = new Texture2D(width, height, localFormat, false, qi.linear);
                 //resultTexture.name = qi.cacheSignature;
@@ -317,7 +319,7 @@ namespace var_browser
             }
 
 
-            LogUtil.Log("resize generate cache:" + realDiskCachePath);
+            LogUtil.LogTextureTrace("Img.Resize.Generate:" + realDiskCachePath, "resize generate cache:" + realDiskCachePath);
 
             // Whether an image is linear affects how qi.tex is displayed.
             var tempTexture = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32,
@@ -352,18 +354,23 @@ namespace var_browser
             resultTexture.Compress(true);
 
             LogUtil.PerfAdd("Img.Convert", swConvert.Elapsed.TotalMilliseconds, 0);
+            LogUtil.LogTextureSlowConvert(qi.imgPath, swConvert.Elapsed.TotalMilliseconds, qi.tex.width, qi.tex.height, qi.tex.format, width, height, resultTexture.format);
 
             RenderTexture.ReleaseTemporary(tempTexture);
 
-            LogUtil.Log(string.Format("convert {0}:{1}({2},{3})mip:{4} isLinear:{5} -> {6}({7},{8})mip:{9}",
-                qi.imgPath,
-                qi.tex.format, qi.tex.width, qi.tex.height, qi.tex.mipmapCount, qi.linear,
-                resultTexture.format, width, height, resultTexture.mipmapCount));
+            LogUtil.LogTextureTrace(
+                "Img.Convert:" + qi.imgPath,
+                string.Format("convert {0}:{1}({2},{3})mip:{4} isLinear:{5} -> {6}({7},{8})mip:{9}",
+                    qi.imgPath,
+                    qi.tex.format, qi.tex.width, qi.tex.height, qi.tex.mipmapCount, qi.linear,
+                    resultTexture.format, width, height, resultTexture.mipmapCount)
+            );
 
             byte[] texBytes = resultTexture.GetRawTextureData();
             var swWrite = System.Diagnostics.Stopwatch.StartNew();
             File.WriteAllBytes(realDiskCachePath, texBytes);
             LogUtil.PerfAdd("Img.Disk.Write", swWrite.Elapsed.TotalMilliseconds, texBytes != null ? texBytes.LongLength : 0);
+            LogUtil.LogTextureSlowDisk("write", realDiskCachePath, swWrite.Elapsed.TotalMilliseconds, texBytes != null ? texBytes.LongLength : 0);
 
             JSONClass jSONClass = new JSONClass();
             jSONClass["type"] = "image";
@@ -502,7 +509,10 @@ namespace var_browser
 
             if (originalWidth != width || originalHeight != height)
             {
-                LogUtil.Log(string.Format("GetResizedSize {0}x{1} min:{2} max:{3} -> {4}x{5}", originalWidth, originalHeight, minSize, maxSize, width, height));
+                LogUtil.LogTextureTrace(
+                    "Img.GetResizedSize:" + originalWidth + "x" + originalHeight + ":" + minSize + ":" + maxSize + ":" + width + "x" + height,
+                    string.Format("GetResizedSize {0}x{1} min:{2} max:{3} -> {4}x{5}", originalWidth, originalHeight, minSize, maxSize, width, height)
+                );
             }
         }
 

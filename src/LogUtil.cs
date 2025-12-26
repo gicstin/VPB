@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.IO;
+using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Profiling;
@@ -12,6 +14,9 @@ namespace var_browser
 {
     class LogUtil
     {
+        static ManualLogSource logSource;
+        static StreamWriter cleanLogWriter;
+        static string cleanLogLastPath;
         static readonly DateTime processStartTime;
         static readonly Stopwatch sincePluginAwake = new Stopwatch();
         static readonly Stopwatch sceneLoadStopwatch = new Stopwatch();
@@ -56,7 +61,30 @@ namespace var_browser
             public int count;
         }
 
+        struct SlowConvertSample
+        {
+            public string path;
+            public double ms;
+            public int srcW;
+            public int srcH;
+            public TextureFormat srcFmt;
+            public int dstW;
+            public int dstH;
+            public TextureFormat dstFmt;
+        }
+
+        struct SlowDiskSample
+        {
+            public string op;
+            public string path;
+            public double ms;
+            public long bytes;
+        }
+
         static readonly Dictionary<string, PerfMetric> perf = new Dictionary<string, PerfMetric>(StringComparer.Ordinal);
+        static readonly Dictionary<string, float> recentLogRealtime = new Dictionary<string, float>(StringComparer.Ordinal);
+        static readonly List<SlowConvertSample> slowConverts = new List<SlowConvertSample>(128);
+        static readonly List<SlowDiskSample> slowDisk = new List<SlowDiskSample>(128);
         static bool pluginAwakeMarked;
         static bool readyLogged;
         static double? readyProcessSeconds;
@@ -74,6 +102,89 @@ namespace var_browser
             }
         }
 
+        public static void SetLogSource(ManualLogSource source)
+        {
+            logSource = source;
+        }
+
+        public static void ConfigureCleanLog(bool enabled, string path)
+        {
+            try
+            {
+                if (!enabled)
+                {
+                    if (cleanLogWriter != null)
+                    {
+                        try { cleanLogWriter.Flush(); } catch { }
+                        try { cleanLogWriter.Dispose(); } catch { }
+                    }
+                    cleanLogWriter = null;
+                    cleanLogLastPath = null;
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(path))
+                {
+                    return;
+                }
+
+                // Normalize slashes and allow relative paths.
+                path = path.Replace('\\', '/');
+                string fullPath = Path.IsPathRooted(path) ? path : Path.Combine(Environment.CurrentDirectory, path);
+                fullPath = fullPath.Replace('\\', '/');
+
+                if (cleanLogWriter != null && string.Equals(cleanLogLastPath, fullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (cleanLogWriter != null)
+                {
+                    try { cleanLogWriter.Flush(); } catch { }
+                    try { cleanLogWriter.Dispose(); } catch { }
+                    cleanLogWriter = null;
+                }
+
+                string dir = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                cleanLogWriter = new StreamWriter(new FileStream(fullPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite), Encoding.UTF8);
+                cleanLogWriter.AutoFlush = true;
+                cleanLogLastPath = fullPath;
+            }
+            catch
+            {
+                cleanLogWriter = null;
+                cleanLogLastPath = null;
+            }
+        }
+
+        static void WriteCleanLine(string msg)
+        {
+            try
+            {
+                if (cleanLogWriter == null) return;
+                cleanLogWriter.WriteLine(msg);
+            }
+            catch
+            {
+                try
+                {
+                    if (cleanLogWriter != null)
+                    {
+                        try { cleanLogWriter.Flush(); } catch { }
+                        try { cleanLogWriter.Dispose(); } catch { }
+                    }
+                }
+                catch { }
+                cleanLogWriter = null;
+                cleanLogLastPath = null;
+            }
+        }
+
         public static void MarkPluginAwake()
         {
             if (pluginAwakeMarked)
@@ -87,15 +198,159 @@ namespace var_browser
 
         public static void Log(string log)
         {
-            UnityEngine.Debug.Log(DateTime.Now.ToString("HH:mm:ss")+" (vb_log) " + log);
+            string msg = DateTime.Now.ToString("HH:mm:ss") + " (vb_log) " + log;
+            WriteCleanLine(msg);
+            if (logSource != null)
+            {
+                logSource.LogInfo(msg);
+                return;
+            }
+            UnityEngine.Debug.Log(msg);
         }
         public static void LogError(string log)
         {
-            UnityEngine.Debug.LogError(DateTime.Now.ToString("HH:mm:ss") + " (vb_err) " + log);
+            string msg = DateTime.Now.ToString("HH:mm:ss") + " (vb_err) " + log;
+            WriteCleanLine(msg);
+            if (logSource != null)
+            {
+                logSource.LogError(msg);
+                return;
+            }
+            UnityEngine.Debug.LogError(msg);
         }
         public static void LogWarning(string log)
         {
-            UnityEngine.Debug.LogWarning(DateTime.Now.ToString("HH:mm:ss") + " (vb_warn) " + log);
+            string msg = DateTime.Now.ToString("HH:mm:ss") + " (vb_warn) " + log;
+            WriteCleanLine(msg);
+            if (logSource != null)
+            {
+                logSource.LogWarning(msg);
+                return;
+            }
+            UnityEngine.Debug.LogWarning(msg);
+        }
+
+        static int GetTextureLogLevel()
+        {
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null)
+                {
+                    return Settings.Instance.TextureLogLevel.Value;
+                }
+            }
+            catch { }
+
+            return 1;
+        }
+
+        static int GetTextureSlowConvertMs()
+        {
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.TextureLogSlowConvertMs != null)
+                {
+                    return Settings.Instance.TextureLogSlowConvertMs.Value;
+                }
+            }
+            catch { }
+
+            return 50;
+        }
+
+        static int GetTextureSlowDiskMs()
+        {
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.TextureLogSlowDiskMs != null)
+                {
+                    return Settings.Instance.TextureLogSlowDiskMs.Value;
+                }
+            }
+            catch { }
+
+            return 20;
+        }
+
+        static bool ShouldLogKey(string key, float intervalSeconds)
+        {
+            if (string.IsNullOrEmpty(key)) return true;
+
+            float now = Time.realtimeSinceStartup;
+            float last;
+            if (recentLogRealtime.TryGetValue(key, out last))
+            {
+                if ((now - last) < intervalSeconds)
+                {
+                    return false;
+                }
+            }
+
+            recentLogRealtime[key] = now;
+
+            if (recentLogRealtime.Count > 4096)
+            {
+                recentLogRealtime.Clear();
+            }
+
+            return true;
+        }
+
+        public static void LogTextureTrace(string key, string message)
+        {
+            if (GetTextureLogLevel() < 2) return;
+            if (!ShouldLogKey(key, 1.0f)) return;
+            Log(message);
+        }
+
+        public static void LogTextureSlowConvert(string imgPath, double ms, int srcW, int srcH, TextureFormat srcFmt, int dstW, int dstH, TextureFormat dstFmt)
+        {
+            if (GetTextureLogLevel() <= 0) return;
+            if (ms < GetTextureSlowConvertMs()) return;
+            if (slowConverts.Count < 2048)
+            {
+                slowConverts.Add(new SlowConvertSample
+                {
+                    path = imgPath,
+                    ms = ms,
+                    srcW = srcW,
+                    srcH = srcH,
+                    srcFmt = srcFmt,
+                    dstW = dstW,
+                    dstH = dstH,
+                    dstFmt = dstFmt,
+                });
+            }
+            LogWarning("TEX_SLOW_CONVERT " + ms.ToString("0.00") + "ms | " + srcFmt + "(" + srcW + "," + srcH + ") -> " + dstFmt + "(" + dstW + "," + dstH + ") | " + imgPath);
+        }
+
+        public static void LogTextureSlowDisk(string op, string path, double ms, long bytes)
+        {
+            if (GetTextureLogLevel() <= 0) return;
+            if (ms < GetTextureSlowDiskMs()) return;
+            if (slowDisk.Count < 2048)
+            {
+                slowDisk.Add(new SlowDiskSample
+                {
+                    op = op,
+                    path = path,
+                    ms = ms,
+                    bytes = bytes,
+                });
+            }
+            LogWarning("TEX_SLOW_DISK " + op + " " + ms.ToString("0.00") + "ms (" + FormatBytes(bytes) + ") | " + path);
+        }
+
+        public static void LogVerboseUi(string message)
+        {
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.LogVerboseUi != null && Settings.Instance.LogVerboseUi.Value)
+                {
+                    Log(message);
+                }
+            }
+            catch { }
         }
 
         public static void LogStartupReadyOnce(string context)
@@ -140,6 +395,9 @@ namespace var_browser
             imageLastActivityRealtime = Time.realtimeSinceStartup;
 
             CaptureMemoryStart();
+
+            slowConverts.Clear();
+            slowDisk.Clear();
 
             sceneLoadInternalActive = true;
             sceneLoadInternalStopwatch.Reset();
@@ -468,6 +726,7 @@ namespace var_browser
             {
                 LogSceneLoadStats(name, ms / 1000.0);
                 LogPerfSummary();
+                LogTextureOffenderSummary();
             }
             catch (Exception ex)
             {
@@ -475,8 +734,68 @@ namespace var_browser
             }
 
             perf.Clear();
+            slowConverts.Clear();
+            slowDisk.Clear();
             sceneLoadAutoEndFailedLogged = false;
             sceneLoadNotBusyStableFrames = 0;
+        }
+
+        static void LogTextureOffenderSummary()
+        {
+            if (slowConverts.Count == 0 && slowDisk.Count == 0)
+            {
+                return;
+            }
+
+            const int topN = 5;
+
+            if (slowConverts.Count > 0)
+            {
+                var top = slowConverts.OrderByDescending(s => s.ms).Take(topN).ToArray();
+                var sb = new StringBuilder(512);
+                sb.Append("[VB] TEX_TOP_CONVERT ");
+                for (int i = 0; i < top.Length; i++)
+                {
+                    if (i > 0) sb.Append(" | ");
+                    var s = top[i];
+                    sb.Append(s.ms.ToString("0.00"));
+                    sb.Append("ms ");
+                    sb.Append(s.srcFmt);
+                    sb.Append("(");
+                    sb.Append(s.srcW);
+                    sb.Append("x");
+                    sb.Append(s.srcH);
+                    sb.Append(") -> ");
+                    sb.Append(s.dstFmt);
+                    sb.Append("(");
+                    sb.Append(s.dstW);
+                    sb.Append("x");
+                    sb.Append(s.dstH);
+                    sb.Append(") ");
+                    sb.Append(s.path);
+                }
+                LogWarning(sb.ToString());
+            }
+
+            if (slowDisk.Count > 0)
+            {
+                var top = slowDisk.OrderByDescending(s => s.ms).Take(topN).ToArray();
+                var sb = new StringBuilder(512);
+                sb.Append("[VB] TEX_TOP_DISK ");
+                for (int i = 0; i < top.Length; i++)
+                {
+                    if (i > 0) sb.Append(" | ");
+                    var s = top[i];
+                    sb.Append(s.op);
+                    sb.Append(" ");
+                    sb.Append(s.ms.ToString("0.00"));
+                    sb.Append("ms (");
+                    sb.Append(FormatBytes(s.bytes));
+                    sb.Append(") ");
+                    sb.Append(s.path);
+                }
+                LogWarning(sb.ToString());
+            }
         }
 
         static void CaptureMemoryStart()

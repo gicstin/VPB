@@ -1865,7 +1865,7 @@ namespace var_browser
 
         protected void Init()
         {
-            LogUtil.Log("HubBrowse Init");
+            LogUtil.LogVerboseUi("HubBrowse Init");
             hubEnabledJSON = new JSONStorableBool("hubEnabled", _hubEnabled, SyncHubEnabled);
             enableHubAction = new JSONStorableAction("EnableHub", EnableHub);
             webBrowserEnabledJSON = new JSONStorableBool("webBrowserEnabled", _webBrowserEnabled, SyncWebBrowserEnabled);
@@ -1967,7 +1967,7 @@ namespace var_browser
 
         protected override void InitUI(Transform t, bool isAlt)
         {
-            LogUtil.LogWarning("HubBrowse InitUI");
+            LogUtil.LogVerboseUi("HubBrowse InitUI");
             if (t == null) return;
             MVR.Hub.HubBrowseUI componentInChildren = t.GetComponentInChildren<MVR.Hub.HubBrowseUI>(true);
             if (componentInChildren == null) return;

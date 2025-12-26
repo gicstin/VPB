@@ -96,6 +96,14 @@ namespace var_browser
         static void LogImageQueueEvent(string evt, ImageLoaderThreaded.QueuedImage qi, int queueCount, int numRealQueuedImages, bool moved)
         {
             if (qi == null) return;
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.LogImageQueueEvents != null && !Settings.Instance.LogImageQueueEvents.Value)
+                {
+                    return;
+                }
+            }
+            catch { }
             string scene = LogUtil.GetSceneLoadName();
             int pri = GetImagePriority(qi.imgPath);
             string cat = GetImageCategory(qi.imgPath);
