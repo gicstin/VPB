@@ -20,32 +20,35 @@ namespace var_browser
             string p;
             try { p = path.ToLowerInvariant(); } catch { p = path; }
 
-            if (p.Contains("/textures/makeups/") || p.Contains("/textures/makeup/") || p.Contains("/makeups/")) return 0;
-            if (p.Contains("/textures/decals/") || p.Contains("/textures/decal/") || p.Contains("/decals/") || p.Contains("/decal/")) return 0;
-            if (p.Contains("/textures/overlays/") || p.Contains("/textures/overlay/") || p.Contains("/overlays/") || p.Contains("/overlay/")) return 0;
+            if (p.Contains("/hair/") || p.Contains("/hairstyles/") || p.Contains("/textures/hair") || p.Contains("hair_") || p.Contains("scalp") || p.Contains("strand") || p.Contains("hairtex")) return 0;
+
+            if (p.Contains("/textures/makeups/") || p.Contains("/textures/makeup/") || p.Contains("/makeups/")) return 1;
+            if (p.Contains("/textures/decals/") || p.Contains("/textures/decal/") || p.Contains("/decals/") || p.Contains("/decal/")) return 1;
+            if (p.Contains("/textures/overlays/") || p.Contains("/textures/overlay/") || p.Contains("/overlays/") || p.Contains("/overlay/")) return 1;
             if (p.Contains("facemask") || p.Contains("face_mask") || p.Contains("mask") || p.Contains("opacity") || p.Contains("alpha"))
             {
-                if (p.Contains("face") || p.Contains("makeup") || p.Contains("makeups") || p.Contains("freckle") || p.Contains("blush")) return 0;
+                if (p.Contains("face") || p.Contains("makeup") || p.Contains("makeups") || p.Contains("freckle") || p.Contains("blush")) return 1;
             }
-            if (p.Contains("freckle") || p.Contains("blush") || p.Contains("eyeshadow") || p.Contains("eye_shadow") || p.Contains("eyeliner") || p.Contains("eye_liner") || p.Contains("lipstick") || p.Contains("lip") || p.Contains("brow") || p.Contains("eyebrow") || p.Contains("foundation") || p.Contains("concealer") || p.Contains("highlight") || p.Contains("highlighter") || p.Contains("contour") || p.Contains("powder")) return 0;
-            if (p.Contains("/textures/") && (p.Contains("/face") || p.Contains("faced") || p.Contains("face_"))) return 0;
-            if (p.Contains("mouth")) return 1;
-            if (p.Contains("eye") || p.Contains("iris") || p.Contains("cornea") || p.Contains("eyeball")) return 2;
-            if (p.Contains("head")) return 3;
-            if (p.Contains("torso") || p.Contains("body")) return 4;
-            if (p.Contains("limb") || p.Contains("arms") || p.Contains("legs")) return 5;
+            if (p.Contains("freckle") || p.Contains("blush") || p.Contains("eyeshadow") || p.Contains("eye_shadow") || p.Contains("eyeliner") || p.Contains("eye_liner") || p.Contains("lipstick") || p.Contains("lip") || p.Contains("brow") || p.Contains("eyebrow") || p.Contains("foundation") || p.Contains("concealer") || p.Contains("highlight") || p.Contains("highlighter") || p.Contains("contour") || p.Contains("powder")) return 1;
+            if (p.Contains("/textures/") && (p.Contains("/face") || p.Contains("faced") || p.Contains("face_"))) return 1;
+            if (p.Contains("mouth")) return 2;
+            if (p.Contains("eye") || p.Contains("iris") || p.Contains("cornea") || p.Contains("eyeball")) return 3;
+            if (p.Contains("head")) return 4;
+            if (p.Contains("torso") || p.Contains("body")) return 5;
+            if (p.Contains("limb") || p.Contains("arms") || p.Contains("legs")) return 6;
             return 100;
         }
 
         static string GetImageCategory(string path)
         {
             int pri = GetImagePriority(path);
-            if (pri == 0) return "face";
-            if (pri == 1) return "mouth";
-            if (pri == 2) return "eyes";
-            if (pri == 3) return "head";
-            if (pri == 4) return "body";
-            if (pri == 5) return "limbs";
+            if (pri == 0) return "hair";
+            if (pri == 1) return "face";
+            if (pri == 2) return "mouth";
+            if (pri == 3) return "eyes";
+            if (pri == 4) return "head";
+            if (pri == 5) return "body";
+            if (pri == 6) return "limbs";
             return "other";
         }
 
@@ -53,7 +56,10 @@ namespace var_browser
         {
             if (queuedImages == null || qi == null) return false;
 
-            if (Settings.Instance == null || Settings.Instance.PrioritizeFaceTextures == null || !Settings.Instance.PrioritizeFaceTextures.Value) return false;
+            if (Settings.Instance == null) return false;
+            bool face = (Settings.Instance.PrioritizeFaceTextures != null) && Settings.Instance.PrioritizeFaceTextures.Value;
+            bool hair = (Settings.Instance.PrioritizeHairTextures != null) && Settings.Instance.PrioritizeHairTextures.Value;
+            if (!face && !hair) return false;
 
             if (qi.isThumbnail) return false;
 

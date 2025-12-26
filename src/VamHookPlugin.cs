@@ -21,6 +21,7 @@ namespace var_browser
         private bool MiniMode;
         private bool m_ShowDownscaleTexturesInfo;
         private bool m_ShowPrioritizeFaceTexturesInfo;
+        private bool m_ShowPrioritizeHairTexturesInfo;
         private bool m_ShowRemoveInvalidVarsInfo;
         private bool m_ShowRemoveOldVersionInfo;
         private bool m_ShowUninstallAllInfo;
@@ -28,6 +29,7 @@ namespace var_browser
         private bool m_ShowSettings;
         private string m_SettingsUiKeyDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
+        private bool m_SettingsPrioritizeHairTexturesDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -96,6 +98,7 @@ namespace var_browser
         {
             m_ShowDownscaleTexturesInfo = false;
             m_ShowPrioritizeFaceTexturesInfo = false;
+            m_ShowPrioritizeHairTexturesInfo = false;
             m_ShowRemoveInvalidVarsInfo = false;
             m_ShowRemoveOldVersionInfo = false;
             m_ShowUninstallAllInfo = false;
@@ -111,6 +114,7 @@ namespace var_browser
             m_ShowSettings = true;
             m_SettingsUiKeyDraft = (Settings.Instance != null && Settings.Instance.UIKey != null) ? Settings.Instance.UIKey.Value : "";
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
+            m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsError = null;
         }
 
@@ -156,6 +160,29 @@ namespace var_browser
                 GUILayout.Label("Tip: Leave this ON if you want faces to resolve sooner while clothing/hair textures continue loading.", m_StyleInfoCardText);
             });
 
+            GUILayout.Space(6);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsPrioritizeHairTexturesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsPrioritizeHairTexturesDraft = !m_SettingsPrioritizeHairTexturesDraft;
+            }
+            GUILayout.Label("Textures: Prioritize hair");
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
+            {
+                ToggleInfoCard(ref m_ShowPrioritizeHairTexturesInfo);
+            }
+            GUILayout.EndHorizontal();
+
+            DrawInfoCard(ref m_ShowPrioritizeHairTexturesInfo, "Prioritize hair textures", () =>
+            {
+                GUILayout.Space(4);
+                GUILayout.Label("When this is ON, VPB tries to process hair earlier during scene load.", m_StyleInfoCardText);
+                GUILayout.Space(2);
+                GUILayout.Label("It does this by reordering VaM's image load queue (it does not download anything extra).", m_StyleInfoCardText);
+            });
+
             if (!string.IsNullOrEmpty(m_SettingsError))
             {
                 GUILayout.Space(4);
@@ -179,7 +206,17 @@ namespace var_browser
                     }
                     if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)
                     {
-                        Settings.Instance.PrioritizeFaceTextures.Value = m_SettingsPrioritizeFaceTexturesDraft;
+                        if (Settings.Instance.PrioritizeFaceTextures.Value != m_SettingsPrioritizeFaceTexturesDraft)
+                        {
+                            Settings.Instance.PrioritizeFaceTextures.Value = m_SettingsPrioritizeFaceTexturesDraft;
+                        }
+                    }
+                    if (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null)
+                    {
+                        if (Settings.Instance.PrioritizeHairTextures.Value != m_SettingsPrioritizeHairTexturesDraft)
+                        {
+                            Settings.Instance.PrioritizeHairTextures.Value = m_SettingsPrioritizeHairTexturesDraft;
+                        }
                     }
                     UIKey = parsed;
                     CloseSettings();

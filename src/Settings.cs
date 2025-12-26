@@ -31,6 +31,7 @@ namespace var_browser
         public ConfigEntry<int> MaxTextureSize;
         public ConfigEntry<bool> InflightDedupEnabled;
         public ConfigEntry<bool> PrioritizeFaceTextures;
+        public ConfigEntry<bool> PrioritizeHairTextures;
         public ConfigEntry<bool> SceneLoadWaitForImagesIdle;
         public ConfigEntry<float> SceneLoadImagesIdleSeconds;
         public ConfigEntry<string> LastGalleryPage;
@@ -58,6 +59,7 @@ namespace var_browser
             CacheAssetBundle = config.Bind<bool>("Optimze", "CacheAssetBundle", true, "cache assetbundle.");
             InflightDedupEnabled = config.Bind<bool>("Optimze", "InflightDedupEnabled", false, "coalesce duplicate image requests while the first is still loading.");
             PrioritizeFaceTextures = config.Bind<bool>("Optimze", "PrioritizeFaceTextures", true, "prioritize face/makeup/overlay textures in VaM image load queue.");
+            PrioritizeHairTextures = config.Bind<bool>("Optimze", "PrioritizeHairTextures", true, "prioritize hair in VaM image load queue.");
             SceneLoadWaitForImagesIdle = config.Bind<bool>("Benchmark", "SceneLoadWaitForImagesIdle", true, "When enabled, SCENE_LOAD_TOTAL waits for image loading to become idle before ending.");
             SceneLoadImagesIdleSeconds = config.Bind<float>("Benchmark", "SceneLoadImagesIdleSeconds", 0f, "Idle window seconds required before SCENE_LOAD_TOTAL ends (when SceneLoadWaitForImagesIdle is enabled).");
 
