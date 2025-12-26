@@ -23,15 +23,21 @@ namespace var_browser
         private bool m_ShowRemoveInvalidVarsInfo;
         private bool m_ShowRemoveOldVersionInfo;
         private bool m_ShowUninstallAllInfo;
+        private bool m_ShowGcRefreshInfo;
+        private bool m_ShowSettings;
+        private string m_SettingsUiKeyDraft;
+        private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
-        Rect m_Rect = new Rect(0, 0, 240, 50);
+        Rect m_Rect = new Rect(0, 0, 220, 50);
 
         private const float MinUiScale = 0.6f;
         private const float MaxUiScale = 2.4f;
         private const float MiniModeHeight = 50f;
 
         private GUIStyle m_TitleTagStyle;
+        private GUIStyle m_TitleBarLabelStyle;
+        private GUIStyle m_DragHintStyle;
         private bool m_StylesInited;
         private Texture2D m_TexPanelBg;
         private Texture2D m_TexSectionBg;
@@ -44,6 +50,9 @@ namespace var_browser
         private Texture2D m_TexBtnPrimaryBg;
         private Texture2D m_TexBtnPrimaryBgHover;
         private Texture2D m_TexBtnPrimaryBgActive;
+        private Texture2D m_TexBtnCheckboxBg;
+        private Texture2D m_TexBtnCheckboxBgHover;
+        private Texture2D m_TexBtnCheckboxBgActive;
         private Texture2D m_TexWindowBorder;
         private Texture2D m_TexWindowBorderActive;
         private Texture2D m_TexInfoCardBg;
@@ -57,6 +66,7 @@ namespace var_browser
         private GUIStyle m_StyleButtonSmall;
         private GUIStyle m_StyleButtonDanger;
         private GUIStyle m_StyleButtonPrimary;
+        private GUIStyle m_StyleButtonCheckbox;
         private GUIStyle m_StyleToggle;
         private GUIStyle m_StyleWindow;
         private GUIStyle m_StyleWindowBorder;
@@ -78,6 +88,138 @@ namespace var_browser
             tex.SetPixel(0, 0, color);
             tex.Apply(false, true);
             return tex;
+        }
+
+        private void CloseAllInfoCards()
+        {
+            m_ShowDownscaleTexturesInfo = false;
+            m_ShowRemoveInvalidVarsInfo = false;
+            m_ShowRemoveOldVersionInfo = false;
+            m_ShowUninstallAllInfo = false;
+            m_ShowGcRefreshInfo = false;
+        }
+
+        private void OpenSettings()
+        {
+            if (MiniMode)
+            {
+                SetMiniMode(false);
+            }
+            m_ShowSettings = true;
+            m_SettingsUiKeyDraft = (Settings.Instance != null && Settings.Instance.UIKey != null) ? Settings.Instance.UIKey.Value : "";
+            m_SettingsError = null;
+        }
+
+        private void CloseSettings()
+        {
+            m_ShowSettings = false;
+            m_SettingsError = null;
+        }
+
+        private void DrawSettingsPage(float buttonHeight)
+        {
+            GUILayout.BeginVertical(m_StyleSection);
+            GUILayout.Label("Settings", m_StyleHeader);
+            GUILayout.Space(6);
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Show/Hide Hotkey", GUILayout.Width(120));
+            m_SettingsUiKeyDraft = GUILayout.TextField(m_SettingsUiKeyDraft ?? "", GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight));
+            GUILayout.EndHorizontal();
+
+            if (!string.IsNullOrEmpty(m_SettingsError))
+            {
+                GUILayout.Space(4);
+                GUILayout.Label(m_SettingsError, m_StyleInfoCardText);
+            }
+
+            GUILayout.Space(10);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Cancel", m_StyleButton, GUILayout.Height(buttonHeight)))
+            {
+                CloseSettings();
+            }
+            if (GUILayout.Button("Save", m_StyleButtonPrimary, GUILayout.Height(buttonHeight)))
+            {
+                try
+                {
+                    var parsed = KeyUtil.Parse(m_SettingsUiKeyDraft ?? "");
+                    if (Settings.Instance != null && Settings.Instance.UIKey != null)
+                    {
+                        Settings.Instance.UIKey.Value = parsed.keyPattern;
+                    }
+                    UIKey = parsed;
+                    CloseSettings();
+                }
+                catch
+                {
+                    m_SettingsError = "Invalid hotkey. Example: Ctrl+Shift+V";
+                }
+            }
+            GUILayout.EndHorizontal();
+            GUILayout.EndVertical();
+        }
+
+        private void ToggleInfoCard(ref bool visible)
+        {
+            bool newValue = !visible;
+            if (newValue)
+            {
+                CloseAllInfoCards();
+            }
+            visible = newValue;
+        }
+
+        private void DrawInfoCard(ref bool visible, string title, Action drawBody)
+        {
+            if (!visible)
+                return;
+
+            GUILayout.BeginVertical(m_StyleInfoCard);
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(title, m_StyleInfoCardTitle);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("x", m_StyleInfoClose, GUILayout.Width(18), GUILayout.Height(18)))
+            {
+                visible = false;
+            }
+            GUILayout.EndHorizontal();
+
+            if (visible)
+            {
+                drawBody?.Invoke();
+            }
+
+            GUILayout.EndVertical();
+        }
+
+        private void DrawPhiSplitButtonsInRect(Rect r, string leftText, GUIStyle leftStyle, Action leftAction, string rightText, GUIStyle rightStyle, Action rightAction, float phi)
+        {
+            const float gutter = 6f;
+            float usableWidth = Mathf.Max(0f, r.width - gutter);
+            float leftWidth = usableWidth / (1f + phi);
+            float rightWidth = Mathf.Max(0f, usableWidth - leftWidth);
+
+            var leftRect = new Rect(r.x, r.y, leftWidth, r.height);
+            var rightRect = new Rect(r.x + leftWidth + gutter, r.y, rightWidth, r.height);
+
+            var actualLeftStyle = leftStyle ?? GUI.skin.button;
+            var actualRightStyle = rightStyle ?? GUI.skin.button;
+
+            if (GUI.Button(leftRect, leftText, actualLeftStyle))
+            {
+                leftAction?.Invoke();
+            }
+            if (GUI.Button(rightRect, rightText, actualRightStyle))
+            {
+                rightAction?.Invoke();
+            }
+        }
+
+        private void DrawPhiSplitButtons(string leftText, GUIStyle leftStyle, Action leftAction, string rightText, GUIStyle rightStyle, Action rightAction, float phi, float height)
+        {
+            var r = GUILayoutUtility.GetRect(0f, height, GUILayout.ExpandWidth(true));
+            DrawPhiSplitButtonsInRect(r, leftText, leftStyle, leftAction, rightText, rightStyle, rightAction, phi);
         }
 
         private static Texture2D MakeBorderedTex(int width, int height, Color fill, Color border, int borderPx = 1)
@@ -129,12 +271,16 @@ namespace var_browser
 
             m_TexBtnPrimaryBg = MakeBorderedTex(12, 12, new Color(0.10f, 0.40f, 0.70f, 0.88f), new Color(1f, 1f, 1f, 0.14f), 1);
             m_TexBtnPrimaryBgHover = MakeBorderedTex(12, 12, new Color(0.12f, 0.50f, 0.85f, 0.92f), new Color(1f, 1f, 1f, 0.16f), 1);
-            m_TexBtnPrimaryBgActive = MakeBorderedTex(12, 12, new Color(0.18f, 0.62f, 0.95f, 0.96f), new Color(1f, 1f, 1f, 0.18f), 1);
+            m_TexBtnPrimaryBgActive = MakeTex(new Color(0.18f, 0.62f, 0.95f, 0.96f));
+
+            m_TexBtnCheckboxBg = MakeBorderedTex(12, 12, new Color(0.22f, 0.24f, 0.29f, 0.84f), new Color(0.70f, 0.74f, 0.80f, 0.22f), 1);
+            m_TexBtnCheckboxBgHover = MakeBorderedTex(12, 12, new Color(0.27f, 0.30f, 0.36f, 0.90f), new Color(0.70f, 0.74f, 0.80f, 0.22f), 1);
+            m_TexBtnCheckboxBgActive = MakeBorderedTex(12, 12, new Color(0.15f, 0.50f, 0.25f, 0.95f), new Color(0.30f, 0.85f, 0.45f, 0.40f), 1);
 
             m_TexWindowBorder = MakeTex(new Color(0.20f, 0.22f, 0.26f, borderAlpha));
             m_TexWindowBorderActive = MakeTex(new Color(0.12f, 0.50f, 0.85f, 0.88f));
             m_TexInfoCardBg = MakeBorderedTex(12, 12, new Color(0.12f, 0.14f, 0.18f, 0.82f), new Color(0.60f, 0.75f, 0.95f, 0.12f), 1);
-            m_TexFpsBadgeBg = MakeBorderedTex(12, 12, new Color(0.10f, 0.11f, 0.13f, 0.90f), new Color(0.70f, 0.74f, 0.80f, 0.32f), 1);
+            m_TexFpsBadgeBg = MakeTex(new Color(0.10f, 0.11f, 0.13f, 0.90f));
             m_TexFpsBadgeOuterBg = MakeBorderedTex(12, 12, new Color(0f, 0f, 0f, 0f), new Color(0.12f, 0.50f, 0.85f, 0.92f), 2);
             var texTransparent = MakeTex(new Color(0f, 0f, 0f, 0f));
 
@@ -160,13 +306,13 @@ namespace var_browser
             m_StylePanel = new GUIStyle(GUI.skin.box);
             m_StylePanel.normal.background = m_TexPanelBg;
             m_StylePanel.normal.textColor = Color.white;
-            m_StylePanel.padding = new RectOffset(10, 10, 10, 10);
+            m_StylePanel.padding = new RectOffset(8, 8, 8, 8);
             m_StylePanel.margin = new RectOffset(6, 6, 6, 6);
 
             m_StyleSection = new GUIStyle(GUI.skin.box);
             m_StyleSection.normal.background = m_TexSectionBg;
             m_StyleSection.normal.textColor = Color.white;
-            m_StyleSection.padding = new RectOffset(10, 10, 8, 8);
+            m_StyleSection.padding = new RectOffset(8, 8, 6, 6);
             m_StyleSection.margin = new RectOffset(0, 0, 6, 6);
 
             m_StyleHeader = new GUIStyle(GUI.skin.label);
@@ -220,6 +366,16 @@ namespace var_browser
             m_StyleButtonPrimary.onActive.background = m_TexBtnPrimaryBgActive;
             m_StyleButtonPrimary.onFocused.background = m_TexBtnPrimaryBgActive;
 
+            m_StyleButtonCheckbox = new GUIStyle(m_StyleButton);
+            m_StyleButtonCheckbox.normal.background = m_TexBtnCheckboxBg;
+            m_StyleButtonCheckbox.hover.background = m_TexBtnCheckboxBgHover;
+            m_StyleButtonCheckbox.active.background = m_TexBtnCheckboxBgHover;
+            m_StyleButtonCheckbox.onNormal.background = m_TexBtnCheckboxBgActive;
+            m_StyleButtonCheckbox.onHover.background = m_TexBtnCheckboxBgActive;
+            m_StyleButtonCheckbox.onActive.background = m_TexBtnCheckboxBgActive;
+            m_StyleButtonCheckbox.onFocused.background = m_TexBtnCheckboxBgActive;
+            m_StyleButtonCheckbox.padding = new RectOffset(8, 8, 6, 6);
+
             m_StyleToggle = new GUIStyle(GUI.skin.toggle);
             m_StyleToggle.normal.textColor = new Color(0.92f, 0.94f, 0.96f, 1f);
             m_StyleToggle.hover.textColor = Color.white;
@@ -228,8 +384,10 @@ namespace var_browser
             m_StyleToggle.alignment = TextAnchor.MiddleLeft;
             m_StyleToggle.wordWrap = false;
             m_StyleToggle.clipping = TextClipping.Clip;
-            m_StyleToggle.padding = new RectOffset(20, 0, 2, 2);
-            m_StyleToggle.contentOffset = new Vector2(0f, -1f);
+            m_StyleToggle.padding = new RectOffset(62, 0, 6, 6);
+            m_StyleToggle.margin = new RectOffset(0, 0, 0, 0);
+            m_StyleToggle.contentOffset = new Vector2(0f, 0f);
+            m_StyleToggle.fontSize = 14;
 
             m_StyleInfoIcon = new GUIStyle(GUI.skin.button);
             m_StyleInfoIcon.normal.background = texTransparent;
@@ -283,6 +441,43 @@ namespace var_browser
             m_StyleFpsBadgeOuter.normal.textColor = Color.clear;
             m_StyleFpsBadgeOuter.padding = new RectOffset(0, 0, 0, 0);
             m_StyleFpsBadgeOuter.margin = new RectOffset(0, 0, 0, 0);
+
+            if (m_TitleTagStyle == null)
+            {
+                m_TitleTagStyle = new GUIStyle(GUI.skin.label);
+                m_TitleTagStyle.normal.textColor = Color.white;
+                m_TitleTagStyle.hover.textColor = Color.white;
+                m_TitleTagStyle.active.textColor = Color.white;
+                m_TitleTagStyle.focused.textColor = Color.white;
+                m_TitleTagStyle.alignment = TextAnchor.MiddleLeft;
+                m_TitleTagStyle.fontStyle = FontStyle.Bold;
+                m_TitleTagStyle.font = GUI.skin.window.font;
+                m_TitleTagStyle.fontSize = GUI.skin.window.fontSize;
+                m_TitleTagStyle.wordWrap = false;
+                m_TitleTagStyle.padding = new RectOffset(0, 0, 0, 0);
+            }
+
+            if (m_TitleBarLabelStyle == null)
+            {
+                m_TitleBarLabelStyle = new GUIStyle(GUI.skin.label);
+                m_TitleBarLabelStyle.font = GUI.skin.window.font;
+                m_TitleBarLabelStyle.fontSize = GUI.skin.window.fontSize;
+                m_TitleBarLabelStyle.fontStyle = GUI.skin.window.fontStyle;
+                m_TitleBarLabelStyle.normal.textColor = Color.white;
+                m_TitleBarLabelStyle.hover.textColor = Color.white;
+                m_TitleBarLabelStyle.active.textColor = Color.white;
+                m_TitleBarLabelStyle.focused.textColor = Color.white;
+                m_TitleBarLabelStyle.alignment = TextAnchor.MiddleLeft;
+                m_TitleBarLabelStyle.wordWrap = false;
+                m_TitleBarLabelStyle.clipping = TextClipping.Clip;
+                m_TitleBarLabelStyle.padding = new RectOffset(0, 0, 0, 0);
+            }
+
+            if (m_DragHintStyle == null)
+            {
+                m_DragHintStyle = new GUIStyle(m_TitleBarLabelStyle);
+                m_DragHintStyle.alignment = TextAnchor.MiddleCenter;
+            }
 
             m_StylesInited = true;
         }
@@ -349,7 +544,7 @@ namespace var_browser
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
 
-            m_Rect = new Rect(UIPosition.x, UIPosition.y, 240, 50);
+            m_Rect = new Rect(UIPosition.x, UIPosition.y, 220, 50);
             if (MiniMode)
             {
                 m_Rect.height = MiniModeHeight;
@@ -367,7 +562,6 @@ namespace var_browser
             harmony.PatchAll(typeof(HubResourcePackageHook));
             harmony.PatchAll(typeof(SuperControllerHook));
             harmony.PatchAll(typeof(PatchAssetLoader));
-            //harmony.PatchAll(typeof(PatchHairLODSettings));
 
         }
 
@@ -397,11 +591,10 @@ namespace var_browser
                 m_Rect.height = Mathf.Max(m_ExpandedHeight, MiniModeHeight);
             }
 
-            RestrcitUIRect();
+            RestrictUiRect();
         }
         void Start()
         {
-            //this.gameObject.name = "var_browser";
             var go = new GameObject("var_browser_messager");
             var messager = go.AddComponent<Messager>();
             messager.target = this.gameObject;
@@ -438,29 +631,23 @@ namespace var_browser
         }
         void OnEnable()
         {
-            MessageKit<string>.addObserver(MessageDef.UpdateLoading, OnPrograss);
+            MessageKit<string>.addObserver(MessageDef.UpdateLoading, OnProgress);
             MessageKit.addObserver(MessageDef.DeactivateWorldUI, OnDeactivateWorldUI);
-            MessageKit.addObserver(MessageDef.FileManagerInit, OnFileManagerInit);
 
         }
         void OnDisable()
         {
-            MessageKit<string>.removeObserver(MessageDef.UpdateLoading, OnPrograss);
+            MessageKit<string>.removeObserver(MessageDef.UpdateLoading, OnProgress);
             MessageKit.removeObserver(MessageDef.DeactivateWorldUI, OnDeactivateWorldUI);
-            MessageKit.removeObserver(MessageDef.FileManagerInit, OnFileManagerInit);
-        }
-        void OnFileManagerInit()
-        {
-
         }
 
-        string prograssText = "";
+        string m_ProgressText = "";
         float m_FpsSmoothedDelta = 0f;
         float m_FpsUpdateTimer = 0f;
         string m_FpsText = "";
-        void OnPrograss(string text)
+        void OnProgress(string text)
         {
-            prograssText = text;
+            m_ProgressText = text;
         }
         void OnDeactivateWorldUI()
         {
@@ -499,7 +686,7 @@ namespace var_browser
                         m_FpsSmoothedDelta = Mathf.Lerp(m_FpsSmoothedDelta, unscaledDt, 0.08f);
 
                     m_FpsUpdateTimer += unscaledDt;
-                    if (m_FpsUpdateTimer >= 0.25f)
+                    if (m_FpsUpdateTimer >= 1.0f)
                     {
                         m_FpsUpdateTimer = 0f;
                         float fps = 1f / Mathf.Max(0.00001f, m_FpsSmoothedDelta);
@@ -529,11 +716,8 @@ namespace var_browser
 
             if (!m_Inited)
             {
-                //if (MVR.Hub.HubBrowse.singleton != null)
-                {
-                    Init();
-                    m_Inited = true;
-                }
+                Init();
+                m_Inited = true;
             }
             if (!m_UIInited)
             {
@@ -591,8 +775,6 @@ namespace var_browser
                 });
             }
 
-            //CreateHubBrowse();
-            //CreateFileBrowser();
             VarPackageMgr.singleton.Init();
             FileManager.Refresh(true);
         }
@@ -708,53 +890,75 @@ namespace var_browser
         {
             EnsureStyles();
 
-            GUI.DragWindow(new Rect(0, 0, m_Rect.width, 28));
+            float dragHeight = MiniMode ? 28f : 52f;
+
+            if (m_StyleWindow != null)
+            {
+                m_StyleWindow.padding.left = 6;
+                m_StyleWindow.padding.right = 6;
+                m_StyleWindow.padding.bottom = 6;
+            }
+            if (m_StylePanel != null)
+            {
+                m_StylePanel.padding.left = 8;
+                m_StylePanel.padding.right = 8;
+                m_StylePanel.padding.top = 8;
+                m_StylePanel.padding.bottom = 8;
+                m_StylePanel.margin.left = 6;
+                m_StylePanel.margin.right = 6;
+                m_StylePanel.margin.top = 6;
+                m_StylePanel.margin.bottom = 6;
+            }
+
+            GUI.DragWindow(new Rect(0, 0, m_Rect.width, dragHeight));
 
             GUILayout.BeginVertical(m_StylePanel);
 
+            // ========== HEADER & CONTROLS ==========
             GUILayout.BeginHorizontal();
-            GUILayout.Label(string.Format("<color=#00FF00><b>{0}</b></color> {1}", FileManager.s_InstalledCount, prograssText), m_StyleHeader);
+            GUILayout.Label(string.Format("<color=#00FF00><b>{0}</b></color> {1}", FileManager.s_InstalledCount, m_ProgressText), m_StyleHeader);
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("+", m_StyleButtonSmall, GUILayout.Width(28)))
+            const float buttonHeight = 28f;
+            if (GUILayout.Button("+", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
 		        m_UIScale = Mathf.Clamp(m_UIScale + 0.2f, MinUiScale, MaxUiScale);
                 Settings.Instance.UIScale.Value = m_UIScale;
-                RestrcitUIRect();
+                RestrictUiRect();
             }
-            if (GUILayout.Button("-", m_StyleButtonSmall, GUILayout.Width(28)))
+            if (GUILayout.Button("-", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
 		        m_UIScale = Mathf.Clamp(m_UIScale - 0.2f, MinUiScale, MaxUiScale);
                 Settings.Instance.UIScale.Value = m_UIScale;
-                RestrcitUIRect();
+                RestrictUiRect();
             }
 
-            if (GUILayout.Button(MiniMode ? "Full" : "Mini", m_StyleButtonSmall, GUILayout.Width(44)))
+            if (GUILayout.Button(MiniMode ? "Full" : "Mini", m_StyleButtonSmall, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
             {
                 SetMiniMode(!MiniMode);
+            }
+            if (GUILayout.Button("...", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
+            {
+                OpenSettings();
             }
             GUILayout.EndHorizontal();
 
             if (MiniMode)
             {
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("1.Scene", m_StyleButton))
-                {
-                    // Custom entries do not require installation.
-                    m_FileBrowser.onlyInstalled = false;
-                    ShowFileBrowser("Custom Scene", "json", "Saves/scene", true);
-                }
-                if (GUILayout.Button("2.Scene", m_StyleButton))
-                {
-                    ShowFileBrowser("Category Scene", "json", "Saves/scene");
-                }
-                GUILayout.EndHorizontal();
+                // ========== MINI MODE: QUICK ACCESS ==========
+                DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Gallery", m_StyleButton, OpenGallery, 1.618f, buttonHeight);
 
                 GUILayout.EndVertical();
                 return;
             }
 
-            GUILayout.Space(4);
-            GUILayout.Label(string.Format("Show/Hide: {0}", UIKey.keyPattern), m_StyleSubHeader);
+            GUILayout.Space(3);
+
+            if (m_ShowSettings)
+            {
+                DrawSettingsPage(buttonHeight);
+                GUILayout.EndVertical();
+                return;
+            }
 
             if (m_FileManagerInited && m_UIInited)
             {
@@ -762,75 +966,62 @@ namespace var_browser
                     GUI.enabled = false;
 
                 {
-                    GUILayout.BeginVertical(m_StyleSection);
-                    GUILayout.Label("System", m_StyleSubHeader);
-
-                    GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Refresh", m_StyleButton))
-                    {
-                        Refresh();
-                    }
-                    if (GUILayout.Button("GC", m_StyleButton))
-                    {
-                        DAZMorphMgr.singleton.cache.Clear();
-                        ImageLoadingMgr.singleton.ClearCache();
-
-                        GC.Collect();
-                        Resources.UnloadUnusedAssets();
-                    }
-                    GUILayout.EndHorizontal();
-
-                    GUILayout.BeginHorizontal();
                     const float infoBtnWidth = 28f;
-                    const float actionRowHeight = 34f;
-                    const float optionRowHeight = 28f;
-                    //const float optionBtnWidth = 44f;
-                    const float optionIndent = 18f;
+                    const float optionIndent = 12f;
 
-                    Settings.Instance.ReduceTextureSize.Value = GUILayout.Toggle(Settings.Instance.ReduceTextureSize.Value, "Downscale Textures", m_StyleToggle, GUILayout.Height(optionRowHeight));
-                    GUILayout.FlexibleSpace();
-                    if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(infoBtnWidth), GUILayout.Height(optionRowHeight)))
+                    // ========== TEXTURE OPTIMIZATION SETTINGS ==========
+                    GUILayout.BeginVertical(m_StyleSection);
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button(Settings.Instance.ReduceTextureSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
                     {
-                        m_ShowDownscaleTexturesInfo = !m_ShowDownscaleTexturesInfo;
+                        Settings.Instance.ReduceTextureSize.Value = !Settings.Instance.ReduceTextureSize.Value;
+                    }
+                    GUILayout.Label("Textures: Downscale");
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
+                    {
+						ToggleInfoCard(ref m_ShowDownscaleTexturesInfo);
                     }
                     GUILayout.EndHorizontal();
-                    if (m_ShowDownscaleTexturesInfo)
-                    {
-                        GUILayout.BeginVertical(m_StyleInfoCard);
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Label("Downscale Textures", m_StyleInfoCardTitle);
-                        GUILayout.FlexibleSpace();
-                        if (GUILayout.Button("x", m_StyleInfoClose, GUILayout.Width(18), GUILayout.Height(18)))
-                        {
-                            m_ShowDownscaleTexturesInfo = false;
-                        }
-                        GUILayout.EndHorizontal();
-                        GUILayout.Space(4);
-                        GUILayout.Label("When enabled, images loaded by VaM are resized to smaller, power-of-two textures and cached.", m_StyleInfoCardText);
-                        GUILayout.Space(2);
-                        GUILayout.Label("This reduces VRAM/RAM usage and can improve performance, at the cost of some texture sharpness.", m_StyleInfoCardText);
-                        GUILayout.Space(6);
-                        GUILayout.Label("Min Resize: textures larger than this will be scaled down (2K/4K/8K).", m_StyleInfoCardText);
-                        GUILayout.Label("Force all to minimum size: clamps both width/height to the minimum (more aggressive).", m_StyleInfoCardText);
-                        GUILayout.Space(6);
-                        GUILayout.Label("Notes: textures smaller than the limit are not upscaled; first load may take longer while the cache is created; web-loaded textures are ignored.", m_StyleInfoCardText);
-                        GUILayout.EndVertical();
-                    }
+					DrawInfoCard(ref m_ShowDownscaleTexturesInfo, "Downscale Textures", () =>
+					{
+						GUILayout.Space(4);
+						GUILayout.Label("When this is ON, VPB makes big textures smaller and saves them so VaM can reuse them.", m_StyleInfoCardText);
+						GUILayout.Space(2);
+						GUILayout.Label("This can lower memory use and help performance. The tradeoff is textures may look a bit less sharp.", m_StyleInfoCardText);
+						GUILayout.Space(6);
+						GUILayout.Label("Min: Anything bigger than this gets reduced down to this size.", m_StyleInfoCardText);
+						GUILayout.Label("Force all to minimum: Makes almost everything use the minimum size (stronger effect).", m_StyleInfoCardText);
+						GUILayout.Space(6);
+						GUILayout.Label("Notes: Smaller textures won't be made bigger. The first time can take longer while VPB builds the cache.", m_StyleInfoCardText);
+					});
 
                     if (Settings.Instance.ReduceTextureSize.Value)
                     {
                         GUILayout.BeginHorizontal();
                         GUILayout.Space(optionIndent);
-                        GUILayout.Label("Min Resize", GUILayout.Width(80));
+                        GUILayout.Label("Min", GUILayout.Width(30));
                         int minTextureSize = Settings.Instance.MinTextureSize.Value;
-                        int selectedIndex = (minTextureSize == 8192) ? 3 : (minTextureSize == 4096) ? 2 : (minTextureSize == 2048) ? 1 : 0;
-                        selectedIndex = GUILayout.Toolbar(
-                            selectedIndex,
-                            new string[] { "1K", "2K", "4K", "8K" },
-                            m_StyleButton,
-                            GUILayout.Height(optionRowHeight)
-                        );
-                        Settings.Instance.MinTextureSize.Value = (selectedIndex == 3) ? 8192 : (selectedIndex == 2) ? 4096 : (selectedIndex == 1) ? 2048 : 1024;
+                        var style1k = m_StyleButtonDanger;
+                        var style2k = (minTextureSize == 2048) ? m_StyleButtonPrimary : m_StyleButton;
+                        var style4k = (minTextureSize == 4096) ? m_StyleButtonPrimary : m_StyleButton;
+                        var style8k = (minTextureSize == 8192) ? m_StyleButtonPrimary : m_StyleButton;
+                        if (GUILayout.Button("1K", style1k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
+                        {
+                            Settings.Instance.MinTextureSize.Value = 1024;
+                        }
+                        if (GUILayout.Button("2K", style2k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
+                        {
+                            Settings.Instance.MinTextureSize.Value = 2048;
+                        }
+                        if (GUILayout.Button("4K", style4k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
+                        {
+                            Settings.Instance.MinTextureSize.Value = 4096;
+                        }
+                        if (GUILayout.Button("8K", style8k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
+                        {
+                            Settings.Instance.MinTextureSize.Value = 8192;
+                        }
                         if (Settings.Instance.MaxTextureSize != null)
                         {
                             Settings.Instance.MaxTextureSize.Value = Settings.Instance.MinTextureSize.Value;
@@ -839,126 +1030,121 @@ namespace var_browser
 
                         GUILayout.BeginHorizontal();
                         GUILayout.Space(optionIndent);
-                        Settings.Instance.ForceTextureToMinSize.Value = GUILayout.Toggle(Settings.Instance.ForceTextureToMinSize.Value, "Force all to minimum size", m_StyleToggle, GUILayout.Height(optionRowHeight));
+                        if (GUILayout.Button(Settings.Instance.ForceTextureToMinSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                        {
+                            Settings.Instance.ForceTextureToMinSize.Value = !Settings.Instance.ForceTextureToMinSize.Value;
+                        }
+                        GUILayout.Label("Force all to minimum size");
+                        GUILayout.FlexibleSpace();
                         GUILayout.EndHorizontal();
                     }
+                    GUILayout.EndVertical();
 
-                    //if (GUILayout.Button("HeapDump"))
-                    //{
-                    //    //UnityHeapDump.Create();
-                    //    new UnityHeapCrawler.HeapSnapshotCollector().Start();
-                    //}
+                    // ========== MAINTENANCE & CACHE TOOLS ==========
+                    GUILayout.BeginVertical(m_StyleSection);
+                    {
+                        var fullRowRect = GUILayoutUtility.GetRect(0f, buttonHeight, GUILayout.ExpandWidth(true));
+                        const float rowGutter = 6f;
+                        float infoWidth = infoBtnWidth;
+
+                        var infoRect = new Rect(fullRowRect.xMax - infoWidth, fullRowRect.y, infoWidth, fullRowRect.height);
+                        var buttonsRect = new Rect(fullRowRect.x, fullRowRect.y, Mathf.Max(0f, fullRowRect.width - infoWidth - rowGutter), fullRowRect.height);
+
+                        DrawPhiSplitButtonsInRect(
+                            buttonsRect,
+                            "GC",
+                            m_StyleButton,
+                            () =>
+                            {
+                                DAZMorphMgr.singleton.cache.Clear();
+                                ImageLoadingMgr.singleton.ClearCache();
+
+                                GC.Collect();
+                                Resources.UnloadUnusedAssets();
+                            },
+                            "Refresh",
+                            m_StyleButton,
+                            Refresh,
+                            1.618f
+                        );
+
+                        if (GUI.Button(infoRect, "i", m_StyleButtonSmall ?? GUI.skin.button))
+                        {
+                            ToggleInfoCard(ref m_ShowGcRefreshInfo);
+                        }
+                    }
+
+                    DrawInfoCard(ref m_ShowGcRefreshInfo, "GC & Refresh", () =>
+                    {
+                        GUILayout.Space(4);
+                        GUILayout.Label("Refresh updates the package list so VPB shows what is currently on disk (new/moved/removed files).", m_StyleInfoCardText);
+                        GUILayout.Space(2);
+                        GUILayout.Label("GC tries to free memory after heavy browsing by clearing caches and asking Unity/.NET to clean up.", m_StyleInfoCardText);
+                    });
+
+                    // ========== REMOVE INVALID VARS ==========
                     GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Remove Invalid Vars", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(actionRowHeight)))
+                    if (GUILayout.Button("Remove Invalid Vars", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                     {
                         RemoveInvalidVars();
                     }
-                    if (GUILayout.Button("i", m_StyleButton, GUILayout.Width(infoBtnWidth), GUILayout.Height(actionRowHeight)))
+                    if (GUILayout.Button("i", m_StyleButton, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
                     {
-                        m_ShowRemoveInvalidVarsInfo = !m_ShowRemoveInvalidVarsInfo;
-                        if (m_ShowRemoveInvalidVarsInfo)
-                        {
-                            m_ShowRemoveOldVersionInfo = false;
-                            m_ShowUninstallAllInfo = false;
-                        }
+						ToggleInfoCard(ref m_ShowRemoveInvalidVarsInfo);
                     }
                     GUILayout.EndHorizontal();
-                    if (m_ShowRemoveInvalidVarsInfo)
-                    {
-                        GUILayout.BeginVertical(m_StyleInfoCard);
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Label("Remove Invalid Vars", m_StyleInfoCardTitle);
-                        GUILayout.FlexibleSpace();
-                        if (GUILayout.Button("x", m_StyleInfoClose, GUILayout.Width(18), GUILayout.Height(18)))
-                        {
-                            m_ShowRemoveInvalidVarsInfo = false;
-                        }
-                        GUILayout.EndHorizontal();
-                        GUILayout.Space(4);
-                        GUILayout.Label("This triggers a deep refresh that removes invalid/broken package entries from the browser database.", m_StyleInfoCardText);
-                        GUILayout.Space(2);
-                        GUILayout.Label("It does not delete your files. It just rebuilds the index so items that no longer exist (or are unreadable) stop showing up.", m_StyleInfoCardText);
-                        GUILayout.EndVertical();
-                    }
+					DrawInfoCard(ref m_ShowRemoveInvalidVarsInfo, "Remove Invalid Vars", () =>
+					{
+						GUILayout.Space(4);
+						GUILayout.Label("Cleans up the browser list so missing or broken items stop showing up.", m_StyleInfoCardText);
+						GUILayout.Space(2);
+						GUILayout.Label("This does NOT delete your files. It only refreshes the list.", m_StyleInfoCardText);
+					});
+
+                    // ========== REMOVE OLD VERSION ==========
                     GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Remove Old Version", m_StyleButtonDanger, GUILayout.ExpandWidth(true), GUILayout.Height(actionRowHeight)))
+                    if (GUILayout.Button("Remove Old Version", m_StyleButtonDanger, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                     {
                         RemoveOldVersion();
                     }
-                    if (GUILayout.Button("i", m_StyleButtonDanger, GUILayout.Width(infoBtnWidth), GUILayout.Height(actionRowHeight)))
+                    if (GUILayout.Button("i", m_StyleButtonDanger, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
                     {
-                        m_ShowRemoveOldVersionInfo = !m_ShowRemoveOldVersionInfo;
-                        if (m_ShowRemoveOldVersionInfo)
-                        {
-                            m_ShowRemoveInvalidVarsInfo = false;
-                            m_ShowUninstallAllInfo = false;
-                        }
+						ToggleInfoCard(ref m_ShowRemoveOldVersionInfo);
                     }
                     GUILayout.EndHorizontal();
-                    if (m_ShowRemoveOldVersionInfo)
-                    {
-                        GUILayout.BeginVertical(m_StyleInfoCard);
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Label("Remove Old Version", m_StyleInfoCardTitle);
-                        GUILayout.FlexibleSpace();
-                        if (GUILayout.Button("x", m_StyleInfoClose, GUILayout.Width(18), GUILayout.Height(18)))
-                        {
-                            m_ShowRemoveOldVersionInfo = false;
-                        }
-                        GUILayout.EndHorizontal();
-                        GUILayout.Space(4);
-                        GUILayout.Label("This triggers a refresh that also tries to remove older duplicates of packages when newer versions exist.", m_StyleInfoCardText);
-                        GUILayout.Space(2);
-                        GUILayout.Label("Depending on your setup, this can move packages out of AddonPackages and/or clean up package lists. It may change what is considered installed.", m_StyleInfoCardText);
-                        GUILayout.EndVertical();
-                    }
+					DrawInfoCard(ref m_ShowRemoveOldVersionInfo, "Remove Old Version", () =>
+					{
+						GUILayout.Space(4);
+						GUILayout.Label("Helps reduce duplicates by keeping newer versions and removing older ones when possible.", m_StyleInfoCardText);
+						GUILayout.Space(2);
+						GUILayout.Label("It may change what VaM considers " + "installed" + " because files can be moved/updated during the cleanup.", m_StyleInfoCardText);
+					});
+
+                    // ========== UNLOAD ALL PACKAGES ==========
                     GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Unload All", m_StyleButtonPrimary, GUILayout.ExpandWidth(true), GUILayout.Height(actionRowHeight)))
+                    if (GUILayout.Button("Unload All", m_StyleButtonPrimary, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                     {
                         UninstallAll();
                     }
-                    if (GUILayout.Button("i", m_StyleButtonPrimary, GUILayout.Width(infoBtnWidth), GUILayout.Height(actionRowHeight)))
+                    if (GUILayout.Button("i", m_StyleButtonPrimary, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
                     {
-                        m_ShowUninstallAllInfo = !m_ShowUninstallAllInfo;
-                        if (m_ShowUninstallAllInfo)
-                        {
-                            m_ShowRemoveInvalidVarsInfo = false;
-                            m_ShowRemoveOldVersionInfo = false;
-                        }
+						ToggleInfoCard(ref m_ShowUninstallAllInfo);
                     }
                     GUILayout.EndHorizontal();
-                    if (m_ShowUninstallAllInfo)
-                    {
-                        GUILayout.BeginVertical(m_StyleInfoCard);
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Label("Unload All", m_StyleInfoCardTitle);
-                        GUILayout.FlexibleSpace();
-                        if (GUILayout.Button("x", m_StyleInfoClose, GUILayout.Width(18), GUILayout.Height(18)))
-                        {
-                            m_ShowUninstallAllInfo = false;
-                        }
-                        GUILayout.EndHorizontal();
-                        GUILayout.Space(4);
-                        GUILayout.Label("This moves all .var files from AddonPackages into AllPackages (except ones marked AutoInstall).", m_StyleInfoCardText);
-                        GUILayout.Space(2);
-                        GUILayout.Label("Result: those packages will no longer be treated as installed/active add-ons. Nothing is deleted; files are just moved.", m_StyleInfoCardText);
-                        GUILayout.EndVertical();
-                    }
-                    if (GUILayout.Button("Hub Browse", m_StyleButton))
-                    {
-                        OpenHubBrowse();
-                    }
+					DrawInfoCard(ref m_ShowUninstallAllInfo, "Unload All", () =>
+					{
+						GUILayout.Space(2);
+						GUILayout.Label("Moves almost all add-on packages out of the active folder so VaM stops loading them.", m_StyleInfoCardText);
+						GUILayout.Space(1);
+						GUILayout.Label("Nothing is deleted. Files are just moved (AutoInstall items stay).", m_StyleInfoCardText);
+					});
+
+                    // ========== HUB BROWSE ==========
+                    DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Gallery", m_StyleButton, OpenGallery, 1.618f, buttonHeight);
 
                     GUILayout.EndVertical();
                 }
                 GUI.enabled = true;
-
-                GUILayout.BeginVertical(m_StyleSection);
-                if (GUILayout.Button("Gallery", m_StyleButton))
-                {
-                    OpenGallery();
-                }
-                GUILayout.EndVertical();
             }
 
             GUILayout.EndVertical();
@@ -992,11 +1178,6 @@ namespace var_browser
 
             if (m_Inited)
             {
-                //if (m_IsMin)
-                //{
-                //    m_Rect = GUILayout.Window(0, m_Rect, DragWnd, "dragable area");
-                //}
-                //else
                 bool show = true;
                 // Hide this window while the preview/file browser UI is open.
                 if (m_FileBrowser != null && m_FileBrowser.window.activeSelf)
@@ -1005,9 +1186,10 @@ namespace var_browser
                 }
                 if (show)
                 {
-                    RestrcitUIRect();
+                    RestrictUiRect();
 
                     EnsureStyles();
+                    m_StyleWindow.padding.top = MiniMode ? 30 : 54;
                     const float borderPx = 1f;
 
                     var windowRect = m_Rect;
@@ -1029,29 +1211,33 @@ namespace var_browser
                         GUI.depth = prevDepth;
                     }
 
-                    RestrcitUIRect();
+                    RestrictUiRect();
 
                     var prevGuiColor = GUI.color;
                     var prevContentColor = GUI.contentColor;
                     var prevBackgroundColor = GUI.backgroundColor;
                     var prevEnabled = GUI.enabled;
 
-                    bool isRepaint = (Event.current.type == EventType.Repaint);
+                    const float headerInsetY = 4f;
+                    const float headerHeight = 24f;
+                    float headerRow1Y = m_Rect.y + headerInsetY;
+                    float headerRow2Y = headerRow1Y + headerHeight;
 
-                    if (m_TitleTagStyle == null)
+                    const float titleRightPadding = 6f;
+                    var fpsText = m_FpsText;
+                    float fpsWidth = 0f;
+                    if (!string.IsNullOrEmpty(fpsText) && m_StyleFpsBadge != null)
                     {
-                        m_TitleTagStyle = new GUIStyle(GUI.skin.label);
-                        m_TitleTagStyle.normal.textColor = Color.white;
-                        m_TitleTagStyle.hover.textColor = Color.white;
-                        m_TitleTagStyle.active.textColor = Color.white;
-                        m_TitleTagStyle.focused.textColor = Color.white;
-                        m_TitleTagStyle.alignment = TextAnchor.MiddleLeft;
-                        m_TitleTagStyle.fontStyle = FontStyle.Bold;
-                        m_TitleTagStyle.font = GUI.skin.window.font;
-                        m_TitleTagStyle.fontSize = GUI.skin.window.fontSize;
-                        m_TitleTagStyle.wordWrap = false;
-                        m_TitleTagStyle.padding = new RectOffset(0, 0, 0, 0);
+                        fpsWidth = m_StyleFpsBadge.CalcSize(new GUIContent(fpsText)).x + 24f;
+                        fpsWidth = Mathf.Max(fpsWidth, 120f);
                     }
+
+                    var rightEdge = m_Rect.xMax - titleRightPadding;
+                    var fpsRect = new Rect(rightEdge - fpsWidth, headerRow1Y, fpsWidth, headerHeight);
+
+                    var hintRect = new Rect(m_Rect.x + 6f, headerRow2Y, Mathf.Max(0f, m_Rect.width - 12f), headerHeight);
+
+                    bool isRepaint = (Event.current.type == EventType.Repaint);
 
                     if (isRepaint)
                     {
@@ -1060,77 +1246,62 @@ namespace var_browser
                         GUI.contentColor = Color.white;
                         GUI.enabled = true;
 
-                        const float headerInsetY = 4f;
-                        const float headerHeight = 24f;
-
-                        var tagRect = new Rect(m_Rect.x + 6f, m_Rect.y + headerInsetY, 150f, headerHeight);
+                        var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
+                        var tagText = string.Format("VPB {0} ({1:0.0}s)", PluginVersionInfo.Version, startupSeconds);
+                        var tagContent = new GUIContent(tagText);
+                        float desiredTagWidth = m_TitleTagStyle != null ? m_TitleTagStyle.CalcSize(tagContent).x : 100f;
+                        float availableTagWidth = Mathf.Max(0f, m_Rect.width - 6f - titleRightPadding - fpsWidth);
+                        float tagWidth = Mathf.Min(desiredTagWidth, availableTagWidth);
+                        var tagRect = new Rect(m_Rect.x + 6f, headerRow1Y, tagWidth, headerHeight);
                         GUI.color = new Color(1f, 1f, 1f, 1f);
                         GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                        var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
-                        GUI.Label(tagRect, string.Format("VPB {0} ({1:0.0}s)", PluginVersionInfo.Version, startupSeconds), m_TitleTagStyle);
-
-                        var titleStyle = new GUIStyle(GUI.skin.label);
-                        titleStyle.font = GUI.skin.window.font;
-                        titleStyle.fontSize = GUI.skin.window.fontSize;
-                        titleStyle.fontStyle = GUI.skin.window.fontStyle;
-                        titleStyle.normal.textColor = Color.white;
-                        titleStyle.hover.textColor = Color.white;
-                        titleStyle.active.textColor = Color.white;
-                        titleStyle.focused.textColor = Color.white;
-                        titleStyle.alignment = TextAnchor.MiddleLeft;
-                        titleStyle.wordWrap = false;
-                        titleStyle.clipping = TextClipping.Clip;
-                        titleStyle.padding = new RectOffset(0, 0, 0, 0);
-
-                        const float titleRightPadding = 6f;
-                        var fpsText = m_FpsText;
-                        float fpsWidth = 0f;
-                        if (!string.IsNullOrEmpty(fpsText))
+                        if (m_TitleTagStyle != null)
                         {
-                            fpsWidth = titleStyle.CalcSize(new GUIContent(fpsText)).x;
+                            GUI.Label(tagRect, tagText, m_TitleTagStyle);
                         }
 
-                        const float titleLeftGap = 4f;
-                        const float titleRightGap = 6f;
-
-                        var leftEdge = tagRect.xMax + titleLeftGap;
-                        var rightEdge = m_Rect.xMax - titleRightPadding;
-
-                        var fpsRect = new Rect(rightEdge - fpsWidth, m_Rect.y + headerInsetY, fpsWidth, headerHeight);
-                        var middleRect = new Rect(leftEdge, m_Rect.y + headerInsetY, Mathf.Max(0f, (fpsRect.xMin - titleRightGap) - leftEdge), headerHeight);
-
-                        if (!string.IsNullOrEmpty(fpsText) && fpsRect.width > 4f)
+                        if (!string.IsNullOrEmpty(fpsText) && fpsRect.width > 4f && m_StyleFpsBadgeOuter != null && m_StyleFpsBadge != null)
                         {
-                            var fpsStyle = new GUIStyle(titleStyle);
-                            fpsStyle.alignment = TextAnchor.MiddleLeft;
-                            GUI.color = new Color(1f, 1f, 1f, 1f);
-                            GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                            GUI.Label(fpsRect, fpsText, fpsStyle);
+                            const float badgeInsetY = 2f;
+                            var outerRect = new Rect(
+                                fpsRect.x,
+                                fpsRect.y + badgeInsetY,
+                                fpsRect.width,
+                                Mathf.Max(0f, fpsRect.height - (badgeInsetY * 2f))
+                            );
+                            var innerRect = new Rect(
+                                outerRect.x + 4f,
+                                outerRect.y + 1f,
+                                Mathf.Max(0f, outerRect.width - 8f),
+                                Mathf.Max(0f, outerRect.height - 2f)
+                            );
+
+                            GUI.Box(outerRect, GUIContent.none, m_StyleFpsBadgeOuter);
+                            GUI.Box(innerRect, fpsText, m_StyleFpsBadge);
                         }
 
-                        if (middleRect.width > 10f)
+                        if (!MiniMode && m_DragHintStyle != null)
                         {
-                            var dragText = "drag area";
+                            var dragText = string.Format("Dragable Area | Toggle: {0}", UIKey.keyPattern);
                             var drawText = dragText;
-                            var maxTitleWidth = middleRect.width;
+                            var maxTitleWidth = hintRect.width;
 
-                            var textSize = titleStyle.CalcSize(new GUIContent(drawText));
-                            if (textSize.x > maxTitleWidth)
+                            if (m_TitleBarLabelStyle != null)
                             {
-                                const string ellipsis = "...";
-                                drawText = dragText;
-                                while (drawText.Length > 0 && titleStyle.CalcSize(new GUIContent(drawText + ellipsis)).x > maxTitleWidth)
+                                var textSize = m_TitleBarLabelStyle.CalcSize(new GUIContent(drawText));
+                                if (textSize.x > maxTitleWidth)
                                 {
-                                    drawText = drawText.Substring(0, drawText.Length - 1);
+                                    const string ellipsis = "...";
+                                    drawText = dragText;
+                                    while (drawText.Length > 0 && m_TitleBarLabelStyle.CalcSize(new GUIContent(drawText + ellipsis)).x > maxTitleWidth)
+                                    {
+                                        drawText = drawText.Substring(0, drawText.Length - 1);
+                                    }
+                                    drawText = (drawText.Length > 0) ? (drawText + ellipsis) : ellipsis;
                                 }
-                                drawText = (drawText.Length > 0) ? (drawText + ellipsis) : ellipsis;
                             }
 
-                            var dragStyle = new GUIStyle(titleStyle);
-                            dragStyle.alignment = TextAnchor.MiddleCenter;
-                            GUI.color = new Color(1f, 1f, 1f, 1f);
-                            GUI.contentColor = new Color(1f, 1f, 1f, 1f);
-                            GUI.Label(middleRect, drawText, dragStyle);
+                            GUI.Label(hintRect, drawText, m_DragHintStyle);
                         }
                     }
 
@@ -1149,7 +1320,7 @@ namespace var_browser
             GUI.matrix = pre;
         }
 
-        void RestrcitUIRect()
+        void RestrictUiRect()
         {
             const float minX = 0f;
             const float minY = 4f;
@@ -1162,12 +1333,6 @@ namespace var_browser
         protected void LoadFromSceneWorldDialog(string saveName)
         {
             LogUtil.LogWarning("LoadFromSceneWorldDialog " + saveName);
-
-            //Debug.Log("FileExists " + MVR.FileManagement.FileManager.FileExists(saveName));
-            //Debug.Log("onStartScene " + Traverse.Create(SuperController.singleton).Field("onStartScene").GetValue());
-            //Traverse.Create(SuperController.singleton).Method("LoadInternal", 
-            //    new Type[3] {typeof(string),typeof(bool),typeof(bool) }, 
-            //    new object[3] { saveName,false,false });
 
             MethodInfo loadInternalMethod = typeof(SuperController).GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             loadInternalMethod.Invoke(SuperController.singleton, new object[3] { saveName, false, false });
