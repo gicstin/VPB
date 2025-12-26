@@ -151,6 +151,16 @@ namespace var_browser
             return sceneLoadActive;
         }
 
+        public static string GetSceneLoadName()
+        {
+            return sceneLoadName;
+        }
+
+        public static bool IsSceneLoadInternalActive()
+        {
+            return sceneLoadInternalActive;
+        }
+
         public static void SceneLoadFrameTick(float unscaledDeltaTime)
         {
             if (!sceneLoadActive)

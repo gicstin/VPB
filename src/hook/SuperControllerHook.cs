@@ -14,6 +14,89 @@ namespace var_browser
     class SuperControllerHook
     {
 
+        static int GetImagePriority(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return 1000;
+            string p;
+            try { p = path.ToLowerInvariant(); } catch { p = path; }
+
+            if (p.Contains("/textures/makeups/") || p.Contains("/textures/makeup/") || p.Contains("/makeups/")) return 0;
+            if (p.Contains("/textures/decals/") || p.Contains("/textures/decal/") || p.Contains("/decals/") || p.Contains("/decal/")) return 0;
+            if (p.Contains("/textures/overlays/") || p.Contains("/textures/overlay/") || p.Contains("/overlays/") || p.Contains("/overlay/")) return 0;
+            if (p.Contains("facemask") || p.Contains("face_mask") || p.Contains("mask") || p.Contains("opacity") || p.Contains("alpha"))
+            {
+                if (p.Contains("face") || p.Contains("makeup") || p.Contains("makeups") || p.Contains("freckle") || p.Contains("blush")) return 0;
+            }
+            if (p.Contains("freckle") || p.Contains("blush") || p.Contains("eyeshadow") || p.Contains("eye_shadow") || p.Contains("eyeliner") || p.Contains("eye_liner") || p.Contains("lipstick") || p.Contains("lip") || p.Contains("brow") || p.Contains("eyebrow") || p.Contains("foundation") || p.Contains("concealer") || p.Contains("highlight") || p.Contains("highlighter") || p.Contains("contour") || p.Contains("powder")) return 0;
+            if (p.Contains("/textures/") && (p.Contains("/face") || p.Contains("faced") || p.Contains("face_"))) return 0;
+            if (p.Contains("mouth")) return 1;
+            if (p.Contains("eye") || p.Contains("iris") || p.Contains("cornea") || p.Contains("eyeball")) return 2;
+            if (p.Contains("head")) return 3;
+            if (p.Contains("torso") || p.Contains("body")) return 4;
+            if (p.Contains("limb") || p.Contains("arms") || p.Contains("legs")) return 5;
+            return 100;
+        }
+
+        static string GetImageCategory(string path)
+        {
+            int pri = GetImagePriority(path);
+            if (pri == 0) return "face";
+            if (pri == 1) return "mouth";
+            if (pri == 2) return "eyes";
+            if (pri == 3) return "head";
+            if (pri == 4) return "body";
+            if (pri == 5) return "limbs";
+            return "other";
+        }
+
+        static bool TryPromoteQueuedImage(LinkedList<ImageLoaderThreaded.QueuedImage> queuedImages, ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (queuedImages == null || qi == null) return false;
+
+            if (Settings.Instance == null || Settings.Instance.PrioritizeFaceTextures == null || !Settings.Instance.PrioritizeFaceTextures.Value) return false;
+
+            if (qi.isThumbnail) return false;
+
+            int pri = GetImagePriority(qi.imgPath);
+            if (pri >= 100) return false;
+
+            LinkedListNode<ImageLoaderThreaded.QueuedImage> node = null;
+            var it = queuedImages.Last;
+            while (it != null)
+            {
+                if (object.ReferenceEquals(it.Value, qi)) { node = it; break; }
+                it = it.Previous;
+            }
+            if (node == null) return false;
+
+            var target = queuedImages.First;
+            while (target != null)
+            {
+                var v = target.Value;
+                if (v == null) { target = target.Next; continue; }
+                if (object.ReferenceEquals(v, qi)) break;
+                int p2 = GetImagePriority(v.imgPath);
+                if (p2 > pri) break;
+                target = target.Next;
+            }
+            if (target == null) return false;
+            if (object.ReferenceEquals(target.Value, qi)) return false;
+
+            queuedImages.Remove(node);
+            queuedImages.AddBefore(target, qi);
+            return true;
+        }
+
+        static void LogImageQueueEvent(string evt, ImageLoaderThreaded.QueuedImage qi, int queueCount, int numRealQueuedImages, bool moved)
+        {
+            if (qi == null) return;
+            string scene = LogUtil.GetSceneLoadName();
+            int pri = GetImagePriority(qi.imgPath);
+            string cat = GetImageCategory(qi.imgPath);
+            string thumb = qi.isThumbnail ? "thumb" : "img";
+            LogUtil.Log(string.Format("IMGQ {0} scene={1} type={2} cat={3} pri={4} moved={5} q={6} realq={7} path={8}", evt, scene, thumb, cat, pri, moved ? "1" : "0", queueCount, numRealQueuedImages, qi.imgPath));
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static void PreRefresh()
@@ -133,6 +216,18 @@ namespace var_browser
                 }
                 return;
             }
+
+            try
+            {
+                var tr = Traverse.Create(__instance);
+                var q = tr.Field("queuedImages").GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
+                int qCount = q != null ? q.Count : 0;
+                int realQ = 0;
+                try { realQ = (int)tr.Field("numRealQueuedImages").GetValue(); } catch { }
+                bool moved = TryPromoteQueuedImage(q, qi);
+                LogImageQueueEvent("enqueue.thumb", qi, qCount, realQ, moved);
+            }
+            catch { }
         }
         public static List<ImageLoaderThreaded.QueuedImage> queuedImagesListCache = new List<ImageLoaderThreaded.QueuedImage>();
 
@@ -168,6 +263,18 @@ namespace var_browser
                 }
                 return;
             }
+
+            try
+            {
+                var tr = Traverse.Create(__instance);
+                var q = tr.Field("queuedImages").GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
+                int qCount = q != null ? q.Count : 0;
+                int realQ = 0;
+                try { realQ = (int)tr.Field("numRealQueuedImages").GetValue(); } catch { }
+                bool moved = TryPromoteQueuedImage(q, qi);
+                LogImageQueueEvent("enqueue.thumb.immediate", qi, qCount, realQ, moved);
+            }
+            catch { }
         }
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueImage", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
@@ -213,6 +320,18 @@ namespace var_browser
                     field3.SetValue(progressMax - 1);
                 }
             }
+
+            try
+            {
+                var tr = Traverse.Create(__instance);
+                var q = tr.Field("queuedImages").GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
+                int qCount = q != null ? q.Count : 0;
+                int realQ = 0;
+                try { realQ = (int)tr.Field("numRealQueuedImages").GetValue(); } catch { }
+                bool moved = TryPromoteQueuedImage(q, qi);
+                LogImageQueueEvent("enqueue.img", qi, qCount, realQ, moved);
+            }
+            catch { }
         }
         // It is added to cache before the callback, so we need to set skipCache one step earlier.
         [HarmonyPostfix]

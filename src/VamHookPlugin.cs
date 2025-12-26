@@ -20,12 +20,14 @@ namespace var_browser
         private Vector2 UIPosition;
         private bool MiniMode;
         private bool m_ShowDownscaleTexturesInfo;
+        private bool m_ShowPrioritizeFaceTexturesInfo;
         private bool m_ShowRemoveInvalidVarsInfo;
         private bool m_ShowRemoveOldVersionInfo;
         private bool m_ShowUninstallAllInfo;
         private bool m_ShowGcRefreshInfo;
         private bool m_ShowSettings;
         private string m_SettingsUiKeyDraft;
+        private bool m_SettingsPrioritizeFaceTexturesDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -93,6 +95,7 @@ namespace var_browser
         private void CloseAllInfoCards()
         {
             m_ShowDownscaleTexturesInfo = false;
+            m_ShowPrioritizeFaceTexturesInfo = false;
             m_ShowRemoveInvalidVarsInfo = false;
             m_ShowRemoveOldVersionInfo = false;
             m_ShowUninstallAllInfo = false;
@@ -107,6 +110,7 @@ namespace var_browser
             }
             m_ShowSettings = true;
             m_SettingsUiKeyDraft = (Settings.Instance != null && Settings.Instance.UIKey != null) ? Settings.Instance.UIKey.Value : "";
+            m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsError = null;
         }
 
@@ -126,6 +130,31 @@ namespace var_browser
             GUILayout.Label("Show/Hide Hotkey", GUILayout.Width(120));
             m_SettingsUiKeyDraft = GUILayout.TextField(m_SettingsUiKeyDraft ?? "", GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight));
             GUILayout.EndHorizontal();
+
+            GUILayout.Space(10);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsPrioritizeFaceTexturesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsPrioritizeFaceTexturesDraft = !m_SettingsPrioritizeFaceTexturesDraft;
+            }
+            GUILayout.Label("Textures: Prioritize face/makeup");
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
+            {
+                ToggleInfoCard(ref m_ShowPrioritizeFaceTexturesInfo);
+            }
+            GUILayout.EndHorizontal();
+
+            DrawInfoCard(ref m_ShowPrioritizeFaceTexturesInfo, "Prioritize face/makeup textures", () =>
+            {
+                GUILayout.Space(4);
+                GUILayout.Label("When this is ON, VPB tries to process face textures and face overlays (makeup/freckles/etc.) earlier during scene load.", m_StyleInfoCardText);
+                GUILayout.Space(2);
+                GUILayout.Label("It does this by reordering VaM's image load queue (it does not download anything extra).", m_StyleInfoCardText);
+                GUILayout.Space(2);
+                GUILayout.Label("Tip: Leave this ON if you want faces to resolve sooner while clothing/hair textures continue loading.", m_StyleInfoCardText);
+            });
 
             if (!string.IsNullOrEmpty(m_SettingsError))
             {
@@ -147,6 +176,10 @@ namespace var_browser
                     if (Settings.Instance != null && Settings.Instance.UIKey != null)
                     {
                         Settings.Instance.UIKey.Value = parsed.keyPattern;
+                    }
+                    if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)
+                    {
+                        Settings.Instance.PrioritizeFaceTextures.Value = m_SettingsPrioritizeFaceTexturesDraft;
                     }
                     UIKey = parsed;
                     CloseSettings();
