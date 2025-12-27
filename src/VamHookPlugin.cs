@@ -1407,9 +1407,21 @@ namespace var_browser
 
                         var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
                         var sceneClickSeconds = LogUtil.GetSceneClickSecondsForDisplay();
-                        var tagText = (sceneClickSeconds.HasValue)
-                            ? string.Format("VPB{0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneClickSeconds.Value)
-                            : string.Format("VPB{0} | {1:0.0}s", PluginVersionInfo.Version, startupSeconds);
+                        var sceneLoadSeconds = LogUtil.GetSceneLoadSecondsForDisplay();
+                        string tagText;
+                        if (sceneLoadSeconds.HasValue)
+                        {
+                            // Prefer showing load time; keep text compact to avoid truncation in small headers.
+                            tagText = string.Format("vpb {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneLoadSeconds.Value);
+                        }
+                        else if (sceneClickSeconds.HasValue)
+                        {
+                            tagText = string.Format("vpb {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneClickSeconds.Value);
+                        }
+                        else
+                        {
+                            tagText = string.Format("vpb {0} | {1:0.0}s", PluginVersionInfo.Version, startupSeconds);
+                        }
                         var tagContent = new GUIContent(tagText);
                         float desiredTagWidth = m_TitleTagStyle != null ? m_TitleTagStyle.CalcSize(tagContent).x : 100f;
                         float availableTagWidth = Mathf.Max(0f, m_Rect.width - 6f - titleRightPadding - fpsWidth);

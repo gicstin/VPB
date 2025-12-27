@@ -58,12 +58,35 @@ namespace var_browser
             if (Settings.Instance == null) return false;
             bool face = (Settings.Instance.PrioritizeFaceTextures != null) && Settings.Instance.PrioritizeFaceTextures.Value;
             bool hair = (Settings.Instance.PrioritizeHairTextures != null) && Settings.Instance.PrioritizeHairTextures.Value;
-            if (!face && !hair) return false;
+            if (!face && !hair)
+            {
+                try
+                {
+                    if (Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
+                    {
+                        int pri0 = GetImagePriority(qi.imgPath);
+                        LogUtil.Log(string.Format("IMGQ promote.skip flags face={0} hair={1} pri={2} path={3}", face ? "1" : "0", hair ? "1" : "0", pri0, qi.imgPath));
+                    }
+                }
+                catch { }
+                return false;
+            }
 
             if (qi.isThumbnail) return false;
 
             int pri = GetImagePriority(qi.imgPath);
-            if (pri >= 100) return false;
+            if (pri == 0)
+            {
+                if (!hair) return false;
+            }
+            else if (pri >= 1 && pri <= 4)
+            {
+                if (!face) return false;
+            }
+            else
+            {
+                return false;
+            }
 
             LinkedListNode<ImageLoaderThreaded.QueuedImage> node = null;
             var it = queuedImages.Last;
@@ -86,6 +109,15 @@ namespace var_browser
             }
             if (target == null) return false;
             if (object.ReferenceEquals(target.Value, qi)) return false;
+
+            try
+            {
+                if (Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
+                {
+                    LogUtil.Log(string.Format("IMGQ promote.do flags face={0} hair={1} pri={2} path={3}", face ? "1" : "0", hair ? "1" : "0", pri, qi.imgPath));
+                }
+            }
+            catch { }
 
             queuedImages.Remove(node);
             queuedImages.AddBefore(target, qi);
@@ -142,6 +174,14 @@ namespace var_browser
             string saveName, bool loadMerge, bool editMode)
         {
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
+            try
+            {
+                if (!LogUtil.IsSceneClickActive())
+                {
+                    LogUtil.BeginSceneClick(saveName);
+                }
+            }
+            catch { }
             LogUtil.BeginSceneLoad(saveName);
 
             try
@@ -210,8 +250,12 @@ namespace var_browser
         [HarmonyPatch(typeof(ImageLoaderThreaded), "ProcessImageImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static void PreProcessImageImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (!Settings.Instance.ReduceTextureSize.Value) return;
             if (string.IsNullOrEmpty(qi.imgPath)) return;
+
+            // Track image activity for scene-load timing even when caching/resize is disabled.
+            LogUtil.MarkImageActivity();
+
+            if (!Settings.Instance.ReduceTextureSize.Value) return;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -228,8 +272,12 @@ namespace var_browser
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnail", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static void PostQueueThumbnail(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (!Settings.Instance.ReduceTextureSize.Value) return;
             if (string.IsNullOrEmpty(qi.imgPath)) return;
+
+            // Track image activity for scene-load timing even when caching/resize is disabled.
+            LogUtil.MarkImageActivity();
+
+            if (!Settings.Instance.ReduceTextureSize.Value) return;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
@@ -278,8 +326,12 @@ namespace var_browser
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnailImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static void PostQueueThumbnailImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (!Settings.Instance.ReduceTextureSize.Value) return;
             if (string.IsNullOrEmpty(qi.imgPath)) return;
+
+            // Track image activity for scene-load timing even when caching/resize is disabled.
+            LogUtil.MarkImageActivity();
+
+            if (!Settings.Instance.ReduceTextureSize.Value) return;
 
             //LogUtil.Log("PostQueueThumbnailImmediate:" + qi.imgPath + " " + qi.textureFormat);
 
@@ -323,8 +375,12 @@ namespace var_browser
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueImage", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static void PostQueueImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (!Settings.Instance.ReduceTextureSize.Value) return;
             if (string.IsNullOrEmpty(qi.imgPath)) return;
+
+            // Track image activity for scene-load timing even when caching/resize is disabled.
+            LogUtil.MarkImageActivity();
+
+            if (!Settings.Instance.ReduceTextureSize.Value) return;
 
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
@@ -381,9 +437,14 @@ namespace var_browser
         [HarmonyPatch(typeof(ImageLoaderThreaded.QueuedImage), "Finish")]
         public static void PostFinish_QueuedImage(ImageLoaderThreaded.QueuedImage __instance)
         {
+            if (string.IsNullOrEmpty(__instance.imgPath)) return;
+
+            // Track image activity for scene-load timing even when caching/resize is disabled.
+            LogUtil.MarkImageActivity();
+
             if (!Settings.Instance.ReduceTextureSize.Value) return;
 
-            if (string.IsNullOrEmpty(__instance.imgPath)) return;
+            if (LogUtil.IsSceneLoadActive() && __instance.isThumbnail) return;
 
             // Ignore hub browse
             if (__instance.tex != null)

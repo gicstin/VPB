@@ -48,6 +48,9 @@ namespace var_browser
         readonly HashSet<string> prewarmQueuedKeys = new HashSet<string>();
         Coroutine prewarmCoroutine;
 
+        double prewarmEwmaMs = 50.0;
+        bool prewarmEwmaInit;
+
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
 
@@ -544,17 +547,19 @@ namespace var_browser
             WaitForEndOfFrame wait = new WaitForEndOfFrame();
             while (true)
             {
-                int perFrame = 1;
+                int maxPerFrame = 1;
                 try
                 {
                     if (Settings.Instance != null && Settings.Instance.ScenePrewarmTexturesPerFrame != null)
                     {
-                        perFrame = Settings.Instance.ScenePrewarmTexturesPerFrame.Value;
+                        maxPerFrame = Settings.Instance.ScenePrewarmTexturesPerFrame.Value;
                     }
                 }
                 catch { }
-                if (perFrame < 1) perFrame = 1;
-                if (perFrame > 16) perFrame = 16;
+                if (maxPerFrame < 1) maxPerFrame = 1;
+                if (maxPerFrame > 16) maxPerFrame = 16;
+
+                int perFrame = GetAdaptivePrewarmPerFrame(maxPerFrame);
 
                 for (int i = 0; i < perFrame; i++)
                 {
@@ -572,7 +577,10 @@ namespace var_browser
 
                     try
                     {
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
                         PrewarmImage(req);
+                        sw.Stop();
+                        UpdatePrewarmCost(sw.Elapsed.TotalMilliseconds);
                     }
                     catch (Exception ex)
                     {
@@ -624,6 +632,14 @@ namespace var_browser
                     {
                         if (asObject["width"] != null) width = asObject["width"].AsInt;
                         if (asObject["height"] != null) height = asObject["height"].AsInt;
+                    }
+
+                    GetResizedSize(ref width, ref height);
+                    var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
+                    if (File.Exists(realDiskCachePath))
+                    {
+                        LogUtil.Log("PREWARM hit.disk path=" + req.imgPath + " cache=" + realDiskCachePath);
+                        return;
                     }
                 }
                 catch { }
@@ -1052,6 +1068,11 @@ namespace var_browser
         {
             var path = qi.imgPath;
 
+            if (LogUtil.IsSceneLoadActive() && qi.isThumbnail)
+            {
+                return null;
+            }
+
             // Must be a power of two, otherwise mipmaps cannot be generated.
             // Start by dividing the size by 2.
             var localFormat = qi.tex.format;
@@ -1466,5 +1487,41 @@ namespace var_browser
             return text;
         }
 
+        void UpdatePrewarmCost(double ms)
+        {
+            if (ms <= 0) return;
+            if (!prewarmEwmaInit)
+            {
+                prewarmEwmaMs = ms;
+                prewarmEwmaInit = true;
+                return;
+            }
+            double a = 0.15;
+            prewarmEwmaMs = (prewarmEwmaMs * (1.0 - a)) + (ms * a);
+            if (prewarmEwmaMs < 0.1) prewarmEwmaMs = 0.1;
+            if (prewarmEwmaMs > 5000.0) prewarmEwmaMs = 5000.0;
+        }
+
+        int GetAdaptivePrewarmPerFrame(int maxPerFrame)
+        {
+            if (maxPerFrame <= 1) return 1;
+            double frameMs;
+            try { frameMs = Time.unscaledDeltaTime * 1000.0; } catch { frameMs = 0.0; }
+            if (frameMs <= 0.0) return 1;
+
+            double targetFrameMs = 33.33;
+            double spare = targetFrameMs - frameMs;
+            if (spare < 0.0) spare = 0.0;
+
+            double budgetMs = 6.0 + (spare * 0.75);
+            int n = 1;
+            if (prewarmEwmaMs > 0.1)
+            {
+                n = 1 + (int)System.Math.Floor(budgetMs / prewarmEwmaMs);
+            }
+            if (n < 1) n = 1;
+            if (n > maxPerFrame) n = maxPerFrame;
+            return n;
+        }
     }
 }

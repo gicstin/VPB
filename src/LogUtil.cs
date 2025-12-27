@@ -33,6 +33,7 @@ namespace var_browser
         static string sceneLoadName;
         static bool sceneLoadActive;
         static bool sceneLoadInternalActive;
+        static double? sceneLoadLastSeconds;
 
         static int sceneLoadStartFrame;
         static int sceneLoadEndFrame;
@@ -526,6 +527,16 @@ namespace var_browser
             return sceneLoadName;
         }
 
+        public static double? GetSceneLoadSecondsForDisplay()
+        {
+            if (sceneLoadActive)
+            {
+                return sceneLoadStopwatch.Elapsed.TotalSeconds;
+            }
+
+            return sceneLoadLastSeconds;
+        }
+
         public static bool IsSceneLoadInternalActive()
         {
             return sceneLoadInternalActive;
@@ -686,6 +697,39 @@ namespace var_browser
                     return true;
                 }
 
+                // Vanilla loader (ImageLoaderThreaded) can still be active even when VPB's custom pipeline is not.
+                // If any images are queued, treat this as busy for scene-load timing.
+                try
+                {
+                    if (ImageLoaderThreaded.singleton != null)
+                    {
+                        var trV = Traverse.Create(ImageLoaderThreaded.singleton);
+
+                        try
+                        {
+                            var n = trV.Field("numRealQueuedImages").GetValue();
+                            if (n is int ni && ni > 0) return true;
+                        }
+                        catch { }
+
+                        try
+                        {
+                            var q = trV.Field("queuedImages").GetValue();
+                            if (q != null)
+                            {
+                                var countProp = q.GetType().GetProperty("Count");
+                                if (countProp != null)
+                                {
+                                    var cObj = countProp.GetValue(q, null);
+                                    if (cObj is int ci && ci > 0) return true;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+
                 if (CustomImageLoaderThreaded.singleton == null)
                 {
                     return false;
@@ -832,6 +876,7 @@ namespace var_browser
             sceneLoadActive = false;
             sceneLoadStopwatch.Stop();
             var ms = sceneLoadStopwatch.Elapsed.TotalMilliseconds;
+            sceneLoadLastSeconds = ms / 1000.0;
             var name = sceneLoadName;
             sceneLoadName = null;
             sceneLoadInternalActive = false;
