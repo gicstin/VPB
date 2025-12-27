@@ -22,14 +22,18 @@ namespace var_browser
         private bool m_ShowDownscaleTexturesInfo;
         private bool m_ShowPrioritizeFaceTexturesInfo;
         private bool m_ShowPrioritizeHairTexturesInfo;
+        private bool m_ShowPluginsAlwaysEnabledInfo;
         private bool m_ShowRemoveInvalidVarsInfo;
         private bool m_ShowRemoveOldVersionInfo;
         private bool m_ShowUninstallAllInfo;
         private bool m_ShowGcRefreshInfo;
         private bool m_ShowSettings;
         private string m_SettingsUiKeyDraft;
+        private string m_SettingsCustomSceneKeyDraft;
+        private string m_SettingsCategorySceneKeyDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
+        private bool m_SettingsPluginsAlwaysEnabledDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -99,6 +103,7 @@ namespace var_browser
             m_ShowDownscaleTexturesInfo = false;
             m_ShowPrioritizeFaceTexturesInfo = false;
             m_ShowPrioritizeHairTexturesInfo = false;
+            m_ShowPluginsAlwaysEnabledInfo = false;
             m_ShowRemoveInvalidVarsInfo = false;
             m_ShowRemoveOldVersionInfo = false;
             m_ShowUninstallAllInfo = false;
@@ -113,8 +118,11 @@ namespace var_browser
             }
             m_ShowSettings = true;
             m_SettingsUiKeyDraft = (Settings.Instance != null && Settings.Instance.UIKey != null) ? Settings.Instance.UIKey.Value : "";
+            m_SettingsCustomSceneKeyDraft = (Settings.Instance != null && Settings.Instance.CustomSceneKey != null) ? Settings.Instance.CustomSceneKey.Value : "";
+            m_SettingsCategorySceneKeyDraft = (Settings.Instance != null && Settings.Instance.CategorySceneKey != null) ? Settings.Instance.CategorySceneKey.Value : "";
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
+            m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsError = null;
         }
 
@@ -135,7 +143,38 @@ namespace var_browser
             m_SettingsUiKeyDraft = GUILayout.TextField(m_SettingsUiKeyDraft ?? "", GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight));
             GUILayout.EndHorizontal();
 
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Custom Scene Hotkey", GUILayout.Width(120));
+            m_SettingsCustomSceneKeyDraft = GUILayout.TextField(m_SettingsCustomSceneKeyDraft ?? "", GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight));
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Category Scene Hotkey", GUILayout.Width(120));
+            m_SettingsCategorySceneKeyDraft = GUILayout.TextField(m_SettingsCategorySceneKeyDraft ?? "", GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight));
+            GUILayout.EndHorizontal();
+
             GUILayout.Space(10);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsPluginsAlwaysEnabledDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsPluginsAlwaysEnabledDraft = !m_SettingsPluginsAlwaysEnabledDraft;
+            }
+            GUILayout.Label("Plugins always enabled");
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
+            {
+                ToggleInfoCard(ref m_ShowPluginsAlwaysEnabledInfo);
+            }
+            GUILayout.EndHorizontal();
+
+            DrawInfoCard(ref m_ShowPluginsAlwaysEnabledInfo, "Plugins always enabled", () =>
+            {
+                GUILayout.Space(4);
+                GUILayout.Label("When this is ON, plugins are treated as always enabled.", m_StyleInfoCardText);
+                GUILayout.Space(2);
+                GUILayout.Label("Tip: Leave this OFF if you want VaM to respect per-package/per-scene plugin enable state.", m_StyleInfoCardText);
+            });
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(m_SettingsPrioritizeFaceTexturesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
@@ -200,9 +239,26 @@ namespace var_browser
                 try
                 {
                     var parsed = KeyUtil.Parse(m_SettingsUiKeyDraft ?? "");
+                    var parsedCustomSceneKey = KeyUtil.Parse(m_SettingsCustomSceneKeyDraft ?? "");
+                    var parsedCategorySceneKey = KeyUtil.Parse(m_SettingsCategorySceneKeyDraft ?? "");
                     if (Settings.Instance != null && Settings.Instance.UIKey != null)
                     {
                         Settings.Instance.UIKey.Value = parsed.keyPattern;
+                    }
+                    if (Settings.Instance != null && Settings.Instance.CustomSceneKey != null)
+                    {
+                        Settings.Instance.CustomSceneKey.Value = parsedCustomSceneKey.keyPattern;
+                    }
+                    if (Settings.Instance != null && Settings.Instance.CategorySceneKey != null)
+                    {
+                        Settings.Instance.CategorySceneKey.Value = parsedCategorySceneKey.keyPattern;
+                    }
+                    if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
+                    {
+                        if (Settings.Instance.PluginsAlwaysEnabled.Value != m_SettingsPluginsAlwaysEnabledDraft)
+                        {
+                            Settings.Instance.PluginsAlwaysEnabled.Value = m_SettingsPluginsAlwaysEnabledDraft;
+                        }
                     }
                     if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)
                     {
@@ -219,11 +275,13 @@ namespace var_browser
                         }
                     }
                     UIKey = parsed;
+                    CustomSceneKey = parsedCustomSceneKey;
+                    CategorySceneKey = parsedCategorySceneKey;
                     CloseSettings();
                 }
                 catch
                 {
-                    m_SettingsError = "Invalid hotkey. Example: Ctrl+Shift+V";
+                    m_SettingsError = "Invalid setting. Example hotkey: Ctrl+Shift+V";
                 }
             }
             GUILayout.EndHorizontal();
@@ -586,6 +644,8 @@ namespace var_browser
 
             LogUtil.MarkPluginAwake();
 
+            VdsLauncher.ParseOnce();
+
             try
             {
                 Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
@@ -646,10 +706,8 @@ namespace var_browser
                 m_Rect.height = MiniModeHeight;
             }
             m_ExpandedHeight = Mathf.Max(m_Rect.height, MiniModeHeight);
-            ZipConstants.DefaultCodePage = Settings.Instance.CodePage.Value;
 
-
-            this.Config.SaveOnConfigSet = false;
+            this.Config.SaveOnConfigSet = true;
             Debug.Log("var browser hook start");
             var harmony = new Harmony("var_browser_hook");
             // Patch VaM/Harmony hook points.
@@ -759,11 +817,16 @@ namespace var_browser
         static bool m_Show = true; // Made static so it can be toggled via external message calls.
         void Update()
         {
+            VdsLauncher.TryExecuteOnce();
             float unscaledDt = Time.unscaledDeltaTime;
             if (LogUtil.IsSceneLoadActive())
             {
                 LogUtil.SceneLoadFrameTick(unscaledDt);
                 LogUtil.SceneLoadUpdate();
+            }
+            if (LogUtil.IsSceneClickActive())
+            {
+                LogUtil.SceneClickUpdate();
             }
 
             if (!m_UIInited || !m_FileManagerInited)
@@ -1324,8 +1387,8 @@ namespace var_browser
                     float fpsWidth = 0f;
                     if (!string.IsNullOrEmpty(fpsText) && m_StyleFpsBadge != null)
                     {
-                        fpsWidth = m_StyleFpsBadge.CalcSize(new GUIContent(fpsText)).x + 24f;
-                        fpsWidth = Mathf.Max(fpsWidth, 120f);
+                        fpsWidth = m_StyleFpsBadge.CalcSize(new GUIContent(fpsText)).x + 16f;
+                        fpsWidth = Mathf.Max(fpsWidth, 80f);
                     }
 
                     var rightEdge = m_Rect.xMax - titleRightPadding;
@@ -1343,7 +1406,10 @@ namespace var_browser
                         GUI.enabled = true;
 
                         var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
-                        var tagText = string.Format("VPB {0} ({1:0.0}s)", PluginVersionInfo.Version, startupSeconds);
+                        var sceneClickSeconds = LogUtil.GetSceneClickSecondsForDisplay();
+                        var tagText = (sceneClickSeconds.HasValue)
+                            ? string.Format("VPB{0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneClickSeconds.Value)
+                            : string.Format("VPB{0} | {1:0.0}s", PluginVersionInfo.Version, startupSeconds);
                         var tagContent = new GUIContent(tagText);
                         float desiredTagWidth = m_TitleTagStyle != null ? m_TitleTagStyle.CalcSize(tagContent).x : 100f;
                         float availableTagWidth = Mathf.Max(0f, m_Rect.width - 6f - titleRightPadding - fpsWidth);
@@ -1378,7 +1444,8 @@ namespace var_browser
 
                         if (!MiniMode && m_DragHintStyle != null)
                         {
-                            var dragText = string.Format("Dragable Area | Toggle: {0}", UIKey.keyPattern);
+                            double totalLoadSeconds = startupSeconds + (sceneClickSeconds.HasValue ? sceneClickSeconds.Value : 0.0);
+                            var dragText = string.Format("{0:0.0}s | Dragable Area | Toggle: {1}", totalLoadSeconds, UIKey.keyPattern);
                             var drawText = dragText;
                             var maxTitleWidth = hintRect.width;
 

@@ -7,7 +7,6 @@ using BepInEx;
 using UnityEngine;
 using HarmonyLib;
 using Prime31.MessageKit;
-using ICSharpCode.SharpZipLib.Zip;
 using GPUTools.Hair.Scripts.Settings;
 namespace var_browser
 {
@@ -116,7 +115,6 @@ namespace var_browser
         public static void PreRefresh()
         {
             LogUtil.Log("FileManager PreRefresh");
-            ZipConstants.DefaultCodePage = Settings.Instance.CodePage.Value;
         }
 
         // Click "Return To Scene View"
@@ -145,6 +143,37 @@ namespace var_browser
         {
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
             LogUtil.BeginSceneLoad(saveName);
+
+            try
+            {
+                if (ImageLoadingMgr.singleton != null && !string.IsNullOrEmpty(saveName))
+                {
+                    string sceneJsonText = null;
+                    if (File.Exists(saveName))
+                    {
+                        sceneJsonText = File.ReadAllText(saveName);
+                    }
+                    else if (saveName.Contains(":/"))
+                    {
+                        using (var fileEntryStream = MVR.FileManagement.FileManager.OpenStream(saveName, true))
+                        {
+                            using (var sr = new StreamReader(fileEntryStream.Stream))
+                            {
+                                sceneJsonText = sr.ReadToEnd();
+                            }
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(sceneJsonText))
+                    {
+                        ImageLoadingMgr.singleton.StartScenePrewarm(saveName, sceneJsonText);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("PREWARM scene read failed: " + saveName + " " + ex.ToString());
+            }
             if (saveName == "Saves\\scene\\MeshedVR\\default.json")
             {
                 if (File.Exists(saveName))

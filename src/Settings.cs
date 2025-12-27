@@ -22,12 +22,10 @@ namespace var_browser
         public ConfigEntry<Vector2> UIPosition;
         public ConfigEntry<bool> MiniMode;
         public ConfigEntry<bool> PluginsAlwaysEnabled;
-        public ConfigEntry<int> CodePage;
         public ConfigEntry<bool> ReduceTextureSize;
         public ConfigEntry<int> MinTextureSize;
         public ConfigEntry<bool> ForceTextureToMinSize;
         public ConfigEntry<bool> CacheAssetBundle;
-        public ConfigEntry<int> ThumbnailSize;
         public ConfigEntry<int> MaxTextureSize;
         public ConfigEntry<bool> InflightDedupEnabled;
         public ConfigEntry<bool> PrioritizeFaceTextures;
@@ -42,6 +40,9 @@ namespace var_browser
         public ConfigEntry<bool> LogVerboseUi;
         public ConfigEntry<bool> CleanLogEnabled;
         public ConfigEntry<string> CleanLogPath;
+        public ConfigEntry<bool> ScenePrewarmEnabled;
+        public ConfigEntry<int> ScenePrewarmTexturesPerFrame;
+        public ConfigEntry<bool> ScenePrewarmIncludeThumbnails;
         
         internal static void Init(ConfigFile config)
         {
@@ -56,8 +57,6 @@ namespace var_browser
             UIPosition = config.Bind<Vector2>("UI", "Position", Vector2.zero, "Set UI Position.");
             MiniMode = config.Bind<bool>("UI", "MiniMode", false, "Set Mini Mode.");
             PluginsAlwaysEnabled = config.Bind<bool>("Settings", "PluginsAlwaysEnabled", false, "Plugins will always enabled.");
-            CodePage = config.Bind<int>("Settings", "CodePage", 0, "CodePage.Chinese user would better set 936.");
-            ThumbnailSize = config.Bind<int>("Settings", "ThumbnailSize", 256, "Thumbnail size.");
             
             ReduceTextureSize = config.Bind<bool>("Optimze", "ReduceTextureSize", false, "reduce texture size.");
             MinTextureSize = config.Bind<int>("Optimze", "MinTextureSize", 1024, "min size for resized texture.");
@@ -67,6 +66,9 @@ namespace var_browser
             InflightDedupEnabled = config.Bind<bool>("Optimze", "InflightDedupEnabled", false, "coalesce duplicate image requests while the first is still loading.");
             PrioritizeFaceTextures = config.Bind<bool>("Optimze", "PrioritizeFaceTextures", true, "prioritize face/makeup/overlay textures in VaM image load queue.");
             PrioritizeHairTextures = config.Bind<bool>("Optimze", "PrioritizeHairTextures", true, "prioritize hair in VaM image load queue.");
+            ScenePrewarmEnabled = config.Bind<bool>("Optimze", "ScenePrewarmEnabled", true, "prewarm var_browser_cache entries for scene textures during scene load.");
+            ScenePrewarmTexturesPerFrame = config.Bind<int>("Optimze", "ScenePrewarmTexturesPerFrame", 1, "max textures to prewarm per frame (main-thread GPU work).");
+            ScenePrewarmIncludeThumbnails = config.Bind<bool>("Optimze", "ScenePrewarmIncludeThumbnails", false, "also prewarm scene thumbnail requests when possible.");
             SceneLoadWaitForImagesIdle = config.Bind<bool>("Benchmark", "SceneLoadWaitForImagesIdle", true, "When enabled, SCENE_LOAD_TOTAL waits for image loading to become idle before ending.");
             SceneLoadImagesIdleSeconds = config.Bind<float>("Benchmark", "SceneLoadImagesIdleSeconds", 0f, "Idle window seconds required before SCENE_LOAD_TOTAL ends (when SceneLoadWaitForImagesIdle is enabled).");
 

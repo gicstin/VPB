@@ -19,6 +19,15 @@ namespace var_browser
         static string cleanLogLastPath;
         static readonly DateTime processStartTime;
         static readonly Stopwatch sincePluginAwake = new Stopwatch();
+        static readonly Stopwatch sceneClickStopwatch = new Stopwatch();
+        static bool sceneClickActive;
+        static double? sceneClickLastSeconds;
+        static string sceneClickName;
+        static bool sceneClickSawImageWork;
+        static float sceneClickLastActivityRealtime;
+        static bool sceneClickSceneLoadTotalEnded;
+        static float sceneClickEndArmRealtime;
+        static bool sceneClickEndArmed;
         static readonly Stopwatch sceneLoadStopwatch = new Stopwatch();
         static readonly Stopwatch sceneLoadInternalStopwatch = new Stopwatch();
         static string sceneLoadName;
@@ -364,6 +373,109 @@ namespace var_browser
             LogWarning("STARTUP_READY " + context + " | since process start: " + GetSecondsSinceProcessStart().ToString("0.000") + "s");
         }
 
+        public static void BeginSceneClick(string saveName)
+        {
+            if (string.IsNullOrEmpty(saveName))
+            {
+                return;
+            }
+
+            sceneClickName = saveName;
+            sceneClickLastSeconds = null;
+            sceneClickActive = true;
+            sceneClickSawImageWork = false;
+            sceneClickLastActivityRealtime = Time.realtimeSinceStartup;
+            sceneClickSceneLoadTotalEnded = false;
+            sceneClickEndArmRealtime = 0f;
+            sceneClickEndArmed = false;
+            sceneClickStopwatch.Reset();
+            sceneClickStopwatch.Start();
+        }
+
+        public static bool IsSceneClickActive()
+        {
+            return sceneClickActive;
+        }
+
+        public static void SceneClickUpdate()
+        {
+            if (!sceneClickActive)
+            {
+                return;
+            }
+
+            // If we haven't even reached the normal scene-load completion point yet, don't end.
+            if (!sceneClickSceneLoadTotalEnded)
+            {
+                return;
+            }
+
+            // If we saw image work, wait until image loading is idle for a quiet window.
+            if (sceneClickSawImageWork)
+            {
+                if (IsImageLoadingBusy())
+                {
+                    sceneClickEndArmed = false;
+                    return;
+                }
+
+                float idleSecondsRequired = 5.0f;
+                try
+                {
+                    if (Settings.Instance != null && Settings.Instance.SceneLoadImagesIdleSeconds != null)
+                    {
+                        idleSecondsRequired = Mathf.Clamp(Settings.Instance.SceneLoadImagesIdleSeconds.Value, 0f, 60f);
+                    }
+                }
+                catch { }
+                if (idleSecondsRequired <= 0f) idleSecondsRequired = 0.5f;
+
+                if ((Time.realtimeSinceStartup - sceneClickLastActivityRealtime) < idleSecondsRequired)
+                {
+                    sceneClickEndArmed = false;
+                    return;
+                }
+            }
+            else
+            {
+                // No image work observed; fall back to SuperController not-loading.
+                bool? loading = TryGetSuperControllerLoading();
+                if (loading.HasValue && loading.Value)
+                {
+                    sceneClickEndArmed = false;
+                    return;
+                }
+            }
+
+            // Arm end and wait a moment; avoids ending on the exact frame state flips.
+            if (!sceneClickEndArmed)
+            {
+                sceneClickEndArmed = true;
+                sceneClickEndArmRealtime = Time.realtimeSinceStartup;
+                return;
+            }
+
+            if ((Time.realtimeSinceStartup - sceneClickEndArmRealtime) < 0.5f)
+            {
+                return;
+            }
+
+            sceneClickStopwatch.Stop();
+            sceneClickActive = false;
+            sceneClickLastSeconds = sceneClickStopwatch.Elapsed.TotalSeconds;
+            sceneClickName = null;
+        }
+
+        public static double? GetSceneClickSecondsForDisplay()
+        {
+            if (sceneClickActive)
+            {
+                return sceneClickStopwatch.Elapsed.TotalSeconds;
+            }
+
+            return sceneClickLastSeconds;
+        }
+
         public static void BeginSceneLoad(string saveName)
         {
             if (string.IsNullOrEmpty(saveName))
@@ -633,6 +745,13 @@ namespace var_browser
         {
             // realtimeSinceStartup is fine here; we only compare deltas.
             imageLastActivityRealtime = Time.realtimeSinceStartup;
+            if (sceneClickActive)
+            {
+                sceneClickSawImageWork = true;
+                sceneClickLastActivityRealtime = Time.realtimeSinceStartup;
+                // If a late burst happens, cancel any pending end.
+                sceneClickEndArmed = false;
+            }
 
             // If any image activity happens during a scene load, we must wait for image-idle before ending.
             if (sceneLoadActive)
@@ -721,6 +840,14 @@ namespace var_browser
             CaptureMemoryEnd();
 
             LogWarning("SCENE_LOAD_TOTAL " + context + " | " + name + " | " + ms.ToString("0.00") + "ms");
+
+            if (sceneClickActive)
+            {
+                if (string.IsNullOrEmpty(sceneClickName) || string.Equals(sceneClickName, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    sceneClickSceneLoadTotalEnded = true;
+                }
+            }
 
             try
             {

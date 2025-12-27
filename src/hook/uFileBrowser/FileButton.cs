@@ -136,6 +136,16 @@ namespace var_browser
         public void OnClick()
         {
             LogUtil.Log("OnClick "+this.fullPath);
+            try
+            {
+                if (!string.IsNullOrEmpty(fullPath)
+                    && fullPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                    && fullPath.Replace('\\', '/').IndexOf("/Saves/scene/", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    LogUtil.BeginSceneClick(fullPath);
+                }
+            }
+            catch { }
             if (browser!=null)
             {
                 if (browser.inGame)

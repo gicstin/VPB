@@ -1,12 +1,12 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text;
-using GPUTools.Skinner.Scripts.Kernels;
 using SimpleJSON;
 using UnityEngine;
 using Valve.Newtonsoft.Json.Linq;
+
 namespace var_browser
 {
     /// <summary>
@@ -14,6 +14,22 @@ namespace var_browser
     /// </summary>
     public class ImageLoadingMgr : MonoBehaviour
     {
+        static readonly char[] s_InvalidFileNameChars = Path.GetInvalidFileNameChars();
+
+        class PrewarmRequest
+        {
+            public string imgPath;
+            public bool isThumbnail;
+            public bool compress;
+            public bool linear;
+            public bool isNormalMap;
+            public bool createAlphaFromGrayscale;
+            public bool createNormalFromBump;
+            public float bumpStrength;
+            public bool invert;
+            public string source;
+        }
+
         [System.Serializable]
         public class ImageRequest
         {
@@ -27,6 +43,10 @@ namespace var_browser
         }
 
         Dictionary<string, Texture2D> cache = new Dictionary<string, Texture2D>();
+
+        readonly Queue<PrewarmRequest> prewarmQueue = new Queue<PrewarmRequest>();
+        readonly HashSet<string> prewarmQueuedKeys = new HashSet<string>();
+        Coroutine prewarmCoroutine;
 
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
@@ -239,6 +259,780 @@ namespace var_browser
 
             LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
             return false;
+        }
+
+        public void StartScenePrewarm(string sceneSaveName, string sceneJsonText)
+        {
+            if (Settings.Instance == null || Settings.Instance.ScenePrewarmEnabled == null || !Settings.Instance.ScenePrewarmEnabled.Value)
+            {
+                return;
+            }
+            if (Settings.Instance.ReduceTextureSize == null || !Settings.Instance.ReduceTextureSize.Value)
+            {
+                return;
+            }
+            if (string.IsNullOrEmpty(sceneJsonText))
+            {
+                return;
+            }
+
+            JObject root;
+            try
+            {
+                root = JObject.Parse(sceneJsonText);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("PREWARM parse scene json failed: " + sceneSaveName + " " + ex.ToString());
+                return;
+            }
+
+            var roots = new List<KeyValuePair<string, JObject>>();
+            roots.Add(new KeyValuePair<string, JObject>(sceneSaveName, root));
+
+            try
+            {
+                CollectReferencedJsonRoots(root, sceneSaveName, roots);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("PREWARM deep json scan failed: " + sceneSaveName + " " + ex.ToString());
+            }
+
+            var requests = new List<PrewarmRequest>(64);
+            for (int i = 0; i < roots.Count; i++)
+            {
+                var kv = roots[i];
+                var src = kv.Key;
+                var r = kv.Value;
+                if (r == null) continue;
+                var sub = BuildPrewarmRequestsFromScene(r, src);
+                if (sub == null || sub.Count == 0) continue;
+                requests.AddRange(sub);
+            }
+            if (requests == null || requests.Count == 0)
+            {
+                return;
+            }
+
+            int added = 0;
+            for (int i = 0; i < requests.Count; i++)
+            {
+                var req = requests[i];
+                if (req == null || string.IsNullOrEmpty(req.imgPath)) continue;
+                if (TryEnqueuePrewarm(req))
+                {
+                    added++;
+                }
+            }
+
+            if (added > 0)
+            {
+                LogUtil.Log("PREWARM start scene=" + sceneSaveName + " requests=" + added);
+                EnsurePrewarmCoroutine();
+            }
+        }
+
+        static bool IsLikelyJsonPathValue(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+
+            string v;
+            try { v = value.Trim(); } catch { v = value; }
+            if (string.IsNullOrEmpty(v)) return false;
+
+            try
+            {
+                if (v.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return false;
+            }
+            catch { }
+
+            string lower;
+            try { lower = v.ToLowerInvariant(); } catch { lower = v; }
+            return lower.EndsWith(".json");
+        }
+
+        static void CollectJsonValues(JToken token, List<string> found)
+        {
+            if (token == null) return;
+
+            var obj = token as JObject;
+            if (obj != null)
+            {
+                foreach (var prop in obj.Properties())
+                {
+                    if (prop == null) continue;
+                    var v = prop.Value;
+                    if (v != null && v.Type == JTokenType.String)
+                    {
+                        string s = null;
+                        try { s = v.Value<string>(); } catch { }
+                        if (!string.IsNullOrEmpty(s) && IsLikelyJsonPathValue(s))
+                        {
+                            found.Add(s);
+                        }
+                    }
+                    CollectJsonValues(prop.Value, found);
+                }
+                return;
+            }
+
+            var arr = token as JArray;
+            if (arr != null)
+            {
+                for (int i = 0; i < arr.Count; i++)
+                {
+                    var item = arr[i];
+                    if (item != null && item.Type == JTokenType.String)
+                    {
+                        string s = null;
+                        try { s = item.Value<string>(); } catch { }
+                        if (!string.IsNullOrEmpty(s) && IsLikelyJsonPathValue(s))
+                        {
+                            found.Add(s);
+                        }
+                        continue;
+                    }
+                    CollectJsonValues(item, found);
+                }
+                return;
+            }
+        }
+
+        static string TryReadAllTextPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            try
+            {
+                if (File.Exists(path))
+                {
+                    return File.ReadAllText(path);
+                }
+            }
+            catch { }
+
+            try
+            {
+                using (var fileEntryStream = MVR.FileManagement.FileManager.OpenStream(path, true))
+                {
+                    using (var sr = new StreamReader(fileEntryStream.Stream))
+                    {
+                        return sr.ReadToEnd();
+                    }
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        void CollectReferencedJsonRoots(JObject sceneRoot, string sceneSaveName, List<KeyValuePair<string, JObject>> roots)
+        {
+            if (sceneRoot == null) return;
+            if (roots == null) return;
+
+            int maxDepth = 3;
+            int maxFiles = 64;
+            var visited = new HashSet<string>();
+            var queue = new Queue<KeyValuePair<string, int>>();
+
+            var initial = new List<string>(32);
+            CollectJsonValues(sceneRoot, initial);
+            for (int i = 0; i < initial.Count; i++)
+            {
+                var p = initial[i];
+                if (string.IsNullOrEmpty(p)) continue;
+                queue.Enqueue(new KeyValuePair<string, int>(p, 1));
+            }
+
+            while (queue.Count > 0)
+            {
+                var kv = queue.Dequeue();
+                var jsonPath = kv.Key;
+                var depth = kv.Value;
+
+                if (string.IsNullOrEmpty(jsonPath)) continue;
+                if (depth > maxDepth) continue;
+                if (visited.Count >= maxFiles) break;
+
+                string canonical = ResolveCanonicalImagePath(jsonPath);
+                if (string.IsNullOrEmpty(canonical)) continue;
+                if (visited.Contains(canonical)) continue;
+                visited.Add(canonical);
+
+                var text = TryReadAllTextPath(canonical);
+                if (string.IsNullOrEmpty(text)) continue;
+
+                JObject root;
+                try
+                {
+                    root = JObject.Parse(text);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                roots.Add(new KeyValuePair<string, JObject>(sceneSaveName + ":" + canonical, root));
+
+                var next = new List<string>(16);
+                CollectJsonValues(root, next);
+                for (int i = 0; i < next.Count; i++)
+                {
+                    var p = next[i];
+                    if (string.IsNullOrEmpty(p)) continue;
+                    queue.Enqueue(new KeyValuePair<string, int>(p, depth + 1));
+                }
+            }
+
+            LogUtil.Log("PREWARM deepjson scene=" + sceneSaveName + " roots=" + roots.Count + " jsonFiles=" + visited.Count);
+        }
+
+        void EnsurePrewarmCoroutine()
+        {
+            if (prewarmCoroutine != null) return;
+            try
+            {
+                prewarmCoroutine = StartCoroutine(PrewarmWorker());
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("PREWARM start coroutine failed: " + ex.ToString());
+            }
+        }
+
+        bool TryEnqueuePrewarm(PrewarmRequest req)
+        {
+            string canonicalPath = ResolveCanonicalImagePath(req.imgPath);
+            if (string.IsNullOrEmpty(canonicalPath))
+            {
+                return false;
+            }
+
+            var qi = new ImageLoaderThreaded.QueuedImage();
+            qi.imgPath = canonicalPath;
+            qi.isThumbnail = req.isThumbnail;
+            qi.compress = req.compress;
+            qi.linear = req.linear;
+            qi.isNormalMap = req.isNormalMap;
+            qi.createAlphaFromGrayscale = req.createAlphaFromGrayscale;
+            qi.createNormalFromBump = req.createNormalFromBump;
+            qi.bumpStrength = req.bumpStrength;
+            qi.invert = req.invert;
+
+            string key = GetDiskCachePath(qi, false, 0, 0);
+            if (string.IsNullOrEmpty(key))
+            {
+                return false;
+            }
+            if (prewarmQueuedKeys.Contains(key))
+            {
+                return false;
+            }
+
+            req.imgPath = canonicalPath;
+            prewarmQueuedKeys.Add(key);
+            prewarmQueue.Enqueue(req);
+            LogUtil.Log("PREWARM enqueue src=" + (req.source ?? "?") + " path=" + canonicalPath + " flags=" + GetDiskCacheSignature(qi, true, 0, 0));
+
+            return true;
+        }
+
+        IEnumerator PrewarmWorker()
+        {
+            WaitForEndOfFrame wait = new WaitForEndOfFrame();
+            while (true)
+            {
+                int perFrame = 1;
+                try
+                {
+                    if (Settings.Instance != null && Settings.Instance.ScenePrewarmTexturesPerFrame != null)
+                    {
+                        perFrame = Settings.Instance.ScenePrewarmTexturesPerFrame.Value;
+                    }
+                }
+                catch { }
+                if (perFrame < 1) perFrame = 1;
+                if (perFrame > 16) perFrame = 16;
+
+                for (int i = 0; i < perFrame; i++)
+                {
+                    if (prewarmQueue.Count == 0)
+                    {
+                        prewarmCoroutine = null;
+                        yield break;
+                    }
+
+                    var req = prewarmQueue.Dequeue();
+                    if (req == null || string.IsNullOrEmpty(req.imgPath))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        PrewarmImage(req);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("PREWARM error path=" + req.imgPath + " " + ex.ToString());
+                    }
+                }
+
+                yield return wait;
+            }
+        }
+
+        void PrewarmImage(PrewarmRequest req)
+        {
+            var qi = new ImageLoaderThreaded.QueuedImage();
+            qi.imgPath = req.imgPath;
+            qi.isThumbnail = req.isThumbnail;
+            qi.compress = req.compress;
+            qi.linear = req.linear;
+            qi.isNormalMap = req.isNormalMap;
+            qi.createAlphaFromGrayscale = req.createAlphaFromGrayscale;
+            qi.createNormalFromBump = req.createNormalFromBump;
+            qi.bumpStrength = req.bumpStrength;
+            qi.invert = req.invert;
+
+            string diskCachePath = GetDiskCachePath(qi, false, 0, 0);
+            if (string.IsNullOrEmpty(diskCachePath))
+            {
+                return;
+            }
+
+            var cacheTexture = GetTextureFromCache(diskCachePath);
+            if (cacheTexture != null)
+            {
+                LogUtil.Log("PREWARM hit.mem path=" + req.imgPath);
+                return;
+            }
+
+            var metaPath = diskCachePath + ".meta";
+            int width = 0;
+            int height = 0;
+            if (File.Exists(metaPath))
+            {
+                try
+                {
+                    var jsonString = File.ReadAllText(metaPath);
+                    JSONNode jSONNode = JSON.Parse(jsonString);
+                    JSONClass asObject = jSONNode.AsObject;
+                    if (asObject != null)
+                    {
+                        if (asObject["width"] != null) width = asObject["width"].AsInt;
+                        if (asObject["height"] != null) height = asObject["height"].AsInt;
+                    }
+                }
+                catch { }
+
+                if (width > 0 && height > 0)
+                {
+                    GetResizedSize(ref width, ref height);
+                    var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
+                    if (File.Exists(realDiskCachePath))
+                    {
+                        LogUtil.Log("PREWARM hit.disk path=" + req.imgPath + " cache=" + realDiskCachePath);
+                        return;
+                    }
+                }
+            }
+
+            byte[] bytes = null;
+            try
+            {
+                using (var fileEntryStream = MVR.FileManagement.FileManager.OpenStream(req.imgPath, true))
+                {
+                    using (var ms = new MemoryStream())
+                    {
+                        var s = fileEntryStream.Stream;
+                        byte[] buffer = new byte[81920];
+                        int read;
+                        while ((read = s.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            ms.Write(buffer, 0, read);
+                        }
+                        bytes = ms.ToArray();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("PREWARM read fail path=" + req.imgPath + " " + ex.ToString());
+                return;
+            }
+
+            if (bytes == null || bytes.Length == 0)
+            {
+                return;
+            }
+
+            Texture2D tex = null;
+            try
+            {
+                tex = new Texture2D(2, 2, TextureFormat.RGBA32, false, qi.linear);
+                if (!tex.LoadImage(bytes, false))
+                {
+                    UnityEngine.Object.Destroy(tex);
+                    return;
+                }
+                qi.tex = tex;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var resized = GetResizedTextureFromBytes(qi);
+                if (resized != null)
+                {
+                    LogUtil.Log("PREWARM generate ok path=" + req.imgPath + " ms=" + sw.Elapsed.TotalMilliseconds.ToString("0") + " resized=" + resized.width + "x" + resized.height);
+
+                    string k = GetDiskCachePath(qi, false, 0, 0);
+                    if (!string.IsNullOrEmpty(k))
+                    {
+                        cache.Remove(k);
+                    }
+                    UnityEngine.Object.Destroy(resized);
+                    qi.tex = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("PREWARM generate fail path=" + req.imgPath + " " + ex.ToString());
+            }
+            finally
+            {
+                if (qi != null && qi.tex != null)
+                {
+                    UnityEngine.Object.Destroy(qi.tex);
+                    qi.tex = null;
+                }
+            }
+        }
+
+        static bool IsUrlFieldName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            try
+            {
+                return name.EndsWith("Url", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool IsLikelyDataTextureSlot(string slotName)
+        {
+            if (string.IsNullOrEmpty(slotName)) return false;
+            string n;
+            try { n = slotName.ToLowerInvariant(); } catch { n = slotName; }
+            if (n.Contains("normal")) return true;
+            if (n.Contains("specular")) return true;
+            if (n.Contains("gloss")) return true;
+            if (n.Contains("roughness")) return true;
+            if (n.Contains("metallic")) return true;
+            if (n.Contains("ao")) return true;
+            if (n.Contains("mask")) return true;
+            if (n.Contains("alpha")) return true;
+            if (n.Contains("opacity")) return true;
+            return false;
+        }
+
+        static bool IsLikelyNormalMapSlot(string slotName)
+        {
+            if (string.IsNullOrEmpty(slotName)) return false;
+            string n;
+            try { n = slotName.ToLowerInvariant(); } catch { n = slotName; }
+            return n.Contains("normal");
+        }
+
+        static bool IsLikelyThumbnailSlot(string slotName)
+        {
+            if (string.IsNullOrEmpty(slotName)) return false;
+            string n;
+            try { n = slotName.ToLowerInvariant(); } catch { n = slotName; }
+            return n.Contains("thumb");
+        }
+
+        static bool IsLikelyAlphaPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string p;
+            try { p = path.ToLowerInvariant(); } catch { p = path; }
+            return p.Contains("alpha") || p.Contains("opacity");
+        }
+
+        static bool IsLikelyNormalMapPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string p;
+            try { p = path.ToLowerInvariant(); } catch { p = path; }
+            if (p.Contains("normal")) return true;
+            if (p.Contains("_nrm")) return true;
+            if (p.EndsWith("_n.png") || p.EndsWith("_n.jpg") || p.EndsWith("_n.jpeg")) return true;
+            return false;
+        }
+
+        static bool IsLikelyFilePathValue(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+
+            string v;
+            try { v = value.Trim(); } catch { v = value; }
+            if (string.IsNullOrEmpty(v)) return false;
+
+            bool looksLikePath = false;
+            try
+            {
+                looksLikePath = v.Contains(":/") || v.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) || v.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                looksLikePath = v.Contains(":/");
+            }
+            if (!looksLikePath) return false;
+
+            string lower;
+            try { lower = v.ToLowerInvariant(); } catch { lower = v; }
+
+            if (lower.EndsWith(".png") || lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".tga") || lower.EndsWith(".bmp") || lower.EndsWith(".tif") || lower.EndsWith(".tiff")) return true;
+            if (lower.EndsWith(".assetbundle") || lower.EndsWith(".shaderbundle") || lower.EndsWith(".audiobundle")) return true;
+
+            return false;
+        }
+
+        List<PrewarmRequest> BuildPrewarmRequestsFromScene(JObject root, string sceneSaveName)
+        {
+            var list = new List<PrewarmRequest>(64);
+            if (root == null) return list;
+
+            var found = new List<KeyValuePair<string, string>>(64);
+            CollectUrlValues(root, found);
+
+            bool includeThumbs = false;
+            try
+            {
+                includeThumbs = Settings.Instance != null && Settings.Instance.ScenePrewarmIncludeThumbnails != null && Settings.Instance.ScenePrewarmIncludeThumbnails.Value;
+            }
+            catch { }
+
+            for (int i = 0; i < found.Count; i++)
+            {
+                var kv = found[i];
+                var slotName = kv.Key;
+                var path = kv.Value;
+                if (string.IsNullOrEmpty(path)) continue;
+                if (!IsLikelyFilePathValue(path)) continue;
+
+                bool createAlphaFromGrayscale = IsLikelyAlphaPath(slotName) || IsLikelyAlphaPath(path);
+                bool isNormalMap = IsLikelyNormalMapSlot(slotName) || IsLikelyNormalMapPath(path);
+                bool linear = IsLikelyDataTextureSlot(slotName) || isNormalMap;
+                bool isThumb = IsLikelyThumbnailSlot(slotName);
+
+                var req = new PrewarmRequest();
+                req.imgPath = path;
+                req.isThumbnail = isThumb;
+                req.compress = true;
+                req.linear = linear;
+                req.isNormalMap = isNormalMap;
+                req.createAlphaFromGrayscale = createAlphaFromGrayscale;
+                req.createNormalFromBump = false;
+                req.bumpStrength = 1f;
+                req.invert = false;
+                req.source = sceneSaveName + ":" + slotName;
+                list.Add(req);
+
+                if (includeThumbs && !isThumb)
+                {
+                    var req2 = new PrewarmRequest();
+                    req2.imgPath = path;
+                    req2.isThumbnail = true;
+                    req2.compress = true;
+                    req2.linear = linear;
+                    req2.isNormalMap = isNormalMap;
+                    req2.createAlphaFromGrayscale = createAlphaFromGrayscale;
+                    req2.createNormalFromBump = false;
+                    req2.bumpStrength = 1f;
+                    req2.invert = false;
+                    req2.source = sceneSaveName + ":" + slotName + ":thumb";
+                    list.Add(req2);
+                }
+            }
+
+            return list;
+        }
+
+        static void CollectUrlValues(JToken token, List<KeyValuePair<string, string>> found)
+        {
+            if (token == null) return;
+
+            var obj = token as JObject;
+            if (obj != null)
+            {
+                foreach (var prop in obj.Properties())
+                {
+                    if (prop == null) continue;
+                    var name = prop.Name;
+                    if (IsUrlFieldName(name))
+                    {
+                        var v = prop.Value;
+                        if (v != null && v.Type == JTokenType.String)
+                        {
+                            string s = null;
+                            try { s = v.Value<string>(); } catch { }
+                            if (!string.IsNullOrEmpty(s))
+                            {
+                                found.Add(new KeyValuePair<string, string>(name, s));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var v = prop.Value;
+                        if (v != null && v.Type == JTokenType.String)
+                        {
+                            string s = null;
+                            try { s = v.Value<string>(); } catch { }
+                            if (!string.IsNullOrEmpty(s) && IsLikelyFilePathValue(s))
+                            {
+                                found.Add(new KeyValuePair<string, string>(name, s));
+                            }
+                        }
+                    }
+
+                    CollectUrlValues(prop.Value, found);
+                }
+                return;
+            }
+
+            var arr = token as JArray;
+            if (arr != null)
+            {
+                for (int i = 0; i < arr.Count; i++)
+                {
+                    var item = arr[i];
+                    if (item != null && item.Type == JTokenType.String)
+                    {
+                        string s = null;
+                        try { s = item.Value<string>(); } catch { }
+                        if (!string.IsNullOrEmpty(s) && IsLikelyFilePathValue(s))
+                        {
+                            found.Add(new KeyValuePair<string, string>("array", s));
+                        }
+                        continue;
+                    }
+
+                    CollectUrlValues(item, found);
+                }
+                return;
+            }
+        }
+
+        static string ResolveCanonicalImagePath(string imgPath)
+        {
+            if (string.IsNullOrEmpty(imgPath)) return imgPath;
+
+            try
+            {
+                if (imgPath.IndexOf(".latest", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
+                    if (fileEntry != null)
+                    {
+                        try
+                        {
+                            var uid = fileEntry.Uid;
+                            if (!string.IsNullOrEmpty(uid) && uid.IndexOf(".latest", StringComparison.OrdinalIgnoreCase) < 0)
+                            {
+                                return uid;
+                            }
+                        }
+                        catch { }
+                        try
+                        {
+                            var p = fileEntry.Path;
+                            if (!string.IsNullOrEmpty(p) && p.IndexOf(".latest", StringComparison.OrdinalIgnoreCase) < 0)
+                            {
+                                return p;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+
+            string packageUid;
+            string internalPath;
+            if (!TrySplitVarPath(imgPath, out packageUid, out internalPath))
+            {
+                return imgPath;
+            }
+
+            if (!packageUid.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+            {
+                return imgPath;
+            }
+
+            VarPackage resolved = ResolveLatestInstalledPackage(packageUid);
+            if (resolved == null)
+            {
+                return imgPath;
+            }
+
+            return resolved.Uid + ":/" + internalPath;
+        }
+
+        static bool TrySplitVarPath(string path, out string packageUidOrRef, out string internalPath)
+        {
+            packageUidOrRef = null;
+            internalPath = null;
+            if (string.IsNullOrEmpty(path)) return false;
+
+            int idx = path.IndexOf(":/", StringComparison.Ordinal);
+            if (idx <= 0) return false;
+
+            packageUidOrRef = path.Substring(0, idx);
+            internalPath = path.Substring(idx + 2);
+            return !string.IsNullOrEmpty(packageUidOrRef) && !string.IsNullOrEmpty(internalPath);
+        }
+
+        static VarPackage ResolveLatestInstalledPackage(string packageLatestRef)
+        {
+            if (string.IsNullOrEmpty(packageLatestRef)) return null;
+            if (!packageLatestRef.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            try
+            {
+                var pkg = var_browser.FileManager.GetPackage(packageLatestRef);
+                if (pkg == null) return null;
+
+                VarPackageGroup group = pkg.Group;
+                if (group == null) return pkg;
+
+                VarPackage bestInstalled = null;
+                if (group.Packages != null)
+                {
+                    for (int i = 0; i < group.Packages.Count; i++)
+                    {
+                        var p = group.Packages[i];
+                        if (p == null) continue;
+                        if (!p.IsInstalled()) continue;
+                        if (bestInstalled == null || p.Version > bestInstalled.Version)
+                        {
+                            bestInstalled = p;
+                        }
+                    }
+                }
+                return bestInstalled ?? pkg;
+            }
+            catch
+            {
+                return null;
+            }
         }
         static int ClosestPowerOfTwo(int value)
         {
@@ -532,11 +1326,35 @@ namespace var_browser
                 string fileName = Path.GetFileName(imgPath);
                 fileName = SanitizeFileName(fileName);
                 fileName = fileName.Replace('.', '_');
-                // No timestamp included, so there may be minor inaccuracies.
-                // Should we handle some purely-numeric names specially?
-                string pathHash = ComputeStableHash(imgPath);
-                var diskCacheSignature = fileName + "_" + text + "_" + pathHash + "_" + GetDiskCacheSignature(qi, useSize, width, height);
-                result = basePath + diskCacheSignature;
+                string token;
+
+                // MVR.FileManagement.FileEntry is not related to var_browser.VarFileEntry,
+                // so we cannot pattern-match directly. For VAR paths, look up our VarFileEntry
+                // using the same path string (uid:/internalPath).
+                VarFileEntry varEntry = null;
+                if (!string.IsNullOrEmpty(imgPath) && imgPath.IndexOf(":/", StringComparison.Ordinal) >= 0)
+                {
+                    varEntry = FileManager.GetVarFileEntry(imgPath);
+                }
+
+                if (varEntry != null && varEntry.Package != null)
+                {
+                    // Cache token = (package id + package version number, internal path, entry lastWriteTime, entry size)
+                    token = BuildVarCacheToken(varEntry);
+                }
+                else if (fileEntry != null)
+                {
+                    // Non-VAR entries: avoid hashing; use timestamp + size.
+                    token = BuildNonVarCacheToken(fileEntry);
+                }
+                else
+                {
+                    token = "0";
+                }
+
+                var diskCacheSignature = fileName + "_" + text + "_" + token + "_" + GetDiskCacheSignature(qi, useSize, width, height);
+                string cacheExt = (!string.IsNullOrEmpty(imgPath) && imgPath.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) ? string.Empty : ".cache";
+                result = basePath + diskCacheSignature + cacheExt;
             }
             return result;
         }
@@ -544,36 +1362,76 @@ namespace var_browser
         static string SanitizeFileName(string value)
         {
             if (string.IsNullOrEmpty(value)) return "img";
-            var invalid = Path.GetInvalidFileNameChars();
             var sb = new StringBuilder(value.Length);
             for (int i = 0; i < value.Length; i++)
             {
                 char c = value[i];
-                bool bad = false;
-                for (int j = 0; j < invalid.Length; j++)
-                {
-                    if (c == invalid[j]) { bad = true; break; }
-                }
-                sb.Append(bad ? '_' : c);
+                sb.Append(Array.IndexOf(s_InvalidFileNameChars, c) >= 0 ? '_' : c);
             }
             return sb.ToString();
         }
 
-        static string ComputeStableHash(string value)
+        static string BuildNonVarCacheToken(MVR.FileManagement.FileEntry fileEntry)
         {
-            if (string.IsNullOrEmpty(value)) return "0";
-            using (var md5 = MD5.Create())
+            return fileEntry.LastWriteTime.ToFileTimeUtc().ToString() + "_" + fileEntry.Size.ToString();
+        }
+
+        static string BuildVarCacheToken(VarFileEntry varEntry)
+        {
+            string internalPath = varEntry.InternalPath ?? string.Empty;
+            internalPath = internalPath.Replace('\\', '_').Replace('/', '_');
+            internalPath = SanitizeFileName(internalPath);
+            internalPath = ShortenInternalPathForCacheToken(internalPath);
+
+            string packageId = varEntry.Package.Uid;
+            string packageVersion = varEntry.Package.Version.ToString();
+            string lwt = varEntry.LastWriteTime.ToFileTimeUtc().ToString();
+            string size = varEntry.Size.ToString();
+
+            var sb = new StringBuilder(packageId.Length + packageVersion.Length + internalPath.Length + lwt.Length + size.Length + 8);
+            sb.Append(packageId);
+            sb.Append('_');
+            sb.Append(packageVersion);
+            sb.Append('_');
+            sb.Append(internalPath);
+            sb.Append('_');
+            sb.Append(lwt);
+            sb.Append('_');
+            sb.Append(size);
+            return sb.ToString();
+        }
+
+        static string ShortenInternalPathForCacheToken(string internalPath)
+        {
+            // Keep filenames from exploding in length (Windows path constraints). Still derives from the full internal path.
+            const int maxLen = 120;
+            if (string.IsNullOrEmpty(internalPath) || internalPath.Length <= maxLen) return internalPath;
+
+            const int head = 50;
+            const int tail = 50;
+
+            string prefix = internalPath.Substring(0, head);
+            string suffix = internalPath.Substring(internalPath.Length - tail, tail);
+            string hash = Fnv1a64Hex(internalPath);
+            return prefix + "_" + suffix + "_" + hash;
+        }
+
+        static string Fnv1a64Hex(string value)
+        {
+            unchecked
             {
-                byte[] bytes = Encoding.UTF8.GetBytes(value);
-                byte[] hash = md5.ComputeHash(bytes);
-                var sb = new StringBuilder(hash.Length * 2);
-                for (int i = 0; i < hash.Length; i++)
+                const ulong offset = 14695981039346656037UL;
+                const ulong prime = 1099511628211UL;
+                ulong hash = offset;
+                for (int i = 0; i < value.Length; i++)
                 {
-                    sb.Append(hash[i].ToString("x2"));
+                    hash ^= value[i];
+                    hash *= prime;
                 }
-                return sb.ToString();
+                return hash.ToString("x16");
             }
         }
+
         protected string GetDiskCacheSignature(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width,int height)
         {
             string text = useSize ?(width + "_" + height):"";

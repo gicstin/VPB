@@ -258,6 +258,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src\GlobalInfo.cs" />
+    <Compile Include="src\VdsLauncher.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\DAZMorphMgr.cs" />
     <Compile Include="src\hook\FileManagement\VarPackageMgr.cs" />
