@@ -12,6 +12,7 @@ namespace var_browser
         sealed class VdsRequest
         {
             public bool Enabled;
+            public bool LogMode;
             public string Scene;
             public string Mode;
             public readonly Dictionary<string, string> Flags = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -28,6 +29,18 @@ namespace var_browser
         static object configFile;
         static bool? configSaveOnConfigSetOriginal;
         static bool configBackupDone;
+
+        public static bool IsVdsEnabled()
+        {
+            try
+            {
+                return request != null && request.Enabled;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         static string NormalizeArgValue(string v)
         {
@@ -59,6 +72,38 @@ namespace var_browser
                     {
                         string arg = args[i];
                         if (string.IsNullOrEmpty(arg)) continue;
+
+                        if (arg.Equals("--vpb.log", StringComparison.OrdinalIgnoreCase) || arg.StartsWith("--vpb.log=", StringComparison.OrdinalIgnoreCase))
+                        {
+                            req.LogMode = true;
+                            continue;
+                        }
+
+                        if (arg.Equals("--vpb.mode", StringComparison.OrdinalIgnoreCase) || arg.StartsWith("--vpb.mode=", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string v = "";
+                            int eqMode = arg.IndexOf('=');
+                            if (eqMode >= 0)
+                            {
+                                v = arg.Substring(eqMode + 1);
+                            }
+                            else if (i + 1 < args.Length)
+                            {
+                                string next = args[i + 1];
+                                if (!string.IsNullOrEmpty(next) && !next.StartsWith("--", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    v = next;
+                                    i++;
+                                }
+                            }
+
+                            v = NormalizeArgValue(v);
+                            if (!string.IsNullOrEmpty(v) && v.Equals("log", StringComparison.OrdinalIgnoreCase))
+                            {
+                                req.LogMode = true;
+                            }
+                            continue;
+                        }
 
                         if (arg.Equals("--vpb.vds", StringComparison.OrdinalIgnoreCase) || arg.StartsWith("--vpb.vds=", StringComparison.OrdinalIgnoreCase))
                         {
@@ -115,12 +160,30 @@ namespace var_browser
             {
                 LogUtil.Log("VDS detected");
             }
+
+            if (req.LogMode)
+            {
+                LogUtil.Log("Log mode detected");
+            }
         }
 
         public static void TryExecuteOnce()
         {
             if (!parsed || executed) return;
-            if (request == null || !request.Enabled) return;
+            if (request == null) return;
+
+            // Apply log-mode overrides even when VDS scene load isn't used.
+            if (request.LogMode && !request.Enabled)
+            {
+                if ((Time.frameCount - parseFrame) < 10) return;
+                var scLog = SuperController.singleton;
+                if (scLog == null) return;
+                ApplyOverridesOnce();
+                executed = true;
+                return;
+            }
+
+            if (!request.Enabled) return;
 
             if ((Time.frameCount - parseFrame) < 10) return;
 
@@ -143,6 +206,30 @@ namespace var_browser
                 executed = true;
                 return;
             }
+
+            try
+            {
+                string sceneJsonText = null;
+                if (File.Exists(resolved))
+                {
+                    sceneJsonText = File.ReadAllText(resolved);
+                }
+                else if (resolved.Contains(":/"))
+                {
+                    using (var fileEntryStream = MVR.FileManagement.FileManager.OpenStream(resolved, true))
+                    {
+                        using (var sr = new StreamReader(fileEntryStream.Stream))
+                        {
+                            sceneJsonText = sr.ReadToEnd();
+                        }
+                    }
+                }
+                if (!string.IsNullOrEmpty(sceneJsonText))
+                {
+                    FileButton.EnsureInstalledInternal(sceneJsonText);
+                }
+            }
+            catch { }
 
             try
             {
@@ -182,6 +269,19 @@ namespace var_browser
 
             try
             {
+                if (request != null && request.LogMode)
+                {
+                    try
+                    {
+                        if (Settings.Instance != null)
+                        {
+                            if (Settings.Instance.LogImageQueueEvents != null) Settings.Instance.LogImageQueueEvents.Value = true;
+                            if (Settings.Instance.TextureLogLevel != null) Settings.Instance.TextureLogLevel.Value = 2;
+                        }
+                    }
+                    catch { }
+                }
+
                 if (request == null || request.Flags == null || request.Flags.Count == 0) return;
 
                 string clearTexDisk;
@@ -522,6 +622,152 @@ namespace var_browser
         {
             try
             {
+                try
+                {
+                    try
+                    {
+                        // VDS launches can start with a different working directory than normal UI loads.
+                        // VaM resolves relative paths like "Custom/..." relative to the VaM root, so force it here.
+                        string dataPath = Application.dataPath;
+                        if (!string.IsNullOrEmpty(dataPath))
+                        {
+                            string root = null;
+                            try { root = Directory.GetParent(dataPath).FullName; } catch { }
+                            if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
+                            {
+                                Environment.CurrentDirectory = root;
+                            }
+
+                            try
+                            {
+                                LogUtil.Log("VDS cwd=" + Environment.CurrentDirectory + " dataPath=" + dataPath + " root=" + (root ?? "<null>"));
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+
+                    // Ensure VaM's file load context is set so SELF:/ and relative paths inside the scene resolve correctly.
+                    // Normal UI scene loads establish this implicitly; VDS loads need to do it explicitly.
+                    var vamAsm = typeof(SuperController).Assembly;
+                    if (vamAsm != null)
+                    {
+                        var fmType = vamAsm.GetType("MVR.FileManagement.FileManager");
+                        if (fmType != null)
+                        {
+                            try
+                            {
+                                LogUtil.Log("VDS FileManager type=" + fmType.AssemblyQualifiedName);
+                            }
+                            catch { }
+
+                            // Ensure VaM considers the install root/Custom readable.
+                            try
+                            {
+                                string dataPath = Application.dataPath;
+                                string root = null;
+                                try { root = !string.IsNullOrEmpty(dataPath) ? Directory.GetParent(dataPath).FullName : null; } catch { }
+                                if (!string.IsNullOrEmpty(root))
+                                {
+                                    var regSecure = fmType.GetMethod("RegisterSecureReadPath", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
+                                    if (regSecure != null)
+                                    {
+                                        regSecure.Invoke(null, new object[] { root });
+                                        try { regSecure.Invoke(null, new object[] { Path.Combine(root, "Custom") }); } catch { }
+                                        try { regSecure.Invoke(null, new object[] { Path.Combine(root, "Saves") }); } catch { }
+                                    }
+                                }
+                            }
+                            catch { }
+
+                            var setLoad = fmType.GetMethod("SetLoadDirFromFilePath", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string), typeof(bool) }, null);
+                            if (setLoad != null)
+                            {
+                                setLoad.Invoke(null, new object[] { saveName, true });
+                            }
+
+                            try
+                            {
+                                // Keep the load context on the stack so CurrentPackageUid remains available while textures are loaded.
+                                var pushLoadFrom = fmType.GetMethod("PushLoadDirFromFilePath", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string), typeof(bool) }, null);
+                                if (pushLoadFrom != null)
+                                {
+                                    pushLoadFrom.Invoke(null, new object[] { saveName, true });
+                                }
+
+                                string pkgUid = null;
+                                try
+                                {
+                                    int idx = saveName != null ? saveName.IndexOf(":/", StringComparison.Ordinal) : -1;
+                                    if (idx > 0) pkgUid = saveName.Substring(0, idx);
+                                }
+                                catch { }
+
+                                if (!string.IsNullOrEmpty(pkgUid))
+                                {
+                                    // Push a directory inside the package so FileManager.CurrentPackageUid is stable during load.
+                                    var pushLoad = fmType.GetMethod("PushLoadDir", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string), typeof(bool) }, null);
+                                    if (pushLoad != null)
+                                    {
+                                        pushLoad.Invoke(null, new object[] { pkgUid + ":/Custom", true });
+                                    }
+                                }
+                            }
+                            catch { }
+                            var setSave = fmType.GetMethod("SetSaveDirFromFilePath", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string), typeof(bool) }, null);
+                            if (setSave != null)
+                            {
+                                setSave.Invoke(null, new object[] { saveName, true });
+                            }
+
+                            try
+                            {
+                                var pLoad = fmType.GetProperty("CurrentLoadDir", BindingFlags.Public | BindingFlags.Static);
+                                var pPkg = fmType.GetProperty("CurrentPackageUid", BindingFlags.Public | BindingFlags.Static);
+                                string curLoad = pLoad != null ? pLoad.GetValue(null, null) as string : null;
+                                string curPkg = pPkg != null ? pPkg.GetValue(null, null) as string : null;
+                                LogUtil.Log("VDS FileManager ctx loadDir=" + (curLoad ?? "<null>") + " pkg=" + (curPkg ?? "<null>"));
+
+                                string probe = "Custom/Atom/Person/Textures/Arin/Arin_Face_2.jpg";
+                                var mNorm = fmType.GetMethod("NormalizeLoadPath", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
+                                if (mNorm != null)
+                                {
+                                    var norm = mNorm.Invoke(null, new object[] { probe }) as string;
+                                    LogUtil.Log("VDS FileManager NormalizeLoadPath(" + probe + ")=" + (norm ?? "<null>"));
+                                }
+
+                                var mFull = fmType.GetMethod("GetFullPath", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
+                                if (mFull != null)
+                                {
+                                    var full = mFull.Invoke(null, new object[] { probe }) as string;
+                                    LogUtil.Log("VDS FileManager GetFullPath(" + probe + ")=" + (full ?? "<null>"));
+                                }
+
+                                var mExists1 = fmType.GetMethod("FileExists", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
+                                if (mExists1 != null)
+                                {
+                                    var existsObj = mExists1.Invoke(null, new object[] { probe });
+                                    LogUtil.Log("VDS FileManager FileExists(" + probe + ")=" + (existsObj != null ? existsObj.ToString() : "<null>"));
+                                }
+                                else
+                                {
+                                    var mExists2 = fmType.GetMethod("FileExists", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string), typeof(bool) }, null);
+                                    if (mExists2 != null)
+                                    {
+                                        var existsObj = mExists2.Invoke(null, new object[] { probe, true });
+                                        LogUtil.Log("VDS FileManager FileExists(" + probe + ",true)=" + (existsObj != null ? existsObj.ToString() : "<null>"));
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                try { LogUtil.Log("VDS FileManager diag failed: " + ex.Message); } catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
                 var t = sc.GetType();
 
                 var m1 = t.GetMethod("Load", BindingFlags.Instance | BindingFlags.Public, null, new Type[] { typeof(string) }, null);

@@ -167,7 +167,6 @@ namespace var_browser
             LogUtil.MarkImageActivity();
             var swRequest = System.Diagnostics.Stopwatch.StartNew();
             var diskCachePath = GetDiskCachePath(qi,false,0,0);
-
             if (string.IsNullOrEmpty(diskCachePath)) return false;
 
             //LogUtil.Log("request img:"+ diskCachePath);
@@ -196,35 +195,53 @@ namespace var_browser
             }
 
             var metaPath = diskCachePath + ".meta";
+            var legacyDiskCachePath = diskCachePath + ".cache";
+            var legacyMetaPath = legacyDiskCachePath + ".meta";
             int width = 0;
             int height = 0;
             TextureFormat textureFormat=TextureFormat.DXT1;
+            string metaToUse = null;
+            bool legacy = false;
             if (File.Exists(metaPath))
             {
-                var jsonString = File.ReadAllText(metaPath);
+                metaToUse = metaPath;
+            }
+            else if (File.Exists(legacyMetaPath))
+            {
+                metaToUse = legacyMetaPath;
+                legacy = true;
+            }
+            if (metaToUse != null)
+            {
+                var jsonString = File.ReadAllText(metaToUse);
                 JSONNode jSONNode = JSON.Parse(jsonString);
                 JSONClass asObject = jSONNode.AsObject;
                 if (asObject != null)
                 {
-                    if (asObject["width"] != null)
-                        width = asObject["width"].AsInt;
-                    if (asObject["height"] != null)
-                        height = asObject["height"].AsInt;
-                    if (asObject["format"] != null)
-                        textureFormat = (TextureFormat)System.Enum.Parse(typeof(TextureFormat), asObject["format"]);
+                    if (asObject["width"] != null) width = asObject["width"].AsInt;
+                    if (asObject["height"] != null) height = asObject["height"].AsInt;
+                    if (asObject["format"] != null) textureFormat = (TextureFormat)System.Enum.Parse(typeof(TextureFormat), asObject["format"]);
                 }
 
                 GetResizedSize(ref width, ref height);
 
                 var realDiskCachePath = GetDiskCachePath(qi, true,width, height);
-                if (File.Exists(realDiskCachePath))
+                var realDiskCachePathCache = realDiskCachePath + ".cache";
+                var legacyRealDiskCachePath = realDiskCachePath + ".cache";
+                string diskPathToUse = legacy ? legacyRealDiskCachePath : realDiskCachePathCache;
+                if (!File.Exists(diskPathToUse) && !legacy)
+                {
+                    // Backward-compat for caches previously written without extension.
+                    diskPathToUse = realDiskCachePath;
+                }
+                if (File.Exists(diskPathToUse))
                 {
                     LogUtil.PerfAdd("Img.Cache.DiskHit", 0, 0);
-                    LogUtil.LogTextureTrace("Img.Request.DiskHit:" + realDiskCachePath, "request use disk cache:" + realDiskCachePath);
+                    LogUtil.LogTextureTrace("Img.Request.DiskHit:" + diskPathToUse, "request use disk cache:" + diskPathToUse);
                     var swRead = System.Diagnostics.Stopwatch.StartNew();
-                    var bytes = File.ReadAllBytes(realDiskCachePath);
+                    var bytes = File.ReadAllBytes(diskPathToUse);
                     LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
-                    LogUtil.LogTextureSlowDisk("read", realDiskCachePath, swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
+                    LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
                     Texture2D tex = new Texture2D(width, height, textureFormat, false,qi.linear);
                     //tex.name = qi.cacheSignature;
                     bool success = true;
@@ -235,8 +252,8 @@ namespace var_browser
                     catch (System.Exception ex)
                     {
                         success = false;
-                        LogUtil.LogError("request load disk cache fail:" + realDiskCachePath + " " + ex.ToString());
-                        File.Delete(realDiskCachePath);
+                        LogUtil.LogError("request load disk cache fail:" + diskPathToUse + " " + ex.ToString());
+                        File.Delete(diskPathToUse);
                     }
                     if (success)
                     {
@@ -636,9 +653,10 @@ namespace var_browser
 
                     GetResizedSize(ref width, ref height);
                     var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
-                    if (File.Exists(realDiskCachePath))
+                    var realDiskCachePathCache = realDiskCachePath + ".cache";
+                    if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath))
                     {
-                        LogUtil.Log("PREWARM hit.disk path=" + req.imgPath + " cache=" + realDiskCachePath);
+                        LogUtil.Log("PREWARM hit.disk path=" + req.imgPath + " cache=" + (File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath));
                         return;
                     }
                 }
@@ -648,9 +666,10 @@ namespace var_browser
                 {
                     GetResizedSize(ref width, ref height);
                     var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
-                    if (File.Exists(realDiskCachePath))
+                    var realDiskCachePathCache = realDiskCachePath + ".cache";
+                    if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath))
                     {
-                        LogUtil.Log("PREWARM hit.disk path=" + req.imgPath + " cache=" + realDiskCachePath);
+                        LogUtil.Log("PREWARM hit.disk path=" + req.imgPath + " cache=" + (File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath));
                         return;
                     }
                 }
@@ -825,10 +844,14 @@ namespace var_browser
             var found = new List<KeyValuePair<string, string>>(64);
             CollectUrlValues(root, found);
 
-            bool includeThumbs = false;
+            string contextPackageUid = null;
             try
             {
-                includeThumbs = Settings.Instance != null && Settings.Instance.ScenePrewarmIncludeThumbnails != null && Settings.Instance.ScenePrewarmIncludeThumbnails.Value;
+                int idx = sceneSaveName != null ? sceneSaveName.IndexOf(":/", StringComparison.Ordinal) : -1;
+                if (idx > 0)
+                {
+                    contextPackageUid = sceneSaveName.Substring(0, idx);
+                }
             }
             catch { }
 
@@ -839,6 +862,15 @@ namespace var_browser
                 var path = kv.Value;
                 if (string.IsNullOrEmpty(path)) continue;
                 if (!IsLikelyFilePathValue(path)) continue;
+
+                if (path.StartsWith("SELF:/", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(contextPackageUid))
+                {
+                    try
+                    {
+                        path = contextPackageUid + ":/" + path.Substring("SELF:/".Length);
+                    }
+                    catch { }
+                }
 
                 bool createAlphaFromGrayscale = IsLikelyAlphaPath(slotName) || IsLikelyAlphaPath(path);
                 bool isNormalMap = IsLikelyNormalMapSlot(slotName) || IsLikelyNormalMapPath(path);
@@ -858,7 +890,7 @@ namespace var_browser
                 req.source = sceneSaveName + ":" + slotName;
                 list.Add(req);
 
-                if (includeThumbs && !isThumb)
+                if (!isThumb)
                 {
                     var req2 = new PrewarmRequest();
                     req2.imgPath = path;
@@ -1097,6 +1129,7 @@ namespace var_browser
 
             var diskCachePath = GetDiskCachePath(qi,false,0,0);
             var realDiskCachePath = GetDiskCachePath(qi,true,width,height);
+            var realDiskCachePathCache = realDiskCachePath + ".cache";
 
             LogUtil.BeginImageWork();
             try
@@ -1115,14 +1148,15 @@ namespace var_browser
             }
 
             //var thumbnailPath = diskCachePath + ext
-            if (File.Exists(realDiskCachePath))
+            string diskPathToUse = File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath;
+            if (File.Exists(diskPathToUse))
             {
                 LogUtil.PerfAdd("Img.Resize.FromDisk", 0, 0);
-                LogUtil.LogTextureTrace("Img.Resize.DiskHit:" + realDiskCachePath, "resize use disk cache:" + realDiskCachePath);
+                LogUtil.LogTextureTrace("Img.Resize.DiskHit:" + diskPathToUse, "resize use disk cache:" + diskPathToUse);
                 var swRead = System.Diagnostics.Stopwatch.StartNew();
-                var bytes = File.ReadAllBytes(realDiskCachePath);
+                var bytes = File.ReadAllBytes(diskPathToUse);
                 LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
-                LogUtil.LogTextureSlowDisk("read", realDiskCachePath, swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
+                LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
 
                 resultTexture = new Texture2D(width, height, localFormat, false, qi.linear);
                 //resultTexture.name = qi.cacheSignature;
@@ -1183,9 +1217,9 @@ namespace var_browser
 
             byte[] texBytes = resultTexture.GetRawTextureData();
             var swWrite = System.Diagnostics.Stopwatch.StartNew();
-            File.WriteAllBytes(realDiskCachePath, texBytes);
+            File.WriteAllBytes(realDiskCachePathCache, texBytes);
             LogUtil.PerfAdd("Img.Disk.Write", swWrite.Elapsed.TotalMilliseconds, texBytes != null ? texBytes.LongLength : 0);
-            LogUtil.LogTextureSlowDisk("write", realDiskCachePath, swWrite.Elapsed.TotalMilliseconds, texBytes != null ? texBytes.LongLength : 0);
+            LogUtil.LogTextureSlowDisk("write", realDiskCachePathCache, swWrite.Elapsed.TotalMilliseconds, texBytes != null ? texBytes.LongLength : 0);
 
             JSONClass jSONClass = new JSONClass();
             jSONClass["type"] = "image";
@@ -1343,39 +1377,13 @@ namespace var_browser
             if (textureCacheDir != null)
             {
                 string basePath = textureCacheDir + "/";
-                string text = (fileEntry != null) ? fileEntry.Size.ToString() : "0";
                 string fileName = Path.GetFileName(imgPath);
                 fileName = SanitizeFileName(fileName);
                 fileName = fileName.Replace('.', '_');
-                string token;
-
-                // MVR.FileManagement.FileEntry is not related to var_browser.VarFileEntry,
-                // so we cannot pattern-match directly. For VAR paths, look up our VarFileEntry
-                // using the same path string (uid:/internalPath).
-                VarFileEntry varEntry = null;
-                if (!string.IsNullOrEmpty(imgPath) && imgPath.IndexOf(":/", StringComparison.Ordinal) >= 0)
-                {
-                    varEntry = FileManager.GetVarFileEntry(imgPath);
-                }
-
-                if (varEntry != null && varEntry.Package != null)
-                {
-                    // Cache token = (package id + package version number, internal path, entry lastWriteTime, entry size)
-                    token = BuildVarCacheToken(varEntry);
-                }
-                else if (fileEntry != null)
-                {
-                    // Non-VAR entries: avoid hashing; use timestamp + size.
-                    token = BuildNonVarCacheToken(fileEntry);
-                }
-                else
-                {
-                    token = "0";
-                }
-
-                var diskCacheSignature = fileName + "_" + text + "_" + token + "_" + GetDiskCacheSignature(qi, useSize, width, height);
-                string cacheExt = (!string.IsNullOrEmpty(imgPath) && imgPath.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)) ? string.Empty : ".cache";
-                result = basePath + diskCacheSignature + cacheExt;
+                string text = (fileEntry != null) ? fileEntry.Size.ToString() : "0";
+                string token = (fileEntry != null) ? fileEntry.LastWriteTime.ToFileTime().ToString() : "0";
+                var diskCacheSignature = GetDiskCacheSignature(qi, useSize, width, height);
+                result = basePath + fileName + "_" + text + "_" + token + "_" + diskCacheSignature;
             }
             return result;
         }
@@ -1394,7 +1402,7 @@ namespace var_browser
 
         static string BuildNonVarCacheToken(MVR.FileManagement.FileEntry fileEntry)
         {
-            return fileEntry.LastWriteTime.ToFileTimeUtc().ToString() + "_" + fileEntry.Size.ToString();
+            return fileEntry.LastWriteTime.ToFileTime().ToString();
         }
 
         static string BuildVarCacheToken(VarFileEntry varEntry)
@@ -1406,10 +1414,9 @@ namespace var_browser
 
             string packageId = varEntry.Package.Uid;
             string packageVersion = varEntry.Package.Version.ToString();
-            string lwt = varEntry.LastWriteTime.ToFileTimeUtc().ToString();
-            string size = varEntry.Size.ToString();
+            string lwt = varEntry.LastWriteTime.ToFileTime().ToString();
 
-            var sb = new StringBuilder(packageId.Length + packageVersion.Length + internalPath.Length + lwt.Length + size.Length + 8);
+            var sb = new StringBuilder(packageId.Length + packageVersion.Length + internalPath.Length + lwt.Length + 8);
             sb.Append(packageId);
             sb.Append('_');
             sb.Append(packageVersion);
@@ -1417,8 +1424,6 @@ namespace var_browser
             sb.Append(internalPath);
             sb.Append('_');
             sb.Append(lwt);
-            sb.Append('_');
-            sb.Append(size);
             return sb.ToString();
         }
 
@@ -1455,7 +1460,7 @@ namespace var_browser
 
         protected string GetDiskCacheSignature(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width,int height)
         {
-            string text = useSize ?(width + "_" + height):"";
+            string text = useSize ? (width + "_" + height) : "";
             if (qi.compress)
             {
                 text += "_C";

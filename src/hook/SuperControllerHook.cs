@@ -51,6 +51,43 @@ namespace var_browser
             return "other";
         }
 
+        static string RewriteVdsPathIfNeeded(string path)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path)) return path;
+                if (!VdsLauncher.IsVdsEnabled()) return path;
+                if (!LogUtil.IsSceneLoadActive()) return path;
+
+                string scenePkg = LogUtil.GetSceneLoadPackageUid();
+
+                string p = path.Replace('\\', '/');
+                if (p.StartsWith("SELF:/", StringComparison.OrdinalIgnoreCase))
+                {
+                    string curPkg = null;
+                    try { curPkg = MVR.FileManagement.FileManager.CurrentPackageUid; } catch { }
+                    string pkg = !string.IsNullOrEmpty(curPkg) ? curPkg : scenePkg;
+                    if (string.IsNullOrEmpty(pkg)) return path;
+                    return pkg + ":/" + p.Substring("SELF:/".Length);
+                }
+                if (p.Contains(":/")) return path;
+                if (!p.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return path;
+
+                if (string.IsNullOrEmpty(scenePkg)) return path;
+
+                string candidate = scenePkg + ":/" + p;
+                if (var_browser.FileManager.GetVarFileEntry(candidate) != null)
+                {
+                    return candidate;
+                }
+                return path;
+            }
+            catch
+            {
+                return path;
+            }
+        }
+
         static bool TryPromoteQueuedImage(LinkedList<ImageLoaderThreaded.QueuedImage> queuedImages, ImageLoaderThreaded.QueuedImage qi)
         {
             if (queuedImages == null || qi == null) return false;
@@ -147,6 +184,50 @@ namespace var_browser
         public static void PreRefresh()
         {
             LogUtil.Log("FileManager PreRefresh");
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "NormalizeLoadPath", new Type[] { typeof(string) })]
+        public static void PreNormalizeLoadPath(ref string path)
+        {
+            string rewritten = RewriteVdsPathIfNeeded(path);
+            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            {
+                path = rewritten;
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "FileExists", new Type[] { typeof(string) })]
+        public static void PreFileExists(ref string path)
+        {
+            string rewritten = RewriteVdsPathIfNeeded(path);
+            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            {
+                path = rewritten;
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStream", new Type[] { typeof(string), typeof(bool) })]
+        public static void PreOpenStream(ref string path)
+        {
+            string rewritten = RewriteVdsPathIfNeeded(path);
+            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            {
+                path = rewritten;
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStreamReader", new Type[] { typeof(string), typeof(bool) })]
+        public static void PreOpenStreamReader(ref string path)
+        {
+            string rewritten = RewriteVdsPathIfNeeded(path);
+            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            {
+                path = rewritten;
+            }
         }
 
         // Click "Return To Scene View"
@@ -266,7 +347,13 @@ namespace var_browser
             }
         }
 
-
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ImageLoaderThreaded), "ProcessImage", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
+        public static void PreProcessImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
+            LogUtil.MarkImageActivity();
+        }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnail", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
@@ -286,7 +373,18 @@ namespace var_browser
             qi.isThumbnail = true;
             if (ImageLoadingMgr.singleton.Request(qi))
             {
-                // Skip
+                // Served from VPB cache: ensure VaM's thumbnail cache is populated.
+                try
+                {
+                    var thumbCache = Traverse.Create(__instance).Field("thumbnailCache").GetValue() as Dictionary<string, Texture2D>;
+                    if (thumbCache != null && qi.tex != null && !thumbCache.ContainsKey(qi.imgPath))
+                    {
+                        thumbCache.Add(qi.imgPath, qi.tex);
+                    }
+                }
+                catch { }
+
+                // Skip VaM threaded processing for this request.
                 qi.skipCache = true;
                 var field = Traverse.Create(__instance).Field("queuedImages");
                 var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
@@ -320,7 +418,6 @@ namespace var_browser
             }
             catch { }
         }
-        public static List<ImageLoaderThreaded.QueuedImage> queuedImagesListCache = new List<ImageLoaderThreaded.QueuedImage>();
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnailImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
@@ -337,7 +434,18 @@ namespace var_browser
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
-                // Skip
+                // Served from VPB cache: ensure VaM's thumbnail cache is populated.
+                try
+                {
+                    var thumbCache = Traverse.Create(__instance).Field("thumbnailCache").GetValue() as Dictionary<string, Texture2D>;
+                    if (thumbCache != null && qi.tex != null && !thumbCache.ContainsKey(qi.imgPath))
+                    {
+                        thumbCache.Add(qi.imgPath, qi.tex);
+                    }
+                }
+                catch { }
+
+                // Skip VaM threaded processing for this request.
                 qi.skipCache = true;
                 var field = Traverse.Create(__instance).Field("queuedImages");
                 var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
@@ -371,6 +479,7 @@ namespace var_browser
             }
             catch { }
         }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueImage", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static void PostQueueImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
@@ -381,7 +490,6 @@ namespace var_browser
             LogUtil.MarkImageActivity();
 
             if (!Settings.Instance.ReduceTextureSize.Value) return;
-
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
@@ -432,6 +540,7 @@ namespace var_browser
             }
             catch { }
         }
+
         // It is added to cache before the callback, so we need to set skipCache one step earlier.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ImageLoaderThreaded.QueuedImage), "Finish")]
@@ -482,8 +591,8 @@ namespace var_browser
             {
                 using (BinaryReader binaryReader = new BinaryReader(fileEntryStream.Stream))
                 {
-                  var  numDeltas = binaryReader.ReadInt32();
-                   var deltas = new DAZMorphVertex[numDeltas];
+                    var numDeltas = binaryReader.ReadInt32();
+                    var deltas = new DAZMorphVertex[numDeltas];
                     Vector3 delta = default(Vector3);
                     for (int i = 0; i < numDeltas; i++)
                     {

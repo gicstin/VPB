@@ -31,6 +31,7 @@ namespace var_browser
         static readonly Stopwatch sceneLoadStopwatch = new Stopwatch();
         static readonly Stopwatch sceneLoadInternalStopwatch = new Stopwatch();
         static string sceneLoadName;
+        static string sceneLoadPackageUid;
         static bool sceneLoadActive;
         static bool sceneLoadInternalActive;
         static double? sceneLoadLastSeconds;
@@ -485,6 +486,16 @@ namespace var_browser
             }
 
             sceneLoadName = saveName;
+            sceneLoadPackageUid = null;
+            try
+            {
+                int idx = saveName.IndexOf(":/", StringComparison.Ordinal);
+                if (idx > 0)
+                {
+                    sceneLoadPackageUid = saveName.Substring(0, idx);
+                }
+            }
+            catch { }
             sceneLoadActive = true;
             sceneLoadStopwatch.Reset();
             sceneLoadStopwatch.Start();
@@ -525,6 +536,11 @@ namespace var_browser
         public static string GetSceneLoadName()
         {
             return sceneLoadName;
+        }
+
+        public static string GetSceneLoadPackageUid()
+        {
+            return sceneLoadPackageUid;
         }
 
         public static double? GetSceneLoadSecondsForDisplay()
@@ -879,6 +895,7 @@ namespace var_browser
             sceneLoadLastSeconds = ms / 1000.0;
             var name = sceneLoadName;
             sceneLoadName = null;
+            sceneLoadPackageUid = null;
             sceneLoadInternalActive = false;
 
             sceneLoadEndFrame = Time.frameCount;
