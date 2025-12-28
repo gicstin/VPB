@@ -226,10 +226,8 @@ namespace var_browser
                 GetResizedSize(ref width, ref height);
 
                 var realDiskCachePath = GetDiskCachePath(qi, true,width, height);
-                var realDiskCachePathCache = realDiskCachePath + ".cache";
-                var legacyRealDiskCachePath = realDiskCachePath + ".cache";
-                string diskPathToUse = legacy ? legacyRealDiskCachePath : realDiskCachePathCache;
-                if (!File.Exists(diskPathToUse) && !legacy)
+                var diskPathToUse = realDiskCachePath + ".cache";
+                if (!File.Exists(diskPathToUse))
                 {
                     // Backward-compat for caches previously written without extension.
                     diskPathToUse = realDiskCachePath;
@@ -1403,59 +1401,6 @@ namespace var_browser
         static string BuildNonVarCacheToken(MVR.FileManagement.FileEntry fileEntry)
         {
             return fileEntry.LastWriteTime.ToFileTime().ToString();
-        }
-
-        static string BuildVarCacheToken(VarFileEntry varEntry)
-        {
-            string internalPath = varEntry.InternalPath ?? string.Empty;
-            internalPath = internalPath.Replace('\\', '_').Replace('/', '_');
-            internalPath = SanitizeFileName(internalPath);
-            internalPath = ShortenInternalPathForCacheToken(internalPath);
-
-            string packageId = varEntry.Package.Uid;
-            string packageVersion = varEntry.Package.Version.ToString();
-            string lwt = varEntry.LastWriteTime.ToFileTime().ToString();
-
-            var sb = new StringBuilder(packageId.Length + packageVersion.Length + internalPath.Length + lwt.Length + 8);
-            sb.Append(packageId);
-            sb.Append('_');
-            sb.Append(packageVersion);
-            sb.Append('_');
-            sb.Append(internalPath);
-            sb.Append('_');
-            sb.Append(lwt);
-            return sb.ToString();
-        }
-
-        static string ShortenInternalPathForCacheToken(string internalPath)
-        {
-            // Keep filenames from exploding in length (Windows path constraints). Still derives from the full internal path.
-            const int maxLen = 120;
-            if (string.IsNullOrEmpty(internalPath) || internalPath.Length <= maxLen) return internalPath;
-
-            const int head = 50;
-            const int tail = 50;
-
-            string prefix = internalPath.Substring(0, head);
-            string suffix = internalPath.Substring(internalPath.Length - tail, tail);
-            string hash = Fnv1a64Hex(internalPath);
-            return prefix + "_" + suffix + "_" + hash;
-        }
-
-        static string Fnv1a64Hex(string value)
-        {
-            unchecked
-            {
-                const ulong offset = 14695981039346656037UL;
-                const ulong prime = 1099511628211UL;
-                ulong hash = offset;
-                for (int i = 0; i < value.Length; i++)
-                {
-                    hash ^= value[i];
-                    hash *= prime;
-                }
-                return hash.ToString("x16");
-            }
         }
 
         protected string GetDiskCacheSignature(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width,int height)
