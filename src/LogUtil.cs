@@ -247,38 +247,129 @@ namespace var_browser
             sincePluginAwake.Start();
         }
 
+        const int LevelInfo = 0;
+        const int LevelWarn = 1;
+        const int LevelErr = 2;
+
+        static void LogString(int level, string msg)
+        {
+            WriteCleanLine(msg);
+            if (logSource != null)
+            {
+                if (level == LevelInfo) logSource.LogInfo(msg);
+                else if (level == LevelWarn) logSource.LogWarning(msg);
+                else if (level == LevelErr) logSource.LogError(msg);
+                return;
+            }
+            if (level == LevelInfo) UnityEngine.Debug.Log(msg);
+            else if (level == LevelWarn) UnityEngine.Debug.LogWarning(msg);
+            else if (level == LevelErr) UnityEngine.Debug.LogError(msg);
+        }
+
         public static void Log(string log)
         {
-            string msg = GetTimeString() + " (vb_log) " + log;
-            WriteCleanLine(msg);
-            if (logSource != null)
-            {
-                logSource.LogInfo(msg);
-                return;
-            }
-            UnityEngine.Debug.Log(msg);
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_log) ");
+            sb.Append(log);
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelInfo, msg);
         }
+
+        public static void Log(string p1, string p2)
+        {
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_log) ");
+            sb.Append(p1);
+            sb.Append(p2);
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelInfo, msg);
+        }
+
+        public static void Log(string p1, string p2, string p3)
+        {
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_log) ");
+            sb.Append(p1);
+            sb.Append(p2);
+            sb.Append(p3);
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelInfo, msg);
+        }
+
+        public static void Log(string p1, int p2)
+        {
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_log) ");
+            sb.Append(p1);
+            sb.Append(p2);
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelInfo, msg);
+        }
+
+        public static void Log(string p1, float p2)
+        {
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_log) ");
+            sb.Append(p1);
+            sb.Append(p2);
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelInfo, msg);
+        }
+
         public static void LogError(string log)
         {
-            string msg = GetTimeString() + " (vb_err) " + log;
-            WriteCleanLine(msg);
-            if (logSource != null)
-            {
-                logSource.LogError(msg);
-                return;
-            }
-            UnityEngine.Debug.LogError(msg);
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_err) ");
+            sb.Append(log);
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelErr, msg);
         }
+
+        public static void LogError(string p1, string p2)
+        {
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_err) ");
+            sb.Append(p1);
+            sb.Append(p2);
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelErr, msg);
+        }
+
         public static void LogWarning(string log)
         {
-            string msg = GetTimeString() + " (vb_warn) " + log;
-            WriteCleanLine(msg);
-            if (logSource != null)
-            {
-                logSource.LogWarning(msg);
-                return;
-            }
-            UnityEngine.Debug.LogWarning(msg);
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_warn) ");
+            sb.Append(log);
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelWarn, msg);
+        }
+
+        public static void LogWarning(string p1, string p2)
+        {
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_warn) ");
+            sb.Append(p1);
+            sb.Append(p2);
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelWarn, msg);
         }
 
         static int GetTextureLogLevel()
@@ -341,7 +432,22 @@ namespace var_browser
                     bytes = bytes,
                 });
             }
-            LogWarning("TEX_SLOW_DISK " + op + " " + ms.ToString("0.00") + "ms (" + FormatBytes(bytes) + ") | " + path);
+
+            var sb = StringBuilderPool.Get();
+            sb.Append(GetTimeString());
+            sb.Append(" (vb_warn) ");
+            sb.Append("TEX_SLOW_DISK ");
+            sb.Append(op);
+            sb.Append(" ");
+            sb.Append(ms.ToString("0.00"));
+            sb.Append("ms (");
+            FormatBytes(sb, bytes);
+            sb.Append(") | ");
+            sb.Append(path);
+
+            string msg = sb.ToString();
+            StringBuilderPool.Return(sb);
+            LogString(LevelWarn, msg);
         }
 
         public static void LogVerboseUi(string message)
@@ -879,7 +985,7 @@ namespace var_browser
                     sb.Append(" ");
                     sb.Append(s.ms.ToString("0.00"));
                     sb.Append("ms (");
-                    sb.Append(FormatBytes(s.bytes));
+                    FormatBytes(sb, s.bytes);
                     sb.Append(") ");
                     sb.Append(s.path);
                 }
@@ -933,8 +1039,12 @@ namespace var_browser
                 }
             }
 
-            var sb = new StringBuilder(512);
-            sb.Append("[VB] SCENELOAD STATS ");
+            var sb = StringBuilderPool.Get();
+            try
+            {
+                sb.Append(GetTimeString());
+                sb.Append(" (vb_warn) ");
+                sb.Append("[VB] SCENELOAD STATS ");
             sb.Append(sceneName);
             sb.Append(" | dur:");
             sb.Append(durSeconds.ToString("0.00"));
@@ -956,25 +1066,43 @@ namespace var_browser
             sb.Append(sceneLoadSt100);
 
             sb.Append(" | mem alloc:");
-            sb.Append(FormatBytes(memAllocEnd));
+            FormatBytes(sb, memAllocEnd);
             sb.Append("(+");
-            sb.Append(FormatBytes(memAllocEnd - memAllocStart));
+            FormatBytes(sb, memAllocEnd - memAllocStart);
             sb.Append(") reserved:");
-            sb.Append(FormatBytes(memReservedEnd));
+            FormatBytes(sb, memReservedEnd);
             sb.Append("(+");
-            sb.Append(FormatBytes(memReservedEnd - memReservedStart));
+            FormatBytes(sb, memReservedEnd - memReservedStart);
             sb.Append(") managed:");
-            sb.Append(FormatBytes(memManagedEnd));
+            FormatBytes(sb, memManagedEnd);
             sb.Append("(+");
-            sb.Append(FormatBytes(memManagedEnd - memManagedStart));
+            FormatBytes(sb, memManagedEnd - memManagedStart);
             sb.Append(")");
 
-            LogWarning(sb.ToString());
+            LogString(LevelWarn, sb.ToString());
+            }
+            finally
+            {
+                StringBuilderPool.Return(sb);
+            }
         }
 
         static string FormatBytes(long bytes)
         {
-            if (bytes == 0) return "0B";
+            var sb = StringBuilderPool.Get();
+            FormatBytes(sb, bytes);
+            string s = sb.ToString();
+            StringBuilderPool.Return(sb);
+            return s;
+        }
+
+        static void FormatBytes(StringBuilder sb, long bytes)
+        {
+            if (bytes == 0)
+            {
+                sb.Append("0B");
+                return;
+            }
             bool neg = bytes < 0;
             double b = Math.Abs((double)bytes);
             string suffix;
@@ -1000,7 +1128,9 @@ namespace var_browser
                 suffix = "B";
             }
 
-            return (neg ? "-" : "") + value.ToString("0.00") + suffix;
+            if (neg) sb.Append("-");
+            sb.Append(value.ToString("0.00"));
+            sb.Append(suffix);
         }
 
         public static void PerfAdd(string key, double ms, long bytes)
@@ -1030,28 +1160,37 @@ namespace var_browser
             }
 
             var keys = perf.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
-            var sb = new StringBuilder(512);
-            sb.Append("[VB] PERF ");
-            bool first = true;
-            foreach (var k in keys)
+            var sb = StringBuilderPool.Get();
+            try
             {
-                var m = perf[k];
-                if (!first) sb.Append(" | ");
-                first = false;
-                sb.Append(k);
-                sb.Append("=");
-                sb.Append(m.totalMs.ToString("0.00"));
-                sb.Append("ms (");
-                sb.Append(m.count);
-                if (m.totalBytes != 0)
+                sb.Append(GetTimeString());
+                sb.Append(" (vb_warn) ");
+                sb.Append("[VB] PERF ");
+                bool first = true;
+                foreach (var k in keys)
                 {
-                    sb.Append(", ");
-                    sb.Append(FormatBytes(m.totalBytes));
+                    var m = perf[k];
+                    if (!first) sb.Append(" | ");
+                    first = false;
+                    sb.Append(k);
+                    sb.Append("=");
+                    sb.Append(m.totalMs.ToString("0.00"));
+                    sb.Append("ms (");
+                    sb.Append(m.count);
+                    if (m.totalBytes != 0)
+                    {
+                        sb.Append(", ");
+                        FormatBytes(sb, m.totalBytes);
+                    }
+                    sb.Append(")");
                 }
-                sb.Append(")");
-            }
 
-            LogWarning(sb.ToString());
+                LogString(LevelWarn, sb.ToString());
+            }
+            finally
+            {
+                StringBuilderPool.Return(sb);
+            }
         }
 
         public static void LogReadyOnce(string context)
@@ -1082,6 +1221,30 @@ namespace var_browser
             }
 
             return GetSecondsSinceProcessStart();
+        }
+
+        static class StringBuilderPool
+        {
+            private static readonly Stack<StringBuilder> _pool = new Stack<StringBuilder>();
+            private static readonly object _lock = new object();
+
+            public static StringBuilder Get()
+            {
+                lock (_lock)
+                {
+                    if (_pool.Count > 0) return _pool.Pop();
+                }
+                return new StringBuilder(512);
+            }
+
+            public static void Return(StringBuilder sb)
+            {
+                sb.Length = 0;
+                lock (_lock)
+                {
+                    if (_pool.Count < 32) _pool.Push(sb);
+                }
+            }
         }
     }
 }

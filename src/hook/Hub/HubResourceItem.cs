@@ -243,7 +243,7 @@ namespace var_browser
         {
             if (var_browser.CustomImageLoaderThreaded.singleton != null && url != null && url != string.Empty)
             {
-                var_browser.CustomImageLoaderThreaded.QueuedImage queuedImage = new var_browser.CustomImageLoaderThreaded.QueuedImage();
+                var_browser.CustomImageLoaderThreaded.QueuedImage queuedImage = var_browser.CustomImageLoaderThreaded.QIPool.Get();
                 queuedImage.imgPath = url;
                 queuedImage.callback = SyncCreatorIconTexture;
                 creatorIconQueuedImage = queuedImage;
@@ -271,7 +271,7 @@ namespace var_browser
         {
             if (var_browser.CustomImageLoaderThreaded.singleton != null && url != null && url != string.Empty)
             {
-                var_browser.CustomImageLoaderThreaded.QueuedImage queuedImage = new var_browser.CustomImageLoaderThreaded.QueuedImage();
+                var_browser.CustomImageLoaderThreaded.QueuedImage queuedImage = var_browser.CustomImageLoaderThreaded.QIPool.Get();
                 queuedImage.imgPath = url;
                 queuedImage.callback = SyncThumbnailTexture;
                 thumbnailQueuedImage = queuedImage;

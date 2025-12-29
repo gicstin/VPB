@@ -12,13 +12,38 @@ namespace var_browser
 {
     class SuperControllerHook
     {
+        static Dictionary<string, int> _priorityCache = new Dictionary<string, int>(StringComparer.Ordinal);
+        static object _priorityCacheLock = new object();
+
         static bool Has(string source, string value)
         {
             if (source == null || value == null) return false;
             return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        static int GetImagePriority(string path)
+        public static int GetImagePriority(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return 1000;
+            
+            int priority;
+            lock (_priorityCacheLock)
+            {
+                if (_priorityCache.TryGetValue(path, out priority))
+                    return priority;
+            }
+
+            priority = CalculateImagePriority(path);
+
+            lock (_priorityCacheLock)
+            {
+                if (_priorityCache.Count >= 10000) _priorityCache.Clear();
+                if (!_priorityCache.ContainsKey(path))
+                    _priorityCache.Add(path, priority);
+            }
+            return priority;
+        }
+
+        static int CalculateImagePriority(string path)
         {
             if (string.IsNullOrEmpty(path)) return 1000;
             string p = path;

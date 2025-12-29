@@ -57,7 +57,12 @@ namespace var_browser
                 webRequestHadError = false;
                 webRequestData = null;
                 callback = null;
+                priority = 1000;
+                insertionIndex = 0;
             }
+
+            public int priority;
+            public long insertionIndex;
 
 			public bool isThumbnail;
 
@@ -765,7 +770,7 @@ namespace var_browser
 
 		protected Dictionary<Texture2D, int> textureUseCount;
 
-		protected volatile LinkedList<QueuedImage> queuedImages;
+		protected PriorityQueue<QueuedImage> queuedImages;
 
 		protected int numRealQueuedImages;
 
@@ -917,7 +922,7 @@ namespace var_browser
 		{
 			if (queuedImages != null && queuedImages.Count > 0)
 			{
-				QueuedImage value = queuedImages.First.Value;
+				QueuedImage value = queuedImages.Peek();
 				value.Process();
 			}
 		}
@@ -939,7 +944,9 @@ namespace var_browser
 
             if (queuedImages != null)
             {
-                queuedImages.AddLast(qi);
+                qi.priority = SuperControllerHook.GetImagePriority(qi.imgPath);
+                qi.insertionIndex = ++_insertionOrderCounter;
+                queuedImages.Enqueue(qi);
             }
             numRealQueuedImages++;
             progressMax++;
@@ -953,7 +960,9 @@ namespace var_browser
 
             if (queuedImages != null)
             {
-                queuedImages.AddLast(qi);
+                qi.priority = 1000;
+                qi.insertionIndex = ++_insertionOrderCounter;
+                queuedImages.Enqueue(qi);
             }
         }
 
@@ -962,15 +971,9 @@ namespace var_browser
 			qi.isThumbnail = true;
 			if (queuedImages != null)
 			{
-				if (queuedImages.Count > 0)
-				{
-					LinkedListNode<QueuedImage> first = queuedImages.First;
-					queuedImages.AddAfter(first, qi);
-				}
-				else
-				{
-					queuedImages.AddLast(qi);
-				}
+                qi.priority = -1;
+                qi.insertionIndex = ++_insertionOrderCounter;
+                queuedImages.Enqueue(qi);
 			}
 		}
 
@@ -995,10 +998,10 @@ namespace var_browser
 			{
 				return;
 			}
-			QueuedImage value = queuedImages.First.Value;
+			QueuedImage value = queuedImages.Peek();
 			if (value.processed)
 			{
-				queuedImages.RemoveFirst();
+				queuedImages.Dequeue();
 				if (!value.isThumbnail)
 				{
 					progress++;
@@ -1089,10 +1092,10 @@ namespace var_browser
 		{
 			if (queuedImages != null)
 			{
-				while (queuedImages.Count > 0 && queuedImages.First.Value.cancel)
+				while (queuedImages.Count > 0 && queuedImages.Peek().cancel)
 				{
-                    QueuedImage qi = queuedImages.First.Value;
-					queuedImages.RemoveFirst();
+                    QueuedImage qi = queuedImages.Peek();
+					queuedImages.Dequeue();
                     QIPool.Return(qi);
 				}
 			}
@@ -1105,7 +1108,7 @@ namespace var_browser
 			{
 				return;
 			}
-			QueuedImage value = queuedImages.First.Value;
+			QueuedImage value = queuedImages.Peek();
 			if (value == null)
 			{
 				return;
@@ -1234,8 +1237,77 @@ namespace var_browser
 			textureTrackedCache = new Dictionary<Texture2D, bool>();
 			thumbnailCache = new Dictionary<string, Texture2D>();
 			textureUseCount = new Dictionary<Texture2D, int>();
-			queuedImages = new LinkedList<QueuedImage>();
+			queuedImages = new PriorityQueue<QueuedImage>((a, b) => {
+                int p = a.priority - b.priority;
+                if (p != 0) return p;
+                return a.insertionIndex.CompareTo(b.insertionIndex);
+            });
 		}
+
+        private static long _insertionOrderCounter = 0;
+
+        public class PriorityQueue<T>
+        {
+            private List<T> data;
+            private Comparison<T> comparison;
+
+            public PriorityQueue(Comparison<T> comparison)
+            {
+                this.data = new List<T>();
+                this.comparison = comparison;
+            }
+
+            public void Enqueue(T item)
+            {
+                data.Add(item);
+                int ci = data.Count - 1; 
+                while (ci > 0)
+                {
+                    int pi = (ci - 1) / 2;
+                    if (comparison(data[ci], data[pi]) >= 0) break;
+                    T tmp = data[ci]; data[ci] = data[pi]; data[pi] = tmp;
+                    ci = pi;
+                }
+            }
+
+            public T Dequeue()
+            {
+                int li = data.Count - 1;
+                T frontItem = data[0];
+                data[0] = data[li];
+                data.RemoveAt(li);
+
+                --li;
+                int pi = 0;
+                while (true)
+                {
+                    int ci = pi * 2 + 1;
+                    if (ci > li) break;
+                    int rc = ci + 1;
+                    if (rc <= li && comparison(data[rc], data[ci]) < 0) ci = rc;
+                    if (comparison(data[pi], data[ci]) <= 0) break;
+                    T tmp = data[pi]; data[pi] = data[ci]; data[ci] = tmp;
+                    pi = ci;
+                }
+                return frontItem;
+            }
+
+            public T Peek()
+            {
+                if (data.Count == 0) return default(T);
+                return data[0];
+            }
+
+            public int Count
+            {
+                get { return data.Count; }
+            }
+
+            public void Clear()
+            {
+                data.Clear();
+            }
+        }
 	}
 
 }
