@@ -51,7 +51,6 @@ namespace var_browser
         static bool sceneLoadEndArmed;
         static float sceneLoadEndArmRealtime;
         static bool sceneLoadAutoEndFailedLogged;
-        static bool sceneLoadSawImageWork;
 
         static long memAllocStart;
         static long memAllocEnd;
@@ -72,18 +71,6 @@ namespace var_browser
             public int count;
         }
 
-        struct SlowConvertSample
-        {
-            public string path;
-            public double ms;
-            public int srcW;
-            public int srcH;
-            public TextureFormat srcFmt;
-            public int dstW;
-            public int dstH;
-            public TextureFormat dstFmt;
-        }
-
         struct SlowDiskSample
         {
             public string op;
@@ -94,12 +81,17 @@ namespace var_browser
 
         static readonly Dictionary<string, PerfMetric> perf = new Dictionary<string, PerfMetric>(StringComparer.Ordinal);
         static readonly Dictionary<string, float> recentLogRealtime = new Dictionary<string, float>(StringComparer.Ordinal);
-        static readonly List<SlowConvertSample> slowConverts = new List<SlowConvertSample>(128);
         static readonly List<SlowDiskSample> slowDisk = new List<SlowDiskSample>(128);
         static bool pluginAwakeMarked;
         static bool readyLogged;
         static double? readyProcessSeconds;
         static bool startupReadyLogged;
+
+        static readonly Queue<string> logQueue = new Queue<string>();
+        static readonly object logLock = new object();
+        static Thread logThread;
+        static readonly AutoResetEvent logSignal = new AutoResetEvent(false);
+        static volatile bool logThreadRunning;
 
         static LogUtil()
         {
@@ -111,7 +103,54 @@ namespace var_browser
             {
                 processStartTime = DateTime.Now;
             }
+            StartLogThread();
         }
+
+        static void StartLogThread()
+        {
+            if (logThreadRunning) return;
+            logThreadRunning = true;
+            logThread = new Thread(LogThreadLoop);
+            logThread.IsBackground = true;
+            logThread.Start();
+        }
+
+        static void LogThreadLoop()
+        {
+            var buffer = new List<string>();
+            while (logThreadRunning)
+            {
+                logSignal.WaitOne();
+                if (!logThreadRunning) break;
+
+                while (true)
+                {
+                    buffer.Clear();
+                    lock (logLock)
+                    {
+                        if (logQueue.Count == 0) break;
+                        while (logQueue.Count > 0 && buffer.Count < 100)
+                        {
+                            buffer.Add(logQueue.Dequeue());
+                        }
+                    }
+
+                    if (buffer.Count > 0 && cleanLogWriter != null)
+                    {
+                        try
+                        {
+                            foreach (var msg in buffer)
+                            {
+                                cleanLogWriter.WriteLine(msg);
+                            }
+                            cleanLogWriter.Flush();
+                        }
+                        catch { }
+                    }
+                }
+            }
+        }
+
 
         public static void SetLogSource(ManualLogSource source)
         {
@@ -163,7 +202,7 @@ namespace var_browser
                 }
 
                 cleanLogWriter = new StreamWriter(new FileStream(fullPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite), Encoding.UTF8);
-                cleanLogWriter.AutoFlush = true;
+                //cleanLogWriter.AutoFlush = true; // Handled by background thread
                 cleanLogLastPath = fullPath;
             }
             catch
@@ -175,25 +214,26 @@ namespace var_browser
 
         static void WriteCleanLine(string msg)
         {
-            try
+            if (cleanLogWriter == null) return;
+            lock (logLock)
             {
-                if (cleanLogWriter == null) return;
-                cleanLogWriter.WriteLine(msg);
+                logQueue.Enqueue(msg);
             }
-            catch
-            {
-                try
-                {
-                    if (cleanLogWriter != null)
-                    {
-                        try { cleanLogWriter.Flush(); } catch { }
-                        try { cleanLogWriter.Dispose(); } catch { }
-                    }
-                }
-                catch { }
-                cleanLogWriter = null;
-                cleanLogLastPath = null;
-            }
+            logSignal.Set();
+        }
+
+        static string lastTimeString;
+        static long lastTimeTicks;
+
+        static string GetTimeString()
+        {
+             long now = DateTime.Now.Ticks / 10000000;
+             if (now != lastTimeTicks)
+             {
+                 lastTimeTicks = now;
+                 lastTimeString = DateTime.Now.ToString("HH:mm:ss");
+             }
+             return lastTimeString;
         }
 
         public static void MarkPluginAwake()
@@ -209,7 +249,7 @@ namespace var_browser
 
         public static void Log(string log)
         {
-            string msg = DateTime.Now.ToString("HH:mm:ss") + " (vb_log) " + log;
+            string msg = GetTimeString() + " (vb_log) " + log;
             WriteCleanLine(msg);
             if (logSource != null)
             {
@@ -220,7 +260,7 @@ namespace var_browser
         }
         public static void LogError(string log)
         {
-            string msg = DateTime.Now.ToString("HH:mm:ss") + " (vb_err) " + log;
+            string msg = GetTimeString() + " (vb_err) " + log;
             WriteCleanLine(msg);
             if (logSource != null)
             {
@@ -231,7 +271,7 @@ namespace var_browser
         }
         public static void LogWarning(string log)
         {
-            string msg = DateTime.Now.ToString("HH:mm:ss") + " (vb_warn) " + log;
+            string msg = GetTimeString() + " (vb_warn) " + log;
             WriteCleanLine(msg);
             if (logSource != null)
             {
@@ -255,33 +295,6 @@ namespace var_browser
             return 1;
         }
 
-        static int GetTextureSlowConvertMs()
-        {
-            try
-            {
-                if (Settings.Instance != null && Settings.Instance.TextureLogSlowConvertMs != null)
-                {
-                    return Settings.Instance.TextureLogSlowConvertMs.Value;
-                }
-            }
-            catch { }
-
-            return 50;
-        }
-
-        static int GetTextureSlowDiskMs()
-        {
-            try
-            {
-                if (Settings.Instance != null && Settings.Instance.TextureLogSlowDiskMs != null)
-                {
-                    return Settings.Instance.TextureLogSlowDiskMs.Value;
-                }
-            }
-            catch { }
-
-            return 20;
-        }
 
         static bool ShouldLogKey(string key, float intervalSeconds)
         {
@@ -314,31 +327,10 @@ namespace var_browser
             Log(message);
         }
 
-        public static void LogTextureSlowConvert(string imgPath, double ms, int srcW, int srcH, TextureFormat srcFmt, int dstW, int dstH, TextureFormat dstFmt)
-        {
-            if (GetTextureLogLevel() <= 0) return;
-            if (ms < GetTextureSlowConvertMs()) return;
-            if (slowConverts.Count < 2048)
-            {
-                slowConverts.Add(new SlowConvertSample
-                {
-                    path = imgPath,
-                    ms = ms,
-                    srcW = srcW,
-                    srcH = srcH,
-                    srcFmt = srcFmt,
-                    dstW = dstW,
-                    dstH = dstH,
-                    dstFmt = dstFmt,
-                });
-            }
-            LogWarning("TEX_SLOW_CONVERT " + ms.ToString("0.00") + "ms | " + srcFmt + "(" + srcW + "," + srcH + ") -> " + dstFmt + "(" + dstW + "," + dstH + ") | " + imgPath);
-        }
-
         public static void LogTextureSlowDisk(string op, string path, double ms, long bytes)
         {
             if (GetTextureLogLevel() <= 0) return;
-            if (ms < GetTextureSlowDiskMs()) return;
+            if (ms < 20) return;
             if (slowDisk.Count < 2048)
             {
                 slowDisk.Add(new SlowDiskSample
@@ -505,13 +497,11 @@ namespace var_browser
             sceneLoadNotBusyStableFrames = 0;
             sceneLoadEndArmed = false;
             sceneLoadEndArmRealtime = 0f;
-            sceneLoadSawImageWork = false;
 
             imageLastActivityRealtime = Time.realtimeSinceStartup;
 
             CaptureMemoryStart();
 
-            slowConverts.Clear();
             slowDisk.Clear();
 
             sceneLoadInternalActive = true;
@@ -733,7 +723,6 @@ namespace var_browser
         public static void BeginImageWork()
         {
             MarkImageActivity();
-            sceneLoadSawImageWork = true;
             Interlocked.Increment(ref imageWorkInFlight);
         }
 
@@ -759,11 +748,6 @@ namespace var_browser
             }
 
             // If any image activity happens during a scene load, we must wait for image-idle before ending.
-            if (sceneLoadActive)
-            {
-                sceneLoadSawImageWork = true;
-            }
-
             // Cancel any pending end if a new image burst starts.
             sceneLoadEndArmed = false;
             sceneLoadNotBusyStableFrames = 0;
@@ -868,7 +852,6 @@ namespace var_browser
             }
 
             perf.Clear();
-            slowConverts.Clear();
             slowDisk.Clear();
             sceneLoadAutoEndFailedLogged = false;
             sceneLoadNotBusyStableFrames = 0;
@@ -876,40 +859,12 @@ namespace var_browser
 
         static void LogTextureOffenderSummary()
         {
-            if (slowConverts.Count == 0 && slowDisk.Count == 0)
+            if (slowDisk.Count == 0)
             {
                 return;
             }
 
             const int topN = 5;
-
-            if (slowConverts.Count > 0)
-            {
-                var top = slowConverts.OrderByDescending(s => s.ms).Take(topN).ToArray();
-                var sb = new StringBuilder(512);
-                sb.Append("[VB] TEX_TOP_CONVERT ");
-                for (int i = 0; i < top.Length; i++)
-                {
-                    if (i > 0) sb.Append(" | ");
-                    var s = top[i];
-                    sb.Append(s.ms.ToString("0.00"));
-                    sb.Append("ms ");
-                    sb.Append(s.srcFmt);
-                    sb.Append("(");
-                    sb.Append(s.srcW);
-                    sb.Append("x");
-                    sb.Append(s.srcH);
-                    sb.Append(") -> ");
-                    sb.Append(s.dstFmt);
-                    sb.Append("(");
-                    sb.Append(s.dstW);
-                    sb.Append("x");
-                    sb.Append(s.dstH);
-                    sb.Append(") ");
-                    sb.Append(s.path);
-                }
-                LogWarning(sb.ToString());
-            }
 
             if (slowDisk.Count > 0)
             {

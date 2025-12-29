@@ -12,29 +12,33 @@ namespace var_browser
 {
     class SuperControllerHook
     {
+        static bool Has(string source, string value)
+        {
+            if (source == null || value == null) return false;
+            return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
         static int GetImagePriority(string path)
         {
             if (string.IsNullOrEmpty(path)) return 1000;
-            string p;
-            try { p = path.ToLowerInvariant(); } catch { p = path; }
+            string p = path;
 
-            if (p.Contains("/hair/") || p.Contains("/hairstyles/") || p.Contains("/textures/hair") || p.Contains("hair_") || p.Contains("scalp") || p.Contains("strand") || p.Contains("hairtex")) return 0;
+            if (Has(p, "/hair/") || Has(p, "/hairstyles/") || Has(p, "/textures/hair") || Has(p, "hair_") || Has(p, "scalp") || Has(p, "strand") || Has(p, "hairtex")) return 0;
 
-            if (p.Contains("/textures/makeups/") || p.Contains("/textures/makeup/") || p.Contains("/makeups/")) return 1;
-            if (p.Contains("/textures/decals/") || p.Contains("/textures/decal/") || p.Contains("/decals/") || p.Contains("/decal/")) return 1;
-            if (p.Contains("/textures/overlays/") || p.Contains("/textures/overlay/") || p.Contains("/overlays/") || p.Contains("/overlay/")) return 1;
-            if (p.Contains("facemask") || p.Contains("face_mask") || p.Contains("mask") || p.Contains("opacity") || p.Contains("alpha"))
+            if (Has(p, "/textures/makeups/") || Has(p, "/textures/makeup/") || Has(p, "/makeups/")) return 1;
+            if (Has(p, "/textures/decals/") || Has(p, "/textures/decal/") || Has(p, "/decals/") || Has(p, "/decal/")) return 1;
+            if (Has(p, "/textures/overlays/") || Has(p, "/textures/overlay/") || Has(p, "/overlays/") || Has(p, "/overlay/")) return 1;
+            if (Has(p, "facemask") || Has(p, "face_mask") || Has(p, "mask") || Has(p, "opacity") || Has(p, "alpha"))
             {
-                if (p.Contains("face") || p.Contains("makeup") || p.Contains("makeups") || p.Contains("freckle") || p.Contains("blush")) return 1;
+                if (Has(p, "face") || Has(p, "makeup") || Has(p, "makeups") || Has(p, "freckle") || Has(p, "blush")) return 1;
             }
-            if (p.Contains("freckle") || p.Contains("blush") || p.Contains("eyeshadow") || p.Contains("eye_shadow") || p.Contains("eyeliner") || p.Contains("eye_liner") || p.Contains("lipstick") || p.Contains("lip") || p.Contains("brow") || p.Contains("eyebrow") || p.Contains("foundation") || p.Contains("concealer") || p.Contains("highlight") || p.Contains("highlighter") || p.Contains("contour") || p.Contains("powder")) return 1;
-            if (p.Contains("/textures/") && (p.Contains("/face") || p.Contains("faced") || p.Contains("face_"))) return 1;
-            if (p.Contains("mouth")) return 2;
-            if (p.Contains("eye") || p.Contains("iris") || p.Contains("cornea") || p.Contains("eyeball")) return 3;
-            if (p.Contains("head")) return 4;
-            if (p.Contains("torso") || p.Contains("body")) return 5;
-            if (p.Contains("limb") || p.Contains("arms") || p.Contains("legs")) return 6;
+            if (Has(p, "freckle") || Has(p, "blush") || Has(p, "eyeshadow") || Has(p, "eye_shadow") || Has(p, "eyeliner") || Has(p, "eye_liner") || Has(p, "lipstick") || Has(p, "lip") || Has(p, "brow") || Has(p, "eyebrow") || Has(p, "foundation") || Has(p, "concealer") || Has(p, "highlight") || Has(p, "highlighter") || Has(p, "contour") || Has(p, "powder")) return 1;
+            if (Has(p, "/textures/") && (Has(p, "/face") || Has(p, "faced") || Has(p, "face_"))) return 1;
+            if (Has(p, "mouth")) return 2;
+            if (Has(p, "eye") || Has(p, "iris") || Has(p, "cornea") || Has(p, "eyeball")) return 3;
+            if (Has(p, "head")) return 4;
+            if (Has(p, "torso") || Has(p, "body")) return 5;
+            if (Has(p, "limb") || Has(p, "arms") || Has(p, "legs")) return 6;
             return 100;
         }
 

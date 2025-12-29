@@ -19,6 +19,42 @@ namespace var_browser
 
 		public class QueuedImage
 		{
+            public void Reset()
+            {
+                isThumbnail = false;
+                imgPath = null;
+                skipCache = false;
+                forceReload = false;
+                createMipMaps = false;
+                compress = true;
+                linear = false;
+                processed = false;
+                preprocessed = false;
+                cancel = false;
+                finished = false;
+                isNormalMap = false;
+                createAlphaFromGrayscale = false;
+                createNormalFromBump = false;
+                bumpStrength = 1f;
+                invert = false;
+                setSize = false;
+                fillBackground = false;
+                width = 0;
+                height = 0;
+                raw = null;
+                hadError = false;
+                errorText = null;
+                textureFormat = TextureFormat.RGBA32;
+                tex = null;
+                rawImageToLoad = null;
+                useWebCache = false;
+                webRequest = null;
+                webRequestDone = false;
+                webRequestHadError = false;
+                webRequestData = null;
+                callback = null;
+            }
+
 			public bool isThumbnail;
 
 			public string imgPath;
@@ -635,6 +671,31 @@ namespace var_browser
 					callback = null;
 				}
 			}
+        }
+
+		public static class QIPool
+        {
+            static Stack<QueuedImage> stack = new Stack<QueuedImage>();
+            static object lockObj = new object();
+
+            public static QueuedImage Get()
+            {
+                lock(lockObj)
+                {
+                    if (stack.Count > 0) return stack.Pop();
+                }
+                return new QueuedImage();
+            }
+
+            public static void Return(QueuedImage qi)
+            {
+                if (qi == null) return;
+                qi.Reset();
+                lock(lockObj)
+                {
+                    stack.Push(qi);
+                }
+            }
         }
 
 		protected class ImageLoaderTaskInfo

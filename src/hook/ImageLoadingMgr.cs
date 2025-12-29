@@ -342,7 +342,7 @@ namespace var_browser
 
                 if (tempTexture != null)
                 {
-                    RenderTexture.ReleaseTemporary(tempTexture);
+            RenderTexture.ReleaseTemporary(tempTexture);
                 }
             }
         }
@@ -405,7 +405,6 @@ namespace var_browser
             int height = 0;
             TextureFormat textureFormat=TextureFormat.DXT1;
             string metaToUse = null;
-            bool legacy = false;
             if (File.Exists(metaPath))
             {
                 metaToUse = metaPath;
@@ -413,7 +412,6 @@ namespace var_browser
             else if (File.Exists(legacyMetaPath))
             {
                 metaToUse = legacyMetaPath;
-                legacy = true;
             }
             if (metaToUse != null)
             {
@@ -1396,13 +1394,8 @@ namespace var_browser
             resultTexture.Apply();
             RenderTexture.active = previous;
 
-            var swConvert = System.Diagnostics.Stopwatch.StartNew();
 
             resultTexture.Compress(true);
-
-            LogUtil.PerfAdd("Img.Convert", swConvert.Elapsed.TotalMilliseconds, 0);
-            LogUtil.LogTextureSlowConvert(qi.imgPath, swConvert.Elapsed.TotalMilliseconds, qi.tex.width, qi.tex.height, qi.tex.format, width, height, resultTexture.format);
-
             RenderTexture.ReleaseTemporary(tempTexture);
 
             LogUtil.LogTextureTrace(

@@ -30,11 +30,15 @@ namespace var_browser
         public ConfigEntry<bool> InflightDedupEnabled;
         public ConfigEntry<bool> PrioritizeFaceTextures;
         public ConfigEntry<bool> PrioritizeHairTextures;
+        public ConfigEntry<bool> OptimizeGameObjectFind;
+        public ConfigEntry<bool> OptimizePhysicsRaycast;
+        public ConfigEntry<bool> OptimizeMeshNormals;
+        public ConfigEntry<bool> OptimizeMeshBounds;
+        public ConfigEntry<bool> OptimizeMeshTangents;
 
         public ConfigEntry<string> LastGalleryPage;
         public ConfigEntry<int> TextureLogLevel;
-        public ConfigEntry<int> TextureLogSlowConvertMs;
-        public ConfigEntry<int> TextureLogSlowDiskMs;
+
         public ConfigEntry<bool> LogImageQueueEvents;
         public ConfigEntry<bool> LogVerboseUi;
         public ConfigEntry<bool> CleanLogEnabled;
@@ -64,10 +68,14 @@ namespace var_browser
             PrioritizeFaceTextures = config.Bind<bool>("Optimze", "PrioritizeFaceTextures", true, "prioritize face/makeup/overlay textures in VaM image load queue.");
             PrioritizeHairTextures = config.Bind<bool>("Optimze", "PrioritizeHairTextures", true, "prioritize hair in VaM image load queue.");
             ScenePrewarmEnabled = config.Bind<bool>("Optimze", "ScenePrewarmEnabled", true, "prewarm var_browser_cache entries for scene textures during scene load.");
+            
+            OptimizeGameObjectFind = config.Bind<bool>("Unity Patches", "OptimizeGameObjectFind", true, "Cache GameObject.Find results.");
+            OptimizePhysicsRaycast = config.Bind<bool>("Unity Patches", "OptimizePhysicsRaycast", true, "Cache Physics.Raycast results per frame.");
+            OptimizeMeshNormals = config.Bind<bool>("Unity Patches", "OptimizeMeshNormals", true, "Debounce Mesh.RecalculateNormals calls.");
+            OptimizeMeshBounds = config.Bind<bool>("Unity Patches", "OptimizeMeshBounds", true, "Debounce Mesh.RecalculateBounds calls.");
+            OptimizeMeshTangents = config.Bind<bool>("Unity Patches", "OptimizeMeshTangents", true, "Debounce Mesh.RecalculateTangents calls.");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 1, "0=off, 1=summary only, 2=verbose per-texture trace.");
-            TextureLogSlowConvertMs = config.Bind<int>("Logging", "TextureLogSlowConvertMs", 50, "Warn when texture compress/convert exceeds this duration (ms).");
-            TextureLogSlowDiskMs = config.Bind<int>("Logging", "TextureLogSlowDiskMs", 20, "Warn when texture disk read/write exceeds this duration (ms).");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");
             LogVerboseUi = config.Bind<bool>("Logging", "LogVerboseUi", false, "Log verbose UI lifecycle messages (can be noisy).");
             CleanLogEnabled = config.Bind<bool>("Logging", "CleanLogEnabled", true, "Write a separate clean var_browser log file (no Unity Filename footer).");

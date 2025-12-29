@@ -14,8 +14,16 @@ namespace var_browser
         static HashSet<string> s_TempResult = new HashSet<string>();
         public static HashSet<string> Parse(string text)
         {
-            if (string.IsNullOrEmpty(text)) return null;
             s_TempResult.Clear();
+            if (string.IsNullOrEmpty(text)) return s_TempResult;
+            Parse(text, s_TempResult);
+            return s_TempResult;
+        }
+
+        public static void Parse(string text, HashSet<string> results)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            
             //(creater).(varname).(version):
             for (int i = 0; i < text.Length - 5;)
             {
@@ -38,7 +46,7 @@ namespace var_browser
                                     if (ReadColon(text, ref i))
                                     {
                                         string uid = s_TempBuilder.ToString();// string.Format("{0}.{1}.{2}", creater, varName, version);
-                                        s_TempResult.Add(uid);
+                                        results.Add(uid);
                                     }
                                 }
                             }
@@ -46,8 +54,6 @@ namespace var_browser
                     }
                 }
             }
-
-            return s_TempResult;
         }
         static int ReadString(StringBuilder builder, string text, ref int idx, int leastLeftCntToRead)
         {

@@ -861,6 +861,7 @@ namespace var_browser
 			foreach (var_browser.CustomImageLoaderThreaded.QueuedImage queuedThumbnail in queuedThumbnails)
 			{
 				queuedThumbnail.cancel = true;
+                var_browser.CustomImageLoaderThreaded.QIPool.Return(queuedThumbnail);
 			}
 			queuedThumbnails.Clear();
 		}
@@ -1083,7 +1084,7 @@ namespace var_browser
 
 				fb.altIcon.texture = null;
 
-				CustomImageLoaderThreaded.QueuedImage queuedImage = new CustomImageLoaderThreaded.QueuedImage();
+				CustomImageLoaderThreaded.QueuedImage queuedImage = CustomImageLoaderThreaded.QIPool.Get();
 				queuedImage.imgPath = fb.imgPath;
 				queuedImage.width = 256;
 				queuedImage.height = 256;
@@ -2047,8 +2048,8 @@ namespace var_browser
 		private void SyncDisplayed()
 		{
 #if DEBUG
-			string stackTrace = new System.Diagnostics.StackTrace().ToString();
-			LogUtil.LogWarning("SyncDisplayed "+ stackTrace);
+			// string stackTrace = new System.Diagnostics.StackTrace().ToString();
+			// LogUtil.LogWarning("SyncDisplayed "+ stackTrace);
 #endif
 			//LogUtil.LogWarning("SyncDisplayed");
 
@@ -2578,6 +2579,7 @@ namespace var_browser
 			foreach (var qi in toRemove)
 			{
 				queuedThumbnails.Remove(qi);
+                CustomImageLoaderThreaded.QIPool.Return(qi);
 			}
 		}
 

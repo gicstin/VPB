@@ -248,6 +248,11 @@ namespace var_browser
             //    set.Add(string.Format("{0}.{1}.{2}", item.Groups[1], item.Groups[2], item.Groups[3]));
             //}
             var set= VarNameParser.Parse(text);
+            return EnsureInstalledBySet(set);
+        }
+
+        public static bool EnsureInstalledBySet(HashSet<string> set)
+        {
             if (set == null)
                 return false;
 

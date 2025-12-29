@@ -34,6 +34,11 @@ namespace var_browser
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
+        private bool m_SettingsOptimizeGameObjectFindDraft;
+        private bool m_SettingsOptimizePhysicsRaycastDraft;
+        private bool m_SettingsOptimizeMeshNormalsDraft;
+        private bool m_SettingsOptimizeMeshBoundsDraft;
+        private bool m_SettingsOptimizeMeshTangentsDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -123,6 +128,11 @@ namespace var_browser
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
+            m_SettingsOptimizeGameObjectFindDraft = (Settings.Instance != null && Settings.Instance.OptimizeGameObjectFind != null) ? Settings.Instance.OptimizeGameObjectFind.Value : true;
+            m_SettingsOptimizePhysicsRaycastDraft = (Settings.Instance != null && Settings.Instance.OptimizePhysicsRaycast != null) ? Settings.Instance.OptimizePhysicsRaycast.Value : true;
+            m_SettingsOptimizeMeshNormalsDraft = (Settings.Instance != null && Settings.Instance.OptimizeMeshNormals != null) ? Settings.Instance.OptimizeMeshNormals.Value : true;
+            m_SettingsOptimizeMeshBoundsDraft = (Settings.Instance != null && Settings.Instance.OptimizeMeshBounds != null) ? Settings.Instance.OptimizeMeshBounds.Value : true;
+            m_SettingsOptimizeMeshTangentsDraft = (Settings.Instance != null && Settings.Instance.OptimizeMeshTangents != null) ? Settings.Instance.OptimizeMeshTangents.Value : true;
             m_SettingsError = null;
         }
 
@@ -222,6 +232,60 @@ namespace var_browser
                 GUILayout.Label("It does this by reordering VaM's image load queue (it does not download anything extra).", m_StyleInfoCardText);
             });
 
+            GUILayout.Space(10);
+            GUILayout.Label("Optimizations (Requires Restart)", m_StyleHeader);
+            GUILayout.Space(6);
+
+            // Optimize GameObject.Find
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsOptimizeGameObjectFindDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsOptimizeGameObjectFindDraft = !m_SettingsOptimizeGameObjectFindDraft;
+            }
+            GUILayout.Label("Cache GameObject.Find");
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            // Optimize Physics.Raycast
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsOptimizePhysicsRaycastDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsOptimizePhysicsRaycastDraft = !m_SettingsOptimizePhysicsRaycastDraft;
+            }
+            GUILayout.Label("Cache Physics.Raycast (per frame)");
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            // Optimize Mesh.RecalculateNormals
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsOptimizeMeshNormalsDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsOptimizeMeshNormalsDraft = !m_SettingsOptimizeMeshNormalsDraft;
+            }
+            GUILayout.Label("Debounce Mesh.RecalculateNormals");
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            // Optimize Mesh.RecalculateBounds
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsOptimizeMeshBoundsDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsOptimizeMeshBoundsDraft = !m_SettingsOptimizeMeshBoundsDraft;
+            }
+            GUILayout.Label("Debounce Mesh.RecalculateBounds");
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            // Optimize Mesh.RecalculateTangents
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsOptimizeMeshTangentsDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsOptimizeMeshTangentsDraft = !m_SettingsOptimizeMeshTangentsDraft;
+            }
+            GUILayout.Label("Debounce Mesh.RecalculateTangents");
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
             if (!string.IsNullOrEmpty(m_SettingsError))
             {
                 GUILayout.Space(4);
@@ -274,6 +338,12 @@ namespace var_browser
                             Settings.Instance.PrioritizeHairTextures.Value = m_SettingsPrioritizeHairTexturesDraft;
                         }
                     }
+                    if (Settings.Instance != null && Settings.Instance.OptimizeGameObjectFind != null) Settings.Instance.OptimizeGameObjectFind.Value = m_SettingsOptimizeGameObjectFindDraft;
+                    if (Settings.Instance != null && Settings.Instance.OptimizePhysicsRaycast != null) Settings.Instance.OptimizePhysicsRaycast.Value = m_SettingsOptimizePhysicsRaycastDraft;
+                    if (Settings.Instance != null && Settings.Instance.OptimizeMeshNormals != null) Settings.Instance.OptimizeMeshNormals.Value = m_SettingsOptimizeMeshNormalsDraft;
+                    if (Settings.Instance != null && Settings.Instance.OptimizeMeshBounds != null) Settings.Instance.OptimizeMeshBounds.Value = m_SettingsOptimizeMeshBoundsDraft;
+                    if (Settings.Instance != null && Settings.Instance.OptimizeMeshTangents != null) Settings.Instance.OptimizeMeshTangents.Value = m_SettingsOptimizeMeshTangentsDraft;
+
                     UIKey = parsed;
                     CustomSceneKey = parsedCustomSceneKey;
                     CategorySceneKey = parsedCategorySceneKey;
@@ -711,11 +781,13 @@ namespace var_browser
             Debug.Log("var browser hook start");
             var harmony = new Harmony("var_browser_hook");
             // Patch VaM/Harmony hook points.
+            UnityEngineHook.Init();
             harmony.PatchAll();
             harmony.PatchAll(typeof(AtomHook));
             harmony.PatchAll(typeof(HubResourcePackageHook));
             harmony.PatchAll(typeof(SuperControllerHook));
             harmony.PatchAll(typeof(PatchAssetLoader));
+            harmony.PatchAll(typeof(UnityEngineHook));
 
         }
 
@@ -817,6 +889,7 @@ namespace var_browser
         static bool m_Show = true; // Made static so it can be toggled via external message calls.
         void Update()
         {
+            UnityEngineHook.Update();
             VdsLauncher.TryExecuteOnce();
             float unscaledDt = Time.unscaledDeltaTime;
             if (LogUtil.IsSceneLoadActive())

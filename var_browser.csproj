@@ -269,6 +269,7 @@
     <Compile Include="src\hook\SuperControllerHook.cs" />
     <Compile Include="src\hook\TagFilter.cs" />
     <Compile Include="src\hook\Tools.cs" />
+    <Compile Include="src\hook\UnityEngineHook.cs" />
     <Compile Include="src\hook\uFileBrowser\DirectoryButton.cs" />
     <Compile Include="src\hook\uFileBrowser\FileBrowser.cs" />
     <Compile Include="src\hook\uFileBrowser\FileBrowserCallback.cs" />

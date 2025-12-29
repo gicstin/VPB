@@ -174,13 +174,53 @@ namespace var_browser
             // This step can be slow when the JSON is large
             if (newInst!=null)
             {
-                string str = newInst.ToString();
-                FileButton.EnsureInstalledInternal(str);
+                EnsureInstalledFromJSON(newInst);
             }
             else
             {
-                string str = inputJSON.ToString();
-                FileButton.EnsureInstalledInternal(str);
+                EnsureInstalledFromJSON(inputJSON);
+            }
+        }
+
+        static void EnsureInstalledFromJSON(JSONNode node)
+        {
+            var results = new HashSet<string>();
+            ScanJSON(node, results);
+            if (results.Count > 0)
+            {
+                bool dirty = FileButton.EnsureInstalledBySet(results);
+                if (dirty)
+                {
+                    MVR.FileManagement.FileManager.Refresh();
+                    var_browser.FileManager.Refresh();
+                }
+            }
+        }
+
+        static void ScanJSON(JSONNode node, HashSet<string> results)
+        {
+            if (node == null) return;
+
+            if (node is JSONClass)
+            {
+                var cls = node as JSONClass;
+                foreach (string k in cls.Keys)
+                {
+                    ScanJSON(cls[k], results);
+                }
+            }
+            else if (node is JSONArray)
+            {
+                var arr = node as JSONArray;
+                for (int i = 0; i < arr.Count; i++)
+                {
+                    ScanJSON(arr[i], results);
+                }
+            }
+            else
+            {
+                string v = node.Value;
+                VarNameParser.Parse(v, results);
             }
         }
     }
