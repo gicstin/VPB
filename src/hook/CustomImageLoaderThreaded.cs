@@ -41,6 +41,10 @@ namespace var_browser
                 fillBackground = false;
                 width = 0;
                 height = 0;
+                if (raw != null)
+                {
+                    ByteArrayPool.Return(raw);
+                }
                 raw = null;
                 hadError = false;
                 errorText = null;
@@ -321,7 +325,7 @@ namespace var_browser
 				int num7 = width * height;
 				int num8 = num7 * num3;
 				int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
-				raw = new byte[num9];
+				raw = ByteArrayPool.Rent(num9);
 				Marshal.Copy(bitmapData.Scan0, raw, 0, num8);
 				bitmap2.UnlockBits(bitmapData);
 				bool flag = isNormalMap && num3 == 4;
@@ -356,7 +360,7 @@ namespace var_browser
 				}
 				if (createNormalFromBump)
 				{
-					byte[] array = new byte[num8 * 2];
+					byte[] array = ByteArrayPool.Rent(num8 * 2);
 					float[][] array2 = new float[height][];
 					for (int l = 0; l < height; l++)
 					{
@@ -447,6 +451,7 @@ namespace var_browser
 							array[num46 + 3] = byte.MaxValue;
 						}
 					}
+					ByteArrayPool.Return(raw);
 					raw = array;
 				}
 				solidBrush.Dispose();
@@ -473,7 +478,18 @@ namespace var_browser
 							{
 								string jsonString = FileManager.ReadAllText(text);
 								ReadMetaJson(jsonString);
-								raw = FileManager.ReadAllBytes(webCachePath);
+								using (Stream fs = new FileStream(webCachePath, FileMode.Open, FileAccess.Read))
+								{
+									int len = (int)fs.Length;
+									raw = ByteArrayPool.Rent(len);
+									int read = 0;
+									while (read < len)
+									{
+										int r = fs.Read(raw, read, len - read);
+										if (r == 0) break;
+										read += r;
+									}
+								}
 								preprocessed = true;
 							}
 							else
@@ -524,7 +540,18 @@ namespace var_browser
 								{
 									string jsonString2 = FileManager.ReadAllText(text2);
 									ReadMetaJson(jsonString2);
-									raw = FileManager.ReadAllBytes(diskCachePath);
+									using (Stream fs = new FileStream(diskCachePath, FileMode.Open, FileAccess.Read))
+									{
+										int len = (int)fs.Length;
+										raw = ByteArrayPool.Rent(len);
+										int read = 0;
+										while (read < len)
+										{
+											int r = fs.Read(raw, read, len - read);
+											if (r == 0) break;
+											read += r;
+										}
+									}
 									preprocessed = true;
 								}
 								else
@@ -656,6 +683,11 @@ namespace var_browser
 						}
 					}
 				}
+                if (raw != null)
+                {
+                    ByteArrayPool.Return(raw);
+                    raw = null;
+                }
 				finished = true;
 			}
 
@@ -971,6 +1003,13 @@ namespace var_browser
 				{
 					progress++;
 					numRealQueuedImages--;
+                    
+                    // Log stats every 50 images so we can see it working during heavy loads
+                    if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
+                    {
+                        LogUtil.Log(ByteArrayPool.GetStatus());
+                    }
+
 					if (numRealQueuedImages == 0)
 					{
 						progress = 0;
@@ -979,6 +1018,8 @@ namespace var_browser
 						{
 							progressHUD.SetActive(false);
 						}
+                        if(ByteArrayPool.TotalRented > 0)
+                            LogUtil.Log(ByteArrayPool.GetStatus());
 					}
 					else
 					{
@@ -1010,6 +1051,7 @@ namespace var_browser
 					}
 				}
 				value.DoCallback();
+                QIPool.Return(value);
 			}
 			if (numRealQueuedImages != 0)
 			{
@@ -1049,7 +1091,9 @@ namespace var_browser
 			{
 				while (queuedImages.Count > 0 && queuedImages.First.Value.cancel)
 				{
+                    QueuedImage qi = queuedImages.First.Value;
 					queuedImages.RemoveFirst();
+                    QIPool.Return(qi);
 				}
 			}
 		}
@@ -1184,6 +1228,7 @@ namespace var_browser
 		private void Awake()
 		{
 			singleton = this;
+            LogUtil.Log("CustomImageLoaderThreaded initialized. ByteArrayPool ready.");
 			immediateTextureCache = new Dictionary<string, Texture2D>();
 			textureCache = new Dictionary<string, Texture2D>();
 			textureTrackedCache = new Dictionary<Texture2D, bool>();

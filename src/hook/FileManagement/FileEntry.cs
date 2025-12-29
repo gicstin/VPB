@@ -104,19 +104,22 @@ namespace var_browser
 					{
 						string txt = File.ReadAllText(GlobalInfo.FavoritePath);
 						var favorites = JsonUtility.FromJson<SerializableFavorite>(txt);
-						foreach (var item in favorites.FavoriteNames)
+						if (favorites != null && favorites.FavoriteNames != null)
 						{
-							string key = item;
-							string[] splits = item.Split(':');
-                            if (splits.Length ==2)
-                            {
-                                string[] array = splits[0].Split('.');
-                                if (array.Length == 3)
-                                {
-									key = array[0] + "." + array[1] + ":" + splits[1];
+							foreach (var item in favorites.FavoriteNames)
+							{
+								string key = item;
+								string[] splits = item.Split(':');
+								if (splits.Length == 2)
+								{
+									string[] array = splits[0].Split('.');
+									if (array.Length == 3)
+									{
+										key = array[0] + "." + array[1] + ":" + splits[1];
+									}
 								}
-                            }
-							s_FavoriteLookup.Add(key);
+								s_FavoriteLookup.Add(key);
+							}
 						}
 					}
 				}
@@ -137,9 +140,12 @@ namespace var_browser
 					{
 						string txt = File.ReadAllText(GlobalInfo.AutoInstallPath);
 						var favorites = JsonUtility.FromJson<SerializableNames>(txt);
-						foreach (var item in favorites.Names)
+						if (favorites != null && favorites.Names != null)
 						{
-							s_AutoInstallLookup.Add(item);
+							foreach (var item in favorites.Names)
+							{
+								s_AutoInstallLookup.Add(item);
+							}
 						}
 					}
 				}

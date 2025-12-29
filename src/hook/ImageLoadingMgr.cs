@@ -319,6 +319,10 @@ namespace var_browser
                 tmp.Compress(true);
 
                 var bytes = tmp.GetRawTextureData();
+                // Copy to pooled buffer for async write to avoid GC alloc
+                byte[] pooledBytes = ByteArrayPool.Rent(bytes.Length);
+                Array.Copy(bytes, pooledBytes, bytes.Length);
+                int realLength = bytes.Length;
                 
                 JSONClass jSONClass = new JSONClass();
                 jSONClass["type"] = "image";
@@ -328,7 +332,7 @@ namespace var_browser
                 jSONClass["resizedHeight"].AsInt = height;
                 jSONClass["format"] = tmp.format.ToString();
                 
-                WriteDiskCacheAsync(realDiskCachePathCache, bytes, diskCachePath + ".meta", jSONClass.ToString(string.Empty));
+                WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, realLength, diskCachePath + ".meta", jSONClass.ToString(string.Empty));
 
                 // Note: we intentionally do NOT RegisterTexture or swap qi.tex in this async cache path.
                 // This prevents unexpected texture replacement mid-frame; future loads will hit disk/mem cache.
@@ -347,18 +351,27 @@ namespace var_browser
             }
         }
 
-        void WriteDiskCacheAsync(string pathCache, byte[] bytes, string pathMeta, string metaContent)
+        void WriteDiskCacheAsync(string pathCache, byte[] bytes, int length, string pathMeta, string metaContent)
         {
             ThreadPool.QueueUserWorkItem((state) =>
             {
                 try
                 {
                     if (bytes != null && !string.IsNullOrEmpty(pathCache))
-                        File.WriteAllBytes(pathCache, bytes);
+                    {
+                        using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
+                        {
+                            fs.Write(bytes, 0, length);
+                        }
+                    }
                     if (!string.IsNullOrEmpty(metaContent) && !string.IsNullOrEmpty(pathMeta))
                         File.WriteAllText(pathMeta, metaContent);
                 }
                 catch { }
+                finally
+                {
+                    if (bytes != null) ByteArrayPool.Return(bytes);
+                }
             });
         }
 
@@ -439,22 +452,46 @@ namespace var_browser
                     LogUtil.PerfAdd("Img.Cache.DiskHit", 0, 0);
                     LogUtil.LogTextureTrace("Img.Request.DiskHit:" + diskPathToUse, "request use disk cache:" + diskPathToUse);
                     var swRead = System.Diagnostics.Stopwatch.StartNew();
-                    var bytes = File.ReadAllBytes(diskPathToUse);
-                    LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
-                    LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
-                    Texture2D tex = new Texture2D(width, height, textureFormat, false,qi.linear);
-                    //tex.name = qi.cacheSignature;
-                    bool success = true;
+                    byte[] bytes = null;
+                    long bytesLen = 0;
+                    bool success = false;
+                    Texture2D tex = null;
+
                     try
                     {
+                        using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
+                        {
+                            int len = (int)fs.Length;
+                            bytes = ByteArrayPool.Rent(len);
+                            bytesLen = len;
+                            int offset = 0;
+                            int remaining = len;
+                            while (remaining > 0)
+                            {
+                                int read = fs.Read(bytes, offset, remaining);
+                                if (read <= 0) break;
+                                offset += read;
+                                remaining -= read;
+                            }
+                        }
+
+                        LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytesLen);
+                        LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytesLen);
+
+                        tex = new Texture2D(width, height, textureFormat, false, qi.linear);
                         tex.LoadRawTextureData(bytes);
+                        success = true;
                     }
                     catch (System.Exception ex)
                     {
-                        success = false;
                         LogUtil.LogError("request load disk cache fail:" + diskPathToUse + " " + ex.ToString());
-                        File.Delete(diskPathToUse);
+                        try { File.Delete(diskPathToUse); } catch { }
                     }
+                    finally
+                    {
+                        if (bytes != null) ByteArrayPool.Return(bytes);
+                    }
+
                     if (success)
                     {
                         tex.Apply();
@@ -1350,17 +1387,42 @@ namespace var_browser
                 LogUtil.PerfAdd("Img.Resize.FromDisk", 0, 0);
                 LogUtil.LogTextureTrace("Img.Resize.DiskHit:" + diskPathToUse, "resize use disk cache:" + diskPathToUse);
                 var swRead = System.Diagnostics.Stopwatch.StartNew();
-                var bytes = File.ReadAllBytes(diskPathToUse);
-                LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
-                LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytes != null ? bytes.LongLength : 0);
+                byte[] bytes = null;
+                long bytesLen = 0;
 
-                resultTexture = new Texture2D(width, height, localFormat, false, qi.linear);
-                //resultTexture.name = qi.cacheSignature;
-                resultTexture.LoadRawTextureData(bytes);
-                resultTexture.Apply();
-                RegisterTexture(diskCachePath, resultTexture);
-                ResolveInflightWaiters(diskCachePath, resultTexture);
-                return resultTexture;
+                try
+                {
+                    using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
+                    {
+                        int len = (int)fs.Length;
+                        bytes = ByteArrayPool.Rent(len);
+                        bytesLen = len;
+                        int offset = 0;
+                        int remaining = len;
+                        while (remaining > 0)
+                        {
+                            int read = fs.Read(bytes, offset, remaining);
+                            if (read <= 0) break;
+                            offset += read;
+                            remaining -= read;
+                        }
+                    }
+
+                    LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytesLen);
+                    LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytesLen);
+
+                    resultTexture = new Texture2D(width, height, localFormat, false, qi.linear);
+                    //resultTexture.name = qi.cacheSignature;
+                    resultTexture.LoadRawTextureData(bytes);
+                    resultTexture.Apply();
+                    RegisterTexture(diskCachePath, resultTexture);
+                    ResolveInflightWaiters(diskCachePath, resultTexture);
+                    return resultTexture;
+                }
+                finally
+                {
+                    if (bytes != null) ByteArrayPool.Return(bytes);
+                }
             }
 
 
@@ -1418,7 +1480,7 @@ namespace var_browser
             jSONClass["format"] = resultTexture.format.ToString();
             string contents = jSONClass.ToString(string.Empty);
             
-            WriteDiskCacheAsync(realDiskCachePathCache, texBytes, diskCachePath + ".meta", contents);
+            WriteDiskCacheAsync(realDiskCachePathCache, texBytes, texBytes.Length, diskCachePath + ".meta", contents);
 
 
             RegisterTexture(diskCachePath, resultTexture);

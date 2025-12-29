@@ -861,7 +861,7 @@ namespace var_browser
 			foreach (var_browser.CustomImageLoaderThreaded.QueuedImage queuedThumbnail in queuedThumbnails)
 			{
 				queuedThumbnail.cancel = true;
-                var_browser.CustomImageLoaderThreaded.QIPool.Return(queuedThumbnail);
+                //var_browser.CustomImageLoaderThreaded.QIPool.Return(queuedThumbnail);
 			}
 			queuedThumbnails.Clear();
 		}
@@ -2579,7 +2579,7 @@ namespace var_browser
 			foreach (var qi in toRemove)
 			{
 				queuedThumbnails.Remove(qi);
-                CustomImageLoaderThreaded.QIPool.Return(qi);
+                //CustomImageLoaderThreaded.QIPool.Return(qi);
 			}
 		}
 
