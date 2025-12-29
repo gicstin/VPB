@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using SimpleJSON;
 using UnityEngine;
 using Valve.Newtonsoft.Json.Linq;
@@ -47,6 +48,16 @@ namespace var_browser
         readonly Queue<PrewarmRequest> prewarmQueue = new Queue<PrewarmRequest>();
         readonly HashSet<string> prewarmQueuedKeys = new HashSet<string>();
         Coroutine prewarmCoroutine;
+
+        class ResizeJob
+        {
+            public ImageLoaderThreaded.QueuedImage qi;
+            public string key;
+        }
+
+        readonly Queue<ResizeJob> resizeQueue = new Queue<ResizeJob>();
+        readonly HashSet<string> resizeQueuedKeys = new HashSet<string>();
+        Coroutine resizeCoroutine;
 
         double prewarmEwmaMs = 50.0;
         bool prewarmEwmaInit;
@@ -156,6 +167,199 @@ namespace var_browser
             // Delay 2 frames; delaying only 1 frame can break decalmaker timing.
             yield return waitForEndOfFrame;
             DoCallback(qi);
+        }
+
+        void EnsureResizeCoroutine()
+        {
+            if (resizeCoroutine != null) return;
+            try
+            {
+                resizeCoroutine = StartCoroutine(ResizeWorker());
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("Resize start coroutine failed: " + ex.ToString());
+            }
+        }
+
+        public bool TryEnqueueResizeCache(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null) return false;
+            if (qi.tex == null) return false;
+
+            try
+            {
+                if (Settings.Instance == null) return false;
+                if (Settings.Instance.ReduceTextureSize == null || !Settings.Instance.ReduceTextureSize.Value) return false;
+            }
+            catch { return false; }
+
+            string key = GetDiskCachePath(qi, false, 0, 0);
+            if (string.IsNullOrEmpty(key)) return false;
+
+            // If no resize would occur, don't generate cache.
+            int w = qi.tex.width;
+            int h = qi.tex.height;
+            GetResizedSize(ref w, ref h);
+            if (w == qi.tex.width && h == qi.tex.height) return false;
+
+            // If disk cache already exists, skip.
+            try
+            {
+                var real = GetDiskCachePath(qi, true, w, h);
+                if (!string.IsNullOrEmpty(real))
+                {
+                    if (File.Exists(real + ".cache") || File.Exists(real)) return false;
+                }
+            }
+            catch { }
+
+            if (resizeQueuedKeys.Contains(key)) return false;
+
+            resizeQueuedKeys.Add(key);
+            resizeQueue.Enqueue(new ResizeJob { qi = qi, key = key });
+            EnsureResizeCoroutine();
+            return true;
+        }
+
+        IEnumerator ResizeWorker()
+        {
+            WaitForEndOfFrame wait = new WaitForEndOfFrame();
+            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+            while (true)
+            {
+                if (resizeQueue.Count == 0)
+                {
+                    resizeCoroutine = null;
+                    yield break;
+                }
+
+                sw.Reset();
+                sw.Start();
+
+                while (resizeQueue.Count > 0)
+                {
+                    var job = resizeQueue.Dequeue();
+                    if (job != null && job.qi != null)
+                    {
+                        try
+                        {
+                            GenerateResizedDiskCache(job.qi);
+                        }
+                        catch (Exception ex)
+                        {
+                            try
+                            {
+                                LogUtil.LogError("ResizeWorker error path=" + (job.qi != null ? job.qi.imgPath : "?") + " " + ex.ToString());
+                            }
+                            catch { }
+                        }
+                        finally
+                        {
+                            try
+                            {
+                                if (!string.IsNullOrEmpty(job.key)) resizeQueuedKeys.Remove(job.key);
+                            }
+                            catch { }
+                        }
+                    }
+
+                    if (sw.Elapsed.TotalMilliseconds > 5.0)
+                    {
+                        break;
+                    }
+                }
+
+                yield return wait;
+            }
+        }
+
+        void GenerateResizedDiskCache(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null) return;
+            if (qi.tex == null) return;
+
+            var diskCachePath = GetDiskCachePath(qi, false, 0, 0);
+            if (string.IsNullOrEmpty(diskCachePath)) return;
+
+            int width = qi.tex.width;
+            int height = qi.tex.height;
+            GetResizedSize(ref width, ref height);
+
+            var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
+            if (string.IsNullOrEmpty(realDiskCachePath)) return;
+            var realDiskCachePathCache = realDiskCachePath + ".cache";
+
+            if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath)) return;
+
+            // Generate the resized/compressed texture and write to disk cache.
+            Texture2D tmp = null;
+            RenderTexture tempTexture = null;
+            try
+            {
+                tempTexture = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32,
+                    qi.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB);
+
+                Graphics.SetRenderTarget(tempTexture);
+                GL.PushMatrix();
+                GL.LoadPixelMatrix(0, width, height, 0);
+                GL.Clear(true, true, Color.clear);
+                Graphics.Blit(qi.tex, tempTexture);
+                GL.PopMatrix();
+                Graphics.SetRenderTarget(null);
+
+                var format = qi.tex.format == TextureFormat.DXT1 ? TextureFormat.RGB24 : TextureFormat.RGBA32;
+                tmp = new Texture2D(width, height, format, false, qi.linear);
+                var previous = RenderTexture.active;
+                RenderTexture.active = tempTexture;
+                tmp.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                tmp.Apply();
+                RenderTexture.active = previous;
+
+                tmp.Compress(true);
+
+                var bytes = tmp.GetRawTextureData();
+                
+                JSONClass jSONClass = new JSONClass();
+                jSONClass["type"] = "image";
+                jSONClass["width"].AsInt = qi.tex.width;
+                jSONClass["height"].AsInt = qi.tex.height;
+                jSONClass["resizedWidth"].AsInt = width;
+                jSONClass["resizedHeight"].AsInt = height;
+                jSONClass["format"] = tmp.format.ToString();
+                
+                WriteDiskCacheAsync(realDiskCachePathCache, bytes, diskCachePath + ".meta", jSONClass.ToString(string.Empty));
+
+                // Note: we intentionally do NOT RegisterTexture or swap qi.tex in this async cache path.
+                // This prevents unexpected texture replacement mid-frame; future loads will hit disk/mem cache.
+            }
+            finally
+            {
+                if (tmp != null)
+                {
+                    UnityEngine.Object.Destroy(tmp);
+                }
+
+                if (tempTexture != null)
+                {
+                    RenderTexture.ReleaseTemporary(tempTexture);
+                }
+            }
+        }
+
+        void WriteDiskCacheAsync(string pathCache, byte[] bytes, string pathMeta, string metaContent)
+        {
+            ThreadPool.QueueUserWorkItem((state) =>
+            {
+                try
+                {
+                    if (bytes != null && !string.IsNullOrEmpty(pathCache))
+                        File.WriteAllBytes(pathCache, bytes);
+                    if (!string.IsNullOrEmpty(metaContent) && !string.IsNullOrEmpty(pathMeta))
+                        File.WriteAllText(pathMeta, metaContent);
+                }
+                catch { }
+            });
         }
 
         public bool Request(ImageLoaderThreaded.QueuedImage qi)
@@ -560,46 +764,40 @@ namespace var_browser
         IEnumerator PrewarmWorker()
         {
             WaitForEndOfFrame wait = new WaitForEndOfFrame();
+            System.Diagnostics.Stopwatch swFrame = new System.Diagnostics.Stopwatch();
             while (true)
             {
-                int maxPerFrame = 1;
-                try
+                if (prewarmQueue.Count == 0)
                 {
-                    if (Settings.Instance != null && Settings.Instance.ScenePrewarmTexturesPerFrame != null)
-                    {
-                        maxPerFrame = Settings.Instance.ScenePrewarmTexturesPerFrame.Value;
-                    }
+                    prewarmCoroutine = null;
+                    yield break;
                 }
-                catch { }
-                if (maxPerFrame < 1) maxPerFrame = 1;
-                if (maxPerFrame > 16) maxPerFrame = 16;
 
-                int perFrame = GetAdaptivePrewarmPerFrame(maxPerFrame);
+                swFrame.Reset();
+                swFrame.Start();
 
-                for (int i = 0; i < perFrame; i++)
+                while (prewarmQueue.Count > 0)
                 {
-                    if (prewarmQueue.Count == 0)
-                    {
-                        prewarmCoroutine = null;
-                        yield break;
-                    }
-
                     var req = prewarmQueue.Dequeue();
-                    if (req == null || string.IsNullOrEmpty(req.imgPath))
+                    if (req != null && !string.IsNullOrEmpty(req.imgPath))
                     {
-                        continue;
+                        try
+                        {
+                            var sw = System.Diagnostics.Stopwatch.StartNew();
+                            PrewarmImage(req);
+                            sw.Stop();
+                            UpdatePrewarmCost(sw.Elapsed.TotalMilliseconds);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("PREWARM error path=" + req.imgPath + " " + ex.ToString());
+                        }
                     }
 
-                    try
+                    // Budget of 5ms per frame to match ResizeWorker
+                    if (swFrame.Elapsed.TotalMilliseconds > 5.0)
                     {
-                        var sw = System.Diagnostics.Stopwatch.StartNew();
-                        PrewarmImage(req);
-                        sw.Stop();
-                        UpdatePrewarmCost(sw.Elapsed.TotalMilliseconds);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogError("PREWARM error path=" + req.imgPath + " " + ex.ToString());
+                        break;
                     }
                 }
 
@@ -713,7 +911,9 @@ namespace var_browser
                 }
                 qi.tex = tex;
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var resized = GetResizedTextureFromBytes(qi);
+                
+                Texture2D resized = GetResizedTextureFromBytes(qi);
+                
                 if (resized != null)
                 {
                     LogUtil.Log("PREWARM generate ok path=" + req.imgPath + " ms=" + sw.Elapsed.TotalMilliseconds.ToString("0") + " resized=" + resized.width + "x" + resized.height);
@@ -1214,11 +1414,7 @@ namespace var_browser
             );
 
             byte[] texBytes = resultTexture.GetRawTextureData();
-            var swWrite = System.Diagnostics.Stopwatch.StartNew();
-            File.WriteAllBytes(realDiskCachePathCache, texBytes);
-            LogUtil.PerfAdd("Img.Disk.Write", swWrite.Elapsed.TotalMilliseconds, texBytes != null ? texBytes.LongLength : 0);
-            LogUtil.LogTextureSlowDisk("write", realDiskCachePathCache, swWrite.Elapsed.TotalMilliseconds, texBytes != null ? texBytes.LongLength : 0);
-
+            
             JSONClass jSONClass = new JSONClass();
             jSONClass["type"] = "image";
             // Record the original texture size here.
@@ -1228,7 +1424,8 @@ namespace var_browser
             jSONClass["resizedHeight"].AsInt = height;
             jSONClass["format"] = resultTexture.format.ToString();
             string contents = jSONClass.ToString(string.Empty);
-            File.WriteAllText(diskCachePath + ".meta", contents);
+            
+            WriteDiskCacheAsync(realDiskCachePathCache, texBytes, diskCachePath + ".meta", contents);
 
 
             RegisterTexture(diskCachePath, resultTexture);

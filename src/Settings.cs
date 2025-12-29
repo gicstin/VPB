@@ -30,8 +30,7 @@ namespace var_browser
         public ConfigEntry<bool> InflightDedupEnabled;
         public ConfigEntry<bool> PrioritizeFaceTextures;
         public ConfigEntry<bool> PrioritizeHairTextures;
-        public ConfigEntry<bool> SceneLoadWaitForImagesIdle;
-        public ConfigEntry<float> SceneLoadImagesIdleSeconds;
+
         public ConfigEntry<string> LastGalleryPage;
         public ConfigEntry<int> TextureLogLevel;
         public ConfigEntry<int> TextureLogSlowConvertMs;
@@ -41,7 +40,6 @@ namespace var_browser
         public ConfigEntry<bool> CleanLogEnabled;
         public ConfigEntry<string> CleanLogPath;
         public ConfigEntry<bool> ScenePrewarmEnabled;
-        public ConfigEntry<int> ScenePrewarmTexturesPerFrame;
         
         internal static void Init(ConfigFile config)
         {
@@ -66,9 +64,6 @@ namespace var_browser
             PrioritizeFaceTextures = config.Bind<bool>("Optimze", "PrioritizeFaceTextures", true, "prioritize face/makeup/overlay textures in VaM image load queue.");
             PrioritizeHairTextures = config.Bind<bool>("Optimze", "PrioritizeHairTextures", true, "prioritize hair in VaM image load queue.");
             ScenePrewarmEnabled = config.Bind<bool>("Optimze", "ScenePrewarmEnabled", true, "prewarm var_browser_cache entries for scene textures during scene load.");
-            ScenePrewarmTexturesPerFrame = config.Bind<int>("Optimze", "ScenePrewarmTexturesPerFrame", 1, "max textures to prewarm per frame (main-thread GPU work).");
-            SceneLoadWaitForImagesIdle = config.Bind<bool>("Benchmark", "SceneLoadWaitForImagesIdle", true, "When enabled, SCENE_LOAD_TOTAL waits for image loading to become idle before ending.");
-            SceneLoadImagesIdleSeconds = config.Bind<float>("Benchmark", "SceneLoadImagesIdleSeconds", 0f, "Idle window seconds required before SCENE_LOAD_TOTAL ends (when SceneLoadWaitForImagesIdle is enabled).");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 1, "0=off, 1=summary only, 2=verbose per-texture trace.");
             TextureLogSlowConvertMs = config.Bind<int>("Logging", "TextureLogSlowConvertMs", 50, "Warn when texture compress/convert exceeds this duration (ms).");

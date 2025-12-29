@@ -563,11 +563,10 @@ namespace var_browser
 
             if (__instance.tex != null)
             {
-                var tex = ImageLoadingMgr.singleton.GetResizedTextureFromBytes(__instance);
-                if (tex != null)
-                {
-                    __instance.skipCache = true;
-                }
+                // Defer expensive resize/compress work to ImageLoadingMgr's background queue.
+                // We intentionally keep the currently loaded texture and only generate the disk cache
+                // so future loads can hit it.
+                ImageLoadingMgr.singleton.TryEnqueueResizeCache(__instance);
             }
         }
 
