@@ -44,6 +44,7 @@ namespace var_browser
         public ConfigEntry<bool> CleanLogEnabled;
         public ConfigEntry<string> CleanLogPath;
         public ConfigEntry<bool> ScenePrewarmEnabled;
+        public ConfigEntry<bool> EnableUiTransparency;
         
         internal static void Init(ConfigFile config)
         {
@@ -68,6 +69,8 @@ namespace var_browser
             PrioritizeFaceTextures = config.Bind<bool>("Optimze", "PrioritizeFaceTextures", true, "prioritize face/makeup/overlay textures in VaM image load queue.");
             PrioritizeHairTextures = config.Bind<bool>("Optimze", "PrioritizeHairTextures", true, "prioritize hair in VaM image load queue.");
             ScenePrewarmEnabled = config.Bind<bool>("Optimze", "ScenePrewarmEnabled", true, "prewarm var_browser_cache entries for scene textures during scene load.");
+
+            EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             
             OptimizeGameObjectFind = config.Bind<bool>("Unity Patches", "OptimizeGameObjectFind", true, "Cache GameObject.Find results.");
             OptimizePhysicsRaycast = config.Bind<bool>("Unity Patches", "OptimizePhysicsRaycast", true, "Cache Physics.Raycast results per frame.");

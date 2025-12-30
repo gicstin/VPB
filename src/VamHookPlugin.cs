@@ -65,6 +65,7 @@ namespace var_browser
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
+        private bool m_SettingsEnableUiTransparencyDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -118,6 +119,8 @@ namespace var_browser
         private GUIStyle m_StyleFpsBadgeOuter;
 
         private bool m_WindowActive;
+        private float m_WindowAlphaState = 1.0f; // Shared state for window transparency
+        private Rect m_RealWindowRect; // Capture the fully rendered rect from Repaint for accurate hover detection
 
         public static VamHookPlugin singleton;
 
@@ -155,6 +158,7 @@ namespace var_browser
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
+            m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
             m_SettingsError = null;
         }
 
@@ -186,6 +190,14 @@ namespace var_browser
             GUILayout.EndHorizontal();
 
             GUILayout.Space(10);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsEnableUiTransparencyDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsEnableUiTransparencyDraft = !m_SettingsEnableUiTransparencyDraft;
+            }
+            GUILayout.Label("Enable dynamic transparency (fade when idle)");
+            GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(m_SettingsPluginsAlwaysEnabledDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
@@ -292,6 +304,13 @@ namespace var_browser
                         if (Settings.Instance.PluginsAlwaysEnabled.Value != m_SettingsPluginsAlwaysEnabledDraft)
                         {
                             Settings.Instance.PluginsAlwaysEnabled.Value = m_SettingsPluginsAlwaysEnabledDraft;
+                        }
+                    }
+                    if (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null)
+                    {
+                        if (Settings.Instance.EnableUiTransparency.Value != m_SettingsEnableUiTransparencyDraft)
+                        {
+                            Settings.Instance.EnableUiTransparency.Value = m_SettingsEnableUiTransparencyDraft;
                         }
                     }
                     if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)
@@ -452,6 +471,7 @@ namespace var_browser
             m_StyleWindowBorder.normal.textColor = Color.white;
             m_StyleWindowBorder.padding = new RectOffset(0, 0, 0, 0);
             m_StyleWindowBorder.margin = new RectOffset(0, 0, 0, 0);
+            m_StyleWindowBorder.border = new RectOffset(1, 1, 1, 1);
 
             m_StyleWindow = new GUIStyle(GUI.skin.window);
             m_StyleWindow.normal.background = texTransparent;
@@ -470,13 +490,13 @@ namespace var_browser
             m_StylePanel.normal.background = m_TexPanelBg;
             m_StylePanel.normal.textColor = Color.white;
             m_StylePanel.padding = new RectOffset(8, 8, 8, 8);
-            m_StylePanel.margin = new RectOffset(6, 6, 6, 6);
+            m_StylePanel.margin = new RectOffset(4, 4, 4, 4);
 
             m_StyleSection = new GUIStyle(GUI.skin.box);
             m_StyleSection.normal.background = m_TexSectionBg;
             m_StyleSection.normal.textColor = Color.white;
             m_StyleSection.padding = new RectOffset(8, 8, 6, 6);
-            m_StyleSection.margin = new RectOffset(0, 0, 6, 6);
+            m_StyleSection.margin = new RectOffset(0, 0, 4, 4);
 
             m_StyleHeader = new GUIStyle(GUI.skin.label);
             m_StyleHeader.fontStyle = FontStyle.Bold;
@@ -505,11 +525,11 @@ namespace var_browser
             m_StyleButton.onActive.textColor = Color.white;
             m_StyleButton.onFocused.textColor = Color.white;
             m_StyleButton.fontStyle = FontStyle.Bold;
-            m_StyleButton.padding = new RectOffset(10, 10, 7, 7);
+            m_StyleButton.padding = new RectOffset(6, 6, 4, 4);
 
             m_StyleButtonSmall = new GUIStyle(m_StyleButton);
             m_StyleButtonSmall.fontStyle = FontStyle.Bold;
-            m_StyleButtonSmall.padding = new RectOffset(8, 8, 4, 4);
+            m_StyleButtonSmall.padding = new RectOffset(4, 4, 2, 2);
 
             m_StyleButtonDanger = new GUIStyle(m_StyleButton);
             m_StyleButtonDanger.normal.background = m_TexBtnDangerBg;
@@ -537,7 +557,7 @@ namespace var_browser
             m_StyleButtonCheckbox.onHover.background = m_TexBtnCheckboxBgActive;
             m_StyleButtonCheckbox.onActive.background = m_TexBtnCheckboxBgActive;
             m_StyleButtonCheckbox.onFocused.background = m_TexBtnCheckboxBgActive;
-            m_StyleButtonCheckbox.padding = new RectOffset(8, 8, 6, 6);
+            m_StyleButtonCheckbox.padding = new RectOffset(4, 4, 4, 4);
 
             m_StyleToggle = new GUIStyle(GUI.skin.toggle);
             m_StyleToggle.normal.textColor = new Color(0.92f, 0.94f, 0.96f, 1f);
@@ -547,7 +567,7 @@ namespace var_browser
             m_StyleToggle.alignment = TextAnchor.MiddleLeft;
             m_StyleToggle.wordWrap = false;
             m_StyleToggle.clipping = TextClipping.Clip;
-            m_StyleToggle.padding = new RectOffset(62, 0, 6, 6);
+            m_StyleToggle.padding = new RectOffset(62, 0, 4, 4);
             m_StyleToggle.margin = new RectOffset(0, 0, 0, 0);
             m_StyleToggle.contentOffset = new Vector2(0f, 0f);
             m_StyleToggle.fontSize = 14;
@@ -1091,8 +1111,13 @@ namespace var_browser
         void DragWnd(int windowsid)
         {
             EnsureStyles();
+            
+            // Re-apply alpha for window content
+            GUI.color = new Color(GUI.color.r, GUI.color.g, GUI.color.b, m_WindowAlphaState);
+            GUI.contentColor = new Color(GUI.contentColor.r, GUI.contentColor.g, GUI.contentColor.b, m_WindowAlphaState);
+            GUI.backgroundColor = new Color(GUI.backgroundColor.r, GUI.backgroundColor.g, GUI.backgroundColor.b, m_WindowAlphaState);
 
-            float dragHeight = MiniMode ? 28f : 52f;
+            float dragHeight = MiniMode ? 26f : 48f;
 
             if (m_StyleWindow != null)
             {
@@ -1106,10 +1131,10 @@ namespace var_browser
                 m_StylePanel.padding.right = 8;
                 m_StylePanel.padding.top = 8;
                 m_StylePanel.padding.bottom = 8;
-                m_StylePanel.margin.left = 6;
-                m_StylePanel.margin.right = 6;
-                m_StylePanel.margin.top = 6;
-                m_StylePanel.margin.bottom = 6;
+                m_StylePanel.margin.left = 4;
+                m_StylePanel.margin.right = 4;
+                m_StylePanel.margin.top = 4;
+                m_StylePanel.margin.bottom = 4;
             }
 
             GUI.DragWindow(new Rect(0, 0, m_Rect.width, dragHeight));
@@ -1118,9 +1143,15 @@ namespace var_browser
 
             // ========== HEADER & CONTROLS ==========
             GUILayout.BeginHorizontal();
-            GUILayout.Label(string.Format("<color=#00FF00><b>{0}</b></color> {1}", FileManager.s_InstalledCount, m_ProgressText), m_StyleHeader);
+            
+            // Generate alpha hex for the green color
+            int alphaInt = Mathf.RoundToInt(m_WindowAlphaState * 255);
+            string alphaHex = alphaInt.ToString("X2");
+            // Use a less bright green (LimeGreen #32CD32 approx) instead of pure #00FF00
+            GUILayout.Label(string.Format("<color=#32CD32{0}><b>{1}</b></color> {2}", alphaHex, FileManager.s_InstalledCount, m_ProgressText), m_StyleHeader);
+            
             GUILayout.FlexibleSpace();
-            const float buttonHeight = 28f;
+            const float buttonHeight = 22f;
             if (GUILayout.Button("+", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
 		        m_UIScale = Mathf.Clamp(m_UIScale + 0.2f, MinUiScale, MaxUiScale);
@@ -1134,7 +1165,7 @@ namespace var_browser
                 RestrictUiRect();
             }
 
-            if (GUILayout.Button(MiniMode ? "Full" : "Mini", m_StyleButtonSmall, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
+            if (GUILayout.Button(MiniMode ? "▼" : "▲", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
                 SetMiniMode(!MiniMode);
             }
@@ -1367,15 +1398,54 @@ namespace var_browser
                     RestrictUiRect();
 
                     EnsureStyles();
-                    m_StyleWindow.padding.top = MiniMode ? 30 : 54;
-                    const float borderPx = 1f;
-
+                    m_StyleWindow.padding.top = MiniMode ? 28 : 50;
+                    
                     var windowRect = m_Rect;
                     windowRect.height = 0f;
 
+                    // Draw the window itself (background + controls)
+                    // We let GUILayout handle the layout, but the border is drawn manually below.
+                    // IMPORTANT: We use a separate border rect to avoid double-drawing borders if the skin has them.
+                    
+                    var prevAlphaColor = GUI.color;
+                    var prevAlphaContentColor = GUI.contentColor;
+                    var prevAlphaBackgroundColor = GUI.backgroundColor;
+
+                    // Hover check for transparency
+                    // We calculate screen space coordinates to robustly detect hover regardless of GUI matrix
+                    // We prefer m_RealWindowRect (from Repaint) if available, to avoid layout-phase transient sizes.
+                    Rect checkRect = (m_RealWindowRect.width > 10f) ? m_RealWindowRect : m_Rect;
+
+                    float hoverMargin = 40f; // Invisible detection border in pixels
+                    Rect screenRect = new Rect(
+                        (checkRect.x * m_UIScale) - hoverMargin,
+                        (checkRect.y * m_UIScale) - hoverMargin,
+                        (checkRect.width * m_UIScale) + (hoverMargin * 2),
+                        (checkRect.height * m_UIScale) + (hoverMargin * 2)
+                    );
+                    
+                    Vector2 screenMousePos = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+                    bool isHovering = screenRect.Contains(screenMousePos);
+
+                    bool enableTransparency = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null && Settings.Instance.EnableUiTransparency.Value);
+
+                    if (isHovering || !enableTransparency)
+                    {
+                        m_WindowAlphaState = 1.0f;
+                    }
+                    else
+                    {
+                        m_WindowAlphaState = 0.0f;
+                    }
+
+                    GUI.color = new Color(GUI.color.r, GUI.color.g, GUI.color.b, m_WindowAlphaState);
+                    GUI.contentColor = new Color(GUI.contentColor.r, GUI.contentColor.g, GUI.contentColor.b, m_WindowAlphaState);
+                    GUI.backgroundColor = new Color(GUI.backgroundColor.r, GUI.backgroundColor.g, GUI.backgroundColor.b, m_WindowAlphaState);
+
                     m_Rect = GUILayout.Window(0, windowRect, DragWnd, "", m_StyleWindow);
 
-                    var borderRect = new Rect(m_Rect.x - borderPx, m_Rect.y - borderPx, m_Rect.width + (borderPx * 2f), m_Rect.height + (borderPx * 2f));
+                    // Draw our custom border ON TOP or AROUND the window rect
+                    var borderRect = new Rect(m_Rect.x, m_Rect.y, m_Rect.width, m_Rect.height);
 
                     if (Event.current.type == EventType.MouseDown)
                         m_WindowActive = borderRect.Contains(Event.current.mousePosition);
@@ -1384,10 +1454,16 @@ namespace var_browser
                     {
                         m_StyleWindowBorder.normal.background = m_WindowActive ? m_TexWindowBorderActive : m_TexWindowBorder;
                         var prevDepth = GUI.depth;
-                        GUI.depth = 1;
+                        GUI.depth = 1; 
+                        // Draw just the frame/border using a style that renders only the border
                         GUI.Box(borderRect, GUIContent.none, m_StyleWindowBorder);
                         GUI.depth = prevDepth;
                     }
+
+                    // Restore opacity so subsequent elements (FPS, sub-windows) are not affected
+                    GUI.color = prevAlphaColor;
+                    GUI.contentColor = prevAlphaContentColor;
+                    GUI.backgroundColor = prevAlphaBackgroundColor;
 
                     RestrictUiRect();
 
@@ -1406,8 +1482,8 @@ namespace var_browser
                     float fpsWidth = 0f;
                     if (!string.IsNullOrEmpty(fpsText) && m_StyleFpsBadge != null)
                     {
-                        fpsWidth = m_StyleFpsBadge.CalcSize(new GUIContent(fpsText)).x + 16f;
-                        fpsWidth = Mathf.Max(fpsWidth, 80f);
+                        fpsWidth = m_StyleFpsBadge.CalcSize(new GUIContent(fpsText)).x + 8f;
+                        fpsWidth = Mathf.Max(fpsWidth, 50f);
                     }
 
                     var rightEdge = m_Rect.xMax - titleRightPadding;
@@ -1419,9 +1495,9 @@ namespace var_browser
 
                     if (isRepaint)
                     {
-                        GUI.color = Color.white;
-                        GUI.backgroundColor = Color.white;
-                        GUI.contentColor = Color.white;
+                        GUI.color = new Color(1f, 1f, 1f, m_WindowAlphaState);
+                        GUI.backgroundColor = new Color(1f, 1f, 1f, m_WindowAlphaState);
+                        GUI.contentColor = new Color(1f, 1f, 1f, m_WindowAlphaState);
                         GUI.enabled = true;
 
                         var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
@@ -1446,8 +1522,8 @@ namespace var_browser
                         float availableTagWidth = Mathf.Max(0f, m_Rect.width - 6f - titleRightPadding - fpsWidth);
                         float tagWidth = Mathf.Min(desiredTagWidth, availableTagWidth);
                         var tagRect = new Rect(m_Rect.x + 6f, headerRow1Y, tagWidth, headerHeight);
-                        GUI.color = new Color(1f, 1f, 1f, 1f);
-                        GUI.contentColor = new Color(1f, 1f, 1f, 1f);
+                        GUI.color = new Color(1f, 1f, 1f, m_WindowAlphaState);
+                        GUI.contentColor = new Color(1f, 1f, 1f, m_WindowAlphaState);
                         if (m_TitleTagStyle != null)
                         {
                             GUI.Label(tagRect, tagText, m_TitleTagStyle);
@@ -1463,18 +1539,42 @@ namespace var_browser
                                 Mathf.Max(0f, fpsRect.height - (badgeInsetY * 2f))
                             );
                             var innerRect = new Rect(
-                                outerRect.x + 4f,
+                                outerRect.x + 2f,
                                 outerRect.y + 1f,
-                                Mathf.Max(0f, outerRect.width - 8f),
+                                Mathf.Max(0f, outerRect.width - 4f),
                                 Mathf.Max(0f, outerRect.height - 2f)
                             );
 
                             GUI.Box(outerRect, GUIContent.none, m_StyleFpsBadgeOuter);
+                            float fpsAlpha = Mathf.Max(m_WindowAlphaState, 0.5f); // Ensure FPS is at least 50% visible
+                            
+                            // To ensure visibility, we might need to boost the alpha of the contentColor specifically
+                            // since GUI.color affects both background and content.
+                            
+                            var prevC = GUI.color;
+                            var prevCC = GUI.contentColor;
+                            var prevBC = GUI.backgroundColor;
+
+                            // We want the text to be relatively opaque (0.5 to 1.0) even if global GUI.color is low.
+                            // But GUI.color multiplies everything.
+                            // If m_WindowAlphaState is 0.1, GUI.color is (1,1,1, 0.1).
+                            // If we set GUI.color to (1,1,1, 0.5), the box background will be 0.5.
+                            // The text color comes from style.normal.textColor (white) * GUI.contentColor * GUI.color.
+                            
+                            GUI.color = new Color(1f, 1f, 1f, fpsAlpha);
+                            GUI.contentColor = Color.white; 
+                            GUI.backgroundColor = Color.white;
+                            
                             GUI.Box(innerRect, fpsText, m_StyleFpsBadge);
+                            
+                            GUI.color = prevC;
+                            GUI.contentColor = prevCC;
+                            GUI.backgroundColor = prevBC;
                         }
 
                         if (!MiniMode && m_DragHintStyle != null)
                         {
+                            GUI.color = new Color(1f, 1f, 1f, m_WindowAlphaState); // Ensure text is transparent
                             double totalLoadSeconds = startupSeconds + (sceneClickSeconds.HasValue ? sceneClickSeconds.Value : 0.0);
                             var dragText = string.Format("{0:0.0}s | Dragable Area | Toggle: {1}", totalLoadSeconds, UIKey.keyPattern);
                             var drawText = dragText;
@@ -1519,6 +1619,11 @@ namespace var_browser
             else
             {
                 GUI.Box(new Rect(0, 0, 200, 30), "var browser is waiting to start");
+            }
+
+            if (Event.current.type == EventType.Repaint)
+            {
+                m_RealWindowRect = m_Rect;
             }
 
             GUI.matrix = pre;
