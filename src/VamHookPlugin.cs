@@ -95,6 +95,8 @@ namespace var_browser
 
         public static VamHookPlugin singleton;
 
+        public static string CurrentScenePackageUid;
+
         private static Texture2D MakeTex(Color color)
         {
             var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
@@ -1239,14 +1241,9 @@ namespace var_browser
                         GUILayout.Space(optionIndent);
                         GUILayout.Label("Min", GUILayout.Width(30));
                         int minTextureSize = Settings.Instance.MinTextureSize.Value;
-                        var style1k = m_StyleButtonDanger;
                         var style2k = (minTextureSize == 2048) ? m_StyleButtonPrimary : m_StyleButton;
                         var style4k = (minTextureSize == 4096) ? m_StyleButtonPrimary : m_StyleButton;
                         var style8k = (minTextureSize == 8192) ? m_StyleButtonPrimary : m_StyleButton;
-                        if (GUILayout.Button("1K", style1k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
-                        {
-                            Settings.Instance.MinTextureSize.Value = 1024;
-                        }
                         if (GUILayout.Button("2K", style2k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
                         {
                             Settings.Instance.MinTextureSize.Value = 2048;

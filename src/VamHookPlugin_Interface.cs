@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using HarmonyLib;
 
 namespace var_browser
 {
@@ -111,11 +112,55 @@ namespace var_browser
         }
         public void UninstallAll()
         {
+            HashSet<string> protectedPackages = new HashSet<string>();
+            if (FileEntry.AutoInstallLookup != null)
+            {
+                foreach (var item in FileEntry.AutoInstallLookup)
+                {
+                    protectedPackages.Add(item);
+                    // Also resolve to currently installed package to handle version drift
+                    VarPackage p = FileManager.ResolveDependency(item);
+                    if (p != null) protectedPackages.Add(p.Uid);
+                }
+            }
+
+            // Protect currently loaded scene and its dependencies
+            string currentPackageUid = CurrentScenePackageUid;
+            if (string.IsNullOrEmpty(currentPackageUid))
+            {
+                currentPackageUid = FileManager.CurrentPackageUid;
+            }
+
+            if (!string.IsNullOrEmpty(currentPackageUid))
+            {
+                //LogUtil.Log("Protecting current package: " + currentPackageUid);
+                protectedPackages.Add(currentPackageUid);
+                
+                VarPackage currentPackage = FileManager.GetPackage(currentPackageUid);
+                if (currentPackage != null && currentPackage.RecursivePackageDependencies != null)
+                {
+                    foreach (var depUid in currentPackage.RecursivePackageDependencies)
+                    {
+                        // Resolve dependency to actual package UID
+                        VarPackage depPackage = FileManager.ResolveDependency(depUid);
+                        if (depPackage != null)
+                        {
+                            protectedPackages.Add(depPackage.Uid);
+                        }
+                        
+                        // Always add the original depUid as well
+                        protectedPackages.Add(depUid);
+                    }
+                }
+            }
+
             string[] addonVarPaths = Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories);
             foreach (var item in addonVarPaths)
             {
                 string name = Path.GetFileNameWithoutExtension(item);
-                if (FileEntry.AutoInstallLookup.Contains(name)) continue;
+                
+                if (protectedPackages.Contains(name)) continue;
+
                 if (item.StartsWith("AddonPackages"))
                 {
                     string targetPath = "AllPackages" + item.Substring("AddonPackages".Length);

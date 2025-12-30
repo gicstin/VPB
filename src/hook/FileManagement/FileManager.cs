@@ -979,6 +979,30 @@ namespace var_browser
 			return null;
 		}
 
+		public static VarPackage ResolveDependency(string uid)
+		{
+			// Try exact match
+			if (packagesByUid.ContainsKey(uid)) return packagesByUid[uid];
+
+			// Try to resolve group
+			string groupId = PackageIDToPackageGroupID(uid);
+			if (packageGroups.ContainsKey(groupId))
+			{
+				VarPackageGroup group = packageGroups[groupId];
+				if (uid.EndsWith(".latest")) return group.NewestPackage;
+
+				string verStr = PackageIDToPackageVersion(uid);
+				if (verStr != null && int.TryParse(verStr, out int ver))
+				{
+					return group.GetClosestMatchingPackageVersion(ver, false, true);
+				}
+
+				// Fallback to newest if we can't parse version but found group
+				return group.NewestPackage;
+			}
+			return null;
+		}
+
 		public static void SetLoadDir(string dir, bool restrictPath = false)
 		{
 			if (loadDirStack != null)

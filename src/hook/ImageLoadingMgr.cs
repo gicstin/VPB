@@ -1507,8 +1507,8 @@ namespace var_browser
             int originalWidth = width;
             int originalHeight = height;
 
-            int minSize = Settings.Instance.MinTextureSize != null ? Settings.Instance.MinTextureSize.Value : 1024;
-            minSize = Mathf.Clamp(minSize, 1024, 8192);
+            int minSize = Settings.Instance.MinTextureSize != null ? Settings.Instance.MinTextureSize.Value : 2048;
+            minSize = Mathf.Clamp(minSize, 2048, 8192);
 
             bool forceToMin = Settings.Instance.ForceTextureToMinSize != null && Settings.Instance.ForceTextureToMinSize.Value;
 

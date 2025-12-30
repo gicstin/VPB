@@ -286,6 +286,21 @@ namespace var_browser
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
             try
             {
+                if (!string.IsNullOrEmpty(saveName))
+                {
+                    // Track current scene package UID for UninstallAll protection
+                    int idx = saveName.IndexOf(":/");
+                    if (idx >= 0)
+                    {
+                        VamHookPlugin.CurrentScenePackageUid = saveName.Substring(0, idx);
+                    }
+                    else if (!loadMerge)
+                    {
+                        // Only clear if not merging (merging implies we are adding to current scene)
+                        VamHookPlugin.CurrentScenePackageUid = null;
+                    }
+                }
+
                 if (!LogUtil.IsSceneClickActive())
                 {
                     LogUtil.BeginSceneClick(saveName);
