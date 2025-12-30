@@ -309,30 +309,35 @@ namespace var_browser
 					num3 = 4;
 				}
 				Bitmap bitmap2 = new Bitmap(width, height, format);
-				System.Drawing.Graphics graphics = System.Drawing.Graphics.FromImage(bitmap2);
-				Rectangle rect = new Rectangle(0, 0, width, height);
-				if (setSize)
+				BitmapData srcBitmapData = null;
+				BitmapData dstBitmapData = null;
+			int num8 = 0;
+			try
 				{
-					if (fillBackground)
-					{
-						graphics.FillRectangle(solidBrush, rect);
-					}
-					float num4 = Mathf.Min((float)width / (float)bitmap.Width, (float)height / (float)bitmap.Height);
-					int num5 = (int)((float)bitmap.Width * num4);
-					int num6 = (int)((float)bitmap.Height * num4);
-					graphics.DrawImage(bitmap, (width - num5) / 2, (height - num6) / 2, num5, num6);
+					srcBitmapData = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, bitmap.PixelFormat);
+					dstBitmapData = bitmap2.LockBits(new Rectangle(0, 0, bitmap2.Width, bitmap2.Height), ImageLockMode.WriteOnly, bitmap2.PixelFormat);
+					
+					byte[] srcData = new byte[srcBitmapData.Stride * srcBitmapData.Height];
+					byte[] dstData = new byte[dstBitmapData.Stride * dstBitmapData.Height];
+					Marshal.Copy(srcBitmapData.Scan0, srcData, 0, srcData.Length);
+					
+					int srcBpp = bitmap.PixelFormat == PixelFormat.Format32bppArgb ? 4 : 3;
+					ImageProcessingOptimization.FastBitmapCopy(srcData, bitmap.Width, bitmap.Height, srcBitmapData.Stride, srcBpp,
+						dstData, width, height, dstBitmapData.Stride, num3, setSize, fillBackground);
+					
+					Marshal.Copy(dstData, 0, dstBitmapData.Scan0, dstData.Length);
+					
+					int num7 = width * height;
+					num8 = num7 * num3;
+					int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
+					raw = ByteArrayPool.Rent(num9);
+					Marshal.Copy(dstBitmapData.Scan0, raw, 0, num8);
 				}
-				else
+				finally
 				{
-					graphics.DrawImage(bitmap, 0, 0, width, height);
+					if (srcBitmapData != null) bitmap.UnlockBits(srcBitmapData);
+					if (dstBitmapData != null) bitmap2.UnlockBits(dstBitmapData);
 				}
-				BitmapData bitmapData = bitmap2.LockBits(rect, ImageLockMode.ReadOnly, bitmap2.PixelFormat);
-				int num7 = width * height;
-				int num8 = num7 * num3;
-				int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
-				raw = ByteArrayPool.Rent(num9);
-				Marshal.Copy(bitmapData.Scan0, raw, 0, num8);
-				bitmap2.UnlockBits(bitmapData);
 				bool flag = isNormalMap && num3 == 4;
 				for (int i = 0; i < num8; i += num3)
 				{
@@ -365,102 +370,10 @@ namespace var_browser
 				}
 				if (createNormalFromBump)
 				{
-					byte[] array = ByteArrayPool.Rent(num8 * 2);
-					float[][] array2 = new float[height][];
-					for (int l = 0; l < height; l++)
-					{
-						array2[l] = new float[width];
-						for (int m = 0; m < width; m++)
-						{
-							int num15 = (l * width + m) * 4;
-							int num16 = raw[num15];
-							int num17 = raw[num15 + 1];
-							int num18 = raw[num15 + 2];
-							float num19 = (float)(num16 + num17 + num18) / 768f;
-							array2[l][m] = num19;
-						}
-					}
-					Vector3 vector = default(Vector3);
-					for (int n = 0; n < height; n++)
-					{
-						for (int num20 = 0; num20 < width; num20++)
-						{
-							float num21 = 0.5f;
-							float num22 = 0.5f;
-							float num23 = 0.5f;
-							float num24 = 0.5f;
-							float num25 = 0.5f;
-							float num26 = 0.5f;
-							float num27 = 0.5f;
-							float num28 = 0.5f;
-							int num29 = num20 - 1;
-							int num30 = num20 + 1;
-							int num31 = n + 1;
-							int num32 = n - 1;
-							int num33 = num31;
-							int num34 = num29;
-							int num35 = num32;
-							int num36 = num29;
-							int num37 = num31;
-							int num38 = num30;
-							int num39 = num32;
-							int num40 = num30;
-							if (num33 >= 0 && num33 < height && num34 >= 0 && num34 < width)
-							{
-								num21 = array2[num33][num34];
-							}
-							if (num29 >= 0 && num29 < width)
-							{
-								num22 = array2[n][num29];
-							}
-							if (num35 >= 0 && num35 < height && num36 >= 0 && num36 < width)
-							{
-								num23 = array2[num35][num36];
-							}
-							if (num31 >= 0 && num31 < height)
-							{
-								num24 = array2[num31][num20];
-							}
-							if (num32 >= 0 && num32 < height)
-							{
-								num25 = array2[num32][num20];
-							}
-							if (num37 >= 0 && num37 < height && num38 >= 0 && num38 < width)
-							{
-								num26 = array2[num37][num38];
-							}
-							if (num30 >= 0 && num30 < width)
-							{
-								num27 = array2[n][num30];
-							}
-							if (num39 >= 0 && num39 < height && num40 >= 0 && num40 < width)
-							{
-								num28 = array2[num39][num40];
-							}
-							float num41 = num26 + 2f * num27 + num28 - num21 - 2f * num22 - num23;
-							float num42 = num23 + 2f * num25 + num28 - num21 - 2f * num24 - num26;
-							vector.x = num41 * bumpStrength;
-							vector.y = num42 * bumpStrength;
-							vector.z = 1f;
-							vector.Normalize();
-							vector.x = vector.x * 0.5f + 0.5f;
-							vector.y = vector.y * 0.5f + 0.5f;
-							vector.z = vector.z * 0.5f + 0.5f;
-							int num43 = (int)(vector.x * 255f);
-							int num44 = (int)(vector.y * 255f);
-							int num45 = (int)(vector.z * 255f);
-							int num46 = (n * width + num20) * 4;
-							array[num46] = (byte)num45;
-							array[num46 + 1] = (byte)num44;
-							array[num46 + 2] = (byte)num43;
-							array[num46 + 3] = byte.MaxValue;
-						}
-					}
-					ByteArrayPool.Return(raw);
-					raw = array;
+					ImageProcessingOptimization.OptimizedNormalMapGeneration(raw, width, height, bumpStrength);
+
 				}
 				solidBrush.Dispose();
-				graphics.Dispose();
 				bitmap.Dispose();
 				bitmap2.Dispose();
 			}

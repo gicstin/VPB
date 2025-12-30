@@ -116,76 +116,25 @@ namespace var_browser
             JSONClass inputJSON,
             bool isMerge = false)
         {
-            JSONClass newInst = null;
-            if (inputJSON != null && inputJSON["storables"] != null)
+            JSONClass processJSON = inputJSON;
+            
+            if (inputJSON != null && JSONOptimization.HasTimelinePlugin(inputJSON))
             {
-                // First check whether this preset contains timeline
-                JSONArray array = inputJSON["storables"] as JSONArray;
-                for (int i = 0; i < array.Count; i++)
-                {
-                    var node = array[i]["id"];
-                    if (node != null)
-                    {
-                        // If this is a timeline preset, do not process it.
-                        // Not sure if this approach is ideal.
-                        if (node.Value.EndsWith("_VamTimeline.AtomPlugin"))
-                        {
-                            newInst = new JSONClass();
-                            break;
-                        }
-                    }
-                }
-                // If timeline is included, remove it and clone a new JSON
-                if (newInst != null)
-                {
-                    foreach (var item in inputJSON.Keys)
-                    {
-                        var node = inputJSON[item];
-                        if (item != "storables")
-                        {
-                            newInst.Add(item, node);
-                        }
-                        else
-                        {
-                            JSONArray newArray = new JSONArray();
-                            JSONArray array2 = inputJSON["storables"] as JSONArray;
-                            for (int i = 0; i < array2.Count; i++)
-                            {
-                                var node2 = array2[i]["id"];
-                                if (node2 != null)
-                                {
-                                    // Remove timeline data
-                                    if (!node2.Value.EndsWith("_VamTimeline.AtomPlugin"))
-                                    {
-                                        newArray.Add(array2[i]);
-                                    }
-                                }
-                                else
-                                {
-                                    newArray.Add(array2[i]);
-                                }
-                            }
-                            newInst.Add(item, newArray);
-                        }
-                    }
-                }
+                LogUtil.Log("[var browser hook]Filtering timeline plugin from preset");
+                processJSON = JSONOptimization.FilterTimelinePlugins(inputJSON);
             }
+            
             LogUtil.Log("[var browser hook]PresetManager PreLoadPresetPreFromJSON " + __instance.presetName);
-            // This step can be slow when the JSON is large
-            if (newInst!=null)
+            if (processJSON != null)
             {
-                EnsureInstalledFromJSON(newInst);
-            }
-            else
-            {
-                EnsureInstalledFromJSON(inputJSON);
+                EnsureInstalledFromJSON(processJSON);
             }
         }
 
         static void EnsureInstalledFromJSON(JSONNode node)
         {
             var results = new HashSet<string>();
-            ScanJSON(node, results);
+            JSONOptimization.ExtractAllVariableReferences(node, results);
             if (results.Count > 0)
             {
                 bool dirty = FileButton.EnsureInstalledBySet(results);
@@ -194,33 +143,6 @@ namespace var_browser
                     MVR.FileManagement.FileManager.Refresh();
                     var_browser.FileManager.Refresh();
                 }
-            }
-        }
-
-        static void ScanJSON(JSONNode node, HashSet<string> results)
-        {
-            if (node == null) return;
-
-            if (node is JSONClass)
-            {
-                var cls = node as JSONClass;
-                foreach (string k in cls.Keys)
-                {
-                    ScanJSON(cls[k], results);
-                }
-            }
-            else if (node is JSONArray)
-            {
-                var arr = node as JSONArray;
-                for (int i = 0; i < arr.Count; i++)
-                {
-                    ScanJSON(arr[i], results);
-                }
-            }
-            else
-            {
-                string v = node.Value;
-                VarNameParser.Parse(v, results);
             }
         }
     }
