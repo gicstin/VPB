@@ -789,6 +789,8 @@ namespace var_browser
             harmony.PatchAll(typeof(PatchAssetLoader));
             harmony.PatchAll(typeof(UnityEngineHook));
 
+            // Initialize Native Hooks (MinHook)
+            Native.NativeHookManager.Initialize();
         }
 
         private void SetMiniMode(bool enabled)
@@ -843,6 +845,9 @@ namespace var_browser
             Settings.Instance.MiniMode.Value = MiniMode;
 
             this.Config.Save();
+            
+            // Shutdown Native Hooks
+            Native.NativeHookManager.Shutdown();
         }
         // Called on (hard) restart as well.
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
