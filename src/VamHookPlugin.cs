@@ -168,26 +168,74 @@ namespace var_browser
             m_SettingsError = null;
         }
 
+        private string DrawHotkeyField(string label, string fieldName, string currentValue, float height)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(label, GUILayout.Width(120));
+
+            GUIStyle style = GUI.skin.textField;
+            int id = GUIUtility.GetControlID(FocusType.Keyboard);
+            
+            Rect rect = GUILayoutUtility.GetRect(new GUIContent(currentValue), style, GUILayout.ExpandWidth(true), GUILayout.Height(height));
+            
+            Event e = Event.current;
+            bool isFocused = GUIUtility.keyboardControl == id;
+            
+            if (e.type == EventType.MouseDown && rect.Contains(e.mousePosition))
+            {
+                if (e.button == 0)
+                {
+                    GUIUtility.keyboardControl = id;
+                    e.Use();
+                }
+            }
+
+            if (isFocused && e.type == EventType.KeyDown)
+            {
+                if (e.keyCode != KeyCode.None && e.keyCode != KeyCode.Return && e.keyCode != KeyCode.KeypadEnter && e.keyCode != KeyCode.Tab)
+                {
+                    string newKey = "";
+                    if (e.control) newKey += "Ctrl+";
+                    if (e.shift) newKey += "Shift+";
+                    if (e.alt) newKey += "Alt+";
+
+                    KeyCode k = e.keyCode;
+                    bool isModifier = k == KeyCode.LeftControl || k == KeyCode.RightControl ||
+                                      k == KeyCode.LeftShift || k == KeyCode.RightShift ||
+                                      k == KeyCode.LeftAlt || k == KeyCode.RightAlt;
+
+                    if (!isModifier)
+                    {
+                        newKey += k.ToString();
+                    }
+                    else
+                    {
+                        if (newKey.EndsWith("+")) newKey = newKey.Substring(0, newKey.Length - 1);
+                    }
+                    
+                    currentValue = newKey;
+                    e.Use();
+                }
+            }
+
+            if (e.type == EventType.Repaint)
+            {
+                style.Draw(rect, new GUIContent(currentValue), rect.Contains(e.mousePosition), isFocused, false, isFocused);
+            }
+
+            GUILayout.EndHorizontal();
+            return currentValue;
+        }
+
         private void DrawSettingsPage(float buttonHeight)
         {
             GUILayout.BeginVertical(m_StyleSection);
             GUILayout.Label("Settings", m_StyleHeader);
             GUILayout.Space(6);
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Show/Hide Hotkey", GUILayout.Width(120));
-            m_SettingsUiKeyDraft = GUILayout.TextField(m_SettingsUiKeyDraft ?? "", GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight));
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Custom Scene Hotkey", GUILayout.Width(120));
-            m_SettingsCustomSceneKeyDraft = GUILayout.TextField(m_SettingsCustomSceneKeyDraft ?? "", GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight));
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Category Scene Hotkey", GUILayout.Width(120));
-            m_SettingsCategorySceneKeyDraft = GUILayout.TextField(m_SettingsCategorySceneKeyDraft ?? "", GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight));
-            GUILayout.EndHorizontal();
+            m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide Hotkey", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
+            m_SettingsCustomSceneKeyDraft = DrawHotkeyField("Custom Scene Hotkey", "CustomSceneKeyField", m_SettingsCustomSceneKeyDraft ?? "", buttonHeight);
+            m_SettingsCategorySceneKeyDraft = DrawHotkeyField("Category Scene Hotkey", "CategorySceneKeyField", m_SettingsCategorySceneKeyDraft ?? "", buttonHeight);
 
             GUILayout.Space(10);
 
@@ -287,6 +335,13 @@ namespace var_browser
                     var parsed = KeyUtil.Parse(m_SettingsUiKeyDraft ?? "");
                     var parsedCustomSceneKey = KeyUtil.Parse(m_SettingsCustomSceneKeyDraft ?? "");
                     var parsedCategorySceneKey = KeyUtil.Parse(m_SettingsCategorySceneKeyDraft ?? "");
+
+                    if (parsed.IsSame(parsedCustomSceneKey) || parsed.IsSame(parsedCategorySceneKey) || parsedCustomSceneKey.IsSame(parsedCategorySceneKey))
+                    {
+                        m_SettingsError = "Duplicate hotkeys are not allowed.";
+                        return;
+                    }
+
                     if (Settings.Instance != null && Settings.Instance.UIKey != null)
                     {
                         Settings.Instance.UIKey.Value = parsed.keyPattern;

@@ -5,9 +5,9 @@ namespace var_browser
 {
 	public class KeyUtil
 	{
-		private List<KeyCode> supportKeys = new List<KeyCode>();
+		public List<KeyCode> supportKeys = new List<KeyCode>();
 
-		private KeyCode key;
+		public KeyCode key;
 		public string keyPattern;
 
 		public static KeyUtil Parse(string keyPattern)
@@ -19,7 +19,7 @@ namespace var_browser
 			if (array.Length == 1)
 			{
 				string text = array[0];
-				code = (KeyCode)System.Enum.Parse(typeof(KeyCode), array[0], true);
+				code = ParseKeyCode(text);
 			}
 			else
 			{
@@ -43,11 +43,11 @@ namespace var_browser
 					}
                     else
                     {
-						list.Add((KeyCode)System.Enum.Parse(typeof(KeyCode), array[i], true));
+						list.Add(ParseKeyCode(array[i]));
 					}
 				}
 				string text = array[array.Length - 1];
-				code = (KeyCode)System.Enum.Parse(typeof(KeyCode), text,true);
+				code = ParseKeyCode(text);
 			}
 			return new KeyUtil
 			{
@@ -55,6 +55,39 @@ namespace var_browser
 				key = code,
 				keyPattern = keyPattern
 		};
+		}
+
+		private static KeyCode ParseKeyCode(string val)
+		{
+			if (string.IsNullOrEmpty(val)) return KeyCode.None;
+
+			switch (val)
+			{
+				case "`": return KeyCode.BackQuote;
+				case "~": return KeyCode.BackQuote;
+				case "§": return KeyCode.BackQuote; // Add support for Section sign
+				case "0": return KeyCode.Alpha0;
+				case "1": return KeyCode.Alpha1;
+				case "2": return KeyCode.Alpha2;
+				case "3": return KeyCode.Alpha3;
+				case "4": return KeyCode.Alpha4;
+				case "5": return KeyCode.Alpha5;
+				case "6": return KeyCode.Alpha6;
+				case "7": return KeyCode.Alpha7;
+				case "8": return KeyCode.Alpha8;
+				case "9": return KeyCode.Alpha9;
+				case "-": return KeyCode.Minus;
+				case "=": return KeyCode.Equals;
+				case "[": return KeyCode.LeftBracket;
+				case "]": return KeyCode.RightBracket;
+				case "\\": return KeyCode.Backslash;
+				case ";": return KeyCode.Semicolon;
+				case "'": return KeyCode.Quote;
+				case ",": return KeyCode.Comma;
+				case ".": return KeyCode.Period;
+				case "/": return KeyCode.Slash;
+			}
+			return (KeyCode)System.Enum.Parse(typeof(KeyCode), val, true);
 		}
 
 		public bool TestKeyUp()
@@ -83,6 +116,31 @@ namespace var_browser
 				{
 					return false;
 				}
+			}
+			return true;
+		}
+
+		public bool IsSame(KeyUtil other)
+		{
+			if (other == null) return false;
+			if (this.key == KeyCode.None || other.key == KeyCode.None) return false;
+			if (this.key != other.key) return false;
+			if (this.supportKeys.Count != other.supportKeys.Count) return false;
+
+			for (int i = 0; i < this.supportKeys.Count; i += 2)
+			{
+				KeyCode k1 = this.supportKeys[i];
+				KeyCode k2 = this.supportKeys[i+1];
+				bool found = false;
+				for (int j = 0; j < other.supportKeys.Count; j += 2)
+				{
+					if (other.supportKeys[j] == k1 && other.supportKeys[j+1] == k2)
+					{
+						found = true;
+						break;
+					}
+				}
+				if (!found) return false;
 			}
 			return true;
 		}
