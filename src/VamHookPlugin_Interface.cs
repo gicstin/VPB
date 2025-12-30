@@ -110,6 +110,36 @@ namespace var_browser
                 }
             }
         }
+        private void ProtectPackage(string packageUid, HashSet<string> protectedPackages)
+        {
+            if (string.IsNullOrEmpty(packageUid)) return;
+            if (protectedPackages.Contains(packageUid)) return;
+
+            protectedPackages.Add(packageUid);
+
+            VarPackage currentPackage = FileManager.GetPackage(packageUid);
+            if (currentPackage != null && currentPackage.RecursivePackageDependencies != null)
+            {
+                foreach (var depUid in currentPackage.RecursivePackageDependencies)
+                {
+                    VarPackage depPackage = FileManager.ResolveDependency(depUid);
+                    if (depPackage != null)
+                    {
+                        protectedPackages.Add(depPackage.Uid);
+                    }
+                    protectedPackages.Add(depUid);
+                }
+            }
+        }
+
+        private string GetPackageFromPath(string path)
+        {
+             if (string.IsNullOrEmpty(path)) return null;
+             int idx = path.IndexOf(':');
+             if (idx > 0) return path.Substring(0, idx);
+             return null;
+        }
+
         public void UninstallAll()
         {
             HashSet<string> protectedPackages = new HashSet<string>();
@@ -117,10 +147,9 @@ namespace var_browser
             {
                 foreach (var item in FileEntry.AutoInstallLookup)
                 {
-                    protectedPackages.Add(item);
-                    // Also resolve to currently installed package to handle version drift
+                    ProtectPackage(item, protectedPackages);
                     VarPackage p = FileManager.ResolveDependency(item);
-                    if (p != null) protectedPackages.Add(p.Uid);
+                    if (p != null) ProtectPackage(p.Uid, protectedPackages);
                 }
             }
 
@@ -130,49 +159,54 @@ namespace var_browser
             {
                 currentPackageUid = FileManager.CurrentPackageUid;
             }
+            ProtectPackage(currentPackageUid, protectedPackages);
 
-            if (!string.IsNullOrEmpty(currentPackageUid))
+            // Protect active plugins
+            try
             {
-                //LogUtil.Log("Protecting current package: " + currentPackageUid);
-                protectedPackages.Add(currentPackageUid);
-                
-                VarPackage currentPackage = FileManager.GetPackage(currentPackageUid);
-                if (currentPackage != null && currentPackage.RecursivePackageDependencies != null)
+                var plugins = UnityEngine.Object.FindObjectsOfType<MVRScript>();
+                foreach (var p in plugins)
                 {
-                    foreach (var depUid in currentPackage.RecursivePackageDependencies)
-                    {
-                        // Resolve dependency to actual package UID
-                        VarPackage depPackage = FileManager.ResolveDependency(depUid);
-                        if (depPackage != null)
-                        {
-                            protectedPackages.Add(depPackage.Uid);
-                        }
-                        
-                        // Always add the original depUid as well
-                        protectedPackages.Add(depUid);
-                    }
+                     var fields = p.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                     foreach(var f in fields)
+                     {
+                         if (f.FieldType == typeof(JSONStorableUrl))
+                         {
+                             var jUrl = f.GetValue(p) as JSONStorableUrl;
+                             if (jUrl != null && !string.IsNullOrEmpty(jUrl.val))
+                             {
+                                 string pkg = GetPackageFromPath(jUrl.val);
+                                 if (pkg != null) ProtectPackage(pkg, protectedPackages);
+                             }
+                         }
+                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                 LogUtil.LogError("Error scanning plugins: " + ex.Message);
             }
 
             string[] addonVarPaths = Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories);
+            m_UnloadList.Clear();
             foreach (var item in addonVarPaths)
             {
                 string name = Path.GetFileNameWithoutExtension(item);
                 
-                if (protectedPackages.Contains(name)) continue;
+                bool isProtected = protectedPackages.Contains(name);
 
                 if (item.StartsWith("AddonPackages"))
                 {
-                    string targetPath = "AllPackages" + item.Substring("AddonPackages".Length);
-                    string dir = Path.GetDirectoryName(targetPath);
-                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                    if (File.Exists(targetPath)) continue;
-                    File.Move(item, targetPath);
+                    m_UnloadList.Add(new UnloadItem {
+                        Uid = name,
+                        Path = item,
+                        Type = DeterminePackageType(name),
+                        Checked = !isProtected,
+                        IsActive = isProtected
+                    });
                 }
             }
-            MVR.FileManagement.FileManager.Refresh();
-            var_browser.FileManager.Refresh();
-            RemoveEmptyFolder("AddonPackages");
+            m_ShowUnloadWindow = true;
         }
         public void OpenHubBrowse()
         {

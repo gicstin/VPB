@@ -19,12 +19,43 @@ namespace var_browser
         private KeyUtil CategorySceneKey;
         private Vector2 UIPosition;
         private bool MiniMode;
+        
+        // Unload All Window
+        private class UnloadItem
+        {
+            public string Uid;
+            public string Path;
+            public string Type;
+            public bool Checked;
+            public bool IsActive;
+        }
+        private bool m_ShowUnloadWindow = false;
+        private System.Collections.Generic.List<UnloadItem> m_UnloadList = new System.Collections.Generic.List<UnloadItem>();
+        private string m_UnloadFilter = "";
+        private bool m_ExcludeActivePackages = true;
+        private Vector2 m_UnloadScroll = Vector2.zero;
+        private Rect m_UnloadWindowRect = new Rect(200, 200, 600, 500);
+
+        // Remove Old/Damaged Window
+        private class RemoveItem
+        {
+            public string Uid;
+            public string Path;
+            public string Type;
+            public bool Checked;
+        }
+        private bool m_ShowRemoveWindow = false;
+        private System.Collections.Generic.List<RemoveItem> m_RemoveList = new System.Collections.Generic.List<RemoveItem>();
+        private string m_RemoveFilter = "";
+        private bool m_ExcludeOld = false;
+        private Vector2 m_RemoveScroll = Vector2.zero;
+        private Rect m_RemoveWindowRect = new Rect(250, 250, 600, 500);
+
         private bool m_ShowDownscaleTexturesInfo;
         private bool m_ShowPrioritizeFaceTexturesInfo;
         private bool m_ShowPrioritizeHairTexturesInfo;
         private bool m_ShowPluginsAlwaysEnabledInfo;
-        private bool m_ShowRemoveInvalidVarsInfo;
-        private bool m_ShowRemoveOldVersionInfo;
+        private bool m_ShowRemoveOldDamagedInfo;
         private bool m_ShowUninstallAllInfo;
         private bool m_ShowGcRefreshInfo;
         private bool m_ShowSettings;
@@ -34,11 +65,6 @@ namespace var_browser
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
-        private bool m_SettingsOptimizeGameObjectFindDraft;
-        private bool m_SettingsOptimizePhysicsRaycastDraft;
-        private bool m_SettingsOptimizeMeshNormalsDraft;
-        private bool m_SettingsOptimizeMeshBoundsDraft;
-        private bool m_SettingsOptimizeMeshTangentsDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -111,8 +137,7 @@ namespace var_browser
             m_ShowPrioritizeFaceTexturesInfo = false;
             m_ShowPrioritizeHairTexturesInfo = false;
             m_ShowPluginsAlwaysEnabledInfo = false;
-            m_ShowRemoveInvalidVarsInfo = false;
-            m_ShowRemoveOldVersionInfo = false;
+            m_ShowRemoveOldDamagedInfo = false;
             m_ShowUninstallAllInfo = false;
             m_ShowGcRefreshInfo = false;
         }
@@ -130,11 +155,6 @@ namespace var_browser
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
-            m_SettingsOptimizeGameObjectFindDraft = (Settings.Instance != null && Settings.Instance.OptimizeGameObjectFind != null) ? Settings.Instance.OptimizeGameObjectFind.Value : true;
-            m_SettingsOptimizePhysicsRaycastDraft = (Settings.Instance != null && Settings.Instance.OptimizePhysicsRaycast != null) ? Settings.Instance.OptimizePhysicsRaycast.Value : true;
-            m_SettingsOptimizeMeshNormalsDraft = (Settings.Instance != null && Settings.Instance.OptimizeMeshNormals != null) ? Settings.Instance.OptimizeMeshNormals.Value : true;
-            m_SettingsOptimizeMeshBoundsDraft = (Settings.Instance != null && Settings.Instance.OptimizeMeshBounds != null) ? Settings.Instance.OptimizeMeshBounds.Value : true;
-            m_SettingsOptimizeMeshTangentsDraft = (Settings.Instance != null && Settings.Instance.OptimizeMeshTangents != null) ? Settings.Instance.OptimizeMeshTangents.Value : true;
             m_SettingsError = null;
         }
 
@@ -235,59 +255,7 @@ namespace var_browser
             });
 
             GUILayout.Space(10);
-            GUILayout.Label("Optimizations (Requires Restart)", m_StyleHeader);
-            GUILayout.Space(6);
-
-            // Optimize GameObject.Find
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsOptimizeGameObjectFindDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsOptimizeGameObjectFindDraft = !m_SettingsOptimizeGameObjectFindDraft;
-            }
-            GUILayout.Label("Cache GameObject.Find");
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-
-            // Optimize Physics.Raycast
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsOptimizePhysicsRaycastDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsOptimizePhysicsRaycastDraft = !m_SettingsOptimizePhysicsRaycastDraft;
-            }
-            GUILayout.Label("Cache Physics.Raycast (per frame)");
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-
-            // Optimize Mesh.RecalculateNormals
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsOptimizeMeshNormalsDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsOptimizeMeshNormalsDraft = !m_SettingsOptimizeMeshNormalsDraft;
-            }
-            GUILayout.Label("Debounce Mesh.RecalculateNormals");
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-
-            // Optimize Mesh.RecalculateBounds
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsOptimizeMeshBoundsDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsOptimizeMeshBoundsDraft = !m_SettingsOptimizeMeshBoundsDraft;
-            }
-            GUILayout.Label("Debounce Mesh.RecalculateBounds");
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-
-            // Optimize Mesh.RecalculateTangents
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsOptimizeMeshTangentsDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsOptimizeMeshTangentsDraft = !m_SettingsOptimizeMeshTangentsDraft;
-            }
-            GUILayout.Label("Debounce Mesh.RecalculateTangents");
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-
+            
             if (!string.IsNullOrEmpty(m_SettingsError))
             {
                 GUILayout.Space(4);
@@ -340,11 +308,6 @@ namespace var_browser
                             Settings.Instance.PrioritizeHairTextures.Value = m_SettingsPrioritizeHairTexturesDraft;
                         }
                     }
-                    if (Settings.Instance != null && Settings.Instance.OptimizeGameObjectFind != null) Settings.Instance.OptimizeGameObjectFind.Value = m_SettingsOptimizeGameObjectFindDraft;
-                    if (Settings.Instance != null && Settings.Instance.OptimizePhysicsRaycast != null) Settings.Instance.OptimizePhysicsRaycast.Value = m_SettingsOptimizePhysicsRaycastDraft;
-                    if (Settings.Instance != null && Settings.Instance.OptimizeMeshNormals != null) Settings.Instance.OptimizeMeshNormals.Value = m_SettingsOptimizeMeshNormalsDraft;
-                    if (Settings.Instance != null && Settings.Instance.OptimizeMeshBounds != null) Settings.Instance.OptimizeMeshBounds.Value = m_SettingsOptimizeMeshBoundsDraft;
-                    if (Settings.Instance != null && Settings.Instance.OptimizeMeshTangents != null) Settings.Instance.OptimizeMeshTangents.Value = m_SettingsOptimizeMeshTangentsDraft;
 
                     UIKey = parsed;
                     CustomSceneKey = parsedCustomSceneKey;
@@ -1316,51 +1279,32 @@ namespace var_browser
                         GUILayout.Label("GC tries to free memory after heavy browsing by clearing caches and asking Unity/.NET to clean up.", m_StyleInfoCardText);
                     });
 
-                    // ========== REMOVE INVALID VARS ==========
+                    // ========== REMOVE OLD/DAMAGED ==========
                     GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Remove Invalid Vars", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
+                    if (GUILayout.Button("Remove Old/Damaged", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                     {
-                        RemoveInvalidVars();
+                        OpenRemoveWindow();
                     }
                     if (GUILayout.Button("i", m_StyleButton, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
                     {
-						ToggleInfoCard(ref m_ShowRemoveInvalidVarsInfo);
+						ToggleInfoCard(ref m_ShowRemoveOldDamagedInfo);
                     }
                     GUILayout.EndHorizontal();
-					DrawInfoCard(ref m_ShowRemoveInvalidVarsInfo, "Remove Invalid Vars", () =>
+					DrawInfoCard(ref m_ShowRemoveOldDamagedInfo, "Remove Old/Damaged", () =>
 					{
 						GUILayout.Space(4);
-						GUILayout.Label("Cleans up the browser list so missing or broken items stop showing up.", m_StyleInfoCardText);
+						GUILayout.Label("Scan for invalid vars (duplicates, invalid names) and old versions.", m_StyleInfoCardText);
 						GUILayout.Space(2);
-						GUILayout.Label("This does NOT delete your files. It only refreshes the list.", m_StyleInfoCardText);
-					});
-
-                    // ========== REMOVE OLD VERSION ==========
-                    GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Remove Old Version", m_StyleButtonDanger, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
-                    {
-                        RemoveOldVersion();
-                    }
-                    if (GUILayout.Button("i", m_StyleButtonDanger, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
-                    {
-						ToggleInfoCard(ref m_ShowRemoveOldVersionInfo);
-                    }
-                    GUILayout.EndHorizontal();
-					DrawInfoCard(ref m_ShowRemoveOldVersionInfo, "Remove Old Version", () =>
-					{
-						GUILayout.Space(4);
-						GUILayout.Label("Helps reduce duplicates by keeping newer versions and removing older ones when possible.", m_StyleInfoCardText);
-						GUILayout.Space(2);
-						GUILayout.Label("It may change what VaM considers " + "installed" + " because files can be moved/updated during the cleanup.", m_StyleInfoCardText);
+						GUILayout.Label("Opens a window to review and confirm removal.", m_StyleInfoCardText);
 					});
 
                     // ========== UNLOAD ALL PACKAGES ==========
                     GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Unload All", m_StyleButtonPrimary, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
+                    if (GUILayout.Button("Unload All", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                     {
                         UninstallAll();
                     }
-                    if (GUILayout.Button("i", m_StyleButtonPrimary, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
+                    if (GUILayout.Button("i", m_StyleButton, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
                     {
 						ToggleInfoCard(ref m_ShowUninstallAllInfo);
                     }
@@ -1560,6 +1504,16 @@ namespace var_browser
                     GUI.backgroundColor = prevBackgroundColor;
                     GUI.enabled = prevEnabled;
 
+                    if (m_ShowUnloadWindow)
+                    {
+                        m_UnloadWindowRect = GUILayout.Window(1, m_UnloadWindowRect, DrawUnloadWindow, "Unload Packages", m_StyleWindow);
+                        GUI.BringWindowToFront(1);
+                    }
+                    if (m_ShowRemoveWindow)
+                    {
+                        m_RemoveWindowRect = GUILayout.Window(2, m_RemoveWindowRect, DrawRemoveWindow, "Remove Old/Damaged", m_StyleWindow);
+                        GUI.BringWindowToFront(2);
+                    }
                 }
             }
             else
@@ -1604,6 +1558,393 @@ namespace var_browser
             m_MVRPluginManager = SuperController.singleton.transform.Find("ScenePluginManager").GetComponent<MVRPluginManager>();
             //m_MVRPluginManager.configurableFilterablePopupPrefab
 
+        }
+
+        string DeterminePackageType(string uid)
+        {
+             VarPackage pkg = FileManager.GetPackage(uid);
+             if (pkg == null) return "Unknown";
+             
+             // Check content
+             if (pkg.ClothingFileEntryNames != null && pkg.ClothingFileEntryNames.Count > 0) return "Clothing";
+             if (pkg.HairFileEntryNames != null && pkg.HairFileEntryNames.Count > 0) return "Hair";
+             
+             // Check file entries for other types
+             if (pkg.FileEntries != null)
+             {
+                 foreach(var entry in pkg.FileEntries)
+                 {
+                     string f = entry.InternalPath;
+                     if (f.StartsWith("Saves/scene", StringComparison.OrdinalIgnoreCase) && f.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return "Scene";
+                     if (f.StartsWith("Custom/Scripts", StringComparison.OrdinalIgnoreCase)) return "Script";
+                     if (f.StartsWith("Custom/Atom/Person", StringComparison.OrdinalIgnoreCase)) return "Person";
+                 }
+             }
+             
+             return "Other";
+        }
+
+
+        void DrawUnloadWindow(int windowID)
+        {
+            // Block game input from scroll wheel immediately, before UI elements consume the event
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                Input.ResetInputAxes();
+            }
+
+            // Focus check for text field
+            if (Event.current.type == EventType.KeyDown)
+            {
+                if (GUI.GetNameOfFocusedControl() == "UnloadFilter")
+                {
+                    // Consume input to prevent hotkeys/world interaction
+                    // But allow normal typing
+                }
+            }
+
+            GUILayout.BeginVertical(m_StylePanel);
+            
+            // Header
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Unload Packages", m_StyleHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
+            {
+                m_ShowUnloadWindow = false;
+            }
+            GUILayout.EndHorizontal();
+
+            // Filter
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Filter:", GUILayout.Width(50));
+            GUI.SetNextControlName("UnloadFilter");
+            m_UnloadFilter = GUILayout.TextField(m_UnloadFilter);
+            if (GUILayout.Button("Clear", m_StyleButtonSmall, GUILayout.Width(50)))
+            {
+                m_UnloadFilter = "";
+                GUI.FocusControl("");
+            }
+            GUILayout.EndHorizontal();
+            
+            m_ExcludeActivePackages = GUILayout.Toggle(m_ExcludeActivePackages, "Exclude Active Packages");
+            
+            GUILayout.Space(5);
+
+            // List
+            GUILayout.BeginVertical(m_StyleSection);
+            
+            // Table Headers
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("", GUILayout.Width(25)); // Checkbox spacer
+            GUILayout.Label("Category", m_StyleInfoCardTitle, GUILayout.Width(80));
+            GUILayout.Label("Package Name", m_StyleInfoCardTitle, GUILayout.Width(200));
+            GUILayout.Label("Folder Path", m_StyleInfoCardTitle);
+            GUILayout.EndHorizontal();
+
+            m_UnloadScroll = GUILayout.BeginScrollView(m_UnloadScroll);
+            
+
+            for (int i = 0; i < m_UnloadList.Count; i++)
+            {
+                var item = m_UnloadList[i];
+                if (m_ExcludeActivePackages && item.IsActive) continue;
+
+                if (!string.IsNullOrEmpty(m_UnloadFilter) && 
+                    !item.Uid.ToLower().Contains(m_UnloadFilter.ToLower()) && 
+                    !item.Type.ToLower().Contains(m_UnloadFilter.ToLower()))
+                {
+                    continue;
+                }
+
+                GUILayout.BeginHorizontal();
+                item.Checked = GUILayout.Toggle(item.Checked, "", GUILayout.Width(25));
+                GUILayout.Label(item.Type, GUILayout.Width(80));
+                GUILayout.Label(item.Uid, GUILayout.Width(200));
+                
+                // Show directory only, excluding filename
+                string dirDisplay = Path.GetDirectoryName(item.Path);
+                GUILayout.Label(dirDisplay);
+                
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.EndScrollView();
+            GUILayout.EndVertical();
+
+            GUILayout.Space(5);
+            
+            // Buttons
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Select All", m_StyleButton))
+            {
+                foreach(var item in m_UnloadList)
+                {
+                    if (m_ExcludeActivePackages && item.IsActive) continue;
+                    item.Checked = true;
+                }
+            }
+            if (GUILayout.Button("Select None", m_StyleButton))
+            {
+                foreach(var item in m_UnloadList) item.Checked = false;
+            }
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Confirm Unload Selected", m_StyleButtonPrimary))
+            {
+                PerformUnload();
+                m_ShowUnloadWindow = false;
+            }
+            GUILayout.EndHorizontal();
+            
+            // Resize handle
+            var resizeRect = new Rect(m_UnloadWindowRect.width - 30, m_UnloadWindowRect.height - 30, 30, 30);
+            GUI.Box(new Rect(m_UnloadWindowRect.width - 20, m_UnloadWindowRect.height - 20, 20, 20), "◢", m_StyleInfoIcon);
+
+            int resizeControlID = GUIUtility.GetControlID(FocusType.Passive);
+            switch (Event.current.GetTypeForControl(resizeControlID))
+            {
+                case EventType.MouseDown:
+                    if (resizeRect.Contains(Event.current.mousePosition))
+                    {
+                        GUIUtility.hotControl = resizeControlID;
+                        Event.current.Use();
+                    }
+                    break;
+                case EventType.MouseUp:
+                    if (GUIUtility.hotControl == resizeControlID)
+                    {
+                        GUIUtility.hotControl = 0;
+                        Event.current.Use();
+                    }
+                    break;
+                case EventType.MouseDrag:
+                    if (GUIUtility.hotControl == resizeControlID)
+                    {
+                        m_UnloadWindowRect.width += Event.current.delta.x;
+                        m_UnloadWindowRect.height += Event.current.delta.y;
+                        m_UnloadWindowRect.width = Mathf.Max(m_UnloadWindowRect.width, 300);
+                        m_UnloadWindowRect.height = Mathf.Max(m_UnloadWindowRect.height, 200);
+                        Event.current.Use();
+                    }
+                    break;
+            }
+
+            // Consume ScrollWheel event if inside window to prevent game scrolling
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                Event.current.Use();
+            }
+
+            GUILayout.EndVertical();
+            
+            // Drag window (excluding resize handle area to avoid conflict)
+            if (Event.current.type != EventType.MouseDrag || !resizeRect.Contains(Event.current.mousePosition))
+            {
+                 GUI.DragWindow();
+            }
+        }
+
+        void PerformUnload()
+        {
+             foreach (var item in m_UnloadList)
+             {
+                 if (m_ExcludeActivePackages && item.IsActive) continue;
+
+                 if (item.Checked)
+                 {
+                    string targetPath = "AllPackages" + item.Path.Substring("AddonPackages".Length);
+                    string dir = Path.GetDirectoryName(targetPath);
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    if (File.Exists(targetPath)) continue;
+                    try {
+                        File.Move(item.Path, targetPath);
+                    } catch (Exception ex) {
+                        LogUtil.LogError("Failed to move " + item.Path + ": " + ex.Message);
+                    }
+                 }
+             }
+             Refresh();
+             RemoveEmptyFolder("AddonPackages");
+        }
+
+        void OpenRemoveWindow()
+        {
+            m_RemoveList.Clear();
+            var items = FileManager.GetCleanupList(true);
+            foreach (var item in items)
+            {
+                m_RemoveList.Add(new RemoveItem
+                {
+                    Path = item.Path,
+                    Uid = item.Uid,
+                    Type = item.Type,
+                    Checked = true
+                });
+            }
+            m_ShowRemoveWindow = true;
+        }
+
+        void PerformRemove()
+        {
+            foreach (var item in m_RemoveList)
+            {
+                if (item.Checked)
+                {
+                    FileManager.RemoveToInvalid(item.Path, item.Type);
+                }
+            }
+            Refresh();
+        }
+
+        void DrawRemoveWindow(int windowID)
+        {
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                Input.ResetInputAxes();
+            }
+
+            if (Event.current.type == EventType.KeyDown)
+            {
+                if (GUI.GetNameOfFocusedControl() == "RemoveFilter")
+                {
+                }
+            }
+
+            GUILayout.BeginVertical(m_StylePanel);
+
+            // Header
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Remove Old/Damaged", m_StyleHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
+            {
+                m_ShowRemoveWindow = false;
+            }
+            GUILayout.EndHorizontal();
+
+            // Filter
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Filter:", GUILayout.Width(50));
+            GUI.SetNextControlName("RemoveFilter");
+            m_RemoveFilter = GUILayout.TextField(m_RemoveFilter);
+            if (GUILayout.Button("Clear", m_StyleButtonSmall, GUILayout.Width(50)))
+            {
+                m_RemoveFilter = "";
+                GUI.FocusControl("");
+            }
+            GUILayout.EndHorizontal();
+
+            m_ExcludeOld = GUILayout.Toggle(m_ExcludeOld, "Exclude Old");
+
+            GUILayout.Space(5);
+
+            // List
+            GUILayout.BeginVertical(m_StyleSection);
+
+            // Table Headers
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("", GUILayout.Width(25));
+            GUILayout.Label("Type", m_StyleInfoCardTitle, GUILayout.Width(80));
+            GUILayout.Label("Package Name", m_StyleInfoCardTitle, GUILayout.Width(200));
+            GUILayout.Label("Path/Info", m_StyleInfoCardTitle);
+            GUILayout.EndHorizontal();
+
+            m_RemoveScroll = GUILayout.BeginScrollView(m_RemoveScroll);
+
+
+            for (int i = 0; i < m_RemoveList.Count; i++)
+            {
+                var item = m_RemoveList[i];
+                if (m_ExcludeOld && item.Type == "OldVersion") continue;
+
+                if (!string.IsNullOrEmpty(m_RemoveFilter) &&
+                    !item.Uid.ToLower().Contains(m_RemoveFilter.ToLower()) &&
+                    !item.Type.ToLower().Contains(m_RemoveFilter.ToLower()))
+                {
+                    continue;
+                }
+
+                GUILayout.BeginHorizontal();
+                item.Checked = GUILayout.Toggle(item.Checked, "", GUILayout.Width(25));
+                GUILayout.Label(item.Type, GUILayout.Width(80));
+                GUILayout.Label(item.Uid, GUILayout.Width(200));
+                GUILayout.Label(Path.GetDirectoryName(item.Path));
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.EndScrollView();
+            GUILayout.EndVertical();
+
+            GUILayout.Space(5);
+
+            // Buttons
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Select All", m_StyleButton))
+            {
+                foreach (var item in m_RemoveList)
+                {
+                    if (m_ExcludeOld && item.Type == "OldVersion") continue;
+                    item.Checked = true;
+                }
+            }
+            if (GUILayout.Button("Select None", m_StyleButton))
+            {
+                foreach (var item in m_RemoveList) item.Checked = false;
+            }
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Remove Selected", m_StyleButtonDanger))
+            {
+                PerformRemove();
+                m_ShowRemoveWindow = false;
+            }
+            GUILayout.EndHorizontal();
+
+            // Resize handle
+            var resizeRect = new Rect(m_RemoveWindowRect.width - 30, m_RemoveWindowRect.height - 30, 30, 30);
+            GUI.Box(new Rect(m_RemoveWindowRect.width - 20, m_RemoveWindowRect.height - 20, 20, 20), "◢", m_StyleInfoIcon);
+
+            int resizeControlID = GUIUtility.GetControlID(FocusType.Passive);
+            switch (Event.current.GetTypeForControl(resizeControlID))
+            {
+                case EventType.MouseDown:
+                    if (resizeRect.Contains(Event.current.mousePosition))
+                    {
+                        GUIUtility.hotControl = resizeControlID;
+                        Event.current.Use();
+                    }
+                    break;
+                case EventType.MouseUp:
+                    if (GUIUtility.hotControl == resizeControlID)
+                    {
+                        GUIUtility.hotControl = 0;
+                        Event.current.Use();
+                    }
+                    break;
+                case EventType.MouseDrag:
+                    if (GUIUtility.hotControl == resizeControlID)
+                    {
+                        m_RemoveWindowRect.width += Event.current.delta.x;
+                        m_RemoveWindowRect.height += Event.current.delta.y;
+                        m_RemoveWindowRect.width = Mathf.Max(m_RemoveWindowRect.width, 300);
+                        m_RemoveWindowRect.height = Mathf.Max(m_RemoveWindowRect.height, 200);
+                        Event.current.Use();
+                    }
+                    break;
+            }
+
+            // Consume ScrollWheel event if inside window to prevent game scrolling
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                Event.current.Use();
+            }
+
+            GUILayout.EndVertical();
+
+            // Drag window (excluding resize handle area to avoid conflict)
+            if (Event.current.type != EventType.MouseDrag || !resizeRect.Contains(Event.current.mousePosition))
+            {
+                GUI.DragWindow();
+            }
         }
     }
 }

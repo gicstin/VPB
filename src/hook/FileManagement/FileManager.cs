@@ -213,7 +213,114 @@ namespace var_browser
 			}
 			return null;
 		}
-		static void RemoveToInvalid(string vpath,string subPath=null)
+		public struct CleanupItem
+		{
+			public string Path;
+			public string Uid;
+			public string Type; // "Duplicated", "InvalidName", "OldVersion", "InvalidZip"
+		}
+
+		public static List<CleanupItem> GetCleanupList(bool checkOldVersions)
+		{
+			List<CleanupItem> items = new List<CleanupItem>();
+			
+			// Get all var files
+			List<string> allFiles = new List<string>();
+			if (Directory.Exists("AddonPackages"))
+				allFiles.AddRange(Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories));
+			if (Directory.Exists("AllPackages"))
+				allFiles.AddRange(Directory.GetFiles("AllPackages", "*.var", SearchOption.AllDirectories));
+
+			// 1. Check for Invalid Names and Duplicates
+			// We build a temporary index to find duplicates
+			Dictionary<string, string> uidToPath = new Dictionary<string, string>();
+
+			foreach (string file in allFiles)
+			{
+				string vpath = CleanFilePath(file);
+				string uidText = packagePathToUid(vpath).Trim();
+				string[] array = uidText.Split('.');
+
+				if (array.Length == 3)
+				{
+					string s = array[2];
+					int version;
+					if (int.TryParse(s, out version))
+					{
+						// Valid name format
+						if (uidToPath.ContainsKey(uidText))
+						{
+							// Duplicate
+							if (packagesByUid != null && packagesByUid.ContainsKey(uidText))
+							{
+								var registered = packagesByUid[uidText];
+								if (registered.Path != vpath)
+								{
+									items.Add(new CleanupItem { Path = vpath, Uid = uidText, Type = "Duplicated" });
+								}
+							}
+							else
+							{
+								items.Add(new CleanupItem { Path = vpath, Uid = uidText, Type = "Duplicated" });
+							}
+						}
+						else
+						{
+							uidToPath[uidText] = vpath;
+						}
+					}
+					else
+					{
+						items.Add(new CleanupItem { Path = vpath, Uid = uidText, Type = "InvalidName" });
+					}
+				}
+				else
+				{
+					items.Add(new CleanupItem { Path = vpath, Uid = uidText, Type = "InvalidName" });
+				}
+			}
+
+			// 2. Check for Invalid Zips (must be in PackagesByUid and marked invalid)
+			if (packagesByUid != null)
+			{
+				foreach (var pkg in packagesByUid.Values)
+				{
+					if (pkg.invalid)
+					{
+						items.Add(new CleanupItem { Path = pkg.Path, Uid = pkg.Uid, Type = "InvalidZip" });
+					}
+				}
+			}
+
+			// 3. Check for Old Versions
+			if (checkOldVersions && packageGroups != null)
+			{
+				HashSet<string> referenced = GetReferencedPackage();
+				foreach (var group in packageGroups.Values)
+				{
+					foreach (var pkg in group.Packages)
+					{
+						if (pkg.Version != group.NewestVersion)
+						{
+							if (!referenced.Contains(pkg.Uid))
+							{
+								bool exists = false;
+								foreach(var it in items) { if(it.Path == pkg.Path) { exists=true; break; } }
+								
+								if (!exists)
+								{
+									items.Add(new CleanupItem { Path = pkg.Path, Uid = pkg.Uid, Type = "OldVersion" });
+								}
+							}
+						}
+					}
+				}
+			}
+
+			return items;
+		}
+
+		public static void RemoveToInvalid(string vpath,string subPath=null)
         {
             if (!Directory.Exists("InvalidPackages"))
                 Directory.CreateDirectory("InvalidPackages");
