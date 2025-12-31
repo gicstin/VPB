@@ -65,6 +65,12 @@ namespace var_browser
         
         // Data
         private string currentCreator = "";
+        private string categoryFilter = "";
+        private string creatorFilter = "";
+
+        private InputField leftSearchInput;
+        private InputField rightSearchInput;
+        private Stack<GameObject> tabButtonPool = new Stack<GameObject>();
         
         public struct CreatorCacheEntry { public string Name; public int Count; }
         private List<CreatorCacheEntry> cachedCreators = new List<CreatorCacheEntry>();
@@ -155,12 +161,23 @@ namespace var_browser
                 rightTabRT.anchorMin = new Vector2(1, 0);
                 rightTabRT.anchorMax = new Vector2(1, 1);
                 rightTabRT.offsetMin = new Vector2(-tabAreaWidth - 10, 20); 
-                rightTabRT.offsetMax = new Vector2(-10, -70); 
+                rightTabRT.offsetMax = new Vector2(-10, -95); 
                 
                 rightTabContainerGO = rightTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
                 VerticalLayoutGroup rightVlg = rightTabContainerGO.GetComponent<VerticalLayoutGroup>();
                 rightVlg.spacing = 2;
                 rightVlg.padding = new RectOffset(0, 10, 0, 0);
+
+                rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth, (val) => {
+                    if (rightActiveContent == ContentType.Category) categoryFilter = val;
+                    else if (rightActiveContent == ContentType.Creator) creatorFilter = val;
+                    UpdateTabs();
+                });
+                RectTransform rSearchRT = rightSearchInput.GetComponent<RectTransform>();
+                rSearchRT.anchorMin = new Vector2(1, 1);
+                rSearchRT.anchorMax = new Vector2(1, 1);
+                rSearchRT.pivot = new Vector2(1, 1);
+                rSearchRT.anchoredPosition = new Vector2(-10, -50);
 
                 // 2. Left Tab Area
                 leftTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchLeft, tabAreaWidth, 0, Vector2.zero);
@@ -168,12 +185,23 @@ namespace var_browser
                 leftTabRT.anchorMin = new Vector2(0, 0);
                 leftTabRT.anchorMax = new Vector2(0, 1);
                 leftTabRT.offsetMin = new Vector2(10, 20);
-                leftTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -70);
+                leftTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -95);
                 
                 leftTabContainerGO = leftTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
                 VerticalLayoutGroup leftVlg = leftTabContainerGO.GetComponent<VerticalLayoutGroup>();
                 leftVlg.spacing = 2;
                 leftVlg.padding = new RectOffset(0, 10, 0, 0);
+
+                leftSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth, (val) => {
+                    if (leftActiveContent == ContentType.Category) categoryFilter = val;
+                    else if (leftActiveContent == ContentType.Creator) creatorFilter = val;
+                    UpdateTabs();
+                });
+                RectTransform lSearchRT = leftSearchInput.GetComponent<RectTransform>();
+                lSearchRT.anchorMin = new Vector2(0, 1);
+                lSearchRT.anchorMax = new Vector2(0, 1);
+                lSearchRT.pivot = new Vector2(0, 1);
+                lSearchRT.anchoredPosition = new Vector2(10, -50);
 
                 // Right Toggle Buttons
                 // Category (Red)
@@ -307,10 +335,27 @@ namespace var_browser
             {
                 leftTabScrollGO.SetActive(true);
                 leftOffset = 210; 
+                if (leftSearchInput != null) 
+                {
+                    leftSearchInput.gameObject.SetActive(true);
+                    string target = leftActiveContent.Value == ContentType.Category ? categoryFilter : creatorFilter;
+                    // Setting text triggers OnValueChanged which calls UpdateTabs, which is fine but maybe redundant.
+                    // To avoid event we'd need to remove listener. 
+                    // But if text is different, we probably WANT to update tabs anyway?
+                    // Actually UpdateTabs is called at end of UpdateLayout anyway.
+                    // But changing text triggers it immediately.
+                    if (leftSearchInput.text != target) leftSearchInput.text = target;
+                    
+                    if (leftSearchInput.placeholder is Text ph)
+                    {
+                        ph.text = leftActiveContent.Value.ToString() + "...";
+                    }
+                }
             }
             else if (leftTabScrollGO != null)
             {
                 leftTabScrollGO.SetActive(false);
+                if (leftSearchInput != null) leftSearchInput.gameObject.SetActive(false);
             }
             
             // Right Side
@@ -318,10 +363,22 @@ namespace var_browser
             {
                 rightTabScrollGO.SetActive(true);
                 rightOffset = -210;
+                if (rightSearchInput != null) 
+                {
+                    rightSearchInput.gameObject.SetActive(true);
+                    string target = rightActiveContent.Value == ContentType.Category ? categoryFilter : creatorFilter;
+                    if (rightSearchInput.text != target) rightSearchInput.text = target;
+
+                    if (rightSearchInput.placeholder is Text ph)
+                    {
+                        ph.text = rightActiveContent.Value.ToString() + "...";
+                    }
+                }
             }
             else if (rightTabScrollGO != null)
             {
                 rightTabScrollGO.SetActive(false);
+                if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
             }
             
             contentScrollRT.offsetMin = new Vector2(leftOffset, 20);
@@ -528,7 +585,7 @@ namespace var_browser
 
             foreach (var btn in trackedButtons)
             {
-                Destroy(btn);
+                ReturnTabButton(btn);
             }
             trackedButtons.Clear();
 
@@ -539,6 +596,8 @@ namespace var_browser
 
                 foreach (var cat in categories)
                 {
+                    if (!string.IsNullOrEmpty(categoryFilter) && cat.name.IndexOf(categoryFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
                     var c = cat;
                     bool isActive = (c.path == currentPath && c.extension == currentExtension);
                     Color btnColor = isActive ? ColorCategory : new Color(0.7f, 0.7f, 0.7f, 1f);
@@ -567,6 +626,8 @@ namespace var_browser
                 
                 foreach (var creator in cachedCreators)
                 {
+                    if (!string.IsNullOrEmpty(creatorFilter) && creator.Name.IndexOf(creatorFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
                     string cName = creator.Name;
                     bool isActive = (currentCreator == cName);
                     Color btnColor = isActive ? ColorCreator : new Color(0.7f, 0.7f, 0.7f, 1f);
@@ -590,39 +651,162 @@ namespace var_browser
 
         private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, UnityAction onUndock, List<GameObject> targetList)
         {
-            // Container
-            GameObject groupGO = new GameObject("TabGroup_" + label);
-            groupGO.transform.SetParent(parent, false);
-            LayoutElement groupLE = groupGO.AddComponent<LayoutElement>();
-            groupLE.minWidth = 140; 
-            groupLE.preferredWidth = 170;
-            groupLE.minHeight = 35;
-            groupLE.preferredHeight = 35;
+            GameObject groupGO = GetTabButton(parent);
+            if (groupGO == null)
+            {
+                // Container
+                groupGO = new GameObject("TabGroup");
+                groupGO.transform.SetParent(parent, false);
+                LayoutElement groupLE = groupGO.AddComponent<LayoutElement>();
+                groupLE.minWidth = 140; 
+                groupLE.preferredWidth = 170;
+                groupLE.minHeight = 35;
+                groupLE.preferredHeight = 35;
+                
+                HorizontalLayoutGroup groupHLG = groupGO.AddComponent<HorizontalLayoutGroup>();
+                groupHLG.childControlWidth = false;
+                groupHLG.childControlHeight = true;
+                groupHLG.childForceExpandWidth = false;
+                groupHLG.spacing = 2;
+
+                // Tab Button
+                GameObject btnGO = UI.CreateUIButton(groupGO, 130, 35, "", 14, 0, 0, AnchorPresets.middleLeft, null);
+                btnGO.name = "Button";
+                
+                // Undock Button
+                GameObject undockGO = UI.CreateUIButton(groupGO, 30, 35, "↗", 14, 0, 0, AnchorPresets.middleRight, null);
+                undockGO.name = "UndockButton";
+                undockGO.GetComponent<Image>().color = new Color(0.5f, 0.5f, 0.5f, 1f);
+            }
             
-            HorizontalLayoutGroup groupHLG = groupGO.AddComponent<HorizontalLayoutGroup>();
-            groupHLG.childControlWidth = false;
-            groupHLG.childControlHeight = true;
-            groupHLG.childForceExpandWidth = false;
-            groupHLG.spacing = 2;
-
-            // Tab Button
-            GameObject btnGO = UI.CreateUIButton(groupGO, 130, 35, label, 14, 0, 0, AnchorPresets.middleLeft, onClick);
+            groupGO.name = "TabGroup_" + label;
             
-            Image img = btnGO.GetComponent<Image>();
-            if (img != null) img.color = color;
-
-            Text txt = btnGO.GetComponentInChildren<Text>();
-            if (txt != null) txt.color = isActive ? Color.white : Color.black;
-
-            // Undock Button (Optional)
+            // Reconfigure
+            Transform btnTr = groupGO.transform.GetChild(0);
+            GameObject btnGO_Reuse = btnTr.gameObject;
+            Button btnComp = btnGO_Reuse.GetComponent<Button>();
+            btnComp.onClick.RemoveAllListeners();
+            if (onClick != null) btnComp.onClick.AddListener(onClick);
+            
+            Image img = btnGO_Reuse.GetComponent<Image>();
+            img.color = color;
+            
+            Text txt = btnGO_Reuse.GetComponentInChildren<Text>();
+            txt.text = label;
+            txt.color = isActive ? Color.white : Color.black;
+            
+            Transform undockTr = groupGO.transform.GetChild(1);
+            GameObject undockGO_Reuse = undockTr.gameObject;
             if (onUndock != null)
             {
-                GameObject undockGO = UI.CreateUIButton(groupGO, 30, 35, "↗", 14, 0, 0, AnchorPresets.middleRight, onUndock);
-                Image undockImg = undockGO.GetComponent<Image>();
-                undockImg.color = new Color(0.5f, 0.5f, 0.5f, 1f);
+                undockGO_Reuse.SetActive(true);
+                Button uBtn = undockGO_Reuse.GetComponent<Button>();
+                uBtn.onClick.RemoveAllListeners();
+                uBtn.onClick.AddListener(onUndock);
             }
-
+            else
+            {
+                undockGO_Reuse.SetActive(false);
+            }
+            
             if (targetList != null) targetList.Add(groupGO);
+        }
+
+        private InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged)
+        {
+            GameObject inputGO = new GameObject("SearchInput");
+            inputGO.transform.SetParent(parent.transform, false);
+            
+            Image bg = inputGO.AddComponent<Image>();
+            bg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            
+            InputField input = inputGO.AddComponent<InputField>();
+            RectTransform inputRT = inputGO.GetComponent<RectTransform>();
+            inputRT.sizeDelta = new Vector2(width, 35);
+            
+            // Text Area
+            GameObject textArea = new GameObject("TextArea");
+            textArea.transform.SetParent(inputGO.transform, false);
+            RectTransform textAreaRT = textArea.AddComponent<RectTransform>();
+            textAreaRT.anchorMin = Vector2.zero;
+            textAreaRT.anchorMax = Vector2.one;
+            textAreaRT.offsetMin = new Vector2(10, 0);
+            textAreaRT.offsetMax = new Vector2(-45, 0); // Room for X button
+            
+            // Placeholder
+            GameObject placeholder = new GameObject("Placeholder");
+            placeholder.transform.SetParent(textArea.transform, false);
+            Text placeholderText = placeholder.AddComponent<Text>();
+            placeholderText.text = "Search...";
+            placeholderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            placeholderText.fontSize = 18; // Increased from 14
+            placeholderText.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            placeholderText.fontStyle = FontStyle.Italic;
+            placeholderText.alignment = TextAnchor.MiddleLeft; // Vertically centered
+            RectTransform placeholderRT = placeholder.GetComponent<RectTransform>();
+            placeholderRT.anchorMin = Vector2.zero;
+            placeholderRT.anchorMax = Vector2.one;
+            placeholderRT.sizeDelta = Vector2.zero;
+            
+            // Text
+            GameObject text = new GameObject("Text");
+            text.transform.SetParent(textArea.transform, false);
+            Text textComponent = text.AddComponent<Text>();
+            textComponent.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            textComponent.fontSize = 18; // Increased from 14
+            textComponent.color = Color.white;
+            textComponent.supportRichText = false;
+            textComponent.alignment = TextAnchor.MiddleLeft; // Vertically centered
+            RectTransform textRT = text.GetComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.sizeDelta = Vector2.zero;
+            
+            input.textComponent = textComponent;
+            input.placeholder = placeholderText;
+            input.onValueChanged.AddListener(onValueChanged);
+            
+            // Clear Button
+            GameObject clearBtn = UI.CreateUIButton(inputGO, 40, 40, "X", 24, 0, 0, AnchorPresets.middleRight, () => { // Increased size and font
+                input.text = "";
+            });
+            RectTransform clearRT = clearBtn.GetComponent<RectTransform>();
+            clearRT.anchorMin = new Vector2(1, 0.5f);
+            clearRT.anchorMax = new Vector2(1, 0.5f);
+            clearRT.pivot = new Vector2(1, 0.5f);
+            clearRT.anchoredPosition = new Vector2(-5, 0);
+            clearBtn.GetComponent<Image>().color = new Color(0,0,0,0); // Transparent bg
+            
+            Text clearText = clearBtn.GetComponentInChildren<Text>();
+            clearText.color = new Color(0.6f, 0.6f, 0.6f);
+
+            UIHoverColor hover = clearBtn.AddComponent<UIHoverColor>();
+            hover.targetText = clearText;
+            hover.normalColor = clearText.color;
+            hover.hoverColor = Color.red;
+
+            return input;
+        }
+
+        private GameObject GetTabButton(Transform parent)
+        {
+            if (tabButtonPool.Count > 0)
+            {
+                GameObject btn = tabButtonPool.Pop();
+                btn.transform.SetParent(parent, false);
+                btn.SetActive(true);
+                return btn;
+            }
+            return null;
+        }
+
+        private void ReturnTabButton(GameObject btn)
+        {
+            if (btn == null) return;
+            btn.SetActive(false);
+            // Keep parented to ensure cleanup on destroy
+            if (backgroundBoxGO != null) btn.transform.SetParent(backgroundBoxGO.transform, false);
+            tabButtonPool.Push(btn);
         }
 
         private void SetLayerRecursive(GameObject go, int layer)
@@ -873,6 +1057,8 @@ namespace var_browser
             {
                 return;
             }
+
+            // LogUtil.Log("Loading thumbnail for " + file.Name + " from " + imgPath);
 
             // Check cache
             if (CustomImageLoaderThreaded.singleton == null) return;
