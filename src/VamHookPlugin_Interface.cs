@@ -52,6 +52,26 @@ namespace var_browser
 
         public void OpenGallery()
         {
+            // 1. Try to restore using category name (supports "Scenes", "Clothing" etc. stored by Gallery UI)
+            if (Gallery.singleton != null)
+            {
+                if (!m_GalleryCatsInited) InitGalleryCategories();
+                
+                string lastPageName = (Settings.Instance != null && Settings.Instance.LastGalleryPage != null) ? Settings.Instance.LastGalleryPage.Value : "";
+                if (!string.IsNullOrEmpty(lastPageName) && m_GalleryCategories != null)
+                {
+                    foreach (var cat in m_GalleryCategories)
+                    {
+                        if (string.Equals(cat.name, lastPageName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Gallery.singleton.Show(cat.name, cat.extension, cat.path);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // 2. Fallback to Enum-based restore (supports "CategoryScene" etc. stored by hotkeys/legacy)
             switch (GetLastGalleryPage())
             {
                 case GalleryPage.CategoryScene: OpenCategoryScene(); break;
@@ -82,21 +102,26 @@ namespace var_browser
         }
 
         private bool m_GalleryCatsInited = false;
+        private List<Gallery.Category> m_GalleryCategories;
+
         private void InitGalleryCategories()
         {
             if (Gallery.singleton == null) return;
             
-            var cats = new List<Gallery.Category>();
-            cats.Add(new Gallery.Category { name = "Scenes", extension = "json", path = "Saves/scene" });
-            cats.Add(new Gallery.Category { name = "Clothing", extension = "vam", path = "Custom/Clothing" });
-            cats.Add(new Gallery.Category { name = "Hair", extension = "vam", path = "Custom/Hair" });
-            cats.Add(new Gallery.Category { name = "Person", extension = "json", path = "Saves/Person" });
-            cats.Add(new Gallery.Category { name = "P.Clothing", extension = "vap", path = "Custom/Clothing" });
-            cats.Add(new Gallery.Category { name = "P.Hair", extension = "vap", path = "Custom/Hair" });
-            cats.Add(new Gallery.Category { name = "Pose", extension = "json|vap", path = "Custom/Atom/Person/Pose" });
-            cats.Add(new Gallery.Category { name = "All", extension = "var", path = "" });
+            if (m_GalleryCategories == null)
+            {
+                m_GalleryCategories = new List<Gallery.Category>();
+                m_GalleryCategories.Add(new Gallery.Category { name = "Scenes", extension = "json", path = "Saves/scene" });
+                m_GalleryCategories.Add(new Gallery.Category { name = "Clothing", extension = "vam", path = "Custom/Clothing" });
+                m_GalleryCategories.Add(new Gallery.Category { name = "Hair", extension = "vam", path = "Custom/Hair" });
+                m_GalleryCategories.Add(new Gallery.Category { name = "Person", extension = "json", path = "Saves/Person" });
+                m_GalleryCategories.Add(new Gallery.Category { name = "P.Clothing", extension = "vap", path = "Custom/Clothing" });
+                m_GalleryCategories.Add(new Gallery.Category { name = "P.Hair", extension = "vap", path = "Custom/Hair" });
+                m_GalleryCategories.Add(new Gallery.Category { name = "Pose", extension = "json|vap", path = "Custom/Atom/Person/Pose" });
+                m_GalleryCategories.Add(new Gallery.Category { name = "All", extension = "var", path = "" });
+            }
             
-            Gallery.singleton.SetCategories(cats);
+            Gallery.singleton.SetCategories(m_GalleryCategories);
             m_GalleryCatsInited = true;
         }
 

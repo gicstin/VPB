@@ -18,6 +18,7 @@ namespace var_browser
         public ConfigEntry<string> UIKey;
         public ConfigEntry<string> CustomSceneKey;
         public ConfigEntry<string> CategorySceneKey;
+        public ConfigEntry<string> GalleryKey;
         public ConfigEntry<float> UIScale;
         public ConfigEntry<Vector2> UIPosition;
         public ConfigEntry<bool> MiniMode;
@@ -45,6 +46,7 @@ namespace var_browser
         public ConfigEntry<string> CleanLogPath;
         public ConfigEntry<bool> ScenePrewarmEnabled;
         public ConfigEntry<bool> EnableUiTransparency;
+        public ConfigEntry<bool> LockGalleryRotation;
         
         internal static void Init(ConfigFile config)
         {
@@ -55,6 +57,7 @@ namespace var_browser
             UIKey = config.Bind<string>("UI", "UIKey", "Ctrl+V", "Shortcut key for Show/Hide Var Browser.");
             CustomSceneKey = config.Bind<string>("UI", "CustomSceneKey", "Ctrl+Shift+Alpha1", "Shortcut key for open Custom Scene.");
             CategorySceneKey = config.Bind<string>("UI", "CategorySceneKey", "Ctrl+Shift+Alpha2", "Shortcut key for open Category Scene.");
+            GalleryKey = config.Bind<string>("UI", "GalleryKey", "Ctrl+Shift+G", "Shortcut key for open VR Gallery.");
             UIScale = config.Bind<float>("UI", "Scale", 1, "Set UI Scale.");
             UIPosition = config.Bind<Vector2>("UI", "Position", Vector2.zero, "Set UI Position.");
             MiniMode = config.Bind<bool>("UI", "MiniMode", false, "Set Mini Mode.");
@@ -71,6 +74,7 @@ namespace var_browser
             ScenePrewarmEnabled = config.Bind<bool>("Optimze", "ScenePrewarmEnabled", true, "prewarm var_browser_cache entries for scene textures during scene load.");
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
+            LockGalleryRotation = config.Bind<bool>("UI", "LockGalleryRotation", true, "Lock gallery panel rotation to be horizontal.");
             
             OptimizeGameObjectFind = config.Bind<bool>("Unity Patches", "OptimizeGameObjectFind", true, "Cache GameObject.Find results.");
             OptimizePhysicsRaycast = config.Bind<bool>("Unity Patches", "OptimizePhysicsRaycast", true, "Cache Physics.Raycast results per frame.");

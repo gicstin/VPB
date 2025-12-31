@@ -17,6 +17,7 @@ namespace var_browser
         private KeyUtil UIKey;
         private KeyUtil CustomSceneKey;
         private KeyUtil CategorySceneKey;
+        private KeyUtil GalleryKey;
         private Vector2 UIPosition;
         private bool MiniMode;
         
@@ -62,10 +63,12 @@ namespace var_browser
         private string m_SettingsUiKeyDraft;
         private string m_SettingsCustomSceneKeyDraft;
         private string m_SettingsCategorySceneKeyDraft;
+        private string m_SettingsGalleryKeyDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
         private bool m_SettingsEnableUiTransparencyDraft;
+        private bool m_SettingsLockGalleryRotationDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -155,12 +158,16 @@ namespace var_browser
             m_SettingsUiKeyDraft = (Settings.Instance != null && Settings.Instance.UIKey != null) ? Settings.Instance.UIKey.Value : "";
             m_SettingsCustomSceneKeyDraft = (Settings.Instance != null && Settings.Instance.CustomSceneKey != null) ? Settings.Instance.CustomSceneKey.Value : "";
             m_SettingsCategorySceneKeyDraft = (Settings.Instance != null && Settings.Instance.CategorySceneKey != null) ? Settings.Instance.CategorySceneKey.Value : "";
+            m_SettingsGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.GalleryKey != null) ? Settings.Instance.GalleryKey.Value : "";
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
+            m_SettingsLockGalleryRotationDraft = (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null) ? Settings.Instance.LockGalleryRotation.Value : true;
             m_SettingsError = null;
         }
+
+
 
         private void CloseSettings()
         {
@@ -236,8 +243,17 @@ namespace var_browser
             m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide Hotkey", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
             m_SettingsCustomSceneKeyDraft = DrawHotkeyField("Custom Scene Hotkey", "CustomSceneKeyField", m_SettingsCustomSceneKeyDraft ?? "", buttonHeight);
             m_SettingsCategorySceneKeyDraft = DrawHotkeyField("Category Scene Hotkey", "CategorySceneKeyField", m_SettingsCategorySceneKeyDraft ?? "", buttonHeight);
+            m_SettingsGalleryKeyDraft = DrawHotkeyField("Gallery Hotkey", "GalleryKeyField", m_SettingsGalleryKeyDraft ?? "", buttonHeight);
 
             GUILayout.Space(10);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsLockGalleryRotationDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsLockGalleryRotationDraft = !m_SettingsLockGalleryRotationDraft;
+            }
+            GUILayout.Label("Lock gallery panel rotation (keep horizontal)");
+            GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(m_SettingsEnableUiTransparencyDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
@@ -335,8 +351,11 @@ namespace var_browser
                     var parsed = KeyUtil.Parse(m_SettingsUiKeyDraft ?? "");
                     var parsedCustomSceneKey = KeyUtil.Parse(m_SettingsCustomSceneKeyDraft ?? "");
                     var parsedCategorySceneKey = KeyUtil.Parse(m_SettingsCategorySceneKeyDraft ?? "");
+                    var parsedGalleryKey = KeyUtil.Parse(m_SettingsGalleryKeyDraft ?? "");
 
-                    if (parsed.IsSame(parsedCustomSceneKey) || parsed.IsSame(parsedCategorySceneKey) || parsedCustomSceneKey.IsSame(parsedCategorySceneKey))
+                    if (parsed.IsSame(parsedCustomSceneKey) || parsed.IsSame(parsedCategorySceneKey) || parsed.IsSame(parsedGalleryKey) || 
+                        parsedCustomSceneKey.IsSame(parsedCategorySceneKey) || parsedCustomSceneKey.IsSame(parsedGalleryKey) ||
+                        parsedCategorySceneKey.IsSame(parsedGalleryKey))
                     {
                         m_SettingsError = "Duplicate hotkeys are not allowed.";
                         return;
@@ -353,6 +372,10 @@ namespace var_browser
                     if (Settings.Instance != null && Settings.Instance.CategorySceneKey != null)
                     {
                         Settings.Instance.CategorySceneKey.Value = parsedCategorySceneKey.keyPattern;
+                    }
+                    if (Settings.Instance != null && Settings.Instance.GalleryKey != null)
+                    {
+                        Settings.Instance.GalleryKey.Value = parsedGalleryKey.keyPattern;
                     }
                     if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
                     {
@@ -382,10 +405,15 @@ namespace var_browser
                             Settings.Instance.PrioritizeHairTextures.Value = m_SettingsPrioritizeHairTexturesDraft;
                         }
                     }
+                    if (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null)
+                    {
+                        Settings.Instance.LockGalleryRotation.Value = m_SettingsLockGalleryRotationDraft;
+                    }
 
                     UIKey = parsed;
                     CustomSceneKey = parsedCustomSceneKey;
                     CategorySceneKey = parsedCategorySceneKey;
+                    GalleryKey = parsedGalleryKey;
                     CloseSettings();
                 }
                 catch
@@ -396,6 +424,8 @@ namespace var_browser
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
         }
+
+
 
         private void ToggleInfoCard(ref bool visible)
         {
@@ -809,6 +839,7 @@ namespace var_browser
             UIKey = KeyUtil.Parse(Settings.Instance.UIKey.Value);
             CustomSceneKey = KeyUtil.Parse(Settings.Instance.CustomSceneKey.Value);
             CategorySceneKey = KeyUtil.Parse(Settings.Instance.CategorySceneKey.Value);
+            GalleryKey = KeyUtil.Parse(Settings.Instance.GalleryKey.Value);
             m_UIScale = Settings.Instance.UIScale.Value;
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
@@ -991,6 +1022,13 @@ namespace var_browser
                 if (CategorySceneKey.TestKeyDown())
                 {
                     ShowFileBrowser("Category Scene", "json", "Saves/scene");
+                }
+                if (GalleryKey.TestKeyDown())
+                {
+                    if (Gallery.singleton != null && Gallery.singleton.IsVisible)
+                        Gallery.singleton.Hide();
+                    else
+                        OpenGallery();
                 }
             }
 
@@ -1409,6 +1447,8 @@ namespace var_browser
 
                     // ========== HUB BROWSE ==========
                     DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Gallery", m_StyleButton, OpenGallery, 1.618f, buttonHeight);
+
+
 
                     GUILayout.EndVertical();
                 }

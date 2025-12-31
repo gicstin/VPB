@@ -34,7 +34,165 @@ namespace var_browser
             target.position = ray.GetPoint(planeDistance) + offset;
             
             // Face camera
-            target.rotation = eventData.pressEventCamera.transform.rotation;
+            Vector3 lookDir = target.position - eventData.pressEventCamera.transform.position;
+            if (lookDir != Vector3.zero)
+            {
+                bool lockRotation = (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null && Settings.Instance.LockGalleryRotation.Value);
+                if (lockRotation)
+                {
+                    // Enforce horizontal leveling (Up = Vector3.up) but allow Pitch (use full lookDir)
+                    target.rotation = Quaternion.LookRotation(lookDir, Vector3.up);
+                }
+                else
+                {
+                    target.rotation = Quaternion.LookRotation(lookDir, eventData.pressEventCamera.transform.up);
+                }
+            }
+        }
+    }
+
+    public class UIResizable : MonoBehaviour, IDragHandler, IBeginDragHandler
+    {
+        public RectTransform target;
+        public Vector2 minSize = new Vector2(400, 300);
+        public Vector2 maxSize = new Vector2(2000, 2000);
+        public int anchor = AnchorPresets.bottomRight;
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            // Consume the drag start event so it doesn't bubble up to parent UIDraggable
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (target == null || target.parent == null) return;
+            if (eventData.pressEventCamera == null) return;
+
+            RectTransform parentRect = target.parent as RectTransform;
+            if (parentRect == null) return;
+
+            // 3. Get Mouse Position in Parent Local Space
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, eventData.pressEventCamera, out Vector2 localMouse))
+            {
+                Vector2 pos = target.anchoredPosition;
+                Vector2 size = target.sizeDelta;
+                Vector2 newPos = pos;
+                Vector2 newSize = size;
+
+                if (anchor == AnchorPresets.bottomRight) 
+                {
+                    // Stationary: Top-Left
+                    float stationaryX = pos.x - size.x * 0.5f;
+                    float stationaryY = pos.y + size.y * 0.5f;
+                    
+                    float w = localMouse.x - stationaryX;
+                    float h = stationaryY - localMouse.y;
+                    
+                    w = Mathf.Clamp(w, minSize.x, maxSize.x);
+                    h = Mathf.Clamp(h, minSize.y, maxSize.y);
+                    
+                    newSize = new Vector2(w, h);
+                    newPos = new Vector2(stationaryX + w * 0.5f, stationaryY - h * 0.5f);
+                }
+                else if (anchor == AnchorPresets.topLeft) 
+                {
+                    // Stationary: Bottom-Right
+                    float stationaryX = pos.x + size.x * 0.5f;
+                    float stationaryY = pos.y - size.y * 0.5f;
+
+                    float w = stationaryX - localMouse.x;
+                    float h = localMouse.y - stationaryY;
+                    
+                    w = Mathf.Clamp(w, minSize.x, maxSize.x);
+                    h = Mathf.Clamp(h, minSize.y, maxSize.y);
+                    
+                    newSize = new Vector2(w, h);
+                    newPos = new Vector2(stationaryX - w * 0.5f, stationaryY + h * 0.5f);
+                }
+                else if (anchor == AnchorPresets.topRight) 
+                {
+                    // Stationary: Bottom-Left
+                    float stationaryX = pos.x - size.x * 0.5f;
+                    float stationaryY = pos.y - size.y * 0.5f;
+
+                    float w = localMouse.x - stationaryX;
+                    float h = localMouse.y - stationaryY;
+                    
+                    w = Mathf.Clamp(w, minSize.x, maxSize.x);
+                    h = Mathf.Clamp(h, minSize.y, maxSize.y);
+                    
+                    newSize = new Vector2(w, h);
+                    newPos = new Vector2(stationaryX + w * 0.5f, stationaryY + h * 0.5f);
+                }
+                else if (anchor == AnchorPresets.bottomLeft) 
+                {
+                    // Stationary: Top-Right
+                    float stationaryX = pos.x + size.x * 0.5f;
+                    float stationaryY = pos.y + size.y * 0.5f;
+
+                    float w = stationaryX - localMouse.x;
+                    float h = stationaryY - localMouse.y;
+                    
+                    w = Mathf.Clamp(w, minSize.x, maxSize.x);
+                    h = Mathf.Clamp(h, minSize.y, maxSize.y);
+                    
+                    newSize = new Vector2(w, h);
+                    newPos = new Vector2(stationaryX - w * 0.5f, stationaryY - h * 0.5f);
+                }
+
+                if (target.sizeDelta != newSize || target.anchoredPosition != newPos)
+                {
+                    target.sizeDelta = newSize;
+                    target.anchoredPosition = newPos;
+                }
+            }
+        }
+    }
+
+    public class UIHoverColor : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IBeginDragHandler, IEndDragHandler
+    {
+        public Text targetText;
+        public Image targetImage;
+        public Color normalColor = Color.white;
+        public Color hoverColor = Color.green;
+        
+        private bool isDragging = false;
+        private bool isHovering = false;
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            isHovering = true;
+            SetColor(hoverColor);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            isHovering = false;
+            if (!isDragging)
+            {
+                SetColor(normalColor);
+            }
+        }
+        
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            isDragging = true;
+            SetColor(hoverColor);
+        }
+        
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            isDragging = false;
+            if (!isHovering)
+            {
+                SetColor(normalColor);
+            }
+        }
+        
+        private void SetColor(Color c)
+        {
+            if (targetText != null) targetText.color = c;
+            if (targetImage != null) targetImage.color = c;
         }
     }
 
