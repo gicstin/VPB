@@ -77,6 +77,31 @@ namespace var_browser
             }
         }
 
+        public void UndockCreator(string creatorName)
+        {
+            var existing = panels.FirstOrDefault(pan => pan.IsUndocked && pan.UndockedCreator == creatorName);
+            if (existing != null)
+            {
+                // What to show? Default to first category
+                if (categories.Count > 0)
+                    existing.Show(categories[0].name, categories[0].extension, categories[0].path);
+                return;
+            }
+
+            GameObject go = new GameObject("GalleryPanel_Creator_" + creatorName);
+            GalleryPanel p = go.AddComponent<GalleryPanel>();
+            p.UndockedCreator = creatorName;
+            
+            p.Init(true);
+            
+            // For undocked creator panel, we give it ALL categories
+            p.SetCategories(categories);
+            
+            // Show default category
+            if (categories.Count > 0)
+                p.Show(categories[0].name, categories[0].extension, categories[0].path);
+        }
+
         // Called by Main Panel to undock a category
         public void Undock(Category cat)
         {
@@ -111,10 +136,17 @@ namespace var_browser
             {
                 if (p != mainPanel && !p.IsVisible)
                 {
-                    if (p.IsUndocked && p.UndockedCategory.HasValue)
+                    if (p.IsUndocked)
                     {
-                        var c = p.UndockedCategory.Value;
-                        p.Show(c.name, c.extension, c.path);
+                        if (p.UndockedCategory.HasValue)
+                        {
+                            var c = p.UndockedCategory.Value;
+                            p.Show(c.name, c.extension, c.path);
+                        }
+                        else if (!string.IsNullOrEmpty(p.UndockedCreator) && categories.Count > 0)
+                        {
+                             p.Show(categories[0].name, categories[0].extension, categories[0].path);
+                        }
                     }
                 }
             }
