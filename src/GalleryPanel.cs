@@ -33,6 +33,10 @@ namespace var_browser
         public bool IsUndocked = false;
         public Gallery.Category? UndockedCategory;
         private bool hasBeenPositioned = false;
+        private bool isTabsVisible = true;
+        private GameObject tabScrollGO;
+        private RectTransform contentScrollRT;
+        private Text tabToggleButtonText;
 
         void OnDestroy()
         {
@@ -103,32 +107,45 @@ namespace var_browser
             // Tab Area - Only create if not undocked
             if (!IsUndocked)
             {
-                tabContainerGO = new GameObject("Tabs");
-                tabContainerGO.transform.SetParent(backgroundBoxGO.transform, false);
-                RectTransform tabRT = tabContainerGO.AddComponent<RectTransform>();
-                tabRT.anchorMin = new Vector2(0, 1);
-                tabRT.anchorMax = new Vector2(1, 1);
-                tabRT.pivot = new Vector2(0.5f, 1);
-                tabRT.anchoredPosition = new Vector2(0, -50);
-                tabRT.sizeDelta = new Vector2(-40, 40);
+                // Create vertical scrollable area for tabs on the right
+                float tabAreaWidth = 180f;
+                tabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero);
+                
+                RectTransform tabScrollRT = tabScrollGO.GetComponent<RectTransform>();
+                // Position on right side: Top -70 (below Close button), Bottom 20, Width 180, Right Padding 10
+                tabScrollRT.anchorMin = new Vector2(1, 0);
+                tabScrollRT.anchorMax = new Vector2(1, 1);
+                tabScrollRT.offsetMin = new Vector2(-tabAreaWidth - 10, 20); 
+                tabScrollRT.offsetMax = new Vector2(-10, -70); 
 
-                HorizontalLayoutGroup hlg = tabContainerGO.AddComponent<HorizontalLayoutGroup>();
-                hlg.childAlignment = TextAnchor.MiddleLeft;
-                hlg.childForceExpandWidth = false;
-                hlg.childControlWidth = true;
-                hlg.childControlHeight = true;
-                hlg.spacing = 10;
+                tabContainerGO = tabScrollGO.GetComponent<ScrollRect>().content.gameObject;
+                
+                // Adjust layout for tabs
+                VerticalLayoutGroup tabVlg = tabContainerGO.GetComponent<VerticalLayoutGroup>();
+                tabVlg.spacing = 2;
+                tabVlg.padding = new RectOffset(0, 10, 0, 0); // Right padding for scrollbar space
+
+                // Floating Toggle Button
+                // Positioned on the right edge, vertically centered relative to tabs or just centered
+                // Anchored to right edge, but moved outside by positive X
+                UI.CreateUIButton(backgroundBoxGO, 30, 60, ">", 20, 30, 0, AnchorPresets.middleRight, () => ToggleTabs());
+                
+                // We need to capture the text component of this button to change it later
+                Transform btnTransform = backgroundBoxGO.transform.Find("Button_>");
+                if (btnTransform != null)
+                {
+                    tabToggleButtonText = btnTransform.GetComponentInChildren<Text>();
+                    tabToggleButtonText.text = "<"; // Initial state is visible, so button hides (<)
+                }
             }
 
-            // Close button
-            UI.CreateUIButton(backgroundBoxGO, 60, 60, "X", 30, -30, -30, AnchorPresets.topRight, () => Hide());
-
             // Content Area
-            float topOffset = IsUndocked ? -50 : -100; // More space if tabs exist
-            GameObject scrollableGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0.2f, 0.2f, 0.2f, 0.5f), AnchorPresets.stretchAll, 0, 0, new Vector2(0, topOffset));
-            RectTransform scrollRT = scrollableGO.GetComponent<RectTransform>();
-            scrollRT.offsetMin = new Vector2(20, 20);
-            scrollRT.offsetMax = new Vector2(-20, IsUndocked ? -60 : -100);
+            float rightPadding = IsUndocked ? -20 : -210; // -180 tab width - 10 padding - 20 margin
+            
+            GameObject scrollableGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0.2f, 0.2f, 0.2f, 0.5f), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
+            contentScrollRT = scrollableGO.GetComponent<RectTransform>();
+            contentScrollRT.offsetMin = new Vector2(20, 20);
+            contentScrollRT.offsetMax = new Vector2(rightPadding, -50);
 
             scrollRect = scrollableGO.GetComponent<ScrollRect>();
             contentGO = scrollRect.content.gameObject;
@@ -138,10 +155,13 @@ namespace var_browser
             if (vlg != null) DestroyImmediate(vlg);
 
             GridLayoutGroup grid = contentGO.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(200, 250);
+            grid.cellSize = new Vector2(200, 200);
             grid.spacing = new Vector2(10, 10);
             grid.padding = new RectOffset(10, 10, 10, 10);
             grid.childAlignment = TextAnchor.UpperLeft;
+
+            // Close button - Rendered last to be on top
+            UI.CreateUIButton(backgroundBoxGO, 50, 50, "X", 30, 0, 0, AnchorPresets.topRight, () => Hide());
 
             SetLayerRecursive(canvasGO, 5); // UI layer for children
             
@@ -155,12 +175,32 @@ namespace var_browser
             Hide();
         }
 
+        private void ToggleTabs()
+        {
+            isTabsVisible = !isTabsVisible;
+            
+            if (tabScrollGO != null)
+                tabScrollGO.SetActive(isTabsVisible);
+            
+            if (tabToggleButtonText != null)
+                tabToggleButtonText.text = isTabsVisible ? "<" : ">";
+
+            // Update content area padding
+            if (contentScrollRT != null)
+            {
+                // If tabs visible: padding -210, if hidden: padding -20 (like undocked)
+                // Actually if undocked, padding is -20.
+                // If not undocked and tabs hidden, we want full width (-20)
+                float rightPadding = isTabsVisible ? -210 : -20;
+                contentScrollRT.offsetMax = new Vector2(rightPadding, -50);
+            }
+        }
+
         private void CreateResizeHandles()
         {
             CreateResizeHandle(AnchorPresets.bottomRight, 0);
             CreateResizeHandle(AnchorPresets.bottomLeft, -90);
             CreateResizeHandle(AnchorPresets.topLeft, 180);
-            CreateResizeHandle(AnchorPresets.topRight, 90);
         }
 
         private void CreateResizeHandle(int anchor, float rotationZ)
@@ -175,7 +215,16 @@ namespace var_browser
             handleRT.anchorMin = AnchorPresets.GetAnchorMin(anchor);
             handleRT.anchorMax = AnchorPresets.GetAnchorMax(anchor);
             handleRT.pivot = AnchorPresets.GetPivot(anchor);
-            handleRT.anchoredPosition = Vector2.zero;
+            
+            // Push handles outwards
+            float offsetDist = 20f;
+            Vector2 offset = Vector2.zero;
+            if (anchor == AnchorPresets.bottomRight) offset = new Vector2(offsetDist, -offsetDist);
+            else if (anchor == AnchorPresets.bottomLeft) offset = new Vector2(-offsetDist, -offsetDist);
+            else if (anchor == AnchorPresets.topLeft) offset = new Vector2(-offsetDist, offsetDist);
+            else if (anchor == AnchorPresets.topRight) offset = new Vector2(offsetDist, offsetDist);
+
+            handleRT.anchoredPosition = offset;
             handleRT.sizeDelta = new Vector2(60, 60);
 
             // Text
@@ -462,32 +511,67 @@ namespace var_browser
             Button btn = btnGO.AddComponent<Button>();
             btn.onClick.AddListener(() => OnFileClick(file));
 
-            // Thumbnail (if any)
+            // Thumbnail (Fill 1x1)
             GameObject thumbGO = new GameObject("Thumbnail");
             thumbGO.transform.SetParent(btnGO.transform, false);
             RawImage thumbImg = thumbGO.AddComponent<RawImage>();
             thumbImg.color = new Color(0, 0, 0, 0.5f);
             RectTransform thumbRT = thumbGO.GetComponent<RectTransform>();
-            thumbRT.anchorMin = new Vector2(0, 0.2f);
-            thumbRT.anchorMax = new Vector2(1, 1);
+            thumbRT.anchorMin = Vector2.zero;
+            thumbRT.anchorMax = Vector2.one;
             thumbRT.sizeDelta = Vector2.zero;
 
             // Load thumbnail
             LoadThumbnail(file, thumbImg);
 
+            // Card Container (Hidden by default, positions below)
+            GameObject cardGO = new GameObject("Card");
+            cardGO.transform.SetParent(btnGO.transform, false);
+            cardGO.SetActive(false);
+
+            RectTransform cardRT = cardGO.AddComponent<RectTransform>();
+            cardRT.anchorMin = new Vector2(0, 0); // Bottom
+            cardRT.anchorMax = new Vector2(1, 0); // Bottom
+            cardRT.pivot = new Vector2(0.5f, 0);  // Pivot Bottom (Inside)
+            cardRT.anchoredPosition = Vector2.zero;
+            cardRT.sizeDelta = new Vector2(0, 0); // Width stretch
+
+            // Dynamic height based on content
+            VerticalLayoutGroup cardVLG = cardGO.AddComponent<VerticalLayoutGroup>();
+            cardVLG.childControlHeight = true;
+            cardVLG.childControlWidth = true;
+            cardVLG.childForceExpandHeight = false;
+            cardVLG.childForceExpandWidth = true;
+            cardVLG.padding = new RectOffset(5, 5, 5, 5);
+            
+            ContentSizeFitter cardCSF = cardGO.AddComponent<ContentSizeFitter>();
+            cardCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Background
+            Image cardBg = cardGO.AddComponent<Image>();
+            cardBg.color = new Color(0, 0, 0, 0.8f);
+            cardBg.raycastTarget = false;
+
             // Label
             GameObject labelGO = new GameObject("Label");
-            labelGO.transform.SetParent(btnGO.transform, false);
+            labelGO.transform.SetParent(cardGO.transform, false);
             Text labelText = labelGO.AddComponent<Text>();
             labelText.text = file.Name;
             labelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             labelText.fontSize = 18;
             labelText.color = Color.white;
-            labelText.alignment = TextAnchor.LowerCenter;
-            RectTransform labelRT = labelGO.GetComponent<RectTransform>();
-            labelRT.anchorMin = Vector2.zero;
-            labelRT.anchorMax = new Vector2(1, 0.2f);
-            labelRT.sizeDelta = Vector2.zero;
+            labelText.alignment = TextAnchor.MiddleCenter;
+            labelText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            labelText.verticalOverflow = VerticalWrapMode.Truncate;
+            labelText.raycastTarget = false;
+            
+            // Label Layout
+            LayoutElement labelLE = labelGO.AddComponent<LayoutElement>();
+            labelLE.minHeight = 30;
+
+            // Hover Logic
+            UIHoverReveal hover = btnGO.AddComponent<UIHoverReveal>();
+            hover.card = cardGO;
 
             activeButtons.Add(btnGO);
             SetLayerRecursive(btnGO, 5);

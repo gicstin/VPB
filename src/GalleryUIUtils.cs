@@ -196,6 +196,21 @@ namespace var_browser
         }
     }
 
+    public class UIHoverReveal : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public GameObject card;
+        
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (card) card.SetActive(true);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (card) card.SetActive(false);
+        }
+    }
+
     public static class AnchorPresets
     {
         public const int none = -1;
