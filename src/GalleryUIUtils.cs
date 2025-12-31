@@ -4,9 +4,40 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 
 namespace var_browser
 {
+    public class UIDraggable : MonoBehaviour, IBeginDragHandler, IDragHandler
+    {
+        public Transform target;
+        private float planeDistance;
+        private Vector3 offset;
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            if (target == null) target = transform;
+            if (eventData.pressEventCamera == null) return;
+            
+            planeDistance = Vector3.Dot(target.position - eventData.pressEventCamera.transform.position, eventData.pressEventCamera.transform.forward);
+            
+            Ray ray = eventData.pressEventCamera.ScreenPointToRay(eventData.position);
+            Vector3 hitPoint = ray.GetPoint(planeDistance);
+            offset = target.position - hitPoint;
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (eventData.pressEventCamera == null) return;
+            
+            Ray ray = eventData.pressEventCamera.ScreenPointToRay(eventData.position);
+            target.position = ray.GetPoint(planeDistance) + offset;
+            
+            // Face camera
+            target.rotation = eventData.pressEventCamera.transform.rotation;
+        }
+    }
+
     public static class AnchorPresets
     {
         public const int none = -1;

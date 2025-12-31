@@ -1047,6 +1047,7 @@ namespace var_browser
                 m_FileManager = child.AddComponent<FileManager>();
                 child.AddComponent<var_browser.CustomImageLoaderThreaded>();
                 child.AddComponent<var_browser.ImageLoadingMgr>();
+                child.AddComponent<var_browser.Gallery>();
                 FileManager.RegisterRefreshHandler(() =>
                 {
                     m_FileManagerInited = true;

@@ -16,11 +16,21 @@ namespace var_browser
         private Canvas mainCanvas;
         private GameObject backgroundBoxGO;
         private GameObject contentGO;
+        private GameObject tabContainerGO;
         private ScrollRect scrollRect;
         private Text titleText;
 
+        public struct Category
+        {
+            public string name;
+            public string extension;
+            public string path;
+        }
+
+        private List<Category> categories = new List<Category>();
         private List<FileEntry> currentFiles = new List<FileEntry>();
         private List<GameObject> activeButtons = new List<GameObject>();
+        private List<GameObject> activeTabButtons = new List<GameObject>();
 
         private string currentPath = "";
         private string currentExtension = "json";
@@ -32,21 +42,37 @@ namespace var_browser
             singleton = this;
         }
 
+        void OnDestroy()
+        {
+            if (mainCanvas != null && SuperController.singleton != null)
+            {
+                SuperController.singleton.RemoveCanvas(mainCanvas);
+            }
+        }
+
         public void Init()
         {
             if (mainCanvas != null) return;
 
             GameObject canvasGO = new GameObject("VPB_GalleryCanvas");
             mainCanvas = canvasGO.AddComponent<Canvas>();
+            RectTransform canvasRT = canvasGO.GetComponent<RectTransform>();
+            canvasRT.sizeDelta = new Vector2(1200, 800);
             canvasGO.AddComponent<GraphicRaycaster>();
+
+            if (SuperController.singleton != null)
+                SuperController.singleton.AddCanvas(mainCanvas);
+
             
             if (Application.isPlaying)
             {
                 // In VaM, we use WorldSpace for VR support
                 mainCanvas.renderMode = RenderMode.WorldSpace;
+                mainCanvas.worldCamera = Camera.main;
+                mainCanvas.sortingOrder = 1000;
                 mainCanvas.transform.position = new Vector3(0, 1.5f, 2.0f); // Default position
                 mainCanvas.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
-                canvasGO.layer = 10; // WorldUI layer
+                canvasGO.layer = 5; // UI layer
             }
             else
             {
@@ -58,21 +84,41 @@ namespace var_browser
 
             // Background
             backgroundBoxGO = UI.AddChildGOImage(canvasGO, new Color(0.1f, 0.1f, 0.1f, 0.9f), AnchorPresets.centre, 1200, 800, Vector2.zero);
+            
+            UIDraggable dragger = backgroundBoxGO.AddComponent<UIDraggable>();
+            dragger.target = canvasGO.transform;
 
             // Title
             GameObject titleGO = new GameObject("Title");
             titleGO.transform.SetParent(backgroundBoxGO.transform, false);
             titleText = titleGO.AddComponent<Text>();
             titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = 40;
+            titleText.fontSize = 30;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.UpperCenter;
             RectTransform titleRT = titleGO.GetComponent<RectTransform>();
             titleRT.anchorMin = new Vector2(0, 1);
             titleRT.anchorMax = new Vector2(1, 1);
             titleRT.pivot = new Vector2(0.5f, 1);
-            titleRT.anchoredPosition = new Vector2(0, -20);
-            titleRT.sizeDelta = new Vector2(0, 60);
+            titleRT.anchoredPosition = new Vector2(0, -10);
+            titleRT.sizeDelta = new Vector2(0, 40);
+
+            // Tab Area
+            tabContainerGO = new GameObject("Tabs");
+            tabContainerGO.transform.SetParent(backgroundBoxGO.transform, false);
+            RectTransform tabRT = tabContainerGO.AddComponent<RectTransform>();
+            tabRT.anchorMin = new Vector2(0, 1);
+            tabRT.anchorMax = new Vector2(1, 1);
+            tabRT.pivot = new Vector2(0.5f, 1);
+            tabRT.anchoredPosition = new Vector2(0, -50);
+            tabRT.sizeDelta = new Vector2(-40, 40);
+
+            HorizontalLayoutGroup hlg = tabContainerGO.AddComponent<HorizontalLayoutGroup>();
+            hlg.childAlignment = TextAnchor.MiddleLeft;
+            hlg.childForceExpandWidth = false;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+            hlg.spacing = 10;
 
             // Close button
             UI.CreateUIButton(backgroundBoxGO, 60, 60, "X", 30, -30, -30, AnchorPresets.topRight, () => Hide());
@@ -96,9 +142,56 @@ namespace var_browser
             grid.padding = new RectOffset(10, 10, 10, 10);
             grid.childAlignment = TextAnchor.UpperLeft;
 
-            SetLayerRecursive(canvasGO, 10); // WorldUI layer
-
+            SetLayerRecursive(canvasGO, 5); // UI layer for children
+            
             Hide();
+        }
+
+        public void SetCategories(List<Category> cats)
+        {
+            categories = cats;
+            UpdateTabs();
+        }
+
+        private void UpdateTabs()
+        {
+            if (tabContainerGO == null) return;
+
+            foreach (var btn in activeTabButtons)
+            {
+                Destroy(btn);
+            }
+            activeTabButtons.Clear();
+
+            if (categories == null || categories.Count == 0) return;
+
+            foreach (var cat in categories)
+            {
+                // We use a local copy for the closure
+                var c = cat;
+                bool isActive = (c.path == currentPath && c.extension == currentExtension);
+                Color btnColor = isActive ? new Color(0.3f, 0.4f, 0.6f, 1f) : new Color(0.7f, 0.7f, 0.7f, 1f);
+
+                GameObject btnGO = UI.CreateUIButton(tabContainerGO, 140, 35, c.name, 14, 0, 0, AnchorPresets.centre, () => {
+                    Show(c.name, c.extension, c.path);
+                });
+                
+                LayoutElement le = btnGO.AddComponent<LayoutElement>();
+                le.minWidth = 100;
+                le.preferredWidth = 140;
+                le.minHeight = 35;
+                le.preferredHeight = 35;
+
+                Image img = btnGO.GetComponent<Image>();
+                if (img != null) img.color = btnColor;
+
+                Text txt = btnGO.GetComponentInChildren<Text>();
+                if (txt != null) txt.color = isActive ? Color.white : Color.black;
+
+                activeTabButtons.Add(btnGO);
+            }
+            
+            SetLayerRecursive(tabContainerGO, 5);
         }
 
         private void SetLayerRecursive(GameObject go, int layer)
@@ -118,8 +211,14 @@ namespace var_browser
             currentExtension = extension;
             currentPath = path;
 
+            if (Application.isPlaying && mainCanvas.renderMode == RenderMode.WorldSpace)
+            {
+                mainCanvas.worldCamera = Camera.main;
+            }
+
             mainCanvas.gameObject.SetActive(true);
             RefreshFiles();
+            UpdateTabs();
 
             // Position it in front of the user if in VR
             if (SuperController.singleton != null)
@@ -250,7 +349,7 @@ namespace var_browser
             labelRT.sizeDelta = Vector2.zero;
 
             activeButtons.Add(btnGO);
-            SetLayerRecursive(btnGO, 10);
+            SetLayerRecursive(btnGO, 5);
         }
 
         private void LoadThumbnail(FileEntry file, RawImage target)

@@ -81,10 +81,30 @@ namespace var_browser
             LogUtil.Log("receive OpenFileBrowser "+ msg);
         }
 
+        private bool m_GalleryCatsInited = false;
+        private void InitGalleryCategories()
+        {
+            if (Gallery.singleton == null) return;
+            
+            var cats = new List<Gallery.Category>();
+            cats.Add(new Gallery.Category { name = "Scenes", extension = "json", path = "Saves/scene" });
+            cats.Add(new Gallery.Category { name = "Clothing", extension = "vam", path = "Custom/Clothing" });
+            cats.Add(new Gallery.Category { name = "Hair", extension = "vam", path = "Custom/Hair" });
+            cats.Add(new Gallery.Category { name = "Person", extension = "json", path = "Saves/Person" });
+            cats.Add(new Gallery.Category { name = "P.Clothing", extension = "vap", path = "Custom/Clothing" });
+            cats.Add(new Gallery.Category { name = "P.Hair", extension = "vap", path = "Custom/Hair" });
+            cats.Add(new Gallery.Category { name = "Pose", extension = "json|vap", path = "Custom/Atom/Person/Pose" });
+            cats.Add(new Gallery.Category { name = "All", extension = "var", path = "" });
+            
+            Gallery.singleton.SetCategories(cats);
+            m_GalleryCatsInited = true;
+        }
+
         private void ShowGallery(string title, string extension, string path)
         {
             if (Gallery.singleton != null)
             {
+                if (!m_GalleryCatsInited) InitGalleryCategories();
                 Gallery.singleton.Show(title, extension, path);
             }
         }
