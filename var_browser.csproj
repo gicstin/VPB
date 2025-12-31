@@ -303,6 +303,8 @@
     <Compile Include="src\unity-object-pool\PoolManager.cs" />
     <Compile Include="src\unity-object-pool\Singleton.cs" />
     <Compile Include="src\VamHookPlugin.cs" />
+    <Compile Include="src\Gallery.cs" />
+    <Compile Include="src\GalleryUIUtils.cs" />
     <Compile Include="src\hook\FileManagement\DirectoryEntry.cs" />
     <Compile Include="src\hook\FileManagement\FileEntry.cs" />
     <Compile Include="src\hook\FileManagement\FileEntryStream.cs" />

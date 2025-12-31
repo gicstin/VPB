@@ -750,6 +750,9 @@ namespace var_browser
         {
             singleton = this;
 
+            // Initialize Gallery
+            gameObject.AddComponent<Gallery>();
+
             LogUtil.SetLogSource(Logger);
 
             LogUtil.MarkPluginAwake();
@@ -1444,7 +1447,7 @@ namespace var_browser
             {
                 bool show = true;
                 // Hide this window while the preview/file browser UI is open.
-                if (m_FileBrowser != null && m_FileBrowser.window.activeSelf)
+                if ((m_FileBrowser != null && m_FileBrowser.window.activeSelf))
                 {
                     show = false;
                 }

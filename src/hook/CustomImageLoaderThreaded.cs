@@ -868,9 +868,7 @@ namespace var_browser
         public void QueueThumbnail(QueuedImage qi)
         {
             qi.isThumbnail = true;
-            //if (ImageLoadingMgr.singleton.Request(qi))
-            //    return;
-
+            // LogUtil.Log("QueueThumbnail: " + qi.imgPath);
             if (queuedImages != null)
             {
                 qi.priority = 1000;
