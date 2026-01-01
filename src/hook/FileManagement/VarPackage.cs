@@ -1135,6 +1135,7 @@ namespace var_browser
 				Directory.CreateDirectory(dir);
 
 			File.Move(this.Path, linkvar);
+			this.Path = linkvar.Replace('\\', '/');
 			FileInfo info = new FileInfo(linkvar);
 			if (info != null)
 				info.Refresh();
@@ -1158,6 +1159,7 @@ namespace var_browser
 			if (!Directory.Exists(dir))
 				Directory.CreateDirectory(dir);
 			File.Move(this.Path, linkvar);
+			this.Path = linkvar.Replace('\\', '/');
 			FileInfo info = new FileInfo(linkvar);
             if (info != null)
                 info.Refresh();

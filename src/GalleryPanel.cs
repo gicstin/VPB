@@ -13,9 +13,10 @@ namespace var_browser
     public class GalleryPanel : MonoBehaviour
     {
         public Canvas canvas;
+        public Text statusBarText;
         private GameObject backgroundBoxGO;
         private GameObject contentGO;
-        private GameObject tabContainerGO;
+        // private GameObject tabContainerGO; // Unused
         private ScrollRect scrollRect;
         private Text titleText;
 
@@ -23,6 +24,8 @@ namespace var_browser
         // private List<FileEntry> currentFiles = new List<FileEntry>(); // Unused
 
         private List<GameObject> activeButtons = new List<GameObject>();
+        private Dictionary<string, Image> fileButtonImages = new Dictionary<string, Image>();
+        private string selectedPath = null;
         private List<GameObject> leftActiveTabButtons = new List<GameObject>();
         private List<GameObject> rightActiveTabButtons = new List<GameObject>();
 
@@ -36,10 +39,13 @@ namespace var_browser
 
         // Configuration
         public bool IsUndocked = false;
+        public bool DragDropReplaceMode = false;
+        private Toggle addToggle;
+        private Toggle replaceToggle;
         public Gallery.Category? UndockedCategory;
         public string UndockedCreator;
         private bool hasBeenPositioned = false;
-        private TabSide currentTabSide = TabSide.Right; // Deprecated, keeping for compilation until refactor complete
+        // private TabSide currentTabSide = TabSide.Right; // Unused
         private ContentType activeContentType = ContentType.Category; // Deprecated
         
         private ContentType? leftActiveContent = null;
@@ -49,7 +55,7 @@ namespace var_browser
         private GameObject rightTabScrollGO;
         private GameObject leftTabContainerGO;
         private GameObject rightTabContainerGO;
-        private GameObject tabScrollGO; // Deprecated
+        // private GameObject tabScrollGO; // Unused
         private RectTransform contentScrollRT;
         
         // Buttons
@@ -239,12 +245,75 @@ namespace var_browser
             
             GameObject scrollableGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0.2f, 0.2f, 0.2f, 0.5f), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
             contentScrollRT = scrollableGO.GetComponent<RectTransform>();
-            contentScrollRT.offsetMin = new Vector2(20, 20);
+            contentScrollRT.offsetMin = new Vector2(20, 50); // Raised for status bar (was 60, 50 is fine if bar is 40)
             contentScrollRT.offsetMax = new Vector2(rightPadding, -50);
 
             scrollRect = scrollableGO.GetComponent<ScrollRect>();
             contentGO = scrollRect.content.gameObject;
+
+            // Status Bar Background
+            GameObject statusBgGO = new GameObject("StatusBarBackground");
+            statusBgGO.transform.SetParent(backgroundBoxGO.transform, false);
+            Image statusBg = statusBgGO.AddComponent<Image>();
+            statusBg.color = new Color(0f, 0f, 0f, 0.8f); // Dark black background
+            statusBg.raycastTarget = false;
+
+            RectTransform statusBgRT = statusBgGO.GetComponent<RectTransform>();
+            statusBgRT.anchorMin = new Vector2(0, 0);
+            statusBgRT.anchorMax = new Vector2(1, 0);
+            statusBgRT.pivot = new Vector2(0.5f, 0);
+            statusBgRT.anchoredPosition = Vector2.zero;
+            statusBgRT.offsetMin = new Vector2(10, 10); // Left, Bottom margins
+            statusBgRT.offsetMax = new Vector2(-10, 45); // Right, Top (relative to anchor min y=0) -> Height = 35
+
+            // Status Text
+            GameObject statusTextGO = new GameObject("StatusText");
+            statusTextGO.transform.SetParent(statusBgGO.transform, false);
+            statusBarText = statusTextGO.AddComponent<Text>();
+            statusBarText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            statusBarText.fontSize = 20;
+            statusBarText.color = Color.yellow;
+            statusBarText.alignment = TextAnchor.MiddleLeft;
+            statusBarText.raycastTarget = false;
             
+            RectTransform statusTextRT = statusTextGO.GetComponent<RectTransform>();
+            statusTextRT.anchorMin = Vector2.zero;
+            statusTextRT.anchorMax = Vector2.one;
+            statusTextRT.sizeDelta = Vector2.zero; // Stretch to fill background
+            statusTextRT.offsetMin = new Vector2(10, 0); // Padding left
+            statusTextRT.offsetMax = new Vector2(-210, 0); // Padding right for toggles
+
+            // Toggles
+            // Add Toggle
+            GameObject addToggleGO = UI.CreateToggle(statusBgGO, "Add", 80, 20, -110, 0, AnchorPresets.middleRight, (val) => {
+                if (val) 
+                {
+                     DragDropReplaceMode = false;
+                     if (replaceToggle != null && replaceToggle.isOn) replaceToggle.isOn = false;
+                }
+                else
+                {
+                     if (!DragDropReplaceMode && addToggle != null) addToggle.isOn = true;
+                }
+            });
+            addToggle = addToggleGO.GetComponent<Toggle>();
+            addToggle.isOn = !DragDropReplaceMode;
+
+            // Replace Toggle
+            GameObject replaceToggleGO = UI.CreateToggle(statusBgGO, "Replace", 100, 20, -10, 0, AnchorPresets.middleRight, (val) => {
+                if (val)
+                {
+                    DragDropReplaceMode = true;
+                    if (addToggle != null && addToggle.isOn) addToggle.isOn = false;
+                }
+                else
+                {
+                    if (DragDropReplaceMode && replaceToggle != null) replaceToggle.isOn = true;
+                }
+            });
+            replaceToggle = replaceToggleGO.GetComponent<Toggle>();
+            replaceToggle.isOn = DragDropReplaceMode;
+
             // Set initial state
             if (!IsUndocked) 
             {
@@ -284,6 +353,34 @@ namespace var_browser
 
             CreateResizeHandles();
             Hide();
+        }
+
+        private string dragStatusMsg = null;
+
+        public void SetStatus(string msg)
+        {
+            if (string.IsNullOrEmpty(msg)) dragStatusMsg = null;
+            else dragStatusMsg = msg;
+        }
+
+        void Update()
+        {
+            if (dragStatusMsg != null)
+            {
+                if (statusBarText != null) statusBarText.text = dragStatusMsg;
+            }
+            else
+            {
+                if (IsVisible && statusBarText != null)
+                {
+                     string msg;
+                     Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : Camera.main;
+                     if (cam == null) return;
+                     
+                     SceneUtils.DetectAtom(Input.mousePosition, cam, out msg);
+                     statusBarText.text = msg;
+                }
+            }
         }
 
         private void ToggleRight(ContentType type)
@@ -880,6 +977,7 @@ namespace var_browser
                 Destroy(btn);
             }
             activeButtons.Clear();
+            fileButtonImages.Clear();
 
             List<FileEntry> files = new List<FileEntry>();
             string[] extensions = currentExtension.Split('|');
@@ -974,7 +1072,9 @@ namespace var_browser
             btnGO.transform.SetParent(contentGO.transform, false);
             
             Image img = btnGO.AddComponent<Image>();
-            img.color = Color.gray;
+            if (file.Path == selectedPath) img.color = Color.yellow;
+            else img.color = Color.gray;
+            if (!fileButtonImages.ContainsKey(file.Path)) fileButtonImages.Add(file.Path, img);
 
             Button btn = btnGO.AddComponent<Button>();
             btn.onClick.AddListener(() => OnFileClick(file));
@@ -988,6 +1088,8 @@ namespace var_browser
             thumbRT.anchorMin = Vector2.zero;
             thumbRT.anchorMax = Vector2.one;
             thumbRT.sizeDelta = Vector2.zero;
+            thumbRT.offsetMin = new Vector2(3, 3);
+            thumbRT.offsetMax = new Vector2(-3, -3);
 
             // Load thumbnail
             LoadThumbnail(file, thumbImg);
@@ -1040,6 +1142,12 @@ namespace var_browser
             // Hover Logic
             UIHoverReveal hover = btnGO.AddComponent<UIHoverReveal>();
             hover.card = cardGO;
+            
+            // Drag Logic
+            UIDraggableItem draggable = btnGO.AddComponent<UIDraggableItem>();
+            draggable.FileEntry = file;
+            draggable.ThumbnailImage = thumbImg;
+            draggable.Panel = this;
 
             activeButtons.Add(btnGO);
             SetLayerRecursive(btnGO, 5);
@@ -1088,21 +1196,23 @@ namespace var_browser
 
         private void OnFileClick(FileEntry file)
         {
-            LogUtil.Log("Selected file: " + file.Path);
+            if (selectedPath == file.Path) return; // Already selected
             
-            // Post message to load
-            if (file.Path.EndsWith(".json"))
+            // Deselect old
+            if (!string.IsNullOrEmpty(selectedPath) && fileButtonImages.ContainsKey(selectedPath))
             {
-                MethodInfo loadInternalMethod = typeof(SuperController).GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                loadInternalMethod.Invoke(SuperController.singleton, new object[3] { file.Path, false, false });
+                if (fileButtonImages[selectedPath] != null)
+                    fileButtonImages[selectedPath].color = Color.gray;
             }
             
-            // Just hide this panel? or all? 
-            // If I select a file, I usually want to close the gallery.
-            if (Gallery.singleton != null)
-                Gallery.singleton.Hide();
-            else
-                Hide();
+            selectedPath = file.Path;
+            
+            // Select new
+            if (fileButtonImages.ContainsKey(selectedPath))
+            {
+                if (fileButtonImages[selectedPath] != null)
+                    fileButtonImages[selectedPath].color = Color.yellow;
+            }
         }
     }
 }
