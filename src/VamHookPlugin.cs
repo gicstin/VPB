@@ -15,9 +15,8 @@ namespace var_browser
     public partial class VamHookPlugin : BaseUnityPlugin // Inherits BaseUnityPlugin
     {
         private KeyUtil UIKey;
-        private KeyUtil CustomSceneKey;
-        private KeyUtil CategorySceneKey;
         private KeyUtil GalleryKey;
+        private KeyUtil CreateGalleryKey;
         private Vector2 UIPosition;
         private bool MiniMode;
         
@@ -61,9 +60,8 @@ namespace var_browser
         private bool m_ShowGcRefreshInfo;
         private bool m_ShowSettings;
         private string m_SettingsUiKeyDraft;
-        private string m_SettingsCustomSceneKeyDraft;
-        private string m_SettingsCategorySceneKeyDraft;
         private string m_SettingsGalleryKeyDraft;
+        private string m_SettingsCreateGalleryKeyDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
@@ -156,9 +154,8 @@ namespace var_browser
             }
             m_ShowSettings = true;
             m_SettingsUiKeyDraft = (Settings.Instance != null && Settings.Instance.UIKey != null) ? Settings.Instance.UIKey.Value : "";
-            m_SettingsCustomSceneKeyDraft = (Settings.Instance != null && Settings.Instance.CustomSceneKey != null) ? Settings.Instance.CustomSceneKey.Value : "";
-            m_SettingsCategorySceneKeyDraft = (Settings.Instance != null && Settings.Instance.CategorySceneKey != null) ? Settings.Instance.CategorySceneKey.Value : "";
             m_SettingsGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.GalleryKey != null) ? Settings.Instance.GalleryKey.Value : "";
+            m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
@@ -241,9 +238,8 @@ namespace var_browser
             GUILayout.Space(6);
 
             m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide Hotkey", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
-            m_SettingsCustomSceneKeyDraft = DrawHotkeyField("Custom Scene Hotkey", "CustomSceneKeyField", m_SettingsCustomSceneKeyDraft ?? "", buttonHeight);
-            m_SettingsCategorySceneKeyDraft = DrawHotkeyField("Category Scene Hotkey", "CategorySceneKeyField", m_SettingsCategorySceneKeyDraft ?? "", buttonHeight);
-            m_SettingsGalleryKeyDraft = DrawHotkeyField("Gallery Hotkey", "GalleryKeyField", m_SettingsGalleryKeyDraft ?? "", buttonHeight);
+            m_SettingsGalleryKeyDraft = DrawHotkeyField("Show/Hide Panes", "GalleryKeyField", m_SettingsGalleryKeyDraft ?? "", buttonHeight);
+            m_SettingsCreateGalleryKeyDraft = DrawHotkeyField("Create Gallery Pane", "CreateGalleryKeyField", m_SettingsCreateGalleryKeyDraft ?? "", buttonHeight);
 
             GUILayout.Space(10);
 
@@ -349,13 +345,10 @@ namespace var_browser
                 try
                 {
                     var parsed = KeyUtil.Parse(m_SettingsUiKeyDraft ?? "");
-                    var parsedCustomSceneKey = KeyUtil.Parse(m_SettingsCustomSceneKeyDraft ?? "");
-                    var parsedCategorySceneKey = KeyUtil.Parse(m_SettingsCategorySceneKeyDraft ?? "");
                     var parsedGalleryKey = KeyUtil.Parse(m_SettingsGalleryKeyDraft ?? "");
+                    var parsedCreateGalleryKey = KeyUtil.Parse(m_SettingsCreateGalleryKeyDraft ?? "");
 
-                    if (parsed.IsSame(parsedCustomSceneKey) || parsed.IsSame(parsedCategorySceneKey) || parsed.IsSame(parsedGalleryKey) || 
-                        parsedCustomSceneKey.IsSame(parsedCategorySceneKey) || parsedCustomSceneKey.IsSame(parsedGalleryKey) ||
-                        parsedCategorySceneKey.IsSame(parsedGalleryKey))
+                    if (parsed.IsSame(parsedGalleryKey) || parsed.IsSame(parsedCreateGalleryKey) || parsedGalleryKey.IsSame(parsedCreateGalleryKey))
                     {
                         m_SettingsError = "Duplicate hotkeys are not allowed.";
                         return;
@@ -365,17 +358,13 @@ namespace var_browser
                     {
                         Settings.Instance.UIKey.Value = parsed.keyPattern;
                     }
-                    if (Settings.Instance != null && Settings.Instance.CustomSceneKey != null)
-                    {
-                        Settings.Instance.CustomSceneKey.Value = parsedCustomSceneKey.keyPattern;
-                    }
-                    if (Settings.Instance != null && Settings.Instance.CategorySceneKey != null)
-                    {
-                        Settings.Instance.CategorySceneKey.Value = parsedCategorySceneKey.keyPattern;
-                    }
                     if (Settings.Instance != null && Settings.Instance.GalleryKey != null)
                     {
                         Settings.Instance.GalleryKey.Value = parsedGalleryKey.keyPattern;
+                    }
+                    if (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null)
+                    {
+                        Settings.Instance.CreateGalleryKey.Value = parsedCreateGalleryKey.keyPattern;
                     }
                     if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
                     {
@@ -411,9 +400,8 @@ namespace var_browser
                     }
 
                     UIKey = parsed;
-                    CustomSceneKey = parsedCustomSceneKey;
-                    CategorySceneKey = parsedCategorySceneKey;
                     GalleryKey = parsedGalleryKey;
+                    CreateGalleryKey = parsedCreateGalleryKey;
                     CloseSettings();
                 }
                 catch
@@ -837,9 +825,8 @@ namespace var_browser
             }
 
             UIKey = KeyUtil.Parse(Settings.Instance.UIKey.Value);
-            CustomSceneKey = KeyUtil.Parse(Settings.Instance.CustomSceneKey.Value);
-            CategorySceneKey = KeyUtil.Parse(Settings.Instance.CategorySceneKey.Value);
             GalleryKey = KeyUtil.Parse(Settings.Instance.GalleryKey.Value);
+            CreateGalleryKey = KeyUtil.Parse(Settings.Instance.CreateGalleryKey.Value);
             m_UIScale = Settings.Instance.UIScale.Value;
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
@@ -1011,17 +998,15 @@ namespace var_browser
                 m_Show = !m_Show;
             }
             // Hotkeys
-            if (m_Inited && m_FileManagerInited)
+            if (m_Inited)
             {
-                if (CustomSceneKey.TestKeyDown())
+                if (CreateGalleryKey.TestKeyDown())
                 {
-                    // Custom entries do not require installation.
-                    m_FileBrowser.onlyInstalled = false;
-                    ShowFileBrowser("Custom Scene", "json", "Saves/scene", true);
-                }
-                if (CategorySceneKey.TestKeyDown())
-                {
-                    ShowFileBrowser("Category Scene", "json", "Saves/scene");
+                    if (Gallery.singleton != null)
+                    {
+                        if (!m_GalleryCatsInited) InitGalleryCategories();
+                        Gallery.singleton.CreatePane();
+                    }
                 }
                 if (GalleryKey.TestKeyDown())
                 {
@@ -1030,6 +1015,11 @@ namespace var_browser
                     else
                         OpenGallery();
                 }
+            }
+
+            if (m_Inited && m_FileManagerInited)
+            {
+                // Future hotkeys that depend on FileManager can go here
             }
 
             if (!m_Inited)

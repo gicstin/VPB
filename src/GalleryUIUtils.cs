@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
@@ -294,16 +295,55 @@ namespace var_browser
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
 
-        private enum ItemType { Clothing, Hair, Pose, Other }
+        private enum ItemType { Clothing, Hair, Pose, Skin, Morphs, Appearance, Animation, BreastPhysics, GlutePhysics, Plugins, General, ClothingItem, HairItem, SubScene, Other }
 
         private ItemType GetItemType(FileEntry entry)
         {
             if (entry == null || string.IsNullOrEmpty(entry.Path)) return ItemType.Other;
-            string p = entry.Path;
-            if (p.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Hair;
-            if (p.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 || p.EndsWith(".vac", StringComparison.OrdinalIgnoreCase)) return ItemType.Pose;
-            if (p.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Clothing;
+            string p = entry.Path.Replace('\\', '/');
+            
+            // Check for person preset categories (these use .vap or .json)
+            if (p.IndexOf("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Appearance;
+            if (p.IndexOf("Custom/Atom/Person/AnimationPresets", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Animation;
+            if (p.IndexOf("Custom/Atom/Person/BreastPhysics", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.BreastPhysics;
+            if (p.IndexOf("Custom/Atom/Person/Clothing", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Clothing;
+            if (p.IndexOf("Custom/Atom/Person/GlutePhysics", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.GlutePhysics;
+            if (p.IndexOf("Custom/Atom/Person/Hair", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Hair;
+            if (p.IndexOf("Custom/Atom/Person/Morphs", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Morphs;
+            if (p.IndexOf("Custom/Atom/Person/Plugins", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Plugins;
+            if (p.IndexOf("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0 || p.EndsWith(".vac", StringComparison.OrdinalIgnoreCase)) return ItemType.Pose;
+            if (p.IndexOf("Custom/Atom/Person/Skin", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Skin;
+            if (p.IndexOf("Custom/Atom/Person/General", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.General;
+            
+            // Check for clothing/hair items (these use .vam and toggle on/off)
+            if (p.IndexOf("Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.ClothingItem;
+            if (p.IndexOf("Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.HairItem;
+            
+            // Check for subscenes
+            if (p.IndexOf("Custom/SubScene", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.SubScene;
+            
             return ItemType.Other;
+        }
+
+        private string GetStorableIdForItemType(ItemType itemType)
+        {
+            switch (itemType)
+            {
+                case ItemType.Appearance: return "AppearancePresets";
+                case ItemType.Animation: return "AnimationPresets";
+                case ItemType.BreastPhysics: return "FemaleBreastPhysicsPresets";
+                case ItemType.Clothing: return "ClothingPresets";
+                case ItemType.ClothingItem: return "ClothingPresets";
+                case ItemType.General: return "Preset";
+                case ItemType.GlutePhysics: return "FemaleGlutePhysicsPresets";
+                case ItemType.Hair: return "HairPresets";
+                case ItemType.HairItem: return "HairPresets";
+                case ItemType.Morphs: return "MorphPresets";
+                case ItemType.Plugins: return "PluginPresets";
+                case ItemType.Pose: return "PosePresets";
+                case ItemType.Skin: return "SkinPresets";
+                default: return null;
+            }
         }
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -347,11 +387,21 @@ namespace var_browser
                 
                 if (Panel != null) Panel.SetStatus("");
 
-                string msg;
-                Atom atom = DetectAtom(eventData, out msg);
-                if (atom != null && FileEntry != null)
+                ItemType itemType = GetItemType(FileEntry);
+                
+                // Handle subscenes differently - load directly without requiring atom
+                if (itemType == ItemType.SubScene && FileEntry != null)
                 {
-                    ApplyClothingToAtom(atom, FileEntry.Uid);
+                    LoadSubScene(FileEntry.Uid);
+                }
+                else
+                {
+                    string msg;
+                    Atom atom = DetectAtom(eventData, out msg);
+                    if (atom != null && FileEntry != null)
+                    {
+                        ApplyClothingToAtom(atom, FileEntry.Uid);
+                    }
                 }
                 dragCam = null;
             }
@@ -392,9 +442,16 @@ namespace var_browser
             statusMsg = hitMsg;
             distance = (hit.collider != null) ? hit.distance : planeDistance;
 
-            if (atom != null && atom.type == "Person")
+            ItemType itemType = GetItemType(FileEntry);
+            
+            if (itemType == ItemType.SubScene)
             {
-                 statusMsg = $"Drop {FileEntry.Name} to {atom.name}";
+                statusMsg = $"Drop to load SubScene: {FileEntry.Name}";
+            }
+            else if (atom != null && atom.type == "Person")
+            {
+                 string action = (Panel != null && Panel.DragDropReplaceMode) ? "Replacing" : "Adding";
+                 statusMsg = $"{action} {FileEntry.Name} to {atom.name}";
             }
             return atom;
         }
@@ -403,6 +460,76 @@ namespace var_browser
         {
             float dummy;
             return DetectAtom(eventData, out statusMsg, out dummy);
+        }
+
+        private void LoadSubScene(string path)
+        {
+            bool installed = false;
+            if (FileEntry is VarFileEntry varEntry && varEntry.Package != null)
+            {
+                installed = varEntry.Package.InstallRecursive();
+            }
+            else if (FileEntry is SystemFileEntry sysEntry && sysEntry.package != null)
+            {
+                installed = sysEntry.package.InstallRecursive();
+            }
+
+            if (installed)
+            {
+                MVR.FileManagement.FileManager.Refresh();
+                FileManager.Refresh();
+            }
+
+            string normalizedPath = path.Replace('\\', '/');
+            string currentDir = Directory.GetCurrentDirectory().Replace('\\', '/');
+            
+            if (normalizedPath.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase))
+            {
+                normalizedPath = normalizedPath.Substring(currentDir.Length);
+                if (normalizedPath.StartsWith("/")) normalizedPath = normalizedPath.Substring(1);
+            }
+
+            LogUtil.Log($"[DragDropDebug] Loading SubScene: {normalizedPath}");
+            
+            try
+            {
+                StartCoroutine(LoadSubSceneCoroutine(normalizedPath));
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[DragDropDebug] Failed to load subscene: {ex.Message}");
+            }
+        }
+
+        private System.Collections.IEnumerator LoadSubSceneCoroutine(string path)
+        {
+            yield return SuperController.singleton.AddAtomByType("SubScene", "", true, true, true);
+            yield return new WaitForEndOfFrame();
+            
+            // Find the newly created SubScene atom
+            Atom subSceneAtom = null;
+            foreach (var atom in SuperController.singleton.GetAtoms())
+            {
+                if (atom.type == "SubScene")
+                {
+                    subSceneAtom = atom;
+                    break;
+                }
+            }
+            
+            if (subSceneAtom != null)
+            {
+                SubScene subScene = subSceneAtom.GetComponentInChildren<SubScene>();
+                if (subScene != null)
+                {
+                    LogUtil.Log($"[DragDropDebug] Calling LoadSubSceneWithPath on SubScene atom with path: {path}");
+                    MethodInfo loadMethod = typeof(SubScene).GetMethod("LoadSubSceneWithPath", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (loadMethod != null)
+                    {
+                        loadMethod.Invoke(subScene, new object[] { path });
+                    }
+                }
+            }
         }
 
         private void ApplyClothingToAtom(Atom atom, string path)
@@ -443,10 +570,14 @@ namespace var_browser
 
             JSONStorable geometry = atom.GetStorableByID("geometry");
             ItemType itemType = GetItemType(FileEntry);
+            
+            bool replaceMode = Panel != null && Panel.DragDropReplaceMode;
+            bool isClothingOrHair = (itemType == ItemType.Clothing || itemType == ItemType.Hair || itemType == ItemType.ClothingItem || itemType == ItemType.HairItem);
+            LogUtil.Log($"[DragDropDebug] Panel={Panel != null}, ReplaceMode={replaceMode}, ItemType={itemType}, IsClothingOrHair={isClothingOrHair}");
 
-            if (Panel != null && Panel.DragDropReplaceMode && (itemType == ItemType.Clothing || itemType == ItemType.Hair))
+            if (Panel != null && Panel.DragDropReplaceMode && (itemType == ItemType.Clothing || itemType == ItemType.Hair || itemType == ItemType.ClothingItem || itemType == ItemType.HairItem))
             {
-                bool isHair = itemType == ItemType.Hair;
+                bool isHair = (itemType == ItemType.Hair || itemType == ItemType.HairItem);
                 bool isClothing = !isHair;
 
                 if (geometry != null)
@@ -517,48 +648,117 @@ namespace var_browser
 
             // Try to load as preset first (standard for Clothing/Hair presets and Poses)
             string ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
-            if (ext == ".vap" || ext == ".json" || ext == ".vam" || ext == ".vac")
+            if (ext == ".vap" || ext == ".json" || ext == ".vac")
             {
-                bool isPose = itemType == ItemType.Pose;
-                Dictionary<string, bool> originalLocks = new Dictionary<string, bool>();
+                string storableId = GetStorableIdForItemType(itemType);
+                if (storableId != null && atom.type == "Person")
+                {
+                    bool isPose = itemType == ItemType.Pose;
+                    Dictionary<string, bool> originalLocks = new Dictionary<string, bool>();
 
-                // If it's a pose, we want to lock Clothing and Hair to prevent them being changed if the pose preset contains them
-                if (isPose && atom != null && atom.type == "Person" && atom.presetManagerControls != null)
-                {
-                    foreach (var pmc in atom.presetManagerControls)
-                    {
-                        if (pmc == null) continue;
-                        if (pmc.name == "ClothingPresets" || pmc.name == "HairPresets")
-                        {
-                            originalLocks[pmc.name] = pmc.lockParams;
-                            pmc.lockParams = true;
-                        }
-                    }
-                }
-
-                try
-                {
-                    LogUtil.Log($"[DragDropDebug] Trying LoadPreset with: {normalizedPath}");
-                    atom.LoadPreset(normalizedPath);
-                }
-                catch (Exception ex)
-                {
-                     LogUtil.LogError("[DragDropDebug] LoadPreset failed for " + normalizedPath + ": " + ex.Message);
-                     // Fallthrough to legacy toggle
-                }
-                finally
-                {
-                    // Restore locks
-                    if (isPose && atom != null && atom.type == "Person" && atom.presetManagerControls != null)
+                    // If it's a pose, we want to lock Clothing and Hair to prevent them being changed if the pose preset contains them
+                    if (isPose && atom.presetManagerControls != null)
                     {
                         foreach (var pmc in atom.presetManagerControls)
                         {
-                            if (pmc != null && originalLocks.ContainsKey(pmc.name))
+                            if (pmc != null && (pmc.name == "ClothingPresets" || pmc.name == "HairPresets"))
                             {
-                                pmc.lockParams = originalLocks[pmc.name];
+                                originalLocks[pmc.name] = pmc.lockParams;
+                                pmc.lockParams = true;
                             }
                         }
                     }
+
+                    bool presetLoaded = false;
+                    try
+                    {
+                        LogUtil.Log($"[DragDropDebug] Loading preset type={itemType}, storableId={storableId}, path={normalizedPath}");
+                        
+                        // Get the storable for this preset type
+                        JSONStorable presetStorable = atom.GetStorableByID(storableId);
+                        if (presetStorable != null)
+                        {
+                            // Get the PresetManager component
+                            MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
+                            if (presetManager != null)
+                            {
+                                // Load the preset JSON
+                                JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
+                                if (presetJSON != null)
+                                {
+                                    // Replace SELF: and ./ references with actual package paths
+                                    string presetPackageName = "";
+                                    string folderFullPath = "";
+                                    
+                                    if (normalizedPath.Contains(":"))
+                                    {
+                                        presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
+                                        folderFullPath = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(normalizedPath);
+                                        folderFullPath = MVR.FileManagementSecure.FileManagerSecure.NormalizeLoadPath(folderFullPath);
+                                        
+                                        string presetJSONString = presetJSON.ToString();
+                                        bool modified = false;
+                                        
+                                        if (presetJSONString.Contains("SELF:"))
+                                        {
+                                            presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
+                                            modified = true;
+                                        }
+                                        
+                                        if (presetJSONString.Contains("\":\"./"))
+                                        {
+                                            presetJSONString = presetJSONString.Replace("\":\"./", "\":\"" + folderFullPath + "/");
+                                            modified = true;
+                                        }
+                                        
+                                        if (modified)
+                                        {
+                                            presetJSON = SimpleJSON.JSON.Parse(presetJSONString).AsObject;
+                                        }
+                                    }
+                                    
+                                    // Apply the preset
+                                    atom.SetLastRestoredData(presetJSON, true, true);
+                                    presetManager.LoadPresetFromJSON(presetJSON, false);
+                                    presetLoaded = true;
+                                    LogUtil.Log($"[DragDropDebug] Successfully loaded preset via PresetManager");
+                                }
+                                else
+                                {
+                                    LogUtil.LogError($"[DragDropDebug] Failed to load preset JSON from {normalizedPath}");
+                                }
+                            }
+                            else
+                            {
+                                LogUtil.LogError($"[DragDropDebug] PresetManager not found on storable {storableId}");
+                            }
+                        }
+                        else
+                        {
+                            LogUtil.LogError($"[DragDropDebug] Storable {storableId} not found on atom");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                         LogUtil.LogError("[DragDropDebug] LoadPreset failed for " + normalizedPath + ": " + ex.Message);
+                         // Fallthrough to legacy toggle
+                    }
+                    finally
+                    {
+                        // Restore locks
+                        if (isPose && atom.presetManagerControls != null)
+                        {
+                            foreach (var pmc in atom.presetManagerControls)
+                            {
+                                if (pmc != null && originalLocks.ContainsKey(pmc.name))
+                                {
+                                    pmc.lockParams = originalLocks[pmc.name];
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (presetLoaded) return;
                 }
             }
 
@@ -896,7 +1096,7 @@ namespace var_browser
                             }
                         }
                     }
-                    catch (Exception ex) 
+                    catch (Exception) 
                     {
                          // ignore
                     }

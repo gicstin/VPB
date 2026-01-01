@@ -20,7 +20,7 @@ namespace var_browser
         
         // Panels management
         private List<GalleryPanel> panels = new List<GalleryPanel>();
-        private GalleryPanel mainPanel;
+        // private GalleryPanel mainPanel; // Removed
 
         // IsVisible property checks if ANY panel is visible
         public bool IsVisible 
@@ -54,85 +54,46 @@ namespace var_browser
         public void RemovePanel(GalleryPanel p)
         {
             if (panels.Contains(p)) panels.Remove(p);
-            if (p == mainPanel) mainPanel = null;
+            // if (p == mainPanel) mainPanel = null; // Removed
         }
 
         public void Init()
         {
-            if (mainPanel != null) return;
+            // if (mainPanel != null) return; // Removed
 
-            // Create Main Panel
-            GameObject go = new GameObject("GalleryPanel_Main");
-            mainPanel = go.AddComponent<GalleryPanel>();
-            mainPanel.SetCategories(categories);
-            mainPanel.Init(false); // Main panel is not undocked
+            // Only create if NO panels exist at all? 
+            // Or is this called to initialize the "main" one?
+            // VamHookPlugin calls this on hotkey if panels are hidden or empty.
+            
+            if (panels.Count == 0)
+            {
+                 CreatePane();
+            }
         }
 
         public void SetCategories(List<Category> cats)
         {
             categories = cats;
-            if (mainPanel != null)
+            foreach (var p in panels)
             {
-                mainPanel.SetCategories(categories);
+                p.SetCategories(categories);
             }
         }
 
-        public void UndockCreator(string creatorName)
-        {
-            var existing = panels.FirstOrDefault(pan => pan.IsUndocked && pan.UndockedCreator == creatorName);
-            if (existing != null)
-            {
-                // What to show? Default to first category
-                if (categories.Count > 0)
-                    existing.Show(categories[0].name, categories[0].extension, categories[0].path);
-                return;
-            }
-
-            GameObject go = new GameObject("GalleryPanel_Creator_" + creatorName);
-            GalleryPanel p = go.AddComponent<GalleryPanel>();
-            p.UndockedCreator = creatorName;
-            
-            p.Init(true);
-            
-            // For undocked creator panel, we give it ALL categories
-            p.SetCategories(categories);
-            
-            // Show default category
-            if (categories.Count > 0)
-                p.Show(categories[0].name, categories[0].extension, categories[0].path);
-        }
-
-        // Called by Main Panel to undock a category
-        public void Undock(Category cat)
-        {
-            var existing = panels.FirstOrDefault(pan => pan.IsUndocked && pan.UndockedCategory?.name == cat.name);
-            if (existing != null)
-            {
-                existing.Show(cat.name, cat.extension, cat.path);
-                return;
-            }
-
-            GameObject go = new GameObject("GalleryPanel_" + cat.name);
-            GalleryPanel p = go.AddComponent<GalleryPanel>();
-            p.UndockedCategory = cat;
-            
-            p.Init(true);
-            
-            // For undocked panel, we only give it the one category
-            p.SetCategories(new List<Category> { cat });
-            
-            p.Show(cat.name, cat.extension, cat.path);
-        }
+        public const int MaxPanels = 20;
 
         public void ClonePanel(GalleryPanel original, bool toRight)
         {
+            if (panels.Count >= MaxPanels)
+            {
+                // Optionally warn user?
+                return;
+            }
+
             GameObject go = new GameObject("GalleryPanel_Clone");
             GalleryPanel p = go.AddComponent<GalleryPanel>();
             
-            p.UndockedCategory = original.UndockedCategory;
-            p.UndockedCreator = original.UndockedCreator;
-            
-            p.Init(true);
+            p.Init();
             p.SetCategories(original.categories);
             
             // Sync state
@@ -149,44 +110,119 @@ namespace var_browser
             }
 
             // Sync position and rotation
-            p.canvas.transform.rotation = original.canvas.transform.rotation;
+            Camera cam = Camera.main;
+            Transform camTrans = cam != null ? cam.transform : null;
+            if (camTrans == null && SuperController.singleton != null && SuperController.singleton.centerCameraTarget != null)
+                camTrans = SuperController.singleton.centerCameraTarget.transform;
+
+            if (camTrans != null)
+            {
+                Vector3 camPos = camTrans.position;
+                Vector3 toOriginal = original.canvas.transform.position - camPos;
+                float radius = toOriginal.magnitude;
+                // Avoid division by zero
+                if (radius < 0.1f) radius = 0.1f;
+
+                float width = originalRT != null ? originalRT.sizeDelta.x * 0.001f : 1.2f;
+                float padding = 0.05f;
+                // Calculate angle for arc: angle = arcLength / radius (in radians)
+                float angle = ((width + padding) / radius) * Mathf.Rad2Deg;
+                if (!toRight) angle = -angle;
+
+                bool lockRotation = (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null && Settings.Instance.LockGalleryRotation.Value);
+                Vector3 upAxis = lockRotation ? Vector3.up : camTrans.up;
+
+                Quaternion rot = Quaternion.AngleAxis(angle, upAxis);
+                Vector3 toNew = rot * toOriginal;
+
+                p.canvas.transform.position = camPos + toNew;
+                p.canvas.transform.rotation = Quaternion.LookRotation(toNew, upAxis);
+            }
+            else
+            {
+                p.canvas.transform.rotation = original.canvas.transform.rotation;
+                float width = originalRT != null ? originalRT.sizeDelta.x * 0.001f : 1.2f;
+                float padding = 0.05f;
+                Vector3 offset = original.canvas.transform.right * (width + padding);
+                if (!toRight) offset = -offset;
+                p.canvas.transform.position = original.canvas.transform.position + offset;
+            }
             
-            float width = originalRT != null ? originalRT.sizeDelta.x * 0.001f : 1.2f;
-            float padding = 0.05f;
-            Vector3 offset = original.canvas.transform.right * (width + padding);
-            if (!toRight) offset = -offset;
-            
-            p.canvas.transform.position = original.canvas.transform.position + offset;
-            
+            p.hasBeenPositioned = true;
             p.Show(original.GetTitle(), original.GetCurrentExtension(), original.GetCurrentPath());
         }
 
         public void Show(string title, string extension, string path)
         {
-            if (mainPanel == null) Init();
-            
-            // Show main panel
-            mainPanel.Show(title, extension, path);
-            
-            // Show all undocked panels too (restore session)
-            foreach(var p in panels)
+            if (panels.Count == 0) 
             {
-                if (p != mainPanel && !p.IsVisible)
+                CreatePane();
+                // CreatePane calls Show internally with default category, 
+                // but we might want to override it with the requested path if it's specific?
+                // Actually CreatePane uses 'categories[0]' by default.
+                // If Show() is called with specific params, we should apply them to the new pane.
+                if (panels.Count > 0)
+                    panels[0].Show(title, extension, path);
+            }
+            else
+            {
+                // Show ALL panes (restore session)
+                foreach(var p in panels)
                 {
-                    if (p.IsUndocked)
+                    if (!p.IsVisible)
                     {
-                        if (p.UndockedCategory.HasValue)
+                        // Restore state
+                        if (!string.IsNullOrEmpty(p.GetCurrentPath()))
                         {
-                            var c = p.UndockedCategory.Value;
-                            p.Show(c.name, c.extension, c.path);
+                             p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
                         }
-                        else if (!string.IsNullOrEmpty(p.UndockedCreator) && categories.Count > 0)
+                        else
                         {
-                             p.Show(categories[0].name, categories[0].extension, categories[0].path);
+                             // Fallback
+                             p.Show(title, extension, path);
                         }
                     }
                 }
             }
+        }
+
+        public void CreatePane()
+        {
+            if (panels.Count >= MaxPanels)
+            {
+                // Optionally warn user?
+                return;
+            }
+
+            GameObject go = new GameObject("GalleryPanel_New");
+            GalleryPanel p = go.AddComponent<GalleryPanel>();
+            p.Init(); // Undocked
+            p.SetCategories(categories);
+
+            // Position relative to viewer
+            if (SuperController.singleton != null && SuperController.singleton.centerCameraTarget != null)
+            {
+                Transform cameraTransform = SuperController.singleton.centerCameraTarget.transform;
+                p.canvas.transform.position = cameraTransform.position + cameraTransform.forward * 0.8f;
+                p.canvas.transform.rotation = cameraTransform.rotation;
+                
+                // If Locked rotation setting is checked, we might want to enforce it here, 
+                // but GalleryPanel.Show handles it on first show if !hasBeenPositioned.
+                // However, since we manually position it here, we might want to set hasBeenPositioned?
+                // Actually, GalleryPanel.Init sets hasBeenPositioned = false.
+                // If we position it here, we should probably set a flag or let Show handle it.
+                // If we let Show handle it, Show will position it at 1.5f distance.
+                // If we want 0.8f or "relative to viewer", we can leave it to Show if 1.5f is acceptable.
+                // The user said "relative to viewer". Show's default is relative to viewer (head).
+                // Let's rely on Show for consistency, unless we want to force it.
+                // But Show only positions if !hasBeenPositioned.
+                
+                // Let's trust GalleryPanel.Show to handle initial positioning.
+            }
+            
+            // Show default category
+            if (categories.Count > 0)
+                 p.Show(categories[0].name, categories[0].extension, categories[0].path);
         }
 
         public void Hide()

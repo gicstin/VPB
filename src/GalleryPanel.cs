@@ -38,17 +38,17 @@ namespace var_browser
         public enum ContentType { Category, Creator, License }
 
         // Configuration
-        public bool IsUndocked = false;
+        // public bool IsUndocked = false; // Removed
         public bool DragDropReplaceMode
         {
             get { return Settings.Instance != null && Settings.Instance.DragDropReplaceMode != null ? Settings.Instance.DragDropReplaceMode.Value : false; }
             set { if (Settings.Instance != null && Settings.Instance.DragDropReplaceMode != null) Settings.Instance.DragDropReplaceMode.Value = value; }
         }
-        private Toggle addToggle;
-        private Toggle replaceToggle;
-        public Gallery.Category? UndockedCategory;
-        public string UndockedCreator;
-        private bool hasBeenPositioned = false;
+        // private Toggle addToggle;
+        // private Toggle replaceToggle;
+        public Gallery.Category? UndockedCategory; // Removed
+        public string UndockedCreator; // Removed
+        public bool hasBeenPositioned = false;
         // private TabSide currentTabSide = TabSide.Right; // Unused
         private ContentType activeContentType = ContentType.Category; // Deprecated
         
@@ -132,9 +132,13 @@ namespace var_browser
 
         void OnDestroy()
         {
-            if (canvas != null && SuperController.singleton != null)
+            if (canvas != null)
             {
-                SuperController.singleton.RemoveCanvas(canvas);
+                if (SuperController.singleton != null)
+                {
+                    SuperController.singleton.RemoveCanvas(canvas);
+                }
+                Destroy(canvas.gameObject);
             }
             // Remove from manager if needed
             if (Gallery.singleton != null)
@@ -143,13 +147,13 @@ namespace var_browser
             }
         }
 
-        public void Init(bool isUndocked = false)
+        public void Init()
         {
             if (canvas != null) return;
 
-            IsUndocked = isUndocked;
-            string nameSuffix = isUndocked ? "_Undocked" : "";
-            GameObject canvasGO = new GameObject("VPB_GalleryCanvas" + nameSuffix);
+            // IsUndocked = isUndocked; // Removed
+            // string nameSuffix = isUndocked ? "_Undocked" : "";
+            GameObject canvasGO = new GameObject("VPB_GalleryCanvas");
             canvas = canvasGO.AddComponent<Canvas>();
             RectTransform canvasRT = canvasGO.GetComponent<RectTransform>();
             canvasRT.sizeDelta = new Vector2(1200, 800);
@@ -317,22 +321,15 @@ namespace var_browser
 
             // Status Bar Removed as per request
 
-            // Set initial state
-            if (!IsUndocked) 
+            // Set initial state - Default to collapsed sidebars unless set by caller
             {
+                // Default new panes to Category on right (Main Panel behavior)
+                // The user asked for "single type of pane".
+                // If we want them all to behave like the main panel, they should start with Category open?
+                // Or maybe started closed?
+                // The main panel started with rightActiveContent = ContentType.Category.
+                // Let's stick to that for consistency.
                 rightActiveContent = ContentType.Category;
-                leftActiveContent = null;
-            }
-            else if (!string.IsNullOrEmpty(UndockedCreator))
-            {
-                currentCreator = UndockedCreator;
-                rightActiveContent = ContentType.Category;
-                leftActiveContent = null;
-            }
-            else
-            {
-                // Default undocked panels to collapsed sidebars
-                rightActiveContent = null;
                 leftActiveContent = null;
             }
             
@@ -354,7 +351,18 @@ namespace var_browser
             adaptive.spacing = 10f;
 
             // Close button - Rendered last to be on top
-            GameObject closeBtn = UI.CreateUIButton(backgroundBoxGO, 50, 50, "X", 30, 0, 0, AnchorPresets.topRight, () => Hide());
+            GameObject closeBtn = UI.CreateUIButton(backgroundBoxGO, 50, 50, "X", 30, 0, 0, AnchorPresets.topRight, () => {
+                if (Gallery.singleton != null) Gallery.singleton.RemovePanel(this);
+                
+                // Destroy canvas explicitly
+                if (canvas != null)
+                {
+                    if (SuperController.singleton != null) SuperController.singleton.RemoveCanvas(canvas);
+                    Destroy(canvas.gameObject);
+                }
+                
+                Destroy(this.gameObject);
+            });
             closeBtn.GetComponent<Image>().color = new Color(0.7f, 0.7f, 0.7f, 1f);
 
             SetLayerRecursive(canvasGO, 5); // UI layer for children
@@ -377,8 +385,27 @@ namespace var_browser
             else dragStatusMsg = msg;
         }
 
+        private Camera _cachedCamera;
         void Update()
         {
+            // Sorting Logic
+            if (canvas != null && canvas.gameObject.activeSelf)
+            {
+                if (_cachedCamera == null) _cachedCamera = canvas.worldCamera;
+                if (_cachedCamera == null) _cachedCamera = Camera.main;
+
+                if (_cachedCamera != null)
+                {
+                    float dist = Vector3.Distance(_cachedCamera.transform.position, canvas.transform.position);
+                    int order = 20000 - (int)(dist * 100);
+                    if (canvas.sortingOrder != order)
+                    {
+                        canvas.sortingOrder = order;
+                    }
+                }
+            }
+
+            // Status Bar Logic
             if (dragStatusMsg != null)
             {
                 if (statusBarText != null) statusBarText.text = dragStatusMsg;
@@ -510,7 +537,7 @@ namespace var_browser
                 if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
             }
             
-            contentScrollRT.offsetMin = new Vector2(leftOffset, IsUndocked ? 20 : 50);
+            contentScrollRT.offsetMin = new Vector2(leftOffset, 20);
             contentScrollRT.offsetMax = new Vector2(rightOffset, -50);
             
             UpdateButtonStates();
@@ -548,6 +575,8 @@ namespace var_browser
                 catExtensions[c.name] = c.extension.Split('|');
             }
 
+            var sortedCategories = categories.OrderByDescending(c => c.path.Length).ToList();
+
             if (FileManager.PackagesByUid != null)
             {
                 foreach (var pkg in FileManager.PackagesByUid.Values)
@@ -555,11 +584,12 @@ namespace var_browser
                     if (pkg.FileEntries == null) continue;
                     foreach (var entry in pkg.FileEntries)
                     {
-                        foreach (var cat in categories)
+                        foreach (var cat in sortedCategories)
                         {
                             if (IsMatch(entry, cat.path, catExtensions[cat.name]))
                             {
                                 categoryCounts[cat.name]++;
+                                break;
                             }
                         }
                     }
@@ -660,7 +690,7 @@ namespace var_browser
             categoriesCached = false;
 
             // Try to restore last tab if not specified
-            if (!IsUndocked && string.IsNullOrEmpty(currentPath) && Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
+            if (string.IsNullOrEmpty(currentPath) && Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
             {
                 string lastPageName = Settings.Instance.LastGalleryPage.Value;
                 var cat = categories.FirstOrDefault(c => c.name == lastPageName);
@@ -692,8 +722,8 @@ namespace var_browser
             // Let's hide the tab area if IsUndocked.
             
             UpdateTabs();
-            // If undocked, we might want to update title to reflect category if it changed
-            if (IsUndocked && categories.Count > 0 && string.IsNullOrEmpty(currentPath))
+            // If we have categories but no path, set title to first category
+            if (categories.Count > 0 && string.IsNullOrEmpty(currentPath))
             {
                  titleText.text = categories[0].name;
             }
@@ -924,7 +954,7 @@ namespace var_browser
 
         public void Show(string title, string extension, string path)
         {
-            if (canvas == null) Init(IsUndocked);
+            if (canvas == null) Init();
 
             titleText.text = title;
             if (currentExtension != extension || currentPath != path)
@@ -942,7 +972,7 @@ namespace var_browser
 
             canvas.gameObject.SetActive(true);
             RefreshFiles();
-            if (!IsUndocked) UpdateTabs();
+            UpdateTabs();
 
             // Position it in front of the user if in VR, ONLY ONCE
             if (!hasBeenPositioned && SuperController.singleton != null)
@@ -995,7 +1025,7 @@ namespace var_browser
                 foreach (var pkg in FileManager.PackagesByUid.Values)
                 {
                     // Filter by Creator if in Creator mode or Undocked for a creator
-                    string filterCreator = !string.IsNullOrEmpty(UndockedCreator) ? UndockedCreator : currentCreator;
+                    string filterCreator = currentCreator;
                     
                     if (!string.IsNullOrEmpty(filterCreator))
                     {

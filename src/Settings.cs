@@ -16,9 +16,8 @@ namespace var_browser
         }
 
         public ConfigEntry<string> UIKey;
-        public ConfigEntry<string> CustomSceneKey;
-        public ConfigEntry<string> CategorySceneKey;
         public ConfigEntry<string> GalleryKey;
+        public ConfigEntry<string> CreateGalleryKey;
         public ConfigEntry<float> UIScale;
         public ConfigEntry<Vector2> UIPosition;
         public ConfigEntry<bool> MiniMode;
@@ -56,9 +55,8 @@ namespace var_browser
         private void Load(ConfigFile config)
         {
             UIKey = config.Bind<string>("UI", "UIKey", "Ctrl+V", "Shortcut key for Show/Hide Var Browser.");
-            CustomSceneKey = config.Bind<string>("UI", "CustomSceneKey", "Ctrl+Shift+Alpha1", "Shortcut key for open Custom Scene.");
-            CategorySceneKey = config.Bind<string>("UI", "CategorySceneKey", "Ctrl+Shift+Alpha2", "Shortcut key for open Category Scene.");
-            GalleryKey = config.Bind<string>("UI", "GalleryKey", "Ctrl+Shift+G", "Shortcut key for open VR Gallery.");
+            GalleryKey = config.Bind<string>("UI", "GalleryKey", "Ctrl+Shift+G", "Shortcut key for Show/Hide Gallery Panes.");
+            CreateGalleryKey = config.Bind<string>("UI", "CreateGalleryKey", "Ctrl+Shift+N", "Shortcut key for Create Gallery Pane.");
             UIScale = config.Bind<float>("UI", "Scale", 1, "Set UI Scale.");
             UIPosition = config.Bind<Vector2>("UI", "Position", Vector2.zero, "Set UI Position.");
             MiniMode = config.Bind<bool>("UI", "MiniMode", false, "Set Mini Mode.");

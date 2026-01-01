@@ -123,6 +123,7 @@ namespace var_browser
 
                 // 1. Static/Legacy Categories
                 addCat("Scenes", "json", "Saves/scene");
+                addCat("SubScenes", "json", "Custom/SubScene");
                 addCat("Clothing", "vam", "Custom/Clothing");
                 addCat("Hair", "vam", "Custom/Hair");
                 addCat("Person", "json", "Saves/Person");
