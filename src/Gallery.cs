@@ -124,6 +124,43 @@ namespace var_browser
             p.Show(cat.name, cat.extension, cat.path);
         }
 
+        public void ClonePanel(GalleryPanel original, bool toRight)
+        {
+            GameObject go = new GameObject("GalleryPanel_Clone");
+            GalleryPanel p = go.AddComponent<GalleryPanel>();
+            
+            p.UndockedCategory = original.UndockedCategory;
+            p.UndockedCreator = original.UndockedCreator;
+            
+            p.Init(true);
+            p.SetCategories(original.categories);
+            
+            // Sync state
+            p.SetFilters(original.GetCurrentPath(), original.GetCurrentExtension(), original.GetCurrentCreator());
+            p.SetLeftActiveContent(original.GetLeftActiveContent());
+            p.SetRightActiveContent(original.GetRightActiveContent());
+            
+            // Sync size
+            RectTransform originalRT = original.GetBackgroundRT();
+            RectTransform pRT = p.GetBackgroundRT();
+            if (originalRT != null && pRT != null)
+            {
+                pRT.sizeDelta = originalRT.sizeDelta;
+            }
+
+            // Sync position and rotation
+            p.canvas.transform.rotation = original.canvas.transform.rotation;
+            
+            float width = originalRT != null ? originalRT.sizeDelta.x * 0.001f : 1.2f;
+            float padding = 0.05f;
+            Vector3 offset = original.canvas.transform.right * (width + padding);
+            if (!toRight) offset = -offset;
+            
+            p.canvas.transform.position = original.canvas.transform.position + offset;
+            
+            p.Show(original.GetTitle(), original.GetCurrentExtension(), original.GetCurrentPath());
+        }
+
         public void Show(string title, string extension, string path)
         {
             if (mainPanel == null) Init();

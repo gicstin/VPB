@@ -47,6 +47,7 @@ namespace var_browser
         public ConfigEntry<bool> ScenePrewarmEnabled;
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<bool> LockGalleryRotation;
+        public ConfigEntry<bool> DragDropReplaceMode;
         
         internal static void Init(ConfigFile config)
         {
@@ -75,6 +76,7 @@ namespace var_browser
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             LockGalleryRotation = config.Bind<bool>("UI", "LockGalleryRotation", true, "Lock gallery panel rotation to be horizontal.");
+            DragDropReplaceMode = config.Bind<bool>("UI", "DragDropReplaceMode", false, "Enable Replace mode for Drag and Drop in Gallery.");
             
             OptimizeGameObjectFind = config.Bind<bool>("Unity Patches", "OptimizeGameObjectFind", true, "Cache GameObject.Find results.");
             OptimizePhysicsRaycast = config.Bind<bool>("Unity Patches", "OptimizePhysicsRaycast", true, "Cache Physics.Raycast results per frame.");

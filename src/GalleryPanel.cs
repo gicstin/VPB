@@ -39,7 +39,11 @@ namespace var_browser
 
         // Configuration
         public bool IsUndocked = false;
-        public bool DragDropReplaceMode = false;
+        public bool DragDropReplaceMode
+        {
+            get { return Settings.Instance != null && Settings.Instance.DragDropReplaceMode != null ? Settings.Instance.DragDropReplaceMode.Value : false; }
+            set { if (Settings.Instance != null && Settings.Instance.DragDropReplaceMode != null) Settings.Instance.DragDropReplaceMode.Value = value; }
+        }
         private Toggle addToggle;
         private Toggle replaceToggle;
         public Gallery.Category? UndockedCategory;
@@ -69,6 +73,11 @@ namespace var_browser
         private Text leftCreatorBtnText;
         private Image leftCreatorBtnImage;
         
+        private Text rightReplaceBtnText;
+        private Image rightReplaceBtnImage;
+        private Text leftReplaceBtnText;
+        private Image leftReplaceBtnImage;
+
         // Data
         private string currentCreator = "";
         private string categoryFilter = "";
@@ -89,6 +98,37 @@ namespace var_browser
         public static readonly Color ColorCategory = new Color(0.7f, 0.2f, 0.2f, 1f); // Desaturated Red
         public static readonly Color ColorCreator = new Color(0.3f, 0.6f, 0.3f, 1f); // Desaturated Green
         public static readonly Color ColorLicense = new Color(1f, 0f, 1f, 1f); // Magenta
+
+        public string GetCurrentPath() => currentPath;
+        public string GetCurrentExtension() => currentExtension;
+        public string GetCurrentCreator() => currentCreator;
+        public string GetTitle() => titleText != null ? titleText.text : "";
+        public RectTransform GetBackgroundRT() => backgroundBoxGO != null ? backgroundBoxGO.GetComponent<RectTransform>() : null;
+
+        public ContentType? GetLeftActiveContent() => leftActiveContent;
+        public ContentType? GetRightActiveContent() => rightActiveContent;
+
+        public void SetLeftActiveContent(ContentType? type)
+        {
+            leftActiveContent = type;
+            UpdateLayout();
+            UpdateTabs();
+        }
+
+        public void SetRightActiveContent(ContentType? type)
+        {
+            rightActiveContent = type;
+            UpdateLayout();
+            UpdateTabs();
+        }
+
+        public void SetFilters(string path, string extension, string creator)
+        {
+            currentPath = path;
+            currentExtension = extension;
+            currentCreator = creator;
+            creatorsCached = false;
+        }
 
         void OnDestroy()
         {
@@ -156,8 +196,8 @@ namespace var_browser
             titleRT.anchoredPosition = new Vector2(0, -10);
             titleRT.sizeDelta = new Vector2(0, 40);
 
-            // Tab Area - Create if not undocked OR if undocked for a creator
-            if (!IsUndocked || !string.IsNullOrEmpty(UndockedCreator))
+            // Tab Area - Create for all panels so undocked can clone/filter
+            if (true)
             {
                 float tabAreaWidth = 180f;
                 
@@ -210,134 +250,108 @@ namespace var_browser
                 lSearchRT.anchoredPosition = new Vector2(10, -50);
 
                 // Right Toggle Buttons
+                // Clone (Gray)
+                GameObject rightCloneBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "〃", 30, 60, 180, AnchorPresets.middleRight, () => {
+                    if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true);
+                });
+                rightCloneBtn.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 1f);
+
                 // Category (Red)
-                GameObject rightCatBtn = UI.CreateUIButton(backgroundBoxGO, 30, 60, ">", 20, 30, 40, AnchorPresets.middleRight, () => ToggleRight(ContentType.Category));
+                GameObject rightCatBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, ">", 30, 60, 60, AnchorPresets.middleRight, () => ToggleRight(ContentType.Category));
                 rightCategoryBtnImage = rightCatBtn.GetComponent<Image>();
                 rightCategoryBtnImage.color = ColorCategory;
                 rightCategoryBtnText = rightCatBtn.GetComponentInChildren<Text>();
                 rightCategoryBtnText.text = "<";
                 
                 // Creator (Green)
-                GameObject rightCreatorBtn = UI.CreateUIButton(backgroundBoxGO, 30, 60, ">", 20, 30, -40, AnchorPresets.middleRight, () => ToggleRight(ContentType.Creator));
+                GameObject rightCreatorBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, ">", 30, 60, -60, AnchorPresets.middleRight, () => ToggleRight(ContentType.Creator));
                 rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
                 rightCreatorBtnImage.color = ColorCreator;
                 rightCreatorBtnText = rightCreatorBtn.GetComponentInChildren<Text>();
                 rightCreatorBtnText.text = ">";
 
+                // Replace Toggle (Right)
+                GameObject rightReplaceBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "Add", 24, 60, -180, AnchorPresets.middleRight, ToggleReplaceMode);
+                rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
+                rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
+
                 // Left Toggle Buttons
+                // Clone (Gray)
+                GameObject leftCloneBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "〃", 30, -60, 180, AnchorPresets.middleLeft, () => {
+                    if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, false);
+                });
+                leftCloneBtn.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 1f);
+
                 // Category (Red)
-                GameObject leftCatBtn = UI.CreateUIButton(backgroundBoxGO, 30, 60, "<", 20, -30, 40, AnchorPresets.middleLeft, () => ToggleLeft(ContentType.Category));
+                GameObject leftCatBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "<", 30, -60, 60, AnchorPresets.middleLeft, () => ToggleLeft(ContentType.Category));
                 leftCategoryBtnImage = leftCatBtn.GetComponent<Image>();
                 leftCategoryBtnImage.color = ColorCategory;
                 leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>();
                 leftCategoryBtnText.text = "<";
                 
                 // Creator (Green)
-                GameObject leftCreatorBtn = UI.CreateUIButton(backgroundBoxGO, 30, 60, "<", 20, -30, -40, AnchorPresets.middleLeft, () => ToggleLeft(ContentType.Creator));
+                GameObject leftCreatorBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "<", 30, -60, -60, AnchorPresets.middleLeft, () => ToggleLeft(ContentType.Creator));
                 leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
                 leftCreatorBtnImage.color = ColorCreator;
                 leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>();
                 leftCreatorBtnText.text = "<";
+
+                // Replace Toggle (Left)
+                GameObject leftReplaceBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "Add", 24, -60, -180, AnchorPresets.middleLeft, ToggleReplaceMode);
+                leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
+                leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
             }
 
+            UpdateReplaceButtonState();
+
             // Content Area
-            float rightPadding = (IsUndocked && string.IsNullOrEmpty(UndockedCreator)) ? -20 : -210; // -180 tab width - 10 padding - 20 margin
+            float rightPadding = -20; // Default padding, updated by UpdateLayout
             
             GameObject scrollableGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0.2f, 0.2f, 0.2f, 0.5f), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
             contentScrollRT = scrollableGO.GetComponent<RectTransform>();
-            contentScrollRT.offsetMin = new Vector2(20, 50); // Raised for status bar (was 60, 50 is fine if bar is 40)
+            contentScrollRT.offsetMin = new Vector2(20, 20);
             contentScrollRT.offsetMax = new Vector2(rightPadding, -50);
 
             scrollRect = scrollableGO.GetComponent<ScrollRect>();
             contentGO = scrollRect.content.gameObject;
 
-            // Status Bar Background
-            GameObject statusBgGO = new GameObject("StatusBarBackground");
-            statusBgGO.transform.SetParent(backgroundBoxGO.transform, false);
-            Image statusBg = statusBgGO.AddComponent<Image>();
-            statusBg.color = new Color(0f, 0f, 0f, 0.8f); // Dark black background
-            statusBg.raycastTarget = false;
-
-            RectTransform statusBgRT = statusBgGO.GetComponent<RectTransform>();
-            statusBgRT.anchorMin = new Vector2(0, 0);
-            statusBgRT.anchorMax = new Vector2(1, 0);
-            statusBgRT.pivot = new Vector2(0.5f, 0);
-            statusBgRT.anchoredPosition = Vector2.zero;
-            statusBgRT.offsetMin = new Vector2(10, 10); // Left, Bottom margins
-            statusBgRT.offsetMax = new Vector2(-10, 45); // Right, Top (relative to anchor min y=0) -> Height = 35
-
-            // Status Text
-            GameObject statusTextGO = new GameObject("StatusText");
-            statusTextGO.transform.SetParent(statusBgGO.transform, false);
-            statusBarText = statusTextGO.AddComponent<Text>();
-            statusBarText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            statusBarText.fontSize = 20;
-            statusBarText.color = Color.yellow;
-            statusBarText.alignment = TextAnchor.MiddleLeft;
-            statusBarText.raycastTarget = false;
-            
-            RectTransform statusTextRT = statusTextGO.GetComponent<RectTransform>();
-            statusTextRT.anchorMin = Vector2.zero;
-            statusTextRT.anchorMax = Vector2.one;
-            statusTextRT.sizeDelta = Vector2.zero; // Stretch to fill background
-            statusTextRT.offsetMin = new Vector2(10, 0); // Padding left
-            statusTextRT.offsetMax = new Vector2(-210, 0); // Padding right for toggles
-
-            // Toggles
-            // Add Toggle
-            GameObject addToggleGO = UI.CreateToggle(statusBgGO, "Add", 80, 20, -110, 0, AnchorPresets.middleRight, (val) => {
-                if (val) 
-                {
-                     DragDropReplaceMode = false;
-                     if (replaceToggle != null && replaceToggle.isOn) replaceToggle.isOn = false;
-                }
-                else
-                {
-                     if (!DragDropReplaceMode && addToggle != null) addToggle.isOn = true;
-                }
-            });
-            addToggle = addToggleGO.GetComponent<Toggle>();
-            addToggle.isOn = !DragDropReplaceMode;
-
-            // Replace Toggle
-            GameObject replaceToggleGO = UI.CreateToggle(statusBgGO, "Replace", 100, 20, -10, 0, AnchorPresets.middleRight, (val) => {
-                if (val)
-                {
-                    DragDropReplaceMode = true;
-                    if (addToggle != null && addToggle.isOn) addToggle.isOn = false;
-                }
-                else
-                {
-                    if (DragDropReplaceMode && replaceToggle != null) replaceToggle.isOn = true;
-                }
-            });
-            replaceToggle = replaceToggleGO.GetComponent<Toggle>();
-            replaceToggle.isOn = DragDropReplaceMode;
+            // Status Bar Removed as per request
 
             // Set initial state
             if (!IsUndocked) 
             {
                 rightActiveContent = ContentType.Category;
                 leftActiveContent = null;
-                UpdateLayout();
             }
             else if (!string.IsNullOrEmpty(UndockedCreator))
             {
                 currentCreator = UndockedCreator;
                 rightActiveContent = ContentType.Category;
                 leftActiveContent = null;
-                UpdateLayout();
             }
+            else
+            {
+                // Default undocked panels to collapsed sidebars
+                rightActiveContent = null;
+                leftActiveContent = null;
+            }
+            
+            UpdateLayout();
 
             // Grid Layout
             VerticalLayoutGroup vlg = contentGO.GetComponent<VerticalLayoutGroup>();
             if (vlg != null) DestroyImmediate(vlg);
 
             GridLayoutGroup grid = contentGO.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(200, 200);
             grid.spacing = new Vector2(10, 10);
             grid.padding = new RectOffset(10, 10, 10, 10);
             grid.childAlignment = TextAnchor.UpperLeft;
+
+            UIGridAdaptive adaptive = contentGO.AddComponent<UIGridAdaptive>();
+            adaptive.grid = grid;
+            adaptive.minSize = 180f;
+            adaptive.maxSize = 250f;
+            adaptive.spacing = 10f;
 
             // Close button - Rendered last to be on top
             GameObject closeBtn = UI.CreateUIButton(backgroundBoxGO, 50, 50, "X", 30, 0, 0, AnchorPresets.topRight, () => Hide());
@@ -371,7 +385,7 @@ namespace var_browser
             }
             else
             {
-                if (IsVisible && statusBarText != null)
+                if (IsVisible && statusBarText != null && !UnityEngine.XR.XRSettings.enabled)
                 {
                      string msg;
                      Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : Camera.main;
@@ -417,6 +431,24 @@ namespace var_browser
             UpdateTabs();
         }
 
+        private void UpdateReplaceButtonState()
+        {
+            string text = DragDropReplaceMode ? "Rep" : "Add";
+            Color color = DragDropReplaceMode ? new Color(0.8f, 0.2f, 0.2f, 1f) : new Color(0.2f, 0.6f, 0.2f, 1f);
+
+            if (rightReplaceBtnText != null) rightReplaceBtnText.text = text;
+            if (rightReplaceBtnImage != null) rightReplaceBtnImage.color = color;
+            
+            if (leftReplaceBtnText != null) leftReplaceBtnText.text = text;
+            if (leftReplaceBtnImage != null) leftReplaceBtnImage.color = color;
+        }
+
+        private void ToggleReplaceMode()
+        {
+            DragDropReplaceMode = !DragDropReplaceMode;
+            UpdateReplaceButtonState();
+        }
+
         private void UpdateLayout()
         {
             if (!creatorsCached) CacheCreators();
@@ -425,7 +457,7 @@ namespace var_browser
             if (contentScrollRT == null) return;
             
             float leftOffset = 20;
-            float rightOffset = (IsUndocked && string.IsNullOrEmpty(UndockedCreator)) ? -20 : -20;
+            float rightOffset = -20;
             
             // Left Side
             if (leftActiveContent.HasValue && leftTabScrollGO != null)
@@ -478,7 +510,7 @@ namespace var_browser
                 if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
             }
             
-            contentScrollRT.offsetMin = new Vector2(leftOffset, 20);
+            contentScrollRT.offsetMin = new Vector2(leftOffset, IsUndocked ? 20 : 50);
             contentScrollRT.offsetMax = new Vector2(rightOffset, -50);
             
             UpdateButtonStates();
@@ -659,14 +691,11 @@ namespace var_browser
             // If I pass only 1 category, it shows 1 tab. That's redundant with the title.
             // Let's hide the tab area if IsUndocked.
             
-            if (!IsUndocked) UpdateTabs();
-            else 
+            UpdateTabs();
+            // If undocked, we might want to update title to reflect category if it changed
+            if (IsUndocked && categories.Count > 0 && string.IsNullOrEmpty(currentPath))
             {
-                 // If undocked, we might want to update title to reflect category if it changed (it shouldn't)
-                 if (categories.Count > 0)
-                 {
-                     titleText.text = categories[0].name;
-                 }
+                 titleText.text = categories[0].name;
             }
         }
 
@@ -701,6 +730,9 @@ namespace var_browser
 
                     int count = 0;
                     if (categoryCounts.ContainsKey(c.name)) count = categoryCounts[c.name];
+                    
+                    if (count == 0 && !isActive) continue;
+
                     string label = c.name + " (" + count + ")";
 
                     CreateTabButton(container.transform, label, btnColor, isActive, () => {
@@ -710,10 +742,7 @@ namespace var_browser
                             Settings.Instance.LastGalleryPage.Value = c.name;
                         }
                         UpdateTabs();
-                    }, 
-                    !IsUndocked ? () => {
-                         if (Gallery.singleton != null) Gallery.singleton.Undock(c);
-                    } : (UnityAction)null, trackedButtons);
+                    }, trackedButtons);
                 }
             }
             else if (contentType == ContentType.Creator)
@@ -736,17 +765,14 @@ namespace var_browser
                         else currentCreator = cName;
                         RefreshFiles();
                         UpdateTabs(); 
-                    }, 
-                    !IsUndocked ? () => {
-                         if (Gallery.singleton != null) Gallery.singleton.UndockCreator(cName);
-                    } : (UnityAction)null, trackedButtons);
+                    }, trackedButtons);
                 }
             }
             
             SetLayerRecursive(container, 5);
         }
 
-        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, UnityAction onUndock, List<GameObject> targetList)
+        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList)
         {
             GameObject groupGO = GetTabButton(parent);
             if (groupGO == null)
@@ -761,19 +787,14 @@ namespace var_browser
                 groupLE.preferredHeight = 35;
                 
                 HorizontalLayoutGroup groupHLG = groupGO.AddComponent<HorizontalLayoutGroup>();
-                groupHLG.childControlWidth = false;
+                groupHLG.childControlWidth = true; // Changed to true since we only have one button now
                 groupHLG.childControlHeight = true;
-                groupHLG.childForceExpandWidth = false;
-                groupHLG.spacing = 2;
+                groupHLG.childForceExpandWidth = true; // Changed to true
+                groupHLG.spacing = 0;
 
                 // Tab Button
-                GameObject btnGO = UI.CreateUIButton(groupGO, 130, 35, "", 14, 0, 0, AnchorPresets.middleLeft, null);
+                GameObject btnGO = UI.CreateUIButton(groupGO, 170, 35, "", 14, 0, 0, AnchorPresets.middleLeft, null);
                 btnGO.name = "Button";
-                
-                // Undock Button
-                GameObject undockGO = UI.CreateUIButton(groupGO, 30, 35, "↗", 14, 0, 0, AnchorPresets.middleRight, null);
-                undockGO.name = "UndockButton";
-                undockGO.GetComponent<Image>().color = new Color(0.5f, 0.5f, 0.5f, 1f);
             }
             
             groupGO.name = "TabGroup_" + label;
@@ -791,20 +812,6 @@ namespace var_browser
             Text txt = btnGO_Reuse.GetComponentInChildren<Text>();
             txt.text = label;
             txt.color = isActive ? Color.white : Color.black;
-            
-            Transform undockTr = groupGO.transform.GetChild(1);
-            GameObject undockGO_Reuse = undockTr.gameObject;
-            if (onUndock != null)
-            {
-                undockGO_Reuse.SetActive(true);
-                Button uBtn = undockGO_Reuse.GetComponent<Button>();
-                uBtn.onClick.RemoveAllListeners();
-                uBtn.onClick.AddListener(onUndock);
-            }
-            else
-            {
-                undockGO_Reuse.SetActive(false);
-            }
             
             if (targetList != null) targetList.Add(groupGO);
         }
@@ -1037,7 +1044,7 @@ namespace var_browser
             files.Sort((a, b) => b.LastWriteTime.CompareTo(a.LastWriteTime));
 
             // Limit to avoid performance issues if too many files
-            int count = Mathf.Min(files.Count, 200);
+            int count = Mathf.Min(files.Count, 2000);
             for (int i = 0; i < count; i++)
             {
                 CreateFileButton(files[i]);

@@ -111,14 +111,65 @@ namespace var_browser
             if (m_GalleryCategories == null)
             {
                 m_GalleryCategories = new List<Gallery.Category>();
-                m_GalleryCategories.Add(new Gallery.Category { name = "Scenes", extension = "json", path = "Saves/scene" });
-                m_GalleryCategories.Add(new Gallery.Category { name = "Clothing", extension = "vam", path = "Custom/Clothing" });
-                m_GalleryCategories.Add(new Gallery.Category { name = "Hair", extension = "vam", path = "Custom/Hair" });
-                m_GalleryCategories.Add(new Gallery.Category { name = "Person", extension = "json", path = "Saves/Person" });
-                m_GalleryCategories.Add(new Gallery.Category { name = "P.Clothing", extension = "vap", path = "Custom/Clothing" });
-                m_GalleryCategories.Add(new Gallery.Category { name = "P.Hair", extension = "vap", path = "Custom/Hair" });
-                m_GalleryCategories.Add(new Gallery.Category { name = "Pose", extension = "json|vap", path = "Custom/Atom/Person/Pose" });
-                m_GalleryCategories.Add(new Gallery.Category { name = "All", extension = "var", path = "" });
+                HashSet<string> usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // Helper to add categories while tracking names
+                Action<string, string, string> addCat = (name, ext, path) => {
+                    if (!usedNames.Contains(name)) {
+                        m_GalleryCategories.Add(new Gallery.Category { name = name, extension = ext, path = path });
+                        usedNames.Add(name);
+                    }
+                };
+
+                // 1. Static/Legacy Categories
+                addCat("Scenes", "json", "Saves/scene");
+                addCat("Clothing", "vam", "Custom/Clothing");
+                addCat("Hair", "vam", "Custom/Hair");
+                addCat("Person", "json", "Saves/Person");
+                addCat("P.Clothing", "vap", "Custom/Clothing");
+                addCat("P.Hair", "vap", "Custom/Hair");
+                // Note: "Pose" removed from hardcoded list to be discovered dynamically
+
+                // 2. Dynamic Discovery from Custom/Atom
+                string atomRoot = "Custom/Atom";
+                if (Directory.Exists(atomRoot))
+                {
+                    try
+                    {
+                        foreach (string atomPath in Directory.GetDirectories(atomRoot))
+                        {
+                            string atomType = Path.GetFileName(atomPath);
+                            
+                            foreach (string resourcePath in Directory.GetDirectories(atomPath))
+                            {
+                                string resourceName = Path.GetFileName(resourcePath);
+                                string finalName = resourceName;
+
+                                // Handle name collisions (e.g. if "Clothing" exists in Atom/Person/Clothing, rename to "Person Clothing")
+                                if (usedNames.Contains(finalName))
+                                {
+                                    finalName = atomType + " " + resourceName;
+                                }
+
+                                // Determine extension
+                                string ext = "vap";
+                                if (string.Equals(resourceName, "Pose", StringComparison.OrdinalIgnoreCase))
+                                    ext = "json|vap";
+                                
+                                // Use forward slashes for path to maintain consistency
+                                string finalPath = resourcePath.Replace("\\", "/");
+                                
+                                addCat(finalName, ext, finalPath);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("Error discovering categories: " + ex.Message);
+                    }
+                }
+
+                addCat("All", "var", "");
             }
             
             Gallery.singleton.SetCategories(m_GalleryCategories);

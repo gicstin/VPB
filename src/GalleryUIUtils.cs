@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
+using SimpleJSON;
 
 namespace var_browser
 {
@@ -14,28 +15,31 @@ namespace var_browser
         public Transform target;
         private float planeDistance;
         private Vector3 offset;
+        private Camera dragCam;
 
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (target == null) target = transform;
-            if (eventData.pressEventCamera == null) return;
+            dragCam = eventData.pressEventCamera;
+            if (dragCam == null) dragCam = Camera.main;
+            if (dragCam == null) return;
             
-            planeDistance = Vector3.Dot(target.position - eventData.pressEventCamera.transform.position, eventData.pressEventCamera.transform.forward);
+            planeDistance = Vector3.Dot(target.position - dragCam.transform.position, dragCam.transform.forward);
             
-            Ray ray = eventData.pressEventCamera.ScreenPointToRay(eventData.position);
+            Ray ray = dragCam.ScreenPointToRay(eventData.position);
             Vector3 hitPoint = ray.GetPoint(planeDistance);
             offset = target.position - hitPoint;
         }
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (eventData.pressEventCamera == null) return;
+            if (dragCam == null) return;
             
-            Ray ray = eventData.pressEventCamera.ScreenPointToRay(eventData.position);
+            Ray ray = dragCam.ScreenPointToRay(eventData.position);
             target.position = ray.GetPoint(planeDistance) + offset;
             
             // Face camera
-            Vector3 lookDir = target.position - eventData.pressEventCamera.transform.position;
+            Vector3 lookDir = target.position - dragCam.transform.position;
             if (lookDir != Vector3.zero)
             {
                 bool lockRotation = (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null && Settings.Instance.LockGalleryRotation.Value);
@@ -46,7 +50,7 @@ namespace var_browser
                 }
                 else
                 {
-                    target.rotation = Quaternion.LookRotation(lookDir, eventData.pressEventCamera.transform.up);
+                    target.rotation = Quaternion.LookRotation(lookDir, dragCam.transform.up);
                 }
             }
         }
@@ -58,22 +62,25 @@ namespace var_browser
         public Vector2 minSize = new Vector2(400, 300);
         public Vector2 maxSize = new Vector2(2000, 2000);
         public int anchor = AnchorPresets.bottomRight;
+        private Camera dragCam;
 
         public void OnBeginDrag(PointerEventData eventData)
         {
             // Consume the drag start event so it doesn't bubble up to parent UIDraggable
+            dragCam = eventData.pressEventCamera;
+            if (dragCam == null) dragCam = Camera.main;
         }
 
         public void OnDrag(PointerEventData eventData)
         {
             if (target == null || target.parent == null) return;
-            if (eventData.pressEventCamera == null) return;
+            if (dragCam == null) return;
 
             RectTransform parentRect = target.parent as RectTransform;
             if (parentRect == null) return;
 
             // 3. Get Mouse Position in Parent Local Space
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, eventData.pressEventCamera, out Vector2 localMouse))
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, dragCam, out Vector2 localMouse))
             {
                 Vector2 pos = target.anchoredPosition;
                 Vector2 size = target.sizeDelta;
@@ -212,6 +219,65 @@ namespace var_browser
         }
     }
 
+    public class UIGridAdaptive : MonoBehaviour
+    {
+        public GridLayoutGroup grid;
+        public float minSize = 200f;
+        public float maxSize = 260f;
+        public float spacing = 10f;
+        
+        private RectTransform rt;
+        private float lastWidth = -1f;
+
+        void Awake()
+        {
+            rt = GetComponent<RectTransform>();
+            if (grid == null) grid = GetComponent<GridLayoutGroup>();
+        }
+
+        void OnEnable()
+        {
+            UpdateGrid();
+        }
+
+        void OnRectTransformDimensionsChange()
+        {
+            UpdateGrid();
+        }
+
+        public void UpdateGrid()
+        {
+            if (rt == null || grid == null) return;
+            float width = rt.rect.width;
+            if (width <= 0) return;
+            if (Mathf.Abs(width - lastWidth) < 0.1f) return;
+            lastWidth = width;
+
+            float usableWidth = width - grid.padding.left - grid.padding.right;
+            if (usableWidth <= 0) return;
+            
+            // Calculate number of columns using a target size that balances between min and max
+            // We want to change column count when the cell size would exceed maxSize or drop below minSize.
+            // A simple approach is to use the floor of (usableWidth + spacing) / (minSize + spacing)
+            // but to avoid the size becoming too large for small column counts, 
+            // we can use a target size in the middle of our range.
+            float targetSize = (minSize + maxSize) * 0.5f;
+            int n = Mathf.FloorToInt((usableWidth + spacing) / (minSize + spacing));
+            if (n < 1) n = 1;
+            
+            float cellSize = (usableWidth - (n - 1) * spacing) / n;
+            
+            // If the resulting cellSize is too much larger than our max, we could force an extra column
+            // even if it drops below minSize slightly, but usually the floor logic is sufficient.
+            if (cellSize > maxSize && n > 0)
+            {
+                // Optional: force n+1 if it's closer to the range
+            }
+
+            grid.cellSize = new Vector2(cellSize, cellSize);
+        }
+    }
+
     public class UIDraggableItem : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         public FileEntry FileEntry;
@@ -221,24 +287,30 @@ namespace var_browser
         private bool isDraggingItem = false;
         private GameObject ghostObject;
         private Image ghostBorder;
+        private Text ghostText; // Added text component
         // private Vector3 offset; // Unused
         private float planeDistance;
+        private Camera dragCam;
 
-        public void Update()
+        private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
+
+        private enum ItemType { Clothing, Hair, Pose, Other }
+
+        private ItemType GetItemType(FileEntry entry)
         {
-            if (isDraggingItem)
-            {
-                if (!Input.GetMouseButton(0))
-                {
-                     PointerEventData dummy = new PointerEventData(EventSystem.current);
-                     // dummy.pressEventCamera is read-only, but DetectAtom falls back to Camera.main if null
-                     OnEndDrag(dummy);
-                }
-            }
+            if (entry == null || string.IsNullOrEmpty(entry.Path)) return ItemType.Other;
+            string p = entry.Path;
+            if (p.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Hair;
+            if (p.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 || p.EndsWith(".vac", StringComparison.OrdinalIgnoreCase)) return ItemType.Pose;
+            if (p.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Clothing;
+            return ItemType.Other;
         }
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            dragCam = eventData.pressEventCamera;
+            if (dragCam == null) dragCam = Camera.main;
+
             isDraggingItem = true;
             CreateGhost(eventData);
 
@@ -247,8 +319,7 @@ namespace var_browser
             Atom atom = DetectAtom(eventData, out msg, out dist);
             if (Panel != null) Panel.SetStatus(msg);
             
-            bool valid = (atom != null && atom.type == "Person");
-            UpdateGhost(eventData, valid, dist);
+            UpdateGhost(eventData, atom, dist);
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -258,9 +329,8 @@ namespace var_browser
                 string msg;
                 float dist;
                 Atom atom = DetectAtom(eventData, out msg, out dist);
-                bool valid = (atom != null && atom.type == "Person");
                 
-                UpdateGhost(eventData, valid, dist);
+                UpdateGhost(eventData, atom, dist);
                 if (Panel != null)
                 {
                      Panel.SetStatus(msg);
@@ -283,12 +353,36 @@ namespace var_browser
                 {
                     ApplyClothingToAtom(atom, FileEntry.Uid);
                 }
+                dragCam = null;
+            }
+        }
+
+        public void OnDisable()
+        {
+            if (isDraggingItem)
+            {
+                DestroyGhost();
+                isDraggingItem = false;
+                if (Panel != null) Panel.SetStatus("");
+                dragCam = null;
+            }
+        }
+
+        public void OnApplicationFocus(bool hasFocus)
+        {
+            if (!hasFocus && isDraggingItem)
+            {
+                DestroyGhost();
+                isDraggingItem = false;
+                if (Panel != null) Panel.SetStatus("");
+                dragCam = null;
             }
         }
 
         private Atom DetectAtom(PointerEventData eventData, out string statusMsg, out float distance)
         {
-            Camera cam = eventData.pressEventCamera;
+            Camera cam = dragCam;
+            if (cam == null) cam = eventData.pressEventCamera;
             if (cam == null) cam = Camera.main;
 
             string hitMsg;
@@ -348,31 +442,100 @@ namespace var_browser
             LogUtil.Log($"[DragDropDebug] Attempting to apply. FullPath: {normalizedPath}, LegacyPath: {legacyPath}, Installed: {installed}");
 
             JSONStorable geometry = atom.GetStorableByID("geometry");
+            ItemType itemType = GetItemType(FileEntry);
 
-            if (Panel != null && Panel.DragDropReplaceMode)
+            if (Panel != null && Panel.DragDropReplaceMode && (itemType == ItemType.Clothing || itemType == ItemType.Hair))
             {
-                if (normalizedPath.IndexOf("/Hair/", StringComparison.OrdinalIgnoreCase) >= 0 && geometry != null)
+                bool isHair = itemType == ItemType.Hair;
+                bool isClothing = !isHair;
+
+                if (geometry != null)
                 {
-                     LogUtil.Log("[DragDropDebug] Replace mode: Clearing existing hair.");
+                     LogUtil.Log($"[DragDropDebug] Replace mode check: Checking types...");
+                     
+                     HashSet<string> droppedRegions = isHair ? GetHairRegions(FileEntry) : GetClothingRegions(FileEntry);
+                     LogUtil.Log($"[DragDropDebug] Dropped regions: {string.Join(",", droppedRegions.ToArray())}");
+
                      List<string> all = geometry.GetBoolParamNames();
                      if (all != null)
                      {
                          foreach(string n in all)
                          {
-                             if (n.StartsWith("hair:"))
+                             bool check = false;
+                             string paramType = "";
+                             if (isHair && n.StartsWith("hair:")) 
                              {
-                                 JSONStorableBool p = geometry.GetBoolJSONParam(n);
-                                 if (p != null && p.val) p.val = false;
+                                 check = true; 
+                                 paramType = "hair";
+                             }
+                             else if (isClothing && n.StartsWith("clothing:")) 
+                             {
+                                 check = true;
+                                 paramType = "clothing";
+                             }
+
+                             if (check)
+                             {
+                                 string itemName = n.Substring(paramType.Length + 1); // remove "hair:" or "clothing:"
+                                 VarFileEntry existingEntry = FileManager.GetVarFileEntry(itemName);
+                                 
+                                 HashSet<string> existingRegions;
+                                 if (existingEntry != null)
+                                 {
+                                     existingRegions = isHair ? GetHairRegions(existingEntry) : GetClothingRegions(existingEntry);
+                                 }
+                                 else
+                                 {
+                                     // Try heuristics on the param name
+                                     existingRegions = isHair ? GetRegionsFromHeuristics(itemName) : GetClothingRegionsFromHeuristics(itemName);
+                                     // No default fallback for existing items - safer to NOT clear if unknown
+                                 }
+
+                                 if (droppedRegions.Overlaps(existingRegions))
+                                 {
+                                     JSONStorableBool p = geometry.GetBoolJSONParam(n);
+                                     if (p != null && p.val) 
+                                     {
+                                         var intersection = droppedRegions.Intersect(existingRegions);
+                                         LogUtil.Log($"[DragDropDebug] Clearing overlapping {paramType} {n}. Dropped regions: [{string.Join(",", droppedRegions.ToArray())}]. Existing regions: [{string.Join(",", existingRegions.ToArray())}]. Overlap on: [{string.Join(",", intersection.ToArray())}]");
+                                         p.val = false;
+                                     }
+                                 }
+                                 else
+                                 {
+                                     LogUtil.Log($"[DragDropDebug] Preserving {paramType} {n} (Regions: {string.Join(",", existingRegions.ToArray())}) - No overlap.");
+                                 }
                              }
                          }
                      }
                 }
             }
-
-            // Try to load as preset first (standard for Clothing/Hair presets)
-            string ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
-            if (ext == ".vap" || ext == ".json" || ext == ".vam")
+            else
             {
+                LogUtil.Log($"[DragDropDebug] Add Mode (Replace OFF). Skipping overlap checks for {normalizedPath}");
+            }
+
+            // Try to load as preset first (standard for Clothing/Hair presets and Poses)
+            string ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
+            if (ext == ".vap" || ext == ".json" || ext == ".vam" || ext == ".vac")
+            {
+                bool isPose = itemType == ItemType.Pose;
+                Dictionary<string, bool> originalLocks = new Dictionary<string, bool>();
+
+                // If it's a pose, we want to lock Clothing and Hair to prevent them being changed if the pose preset contains them
+                if (isPose && atom != null && atom.type == "Person" && atom.presetManagerControls != null)
+                {
+                    foreach (var pmc in atom.presetManagerControls)
+                    {
+                        if (pmc == null) continue;
+                        if (pmc.name == "ClothingPresets" || pmc.name == "HairPresets")
+                        {
+                            originalLocks[pmc.name] = pmc.lockParams;
+                            pmc.lockParams = true;
+                        }
+                    }
+                }
+
                 try
                 {
                     LogUtil.Log($"[DragDropDebug] Trying LoadPreset with: {normalizedPath}");
@@ -382,6 +545,20 @@ namespace var_browser
                 {
                      LogUtil.LogError("[DragDropDebug] LoadPreset failed for " + normalizedPath + ": " + ex.Message);
                      // Fallthrough to legacy toggle
+                }
+                finally
+                {
+                    // Restore locks
+                    if (isPose && atom != null && atom.type == "Person" && atom.presetManagerControls != null)
+                    {
+                        foreach (var pmc in atom.presetManagerControls)
+                        {
+                            if (pmc != null && originalLocks.ContainsKey(pmc.name))
+                            {
+                                pmc.lockParams = originalLocks[pmc.name];
+                            }
+                        }
+                    }
                 }
             }
 
@@ -442,7 +619,9 @@ namespace var_browser
 
         private void CreateGhost(PointerEventData eventData)
         {
-             if (eventData.pressEventCamera == null) return;
+             Camera cam = dragCam != null ? dragCam : eventData.pressEventCamera;
+             if (cam == null) cam = Camera.main;
+             if (cam == null) return;
              
              ghostObject = new GameObject("DragGhost");
              
@@ -460,6 +639,28 @@ namespace var_browser
              ghostBorder.raycastTarget = false;
              ghostBorder.color = new Color(1, 1, 1, 0.2f);
              
+             // --- Added Text ---
+             GameObject textGO = new GameObject("ActionText");
+             textGO.transform.SetParent(ghostObject.transform, false);
+             ghostText = textGO.AddComponent<Text>();
+             ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+             ghostText.fontSize = 24;
+             ghostText.color = Color.white;
+             ghostText.alignment = TextAnchor.UpperCenter;
+             ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
+             ghostText.verticalOverflow = VerticalWrapMode.Overflow;
+             
+             // Add Outline
+             textGO.AddComponent<Outline>().effectColor = Color.black;
+
+             RectTransform textRT = textGO.GetComponent<RectTransform>();
+             textRT.anchorMin = new Vector2(0.5f, 0);
+             textRT.anchorMax = new Vector2(0.5f, 0);
+             textRT.pivot = new Vector2(0.5f, 1);
+             textRT.anchoredPosition = new Vector2(0, -10);
+             textRT.sizeDelta = new Vector2(400, 60);
+             // ------------------
+
              GameObject contentGO = new GameObject("Content");
              contentGO.transform.SetParent(ghostObject.transform, false);
              contentGO.layer = ghostObject.layer;
@@ -481,30 +682,79 @@ namespace var_browser
              contentRT.offsetMin = new Vector2(5, 5);
              contentRT.offsetMax = new Vector2(-5, -5);
              
-             planeDistance = Vector3.Dot(transform.position - eventData.pressEventCamera.transform.position, eventData.pressEventCamera.transform.forward);
+             planeDistance = Vector3.Dot(transform.position - cam.transform.position, cam.transform.forward);
              
-             UpdateGhost(eventData, false, planeDistance);
+             UpdateGhost(eventData, null, planeDistance);
         }
         
-        private void UpdateGhost(PointerEventData eventData, bool isValidTarget, float distance)
+        private void UpdateGhost(PointerEventData eventData, Atom atom, float distance)
         {
-             if (ghostObject == null || eventData.pressEventCamera == null) return;
+             Camera cam = dragCam != null ? dragCam : eventData.pressEventCamera;
+             if (cam == null) cam = Camera.main;
+             if (ghostObject == null || cam == null) return;
              
+             bool isValidTarget = (atom != null && atom.type == "Person");
+
              UpdateGhostPosition(eventData, isValidTarget, distance);
              
              if (isValidTarget)
              {
                  if (ghostBorder != null) ghostBorder.color = new Color(0, 1, 0, 0.4f);
+                 
+                 if (ghostText != null)
+                 {
+                     ItemType itemType = GetItemType(FileEntry);
+                     HashSet<string> regions = (itemType == ItemType.Hair) ? GetHairRegions(FileEntry) : GetClothingRegions(FileEntry);
+
+                     string typeStr;
+                     if (regions.Count > 0)
+                     {
+                         typeStr = string.Join("/", regions.Select(r => char.ToUpper(r[0]) + r.Substring(1)).ToArray());
+                     }
+                     else
+                     {
+                         switch(itemType)
+                         {
+                             case ItemType.Hair: typeStr = "Hair"; break;
+                             case ItemType.Pose: typeStr = "Pose"; break;
+                             case ItemType.Clothing: typeStr = "Clothing"; break;
+                             default: typeStr = "Item"; break;
+                         }
+                     }
+
+                     if (Panel != null && Panel.DragDropReplaceMode && (itemType == ItemType.Clothing || itemType == ItemType.Hair))
+                     {
+                         bool overlaps = CheckAtomOverlap(atom, regions, itemType == ItemType.Hair);
+                         
+                         if (overlaps)
+                         {
+                             ghostText.text = $"Replacing {typeStr} on\n" + atom.name;
+                             ghostText.color = new Color(1f, 0.5f, 0.5f); // Reddish
+                         }
+                         else
+                         {
+                             ghostText.text = $"Adding {typeStr} to\n" + atom.name;
+                             ghostText.color = new Color(0.5f, 1f, 0.5f); // Greenish
+                         }
+                     }
+                     else
+                     {
+                         string action = (itemType == ItemType.Pose) ? "Applying" : "Adding";
+                         ghostText.text = $"{action} {typeStr} to\n" + atom.name;
+                         ghostText.color = new Color(0.5f, 1f, 0.5f); // Greenish
+                     }
+                 }
              }
              else
              {
                  if (ghostBorder != null) ghostBorder.color = new Color(1, 1, 1, 0.2f);
+                 if (ghostText != null) ghostText.text = "";
              }
         }
         
         private void UpdateGhostPosition(PointerEventData eventData, bool isValidTarget, float distance)
         {
-             Camera cam = eventData.pressEventCamera;
+             Camera cam = dragCam != null ? dragCam : eventData.pressEventCamera;
              if (cam == null) cam = Camera.main;
              if (cam == null) return;
 
@@ -526,6 +776,247 @@ namespace var_browser
              Ray ray = cam.ScreenPointToRay(eventData.position);
              ghostObject.transform.position = ray.GetPoint(finalDist);
              ghostObject.transform.rotation = cam.transform.rotation;
+        }
+
+        private HashSet<string> GetHairRegions(FileEntry entry)
+        {
+            if (entry == null) return new HashSet<string>();
+            string cacheKey = "hair:" + entry.Uid;
+            if (_globalRegionCache.TryGetValue(cacheKey, out HashSet<string> cached)) return cached;
+
+            HashSet<string> regions = new HashSet<string>();
+            
+            // 1. Try VarFileEntry pre-parsed tags
+            if (entry is VarFileEntry vfe && vfe.HairTags != null && vfe.HairTags.Count > 0)
+            {
+                foreach (var t in vfe.HairTags)
+                {
+                    string lower = t.ToLowerInvariant();
+                    if (TagFilter.HairRegionTags.Contains(lower))
+                    {
+                        regions.Add(lower);
+                    }
+                }
+            }
+
+            // 2. If no regions found yet, try reading file content (for loose files or missing cache)
+            if (regions.Count == 0 && entry != null)
+            {
+                string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
+                if (ext == ".vap" || ext == ".json" || ext == ".vam")
+                {
+                    try 
+                    {
+                        using (var reader = entry.OpenStreamReader())
+                        {
+                            string content = reader.ReadToEnd();
+                            JSONNode node = JSON.Parse(content);
+                            if (node != null && node["tags"] != null)
+                            {
+                                 string tagStr = node["tags"].Value;
+                                 if (!string.IsNullOrEmpty(tagStr))
+                                 {
+                                     var tags = tagStr.Split(',').Select(t => t.Trim().ToLowerInvariant());
+                                     foreach(var t in tags)
+                                     {
+                                         if (TagFilter.HairRegionTags.Contains(t))
+                                         {
+                                             regions.Add(t);
+                                         }
+                                     }
+                                 }
+                            }
+                        }
+                    }
+                    catch(Exception ex) 
+                    {
+                        LogUtil.LogError("Error parsing tags from file " + entry.Path + ": " + ex.Message);
+                    }
+                }
+            }
+
+            // 3. If still no regions, try filename heuristics
+            if (regions.Count == 0 && entry != null)
+            {
+                string name = Path.GetFileNameWithoutExtension(entry.Path);
+                regions = GetRegionsFromHeuristics(name);
+            }
+            
+            if (entry != null) _globalRegionCache[cacheKey] = regions;
+            return regions;
+        }
+
+        private HashSet<string> GetClothingRegions(FileEntry entry)
+        {
+            if (entry == null) return new HashSet<string>();
+            string cacheKey = "clothing:" + entry.Uid;
+            if (_globalRegionCache.TryGetValue(cacheKey, out HashSet<string> cached)) return cached;
+            
+            HashSet<string> regions = new HashSet<string>();
+            
+            // 1. Try VarFileEntry pre-parsed tags
+            if (entry is VarFileEntry vfe && vfe.ClothingTags != null && vfe.ClothingTags.Count > 0)
+            {
+                foreach (var t in vfe.ClothingTags)
+                {
+                    string lower = t.ToLowerInvariant();
+                    if (TagFilter.ClothingRegionTags.Contains(lower))
+                    {
+                        regions.Add(lower);
+                    }
+                }
+            }
+
+            // 2. Try file content
+            if (regions.Count == 0 && entry != null)
+            {
+                string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
+                if (ext == ".vap" || ext == ".json" || ext == ".vam")
+                {
+                    try 
+                    {
+                        using (var reader = entry.OpenStreamReader())
+                        {
+                            string content = reader.ReadToEnd();
+                            JSONNode node = JSON.Parse(content);
+                            if (node != null && node["tags"] != null)
+                            {
+                                 string tagStr = node["tags"].Value;
+                                 if (!string.IsNullOrEmpty(tagStr))
+                                 {
+                                     var tags = tagStr.Split(',').Select(t => t.Trim().ToLowerInvariant());
+                                     foreach(var t in tags)
+                                     {
+                                         if (TagFilter.ClothingRegionTags.Contains(t))
+                                         {
+                                             regions.Add(t);
+                                         }
+                                     }
+                                 }
+                            }
+                        }
+                    }
+                    catch (Exception ex) 
+                    {
+                         // ignore
+                    }
+                }
+            }
+            
+            // 3. Heuristics
+            if (regions.Count == 0 && entry != null)
+            {
+                string name = Path.GetFileNameWithoutExtension(entry.Path);
+                regions = GetClothingRegionsFromHeuristics(name);
+            }
+            
+            if (entry != null) _globalRegionCache[cacheKey] = regions;
+            return regions;
+        }
+
+        private static HashSet<string> GetRegionsFromHeuristics(string name)
+        {
+            HashSet<string> regions = new HashSet<string>();
+            if (string.IsNullOrEmpty(name)) return regions;
+            
+            name = name.ToLowerInvariant();
+            
+            if (name.Contains("genital") || name.Contains("pubic")) regions.Add("genital");
+            
+            if (name.Contains("beard") || name.Contains("mustache") || name.Contains("stubble") || name.Contains("face")) regions.Add("face");
+            
+            if (name.Contains("torso") || name.Contains("chest") || name.Contains("nipple") || name.Contains("stomach") || name.Contains("belly")) regions.Add("torso");
+            
+            if ((name.Contains("leg") && !name.Contains("legend") && !name.Contains("collection")) || name.Contains("stocking")) regions.Add("legs");
+            
+            if (name.Contains("arm") && !name.Contains("armour") && !name.Contains("warm")) regions.Add("arms");
+            
+            if (name.Contains("body") && !name.Contains("nobody")) regions.Add("full body"); 
+            
+            if (name.Contains("bang")) regions.Add("bangs");
+            
+            if (name.Contains("brow") || name.Contains("lash")) regions.Add("face");
+            
+            return regions;
+        }
+        
+        private static HashSet<string> GetClothingRegionsFromHeuristics(string name)
+        {
+             HashSet<string> regions = new HashSet<string>();
+             if (string.IsNullOrEmpty(name)) return regions;
+             
+             name = name.ToLowerInvariant();
+             
+             if (name.Contains("top") || name.Contains("shirt") || name.Contains("bra") || name.Contains("jacket") || name.Contains("sweater")) regions.Add("torso");
+             if (name.Contains("bottom") || name.Contains("pant") || name.Contains("skirt") || name.Contains("short") || name.Contains("underwear") || name.Contains("thong")) regions.Add("hip"); // usually Hip/Pelvis
+             
+             if (name.Contains("dress") || name.Contains("bodysuit") || name.Contains("suit")) 
+             {
+                 regions.Add("torso");
+                 regions.Add("hip");
+             }
+             
+             if (name.Contains("sock") || name.Contains("stocking") || name.Contains("shoe") || name.Contains("boot") || name.Contains("heel")) regions.Add("feet");
+             if (name.Contains("glove")) regions.Add("hands");
+             
+             if (name.Contains("hat") || name.Contains("cap") || name.Contains("mask") || name.Contains("glasses")) regions.Add("head");
+             
+             return regions;
+        }
+
+        private bool CheckAtomOverlap(Atom atom, HashSet<string> droppedRegions, bool isHair)
+        {
+            if (atom == null || droppedRegions == null || droppedRegions.Count == 0) return false;
+            
+            JSONStorable geometry = atom.GetStorableByID("geometry");
+            if (geometry == null) return false;
+
+            List<string> all = geometry.GetBoolParamNames();
+            if (all == null) return false;
+
+            foreach(string n in all)
+            {
+                bool check = false;
+                string paramType = "";
+                
+                if (isHair && n.StartsWith("hair:")) 
+                {
+                    check = true; 
+                    paramType = "hair";
+                }
+                else if (!isHair && n.StartsWith("clothing:")) 
+                {
+                    check = true;
+                    paramType = "clothing";
+                }
+
+                if (check)
+                {
+                    // Check if enabled
+                    JSONStorableBool p = geometry.GetBoolJSONParam(n);
+                    if (p == null || !p.val) continue;
+
+                    string itemName = n.Substring(paramType.Length + 1);
+                    VarFileEntry existingEntry = FileManager.GetVarFileEntry(itemName);
+                    
+                    HashSet<string> existingRegions;
+                    if (existingEntry != null)
+                    {
+                        existingRegions = isHair ? GetHairRegions(existingEntry) : GetClothingRegions(existingEntry);
+                    }
+                    else
+                    {
+                        existingRegions = isHair ? GetRegionsFromHeuristics(itemName) : GetClothingRegionsFromHeuristics(itemName);
+                        // No default fallback - safer to NOT detect overlap if unknown
+                    }
+
+                    if (droppedRegions.Overlaps(existingRegions))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private void DestroyGhost()
