@@ -82,6 +82,7 @@ namespace var_browser
         private string currentCreator = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
+        private string currentLoadingGroupId = "";
 
         private InputField leftSearchInput;
         private InputField rightSearchInput;
@@ -279,6 +280,11 @@ namespace var_browser
                 rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
 
+                // Undo (Right)
+                GameObject rightUndoBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "Undo", 20, 60, -300, AnchorPresets.middleRight, Undo);
+                rightUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
+                rightUndoBtn.GetComponentInChildren<Text>().color = Color.white;
+
                 // Left Toggle Buttons
                 // Clone (Gray)
                 GameObject leftCloneBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "〃", 30, -60, 180, AnchorPresets.middleLeft, () => {
@@ -304,6 +310,11 @@ namespace var_browser
                 GameObject leftReplaceBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "Add", 24, -60, -180, AnchorPresets.middleLeft, ToggleReplaceMode);
                 leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
+
+                // Undo (Left)
+                GameObject leftUndoBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "Undo", 20, -60, -300, AnchorPresets.middleLeft, Undo);
+                leftUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
+                leftUndoBtn.GetComponentInChildren<Text>().color = Color.white;
             }
 
             UpdateReplaceButtonState();
@@ -729,6 +740,37 @@ namespace var_browser
             }
         }
 
+        
+        // Undo Stack
+        private Stack<Action> undoStack = new Stack<Action>();
+        
+        public void PushUndo(Action action)
+        {
+            if (action == null) return;
+            undoStack.Push(action);
+            if (undoStack.Count > 20) // Limit stack size
+            {
+                // Stack doesn't have RemoveFromBottom, but 20 is small enough.
+                // Or we can just let it grow a bit. 20 is safe.
+            }
+        }
+        
+        private void Undo()
+        {
+            if (undoStack.Count > 0)
+            {
+                Action action = undoStack.Pop();
+                try
+                {
+                    action?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("Error during Undo: " + ex.Message);
+                }
+            }
+        }
+        
         private void UpdateTabs()
         {
             if (leftActiveContent.HasValue) UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
@@ -1008,6 +1050,13 @@ namespace var_browser
 
         public void RefreshFiles()
         {
+            // Cancel previous loading group
+            if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
+            {
+                CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
+            }
+            currentLoadingGroupId = Guid.NewGuid().ToString();
+
             // Clear existing
             foreach (var btn in activeButtons)
             {
@@ -1221,6 +1270,7 @@ namespace var_browser
                 qi.imgPath = imgPath;
                 qi.isThumbnail = true;
                 qi.priority = 10; // High priority for gallery thumbnails
+                qi.groupId = currentLoadingGroupId;
                 qi.callback = (res) => {
                     if (res != null && res.tex != null && target != null) {
                         target.texture = res.tex;

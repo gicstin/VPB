@@ -237,7 +237,7 @@ namespace var_browser
             GUILayout.Label("Settings", m_StyleHeader);
             GUILayout.Space(6);
 
-            m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide Hotkey", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
+            m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide VPB", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
             m_SettingsGalleryKeyDraft = DrawHotkeyField("Show/Hide Panes", "GalleryKeyField", m_SettingsGalleryKeyDraft ?? "", buttonHeight);
             m_SettingsCreateGalleryKeyDraft = DrawHotkeyField("Create Gallery Pane", "CreateGalleryKeyField", m_SettingsCreateGalleryKeyDraft ?? "", buttonHeight);
 

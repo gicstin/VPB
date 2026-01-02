@@ -1,22 +1,31 @@
-﻿using System;
+using System;
 using UnityEngine;
-using System.Collections;
-using System.Collections.Generic;
-using SimpleJSON;
 using UnityEngine.UI;
+using SimpleJSON;
 
 namespace VarBrowser
 {
     public class VarBrowserSessionPlugin : MVRScript
     {
-
         // IMPORTANT - DO NOT make custom enums. The dynamic C# complier crashes Unity when it encounters these for
         // some reason
 
         // IMPORTANT - DO NOT OVERRIDE Awake() as it is used internally by MVRScript - instead use Init() function which
         // is called right after creation
 
-        public GameObject m_Messager;
+        private GameObject _messager;
+        public GameObject Messager
+        {
+            get
+            {
+                if (_messager == null)
+                {
+                    _messager = GameObject.Find("var_browser_messager");
+                }
+                return _messager;
+            }
+        }
+
         void CreateHeader(string v, bool rightSide, Color color)
         {
             var header = CreateSpacer(rightSide);
@@ -28,18 +37,20 @@ namespace VarBrowser
             text.fontStyle = FontStyle.Bold;
             text.color = color;
         }
+
         UIDynamicButton CreateBigButton(string label, bool rightSide = false)
         {
             var btn = CreateButton(label, rightSide);
             btn.height = 80;
             return btn;
         }
+
         public override void Init()
         {
             try
             {
-                m_Messager = GameObject.Find("var_browser_messager");
-                if (m_Messager == null)
+                // Initial check to show status
+                if (Messager == null)
                     CreateHeader("var browser not ready", false, Color.red);
                 else
                     CreateHeader("var browser is ready", false, Color.white);
@@ -73,8 +84,7 @@ namespace VarBrowser
                 CreateButton("Pose", true).button.onClick.AddListener(OpenCategoryPose);
                 RegisterAction(new JSONStorableAction("OpenCategoryPose", OpenCategoryPose));
 
-                //CreateHeader("Plugin", true, Color.white);
-                CreateHeader("Preset", true, Color.white);
+                CreateHeader("Plugin", true, Color.white);
                 CreateButton("Person", true).button.onClick.AddListener(OpenPresetPerson);
                 RegisterAction(new JSONStorableAction("OpenPresetPerson", OpenPresetPerson));
                 CreateButton("Clothing", true).button.onClick.AddListener(OpenPresetClothing);
@@ -96,118 +106,28 @@ namespace VarBrowser
             }
         }
 
-        void Refresh()
+        private void InvokeMsg(string msg)
         {
-            m_Messager.SendMessage("Invoke", "Refresh");
-        }
-        void RemoveInvalidVars()
-        {
-            m_Messager.SendMessage("Invoke", "RemoveInvalidVars");
-        }
-        void UninstallAll()
-        {
-            m_Messager.SendMessage("Invoke", "UninstallAll");
-        }
-        void OpenHubBrowse()
-        {
-            m_Messager.SendMessage("Invoke", "OpenHubBrowse");
-        }
-        void OpenCustomScene()
-        {
-            m_Messager.SendMessage("Invoke", "OpenCustomScene");
-        }
-        void OpenCustomSavedPerson()
-        {
-            m_Messager.SendMessage("Invoke", "OpenCustomSavedPerson");
-        }
-        void OpenPersonPreset()
-        {
-            m_Messager.SendMessage("Invoke", "OpenPersonPreset");
-        }
-        void OpenCategoryScene()
-        {
-            m_Messager.SendMessage("Invoke", "OpenCategoryScene");
-        }
-        void OpenCategoryClothing()
-        {
-            m_Messager.SendMessage("Invoke", "OpenCategoryClothing");
-        }
-        void OpenCategoryHair()
-        {
-            m_Messager.SendMessage("Invoke", "OpenCategoryHair");
-        }
-        void OpenCategoryPose()
-        {
-            m_Messager.SendMessage("Invoke", "OpenCategoryPose");
-        }
-        void OpenPresetPerson()
-        {
-            m_Messager.SendMessage("Invoke", "OpenPresetPerson");
-        }
-        void OpenPresetClothing()
-        {
-            m_Messager.SendMessage("Invoke", "OpenPresetClothing");
-        }
-        void OpenPresetHair()
-        {
-            m_Messager.SendMessage("Invoke", "OpenPresetHair");
-        }
-        void OpenPresetOther()
-        {
-            m_Messager.SendMessage("Invoke", "OpenPresetOther");
-        }
-        void OpenMiscCUA()
-        {
-            m_Messager.SendMessage("Invoke", "OpenMiscCUA");
-        }
-        void OpenMiscAll()
-        {
-            m_Messager.SendMessage("Invoke", "OpenMiscAll");
+            if (Messager != null)
+                Messager.SendMessage("Invoke", msg);
         }
 
-        // Start is called once before Update or FixedUpdate is called and after Init()
-        void Start()
-        {
-            try
-            {
-                // put code in here
-            }
-            catch (Exception e)
-            {
-                SuperController.LogError("Exception caught: " + e);
-            }
-        }
-
-        // Update is called with each rendered frame by Unity
-        void Update()
-        {
-            try
-            {
-                // put code in here
-            }
-            catch (Exception e)
-            {
-                SuperController.LogError("Exception caught: " + e);
-            }
-        }
-
-        // FixedUpdate is called with each physics simulation frame by Unity
-        void FixedUpdate()
-        {
-            try
-            {
-                // put code in here
-            }
-            catch (Exception e)
-            {
-                SuperController.LogError("Exception caught: " + e);
-            }
-        }
-
-        // OnDestroy is where you should put any cleanup
-        // if you registered objects to supercontroller or atom, you should unregister them here
-        void OnDestroy()
-        {
-        }
+        void Refresh() => InvokeMsg("Refresh");
+        void RemoveInvalidVars() => InvokeMsg("RemoveInvalidVars");
+        void UninstallAll() => InvokeMsg("UninstallAll");
+        void OpenHubBrowse() => InvokeMsg("OpenHubBrowse");
+        void OpenCustomScene() => InvokeMsg("OpenCustomScene");
+        void OpenCustomSavedPerson() => InvokeMsg("OpenCustomSavedPerson");
+        void OpenPersonPreset() => InvokeMsg("OpenPersonPreset");
+        void OpenCategoryScene() => InvokeMsg("OpenCategoryScene");
+        void OpenCategoryClothing() => InvokeMsg("OpenCategoryClothing");
+        void OpenCategoryHair() => InvokeMsg("OpenCategoryHair");
+        void OpenCategoryPose() => InvokeMsg("OpenCategoryPose");
+        void OpenPresetPerson() => InvokeMsg("OpenPresetPerson");
+        void OpenPresetClothing() => InvokeMsg("OpenPresetClothing");
+        void OpenPresetHair() => InvokeMsg("OpenPresetHair");
+        void OpenPresetOther() => InvokeMsg("OpenPresetOther");
+        void OpenMiscCUA() => InvokeMsg("OpenMiscCUA");
+        void OpenMiscAll() => InvokeMsg("OpenMiscAll");
     }
 }

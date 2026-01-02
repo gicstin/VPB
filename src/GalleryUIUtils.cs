@@ -570,6 +570,60 @@ namespace var_browser
 
             JSONStorable geometry = atom.GetStorableByID("geometry");
             ItemType itemType = GetItemType(FileEntry);
+
+            // Capture state for Undo
+            if (Panel != null)
+            {
+                try
+                {
+                    // Only snapshot relevant storables to avoid breaking physics/scene state
+                    // We primarily care about geometry (clothing/hair items) and StorableIds for presets
+                    List<JSONClass> storableSnapshots = new List<JSONClass>();
+                    
+                    // 1. Geometry (Direct toggle items)
+                    JSONStorable geometryStorable = atom.GetStorableByID("geometry");
+                    if (geometryStorable != null) storableSnapshots.Add(geometryStorable.GetJSON());
+
+                    // 2. Preset Managers (Clothing, Hair, Pose, Skin, etc)
+                    // We can snapshot all PresetManagers on the atom as they control the state of what's applied
+                    foreach(var storable in atom.GetStorableIDs())
+                    {
+                         // Heuristic: If it ends in "Presets" or is a known manager
+                         if (storable.EndsWith("Presets") || storable == "Skin" || storable.EndsWith("Physics"))
+                         {
+                             JSONStorable s = atom.GetStorableByID(storable);
+                             if (s != null) storableSnapshots.Add(s.GetJSON());
+                         }
+                    }
+
+                    string atomUid = atom.uid; 
+                    Panel.PushUndo(() => {
+                        Atom targetAtom = SuperController.singleton.GetAtomByUid(atomUid);
+                        if (targetAtom != null)
+                        {
+                            // Restore specific storables
+                            foreach(var snap in storableSnapshots)
+                            {
+                                string sid = snap["id"].Value;
+                                JSONStorable s = targetAtom.GetStorableByID(sid);
+                                if (s != null)
+                                {
+                                    s.RestoreFromJSON(snap);
+                                }
+                            }
+                            LogUtil.Log($"[Gallery] Undo performed on {atomUid} (Storables)");
+                        }
+                        else
+                        {
+                            LogUtil.LogError($"[Gallery] Undo failed: Atom {atomUid} not found.");
+                        }
+                    });
+                }
+                catch(Exception ex)
+                {
+                    LogUtil.LogError("[Gallery] Failed to capture undo state: " + ex.Message);
+                }
+            }
             
             bool replaceMode = Panel != null && Panel.DragDropReplaceMode;
             bool isClothingOrHair = (itemType == ItemType.Clothing || itemType == ItemType.Hair || itemType == ItemType.ClothingItem || itemType == ItemType.HairItem);
@@ -904,7 +958,10 @@ namespace var_browser
                  if (ghostText != null)
                  {
                      ItemType itemType = GetItemType(FileEntry);
-                     HashSet<string> regions = (itemType == ItemType.Hair) ? GetHairRegions(FileEntry) : GetClothingRegions(FileEntry);
+                     bool isHair = (itemType == ItemType.Hair || itemType == ItemType.HairItem);
+                     bool isClothing = (itemType == ItemType.Clothing || itemType == ItemType.ClothingItem);
+                     
+                     HashSet<string> regions = isHair ? GetHairRegions(FileEntry) : GetClothingRegions(FileEntry);
 
                      string typeStr;
                      if (regions.Count > 0)
@@ -913,29 +970,16 @@ namespace var_browser
                      }
                      else
                      {
-                         switch(itemType)
-                         {
-                             case ItemType.Hair: typeStr = "Hair"; break;
-                             case ItemType.Pose: typeStr = "Pose"; break;
-                             case ItemType.Clothing: typeStr = "Clothing"; break;
-                             default: typeStr = "Item"; break;
-                         }
+                         if (isHair) typeStr = "Hair";
+                         else if (isClothing) typeStr = "Clothing";
+                         else if (itemType == ItemType.Pose) typeStr = "Pose";
+                         else typeStr = "Item";
                      }
 
-                     if (Panel != null && Panel.DragDropReplaceMode && (itemType == ItemType.Clothing || itemType == ItemType.Hair))
+                     if (Panel != null && Panel.DragDropReplaceMode && (isClothing || isHair))
                      {
-                         bool overlaps = CheckAtomOverlap(atom, regions, itemType == ItemType.Hair);
-                         
-                         if (overlaps)
-                         {
-                             ghostText.text = $"Replacing {typeStr} on\n" + atom.name;
-                             ghostText.color = new Color(1f, 0.5f, 0.5f); // Reddish
-                         }
-                         else
-                         {
-                             ghostText.text = $"Adding {typeStr} to\n" + atom.name;
-                             ghostText.color = new Color(0.5f, 1f, 0.5f); // Greenish
-                         }
+                         ghostText.text = $"Replacing {typeStr} on\n" + atom.name;
+                         ghostText.color = new Color(1f, 0.5f, 0.5f); // Reddish
                      }
                      else
                      {
@@ -1137,6 +1181,8 @@ namespace var_browser
             
             if (name.Contains("brow") || name.Contains("lash")) regions.Add("face");
             
+            if (regions.Count == 0) regions.Add("head");
+
             return regions;
         }
         
@@ -1164,60 +1210,7 @@ namespace var_browser
              return regions;
         }
 
-        private bool CheckAtomOverlap(Atom atom, HashSet<string> droppedRegions, bool isHair)
-        {
-            if (atom == null || droppedRegions == null || droppedRegions.Count == 0) return false;
-            
-            JSONStorable geometry = atom.GetStorableByID("geometry");
-            if (geometry == null) return false;
 
-            List<string> all = geometry.GetBoolParamNames();
-            if (all == null) return false;
-
-            foreach(string n in all)
-            {
-                bool check = false;
-                string paramType = "";
-                
-                if (isHair && n.StartsWith("hair:")) 
-                {
-                    check = true; 
-                    paramType = "hair";
-                }
-                else if (!isHair && n.StartsWith("clothing:")) 
-                {
-                    check = true;
-                    paramType = "clothing";
-                }
-
-                if (check)
-                {
-                    // Check if enabled
-                    JSONStorableBool p = geometry.GetBoolJSONParam(n);
-                    if (p == null || !p.val) continue;
-
-                    string itemName = n.Substring(paramType.Length + 1);
-                    VarFileEntry existingEntry = FileManager.GetVarFileEntry(itemName);
-                    
-                    HashSet<string> existingRegions;
-                    if (existingEntry != null)
-                    {
-                        existingRegions = isHair ? GetHairRegions(existingEntry) : GetClothingRegions(existingEntry);
-                    }
-                    else
-                    {
-                        existingRegions = isHair ? GetRegionsFromHeuristics(itemName) : GetClothingRegionsFromHeuristics(itemName);
-                        // No default fallback - safer to NOT detect overlap if unknown
-                    }
-
-                    if (droppedRegions.Overlaps(existingRegions))
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
 
         private void DestroyGhost()
         {

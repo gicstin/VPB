@@ -58,10 +58,12 @@ namespace var_browser
                 callback = null;
                 priority = 1000;
                 insertionIndex = 0;
+                groupId = null;
             }
 
             public int priority;
             public long insertionIndex;
+            public string groupId;
 
 			public bool isThumbnail;
 
@@ -470,8 +472,29 @@ namespace var_browser
 					}
 					else if (FileManager.FileExists(imgPath))
 					{
+                        bool loadedFromGalleryCache = false;
+                        if (isThumbnail)
+                        {
+                            FileEntry fe = FileManager.GetFileEntry(imgPath);
+                            if (fe != null)
+                            {
+                                int w, h;
+                                TextureFormat fmt;
+                                byte[] data;
+                                if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, fe.LastWriteTime.ToFileTime(), out data, out w, out h, out fmt))
+                                {
+                                    raw = data;
+                                    width = w;
+                                    height = h;
+                                    textureFormat = fmt;
+                                    preprocessed = true;
+                                    loadedFromGalleryCache = true;
+                                }
+                            }
+                        }
+
 						string diskCachePath = GetDiskCachePath();
-						if (MVR.FileManagement.CacheManager.CachingEnabled && diskCachePath != null && FileManager.FileExists(diskCachePath))
+						if (!loadedFromGalleryCache && MVR.FileManagement.CacheManager.CachingEnabled && diskCachePath != null && FileManager.FileExists(diskCachePath))
 						{
 							try
 							{
@@ -509,21 +532,24 @@ namespace var_browser
 						}
 						else
 						{
-							try
-							{
-								// Load image from a var package
-								using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
-								{
-									Stream stream = fileEntryStream.Stream;
-									ProcessFromStream(stream);
-								}
-							}
-							catch (Exception ex4)
-							{
-								hadError = true;
-								LogUtil.LogError("Exception " + ex4 + " " + imgPath);
-								errorText = ex4.ToString();
-							}
+                            if (!loadedFromGalleryCache)
+                            {
+							    try
+							    {
+								    // Load image from a var package
+								    using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
+								    {
+									    Stream stream = fileEntryStream.Stream;
+									    ProcessFromStream(stream);
+								    }
+							    }
+							    catch (Exception ex4)
+							    {
+								    hadError = true;
+								    LogUtil.LogError("Exception " + ex4 + " " + imgPath);
+								    errorText = ex4.ToString();
+							    }
+                            }
 						}
 					}
 					//else
@@ -604,7 +630,29 @@ namespace var_browser
 					{
 						tex.Compress(true);
 					}
-					if (MVR.FileManagement.CacheManager.CachingEnabled)
+                    bool savedToGalleryCache = false;
+                    if (isThumbnail && GalleryThumbnailCache.Instance != null && !Regex.IsMatch(imgPath, "^http"))
+                    {
+                         try
+                         {
+                             if (FileManager.FileExists(imgPath))
+                             {
+                                 FileEntry fe = FileManager.GetFileEntry(imgPath);
+                                 if (fe != null)
+                                 {
+                                     byte[] rawTextureData2 = tex.GetRawTextureData();
+                                     GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, fe.LastWriteTime.ToFileTime());
+                                     savedToGalleryCache = true;
+                                 }
+                             }
+                         }
+                         catch (Exception ex)
+                         {
+                             LogUtil.LogError("Exception during gallery caching " + ex);
+                         }
+                    }
+
+					if (!savedToGalleryCache && MVR.FileManagement.CacheManager.CachingEnabled)
 					{
 						string text = ((!Regex.IsMatch(imgPath, "^http")) ? GetDiskCachePath() : GetWebCachePath());
 						if (text != null && !FileManager.FileExists(text))
@@ -879,6 +927,21 @@ namespace var_browser
 			return null;
 		}
 
+        public void CancelGroup(string groupId)
+        {
+            if (string.IsNullOrEmpty(groupId)) return;
+            if (queuedImages != null && queuedImages.data != null)
+            {
+                foreach(var qi in queuedImages.data)
+                {
+                    if (qi.groupId == groupId)
+                    {
+                        qi.cancel = true;
+                    }
+                }
+            }
+        }
+
         public void QueueImage(QueuedImage qi)
         {
             //if (ImageLoadingMgr.singleton.Request(qi))
@@ -900,7 +963,7 @@ namespace var_browser
             // LogUtil.Log("QueueThumbnail: " + qi.imgPath);
             if (queuedImages != null)
             {
-                qi.priority = 1000;
+                // qi.priority = 1000; // Don't overwrite if set by caller
                 qi.insertionIndex = ++_insertionOrderCounter;
                 queuedImages.Enqueue(qi);
             }
@@ -1188,7 +1251,7 @@ namespace var_browser
 
         public class PriorityQueue<T>
         {
-            private List<T> data;
+            public List<T> data;
             private Comparison<T> comparison;
 
             public PriorityQueue(Comparison<T> comparison)
