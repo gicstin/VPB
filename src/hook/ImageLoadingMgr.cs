@@ -316,7 +316,10 @@ namespace VPB
                 tmp.Apply();
                 RenderTexture.active = previous;
 
-                tmp.Compress(true);
+                if (width > 0 && height > 0 && (width & (width - 1)) == 0 && (height & (height - 1)) == 0)
+                {
+                    try { tmp.Compress(true); } catch (Exception ex) { LogUtil.LogError("Img cache compress failed " + ex + " path=" + qi.imgPath); }
+                }
 
                 var bytes = tmp.GetRawTextureData();
                 // Copy to pooled buffer for async write to avoid GC alloc
@@ -1457,7 +1460,10 @@ namespace VPB
             RenderTexture.active = previous;
 
 
-            resultTexture.Compress(true);
+            if (width > 0 && height > 0 && (width & (width - 1)) == 0 && (height & (height - 1)) == 0)
+            {
+                try { resultTexture.Compress(true); } catch (Exception ex) { LogUtil.LogError("Img convert compress failed " + ex + " path=" + qi.imgPath); }
+            }
             RenderTexture.ReleaseTemporary(tempTexture);
 
             LogUtil.LogTextureTrace(

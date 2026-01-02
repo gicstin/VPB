@@ -117,6 +117,51 @@ namespace VPB
             }
         }
 
+        public static void PatchOptional(Harmony harmony)
+        {
+            PatchFileExists(harmony);
+            PatchProcessImage(harmony);
+        }
+
+        static void PatchFileExists(Harmony harmony)
+        {
+            var fm = typeof(MVR.FileManagement.FileManager);
+            var prefix = AccessTools.Method(typeof(SuperControllerHook), nameof(PreFileExists));
+            if (prefix == null) return;
+            var candidates = new Type[][]
+            {
+                new[] { typeof(string), typeof(bool), typeof(bool) },
+                new[] { typeof(string), typeof(bool) },
+                new[] { typeof(string) }
+            };
+            foreach (var sig in candidates)
+            {
+                var m = AccessTools.Method(fm, "FileExists", sig);
+                if (m == null) continue;
+                harmony.Patch(m, prefix: new HarmonyMethod(prefix));
+                return;
+            }
+        }
+
+        static void PatchProcessImage(Harmony harmony)
+        {
+            var ilt = typeof(ImageLoaderThreaded);
+            var prefix = AccessTools.Method(typeof(SuperControllerHook), nameof(PreProcessImage));
+            if (prefix == null) return;
+            var methods = AccessTools.GetDeclaredMethods(ilt);
+            if (methods == null) return;
+            foreach (var m in methods)
+            {
+                if (m == null) continue;
+                if (!string.Equals(m.Name, "ProcessImage", StringComparison.Ordinal)) continue;
+                var p = m.GetParameters();
+                if (p == null || p.Length == 0) continue;
+                if (p[0].ParameterType != typeof(ImageLoaderThreaded.QueuedImage)) continue;
+                harmony.Patch(m, prefix: new HarmonyMethod(prefix));
+                return;
+            }
+        }
+
         static bool TryPromoteQueuedImage(LinkedList<ImageLoaderThreaded.QueuedImage> queuedImages, ImageLoaderThreaded.QueuedImage qi)
         {
             if (queuedImages == null || qi == null) return false;
@@ -226,14 +271,12 @@ namespace VPB
             }
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "FileExists", new Type[] { typeof(string) })]
-        public static void PreFileExists(ref string path)
+        public static void PreFileExists(ref string __0)
         {
-            string rewritten = RewriteVdsPathIfNeeded(path);
-            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            string rewritten = RewriteVdsPathIfNeeded(__0);
+            if (!string.Equals(rewritten, __0, StringComparison.Ordinal))
             {
-                path = rewritten;
+                __0 = rewritten;
             }
         }
 
@@ -391,10 +434,9 @@ namespace VPB
             }
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(ImageLoaderThreaded), "ProcessImage", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
-        public static void PreProcessImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
+        public static void PreProcessImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage __0)
         {
+            var qi = __0;
             if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
             LogUtil.MarkImageActivity();
         }

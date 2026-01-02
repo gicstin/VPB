@@ -582,7 +582,7 @@ namespace VPB
 				{
 					return;
 				}
-				bool flag = (!createMipMaps || !compress || (IsPowerOfTwo((uint)width) && IsPowerOfTwo((uint)height))) && compress;
+				bool canCompress = compress && width > 0 && height > 0 && IsPowerOfTwo((uint)width) && IsPowerOfTwo((uint)height);
 				CreateTexture();
                 if (tex == null)
                 {
@@ -606,9 +606,9 @@ namespace VPB
 						tex.LoadRawTextureData(raw);
 					}
 					tex.Apply(false);
-					if (compress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
+					if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
 					{
-						tex.Compress(true);
+						try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
 					}
 				}
 				else if (tex.format == TextureFormat.DXT1 || tex.format == TextureFormat.DXT5)
@@ -616,7 +616,10 @@ namespace VPB
 					Texture2D texture2D = new Texture2D(width, height, textureFormat, createMipMaps, linear);
 					texture2D.LoadRawTextureData(raw);
 					texture2D.Apply();
-					texture2D.Compress(true);
+					if (canCompress)
+					{
+						try { texture2D.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed (dxt) " + ex + " path=" + imgPath); canCompress = false; }
+					}
 					byte[] rawTextureData = texture2D.GetRawTextureData();
 					tex.LoadRawTextureData(rawTextureData);
 					tex.Apply();
@@ -626,9 +629,9 @@ namespace VPB
 				{
 					tex.LoadRawTextureData(raw);
 					tex.Apply();
-					if (flag)
+					if (canCompress)
 					{
-						tex.Compress(true);
+						try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
 					}
                     bool savedToGalleryCache = false;
                     if (isThumbnail && GalleryThumbnailCache.Instance != null && !Regex.IsMatch(imgPath, "^http"))

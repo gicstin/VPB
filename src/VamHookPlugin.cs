@@ -846,7 +846,7 @@ namespace VPB
             var harmony = new Harmony("VPB_hook");
             // Patch VaM/Harmony hook points.
             UnityEngineHook.Init();
-            harmony.PatchAll();
+            SuperControllerHook.PatchOptional(harmony);
             harmony.PatchAll(typeof(AtomHook));
             harmony.PatchAll(typeof(HubResourcePackageHook));
             harmony.PatchAll(typeof(SuperControllerHook));
