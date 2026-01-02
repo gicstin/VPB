@@ -31,7 +31,9 @@ namespace VPB
         private Dictionary<string, Image> fileButtonImages = new Dictionary<string, Image>();
         private string selectedPath = null;
         private List<GameObject> leftActiveTabButtons = new List<GameObject>();
+        private List<GameObject> leftSubActiveTabButtons = new List<GameObject>(); // NEW
         private List<GameObject> rightActiveTabButtons = new List<GameObject>();
+        private List<GameObject> rightSubActiveTabButtons = new List<GameObject>(); // NEW
 
         private string currentPath = "";
         private string currentExtension = "json";
@@ -39,7 +41,7 @@ namespace VPB
         public bool IsVisible => canvas != null && canvas.gameObject.activeSelf;
         
         public enum TabSide { Hidden, Left, Right }
-        public enum ContentType { Category, Creator, Status, License }
+        public enum ContentType { Category, Creator, Status, License, Tags }
 
         // Configuration
         // public bool IsUndocked = false; // Removed
@@ -60,9 +62,13 @@ namespace VPB
         private ContentType? rightActiveContent = ContentType.Category;
         
         private GameObject leftTabScrollGO;
+        private GameObject leftSubTabScrollGO; // NEW: For split view
         private GameObject rightTabScrollGO;
+        private GameObject rightSubTabScrollGO; // NEW: For split view
         private GameObject leftTabContainerGO;
+        private GameObject leftSubTabContainerGO; // NEW: For split view
         private GameObject rightTabContainerGO;
+        private GameObject rightSubTabContainerGO; // NEW: For split view
         // private GameObject tabScrollGO; // Unused
         private RectTransform contentScrollRT;
         
@@ -76,7 +82,7 @@ namespace VPB
         private Image leftCategoryBtnImage;
         private Text leftCreatorBtnText;
         private Image leftCreatorBtnImage;
-        
+
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
         private Text leftReplaceBtnText;
@@ -87,15 +93,35 @@ namespace VPB
         private GameObject leftSortBtn;
         private GameObject rightSortBtn;
 
+        // Sub Sort/Search
+        private GameObject leftSubSortBtn;
+        private Text leftSubSortBtnText;
+        private InputField leftSubSearchInput;
+        
+        private GameObject rightSubSortBtn;
+        private Text rightSubSortBtnText;
+        private InputField rightSubSearchInput;
+
         // Data
         private string currentCreator = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
+        private string tagFilter = ""; // NEW
         private string currentLoadingGroupId = "";
         
         private bool filterFavorite = false;
         private string nameFilter = "";
         private string nameFilterLower = "";
+
+        // Tagging
+        private List<string> currentPaths = new List<string>();
+        private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private GameObject leftTagsBtnGO;
+
+        private void UpdateSideButtonsVisibility()
+        {
+            // Removed Tag Button Logic
+        }
 
         private InputField leftSearchInput;
         private InputField rightSearchInput;
@@ -153,6 +179,9 @@ namespace VPB
         
         private Dictionary<string, int> categoryCounts = new Dictionary<string, int>();
         private bool categoriesCached = false;
+        
+        private Dictionary<string, int> tagCounts = new Dictionary<string, int>();
+        private bool tagsCached = false;
 
         // Define colors for different content types
         public static readonly Color ColorCategory = new Color(0.7f, 0.2f, 0.2f, 1f); // Desaturated Red
@@ -188,6 +217,7 @@ namespace VPB
             currentExtension = extension;
             currentCreator = creator;
             creatorsCached = false;
+            tagsCached = false;
         }
 
         void OnDestroy()
@@ -338,7 +368,7 @@ namespace VPB
             // Tab Area - Create for all panels so undocked can clone/filter
             if (true)
             {
-                float tabAreaWidth = 180f;
+                float tabAreaWidth = 220f;
                 
                 // 1. Right Tab Area
                 rightTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero);
@@ -352,6 +382,55 @@ namespace VPB
                 VerticalLayoutGroup rightVlg = rightTabContainerGO.GetComponent<VerticalLayoutGroup>();
                 rightVlg.spacing = 2;
                 rightTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
+
+                // 1b. Right Sub Tab Area (For Tags split view)
+                rightSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero);
+                RectTransform rightSubTabRT = rightSubTabScrollGO.GetComponent<RectTransform>();
+                rightSubTabRT.anchorMin = new Vector2(1, 0);
+                rightSubTabRT.anchorMax = new Vector2(1, 0.5f); // Bottom half default
+                rightSubTabRT.offsetMin = new Vector2(-tabAreaWidth - 10, 20);
+                rightSubTabRT.offsetMax = new Vector2(-10, -45);
+                
+                rightSubTabContainerGO = rightSubTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
+                VerticalLayoutGroup rightSubVlg = rightSubTabContainerGO.GetComponent<VerticalLayoutGroup>();
+                rightSubVlg.spacing = 2;
+                rightSubTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
+                rightSubTabScrollGO.SetActive(false); // Hidden by default
+
+                // Right Sub Sort Button
+                rightSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 30, "Az↑", 14, 0, 0, AnchorPresets.topRight, null);
+                RectTransform rsSubRT = rightSubSortBtn.GetComponent<RectTransform>();
+                rsSubRT.anchorMin = new Vector2(1, 0.5f);
+                rsSubRT.anchorMax = new Vector2(1, 0.5f);
+                rsSubRT.pivot = new Vector2(1, 1);
+                rsSubRT.anchoredPosition = new Vector2(-150, -10); // Below split line
+                
+                rightSubSortBtnText = rightSubSortBtn.GetComponentInChildren<Text>();
+                Button rightSubSortButton = rightSubSortBtn.GetComponent<Button>();
+                rightSubSortButton.onClick.RemoveAllListeners();
+                rightSubSortButton.onClick.AddListener(() => {
+                    CycleSort("Tags", rightSubSortBtnText);
+                });
+                AddRightClickDelegate(rightSubSortBtn, () => {
+                    ToggleSortDirection("Tags", rightSubSortBtnText);
+                });
+
+                // Right Sub Search
+                rightSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
+                    tagFilter = val;
+                    UpdateTabs();
+                });
+                RectTransform rSubSearchRT = rightSubSearchInput.GetComponent<RectTransform>();
+                rSubSearchRT.anchorMin = new Vector2(1, 0.5f);
+                rSubSearchRT.anchorMax = new Vector2(1, 0.5f);
+                rSubSearchRT.pivot = new Vector2(1, 1);
+                rSubSearchRT.anchoredPosition = new Vector2(-10, -10);
+                
+                // Init Sub Sort Text
+                UpdateSortButtonText(rightSubSortBtnText, GetSortState("Tags"));
+                
+                rightSubSortBtn.SetActive(false);
+                rightSubSearchInput.gameObject.SetActive(false);
 
                 // Right Sort Button
                 rightSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 30, "Az↑", 14, 0, 0, AnchorPresets.topRight, null);
@@ -394,6 +473,55 @@ namespace VPB
                 VerticalLayoutGroup leftVlg = leftTabContainerGO.GetComponent<VerticalLayoutGroup>();
                 leftVlg.spacing = 2;
                 leftTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
+
+                // 2b. Left Sub Tab Area (For Tags split view)
+                leftSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchLeft, tabAreaWidth, 0, Vector2.zero);
+                RectTransform leftSubTabRT = leftSubTabScrollGO.GetComponent<RectTransform>();
+                leftSubTabRT.anchorMin = new Vector2(0, 0);
+                leftSubTabRT.anchorMax = new Vector2(0, 0.5f); // Bottom half default
+                leftSubTabRT.offsetMin = new Vector2(10, 20);
+                leftSubTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -45);
+                
+                leftSubTabContainerGO = leftSubTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
+                VerticalLayoutGroup leftSubVlg = leftSubTabContainerGO.GetComponent<VerticalLayoutGroup>();
+                leftSubVlg.spacing = 2;
+                leftSubTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
+                leftSubTabScrollGO.SetActive(false); // Hidden by default
+
+                // Left Sub Sort Button
+                leftSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 30, "Az↑", 14, 0, 0, AnchorPresets.topLeft, null);
+                RectTransform lsSubRT = leftSubSortBtn.GetComponent<RectTransform>();
+                lsSubRT.anchorMin = new Vector2(0, 0.5f);
+                lsSubRT.anchorMax = new Vector2(0, 0.5f);
+                lsSubRT.pivot = new Vector2(0, 1);
+                lsSubRT.anchoredPosition = new Vector2(10, -10); // Below split line
+                
+                leftSubSortBtnText = leftSubSortBtn.GetComponentInChildren<Text>();
+                Button leftSubSortButton = leftSubSortBtn.GetComponent<Button>();
+                leftSubSortButton.onClick.RemoveAllListeners();
+                leftSubSortButton.onClick.AddListener(() => {
+                    CycleSort("Tags", leftSubSortBtnText);
+                });
+                AddRightClickDelegate(leftSubSortBtn, () => {
+                    ToggleSortDirection("Tags", leftSubSortBtnText);
+                });
+
+                // Left Sub Search
+                leftSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
+                    tagFilter = val;
+                    UpdateTabs();
+                });
+                RectTransform lSubSearchRT = leftSubSearchInput.GetComponent<RectTransform>();
+                lSubSearchRT.anchorMin = new Vector2(0, 0.5f);
+                lSubSearchRT.anchorMax = new Vector2(0, 0.5f);
+                lSubSearchRT.pivot = new Vector2(0, 1);
+                lSubSearchRT.anchoredPosition = new Vector2(55, -10);
+
+                // Init Sub Sort Text
+                UpdateSortButtonText(leftSubSortBtnText, GetSortState("Tags"));
+
+                leftSubSortBtn.SetActive(false);
+                leftSubSearchInput.gameObject.SetActive(false);
 
                 // Left Sort Button
                 leftSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 30, "Az↑", 14, 0, 0, AnchorPresets.topLeft, null);
@@ -520,8 +648,8 @@ namespace VPB
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
                 leftUndoBtn.GetComponentInChildren<Text>().color = Color.white;
 
-                CreateCancelButtonsGroup(rightButtonsContainer, btnWidth, btnHeight, startY - spacing * 7 - 80f);
-                CreateCancelButtonsGroup(leftButtonsContainer, btnWidth, btnHeight, startY - spacing * 7 - 80f);
+                CreateCancelButtonsGroup(rightButtonsContainer, btnWidth, btnHeight, startY - spacing * 8 - 80f);
+                CreateCancelButtonsGroup(leftButtonsContainer, btnWidth, btnHeight, startY - spacing * 8 - 80f);
             }
 
             // Add Hover Delegates to all side buttons and containers
@@ -890,7 +1018,7 @@ namespace VPB
             if (leftActiveContent.HasValue && leftTabScrollGO != null)
             {
                 leftTabScrollGO.SetActive(true);
-                leftOffset = 190; 
+                leftOffset = 230; 
                 
                 if (leftSortBtn != null) leftSortBtn.SetActive(true);
 
@@ -902,11 +1030,6 @@ namespace VPB
                     else if (leftActiveContent.Value == ContentType.Creator) target = creatorFilter;
                     else target = ""; // Status filter?
 
-                    // Setting text triggers OnValueChanged which calls UpdateTabs, which is fine but maybe redundant.
-                    // To avoid event we'd need to remove listener. 
-                    // But if text is different, we probably WANT to update tabs anyway?
-                    // Actually UpdateTabs is called at end of UpdateLayout anyway.
-                    // But changing text triggers it immediately.
                     if (leftSearchInput.text != target) leftSearchInput.text = target;
                     
                     if (leftSearchInput.placeholder is Text ph)
@@ -917,19 +1040,46 @@ namespace VPB
                     // Hide search input for Status for now
                     if (leftActiveContent.Value == ContentType.Status) leftSearchInput.gameObject.SetActive(false);
                 }
+
+                // Sub Controls logic moved to UpdateTabs to ensure correct state synchronization
+                /*
+                if (leftSubTabScrollGO.activeSelf)
+                {
+                    if (leftSubSortBtn != null) 
+                    {
+                        leftSubSortBtn.SetActive(true);
+                        UpdateSortButtonText(leftSubSortBtnText, GetSortState("Tags"));
+                    }
+                    if (leftSubSearchInput != null) 
+                    {
+                        leftSubSearchInput.gameObject.SetActive(true);
+                        if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
+                    }
+                }
+                else
+                {
+                    if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
+                    if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
+                }
+                */
             }
             else if (leftTabScrollGO != null)
             {
                 leftTabScrollGO.SetActive(false);
+                if (leftSubTabScrollGO != null) leftSubTabScrollGO.SetActive(false);
                 if (leftSearchInput != null) leftSearchInput.gameObject.SetActive(false);
                 if (leftSortBtn != null) leftSortBtn.SetActive(false);
+                
+                // Ensure sub controls are hidden if main panel is closed
+                if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
+                if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
             }
             
             // Right Side
             if (rightActiveContent.HasValue && rightTabScrollGO != null)
             {
                 rightTabScrollGO.SetActive(true);
-                rightOffset = -190;
+                rightOffset = -230;
 
                 if (rightSortBtn != null) rightSortBtn.SetActive(true);
 
@@ -951,12 +1101,39 @@ namespace VPB
                     // Hide search input for Status for now
                     if (rightActiveContent.Value == ContentType.Status) rightSearchInput.gameObject.SetActive(false);
                 }
+
+                // Sub Controls logic moved to UpdateTabs
+                /*
+                if (rightSubTabScrollGO.activeSelf)
+                {
+                    if (rightSubSortBtn != null) 
+                    {
+                        rightSubSortBtn.SetActive(true);
+                        UpdateSortButtonText(rightSubSortBtnText, GetSortState("Tags"));
+                    }
+                    if (rightSubSearchInput != null) 
+                    {
+                        rightSubSearchInput.gameObject.SetActive(true);
+                        if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
+                    }
+                }
+                else
+                {
+                    if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
+                    if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
+                }
+                */
             }
             else if (rightTabScrollGO != null)
             {
                 rightTabScrollGO.SetActive(false);
+                if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
                 if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
                 if (rightSortBtn != null) rightSortBtn.SetActive(false);
+                
+                // Ensure sub controls are hidden if main panel is closed
+                if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
+                if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
             }
             
             contentScrollRT.offsetMin = new Vector2(leftOffset, 20);
@@ -1011,7 +1188,7 @@ namespace VPB
                     {
                         foreach (var cat in sortedCategories)
                         {
-                            if (IsMatch(entry, cat.path, catExtensions[cat.name]))
+                            if (IsMatch(entry, cat.paths, cat.path, catExtensions[cat.name]))
                             {
                                 categoryCounts[cat.name]++;
                                 break;
@@ -1037,7 +1214,7 @@ namespace VPB
 
                 foreach (var entry in pkg.FileEntries)
                 {
-                     if (IsMatch(entry, currentPath, extensions))
+                     if (IsMatch(entry, currentPaths, currentPath, extensions))
                      {
                          if (!counts.ContainsKey(pkg.Creator)) counts[pkg.Creator] = 0;
                          counts[pkg.Creator]++;
@@ -1048,6 +1225,58 @@ namespace VPB
             cachedCreators = counts.Select(kv => new CreatorCacheEntry { Name = kv.Key, Count = kv.Value })
                                    .OrderBy(c => c.Name).ToList();
             creatorsCached = true;
+        }
+
+        private void CacheTagCounts()
+        {
+            tagCounts.Clear();
+            if (FileManager.PackagesByUid == null) return;
+
+            string[] extensions = currentExtension.Split('|');
+            
+            // Collect all relevant tags to count
+            HashSet<string> tagsToCount = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string title = titleText != null ? titleText.text : "";
+            if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                tagsToCount.UnionWith(TagFilter.AllClothingTags);
+                tagsToCount.UnionWith(TagFilter.ClothingUnknownTags);
+            }
+            else if (title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                tagsToCount.UnionWith(TagFilter.AllHairTags);
+                tagsToCount.UnionWith(TagFilter.HairUnknownTags);
+            }
+            
+            if (tagsToCount.Count == 0) return;
+
+            foreach (var pkg in FileManager.PackagesByUid.Values)
+            {
+                if (pkg.FileEntries == null) continue;
+                
+                // If filtering by creator, respect it
+                if (!string.IsNullOrEmpty(currentCreator))
+                {
+                    if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
+                }
+
+                foreach (var entry in pkg.FileEntries)
+                {
+                    if (IsMatch(entry, currentPaths, currentPath, extensions))
+                    {
+                        string pathLower = entry.Path.ToLowerInvariant();
+                        foreach(var tag in tagsToCount)
+                        {
+                            if (pathLower.Contains(tag)) // tagsToCount are lowercase
+                            {
+                                if (!tagCounts.ContainsKey(tag)) tagCounts[tag] = 0;
+                                tagCounts[tag]++;
+                            }
+                        }
+                    }
+                }
+            }
+            tagsCached = true;
         }
 
         private void CreateResizeHandles()
@@ -1131,8 +1360,10 @@ namespace VPB
                 if (!string.IsNullOrEmpty(cat.name))
                 {
                     currentPath = cat.path;
+                    currentPaths = cat.paths;
                     currentExtension = cat.extension;
                     titleText.text = cat.name;
+                    activeTags.Clear();
                 }
             }
 
@@ -1140,8 +1371,10 @@ namespace VPB
             {
                 // Fallback to first category
                 currentPath = categories[0].path;
+                currentPaths = categories[0].paths;
                 currentExtension = categories[0].extension;
                 titleText.text = categories[0].name;
+                activeTags.Clear();
             }
 
             // If undocked, update tabs (which might just handle layout without adding tab buttons if we want)
@@ -1199,12 +1432,128 @@ namespace VPB
             if (leftActiveContent.HasValue) 
             {
                 UpdateSortButtonText(leftSortBtnText, GetSortState(leftActiveContent.Value.ToString()));
-                UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
+                
+                // Split View Logic
+                bool splitView = false;
+                if (leftActiveContent == ContentType.Category)
+                {
+                    string title = titleText != null ? titleText.text : "";
+                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        splitView = true;
+                    }
+                }
+
+                if (splitView && leftActiveContent == ContentType.Category && leftSubTabScrollGO != null)
+                {
+                    // Split Layout
+                    leftSubTabScrollGO.SetActive(true);
+                    
+                    if (leftSubSortBtn != null) 
+                    {
+                        leftSubSortBtn.SetActive(true);
+                        UpdateSortButtonText(leftSubSortBtnText, GetSortState("Tags"));
+                    }
+                    if (leftSubSearchInput != null) 
+                    {
+                        leftSubSearchInput.gameObject.SetActive(true);
+                        if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
+                    }
+                    
+                    RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
+                    leftRT.anchorMin = new Vector2(0, 0.5f);
+                    leftRT.anchorMax = new Vector2(0, 1);
+                    leftRT.offsetMin = new Vector2(10, 5); // Add gap at bottom
+                    
+                    RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
+                    subRT.anchorMin = new Vector2(0, 0);
+                    subRT.anchorMax = new Vector2(0, 0.5f);
+                    subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
+
+                    // Populate Top (Category)
+                    UpdateTabs(ContentType.Category, leftTabContainerGO, leftActiveTabButtons, true);
+                    
+                    // Populate Bottom (Tags)
+                    UpdateTabs(ContentType.Tags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+                }
+                else
+                {
+                    // Full Layout
+                    if (leftSubTabScrollGO != null) leftSubTabScrollGO.SetActive(false);
+                    if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
+                    if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
+
+                    RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
+                    leftRT.anchorMin = new Vector2(0, 0);
+                    leftRT.anchorMax = new Vector2(0, 1);
+                    leftRT.offsetMin = new Vector2(10, 20); // Restore default
+
+                    UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
+                }
             }
             if (rightActiveContent.HasValue) 
             {
                 UpdateSortButtonText(rightSortBtnText, GetSortState(rightActiveContent.Value.ToString()));
-                UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
+                
+                // Right Split View Logic
+                bool splitView = false;
+                if (rightActiveContent == ContentType.Category)
+                {
+                    string title = titleText != null ? titleText.text : "";
+                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        splitView = true;
+                    }
+                }
+
+                if (splitView && rightActiveContent == ContentType.Category && rightSubTabScrollGO != null)
+                {
+                    // Split Layout
+                    rightSubTabScrollGO.SetActive(true);
+                    
+                    if (rightSubSortBtn != null) 
+                    {
+                        rightSubSortBtn.SetActive(true);
+                        UpdateSortButtonText(rightSubSortBtnText, GetSortState("Tags"));
+                    }
+                    if (rightSubSearchInput != null) 
+                    {
+                        rightSubSearchInput.gameObject.SetActive(true);
+                        if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
+                    }
+                    
+                    RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
+                    rightRT.anchorMin = new Vector2(1, 0.5f);
+                    rightRT.anchorMax = new Vector2(1, 1);
+                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, 5); // Add gap at bottom
+                    
+                    RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
+                    subRT.anchorMin = new Vector2(1, 0);
+                    subRT.anchorMax = new Vector2(1, 0.5f);
+                    subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
+
+                    // Populate Top (Category)
+                    UpdateTabs(ContentType.Category, rightTabContainerGO, rightActiveTabButtons, false);
+                    
+                    // Populate Bottom (Tags)
+                    UpdateTabs(ContentType.Tags, rightSubTabContainerGO, rightSubActiveTabButtons, false);
+                }
+                else
+                {
+                    // Full Layout
+                    if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
+                    if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
+                    if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
+
+                    RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
+                    rightRT.anchorMin = new Vector2(1, 0);
+                    rightRT.anchorMax = new Vector2(1, 1);
+                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, 20); // Restore default
+
+                    UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
+                }
             }
         }
 
@@ -1311,6 +1660,76 @@ namespace VPB
                 }
             }
             
+            else if (contentType == ContentType.Tags)
+            {
+                if (!tagsCached) CacheTagCounts();
+
+                // Determine which tags to show
+                List<string> tagsToShow = new List<string>();
+                string title = titleText != null ? titleText.text : "";
+                
+                if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    tagsToShow.AddRange(TagFilter.ClothingTypeTags);
+                    tagsToShow.AddRange(TagFilter.ClothingRegionTags);
+                    tagsToShow.AddRange(TagFilter.ClothingOtherTags);
+                }
+                else if (title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    tagsToShow.AddRange(TagFilter.HairTypeTags);
+                    tagsToShow.AddRange(TagFilter.HairRegionTags);
+                    tagsToShow.AddRange(TagFilter.HairOtherTags);
+                }
+                
+                // Filter
+                if (!string.IsNullOrEmpty(tagFilter))
+                {
+                    tagsToShow.RemoveAll(t => t.IndexOf(tagFilter, StringComparison.OrdinalIgnoreCase) < 0);
+                }
+
+                // Sort
+                var sortState = GetSortState("Tags");
+                if (sortState.Type == SortType.Name)
+                {
+                    if (sortState.Direction == SortDirection.Ascending) tagsToShow.Sort();
+                    else tagsToShow.Sort((a, b) => b.CompareTo(a));
+                }
+                else if (sortState.Type == SortType.Count)
+                {
+                    tagsToShow.Sort((a, b) => {
+                        int cA = tagCounts.ContainsKey(a) ? tagCounts[a] : 0;
+                        int cB = tagCounts.ContainsKey(b) ? tagCounts[b] : 0;
+                        int cmp = cA.CompareTo(cB);
+                        if (cmp == 0) return a.CompareTo(b);
+                        return sortState.Direction == SortDirection.Ascending ? cmp : -cmp;
+                    });
+                }
+                
+                foreach (var tag in tagsToShow)
+                {
+                    int count = 0;
+                    if (tagCounts.ContainsKey(tag)) count = tagCounts[tag];
+                    
+                    bool isActive = activeTags.Contains(tag);
+                    
+                    // Optional: hide tags with 0 count unless active?
+                    // User asked for counter, not hiding. But typical gallery behavior is to hide empty filters.
+                    // Let's hide them if count is 0 and not active.
+                    if (count == 0 && !isActive) continue;
+
+                    string label = tag + " (" + count + ")";
+                    Color btnColor = isActive ? new Color(0.5f, 0.2f, 0.5f, 1f) : new Color(0.7f, 0.7f, 0.7f, 1f);
+
+                    CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                        if (activeTags.Contains(tag)) activeTags.Remove(tag);
+                        else activeTags.Add(tag);
+                        
+                        RefreshFiles();
+                        UpdateTabs();
+                    }, trackedButtons);
+                }
+            }
+            
             SetLayerRecursive(container, 5);
         }
 
@@ -1335,7 +1754,7 @@ namespace VPB
                 groupHLG.spacing = 0;
 
                 // Tab Button
-                GameObject btnGO = UI.CreateUIButton(groupGO, 170, 35, "", 14, 0, 0, AnchorPresets.middleLeft, null);
+                GameObject btnGO = UI.CreateUIButton(groupGO, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
                 btnGO.name = "Button";
                 AddHoverDelegate(btnGO);
             }
@@ -1354,6 +1773,7 @@ namespace VPB
             
             Text txt = btnGO_Reuse.GetComponentInChildren<Text>();
             txt.text = label;
+            txt.fontSize = 18;
             txt.color = isActive ? Color.white : Color.black;
             
             if (targetList != null) targetList.Add(groupGO);
@@ -1483,16 +1903,29 @@ namespace VPB
             if (currentExtension != extension || currentPath != path)
             {
                 creatorsCached = false;
+                tagsCached = false;
                 currentCreator = "";
+                activeTags.Clear();
             }
             currentExtension = extension;
             currentPath = path;
+            
+            // Set currentPaths
+            currentPaths = null;
+            if (categories != null) {
+                var cat = categories.FirstOrDefault(c => c.path == path && c.name == title);
+                if (!string.IsNullOrEmpty(cat.name)) currentPaths = cat.paths;
+            }
+            if (currentPaths == null) currentPaths = new List<string> { path };
+
             if (titleSearchInput != null) titleSearchInput.text = nameFilter;
 
             if (Application.isPlaying && canvas.renderMode == RenderMode.WorldSpace)
             {
                 canvas.worldCamera = Camera.main;
             }
+            
+            UpdateSideButtonsVisibility();
 
             canvas.gameObject.SetActive(true);
             RefreshFiles();
@@ -1588,7 +2021,7 @@ namespace VPB
                             // In Category mode, we match path (Saves/scene/...). 
                             // In Creator mode, we also respect the Category path filter if set.
                             
-                            bool match = IsMatch(entry, currentPath, extensions);
+                            bool match = IsMatch(entry, currentPaths, currentPath, extensions);
                             if (match && hasNameFilter)
                             {
                                 if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
@@ -1598,6 +2031,22 @@ namespace VPB
                             {
                                 try { if (!entry.IsFavorite()) match = false; }
                                 catch { }
+                            }
+                            
+                            // Tag Filter
+                            if (match && activeTags.Count > 0)
+                            {
+                                bool tagMatch = false;
+                                string pathLower = entry.Path.ToLowerInvariant();
+                                foreach(var tag in activeTags)
+                                {
+                                    if (pathLower.Contains(tag.ToLowerInvariant())) 
+                                    {
+                                        tagMatch = true; 
+                                        break; 
+                                    }
+                                }
+                                if (!tagMatch) match = false;
                             }
 
                             if (match)
@@ -1610,26 +2059,51 @@ namespace VPB
             }
 
             // 2. Search on local disk (System files) - Only in Category mode?
-            if (activeContentType == ContentType.Category && Directory.Exists(currentPath))
+            List<string> pathsToSearch = new List<string>();
+            if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
+            else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
+
+            if (activeContentType == ContentType.Category)
             {
-                foreach (var ext in extensions)
+                foreach (var searchPath in pathsToSearch)
                 {
-                    string[] systemFiles = Directory.GetFiles(currentPath, "*." + ext, SearchOption.AllDirectories);
-                    foreach (var sysPath in systemFiles)
+                    if (!Directory.Exists(searchPath)) continue;
+
+                    foreach (var ext in extensions)
                     {
-                        var sysEntry = new SystemFileEntry(sysPath);
-                        bool include = true;
-                        if (hasNameFilter)
+                        string[] systemFiles = Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories);
+                        foreach (var sysPath in systemFiles)
                         {
-                            if (sysEntry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) include = false;
+                            // Tag Filter (pre-check)
+                            if (activeTags.Count > 0)
+                            {
+                                bool tagMatch = false;
+                                string pathLower = sysPath.ToLowerInvariant();
+                                foreach(var tag in activeTags)
+                                {
+                                    if (pathLower.Contains(tag.ToLowerInvariant())) 
+                                    {
+                                        tagMatch = true; 
+                                        break; 
+                                    }
+                                }
+                                if (!tagMatch) continue;
+                            }
+
+                            var sysEntry = new SystemFileEntry(sysPath);
+                            bool include = true;
+                            if (hasNameFilter)
+                            {
+                                if (sysEntry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) include = false;
+                            }
+                            if (include && filterFavorite)
+                            {
+                                try { if (!sysEntry.IsFavorite()) include = false; }
+                                catch { }
+                            }
+                            
+                            if (include) files.Add(sysEntry);
                         }
-                        if (include && filterFavorite)
-                        {
-                            try { if (!sysEntry.IsFavorite()) include = false; }
-                            catch { }
-                        }
-                        
-                        if (include) files.Add(sysEntry);
                     }
                 }
             }
@@ -1654,7 +2128,7 @@ namespace VPB
             }
         }
 
-        private bool IsMatch(FileEntry entry, string path, string[] extensions)
+        private bool IsMatch(FileEntry entry, List<string> paths, string singlePath, string[] extensions)
         {
             string entryPath = entry.Path;
             int startIdx = 0;
@@ -1665,9 +2139,23 @@ namespace VPB
                 startIdx = colonIdx + 2;
             }
 
-            // Check StartsWith using Compare to avoid substring allocation
-            if (string.Compare(entryPath, startIdx, path, 0, path.Length, StringComparison.OrdinalIgnoreCase) != 0)
-                return false;
+            bool pathMatch = false;
+            if (paths != null && paths.Count > 0)
+            {
+                foreach(var p in paths) {
+                    if (string.Compare(entryPath, startIdx, p, 0, p.Length, StringComparison.OrdinalIgnoreCase) == 0) {
+                        pathMatch = true;
+                        break;
+                    }
+                }
+            }
+            else if (!string.IsNullOrEmpty(singlePath))
+            {
+                if (string.Compare(entryPath, startIdx, singlePath, 0, singlePath.Length, StringComparison.OrdinalIgnoreCase) == 0)
+                    pathMatch = true;
+            }
+
+            if (!pathMatch) return false;
 
             foreach (var ext in extensions)
             {
@@ -1988,7 +2476,7 @@ namespace VPB
             {
                 return type == SortType.Name || type == SortType.Date || type == SortType.Size;
             }
-            else if (context == "Category" || context == "Creator" || context == "Status")
+            else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags")
             {
                 return type == SortType.Name || type == SortType.Count;
             }

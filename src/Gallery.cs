@@ -14,6 +14,7 @@ namespace VPB
             public string name;
             public string extension;
             public string path;
+            public List<string> paths;
         }
 
         private List<Category> categories = new List<Category>();

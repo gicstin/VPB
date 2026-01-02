@@ -104,6 +104,12 @@ namespace VPB
         private bool m_GalleryCatsInited = false;
         private List<Gallery.Category> m_GalleryCategories;
 
+        private class CategoryInfo
+        {
+            public string ext;
+            public List<string> paths;
+        }
+
         private void InitGalleryCategories()
         {
             if (Gallery.singleton == null) return;
@@ -111,14 +117,38 @@ namespace VPB
             if (m_GalleryCategories == null)
             {
                 m_GalleryCategories = new List<Gallery.Category>();
-                HashSet<string> usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var catDict = new Dictionary<string, CategoryInfo>(StringComparer.OrdinalIgnoreCase);
 
                 // Helper to add categories while tracking names
                 Action<string, string, string> addCat = (name, ext, path) => {
-                    if (!usedNames.Contains(name)) {
-                        m_GalleryCategories.Add(new Gallery.Category { name = name, extension = ext, path = path });
-                        usedNames.Add(name);
+                    // Consolidate names
+                    if (name.Equals("Person Hair", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Hair", StringComparison.OrdinalIgnoreCase)) name = "Hair";
+                    if (name.Equals("Person Clothing", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Clothing", StringComparison.OrdinalIgnoreCase)) name = "Clothing";
+                    if (name.Equals("Person Pose", StringComparison.OrdinalIgnoreCase)) name = "Pose";
+                    if (name.Equals("Person", StringComparison.OrdinalIgnoreCase)) name = "Pose"; // Merge Person into Pose as requested
+
+                    if (!catDict.ContainsKey(name)) {
+                        catDict[name] = new CategoryInfo { ext = ext, paths = new List<string>() };
                     }
+                    
+                    var entry = catDict[name];
+                    if (!entry.paths.Contains(path)) {
+                        entry.paths.Add(path);
+                    }
+                    
+                    // Merge extensions
+                    var currentExts = new HashSet<string>(entry.ext.Split('|'), StringComparer.OrdinalIgnoreCase);
+                    var newExts = ext.Split('|');
+                    bool changed = false;
+                    foreach(var e in newExts) {
+                        if (currentExts.Add(e)) changed = true;
+                    }
+                    if (changed) {
+                        var extList = new List<string>(currentExts);
+                        entry.ext = string.Join("|", extList.ToArray());
+                    }
+                    
+                    // catDict[name] = entry; // Class is reference type, no need to reassign
                 };
 
                 // 1. Static/Legacy Categories
@@ -126,11 +156,10 @@ namespace VPB
                 addCat("SubScenes", "json", "Custom/SubScene");
                 addCat("Clothing", "vam", "Custom/Clothing");
                 addCat("Hair", "vam", "Custom/Hair");
-                addCat("Person", "json", "Saves/Person");
-                addCat("P.Clothing", "vap", "Custom/Clothing");
-                addCat("P.Hair", "vap", "Custom/Hair");
-                // Note: "Pose" removed from hardcoded list to be discovered dynamically
-
+                addCat("Pose", "json", "Saves/Person"); // Was Person
+                addCat("Clothing", "vap", "Custom/Clothing"); // Was P.Clothing
+                addCat("Hair", "vap", "Custom/Hair"); // Was P.Hair
+                
                 // 2. Dynamic Discovery from Custom/Atom
                 string atomRoot = "Custom/Atom";
                 if (Directory.Exists(atomRoot))
@@ -147,9 +176,13 @@ namespace VPB
                                 string finalName = resourceName;
 
                                 // Handle name collisions (e.g. if "Clothing" exists in Atom/Person/Clothing, rename to "Person Clothing")
-                                if (usedNames.Contains(finalName))
+                                // But here we want to consolidate, so we might strip "Person" if present?
+                                // Actually, standard logic was adding "atomType + resourceName".
+                                // Now we just let addCat handle normalization.
+                                if (atomType.Equals("Person", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    finalName = atomType + " " + resourceName;
+                                     // "Person" + "Hair" -> "Person Hair" -> "Hair"
+                                     finalName = atomType + " " + resourceName;
                                 }
 
                                 // Determine extension
@@ -171,6 +204,17 @@ namespace VPB
                 }
 
                 addCat("All", "var", "");
+
+                // Build list
+                foreach(var kvp in catDict)
+                {
+                    m_GalleryCategories.Add(new Gallery.Category { 
+                        name = kvp.Key, 
+                        extension = kvp.Value.ext, 
+                        path = kvp.Value.paths.Count > 0 ? kvp.Value.paths[0] : "", 
+                        paths = kvp.Value.paths 
+                    });
+                }
             }
             
             Gallery.singleton.SetCategories(m_GalleryCategories);
