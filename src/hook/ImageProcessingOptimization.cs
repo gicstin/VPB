@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace var_browser
+namespace VPB
 {
     public static class ImageProcessingOptimization
     {
@@ -26,64 +26,131 @@ namespace var_browser
             }
         }
 
-        private static void FastBitmapCopyUnscaled(byte[] srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
+        private static unsafe void FastBitmapCopyUnscaled(byte[] srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
                                                     byte[] dstData, int dstWidth, int dstHeight, int dstStride, int dstBpp)
         {
             int copyWidth = Math.Min(srcWidth, dstWidth);
             int copyHeight = Math.Min(srcHeight, dstHeight);
-            int copyBytes = copyWidth * srcBpp;
 
-            for (int y = 0; y < copyHeight; y++)
+            // Validate buffers are large enough for the operation
+            if (srcData.Length < (srcHeight - 1) * srcStride + srcWidth * srcBpp)
+                throw new ArgumentException("Source buffer too small");
+            if (dstData.Length < (dstHeight - 1) * dstStride + dstWidth * dstBpp)
+                throw new ArgumentException("Destination buffer too small");
+
+            if (srcBpp == dstBpp)
             {
-                Buffer.BlockCopy(srcData, y * srcStride, dstData, y * dstStride, copyBytes);
+                int copyBytes = copyWidth * srcBpp;
+                for (int y = 0; y < copyHeight; y++)
+                {
+                    Buffer.BlockCopy(srcData, y * srcStride, dstData, y * dstStride, copyBytes);
+                }
+            }
+            else
+            {
+                fixed (byte* pSrcBase = srcData, pDstBase = dstData)
+                {
+                    // Format conversion needed (e.g., RGBA -> RGB or RGB -> RGBA)
+                    for (int y = 0; y < copyHeight; y++)
+                    {
+                        byte* pSrcRow = pSrcBase + y * srcStride;
+                        byte* pDstRow = pDstBase + y * dstStride;
+
+                        for (int x = 0; x < copyWidth; x++)
+                        {
+                            byte* pSrc = pSrcRow + x * srcBpp;
+                            byte* pDst = pDstRow + x * dstBpp;
+
+                            pDst[0] = pSrc[0]; // R
+                            pDst[1] = pSrc[1]; // G
+                            pDst[2] = pSrc[2]; // B
+
+                            if (dstBpp == 4)
+                            {
+                                pDst[3] = (srcBpp == 4) ? pSrc[3] : (byte)255; // A
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        private static void FastBitmapCopyScaled(byte[] srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
+        private static unsafe void FastBitmapCopyScaled(byte[] srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
                                                   byte[] dstData, int dstWidth, int dstHeight, int dstStride, int dstBpp,
                                                   bool fillWhiteBackground)
         {
-            if (fillWhiteBackground)
+             // Validate buffers are large enough
+            if (srcData.Length < (srcHeight - 1) * srcStride + srcWidth * srcBpp)
+                throw new ArgumentException("Source buffer too small");
+            if (dstData.Length < (dstHeight - 1) * dstStride + dstWidth * dstBpp)
+                throw new ArgumentException("Destination buffer too small");
+
+            fixed (byte* pSrcBase = srcData, pDstBase = dstData)
             {
-                Array.Clear(dstData, 0, dstData.Length);
-                if (dstBpp == 4)
+                if (fillWhiteBackground)
                 {
-                    for (int i = 3; i < dstData.Length; i += 4)
-                        dstData[i] = 255;
-                }
-            }
-
-            float scaleX = (float)srcWidth / dstWidth;
-            float scaleY = (float)srcHeight / dstHeight;
-            float scale = Math.Min(scaleX, scaleY);
-
-            int scaledWidth = (int)(srcWidth / scale);
-            int scaledHeight = (int)(srcHeight / scale);
-            int offsetX = (dstWidth - scaledWidth) / 2;
-            int offsetY = (dstHeight - scaledHeight) / 2;
-
-            for (int dy = 0; dy < scaledHeight && dy + offsetY < dstHeight; dy++)
-            {
-                float sy = dy * scale;
-                int srcY = (int)sy;
-                if (srcY >= srcHeight) srcY = srcHeight - 1;
-
-                int dstRowIdx = (dy + offsetY) * dstStride;
-
-                for (int dx = 0; dx < scaledWidth && dx + offsetX < dstWidth; dx++)
-                {
-                    float sx = dx * scale;
-                    int srcX = (int)sx;
-                    if (srcX >= srcWidth) srcX = srcWidth - 1;
-
-                    int srcIdx = srcY * srcStride + srcX * srcBpp;
-                    int dstIdx = dstRowIdx + (dx + offsetX) * dstBpp;
-
-                    dstData[dstIdx] = srcData[srcIdx];
-                    dstData[dstIdx + 1] = srcData[srcIdx + 1];
-                    dstData[dstIdx + 2] = srcData[srcIdx + 2];
+                    // Clear with white/transparent
+                    // Note: Array.Clear sets to 0. If we want white background we need to set to 255.
+                    // But if BPP is 3, 0 is black. If BPP is 4, 0 is transparent black.
+                    // The logic below mimics original:
+                    // Array.Clear(dstData, 0, dstData.Length); -> Sets everything to 0
+                    // If dstBpp == 4, set alpha to 255.
+                    
+                    // Optimization: Use pointer to clear
+                    int len = dstData.Length;
+                    // Memset to 0
+                    // For large arrays, P/Invoke memset or similar is faster, but loop is okay for now or use Array.Clear
+                    Array.Clear(dstData, 0, len);
+                    
                     if (dstBpp == 4)
-                        dstData[dstIdx + 3] = (srcBpp == 4) ? srcData[srcIdx + 3] : (byte)255;
+                    {
+                        // Set Alpha to 255
+                        for (int i = 3; i < len; i += 4)
+                            pDstBase[i] = 255;
+                    }
+                }
+
+                float scaleX = (float)srcWidth / dstWidth;
+                float scaleY = (float)srcHeight / dstHeight;
+                // Use Max to fit the image inside the destination (Aspect Fit)
+                float scale = Math.Max(scaleX, scaleY);
+
+                int scaledWidth = (int)(srcWidth / scale);
+                int scaledHeight = (int)(srcHeight / scale);
+                int offsetX = (dstWidth - scaledWidth) / 2;
+                int offsetY = (dstHeight - scaledHeight) / 2;
+
+                // Precompute bounds to avoid checks inside loop
+                int startY = Math.Max(0, -offsetY);
+                int endY = Math.Min(scaledHeight, dstHeight - offsetY);
+                
+                int startX = Math.Max(0, -offsetX);
+                int endX = Math.Min(scaledWidth, dstWidth - offsetX);
+
+                for (int dy = startY; dy < endY; dy++)
+                {
+                    float sy = dy * scale;
+                    int srcY = (int)sy;
+                    if (srcY >= srcHeight) srcY = srcHeight - 1;
+
+                    byte* pSrcRow = pSrcBase + srcY * srcStride;
+                    byte* pDstRow = pDstBase + (dy + offsetY) * dstStride;
+
+                    for (int dx = startX; dx < endX; dx++)
+                    {
+                        float sx = dx * scale;
+                        int srcX = (int)sx;
+                        if (srcX >= srcWidth) srcX = srcWidth - 1;
+
+                        byte* pSrc = pSrcRow + srcX * srcBpp;
+                        byte* pDst = pDstRow + (dx + offsetX) * dstBpp;
+
+                        pDst[0] = pSrc[0];
+                        pDst[1] = pSrc[1];
+                        pDst[2] = pSrc[2];
+                        if (dstBpp == 4)
+                            pDst[3] = (srcBpp == 4) ? pSrc[3] : (byte)255;
+                    }
                 }
             }
         }

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace var_browser
+namespace VPB
 {
 	public abstract class FileEntryStreamReader : IDisposable
 	{

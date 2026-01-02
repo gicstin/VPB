@@ -2,7 +2,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-namespace var_browser
+namespace VPB
 {
 	public class SystemFileEntry : FileEntry
 	{
@@ -60,45 +60,11 @@ namespace var_browser
 		}
 		public override bool IsFavorite()
 		{
-
-			string key = null;
-            if (isVar)
-				key = System.IO.Path.GetFileNameWithoutExtension(Path);
-            else
-				key = Path;
-			if (FavoriteLookup.Contains(key))
-				return true;
-			return false;
+			return FavoritesManager.Instance.IsFavorite(this);
 		}
 		public override void SetFavorite(bool b)
 		{
-			string key = null;
-			if (isVar)
-				key = System.IO.Path.GetFileNameWithoutExtension(Path);
-			else
-				key = Path;
-			if (b)
-			{
-				FavoriteLookup.Add(key);
-			}
-			else
-			{
-				FavoriteLookup.Remove(key);
-			}
-
-			if (!Directory.Exists(GlobalInfo.FavoriteDirectory))
-			{
-				Directory.CreateDirectory(GlobalInfo.FavoriteDirectory);
-			}
-
-			SerializableFavorite sf = new SerializableFavorite();
-			var list = new List<string>();
-			foreach (var item in FavoriteLookup)
-			{
-				list.Add(item);
-			}
-			sf.FavoriteNames = list.ToArray();
-			File.WriteAllText(GlobalInfo.FavoritePath, JsonUtility.ToJson(sf));
+			FavoritesManager.Instance.SetFavorite(this, b);
 		}
 		public override bool IsAutoInstall()
 		{

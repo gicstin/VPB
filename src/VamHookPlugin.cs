@@ -8,15 +8,16 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-namespace var_browser
+namespace VPB
 {
     // Plugin metadata attribute: plugin ID, plugin name, plugin version (must be numeric)
-    [BepInPlugin("vam_var_browser", "var_browser", "0.15")]
+    [BepInPlugin("VPB", "VPB", "0.06")]
+
     public partial class VamHookPlugin : BaseUnityPlugin // Inherits BaseUnityPlugin
     {
         private KeyUtil UIKey;
-        private KeyUtil CustomSceneKey;
-        private KeyUtil CategorySceneKey;
+        private KeyUtil GalleryKey;
+        private KeyUtil CreateGalleryKey;
         private Vector2 UIPosition;
         private bool MiniMode;
         
@@ -60,12 +61,13 @@ namespace var_browser
         private bool m_ShowGcRefreshInfo;
         private bool m_ShowSettings;
         private string m_SettingsUiKeyDraft;
-        private string m_SettingsCustomSceneKeyDraft;
-        private string m_SettingsCategorySceneKeyDraft;
+        private string m_SettingsGalleryKeyDraft;
+        private string m_SettingsCreateGalleryKeyDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
         private bool m_SettingsEnableUiTransparencyDraft;
+        private bool m_SettingsEnableGalleryFadeDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -153,14 +155,17 @@ namespace var_browser
             }
             m_ShowSettings = true;
             m_SettingsUiKeyDraft = (Settings.Instance != null && Settings.Instance.UIKey != null) ? Settings.Instance.UIKey.Value : "";
-            m_SettingsCustomSceneKeyDraft = (Settings.Instance != null && Settings.Instance.CustomSceneKey != null) ? Settings.Instance.CustomSceneKey.Value : "";
-            m_SettingsCategorySceneKeyDraft = (Settings.Instance != null && Settings.Instance.CategorySceneKey != null) ? Settings.Instance.CategorySceneKey.Value : "";
+            m_SettingsGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.GalleryKey != null) ? Settings.Instance.GalleryKey.Value : "";
+            m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
+            m_SettingsEnableGalleryFadeDraft = (Settings.Instance != null && Settings.Instance.EnableGalleryFade != null) ? Settings.Instance.EnableGalleryFade.Value : true;
             m_SettingsError = null;
         }
+
+
 
         private void CloseSettings()
         {
@@ -233,9 +238,9 @@ namespace var_browser
             GUILayout.Label("Settings", m_StyleHeader);
             GUILayout.Space(6);
 
-            m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide Hotkey", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
-            m_SettingsCustomSceneKeyDraft = DrawHotkeyField("Custom Scene Hotkey", "CustomSceneKeyField", m_SettingsCustomSceneKeyDraft ?? "", buttonHeight);
-            m_SettingsCategorySceneKeyDraft = DrawHotkeyField("Category Scene Hotkey", "CategorySceneKeyField", m_SettingsCategorySceneKeyDraft ?? "", buttonHeight);
+            m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide VPB", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
+            m_SettingsGalleryKeyDraft = DrawHotkeyField("Show/Hide Panes", "GalleryKeyField", m_SettingsGalleryKeyDraft ?? "", buttonHeight);
+            m_SettingsCreateGalleryKeyDraft = DrawHotkeyField("Create Gallery Pane", "CreateGalleryKeyField", m_SettingsCreateGalleryKeyDraft ?? "", buttonHeight);
 
             GUILayout.Space(10);
 
@@ -245,6 +250,14 @@ namespace var_browser
                 m_SettingsEnableUiTransparencyDraft = !m_SettingsEnableUiTransparencyDraft;
             }
             GUILayout.Label("Enable dynamic transparency (fade when idle)");
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsEnableGalleryFadeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsEnableGalleryFadeDraft = !m_SettingsEnableGalleryFadeDraft;
+            }
+            GUILayout.Label("Enable Gallery Button Fade");
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
@@ -333,10 +346,10 @@ namespace var_browser
                 try
                 {
                     var parsed = KeyUtil.Parse(m_SettingsUiKeyDraft ?? "");
-                    var parsedCustomSceneKey = KeyUtil.Parse(m_SettingsCustomSceneKeyDraft ?? "");
-                    var parsedCategorySceneKey = KeyUtil.Parse(m_SettingsCategorySceneKeyDraft ?? "");
+                    var parsedGalleryKey = KeyUtil.Parse(m_SettingsGalleryKeyDraft ?? "");
+                    var parsedCreateGalleryKey = KeyUtil.Parse(m_SettingsCreateGalleryKeyDraft ?? "");
 
-                    if (parsed.IsSame(parsedCustomSceneKey) || parsed.IsSame(parsedCategorySceneKey) || parsedCustomSceneKey.IsSame(parsedCategorySceneKey))
+                    if (parsed.IsSame(parsedGalleryKey) || parsed.IsSame(parsedCreateGalleryKey) || parsedGalleryKey.IsSame(parsedCreateGalleryKey))
                     {
                         m_SettingsError = "Duplicate hotkeys are not allowed.";
                         return;
@@ -346,13 +359,13 @@ namespace var_browser
                     {
                         Settings.Instance.UIKey.Value = parsed.keyPattern;
                     }
-                    if (Settings.Instance != null && Settings.Instance.CustomSceneKey != null)
+                    if (Settings.Instance != null && Settings.Instance.GalleryKey != null)
                     {
-                        Settings.Instance.CustomSceneKey.Value = parsedCustomSceneKey.keyPattern;
+                        Settings.Instance.GalleryKey.Value = parsedGalleryKey.keyPattern;
                     }
-                    if (Settings.Instance != null && Settings.Instance.CategorySceneKey != null)
+                    if (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null)
                     {
-                        Settings.Instance.CategorySceneKey.Value = parsedCategorySceneKey.keyPattern;
+                        Settings.Instance.CreateGalleryKey.Value = parsedCreateGalleryKey.keyPattern;
                     }
                     if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
                     {
@@ -366,6 +379,13 @@ namespace var_browser
                         if (Settings.Instance.EnableUiTransparency.Value != m_SettingsEnableUiTransparencyDraft)
                         {
                             Settings.Instance.EnableUiTransparency.Value = m_SettingsEnableUiTransparencyDraft;
+                        }
+                    }
+                    if (Settings.Instance != null && Settings.Instance.EnableGalleryFade != null)
+                    {
+                        if (Settings.Instance.EnableGalleryFade.Value != m_SettingsEnableGalleryFadeDraft)
+                        {
+                            Settings.Instance.EnableGalleryFade.Value = m_SettingsEnableGalleryFadeDraft;
                         }
                     }
                     if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)
@@ -382,10 +402,9 @@ namespace var_browser
                             Settings.Instance.PrioritizeHairTextures.Value = m_SettingsPrioritizeHairTexturesDraft;
                         }
                     }
-
                     UIKey = parsed;
-                    CustomSceneKey = parsedCustomSceneKey;
-                    CategorySceneKey = parsedCategorySceneKey;
+                    GalleryKey = parsedGalleryKey;
+                    CreateGalleryKey = parsedCreateGalleryKey;
                     CloseSettings();
                 }
                 catch
@@ -396,6 +415,8 @@ namespace var_browser
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
         }
+
+
 
         private void ToggleInfoCard(ref bool visible)
         {
@@ -725,7 +746,7 @@ namespace var_browser
         {
             if (string.IsNullOrEmpty(cacheDir))
             {
-                cacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/var_browser_cache";
+                cacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/VPB_cache";
                 if (!Directory.Exists(cacheDir))
                 {
                     Directory.CreateDirectory(cacheDir);
@@ -738,7 +759,7 @@ namespace var_browser
         {
             if (string.IsNullOrEmpty(abCacheDir))
             {
-                abCacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/var_browser_cache/ab";
+                abCacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/VPB_cache/ab";
                 if (!Directory.Exists(abCacheDir))
                 {
                     Directory.CreateDirectory(abCacheDir);
@@ -749,6 +770,9 @@ namespace var_browser
         void Awake()
         {
             singleton = this;
+
+            // Initialize Gallery
+            gameObject.AddComponent<Gallery>();
 
             LogUtil.SetLogSource(Logger);
 
@@ -804,8 +828,8 @@ namespace var_browser
             }
 
             UIKey = KeyUtil.Parse(Settings.Instance.UIKey.Value);
-            CustomSceneKey = KeyUtil.Parse(Settings.Instance.CustomSceneKey.Value);
-            CategorySceneKey = KeyUtil.Parse(Settings.Instance.CategorySceneKey.Value);
+            GalleryKey = KeyUtil.Parse(Settings.Instance.GalleryKey.Value);
+            CreateGalleryKey = KeyUtil.Parse(Settings.Instance.CreateGalleryKey.Value);
             m_UIScale = Settings.Instance.UIScale.Value;
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
@@ -819,7 +843,7 @@ namespace var_browser
 
             this.Config.SaveOnConfigSet = true;
             Debug.Log("var browser hook start");
-            var harmony = new Harmony("var_browser_hook");
+            var harmony = new Harmony("VPB_hook");
             // Patch VaM/Harmony hook points.
             UnityEngineHook.Init();
             harmony.PatchAll();
@@ -863,7 +887,7 @@ namespace var_browser
         }
         void Start()
         {
-            var go = new GameObject("var_browser_messager");
+            var go = new GameObject("VPB_messager");
             var messager = go.AddComponent<Messager>();
             messager.target = this.gameObject;
             go.AddComponent<CustomAssetLoader>();
@@ -977,18 +1001,28 @@ namespace var_browser
                 m_Show = !m_Show;
             }
             // Hotkeys
+            if (m_Inited)
+            {
+                if (CreateGalleryKey.TestKeyDown())
+                {
+                    if (Gallery.singleton != null)
+                    {
+                        if (!m_GalleryCatsInited) InitGalleryCategories();
+                        Gallery.singleton.CreatePane();
+                    }
+                }
+                if (GalleryKey.TestKeyDown())
+                {
+                    if (Gallery.singleton != null && Gallery.singleton.IsVisible)
+                        Gallery.singleton.Hide();
+                    else
+                        OpenGallery();
+                }
+            }
+
             if (m_Inited && m_FileManagerInited)
             {
-                if (CustomSceneKey.TestKeyDown())
-                {
-                    // Custom entries do not require installation.
-                    m_FileBrowser.onlyInstalled = false;
-                    ShowFileBrowser("Custom Scene", "json", "Saves/scene", true);
-                }
-                if (CategorySceneKey.TestKeyDown())
-                {
-                    ShowFileBrowser("Category Scene", "json", "Saves/scene");
-                }
+                // Future hotkeys that depend on FileManager can go here
             }
 
             if (!m_Inited)
@@ -1028,7 +1062,7 @@ namespace var_browser
             if (flag)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                var_browser.FileManager.Refresh();
+                VPB.FileManager.Refresh();
             }
         }
 
@@ -1042,8 +1076,9 @@ namespace var_browser
             {
                 var child = Tools.AddChild(this.gameObject);
                 m_FileManager = child.AddComponent<FileManager>();
-                child.AddComponent<var_browser.CustomImageLoaderThreaded>();
-                child.AddComponent<var_browser.ImageLoadingMgr>();
+                child.AddComponent<VPB.CustomImageLoaderThreaded>();
+                child.AddComponent<VPB.ImageLoadingMgr>();
+                child.AddComponent<VPB.Gallery>();
                 FileManager.RegisterRefreshHandler(() =>
                 {
                     m_FileManagerInited = true;
@@ -1406,6 +1441,8 @@ namespace var_browser
                     // ========== HUB BROWSE ==========
                     DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Gallery", m_StyleButton, OpenGallery, 1.618f, buttonHeight);
 
+
+
                     GUILayout.EndVertical();
                 }
                 GUI.enabled = true;
@@ -1444,7 +1481,7 @@ namespace var_browser
             {
                 bool show = true;
                 // Hide this window while the preview/file browser UI is open.
-                if (m_FileBrowser != null && m_FileBrowser.window.activeSelf)
+                if ((m_FileBrowser != null && m_FileBrowser.window.activeSelf))
                 {
                     show = false;
                 }

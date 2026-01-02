@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace var_browser
+namespace VPB
 {
     public static class ByteArrayPool
     {

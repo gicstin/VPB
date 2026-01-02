@@ -7,7 +7,7 @@ using UnityEngine;
 using Valve.Newtonsoft.Json;
 using System.Runtime.Serialization.Formatters.Binary;
 
-namespace var_browser
+namespace VPB
 {
     [System.Serializable]
     public class AllSerializableVarPackage

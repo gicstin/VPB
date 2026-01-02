@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using BepInEx;
 using UnityEngine;
 using HarmonyLib;
-namespace var_browser
+namespace VPB
 {
     class HubResourcePackageHook
     {
@@ -29,7 +29,7 @@ namespace var_browser
             }
             LogUtil.Log("Hook DownloadComplete "+ str);
             // Move into the repository directory, then link it back
-            var_browser.FileManager.Refresh();
+            VPB.FileManager.Refresh();
         }
 
     }

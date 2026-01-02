@@ -1,6 +1,0 @@
-3 commits since v5.4.23.3
-
-Changelog (excluding merges):
-* (02413dd) [ManlyMarco] Bump version number
-* (176a97e) [Chris Yeninas] Fix incorrect instructions in BUILDING.md (#1175)
-* (8ad052a) [Arrowmaster] Upgrade Doorstop to version 4.4.1 (#1156)

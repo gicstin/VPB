@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace var_browser
+namespace VPB
 {
     public partial class FileBrowser : MonoBehaviour
     {

@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.32802.440
+# Visual Studio Version 18
+VisualStudioVersion = 18.1.11312.151 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "var_browser", "var_browser.csproj", "{758453DA-4E36-49AF-8DF4-A046875D333D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VPB", "VPB.csproj", "{758453DA-4E36-49AF-8DF4-A046875D333D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

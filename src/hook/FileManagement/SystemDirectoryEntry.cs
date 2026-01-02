@@ -3,7 +3,7 @@
 //using System.IO;
 
 
-//namespace var_browser
+//namespace VPB
 //{
 //	public class SystemDirectoryEntry : DirectoryEntry
 //	{

@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -10,8 +8,9 @@ using SimpleJSON;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
+using StbImageSharp; // Requires StbImageSharp library
 
-namespace var_browser
+namespace VPB
 {
 	public class CustomImageLoaderThreaded : MonoBehaviour
 	{
@@ -59,10 +58,12 @@ namespace var_browser
                 callback = null;
                 priority = 1000;
                 insertionIndex = 0;
+                groupId = null;
             }
 
             public int priority;
             public long insertionIndex;
+            public string groupId;
 
 			public bool isThumbnail;
 
@@ -274,109 +275,132 @@ namespace var_browser
 				}
 			}
 
-			protected void ProcessFromStream(Stream st)
-			{
-				Bitmap bitmap = new Bitmap(st);
-				SolidBrush solidBrush = new SolidBrush(System.Drawing.Color.White);
-				bitmap.RotateFlip(RotateFlipType.Rotate180FlipX);
-				if (!setSize)
-				{
-					width = bitmap.Width;
-					height = bitmap.Height;
-					if (compress)
-					{
-						int num = width / 4;
-						if (num == 0)
-						{
-							num = 1;
-						}
-						width = num * 4;
-						int num2 = height / 4;
-						if (num2 == 0)
-						{
-							num2 = 1;
-						}
-						height = num2 * 4;
-					}
-				}
-				int num3 = 3;
-				textureFormat = TextureFormat.RGB24;
-				PixelFormat format = PixelFormat.Format24bppRgb;
-				if (createAlphaFromGrayscale || isNormalMap || createNormalFromBump || bitmap.PixelFormat == PixelFormat.Format32bppArgb)
-				{
-					textureFormat = TextureFormat.RGBA32;
-					format = PixelFormat.Format32bppArgb;
-					num3 = 4;
-				}
-				Bitmap bitmap2 = new Bitmap(width, height, format);
-				BitmapData srcBitmapData = null;
-				BitmapData dstBitmapData = null;
-			int num8 = 0;
-			try
-				{
-					srcBitmapData = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, bitmap.PixelFormat);
-					dstBitmapData = bitmap2.LockBits(new Rectangle(0, 0, bitmap2.Width, bitmap2.Height), ImageLockMode.WriteOnly, bitmap2.PixelFormat);
-					
-					byte[] srcData = new byte[srcBitmapData.Stride * srcBitmapData.Height];
-					byte[] dstData = new byte[dstBitmapData.Stride * dstBitmapData.Height];
-					Marshal.Copy(srcBitmapData.Scan0, srcData, 0, srcData.Length);
-					
-					int srcBpp = bitmap.PixelFormat == PixelFormat.Format32bppArgb ? 4 : 3;
-					ImageProcessingOptimization.FastBitmapCopy(srcData, bitmap.Width, bitmap.Height, srcBitmapData.Stride, srcBpp,
-						dstData, width, height, dstBitmapData.Stride, num3, setSize, fillBackground);
-					
-					Marshal.Copy(dstData, 0, dstBitmapData.Scan0, dstData.Length);
-					
-					int num7 = width * height;
-					num8 = num7 * num3;
-					int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
-					raw = ByteArrayPool.Rent(num9);
-					Marshal.Copy(dstBitmapData.Scan0, raw, 0, num8);
-				}
-				finally
-				{
-					if (srcBitmapData != null) bitmap.UnlockBits(srcBitmapData);
-					if (dstBitmapData != null) bitmap2.UnlockBits(dstBitmapData);
-				}
-				bool flag = isNormalMap && num3 == 4;
-				for (int i = 0; i < num8; i += num3)
-				{
-					byte b = raw[i];
-					raw[i] = raw[i + 2];
-					raw[i + 2] = b;
-					if (flag)
-					{
-						raw[i + 3] = byte.MaxValue;
-					}
-				}
-				if (invert)
-				{
-					for (int j = 0; j < num8; j++)
-					{
-						int num10 = 255 - raw[j];
-						raw[j] = (byte)num10;
-					}
-				}
-				if (createAlphaFromGrayscale)
-				{
-					for (int k = 0; k < num8; k += 4)
-					{
-						int num11 = raw[k];
-						int num12 = raw[k + 1];
-						int num13 = raw[k + 2];
-						int num14 = (num11 + num12 + num13) / 3;
-						raw[k + 3] = (byte)num14;
-					}
-				}
-				if (createNormalFromBump)
-				{
-					ImageProcessingOptimization.OptimizedNormalMapGeneration(raw, width, height, bumpStrength);
+		protected void ProcessFromStream(Stream st)
+		{
+            // Use StbImageSharp for fast, thread-safe loading
+            StbImage.stbi_set_flip_vertically_on_load(1);
+            ImageResult image = null;
+            
+            Stream streamToUse = st;
+            MemoryStream ms = null;
+            
+            try 
+            {
+                if (!st.CanSeek)
+                {
+                    ms = new MemoryStream();
+                    byte[] buffer = ByteArrayPool.Rent(4096);
+                    try
+                    {
+                        int read;
+                        while ((read = st.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            ms.Write(buffer, 0, read);
+                        }
+                    }
+                    finally
+                    {
+                        ByteArrayPool.Return(buffer);
+                    }
+                    ms.Position = 0;
+                    streamToUse = ms;
+                }
+            
+                image = ImageResult.FromStream(streamToUse, ColorComponents.RedGreenBlueAlpha);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("StbImage FromStream Error: " + ex);
+            }
+            finally
+            {
+                if (ms != null) ms.Dispose();
+            }
+            
+            if (image == null) 
+            {
+                LogUtil.LogError("StbImage returned null for stream. Reason: " + StbImage.stbi__g_failure_reason);
+                return;
+            }
 
+            int srcWidth = image.Width;
+            int srcHeight = image.Height;
+            byte[] srcData = image.Data;
+            int srcStride = srcWidth * 4; // We requested RGBA
+            int srcBpp = 4;
+
+			if (!setSize)
+			{
+				width = srcWidth;
+				height = srcHeight;
+				if (compress)
+				{
+					int num = width / 4;
+					if (num == 0) num = 1;
+					width = num * 4;
+					int num2 = height / 4;
+					if (num2 == 0) num2 = 1;
+					height = num2 * 4;
 				}
-				solidBrush.Dispose();
-				bitmap.Dispose();
-				bitmap2.Dispose();
 			}
+			int num3 = 3;
+			textureFormat = TextureFormat.RGB24;
+			
+            // Use RGBA if alpha requested or source suggests it
+			if (createAlphaFromGrayscale || isNormalMap || createNormalFromBump || image.SourceComp == ColorComponents.RedGreenBlueAlpha)
+			{
+				textureFormat = TextureFormat.RGBA32;
+				num3 = 4;
+			}
+            
+            // Destination Buffer
+            int dstStride = width * num3;
+			int num7 = width * height;
+			int num8 = num7 * num3;
+            byte[] dstData = new byte[num8];
+
+            // Use FastBitmapCopy to Resize/Crop/Format Convert
+			ImageProcessingOptimization.FastBitmapCopy(srcData, srcWidth, srcHeight, srcStride, srcBpp,
+				dstData, width, height, dstStride, num3, setSize, fillBackground);
+
+			int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
+			raw = ByteArrayPool.Rent(num9);
+            Array.Copy(dstData, raw, num8);
+
+            // Post Processing
+			bool flag = isNormalMap && num3 == 4;
+            if (flag)
+            {
+                for (int i = 0; i < num8; i += 4)
+                {
+                    raw[i + 3] = 255;
+                }
+            }
+
+			if (invert)
+			{
+				for (int j = 0; j < num8; j++)
+				{
+					int num10 = 255 - raw[j];
+					raw[j] = (byte)num10;
+				}
+			}
+			if (createAlphaFromGrayscale)
+			{
+				for (int k = 0; k < num8; k += 4)
+				{
+					int num11 = raw[k];
+					int num12 = raw[k + 1];
+					int num13 = raw[k + 2];
+					int num14 = (num11 + num12 + num13) / 3;
+					raw[k + 3] = (byte)num14;
+				}
+			}
+			if (createNormalFromBump)
+			{
+				ImageProcessingOptimization.OptimizedNormalMapGeneration(raw, width, height, bumpStrength);
+			}
+		}
 
 			public void Process()
 			{
@@ -448,8 +472,29 @@ namespace var_browser
 					}
 					else if (FileManager.FileExists(imgPath))
 					{
+                        bool loadedFromGalleryCache = false;
+                        if (isThumbnail)
+                        {
+                            FileEntry fe = FileManager.GetFileEntry(imgPath);
+                            if (fe != null)
+                            {
+                                int w, h;
+                                TextureFormat fmt;
+                                byte[] data;
+                                if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, fe.LastWriteTime.ToFileTime(), out data, out w, out h, out fmt))
+                                {
+                                    raw = data;
+                                    width = w;
+                                    height = h;
+                                    textureFormat = fmt;
+                                    preprocessed = true;
+                                    loadedFromGalleryCache = true;
+                                }
+                            }
+                        }
+
 						string diskCachePath = GetDiskCachePath();
-						if (MVR.FileManagement.CacheManager.CachingEnabled && diskCachePath != null && FileManager.FileExists(diskCachePath))
+						if (!loadedFromGalleryCache && MVR.FileManagement.CacheManager.CachingEnabled && diskCachePath != null && FileManager.FileExists(diskCachePath))
 						{
 							try
 							{
@@ -487,21 +532,24 @@ namespace var_browser
 						}
 						else
 						{
-							try
-							{
-								// Load image from a var package
-								using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
-								{
-									Stream stream = fileEntryStream.Stream;
-									ProcessFromStream(stream);
-								}
-							}
-							catch (Exception ex4)
-							{
-								hadError = true;
-								LogUtil.LogError("Exception " + ex4 + " " + imgPath);
-								errorText = ex4.ToString();
-							}
+                            if (!loadedFromGalleryCache)
+                            {
+							    try
+							    {
+								    // Load image from a var package
+								    using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
+								    {
+									    Stream stream = fileEntryStream.Stream;
+									    ProcessFromStream(stream);
+								    }
+							    }
+							    catch (Exception ex4)
+							    {
+								    hadError = true;
+								    LogUtil.LogError("Exception " + ex4 + " " + imgPath);
+								    errorText = ex4.ToString();
+							    }
+                            }
 						}
 					}
 					//else
@@ -536,6 +584,13 @@ namespace var_browser
 				}
 				bool flag = (!createMipMaps || !compress || (IsPowerOfTwo((uint)width) && IsPowerOfTwo((uint)height))) && compress;
 				CreateTexture();
+                if (tex == null)
+                {
+                    LogUtil.LogError("Failed to create texture in Finish() for " + imgPath);
+                    hadError = true;
+                    return;
+                }
+
 				if (preprocessed)
 				{
 					try
@@ -575,7 +630,29 @@ namespace var_browser
 					{
 						tex.Compress(true);
 					}
-					if (MVR.FileManagement.CacheManager.CachingEnabled)
+                    bool savedToGalleryCache = false;
+                    if (isThumbnail && GalleryThumbnailCache.Instance != null && !Regex.IsMatch(imgPath, "^http"))
+                    {
+                         try
+                         {
+                             if (FileManager.FileExists(imgPath))
+                             {
+                                 FileEntry fe = FileManager.GetFileEntry(imgPath);
+                                 if (fe != null)
+                                 {
+                                     byte[] rawTextureData2 = tex.GetRawTextureData();
+                                     GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, fe.LastWriteTime.ToFileTime());
+                                     savedToGalleryCache = true;
+                                 }
+                             }
+                         }
+                         catch (Exception ex)
+                         {
+                             LogUtil.LogError("Exception during gallery caching " + ex);
+                         }
+                    }
+
+					if (!savedToGalleryCache && MVR.FileManagement.CacheManager.CachingEnabled)
 					{
 						string text = ((!Regex.IsMatch(imgPath, "^http")) ? GetDiskCachePath() : GetWebCachePath());
 						if (text != null && !FileManager.FileExists(text))
@@ -661,7 +738,7 @@ namespace var_browser
 			public volatile bool kill;
 		}
 
-		public static var_browser.CustomImageLoaderThreaded singleton;
+		public static VPB.CustomImageLoaderThreaded singleton;
 
 		public GameObject progressHUD;
 
@@ -850,6 +927,21 @@ namespace var_browser
 			return null;
 		}
 
+        public void CancelGroup(string groupId)
+        {
+            if (string.IsNullOrEmpty(groupId)) return;
+            if (queuedImages != null && queuedImages.data != null)
+            {
+                foreach(var qi in queuedImages.data)
+                {
+                    if (qi.groupId == groupId)
+                    {
+                        qi.cancel = true;
+                    }
+                }
+            }
+        }
+
         public void QueueImage(QueuedImage qi)
         {
             //if (ImageLoadingMgr.singleton.Request(qi))
@@ -868,12 +960,10 @@ namespace var_browser
         public void QueueThumbnail(QueuedImage qi)
         {
             qi.isThumbnail = true;
-            //if (ImageLoadingMgr.singleton.Request(qi))
-            //    return;
-
+            // LogUtil.Log("QueueThumbnail: " + qi.imgPath);
             if (queuedImages != null)
             {
-                qi.priority = 1000;
+                // qi.priority = 1000; // Don't overwrite if set by caller
                 qi.insertionIndex = ++_insertionOrderCounter;
                 queuedImages.Enqueue(qi);
             }
@@ -1161,7 +1251,7 @@ namespace var_browser
 
         public class PriorityQueue<T>
         {
-            private List<T> data;
+            public List<T> data;
             private Comparison<T> comparison;
 
             public PriorityQueue(Comparison<T> comparison)

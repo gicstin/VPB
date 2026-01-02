@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
-namespace var_browser
+namespace VPB
 {
 	public abstract class DirectoryEntry
 	{

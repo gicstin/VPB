@@ -4,7 +4,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
-namespace var_browser
+namespace VPB
 {
 	[System.Serializable]
 	public class SerializableFavorite
@@ -83,11 +83,7 @@ namespace var_browser
 		}
 		public override bool IsFavorite()
 		{
-			string key = this.Package.Creator + "." + this.Package.Name + ":" + InternalPath;
-
-			if (FavoriteLookup.Contains(key))
-				return true;
-			return false;
+			return FavoritesManager.Instance.IsFavorite(this);
 		}
 		public override bool IsAutoInstall()
 		{
@@ -99,30 +95,7 @@ namespace var_browser
 		}
 		public override void SetFavorite(bool b)
 		{
-			//string key = this.Package.Uid + ":" + InternalPath;
-			string key = this.Package.Creator+"."+this.Package.Name+ ":" + InternalPath;
-			if (b)
-			{
-				FavoriteLookup.Add(key);
-			}
-			else
-			{
-				FavoriteLookup.Remove(key);
-			}
-
-			if (!Directory.Exists(GlobalInfo.FavoriteDirectory))
-			{
-				Directory.CreateDirectory(GlobalInfo.FavoriteDirectory);
-			}
-
-			SerializableFavorite sf = new SerializableFavorite();
-			var list = new List<string>();
-			foreach(var item in FavoriteLookup)
-            {
-				list.Add(item);
-            }
-			sf.FavoriteNames = list.ToArray();
-			File.WriteAllText(GlobalInfo.FavoritePath, JsonUtility.ToJson(sf));
+			FavoritesManager.Instance.SetFavorite(this, b);
 		}
 
         public override bool SetAutoInstall(bool b)

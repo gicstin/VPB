@@ -10,7 +10,7 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Profiling;
 
-namespace var_browser
+namespace VPB
 {
     class LogUtil
     {

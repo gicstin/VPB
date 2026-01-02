@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Text;
 
-namespace var_browser
+namespace VPB
 {
     class Tools
     {

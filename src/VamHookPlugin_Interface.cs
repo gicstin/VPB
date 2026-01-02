@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using HarmonyLib;
 
-namespace var_browser
+namespace VPB
 {
     public partial class VamHookPlugin
     {
@@ -52,6 +52,26 @@ namespace var_browser
 
         public void OpenGallery()
         {
+            // 1. Try to restore using category name (supports "Scenes", "Clothing" etc. stored by Gallery UI)
+            if (Gallery.singleton != null)
+            {
+                if (!m_GalleryCatsInited) InitGalleryCategories();
+                
+                string lastPageName = (Settings.Instance != null && Settings.Instance.LastGalleryPage != null) ? Settings.Instance.LastGalleryPage.Value : "";
+                if (!string.IsNullOrEmpty(lastPageName) && m_GalleryCategories != null)
+                {
+                    foreach (var cat in m_GalleryCategories)
+                    {
+                        if (string.Equals(cat.name, lastPageName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Gallery.singleton.Show(cat.name, cat.extension, cat.path);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // 2. Fallback to Enum-based restore (supports "CategoryScene" etc. stored by hotkeys/legacy)
             switch (GetLastGalleryPage())
             {
                 case GalleryPage.CategoryScene: OpenCategoryScene(); break;
@@ -79,6 +99,91 @@ namespace var_browser
         void OpenFileBrowser(string msg)
         {
             LogUtil.Log("receive OpenFileBrowser "+ msg);
+        }
+
+        private bool m_GalleryCatsInited = false;
+        private List<Gallery.Category> m_GalleryCategories;
+
+        private void InitGalleryCategories()
+        {
+            if (Gallery.singleton == null) return;
+            
+            if (m_GalleryCategories == null)
+            {
+                m_GalleryCategories = new List<Gallery.Category>();
+                HashSet<string> usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // Helper to add categories while tracking names
+                Action<string, string, string> addCat = (name, ext, path) => {
+                    if (!usedNames.Contains(name)) {
+                        m_GalleryCategories.Add(new Gallery.Category { name = name, extension = ext, path = path });
+                        usedNames.Add(name);
+                    }
+                };
+
+                // 1. Static/Legacy Categories
+                addCat("Scenes", "json", "Saves/scene");
+                addCat("SubScenes", "json", "Custom/SubScene");
+                addCat("Clothing", "vam", "Custom/Clothing");
+                addCat("Hair", "vam", "Custom/Hair");
+                addCat("Person", "json", "Saves/Person");
+                addCat("P.Clothing", "vap", "Custom/Clothing");
+                addCat("P.Hair", "vap", "Custom/Hair");
+                // Note: "Pose" removed from hardcoded list to be discovered dynamically
+
+                // 2. Dynamic Discovery from Custom/Atom
+                string atomRoot = "Custom/Atom";
+                if (Directory.Exists(atomRoot))
+                {
+                    try
+                    {
+                        foreach (string atomPath in Directory.GetDirectories(atomRoot))
+                        {
+                            string atomType = Path.GetFileName(atomPath);
+                            
+                            foreach (string resourcePath in Directory.GetDirectories(atomPath))
+                            {
+                                string resourceName = Path.GetFileName(resourcePath);
+                                string finalName = resourceName;
+
+                                // Handle name collisions (e.g. if "Clothing" exists in Atom/Person/Clothing, rename to "Person Clothing")
+                                if (usedNames.Contains(finalName))
+                                {
+                                    finalName = atomType + " " + resourceName;
+                                }
+
+                                // Determine extension
+                                string ext = "vap";
+                                if (string.Equals(resourceName, "Pose", StringComparison.OrdinalIgnoreCase))
+                                    ext = "json|vap";
+                                
+                                // Use forward slashes for path to maintain consistency
+                                string finalPath = resourcePath.Replace("\\", "/");
+                                
+                                addCat(finalName, ext, finalPath);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("Error discovering categories: " + ex.Message);
+                    }
+                }
+
+                addCat("All", "var", "");
+            }
+            
+            Gallery.singleton.SetCategories(m_GalleryCategories);
+            m_GalleryCatsInited = true;
+        }
+
+        private void ShowGallery(string title, string extension, string path)
+        {
+            if (Gallery.singleton != null)
+            {
+                if (!m_GalleryCatsInited) InitGalleryCategories();
+                Gallery.singleton.Show(title, extension, path);
+            }
         }
 
         public void Refresh()
@@ -216,73 +321,67 @@ namespace var_browser
         public void OpenCustomScene()
         {
             SetLastGalleryPage(GalleryPage.CustomScene);
-            // Custom content does not require installation
-            m_FileBrowser.onlyInstalled = false;
-            ShowFileBrowser("Custom Scene", "json", "Saves/scene", true);
+            ShowGallery("Custom Scene", "json", "Saves/scene");
         }
         public void OpenCustomSavedPerson()
         {
             SetLastGalleryPage(GalleryPage.CustomSavedPerson);
-            // Custom content does not require installation
-            m_FileBrowser.onlyInstalled = false;
-            ShowFileBrowser("Custom Saved Person", "json", "Saves/Person", true);
+            ShowGallery("Custom Saved Person", "json", "Saves/Person");
         }
         public void OpenPersonPreset()
         {
             SetLastGalleryPage(GalleryPage.CustomPersonPreset);
-            // Custom content does not require installation
-            m_FileBrowser.onlyInstalled = false;
-            ShowFileBrowser("Custom Person Preset", "vap", "Custom/Atom/Person", true, false);
+            ShowGallery("Custom Person Preset", "vap", "Custom/Atom/Person");
         }
         public void OpenCategoryScene()
         {
             SetLastGalleryPage(GalleryPage.CategoryScene);
-            ShowFileBrowser("Category Scene", "json", "Saves/scene");
+            ShowGallery("Category Scene", "json", "Saves/scene");
         }
         public void OpenCategoryClothing()
         {
             SetLastGalleryPage(GalleryPage.CategoryClothing);
-            ShowFileBrowser("Category Clothing", "vam", "Custom/Clothing", false, false);
+            ShowGallery("Category Clothing", "vam", "Custom/Clothing");
         }
         public void OpenCategoryHair()
         {
             SetLastGalleryPage(GalleryPage.CategoryHair);
-            ShowFileBrowser("Category Hair", "vam", "Custom/Hair", false, false);
+            ShowGallery("Category Hair", "vam", "Custom/Hair");
         }
         public void OpenCategoryPose()
         {
             SetLastGalleryPage(GalleryPage.CategoryPose);
-            ShowFileBrowser("Category Pose", "json|vap", "Custom/Atom/Person/Pose", false, false);
+            ShowGallery("Category Pose", "json|vap", "Custom/Atom/Person/Pose");
         }
         public void OpenPresetPerson()
         {
             SetLastGalleryPage(GalleryPage.PresetPerson);
-            ShowFileBrowser("Preset Person", "vap", "Custom/Atom/Person", false, false);
+            ShowGallery("Preset Person", "vap", "Custom/Atom/Person");
         }
         public void OpenPresetClothing()
         {
             SetLastGalleryPage(GalleryPage.PresetClothing);
-            ShowFileBrowser("Preset Clothing", "vap", "Custom/Clothing", false, false);
+            ShowGallery("Preset Clothing", "vap", "Custom/Clothing");
         }
         public void OpenPresetHair()
         {
             SetLastGalleryPage(GalleryPage.PresetHair);
-            ShowFileBrowser("Preset Hair", "vap", "Custom/Hair", false, false);
+            ShowGallery("Preset Hair", "vap", "Custom/Hair");
         }
         public void OpenPresetOther()
         {
             SetLastGalleryPage(GalleryPage.PresetOther);
-            ShowFileBrowser("Preset Other", "vap", "Custom", false, false);
+            ShowGallery("Preset Other", "vap", "Custom");
         }
         public void OpenMiscCUA()
         {
             SetLastGalleryPage(GalleryPage.MiscAssetBundle);
-            ShowFileBrowser("AssetBundle", "assetbundle", "Custom", false, false);
+            ShowGallery("AssetBundle", "assetbundle", "Custom");
         }
         public void OpenMiscAll()
         {
             SetLastGalleryPage(GalleryPage.MiscAll);
-            ShowFileBrowser("All", "var", "", false, false);
+            ShowGallery("All", "var", "");
         }
     }
 }

@@ -4,7 +4,7 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace var_browser
+namespace VPB
 {
     public static class UnityEngineHook
     {

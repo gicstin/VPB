@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
-namespace var_browser
+namespace VPB
 {
     /// <summary>
     /// Custom var package ID scanner

@@ -5,7 +5,7 @@ using System.IO;
 using System.Reflection;
 using UnityEngine;
 
-namespace var_browser
+namespace VPB
 {
     static class VdsLauncher
     {

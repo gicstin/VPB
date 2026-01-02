@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 
-namespace var_browser
+namespace VPB
 {
     public class HubResourceItemUI : MonoBehaviour
     {

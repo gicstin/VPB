@@ -12,7 +12,7 @@ using UnityEngine.UI;
 using ZenFulcrum.EmbeddedBrowser;
 //using MVR.Hub;
 
-namespace var_browser
+namespace VPB
 {
     public class HubBrowse : JSONStorable
     {
@@ -1569,7 +1569,7 @@ namespace var_browser
                     yield return BinaryGetRequest(request,request.url, request.startedCallback, request.successCallback, request.errorCallback, request.progressCallback, hubCookies);
                     if (downloadQueue.Count == 0)
                     {
-                        var_browser.FileManager.Refresh();
+                        VPB.FileManager.Refresh();
                     }
                 }
                 else

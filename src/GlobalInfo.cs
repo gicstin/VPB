@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace var_browser
+namespace VPB
 {
 
     // 1. Package names cannot be corrected.

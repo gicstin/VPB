@@ -8,7 +8,7 @@ using SimpleJSON;
 using UnityEngine;
 using Valve.Newtonsoft.Json.Linq;
 
-namespace var_browser
+namespace VPB
 {
     /// <summary>
     /// Textures may need to be read later, so we cannot discard the CPU-side memory.
@@ -1288,7 +1288,7 @@ namespace var_browser
 
             try
             {
-                var pkg = var_browser.FileManager.GetPackage(packageLatestRef);
+                var pkg = VPB.FileManager.GetPackage(packageLatestRef);
                 if (pkg == null) return null;
 
                 VarPackageGroup group = pkg.Group;

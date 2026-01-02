@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace var_browser
+namespace VPB
 {
     class Messager : MonoBehaviour
     {

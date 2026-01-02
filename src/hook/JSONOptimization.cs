@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using SimpleJSON;
 
-namespace var_browser
+namespace VPB
 {
     public static class JSONOptimization
     {

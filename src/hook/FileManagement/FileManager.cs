@@ -7,9 +7,11 @@ using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
+//using System.Threading.Tasks;
+using System.Linq;
 using UnityEngine;
 using Prime31.MessageKit;
-namespace var_browser
+namespace VPB
 {
 	public class FileManager : MonoBehaviour
 	{
@@ -704,41 +706,69 @@ namespace var_browser
 		Coroutine m_Co = null;
 		IEnumerator ScanVarPackage(bool clean, List<VarPackage> invalid)
 		{
-			int cnt = 0;
 			int allCount = packagesByUid.Count;
 			int idx = 0;
-			List<string> list = new List<string>();
-			foreach (var item in packagesByUid)
-			{
-				list.Add(item.Key);
-			}
-			int step = 20;
-            if (VarPackageMgr.singleton.existCache)
-            {
-				step = 200;
-            }
-			for (int i = 0; i < list.Count; i++)
-            {
-				string uid = list[i];
-                if (packagesByUid.ContainsKey(uid))
-                {
-					var pkg = packagesByUid[uid];
-					if (cnt > step)
-					{
-						yield return null;
-						cnt = 0;
-					}
-					ScanAndRegister(pkg);
-					if (pkg.invalid)
-					{
-						invalid.Add(pkg);
-					}
-				}
-				idx++;
-				MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+			List<VarPackage> list = new List<VarPackage>(packagesByUid.Values);
 
-				cnt++;
-			}
+            // Parallel Scan Settings
+            int batchSize = 50; 
+            List<string> errors = new List<string>();
+
+			for (int i = 0; i < list.Count; i += batchSize)
+            {
+                int count = Math.Min(batchSize, list.Count - i);
+                var batch = list.GetRange(i, count);
+                errors.Clear();
+                object errorLock = new object();
+                int pending = count;
+                // ManualResetEvent to wait for all items in batch
+                // Note: In .NET 3.5 we don't have CountdownEvent
+                ManualResetEvent doneEvent = new ManualResetEvent(false);
+
+                // Run Scan in parallel using ThreadPool
+                foreach (var pkg in batch)
+                {
+                    ThreadPool.QueueUserWorkItem((state) => {
+                        VarPackage p = (VarPackage)state;
+                        try {
+                            p.Scan();
+                        } catch (Exception ex) {
+                            lock(errorLock) {
+                                errors.Add("Error scanning " + p.Path + ": " + ex.Message);
+                            }
+                        } finally {
+                            // Decrement pending count, if 0 set event
+                            if (Interlocked.Decrement(ref pending) == 0) {
+                                doneEvent.Set();
+                            }
+                        }
+                    }, pkg);
+                }
+
+                // Wait for batch to complete while keeping Unity main thread responsive
+                // WaitOne(0) checks state without blocking
+                while (!doneEvent.WaitOne(0)) yield return null;
+                doneEvent.Close();
+                
+                // Log errors on main thread
+                foreach(var err in errors) LogUtil.LogError(err);
+
+                // Register on Main Thread
+                foreach (var pkg in batch)
+                {
+                    if (pkg.invalid)
+                    {
+                        invalid.Add(pkg);
+                    }
+                    else
+                    {
+                        RegisterFileEntry(pkg);
+                    }
+                }
+
+                idx += count;
+				MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+            }
 		}
 
 		public List<string> GetAllVars()

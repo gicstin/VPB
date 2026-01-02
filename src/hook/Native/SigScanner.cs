@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Globalization;
 
-namespace var_browser.Native
+namespace VPB.Native
 {
     public static class SigScanner
     {
