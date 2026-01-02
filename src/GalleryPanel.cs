@@ -188,11 +188,25 @@ namespace VPB
             // IsUndocked = isUndocked; // Removed
             // string nameSuffix = isUndocked ? "_Undocked" : "";
             GameObject canvasGO = new GameObject("VPB_GalleryCanvas");
+            canvasGO.layer = 5; // UI layer
             canvas = canvasGO.AddComponent<Canvas>();
             RectTransform canvasRT = canvasGO.GetComponent<RectTransform>();
             canvasRT.sizeDelta = new Vector2(1200, 800);
-            canvasGO.AddComponent<GraphicRaycaster>();
-
+            
+            // Note: In VaM VR, standard GraphicRaycaster often conflicts or is ignored.
+            // We rely on BoxCollider for the main panel background hit detection.
+            // Adding GraphicRaycaster but disabling it by default unless needed for non-VR mouse interaction?
+            // Actually, let's keep it simple: relying on BoxCollider with offset seems to be the intended path for VaM UI panels.
+            // But user said offset didn't work. The key might be that the collider MUST be there for the laser to "stop"
+            // but the "dimming" means it thinks it's penetrating.
+            // The resize handles work because they have small colliders or none?
+            // Resize handles in this code do NOT have colliders added explicitly! They just use Image + UIHoverBorder/UIHoverColor.
+            // So if resize handles work WITHOUT collider, we should aim for that.
+            
+            // Standard GraphicRaycaster is needed for UI elements without colliders.
+            GraphicRaycaster gr = canvasGO.AddComponent<GraphicRaycaster>();
+            gr.ignoreReversedGraphics = true;
+            
             if (SuperController.singleton != null)
                 SuperController.singleton.AddCanvas(canvas);
 
@@ -200,7 +214,7 @@ namespace VPB
             {
                 canvas.renderMode = RenderMode.WorldSpace;
                 canvas.worldCamera = Camera.main;
-                canvas.sortingOrder = 0;
+                canvas.sortingOrder = -10000;
                 // Position will be set in Show()
                 canvas.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
                 canvasGO.layer = 5; // UI layer
@@ -215,6 +229,14 @@ namespace VPB
 
             // Background
             backgroundBoxGO = UI.AddChildGOImage(canvasGO, new Color(0.1f, 0.1f, 0.1f, 0.9f), AnchorPresets.centre, 1200, 800, Vector2.zero);
+            
+            // Add UIHoverColor (This handles hover/drag color changes AND sets raycast target properly)
+            UIHoverColor bgHover = backgroundBoxGO.AddComponent<UIHoverColor>();
+            bgHover.targetImage = backgroundBoxGO.GetComponent<Image>();
+            bgHover.normalColor = new Color(0.1f, 0.1f, 0.1f, 0.9f);
+            bgHover.hoverColor = new Color(0.1f, 0.1f, 0.1f, 0.9f); // Same color for now, but ensures interaction
+            
+            // AddHoverDelegate
             AddHoverDelegate(backgroundBoxGO);
             
             UIDraggable dragger = backgroundBoxGO.AddComponent<UIDraggable>();
@@ -503,7 +525,7 @@ namespace VPB
                 if (_cachedCamera != null)
                 {
                     float dist = Vector3.Distance(_cachedCamera.transform.position, canvas.transform.position);
-                    int order = 20000 - (int)(dist * 100);
+                    int order = -10000 - (int)(dist * 100);
                     if (canvas.sortingOrder != order)
                     {
                         canvas.sortingOrder = order;
@@ -575,14 +597,11 @@ namespace VPB
             // Pointer Dot Logic
             if (pointerDotGO != null)
             {
-                if (hoverCount > 0 && currentPointerData != null)
+                if (hoverCount > 0 && currentPointerData != null && currentPointerData.pointerCurrentRaycast.isValid)
                 {
-                    // Check if we are still hitting something valid
-                    // Note: pointerCurrentRaycast.isValid might be true even if not hitting THIS panel, 
-                    // but hoverCount ensures we are hitting this panel's elements.
-                    
                     if (!pointerDotGO.activeSelf) pointerDotGO.SetActive(true);
-                    pointerDotGO.transform.position = currentPointerData.pointerCurrentRaycast.worldPosition - canvas.transform.forward * 0.001f;
+                    // Use standard 5mm offset to prevent z-fighting
+                    pointerDotGO.transform.position = currentPointerData.pointerCurrentRaycast.worldPosition - canvas.transform.forward * 0.005f;
                     pointerDotGO.transform.SetAsLastSibling(); 
                 }
                 else
@@ -848,6 +867,7 @@ namespace VPB
             GameObject textGO = new GameObject("Text");
             textGO.transform.SetParent(handleGO.transform, false);
             Text t = textGO.AddComponent<Text>();
+            t.raycastTarget = false;
             t.text = "◢";
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             t.fontSize = 36; // Increased size
@@ -873,6 +893,8 @@ namespace VPB
             hover.targetText = t;
             hover.normalColor = t.color;
             hover.hoverColor = Color.green;
+            
+            AddHoverDelegate(handleGO); // Ensure tracking works here too
         }
 
         public void SetCategories(List<Gallery.Category> cats)
