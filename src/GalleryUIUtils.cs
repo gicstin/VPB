@@ -333,7 +333,7 @@ namespace VPB
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
 
-        private enum ItemType { Clothing, Hair, Pose, Skin, Morphs, Appearance, Animation, BreastPhysics, GlutePhysics, Plugins, General, ClothingItem, HairItem, SubScene, Other }
+        private enum ItemType { Clothing, Hair, Pose, Skin, Morphs, Appearance, Animation, BreastPhysics, GlutePhysics, Plugins, General, ClothingItem, HairItem, SubScene, Scene, Other }
 
         private ItemType GetItemType(FileEntry entry)
         {
@@ -359,6 +359,16 @@ namespace VPB
             
             // Check for subscenes
             if (p.IndexOf("Custom/SubScene", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.SubScene;
+
+            // Scenes
+            if (p.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0 || p.IndexOf("/scene/", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                if (p.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return ItemType.Scene;
+            }
+            if (p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && p.IndexOf("scene", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return ItemType.Scene;
+            }
             
             return ItemType.Other;
         }
@@ -391,11 +401,16 @@ namespace VPB
 
             isDraggingItem = true;
             CreateGhost(eventData);
+            if (Panel != null)
+            {
+                Panel.ShowCancelDropZone(true);
+            }
 
             string msg;
             float dist;
             Atom atom = DetectAtom(eventData, out msg, out dist);
-            if (Panel != null) Panel.SetStatus(msg);
+            bool overCancel = Panel != null && Panel.IsPointerOverCancelDropZone(eventData);
+            if (Panel != null) Panel.SetStatus(overCancel ? "Drop to cancel" : msg);
             
             UpdateGhost(eventData, atom, dist);
         }
@@ -411,7 +426,8 @@ namespace VPB
                 UpdateGhost(eventData, atom, dist);
                 if (Panel != null)
                 {
-                     Panel.SetStatus(msg);
+                     bool overCancel = Panel.IsPointerOverCancelDropZone(eventData);
+                     Panel.SetStatus(overCancel ? "Drop to cancel" : msg);
                 }
             }
         }
@@ -420,10 +436,21 @@ namespace VPB
         {
             if (isDraggingItem)
             {
+                bool cancelDrop = Panel != null && Panel.IsPointerOverCancelDropZone(eventData);
                 DestroyGhost();
                 isDraggingItem = false;
                 
-                if (Panel != null) Panel.SetStatus("");
+                if (Panel != null)
+                {
+                    Panel.ShowCancelDropZone(false);
+                    Panel.SetStatus("");
+                }
+
+                if (cancelDrop)
+                {
+                    dragCam = null;
+                    return;
+                }
 
                 ItemType itemType = GetItemType(FileEntry);
                 
@@ -431,6 +458,10 @@ namespace VPB
                 if (itemType == ItemType.SubScene && FileEntry != null)
                 {
                     LoadSubScene(FileEntry.Uid);
+                }
+                else if (itemType == ItemType.Scene && FileEntry != null)
+                {
+                    LoadSceneFile(FileEntry.Uid);
                 }
                 else
                 {
@@ -454,6 +485,7 @@ namespace VPB
                 if (Panel != null) Panel.SetStatus("");
                 dragCam = null;
             }
+            if (Panel != null) Panel.ShowCancelDropZone(false);
         }
 
         public void OnApplicationFocus(bool hasFocus)
@@ -465,6 +497,7 @@ namespace VPB
                 if (Panel != null) Panel.SetStatus("");
                 dragCam = null;
             }
+            if (!hasFocus && Panel != null) Panel.ShowCancelDropZone(false);
         }
 
         private Atom DetectAtom(PointerEventData eventData, out string statusMsg, out float distance)
@@ -486,6 +519,10 @@ namespace VPB
             {
                 statusMsg = $"Drop to load SubScene: {FileEntry.Name}";
             }
+            else if (itemType == ItemType.Scene)
+            {
+                statusMsg = $"Release to launch scene {FileEntry.Name}";
+            }
             else if (atom != null && atom.type == "Person")
             {
                  string action = (Panel != null && Panel.DragDropReplaceMode) ? "Replacing" : "Adding";
@@ -502,15 +539,7 @@ namespace VPB
 
         private void LoadSubScene(string path)
         {
-            bool installed = false;
-            if (FileEntry is VarFileEntry varEntry && varEntry.Package != null)
-            {
-                installed = varEntry.Package.InstallRecursive();
-            }
-            else if (FileEntry is SystemFileEntry sysEntry && sysEntry.package != null)
-            {
-                installed = sysEntry.package.InstallRecursive();
-            }
+            bool installed = EnsureInstalled();
 
             if (installed)
             {
@@ -518,14 +547,7 @@ namespace VPB
                 FileManager.Refresh();
             }
 
-            string normalizedPath = path.Replace('\\', '/');
-            string currentDir = Directory.GetCurrentDirectory().Replace('\\', '/');
-            
-            if (normalizedPath.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase))
-            {
-                normalizedPath = normalizedPath.Substring(currentDir.Length);
-                if (normalizedPath.StartsWith("/")) normalizedPath = normalizedPath.Substring(1);
-            }
+            string normalizedPath = NormalizePath(path);
 
             LogUtil.Log($"[DragDropDebug] Loading SubScene: {normalizedPath}");
             
@@ -536,6 +558,32 @@ namespace VPB
             catch (Exception ex)
             {
                 LogUtil.LogError($"[DragDropDebug] Failed to load subscene: {ex.Message}");
+            }
+        }
+
+        private void LoadSceneFile(string path)
+        {
+            bool installed = EnsureInstalled();
+
+            if (installed)
+            {
+                MVR.FileManagement.FileManager.Refresh();
+                FileManager.Refresh();
+            }
+
+            string normalizedPath = NormalizePath(path);
+            LogUtil.Log($"[DragDropDebug] Loading Scene: {normalizedPath}");
+            try
+            {
+                SuperController sc = SuperController.singleton;
+                if (sc != null)
+                {
+                    sc.Load(normalizedPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[DragDropDebug] Failed to load scene: {ex.Message}");
             }
         }
 
@@ -570,7 +618,7 @@ namespace VPB
             }
         }
 
-        private void ApplyClothingToAtom(Atom atom, string path)
+        private bool EnsureInstalled()
         {
             bool installed = false;
             if (FileEntry is VarFileEntry varEntry && varEntry.Package != null)
@@ -581,13 +629,11 @@ namespace VPB
             {
                 installed = sysEntry.package.InstallRecursive();
             }
+            return installed;
+        }
 
-            if (installed)
-            {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
-            }
-
+        private string NormalizePath(string path)
+        {
             string normalizedPath = path.Replace('\\', '/');
             string currentDir = Directory.GetCurrentDirectory().Replace('\\', '/');
             
@@ -596,6 +642,20 @@ namespace VPB
                 normalizedPath = normalizedPath.Substring(currentDir.Length);
                 if (normalizedPath.StartsWith("/")) normalizedPath = normalizedPath.Substring(1);
             }
+            return normalizedPath;
+        }
+
+        private void ApplyClothingToAtom(Atom atom, string path)
+        {
+            bool installed = EnsureInstalled();
+
+            if (installed)
+            {
+                MVR.FileManagement.FileManager.Refresh();
+                FileManager.Refresh();
+            }
+
+            string normalizedPath = NormalizePath(path);
 
             string legacyPath = normalizedPath;
             int colonIndex = normalizedPath.IndexOf(":/");
@@ -965,10 +1025,12 @@ namespace VPB
              }
              
              RectTransform rt = ghostObject.GetComponent<RectTransform>();
+             if (rt == null) rt = ghostObject.AddComponent<RectTransform>();
              rt.sizeDelta = new Vector2(80, 80); 
              rt.pivot = new Vector2(0.5f, 0.5f);
              
-             RectTransform contentRT = contentGO.AddComponent<RectTransform>();
+             RectTransform contentRT = contentGO.GetComponent<RectTransform>();
+             if (contentRT == null) contentRT = contentGO.AddComponent<RectTransform>();
              contentRT.anchorMin = Vector2.zero;
              contentRT.anchorMax = Vector2.one;
              contentRT.offsetMin = new Vector2(5, 5);
@@ -985,9 +1047,37 @@ namespace VPB
              if (cam == null) cam = Camera.main;
              if (ghostObject == null || cam == null) return;
              
+             bool isCancelZone = Panel != null && Panel.IsPointerOverCancelDropZone(eventData);
+             if (isCancelZone)
+             {
+                 UpdateGhostPosition(eventData, false, distance);
+                 if (ghostBorder != null) ghostBorder.color = new Color(0.8f, 0.2f, 0.2f, 0.6f);
+                 if (ghostText != null)
+                 {
+                     ghostText.text = "Release to cancel";
+                     ghostText.color = new Color(1f, 0.7f, 0.7f);
+                 }
+                 return;
+             }
+             
              bool isValidTarget = (atom != null && atom.type == "Person");
+             ItemType itemType = GetItemType(FileEntry);
+             bool isHair = (itemType == ItemType.Hair || itemType == ItemType.HairItem);
+             bool isClothing = (itemType == ItemType.Clothing || itemType == ItemType.ClothingItem);
+             bool isScene = itemType == ItemType.Scene;
 
              UpdateGhostPosition(eventData, isValidTarget, distance);
+             
+             if (isScene)
+             {
+                 if (ghostBorder != null) ghostBorder.color = new Color(0.4f, 0.8f, 1f, 0.4f);
+                 if (ghostText != null)
+                 {
+                     ghostText.text = $"Release to launch scene\n{FileEntry.Name}";
+                     ghostText.color = new Color(0.6f, 0.9f, 1f);
+                 }
+                 return;
+             }
              
              if (isValidTarget)
              {
@@ -995,10 +1085,6 @@ namespace VPB
                  
                  if (ghostText != null)
                  {
-                     ItemType itemType = GetItemType(FileEntry);
-                     bool isHair = (itemType == ItemType.Hair || itemType == ItemType.HairItem);
-                     bool isClothing = (itemType == ItemType.Clothing || itemType == ItemType.ClothingItem);
-                     
                      HashSet<string> regions = isHair ? GetHairRegions(FileEntry) : GetClothingRegions(FileEntry);
 
                      string typeStr;

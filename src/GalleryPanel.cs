@@ -20,6 +20,7 @@ namespace VPB
         // private GameObject tabContainerGO; // Unused
         private ScrollRect scrollRect;
         private Text titleText;
+        private Text fpsText;
 
         public List<Gallery.Category> categories = new List<Gallery.Category>();
         // private List<FileEntry> currentFiles = new List<FileEntry>(); // Unused
@@ -98,6 +99,16 @@ namespace VPB
         private int hoverCount = 0;
         private GameObject pointerDotGO;
         private PointerEventData currentPointerData;
+        private List<RectTransform> cancelDropZoneRTs = new List<RectTransform>();
+        private List<Image> cancelDropZoneImages = new List<Image>();
+        private List<Text> cancelDropZoneTexts = new List<Text>();
+        private List<GameObject> cancelDropGroups = new List<GameObject>();
+        private Color cancelZoneNormalColor = new Color(0.25f, 0.05f, 0.05f, 0.8f);
+        private Color cancelZoneHoverColor = new Color(0.6f, 0.1f, 0.1f, 0.9f);
+
+        private float fpsTimer = 0f;
+        private int fpsFrames = 0;
+        private const float FpsInterval = 0.5f;
 
         private void AddHoverDelegate(GameObject go)
         {
@@ -242,20 +253,43 @@ namespace VPB
             UIDraggable dragger = backgroundBoxGO.AddComponent<UIDraggable>();
             dragger.target = canvasGO.transform;
 
-            // Title
+            // Title Bar
+            GameObject titleBarGO = new GameObject("TitleBar");
+            titleBarGO.transform.SetParent(backgroundBoxGO.transform, false);
+            RectTransform titleBarRT = titleBarGO.AddComponent<RectTransform>();
+            titleBarRT.anchorMin = new Vector2(0, 1);
+            titleBarRT.anchorMax = new Vector2(1, 1);
+            titleBarRT.pivot = new Vector2(0.5f, 1);
+            titleBarRT.anchoredPosition = new Vector2(0, -10);
+            titleBarRT.sizeDelta = new Vector2(0, 40);
+
             GameObject titleGO = new GameObject("Title");
-            titleGO.transform.SetParent(backgroundBoxGO.transform, false);
+            titleGO.transform.SetParent(titleBarGO.transform, false);
             titleText = titleGO.AddComponent<Text>();
             titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             titleText.fontSize = 30;
             titleText.color = Color.white;
-            titleText.alignment = TextAnchor.UpperCenter;
+            titleText.alignment = TextAnchor.MiddleLeft;
             RectTransform titleRT = titleGO.GetComponent<RectTransform>();
-            titleRT.anchorMin = new Vector2(0, 1);
-            titleRT.anchorMax = new Vector2(1, 1);
-            titleRT.pivot = new Vector2(0.5f, 1);
-            titleRT.anchoredPosition = new Vector2(0, -10);
-            titleRT.sizeDelta = new Vector2(0, 40);
+            titleRT.anchorMin = new Vector2(0, 0.5f);
+            titleRT.anchorMax = new Vector2(0, 0.5f);
+            titleRT.pivot = new Vector2(0, 0.5f);
+            titleRT.anchoredPosition = new Vector2(20, -2);
+            titleRT.sizeDelta = new Vector2(600, 40);
+
+            GameObject fpsGO = new GameObject("FPS");
+            fpsGO.transform.SetParent(titleBarGO.transform, false);
+            fpsText = fpsGO.AddComponent<Text>();
+            fpsText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            fpsText.fontSize = 24;
+            fpsText.color = Color.white;
+            fpsText.alignment = TextAnchor.MiddleRight;
+            RectTransform fpsRT = fpsGO.GetComponent<RectTransform>();
+            fpsRT.anchorMin = new Vector2(1, 0.5f);
+            fpsRT.anchorMax = new Vector2(1, 0.5f);
+            fpsRT.pivot = new Vector2(1, 0.5f);
+            fpsRT.anchoredPosition = new Vector2(-120, -2);
+            fpsRT.sizeDelta = new Vector2(140, 40);
 
             // Tab Area - Create for all panels so undocked can clone/filter
             if (true)
@@ -405,6 +439,9 @@ namespace VPB
                 GameObject leftUndoBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 6, AnchorPresets.centre, Undo);
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
                 leftUndoBtn.GetComponentInChildren<Text>().color = Color.white;
+
+                CreateCancelButtonsGroup(rightButtonsContainer, btnWidth, btnHeight, startY - spacing * 7 - 80f);
+                CreateCancelButtonsGroup(leftButtonsContainer, btnWidth, btnHeight, startY - spacing * 7 - 80f);
             }
 
             // Add Hover Delegates to all side buttons and containers
@@ -505,12 +542,94 @@ namespace VPB
             Hide();
         }
 
+        private void CreateCancelButtonsGroup(GameObject parent, float btnWidth, float btnHeight, float yOffset)
+        {
+            float tallHeight = btnHeight * 3f + 8f;
+            GameObject container = UI.AddChildGOImage(parent, new Color(0, 0, 0, 0.02f), AnchorPresets.centre, btnWidth, tallHeight, new Vector2(0, yOffset));
+            container.name = "CancelButtons";
+            VerticalLayoutGroup vlg = container.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = 0f;
+            vlg.childControlHeight = true;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childAlignment = TextAnchor.MiddleCenter;
+
+            GameObject btn = UI.CreateUIButton(container, btnWidth, tallHeight, "Release\nHere To\nCancel", 18, 0, 0, AnchorPresets.centre, null);
+            RectTransform rt = btn.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(btnWidth, tallHeight);
+            LayoutElement le = btn.AddComponent<LayoutElement>();
+            le.preferredHeight = tallHeight;
+            le.preferredWidth = btnWidth;
+
+            Image img = btn.GetComponent<Image>();
+            if (img != null) img.color = cancelZoneNormalColor;
+            Text t = btn.GetComponentInChildren<Text>();
+            if (t != null)
+            {
+                t.color = new Color(1f, 1f, 1f, 0.9f);
+                t.alignment = TextAnchor.MiddleCenter;
+                t.supportRichText = false;
+            }
+
+            cancelDropZoneRTs.Add(rt);
+            cancelDropZoneImages.Add(img);
+            cancelDropZoneTexts.Add(t);
+            AddHoverDelegate(btn);
+
+            AddHoverDelegate(container);
+            container.SetActive(false);
+            cancelDropGroups.Add(container);
+        }
+
         private string dragStatusMsg = null;
 
         public void SetStatus(string msg)
         {
             if (string.IsNullOrEmpty(msg)) dragStatusMsg = null;
             else dragStatusMsg = msg;
+        }
+
+        public void ShowCancelDropZone(bool show)
+        {
+            foreach (var g in cancelDropGroups)
+            {
+                if (g != null) g.SetActive(show);
+            }
+            if (show) UpdateCancelDropZoneVisual(-1);
+        }
+
+        public bool IsPointerOverCancelDropZone(PointerEventData eventData)
+        {
+            if (eventData == null || cancelDropZoneRTs.Count == 0) return false;
+            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : Camera.main;
+            int hoveredIndex = -1;
+            for (int i = 0; i < cancelDropZoneRTs.Count; i++)
+            {
+                RectTransform rt = cancelDropZoneRTs[i];
+                if (rt == null) continue;
+                if (RectTransformUtility.RectangleContainsScreenPoint(rt, eventData.position, cam))
+                {
+                    hoveredIndex = i;
+                    break;
+                }
+            }
+            UpdateCancelDropZoneVisual(hoveredIndex);
+            return hoveredIndex >= 0;
+        }
+
+        private void UpdateCancelDropZoneVisual(int hoveredIndex)
+        {
+            for (int i = 0; i < cancelDropZoneImages.Count; i++)
+            {
+                Image img = cancelDropZoneImages[i];
+                if (img != null) img.color = (i == hoveredIndex) ? cancelZoneHoverColor : cancelZoneNormalColor;
+            }
+            for (int i = 0; i < cancelDropZoneTexts.Count; i++)
+            {
+                Text t = cancelDropZoneTexts[i];
+                if (t != null) t.color = (i == hoveredIndex) ? Color.white : new Color(1f, 1f, 1f, 0.9f);
+            }
         }
 
         private Camera _cachedCamera;
@@ -548,6 +667,20 @@ namespace VPB
                      
                      SceneUtils.DetectAtom(Input.mousePosition, cam, out msg);
                      statusBarText.text = msg;
+                }
+            }
+
+            // FPS (lightweight, ~2Hz)
+            if (fpsText != null)
+            {
+                fpsTimer += Time.unscaledDeltaTime;
+                fpsFrames++;
+                if (fpsTimer >= FpsInterval)
+                {
+                    float fps = fpsFrames / fpsTimer;
+                    fpsText.text = string.Format("{0:0} FPS", fps);
+                    fpsTimer = 0f;
+                    fpsFrames = 0;
                 }
             }
 
