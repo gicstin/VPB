@@ -6,9 +6,10 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using UnityEngine.Events;
 
-namespace var_browser
+namespace VPB
 {
     public class GalleryPanel : MonoBehaviour
     {
@@ -24,6 +25,7 @@ namespace var_browser
         // private List<FileEntry> currentFiles = new List<FileEntry>(); // Unused
 
         private List<GameObject> activeButtons = new List<GameObject>();
+        private Stack<GameObject> fileButtonPool = new Stack<GameObject>();
         private Dictionary<string, Image> fileButtonImages = new Dictionary<string, Image>();
         private string selectedPath = null;
         private List<GameObject> leftActiveTabButtons = new List<GameObject>();
@@ -35,7 +37,7 @@ namespace var_browser
         public bool IsVisible => canvas != null && canvas.gameObject.activeSelf;
         
         public enum TabSide { Hidden, Left, Right }
-        public enum ContentType { Category, Creator, License }
+        public enum ContentType { Category, Creator, Status, License }
 
         // Configuration
         // public bool IsUndocked = false; // Removed
@@ -83,10 +85,41 @@ namespace var_browser
         private string categoryFilter = "";
         private string creatorFilter = "";
         private string currentLoadingGroupId = "";
+        
+        private bool filterFavorite = false;
 
         private InputField leftSearchInput;
         private InputField rightSearchInput;
         private Stack<GameObject> tabButtonPool = new Stack<GameObject>();
+
+        private List<CanvasGroup> sideButtonGroups = new List<CanvasGroup>();
+        private float sideButtonsAlpha = 1f;
+        private bool isResizing = false;
+        private int hoverCount = 0;
+        private GameObject pointerDotGO;
+        private PointerEventData currentPointerData;
+
+        private void AddHoverDelegate(GameObject go)
+        {
+            var del = go.AddComponent<UIHoverDelegate>();
+            del.OnHoverChange += (enter) => {
+                if (enter) hoverCount++;
+                else hoverCount--;
+            };
+            del.OnPointerEnterEvent += (d) => {
+                currentPointerData = d;
+            };
+        }
+
+        // Follow Mode Fields
+        private bool followUser = true;
+        private float lastFollowUpdateTime = 0f;
+        private const float FollowUpdateInterval = 0.5f; 
+        private Quaternion targetFollowRotation;
+        private Text rightFollowBtnText;
+        private Image rightFollowBtnImage;
+        private Text leftFollowBtnText;
+        private Image leftFollowBtnImage;
         
         public struct CreatorCacheEntry { public string Name; public int Count; }
         private List<CreatorCacheEntry> cachedCreators = new List<CreatorCacheEntry>();
@@ -182,6 +215,7 @@ namespace var_browser
 
             // Background
             backgroundBoxGO = UI.AddChildGOImage(canvasGO, new Color(0.1f, 0.1f, 0.1f, 0.9f), AnchorPresets.centre, 1200, 800, Vector2.zero);
+            AddHoverDelegate(backgroundBoxGO);
             
             UIDraggable dragger = backgroundBoxGO.AddComponent<UIDraggable>();
             dragger.target = canvasGO.transform;
@@ -217,7 +251,7 @@ namespace var_browser
                 rightTabContainerGO = rightTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
                 VerticalLayoutGroup rightVlg = rightTabContainerGO.GetComponent<VerticalLayoutGroup>();
                 rightVlg.spacing = 2;
-                rightVlg.padding = new RectOffset(0, 10, 0, 0);
+                rightVlg.padding = new RectOffset(5, 5, 0, 0);
 
                 rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth, (val) => {
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
@@ -241,7 +275,7 @@ namespace var_browser
                 leftTabContainerGO = leftTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
                 VerticalLayoutGroup leftVlg = leftTabContainerGO.GetComponent<VerticalLayoutGroup>();
                 leftVlg.spacing = 2;
-                leftVlg.padding = new RectOffset(0, 10, 0, 0);
+                leftVlg.padding = new RectOffset(5, 5, 0, 0);
 
                 leftSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth, (val) => {
                     if (leftActiveContent == ContentType.Category) categoryFilter = val;
@@ -254,75 +288,124 @@ namespace var_browser
                 lSearchRT.pivot = new Vector2(0, 1);
                 lSearchRT.anchoredPosition = new Vector2(10, -50);
 
+                // Right Button Container
+                GameObject rightButtonsContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleRight, 130, 430, new Vector2(120, 0));
+                sideButtonGroups.Add(rightButtonsContainer.AddComponent<CanvasGroup>());
+
                 // Right Toggle Buttons
+                int btnFontSize = 20;
+                float btnWidth = 120;
+                float btnHeight = 50;
+                float spacing = 60f;
+                float startY = 180f;
+
+                // Follow (Top)
+                GameObject rightFollowBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY, AnchorPresets.centre, ToggleFollowMode);
+                rightFollowBtnImage = rightFollowBtn.GetComponent<Image>();
+                rightFollowBtnText = rightFollowBtn.GetComponentInChildren<Text>();
+                rightFollowBtnImage.color = Color.gray;
+
                 // Clone (Gray)
-                GameObject rightCloneBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "〃", 30, 60, 180, AnchorPresets.middleRight, () => {
+                GameObject rightCloneBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true);
                 });
                 rightCloneBtn.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 1f);
 
                 // Category (Red)
-                GameObject rightCatBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, ">", 30, 60, 60, AnchorPresets.middleRight, () => ToggleRight(ContentType.Category));
+                GameObject rightCatBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Category));
                 rightCategoryBtnImage = rightCatBtn.GetComponent<Image>();
                 rightCategoryBtnImage.color = ColorCategory;
                 rightCategoryBtnText = rightCatBtn.GetComponentInChildren<Text>();
-                rightCategoryBtnText.text = "<";
+                // rightCategoryBtnText.text = "<"; // Set by create
                 
                 // Creator (Green)
-                GameObject rightCreatorBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, ">", 30, 60, -60, AnchorPresets.middleRight, () => ToggleRight(ContentType.Creator));
+                GameObject rightCreatorBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 3, AnchorPresets.centre, () => ToggleRight(ContentType.Creator));
                 rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
                 rightCreatorBtnImage.color = ColorCreator;
                 rightCreatorBtnText = rightCreatorBtn.GetComponentInChildren<Text>();
-                rightCreatorBtnText.text = ">";
+                // rightCreatorBtnText.text = ">"; // Set by create
+
+                // Status (Blue) - NEW
+                GameObject rightStatusBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 4, AnchorPresets.centre, () => ToggleRight(ContentType.Status));
+                rightStatusBtn.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.7f, 1f);
 
                 // Replace Toggle (Right)
-                GameObject rightReplaceBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "Add", 24, 60, -180, AnchorPresets.middleRight, ToggleReplaceMode);
+                GameObject rightReplaceBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 5, AnchorPresets.centre, ToggleReplaceMode);
                 rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
 
                 // Undo (Right)
-                GameObject rightUndoBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "Undo", 20, 60, -300, AnchorPresets.middleRight, Undo);
+                GameObject rightUndoBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 6, AnchorPresets.centre, Undo);
                 rightUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
                 rightUndoBtn.GetComponentInChildren<Text>().color = Color.white;
 
+                // Left Button Container
+                GameObject leftButtonsContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleLeft, 130, 430, new Vector2(-120, 0));
+                sideButtonGroups.Add(leftButtonsContainer.AddComponent<CanvasGroup>());
+
                 // Left Toggle Buttons
+                // Follow (Top)
+                GameObject leftFollowBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY, AnchorPresets.centre, ToggleFollowMode);
+                leftFollowBtnImage = leftFollowBtn.GetComponent<Image>();
+                leftFollowBtnText = leftFollowBtn.GetComponentInChildren<Text>();
+                leftFollowBtnImage.color = Color.gray;
+
                 // Clone (Gray)
-                GameObject leftCloneBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "〃", 30, -60, 180, AnchorPresets.middleLeft, () => {
+                GameObject leftCloneBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, false);
                 });
                 leftCloneBtn.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 1f);
 
                 // Category (Red)
-                GameObject leftCatBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "<", 30, -60, 60, AnchorPresets.middleLeft, () => ToggleLeft(ContentType.Category));
+                GameObject leftCatBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
                 leftCategoryBtnImage = leftCatBtn.GetComponent<Image>();
                 leftCategoryBtnImage.color = ColorCategory;
                 leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>();
-                leftCategoryBtnText.text = "<";
+                // leftCategoryBtnText.text = "<"; // Set by create
                 
                 // Creator (Green)
-                GameObject leftCreatorBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "<", 30, -60, -60, AnchorPresets.middleLeft, () => ToggleLeft(ContentType.Creator));
+                GameObject leftCreatorBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
                 leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
                 leftCreatorBtnImage.color = ColorCreator;
                 leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>();
-                leftCreatorBtnText.text = "<";
+                // leftCreatorBtnText.text = "<"; // Set by create
+
+                // Status (Blue) - NEW
+                GameObject leftStatusBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 4, AnchorPresets.centre, () => ToggleLeft(ContentType.Status));
+                leftStatusBtn.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.7f, 1f);
 
                 // Replace Toggle (Left)
-                GameObject leftReplaceBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "Add", 24, -60, -180, AnchorPresets.middleLeft, ToggleReplaceMode);
+                GameObject leftReplaceBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 5, AnchorPresets.centre, ToggleReplaceMode);
                 leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
 
                 // Undo (Left)
-                GameObject leftUndoBtn = UI.CreateUIButton(backgroundBoxGO, 60, 100, "Undo", 20, -60, -300, AnchorPresets.middleLeft, Undo);
+                GameObject leftUndoBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 6, AnchorPresets.centre, Undo);
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
                 leftUndoBtn.GetComponentInChildren<Text>().color = Color.white;
             }
 
+            // Add Hover Delegates to all side buttons and containers
+            foreach (var cg in sideButtonGroups)
+            {
+                if (cg != null)
+                {
+                    AddHoverDelegate(cg.gameObject);
+                    foreach (Transform t in cg.transform)
+                    {
+                        AddHoverDelegate(t.gameObject);
+                    }
+                }
+            }
+
             UpdateReplaceButtonState();
+            UpdateFollowButtonState();
 
             // Content Area
             float rightPadding = -20; // Default padding, updated by UpdateLayout
             
             GameObject scrollableGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0.2f, 0.2f, 0.2f, 0.5f), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
+            AddHoverDelegate(scrollableGO); // Add this
             contentScrollRT = scrollableGO.GetComponent<RectTransform>();
             contentScrollRT.offsetMin = new Vector2(20, 20);
             contentScrollRT.offsetMax = new Vector2(rightPadding, -50);
@@ -375,6 +458,7 @@ namespace var_browser
                 Destroy(this.gameObject);
             });
             closeBtn.GetComponent<Image>().color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            AddHoverDelegate(closeBtn);
 
             SetLayerRecursive(canvasGO, 5); // UI layer for children
             
@@ -385,6 +469,17 @@ namespace var_browser
             }
 
             CreateResizeHandles();
+
+            // Pointer Dot
+            pointerDotGO = new GameObject("PointerDot");
+            pointerDotGO.transform.SetParent(backgroundBoxGO.transform, false);
+            Image dotImg = pointerDotGO.AddComponent<Image>();
+            dotImg.color = Color.magenta;
+            dotImg.raycastTarget = false;
+            RectTransform dotRT = pointerDotGO.GetComponent<RectTransform>();
+            dotRT.sizeDelta = new Vector2(10, 10);
+            pointerDotGO.SetActive(false);
+
             Hide();
         }
 
@@ -433,6 +528,68 @@ namespace var_browser
                      statusBarText.text = msg;
                 }
             }
+
+            // Side Buttons Auto-Hide Logic
+            bool showSideButtons = hoverCount > 0;
+            
+            bool enableFade = (Settings.Instance != null && Settings.Instance.EnableGalleryFade != null) ? Settings.Instance.EnableGalleryFade.Value : true;
+            float targetAlpha = (showSideButtons || isResizing || !enableFade) ? 1.0f : 0.0f;
+            if (Mathf.Abs(sideButtonsAlpha - targetAlpha) > 0.01f)
+            {
+                sideButtonsAlpha = Mathf.Lerp(sideButtonsAlpha, targetAlpha, Time.deltaTime * 15.0f);
+                foreach (var cg in sideButtonGroups)
+                {
+                    if (cg != null) cg.alpha = sideButtonsAlpha;
+                }
+            }
+
+            if (followUser)
+            {
+                if (Time.time - lastFollowUpdateTime > FollowUpdateInterval)
+                {
+                    lastFollowUpdateTime = Time.time;
+                    
+                    // Always refresh camera to ensure we track VR/Desktop switches
+                    Camera cam = Camera.main;
+                    _cachedCamera = cam;
+
+                    if (canvas != null && cam != null)
+                    {
+                        Vector3 lookDir = canvas.transform.position - cam.transform.position;
+                        
+                        if (lookDir.sqrMagnitude > 0.001f)
+                        {
+                            // Face camera including pitch, but keep upright (no roll)
+                            targetFollowRotation = Quaternion.LookRotation(lookDir, Vector3.up);
+                        }
+                    }
+                }
+                
+                // Smooth interpolation
+                if (canvas != null)
+                {
+                    canvas.transform.rotation = Quaternion.Slerp(canvas.transform.rotation, targetFollowRotation, Time.deltaTime * 2.0f);
+                }
+            }
+
+            // Pointer Dot Logic
+            if (pointerDotGO != null)
+            {
+                if (hoverCount > 0 && currentPointerData != null)
+                {
+                    // Check if we are still hitting something valid
+                    // Note: pointerCurrentRaycast.isValid might be true even if not hitting THIS panel, 
+                    // but hoverCount ensures we are hitting this panel's elements.
+                    
+                    if (!pointerDotGO.activeSelf) pointerDotGO.SetActive(true);
+                    pointerDotGO.transform.position = currentPointerData.pointerCurrentRaycast.worldPosition - canvas.transform.forward * 0.001f;
+                    pointerDotGO.transform.SetAsLastSibling(); 
+                }
+                else
+                {
+                    if (pointerDotGO.activeSelf) pointerDotGO.SetActive(false);
+                }
+            }
         }
 
         private void ToggleRight(ContentType type)
@@ -471,7 +628,7 @@ namespace var_browser
 
         private void UpdateReplaceButtonState()
         {
-            string text = DragDropReplaceMode ? "Rep" : "Add";
+            string text = DragDropReplaceMode ? "Replace" : "Add";
             Color color = DragDropReplaceMode ? new Color(0.8f, 0.2f, 0.2f, 1f) : new Color(0.2f, 0.6f, 0.2f, 1f);
 
             if (rightReplaceBtnText != null) rightReplaceBtnText.text = text;
@@ -501,11 +658,15 @@ namespace var_browser
             if (leftActiveContent.HasValue && leftTabScrollGO != null)
             {
                 leftTabScrollGO.SetActive(true);
-                leftOffset = 210; 
+                leftOffset = 190; 
                 if (leftSearchInput != null) 
                 {
                     leftSearchInput.gameObject.SetActive(true);
-                    string target = leftActiveContent.Value == ContentType.Category ? categoryFilter : creatorFilter;
+                    string target = "";
+                    if (leftActiveContent.Value == ContentType.Category) target = categoryFilter;
+                    else if (leftActiveContent.Value == ContentType.Creator) target = creatorFilter;
+                    else target = ""; // Status filter?
+
                     // Setting text triggers OnValueChanged which calls UpdateTabs, which is fine but maybe redundant.
                     // To avoid event we'd need to remove listener. 
                     // But if text is different, we probably WANT to update tabs anyway?
@@ -517,6 +678,9 @@ namespace var_browser
                     {
                         ph.text = leftActiveContent.Value.ToString() + "...";
                     }
+                    
+                    // Hide search input for Status for now
+                    if (leftActiveContent.Value == ContentType.Status) leftSearchInput.gameObject.SetActive(false);
                 }
             }
             else if (leftTabScrollGO != null)
@@ -529,17 +693,24 @@ namespace var_browser
             if (rightActiveContent.HasValue && rightTabScrollGO != null)
             {
                 rightTabScrollGO.SetActive(true);
-                rightOffset = -210;
+                rightOffset = -190;
                 if (rightSearchInput != null) 
                 {
                     rightSearchInput.gameObject.SetActive(true);
-                    string target = rightActiveContent.Value == ContentType.Category ? categoryFilter : creatorFilter;
+                    string target = "";
+                    if (rightActiveContent.Value == ContentType.Category) target = categoryFilter;
+                    else if (rightActiveContent.Value == ContentType.Creator) target = creatorFilter;
+                    else target = "";
+
                     if (rightSearchInput.text != target) rightSearchInput.text = target;
 
                     if (rightSearchInput.placeholder is Text ph)
                     {
                         ph.text = rightActiveContent.Value.ToString() + "...";
                     }
+
+                    // Hide search input for Status for now
+                    if (rightActiveContent.Value == ContentType.Status) rightSearchInput.gameObject.SetActive(false);
                 }
             }
             else if (rightTabScrollGO != null)
@@ -556,10 +727,13 @@ namespace var_browser
 
         private void UpdateButtonStates()
         {
+             // Text updates disabled as per request to keep static labels
+             /*
              UpdateButtonState(rightCategoryBtnText, true, ContentType.Category);
              UpdateButtonState(rightCreatorBtnText, true, ContentType.Creator);
              UpdateButtonState(leftCategoryBtnText, false, ContentType.Category);
              UpdateButtonState(leftCreatorBtnText, false, ContentType.Creator);
+             */
         }
 
         private void UpdateButtonState(Text btnText, bool isRight, ContentType type)
@@ -651,6 +825,9 @@ namespace var_browser
             Image img = handleGO.AddComponent<Image>();
             img.color = new Color(0, 0, 0, 0.01f); // Invisible hit area
 
+            // Add Hover Border
+            handleGO.AddComponent<UIHoverBorder>();
+
             RectTransform handleRT = handleGO.GetComponent<RectTransform>();
             handleRT.anchorMin = AnchorPresets.GetAnchorMin(anchor);
             handleRT.anchorMax = AnchorPresets.GetAnchorMax(anchor);
@@ -687,6 +864,9 @@ namespace var_browser
             UIResizable resizer = handleGO.AddComponent<UIResizable>();
             resizer.target = backgroundBoxGO.GetComponent<RectTransform>();
             resizer.anchor = anchor;
+            resizer.onResizeStatusChange = (isResizing) => {
+                 this.isResizing = isResizing;
+            };
 
             // Hover Effect
             UIHoverColor hover = handleGO.AddComponent<UIHoverColor>();
@@ -840,6 +1020,28 @@ namespace var_browser
                     }, trackedButtons);
                 }
             }
+            else if (contentType == ContentType.Status)
+            {
+                string[] statuses = new string[] { "Favorite", "Hidden", "Loaded", "Unloaded", "Autoinstall" };
+                Color statusColor = new Color(0.3f, 0.5f, 0.7f, 1f); // Blue-ish
+
+                foreach (var status in statuses)
+                {
+                    bool isActive = false;
+                    if (status == "Favorite") isActive = filterFavorite;
+                    
+                    Color btnColor = isActive ? statusColor : new Color(0.7f, 0.7f, 0.7f, 1f);
+
+                    CreateTabButton(container.transform, status, btnColor, isActive, () => {
+                        if (status == "Favorite")
+                        {
+                            filterFavorite = !filterFavorite;
+                            UpdateTabs();
+                            RefreshFiles();
+                        }
+                    }, trackedButtons);
+                }
+            }
             
             SetLayerRecursive(container, 5);
         }
@@ -867,6 +1069,7 @@ namespace var_browser
                 // Tab Button
                 GameObject btnGO = UI.CreateUIButton(groupGO, 170, 35, "", 14, 0, 0, AnchorPresets.middleLeft, null);
                 btnGO.name = "Button";
+                AddHoverDelegate(btnGO);
             }
             
             groupGO.name = "TabGroup_" + label;
@@ -896,6 +1099,10 @@ namespace var_browser
             Image bg = inputGO.AddComponent<Image>();
             bg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
             
+            // Add Hover Border
+            inputGO.AddComponent<UIHoverBorder>();
+            AddHoverDelegate(inputGO);
+
             InputField input = inputGO.AddComponent<InputField>();
             RectTransform inputRT = inputGO.GetComponent<RectTransform>();
             inputRT.sizeDelta = new Vector2(width, 35);
@@ -1017,28 +1224,28 @@ namespace var_browser
             UpdateTabs();
 
             // Position it in front of the user if in VR, ONLY ONCE
-            if (!hasBeenPositioned && SuperController.singleton != null)
+            if (!hasBeenPositioned)
             {
-                Transform head = SuperController.singleton.centerCameraTarget.transform;
-                // If undocked, maybe offset slightly? No, user can move it.
-                // Or maybe default position is different for undocked?
-                // Let's stick to center for now.
-                canvas.transform.position = head.position + head.forward * 1.5f;
-                
-                // Face the user
-                bool lockRotation = (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null && Settings.Instance.LockGalleryRotation.Value);
-                if (lockRotation)
+                Transform targetTransform = null;
+                if (Camera.main != null) targetTransform = Camera.main.transform;
+                else if (SuperController.singleton != null) targetTransform = SuperController.singleton.centerCameraTarget.transform;
+
+                if (targetTransform != null)
                 {
-                    // Enforce horizontal leveling on launch
-                    Vector3 lookDir = canvas.transform.position - head.position;
-                    canvas.transform.rotation = Quaternion.LookRotation(lookDir, Vector3.up);
+                    // Place 2.0m in front of camera (increased from 1.0m to avoid clipping/too close)
+                    // Ensure we don't spawn inside objects if possible, but for UI just floating in front is standard.
+                    canvas.transform.position = targetTransform.position + targetTransform.forward * 2.0f;
+                    
+                    // Face the user
+                    Vector3 lookDir = canvas.transform.position - targetTransform.position;
+                    
+                    if (lookDir.sqrMagnitude > 0.001f)
+                    {
+                        canvas.transform.rotation = Quaternion.LookRotation(lookDir, Vector3.up);
+                    }
+                    
+                    hasBeenPositioned = true;
                 }
-                else
-                {
-                    canvas.transform.rotation = head.rotation;
-                }
-                
-                hasBeenPositioned = true;
             }
         }
 
@@ -1060,7 +1267,8 @@ namespace var_browser
             // Clear existing
             foreach (var btn in activeButtons)
             {
-                Destroy(btn);
+                btn.SetActive(false);
+                fileButtonPool.Push(btn);
             }
             activeButtons.Clear();
             fileButtonImages.Clear();
@@ -1096,6 +1304,11 @@ namespace var_browser
                             // In Creator mode, we also respect the Category path filter if set.
                             
                             bool match = IsMatch(entry, currentPath, extensions);
+                            if (match && filterFavorite)
+                            {
+                                try { if (!entry.IsFavorite()) match = false; }
+                                catch { }
+                            }
 
                             if (match)
                             {
@@ -1114,7 +1327,15 @@ namespace var_browser
                     string[] systemFiles = Directory.GetFiles(currentPath, "*." + ext, SearchOption.AllDirectories);
                     foreach (var sysPath in systemFiles)
                     {
-                        files.Add(new SystemFileEntry(sysPath));
+                        var sysEntry = new SystemFileEntry(sysPath);
+                        bool include = true;
+                        if (filterFavorite)
+                        {
+                            try { if (!sysEntry.IsFavorite()) include = false; }
+                            catch { }
+                        }
+                        
+                        if (include) files.Add(sysEntry);
                     }
                 }
             }
@@ -1126,7 +1347,14 @@ namespace var_browser
             int count = Mathf.Min(files.Count, 2000);
             for (int i = 0; i < count; i++)
             {
-                CreateFileButton(files[i]);
+                try
+                {
+                    CreateFileButton(files[i]);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("[VPB] Error creating button for " + files[i].Name + ": " + ex.ToString());
+                }
             }
         }
 
@@ -1154,16 +1382,34 @@ namespace var_browser
 
         private void CreateFileButton(FileEntry file)
         {
-            GameObject btnGO = new GameObject("FileButton_" + file.Name);
+            GameObject btnGO;
+            if (fileButtonPool.Count > 0)
+            {
+                btnGO = fileButtonPool.Pop();
+                btnGO.SetActive(true);
+            }
+            else
+            {
+                btnGO = CreateNewFileButtonGO();
+            }
+            
+            BindFileButton(btnGO, file);
+            activeButtons.Add(btnGO);
+        }
+
+        private GameObject CreateNewFileButtonGO()
+        {
+            GameObject btnGO = new GameObject("FileButton_Template");
             btnGO.transform.SetParent(contentGO.transform, false);
             
             Image img = btnGO.AddComponent<Image>();
-            if (file.Path == selectedPath) img.color = Color.yellow;
-            else img.color = Color.gray;
-            if (!fileButtonImages.ContainsKey(file.Path)) fileButtonImages.Add(file.Path, img);
+            img.color = Color.gray;
+
+            // Add Hover Border
+            btnGO.AddComponent<UIHoverBorder>();
+            AddHoverDelegate(btnGO);
 
             Button btn = btnGO.AddComponent<Button>();
-            btn.onClick.AddListener(() => OnFileClick(file));
 
             // Thumbnail (Fill 1x1)
             GameObject thumbGO = new GameObject("Thumbnail");
@@ -1176,9 +1422,6 @@ namespace var_browser
             thumbRT.sizeDelta = Vector2.zero;
             thumbRT.offsetMin = new Vector2(3, 3);
             thumbRT.offsetMax = new Vector2(-3, -3);
-
-            // Load thumbnail
-            LoadThumbnail(file, thumbImg);
 
             // Card Container (Hidden by default, positions below)
             GameObject cardGO = new GameObject("Card");
@@ -1212,7 +1455,6 @@ namespace var_browser
             GameObject labelGO = new GameObject("Label");
             labelGO.transform.SetParent(cardGO.transform, false);
             Text labelText = labelGO.AddComponent<Text>();
-            labelText.text = file.Name;
             labelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             labelText.fontSize = 18;
             labelText.color = Color.white;
@@ -1231,12 +1473,93 @@ namespace var_browser
             
             // Drag Logic
             UIDraggableItem draggable = btnGO.AddComponent<UIDraggableItem>();
-            draggable.FileEntry = file;
             draggable.ThumbnailImage = thumbImg;
             draggable.Panel = this;
 
-            activeButtons.Add(btnGO);
+            // Favorite Button
+            try
+            {
+                GameObject favBtnGO = UI.CreateUIButton(btnGO, 40, 40, "★", 24, 0, 0, AnchorPresets.topRight, null);
+                favBtnGO.name = "Button_Fav"; // Name it to find it later
+                favBtnGO.SetActive(false); 
+                RectTransform favRT = favBtnGO.GetComponent<RectTransform>();
+                favRT.anchoredPosition = new Vector2(-5, -5);
+                
+                Image favBg = favBtnGO.GetComponent<Image>();
+                favBg.color = new Color(0, 0, 0, 0.4f);
+
+                favBtnGO.AddComponent<FavoriteHandler>();
+                
+                // Hover Logic
+                var hoverDelegate = btnGO.AddComponent<UIHoverDelegate>();
+                hoverDelegate.OnHoverChange = (isHovering) => {
+                     var handler = favBtnGO.GetComponent<FavoriteHandler>();
+                     if (handler != null) handler.SetHover(isHovering);
+                };
+                hoverDelegate.OnHoverChange += (enter) => {
+                    if (enter) hoverCount++;
+                    else hoverCount--;
+                };
+
+                if (favBtnGO != null) AddHoverDelegate(favBtnGO);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[VPB] Error creating favorite icon template: " + ex.Message);
+            }
+            
             SetLayerRecursive(btnGO, 5);
+            return btnGO;
+        }
+
+        private void BindFileButton(GameObject btnGO, FileEntry file)
+        {
+            btnGO.name = "FileButton_" + file.Name;
+            
+            // Image
+            Image img = btnGO.GetComponent<Image>();
+            if (file.Path == selectedPath) img.color = Color.yellow;
+            else img.color = Color.gray;
+            if (!fileButtonImages.ContainsKey(file.Path)) fileButtonImages.Add(file.Path, img);
+
+            // Button
+            Button btn = btnGO.GetComponent<Button>();
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(() => OnFileClick(file));
+
+            // Thumbnail
+            Transform thumbTr = btnGO.transform.Find("Thumbnail");
+            RawImage thumbImg = thumbTr.GetComponent<RawImage>();
+            thumbImg.texture = null; // Clear prev
+            thumbImg.color = new Color(0, 0, 0, 0.5f);
+            LoadThumbnail(file, thumbImg);
+            
+            // Label
+            Transform labelTr = btnGO.transform.Find("Card/Label");
+            Text labelText = labelTr.GetComponent<Text>();
+            labelText.text = file.Name;
+            
+            // Draggable
+            UIDraggableItem draggable = btnGO.GetComponent<UIDraggableItem>();
+            draggable.FileEntry = file;
+            
+            // Favorite
+            Transform favTr = btnGO.transform.Find("Button_Fav");
+            if (favTr != null)
+            {
+                GameObject favBtnGO = favTr.gameObject;
+                FavoriteHandler favHandler = favBtnGO.GetComponent<FavoriteHandler>();
+                Text favText = favBtnGO.GetComponentInChildren<Text>();
+                
+                favHandler.Init(file, favText);
+                
+                Button favBtn = favBtnGO.GetComponent<Button>();
+                favBtn.onClick.RemoveAllListeners();
+                favBtn.onClick.AddListener(() => {
+                    try { file.SetFavorite(!file.IsFavorite()); }
+                    catch (Exception ex) { Debug.LogError("[VPB] Error toggling favorite: " + ex.Message); }
+                });
+            }
         }
 
         private void LoadThumbnail(FileEntry file, RawImage target)
@@ -1300,6 +1623,119 @@ namespace var_browser
                 if (fileButtonImages[selectedPath] != null)
                     fileButtonImages[selectedPath].color = Color.yellow;
             }
+        }
+
+        public void SetFollowMode(bool enabled)
+        {
+            if (followUser != enabled)
+            {
+                ToggleFollowMode();
+            }
+        }
+        
+        public bool GetFollowMode()
+        {
+            return followUser;
+        }
+
+        public void ToggleFollowMode()
+        {
+            followUser = !followUser;
+            if (followUser)
+            {
+                lastFollowUpdateTime = 0f; // Force immediate update
+                if (canvas != null) targetFollowRotation = canvas.transform.rotation;
+            }
+            UpdateFollowButtonState();
+        }
+
+        private void UpdateFollowButtonState()
+        {
+            string text = followUser ? "Follow" : "Static";
+            Color color = followUser ? new Color(0.2f, 0.6f, 0.8f, 1f) : Color.gray;
+            
+            if (rightFollowBtnText != null) rightFollowBtnText.text = text;
+            if (rightFollowBtnImage != null) rightFollowBtnImage.color = color;
+            
+            if (leftFollowBtnText != null) leftFollowBtnText.text = text;
+            if (leftFollowBtnImage != null) leftFollowBtnImage.color = color;
+        }
+
+    }
+
+    public class UIHoverDelegate : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public Action<bool> OnHoverChange;
+        public Action<PointerEventData> OnPointerEnterEvent;
+        public void OnPointerEnter(PointerEventData d) 
+        {
+            OnHoverChange?.Invoke(true);
+            OnPointerEnterEvent?.Invoke(d);
+        }
+        public void OnPointerExit(PointerEventData d) => OnHoverChange?.Invoke(false);
+    }
+
+    public class FavoriteHandler : MonoBehaviour
+    {
+        private FileEntry entry;
+        private Text iconText;
+        private bool isHovering = false;
+        private bool isFavorite = false;
+
+        public void Init(FileEntry e, Text t)
+        {
+            entry = e;
+            iconText = t;
+            try
+            {
+                if (FavoritesManager.Instance != null)
+                {
+                    isFavorite = FavoritesManager.Instance.IsFavorite(entry);
+                    FavoritesManager.Instance.OnFavoriteChanged += OnFavChanged;
+                }
+            }
+            catch (Exception) { }
+            UpdateState();
+        }
+
+        public void SetHover(bool hover)
+        {
+            isHovering = hover;
+            UpdateState();
+        }
+
+        private void OnFavChanged(string uid, bool fav)
+        {
+            if (entry != null && entry.Uid == uid)
+            {
+                isFavorite = fav;
+                UpdateState();
+            }
+        }
+
+        private void UpdateState()
+        {
+            // Logic: Visible if Favorite OR Hovering
+            bool shouldShow = isFavorite || isHovering;
+            
+            gameObject.SetActive(shouldShow);
+
+            if (iconText != null)
+            {
+                // Color: Yellow if Favorite, otherwise White with alpha (Ghost)
+                iconText.color = isFavorite ? Color.yellow : new Color(1f, 1f, 1f, 0.5f);
+            }
+        }
+
+        void OnDestroy()
+        {
+            try
+            {
+                // Only unsubscribe if we successfully subscribed (which means Instance worked)
+                // But safer to just try/catch
+                FavoritesManager.Instance.OnFavoriteChanged -= OnFavChanged;
+            }
+            catch { }
         }
     }
 }

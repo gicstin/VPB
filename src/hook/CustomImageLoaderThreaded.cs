@@ -10,7 +10,7 @@ using UnityEngine.Networking;
 using UnityEngine.UI;
 using StbImageSharp; // Requires StbImageSharp library
 
-namespace var_browser
+namespace VPB
 {
 	public class CustomImageLoaderThreaded : MonoBehaviour
 	{
@@ -738,7 +738,7 @@ namespace var_browser
 			public volatile bool kill;
 		}
 
-		public static var_browser.CustomImageLoaderThreaded singleton;
+		public static VPB.CustomImageLoaderThreaded singleton;
 
 		public GameObject progressHUD;
 

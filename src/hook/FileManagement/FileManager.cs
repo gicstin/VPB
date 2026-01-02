@@ -11,7 +11,7 @@ using System.Threading;
 using System.Linq;
 using UnityEngine;
 using Prime31.MessageKit;
-namespace var_browser
+namespace VPB
 {
 	public class FileManager : MonoBehaviour
 	{

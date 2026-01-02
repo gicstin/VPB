@@ -1,28 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{86C32DA8-DA52-47FB-AC78-B6BBFC7963F5}</ProjectGuid>
+    <ProjectGuid>{758453DA-4E36-49AF-8DF4-A046875D333D}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>PluginBuilder</RootNamespace>
-    <AssemblyName>VarBrowserSessionPlugin</AssemblyName>
+    <RootNamespace>VPB</RootNamespace>
+    <AssemblyName>VPB</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <VaMPath Condition="'$(VaMPath)' == ''">C:\vam</VaMPath>
     <TargetFrameworkProfile>
     </TargetFrameworkProfile>
-  </PropertyGroup>
-  <PropertyGroup>
-    <PostBuildEvent>
-      if not exist "$(VaMPath)\Custom\Scripts\var_browser" mkdir "$(VaMPath)\Custom\Scripts\var_browser"
-      copy /Y "$(MSBuildProjectDirectory)\VarBrowserSessionPlugin.cs" "$(VaMPath)\Custom\Scripts\var_browser\VarBrowserSessionPlugin.cs"
-      if not exist "$(MSBuildProjectDirectory)\..\..\..\vam_patch\Custom\Scripts\var_browser" mkdir "$(MSBuildProjectDirectory)\..\..\..\vam_patch\Custom\Scripts\var_browser"
-      copy /Y "$(MSBuildProjectDirectory)\VarBrowserSessionPlugin.cs" "$(MSBuildProjectDirectory)\..\..\..\vam_patch\Custom\Scripts\var_browser\VarBrowserSessionPlugin.cs"
-    </PostBuildEvent>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -267,7 +259,146 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="VarBrowserSessionPlugin.cs" />
+    <Compile Include="src\ByteArrayPool.cs" />
+    <Compile Include="src\GlobalInfo.cs" />
+    <Compile Include="src\VdsLauncher.cs" />
+    <Compile Include="src\hook\AtomHook.cs" />
+    <Compile Include="src\hook\JSONOptimization.cs" />
+    <Compile Include="src\hook\ImageProcessingOptimization.cs" />
+    <Compile Include="src\hook\DAZMorphMgr.cs" />
+    <Compile Include="src\hook\FileManagement\VarPackageMgr.cs" />
+    <Compile Include="src\hook\HubResourcePackageHook.cs" />
+    <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
+    <Compile Include="src\StbImageSharp\AnimatedFrameResult.cs" />
+    <Compile Include="src\StbImageSharp\AnimatedGifEnumerator.cs" />
+    <Compile Include="src\StbImageSharp\ColorComponents.cs" />
+    <Compile Include="src\StbImageSharp\ImageInfo.cs" />
+    <Compile Include="src\StbImageSharp\ImageResult.cs" />
+    <Compile Include="src\StbImageSharp\ImageResultFloat.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.Generated.Bmp.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.Generated.Common.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.Generated.Gif.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.Generated.Hdr.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.Generated.Jpg.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.Generated.Png.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.Generated.Psd.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.Generated.Tga.cs" />
+    <Compile Include="src\StbImageSharp\StbImage.Generated.Zlib.cs" />
+    <Compile Include="src\StbImageSharp\Utility.cs" />
+    <Compile Include="src\StbImageSharp\Hebron.Runtime\MemoryStats.cs" />
+    <Compile Include="src\StbImageSharp\Hebron.Runtime\CRuntime.cs" />
+    <Compile Include="src\hook\CustomAssetLoader.cs" />
+    <Compile Include="src\hook\ImageLoadingMgr.cs" />
+    <Compile Include="src\hook\SuperControllerHook.cs" />
+    <Compile Include="src\hook\TagFilter.cs" />
+    <Compile Include="src\hook\Tools.cs" />
+    <Compile Include="src\hook\UnityEngineHook.cs" />
+    <Compile Include="src\hook\Native\Kernel32.cs" />
+    <Compile Include="src\hook\Native\MinHook.cs" />
+    <Compile Include="src\hook\Native\NativeHookManager.cs" />
+    <Compile Include="src\hook\Native\BoehmGC.cs" />
+    <Compile Include="src\hook\Native\SigScanner.cs" />
+    <Compile Include="src\hook\uFileBrowser\DirectoryButton.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowser.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowserCallback.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowserFullCallback.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowser_Clothing.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileBrowser_UI.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileButton.cs" />
+    <Compile Include="src\hook\uFileBrowser\FileIcon.cs" />
+    <Compile Include="src\hook\uFileBrowser\ShortCutButton.cs" />
+    <Compile Include="src\hook\VarNameParser.cs" />
+    <Compile Include="src\KeyUtil.cs" />
+    <Compile Include="src\LogUtil.cs" />
+    <Compile Include="src\MessageDef.cs" />
+    <Compile Include="src\MessageKit\LocatorKit.cs" />
+    <Compile Include="src\MessageKit\MessageKit.cs" />
+    <Compile Include="src\MessageKit\MessageKitLite.cs" />
+    <Compile Include="src\Messager.cs" />
+    <Compile Include="src\Settings.cs" />
+    <Compile Include="src\unity-object-pool\ObjectPool.cs" />
+    <Compile Include="src\unity-object-pool\ObjectPoolContainer.cs" />
+    <Compile Include="src\unity-object-pool\PoolManager.cs" />
+    <Compile Include="src\unity-object-pool\Singleton.cs" />
+    <Compile Include="src\VamHookPlugin.cs" />
+    <Compile Include="src\Gallery.cs" />
+    <Compile Include="src\GalleryPanel.cs" />
+    <Compile Include="src\GalleryThumbnailCache.cs" />
+    <Compile Include="src\GalleryUIUtils.cs" />
+    <Compile Include="src\FavoritesManager.cs" />
+    <Compile Include="src\hook\FileManagement\DirectoryEntry.cs" />
+    <Compile Include="src\hook\FileManagement\FileEntry.cs" />
+    <Compile Include="src\hook\FileManagement\FileEntryStream.cs" />
+    <Compile Include="src\hook\FileManagement\FileEntryStreamReader.cs" />
+    <Compile Include="src\hook\FileManagement\FileManager.cs" />
+    <Compile Include="src\hook\FileManagement\SystemDirectoryEntry.cs" />
+    <Compile Include="src\hook\FileManagement\SystemFileEntry.cs" />
+    <Compile Include="src\hook\FileManagement\SystemFileEntryStream.cs" />
+    <Compile Include="src\hook\FileManagement\SystemFileEntryStreamReader.cs" />
+    <Compile Include="src\hook\FileManagement\VarDirectoryEntry.cs" />
+    <Compile Include="src\hook\FileManagement\VarFileEntry.cs" />
+    <Compile Include="src\hook\FileManagement\VarFileEntryStream.cs" />
+    <Compile Include="src\hook\FileManagement\VarFileEntryStreamReader.cs" />
+    <Compile Include="src\hook\FileManagement\VarPackage.cs" />
+    <Compile Include="src\hook\FileManagement\VarPackageGroup.cs" />
+    <Compile Include="src\hook\Hub\HubBrowse.cs" />
+    <Compile Include="src\hook\Hub\HubResourceCreatorSupportUI.cs" />
+    <Compile Include="src\hook\Hub\HubResourceItem.cs" />
+    <Compile Include="src\hook\Hub\HubResourceItemDetail.cs" />
+    <Compile Include="src\hook\Hub\HubResourceItemDetailUI.cs" />
+    <Compile Include="src\hook\Hub\HubResourceItemUI.cs" />
+    <Compile Include="src\hook\Hub\HubResourcePackage.cs" />
+    <Compile Include="src\hook\Hub\HubResourcePackageUI.cs" />
+    <Compile Include="src\hook\VarUtil.cs" />
+    <Compile Include="src\Properties\AssemblyInfo.cs" />
+    <Compile Include="src\VamHookPlugin_Interface.cs" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="$(IntermediateOutputPath)PluginVersion.g.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="_vam_patch\**" />
+    <EmbeddedResource Remove="vam_patch\**" />
+    <None Remove="vam_patch\**" />
+    <Page Remove="vam_patch\**" />
+  </ItemGroup>
+
+  <Target Name="GeneratePluginVersion" BeforeTargets="BeforeCompile">
+    <PropertyGroup>
+      <PluginVersionFile>$(MSBuildProjectDirectory)\plugin_version.txt</PluginVersionFile>
+      <PluginVersionGeneratedFile>$(IntermediateOutputPath)PluginVersion.g.cs</PluginVersionGeneratedFile>
+    </PropertyGroup>
+
+    <ReadLinesFromFile File="$(PluginVersionFile)">
+      <Output TaskParameter="Lines" ItemName="_PluginVersionLines" />
+    </ReadLinesFromFile>
+
+    <PropertyGroup>
+      <PluginVersion>$([System.Text.RegularExpressions.Regex]::Replace('%(_PluginVersionLines.Identity)', '\\s+', ''))</PluginVersion>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+
+    <ItemGroup>
+      <_PluginVersionSourceLines Include="namespace VPB {" />
+      <_PluginVersionSourceLines Include="    internal static class PluginVersionInfo {" />
+      <_PluginVersionSourceLines Include="        public const string Version = &quot;$(PluginVersion)&quot;%3B" />
+      <_PluginVersionSourceLines Include="    }" />
+      <_PluginVersionSourceLines Include="}" />
+    </ItemGroup>
+
+    <WriteLinesToFile
+      File="$(PluginVersionGeneratedFile)"
+      Overwrite="true"
+      Lines="@(_PluginVersionSourceLines)" />
+  </Target>
+
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\plugins\VPB.dll"
+copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB.dll"</PostBuildEvent>
+  </PropertyGroup>
 </Project>

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using HarmonyLib;
 
-namespace var_browser
+namespace VPB
 {
     public partial class VamHookPlugin
     {

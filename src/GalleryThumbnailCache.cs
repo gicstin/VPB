@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 
-namespace var_browser
+namespace VPB
 {
     public class GalleryThumbnailCache
     {

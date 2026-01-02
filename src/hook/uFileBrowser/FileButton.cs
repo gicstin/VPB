@@ -10,7 +10,7 @@ using SimpleJSON;
 using System.Text.RegularExpressions;
 using System.Collections.Generic;
 
-namespace var_browser
+namespace VPB
 {
     public class FileButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IEventSystemHandler
     {
@@ -119,7 +119,7 @@ namespace var_browser
                                     if (dirty)
                                     {
                                         MVR.FileManagement.FileManager.Refresh();
-                                        var_browser.FileManager.Refresh();
+                                        VPB.FileManager.Refresh();
                                     }
                                 }
                             }
@@ -168,7 +168,7 @@ namespace var_browser
                                     if (dirty)
                                     {
                                         MVR.FileManagement.FileManager.Refresh();
-                                        var_browser.FileManager.Refresh();
+                                        VPB.FileManager.Refresh();
                                     }
                                 }
                             }
@@ -213,7 +213,7 @@ namespace var_browser
         public void OnSetAutoInstall(bool b)
         {
             bool flag = false;
-            FileEntry fileEntry = var_browser.FileManager.GetFileEntry(fullPath, true);
+            FileEntry fileEntry = VPB.FileManager.GetFileEntry(fullPath, true);
             if (fileEntry != null && (fileEntry is VarFileEntry))
             {
                 bool dirty=fileEntry.SetAutoInstall(b);
@@ -228,7 +228,7 @@ namespace var_browser
             {
                 MVR.FileManagement.FileManager.Refresh();
                 // Refresh this as well; this will raise events.
-                var_browser.FileManager.Refresh();
+                VPB.FileManager.Refresh();
             }
         }
         public void EnsureInstalled()
@@ -295,7 +295,7 @@ namespace var_browser
             if (dirty)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                var_browser.FileManager.Refresh();
+                VPB.FileManager.Refresh();
             }
         }
 
@@ -347,7 +347,7 @@ namespace var_browser
             {
                 MVR.FileManagement.FileManager.Refresh();
                 // Refresh this as well; this will raise events.
-                var_browser.FileManager.Refresh();
+                VPB.FileManager.Refresh();
             }
         }
 
@@ -463,7 +463,7 @@ namespace var_browser
             bool isInstalled = false;
             bool isAutoInstall = false;
             bool isFavorite = false;
-            FileEntry fileEntry = var_browser.FileManager.GetFileEntry(fullPath, true);
+            FileEntry fileEntry = VPB.FileManager.GetFileEntry(fullPath, true);
             if (fileEntry != null && fileEntry is VarFileEntry)
             {
                 isInstalled = fileEntry.IsInstalled();
@@ -487,7 +487,7 @@ namespace var_browser
                 {
                     fullPath = "AllPackages" + fullPath.Substring("AddonPackages".Length);
                 }
-                fileEntry = var_browser.FileManager.GetFileEntry(fullPath, true);
+                fileEntry = VPB.FileManager.GetFileEntry(fullPath, true);
                 if (fileEntry != null)
                 {
                     isInstalled = fileEntry.IsInstalled();

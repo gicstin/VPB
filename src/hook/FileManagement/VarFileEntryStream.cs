@@ -2,7 +2,7 @@
 using System.IO;
 using ICSharpCode.SharpZipLib.Zip;
 
-namespace var_browser
+namespace VPB
 {
 	public class VarFileEntryStream : FileEntryStream
 	{

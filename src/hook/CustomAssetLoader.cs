@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using MeshVR;
 
-namespace var_browser
+namespace VPB
 {
 	public class CustomAssetLoader : MonoBehaviour
 	{

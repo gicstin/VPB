@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace var_browser.Native
+namespace VPB.Native
 {
     public static class BoehmGC
     {

@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace var_browser
+namespace VPB
 {
 	public partial class FileBrowser : MonoBehaviour
 	{
@@ -521,7 +521,7 @@ namespace var_browser
 
 		public List<FileIcon> fileIcons = new List<FileIcon>();
 
-		private HashSet<var_browser.CustomImageLoaderThreaded.QueuedImage> queuedThumbnails;
+		private HashSet<VPB.CustomImageLoaderThreaded.QueuedImage> queuedThumbnails;
 
 		public bool clearCurrentPathOnHide = true;
 
@@ -850,18 +850,18 @@ namespace var_browser
 
 		public void ClearCacheImage(string imgPath)
 		{
-			if (var_browser.CustomImageLoaderThreaded.singleton != null)
+			if (VPB.CustomImageLoaderThreaded.singleton != null)
 			{
-				var_browser.CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath);
+				VPB.CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath);
 			}
 		}
 
 		public void ClearImageQueue()
 		{
-			foreach (var_browser.CustomImageLoaderThreaded.QueuedImage queuedThumbnail in queuedThumbnails)
+			foreach (VPB.CustomImageLoaderThreaded.QueuedImage queuedThumbnail in queuedThumbnails)
 			{
 				queuedThumbnail.cancel = true;
-                //var_browser.CustomImageLoaderThreaded.QIPool.Return(queuedThumbnail);
+                //VPB.CustomImageLoaderThreaded.QIPool.Return(queuedThumbnail);
 			}
 			queuedThumbnails.Clear();
 		}
@@ -2567,7 +2567,7 @@ namespace var_browser
 			{
 				return;
 			}
-			var toRemove = new List<var_browser.CustomImageLoaderThreaded.QueuedImage>();
+			var toRemove = new List<VPB.CustomImageLoaderThreaded.QueuedImage>();
 			foreach (var qi in queuedThumbnails)
 			{
 				if (qi != null && qi.rawImageToLoad == ri)
@@ -2879,7 +2879,7 @@ namespace var_browser
 			{
 				return;
 			}
-			var toRemove = new List<var_browser.CustomImageLoaderThreaded.QueuedImage>();
+			var toRemove = new List<VPB.CustomImageLoaderThreaded.QueuedImage>();
 			foreach (var qi in queuedThumbnails)
 			{
 				if (qi != null && qi.rawImageToLoad != null && !visibleRawImages.Contains(qi.rawImageToLoad))
@@ -3250,7 +3250,7 @@ namespace var_browser
 			slash = directorySeparatorChar.ToString();
 			drives = new List<string>(Directory.GetLogicalDrives());
 			displayedFileButtons = new HashSet<FileButton>();
-			queuedThumbnails = new HashSet<var_browser.CustomImageLoaderThreaded.QueuedImage>();
+			queuedThumbnails = new HashSet<VPB.CustomImageLoaderThreaded.QueuedImage>();
 		}
 		void Start()
 		{ 

@@ -10,7 +10,7 @@ using UnityEngine;
 using System.Runtime.InteropServices;
 using Valve.Newtonsoft.Json;
 
-namespace var_browser
+namespace VPB
 {
     
     [System.Serializable]
@@ -608,12 +608,12 @@ namespace var_browser
 
 		public void OpenOnHub()
 		{
-			if (var_browser.HubBrowse.singleton != null)
+			if (VPB.HubBrowse.singleton != null)
 			{
-				string packageHubResourceId = var_browser.HubBrowse.singleton.GetPackageHubResourceId(Uid);
+				string packageHubResourceId = VPB.HubBrowse.singleton.GetPackageHubResourceId(Uid);
 				if (packageHubResourceId != null)
 				{
-					var_browser.HubBrowse.singleton.OpenDetail(packageHubResourceId);
+					VPB.HubBrowse.singleton.OpenDetail(packageHubResourceId);
 				}
 			}
 		}

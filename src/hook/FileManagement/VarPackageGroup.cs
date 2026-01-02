@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using SimpleJSON;
 
 
-namespace var_browser
+namespace VPB
 {
 	public class VarPackageGroup
 	{

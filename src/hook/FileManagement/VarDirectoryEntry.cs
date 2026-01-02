@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using System.Linq;
 
-namespace var_browser
+namespace VPB
 {
 	public class VarDirectoryEntry : DirectoryEntry
 	{

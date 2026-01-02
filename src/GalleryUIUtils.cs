@@ -9,7 +9,7 @@ using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using SimpleJSON;
 
-namespace var_browser
+namespace VPB
 {
     public class UIDraggable : MonoBehaviour, IBeginDragHandler, IDragHandler
     {
@@ -43,26 +43,22 @@ namespace var_browser
             Vector3 lookDir = target.position - dragCam.transform.position;
             if (lookDir != Vector3.zero)
             {
-                bool lockRotation = (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null && Settings.Instance.LockGalleryRotation.Value);
-                if (lockRotation)
+                if (lookDir.sqrMagnitude > 0.001f)
                 {
-                    // Enforce horizontal leveling (Up = Vector3.up) but allow Pitch (use full lookDir)
+                    // Face camera, but no roll
                     target.rotation = Quaternion.LookRotation(lookDir, Vector3.up);
-                }
-                else
-                {
-                    target.rotation = Quaternion.LookRotation(lookDir, dragCam.transform.up);
                 }
             }
         }
     }
 
-    public class UIResizable : MonoBehaviour, IDragHandler, IBeginDragHandler
+    public class UIResizable : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHandler
     {
         public RectTransform target;
         public Vector2 minSize = new Vector2(400, 300);
         public Vector2 maxSize = new Vector2(2000, 2000);
         public int anchor = AnchorPresets.bottomRight;
+        public UnityAction<bool> onResizeStatusChange;
         private Camera dragCam;
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -70,6 +66,13 @@ namespace var_browser
             // Consume the drag start event so it doesn't bubble up to parent UIDraggable
             dragCam = eventData.pressEventCamera;
             if (dragCam == null) dragCam = Camera.main;
+            
+            if (onResizeStatusChange != null) onResizeStatusChange(true);
+        }
+        
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            if (onResizeStatusChange != null) onResizeStatusChange(false);
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -155,6 +158,41 @@ namespace var_browser
                     target.anchoredPosition = newPos;
                 }
             }
+        }
+    }
+
+    public class UIHoverBorder : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public Graphic targetGraphic;
+        public Color hoverColor = new Color(1f, 1f, 0f, 1f); // Bright yellow visible highlight
+        public float borderSize = 2f;
+        
+        private Outline outline;
+
+        void Awake()
+        {
+            if (targetGraphic == null) targetGraphic = GetComponent<Graphic>();
+            if (targetGraphic != null)
+            {
+                outline = targetGraphic.gameObject.GetComponent<Outline>();
+                if (outline == null)
+                {
+                    outline = targetGraphic.gameObject.AddComponent<Outline>();
+                    outline.enabled = false;
+                }
+                outline.effectDistance = new Vector2(borderSize, -borderSize);
+                outline.effectColor = hoverColor;
+            }
+        }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (outline != null) outline.enabled = true;
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (outline != null) outline.enabled = false;
         }
     }
 
@@ -1318,7 +1356,7 @@ namespace var_browser
 
     public static class UI
     {
-        public static GameObject CreateVScrollableContent(GameObject parentGO, Color backgroundColor, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, float scrollBarWidth = 10f, float spacing = 0f)
+        public static GameObject CreateVScrollableContent(GameObject parentGO, Color backgroundColor, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, float scrollBarWidth = 15f, float spacing = 0f)
         {
             GameObject scrollableContentGO = AddChildGOImage(parentGO, backgroundColor, anchorPreset, horizontalSize, verticalSize, anchoredPositionOffset);
 
@@ -1328,7 +1366,7 @@ namespace var_browser
             viewportRT.anchorMin = Vector2.zero;
             viewportRT.anchorMax = Vector2.one;
             viewportRT.sizeDelta = new Vector2(-scrollBarWidth, 0);
-            viewportRT.anchoredPosition = new Vector2(-scrollBarWidth / 2, 0);
+            viewportRT.anchoredPosition = new Vector2(-scrollBarWidth / 2 - 5, 0); // Shift left slightly to avoid clip
             viewportGO.AddComponent<RectMask2D>();
 
             GameObject contentGO = new GameObject("Content");
@@ -1422,7 +1460,7 @@ namespace var_browser
             GameObject buttonGO = AddChildGOImage(parentGO, Color.white, anchorPreset, width, height, new Vector2(xOffset, yOffset));
             buttonGO.name = "Button_" + label;
             Button btn = buttonGO.AddComponent<Button>();
-            btn.onClick.AddListener(onClick);
+            if (onClick != null) btn.onClick.AddListener(onClick);
 
             GameObject textGO = new GameObject("Text");
             textGO.transform.SetParent(buttonGO.transform, false);
@@ -1437,6 +1475,9 @@ namespace var_browser
             textRT.anchorMin = Vector2.zero;
             textRT.anchorMax = Vector2.one;
             textRT.sizeDelta = Vector2.zero;
+            
+            // Add Hover Border
+            buttonGO.AddComponent<UIHoverBorder>();
 
             return buttonGO;
         }

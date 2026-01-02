@@ -3,7 +3,7 @@ using System.IO;
 using BepInEx;
 using UnityEngine;
 
-namespace var_browser.Native
+namespace VPB.Native
 {
     public class NativeHookManager
     {

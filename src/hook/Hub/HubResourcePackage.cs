@@ -6,7 +6,7 @@ using SimpleJSON;
 using UnityEngine.UI;
 using UnityEngine;
 
-namespace var_browser
+namespace VPB
 {
     public class HubResourcePackage
     {

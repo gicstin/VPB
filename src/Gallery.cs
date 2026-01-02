@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-namespace var_browser
+namespace VPB
 {
     public class Gallery : MonoBehaviour
     {
@@ -100,6 +100,7 @@ namespace var_browser
             p.SetFilters(original.GetCurrentPath(), original.GetCurrentExtension(), original.GetCurrentCreator());
             p.SetLeftActiveContent(original.GetLeftActiveContent());
             p.SetRightActiveContent(original.GetRightActiveContent());
+            p.SetFollowMode(original.GetFollowMode());
             
             // Sync size
             RectTransform originalRT = original.GetBackgroundRT();
@@ -129,9 +130,9 @@ namespace var_browser
                 float angle = ((width + padding) / radius) * Mathf.Rad2Deg;
                 if (!toRight) angle = -angle;
 
-                bool lockRotation = (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null && Settings.Instance.LockGalleryRotation.Value);
-                Vector3 upAxis = lockRotation ? Vector3.up : camTrans.up;
-
+                // Force leveled rotation (no roll)
+                Vector3 upAxis = Vector3.up;
+                
                 Quaternion rot = Quaternion.AngleAxis(angle, upAxis);
                 Vector3 toNew = rot * toOriginal;
 

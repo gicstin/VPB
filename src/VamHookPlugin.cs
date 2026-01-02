@@ -8,10 +8,11 @@ using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-namespace var_browser
+namespace VPB
 {
     // Plugin metadata attribute: plugin ID, plugin name, plugin version (must be numeric)
-    [BepInPlugin("vam_var_browser", "var_browser", "0.15")]
+    [BepInPlugin("VPB", "VPB", "0.06")]
+
     public partial class VamHookPlugin : BaseUnityPlugin // Inherits BaseUnityPlugin
     {
         private KeyUtil UIKey;
@@ -66,7 +67,7 @@ namespace var_browser
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
         private bool m_SettingsEnableUiTransparencyDraft;
-        private bool m_SettingsLockGalleryRotationDraft;
+        private bool m_SettingsEnableGalleryFadeDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -160,7 +161,7 @@ namespace var_browser
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
-            m_SettingsLockGalleryRotationDraft = (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null) ? Settings.Instance.LockGalleryRotation.Value : true;
+            m_SettingsEnableGalleryFadeDraft = (Settings.Instance != null && Settings.Instance.EnableGalleryFade != null) ? Settings.Instance.EnableGalleryFade.Value : true;
             m_SettingsError = null;
         }
 
@@ -244,19 +245,19 @@ namespace var_browser
             GUILayout.Space(10);
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsLockGalleryRotationDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsLockGalleryRotationDraft = !m_SettingsLockGalleryRotationDraft;
-            }
-            GUILayout.Label("Lock gallery panel rotation (keep horizontal)");
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
             if (GUILayout.Button(m_SettingsEnableUiTransparencyDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
             {
                 m_SettingsEnableUiTransparencyDraft = !m_SettingsEnableUiTransparencyDraft;
             }
             GUILayout.Label("Enable dynamic transparency (fade when idle)");
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsEnableGalleryFadeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsEnableGalleryFadeDraft = !m_SettingsEnableGalleryFadeDraft;
+            }
+            GUILayout.Label("Enable Gallery Button Fade");
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
@@ -380,6 +381,13 @@ namespace var_browser
                             Settings.Instance.EnableUiTransparency.Value = m_SettingsEnableUiTransparencyDraft;
                         }
                     }
+                    if (Settings.Instance != null && Settings.Instance.EnableGalleryFade != null)
+                    {
+                        if (Settings.Instance.EnableGalleryFade.Value != m_SettingsEnableGalleryFadeDraft)
+                        {
+                            Settings.Instance.EnableGalleryFade.Value = m_SettingsEnableGalleryFadeDraft;
+                        }
+                    }
                     if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)
                     {
                         if (Settings.Instance.PrioritizeFaceTextures.Value != m_SettingsPrioritizeFaceTexturesDraft)
@@ -394,11 +402,6 @@ namespace var_browser
                             Settings.Instance.PrioritizeHairTextures.Value = m_SettingsPrioritizeHairTexturesDraft;
                         }
                     }
-                    if (Settings.Instance != null && Settings.Instance.LockGalleryRotation != null)
-                    {
-                        Settings.Instance.LockGalleryRotation.Value = m_SettingsLockGalleryRotationDraft;
-                    }
-
                     UIKey = parsed;
                     GalleryKey = parsedGalleryKey;
                     CreateGalleryKey = parsedCreateGalleryKey;
@@ -743,7 +746,7 @@ namespace var_browser
         {
             if (string.IsNullOrEmpty(cacheDir))
             {
-                cacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/var_browser_cache";
+                cacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/VPB_cache";
                 if (!Directory.Exists(cacheDir))
                 {
                     Directory.CreateDirectory(cacheDir);
@@ -756,7 +759,7 @@ namespace var_browser
         {
             if (string.IsNullOrEmpty(abCacheDir))
             {
-                abCacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/var_browser_cache/ab";
+                abCacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/VPB_cache/ab";
                 if (!Directory.Exists(abCacheDir))
                 {
                     Directory.CreateDirectory(abCacheDir);
@@ -840,7 +843,7 @@ namespace var_browser
 
             this.Config.SaveOnConfigSet = true;
             Debug.Log("var browser hook start");
-            var harmony = new Harmony("var_browser_hook");
+            var harmony = new Harmony("VPB_hook");
             // Patch VaM/Harmony hook points.
             UnityEngineHook.Init();
             harmony.PatchAll();
@@ -884,7 +887,7 @@ namespace var_browser
         }
         void Start()
         {
-            var go = new GameObject("var_browser_messager");
+            var go = new GameObject("VPB_messager");
             var messager = go.AddComponent<Messager>();
             messager.target = this.gameObject;
             go.AddComponent<CustomAssetLoader>();
@@ -1059,7 +1062,7 @@ namespace var_browser
             if (flag)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                var_browser.FileManager.Refresh();
+                VPB.FileManager.Refresh();
             }
         }
 
@@ -1073,9 +1076,9 @@ namespace var_browser
             {
                 var child = Tools.AddChild(this.gameObject);
                 m_FileManager = child.AddComponent<FileManager>();
-                child.AddComponent<var_browser.CustomImageLoaderThreaded>();
-                child.AddComponent<var_browser.ImageLoadingMgr>();
-                child.AddComponent<var_browser.Gallery>();
+                child.AddComponent<VPB.CustomImageLoaderThreaded>();
+                child.AddComponent<VPB.ImageLoadingMgr>();
+                child.AddComponent<VPB.Gallery>();
                 FileManager.RegisterRefreshHandler(() =>
                 {
                     m_FileManagerInited = true;

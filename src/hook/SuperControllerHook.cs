@@ -8,7 +8,7 @@ using UnityEngine;
 using HarmonyLib;
 using Prime31.MessageKit;
 using GPUTools.Hair.Scripts.Settings;
-namespace var_browser
+namespace VPB
 {
     class SuperControllerHook
     {
@@ -105,7 +105,7 @@ namespace var_browser
                 if (string.IsNullOrEmpty(scenePkg)) return path;
 
                 string candidate = scenePkg + ":/" + p;
-                if (var_browser.FileManager.GetVarFileEntry(candidate) != null)
+                if (VPB.FileManager.GetVarFileEntry(candidate) != null)
                 {
                     return candidate;
                 }
@@ -692,7 +692,7 @@ namespace var_browser
         {
             if (Settings.Instance.CacheAssetBundle.Value)
             {
-                var_browser.CustomAssetLoader.QueueLoadAssetBundleFromFile(abffr);
+                VPB.CustomAssetLoader.QueueLoadAssetBundleFromFile(abffr);
                 return false; // Prevent the original method from running
             }
             return true;
@@ -704,7 +704,7 @@ namespace var_browser
         {
             if (Settings.Instance.CacheAssetBundle.Value)
             {
-                var_browser.CustomAssetLoader.QueueLoadSceneIntoTransform(slr);
+                VPB.CustomAssetLoader.QueueLoadSceneIntoTransform(slr);
                 return false; // Prevent the original method from running
             }
             return true;
@@ -716,7 +716,7 @@ namespace var_browser
         {
             if (Settings.Instance.CacheAssetBundle.Value)
             {
-                var_browser.CustomAssetLoader.DoneWithAssetBundleFromFile(path);
+                VPB.CustomAssetLoader.DoneWithAssetBundleFromFile(path);
                 return false; // Prevent the original method from running
             }
             return true;

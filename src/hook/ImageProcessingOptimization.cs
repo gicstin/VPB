@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace var_browser
+namespace VPB
 {
     public static class ImageProcessingOptimization
     {

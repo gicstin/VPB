@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace var_browser
+namespace VPB
 {
 	[Serializable]
 	public class FileIcon

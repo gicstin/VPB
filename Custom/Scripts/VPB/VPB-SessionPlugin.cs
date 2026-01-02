@@ -3,9 +3,9 @@ using UnityEngine;
 using UnityEngine.UI;
 using SimpleJSON;
 
-namespace VarBrowser
+namespace VPB
 {
-    public class VarBrowserSessionPlugin : MVRScript
+    public class VPB_SessionPlugin : MVRScript
     {
         // IMPORTANT - DO NOT make custom enums. The dynamic C# complier crashes Unity when it encounters these for
         // some reason
@@ -51,9 +51,9 @@ namespace VarBrowser
             {
                 // Initial check to show status
                 if (Messager == null)
-                    CreateHeader("var browser not ready", false, Color.red);
+                    CreateHeader("VPB Inactive", false, Color.red);
                 else
-                    CreateHeader("var browser is ready", false, Color.white);
+                    CreateHeader("VPB Active", false, Color.white);
 
                 CreateButton("Refresh").button.onClick.AddListener(Refresh);
                 RegisterAction(new JSONStorableAction("Refresh", Refresh));

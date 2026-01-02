@@ -10,7 +10,7 @@ using HarmonyLib;
 using SimpleJSON;
 using System.Reflection;
 
-namespace var_browser
+namespace VPB
 {
     class AtomHook
     {
@@ -58,7 +58,7 @@ namespace var_browser
                 if (dirty)
                 {
                     MVR.FileManagement.FileManager.Refresh();
-                    var_browser.FileManager.Refresh();
+                    VPB.FileManager.Refresh();
                 }
             }
             else
@@ -94,7 +94,7 @@ namespace var_browser
                     if (dirty)
                     {
                         MVR.FileManagement.FileManager.Refresh();
-                        var_browser.FileManager.Refresh();
+                        VPB.FileManager.Refresh();
                     }
                 }
             }
@@ -141,7 +141,7 @@ namespace var_browser
                 if (dirty)
                 {
                     MVR.FileManagement.FileManager.Refresh();
-                    var_browser.FileManager.Refresh();
+                    VPB.FileManager.Refresh();
                 }
             }
         }
