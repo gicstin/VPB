@@ -324,6 +324,7 @@
     <Compile Include="src\VamHookPlugin.cs" />
     <Compile Include="src\Gallery.cs" />
     <Compile Include="src\GalleryPanel.cs" />
+    <Compile Include="src\GallerySortManager.cs" />
     <Compile Include="src\GalleryThumbnailCache.cs" />
     <Compile Include="src\GalleryUIUtils.cs" />
     <Compile Include="src\FavoritesManager.cs" />

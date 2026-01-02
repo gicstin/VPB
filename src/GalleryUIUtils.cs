@@ -1366,6 +1366,7 @@ namespace VPB
         public const int stretchAll = 13;
         public const int middleLeft = 14;
         public const int middleRight = 15;
+        public const int middleCenter = 16;
 
         public static Vector2 GetAnchorMin(int preset)
         {
@@ -1387,6 +1388,7 @@ namespace VPB
                 case stretchAll: return new Vector2(0, 0);
                 case middleLeft: return new Vector2(0, 0.5f);
                 case middleRight: return new Vector2(1, 0.5f);
+                case middleCenter: return new Vector2(0.5f, 0.5f);
                 default: return Vector2.zero;
             }
         }
@@ -1411,6 +1413,7 @@ namespace VPB
                 case stretchAll: return new Vector2(1, 1);
                 case middleLeft: return new Vector2(0, 0.5f);
                 case middleRight: return new Vector2(1, 0.5f);
+                case middleCenter: return new Vector2(0.5f, 0.5f);
                 default: return Vector2.zero;
             }
         }
@@ -1435,6 +1438,7 @@ namespace VPB
                 case stretchAll: return new Vector2(0.5f, 0.5f);
                 case middleLeft: return new Vector2(0, 0.5f);
                 case middleRight: return new Vector2(1, 0.5f);
+                case middleCenter: return new Vector2(0.5f, 0.5f);
                 default: return new Vector2(0.5f, 0.5f);
             }
         }
