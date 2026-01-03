@@ -323,6 +323,9 @@ namespace VPB
         public RawImage ThumbnailImage;
         public GalleryPanel Panel;
         
+        private bool? _isDualPose = null;
+        private JSONNode _dualPoseNode = null;
+        
         private bool isDraggingItem = false;
         private GameObject ghostObject;
         private Image ghostBorder;
@@ -332,6 +335,91 @@ namespace VPB
         private Camera dragCam;
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
+
+        private bool CheckDualPose()
+        {
+            if (_isDualPose.HasValue) return _isDualPose.Value;
+            
+            _isDualPose = false;
+            
+            if (FileEntry != null && FileEntry.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                // Try reading using SuperController.singleton.ReadFileIntoString first if path is normalized or manageable
+                // Otherwise try stream
+                
+                string content = null;
+                try
+                {
+                    // Prefer using FileManager or SuperController which handles reading better
+                    string normalized = NormalizePath(FileEntry.Path);
+                    if (normalized.Contains(":")) // Var
+                    {
+                         // Use OpenStreamReader for vars as it handles the archive access
+                         using (var reader = FileEntry.OpenStreamReader())
+                         {
+                             content = reader.ReadToEnd();
+                         }
+                    }
+                    else
+                    {
+                        // For loose files, standard file IO might be safer or SuperController
+                        // But FileEntry.OpenStreamReader should ideally work.
+                        // However, let's try SuperController read if it's a file path
+                         using (var reader = FileEntry.OpenStreamReader())
+                         {
+                             content = reader.ReadToEnd();
+                         }
+                    }
+
+                    if (!string.IsNullOrEmpty(content))
+                    {
+                        _dualPoseNode = JSON.Parse(content);
+                        if (_dualPoseNode != null)
+                        {
+                            // Check PeopleCount (string or int)
+                            if (_dualPoseNode["PeopleCount"] != null)
+                            {
+                                int count = _dualPoseNode["PeopleCount"].AsInt;
+                                if (count >= 2)
+                                {
+                                    _isDualPose = true;
+                                    LogUtil.Log($"[DragDropDebug] Detected Dual Pose: PeopleCount={count} in {FileEntry.Name}");
+                                }
+                                else
+                                {
+                                    LogUtil.Log($"[DragDropDebug] Not Dual Pose: PeopleCount={count} in {FileEntry.Name}");
+                                }
+                            }
+                            else
+                            {
+                                 // LogUtil.Log($"[DragDropDebug] Not Dual Pose: No PeopleCount in {FileEntry.Name}");
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                     LogUtil.LogError($"[DragDropDebug] CheckDualPose error reading {FileEntry.Name}: {ex.Message}");
+                }
+            }
+            return _isDualPose.Value;
+        }
+
+        private bool IsAtomMale(Atom atom)
+        {
+            if (atom == null) return false;
+            JSONStorable geometry = atom.GetStorableByID("geometry");
+            if (geometry != null)
+            {
+                JSONStorableStringChooser charChooser = geometry.GetStringChooserJSONParam("character");
+                if (charChooser != null)
+                {
+                    string val = charChooser.val;
+                    if (!string.IsNullOrEmpty(val) && val.StartsWith("Male", StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+            return false; 
+        }
 
         private enum ItemType { Clothing, Hair, Pose, Skin, Morphs, Appearance, Animation, BreastPhysics, GlutePhysics, Plugins, General, ClothingItem, HairItem, SubScene, Scene, Other }
 
@@ -402,6 +490,8 @@ namespace VPB
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            _isDualPose = null;
+            _dualPoseNode = null;
             dragCam = eventData.pressEventCamera;
             if (dragCam == null) dragCam = Camera.main;
 
@@ -698,6 +788,12 @@ namespace VPB
 
             if (ext == ".json" && atom.type == "Person" && (itemType == ItemType.Other || itemType == ItemType.Scene || isPoseCategory)) itemType = ItemType.Pose;
 
+            if (CheckDualPose())
+            {
+                ApplyDualPose(atom, _dualPoseNode);
+                return;
+            }
+
             // Capture state for Undo
             if (Panel != null)
             {
@@ -838,11 +934,12 @@ namespace VPB
                     Dictionary<string, bool> originalLocks = new Dictionary<string, bool>();
 
                     // If it's a pose, we want to lock Clothing and Hair to prevent them being changed if the pose preset contains them
+                    // NEW: Also lock Morphs and Skin for cleaner pose application
                     if (isPose && atom.presetManagerControls != null)
                     {
                         foreach (var pmc in atom.presetManagerControls)
                         {
-                            if (pmc != null && (pmc.name == "ClothingPresets" || pmc.name == "HairPresets"))
+                            if (pmc != null && (pmc.name == "ClothingPresets" || pmc.name == "HairPresets" || pmc.name == "MorphPresets" || pmc.name == "SkinPresets" || pmc.name == "AppearancePresets"))
                             {
                                 originalLocks[pmc.name] = pmc.lockParams;
                                 pmc.lockParams = true;
@@ -851,9 +948,11 @@ namespace VPB
                     }
 
                     bool presetLoaded = false;
+                    bool suppressRoot = isPose && !Input.GetKey(KeyCode.LeftShift); // Default to suppress root (In Place), hold Shift to move
+                    
                     try
                     {
-                        LogUtil.Log($"[DragDropDebug] Loading preset type={itemType}, storableId={storableId}, path={normalizedPath}");
+                        LogUtil.Log($"[DragDropDebug] Loading preset type={itemType}, storableId={storableId}, path={normalizedPath}, SuppressRoot={suppressRoot}");
                         
                         // Get the storable for this preset type
                         JSONStorable presetStorable = atom.GetStorableByID(storableId);
@@ -865,7 +964,17 @@ namespace VPB
                                 bool actionLoaded = false;
                                 bool isVarPath = normalizedPath.Contains(":");
                                 bool isPosePath = normalizedPath.IndexOf("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0;
-                                if (!isVarPath && isPosePath)
+                                // NEW: For .json legacy files, check if they are in Saves/Person/Pose too
+                                if (!isPosePath) 
+                                {
+                                    isPosePath = normalizedPath.IndexOf("Saves/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0;
+                                }
+
+                                
+                                // Only use direct action if we don't need to modify the JSON (suppressRoot)
+                                // AND we are not a .json file, because .json files might not work well with "LoadPreset" action if they lack ID
+                                // Actually, for .json files, we should probably prefer the new direct load method anyway if suppressRoot is true
+                                if (!isVarPath && isPosePath && !suppressRoot)
                                 {
                                     try
                                     {
@@ -929,52 +1038,200 @@ namespace VPB
                                             }
                                         }
 
-                                        bool nativePoseLoad = itemType == ItemType.Pose;
-                                        if (nativePoseLoad)
+                                        // Function to clean presets array (Shared logic)
+                                        void CleanPresets(JSONArray presets)
                                         {
-                                            try
+                                            if (presets == null) return;
+                                            for (int j = 0; j < presets.Count; j++)
                                             {
-                                                string tempFolder = "Custom/Atom/Person/Pose/VPBTemp";
-                                                string tempPath = Path.Combine(tempFolder, "VPB_PoseTemp_" + Guid.NewGuid().ToString("N") + ".vap");
-                                                tempPath = FileManager.NormalizePath(tempPath);
-                                                string tempDir = Path.GetDirectoryName(tempPath);
-                                                if (!string.IsNullOrEmpty(tempDir) && !Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
-
-                                                SuperController.singleton.SaveJSON(presetJSON, tempPath);
-
-                                                JSONStorableBool loadOnSelect = presetStorable.GetBoolJSONParam("loadPresetOnSelect");
-                                                JSONStorableString presetName = presetStorable.GetStringJSONParam("presetName");
-                                                bool loadOnSelectPrev = loadOnSelect != null ? loadOnSelect.val : false;
-                                                string presetNamePrev = presetName != null ? presetName.val : null;
-
-                                                if (loadOnSelect != null) loadOnSelect.val = false;
-                                                if (presetName != null)
+                                                JSONClass p = presets[j] as JSONClass;
+                                                if (p != null && p["id"].Value == "control")
                                                 {
-                                                    presetName.val = presetManager.GetPresetNameFromFilePath(SuperController.singleton.NormalizePath(tempPath));
+                                                    // Instead of removing the node, we strip its position/rotation
+                                                    // This avoids invalidating the preset if 'control' is required
+                                                    if (p.HasKey("position")) p.Remove("position");
+                                                    if (p.HasKey("rotation")) p.Remove("rotation");
+
+                                                    LogUtil.Log("[DragDropDebug] Suppressed root node (control) properties from Pose Preset.");
+                                                    break; 
                                                 }
-
-                                                presetStorable.CallAction("LoadPreset");
-
-                                                if (loadOnSelect != null) loadOnSelect.val = loadOnSelectPrev;
-                                                if (presetName != null) presetName.valNoCallback = presetNamePrev;
-
-                                                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-
-                                                presetLoaded = true;
-                                                LogUtil.Log("[DragDropDebug] Loaded pose via native storable action from temp copy");
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                LogUtil.LogError("[DragDropDebug] Native pose load failed: " + ex.Message);
                                             }
                                         }
 
-                                        if (!presetLoaded)
+                                        // NEW: Suppress Root Node logic
+                                        if (suppressRoot && itemType == ItemType.Pose)
                                         {
+                                            try
+                                            {
+                                                if (presetJSON["storables"] != null)
+                                                {
+                                                    JSONArray storables = presetJSON["storables"] as JSONArray;
+                                                    if (storables != null)
+                                                    {
+                                                        for (int i = 0; i < storables.Count; i++)
+                                                        {
+                                                            JSONClass s = storables[i] as JSONClass;
+                                                            // Check for PosePresets ID or any other that matches the target storableId
+                                                            if (s != null && s["id"].Value == storableId)
+                                                            {
+                                                                if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                else if (presetJSON["presets"] != null)
+                                                {
+                                                    // Direct storable dump?
+                                                    // Verify ID if present, otherwise assume it's the right one
+                                                    if (presetJSON["id"] == null || presetJSON["id"].Value == storableId)
+                                                    {
+                                                        CleanPresets(presetJSON["presets"] as JSONArray);
+                                                    }
+                                                }
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                LogUtil.LogError("[DragDropDebug] Failed to suppress root node: " + ex.Message);
+                                            }
+                                        }
+
+                                        // Simplified handling: Use direct PresetManager load
+                                        // This bypasses the complexity of storable actions + temp files
+                                        try
+                                        {
+                                            if (itemType == ItemType.Pose)
+                                            {
+                                                LogUtil.Log($"[DragDropDebug] Loading Pose via direct PresetManager injection (Bypassing temp files)");
+                                                
+                                                // Specific logging for .json files debugging
+                                                if (ext == ".json")
+                                                {
+                                                    // Convert Keys to array for string.Join compatibility in older .NET/Unity versions
+                                                    string[] keys = new string[0];
+                                                    if (presetJSON.Keys != null) keys = presetJSON.Keys.ToArray();
+                                                    LogUtil.Log($"[DragDropDebug] .json Pose Debug: Keys in JSON: {string.Join(", ", keys)}");
+                                                    
+                                                    if (presetJSON["id"] != null) LogUtil.Log($"[DragDropDebug] .json Pose Debug: Existing 'id': {presetJSON["id"].Value}");
+                                                    else LogUtil.Log($"[DragDropDebug] .json Pose Debug: No 'id' field found.");
+                                                    
+                                                    if (presetJSON["presets"] != null) LogUtil.Log($"[DragDropDebug] .json Pose Debug: Found 'presets' array.");
+                                                    if (presetJSON["storables"] != null) LogUtil.Log($"[DragDropDebug] .json Pose Debug: Found 'storables' array.");
+                                                }
+                                            }
+
+                                            // Ensure ID is correct (fixes "not a preset for current store" error)
+                                            // Only inject if it's NOT a container (no 'storables' array)
+                                            // If it has 'storables', we assume the ID is correct for the container (e.g. 'Person')
+                                            if (presetJSON["storables"] == null)
+                                            {
+                                                // Handle 'atoms' root key (Legacy scene/person save used as pose)
+                                                // Optimized Native Loading: Use direct Atom.Restore for maximum performance and compatibility
+                                                if (presetJSON["atoms"] != null)
+                                                {
+                                                    LogUtil.Log($"[DragDropDebug] 'atoms' root key detected. Using optimized Native Atom Restoration...");
+                                                    JSONArray atomsArray = presetJSON["atoms"] as JSONArray;
+                                                    
+                                                    if (atomsArray != null && atomsArray.Count > 0)
+                                                    {
+                                                        // Find the target atom (usually "Person" or just the first one)
+                                                        JSONClass targetAtom = null;
+                                                        for(int i=0; i<atomsArray.Count; i++) 
+                                                        {
+                                                            JSONClass a = atomsArray[i] as JSONClass;
+                                                            if (a != null && (a["id"].Value == "Person" || a["type"].Value == "Person"))
+                                                            {
+                                                                targetAtom = a;
+                                                                break;
+                                                            }
+                                                        }
+                                                        if (targetAtom == null) targetAtom = atomsArray[0] as JSONClass;
+
+                                                        if (targetAtom != null)
+                                                        {
+                                                            LogUtil.Log($"[DragDropDebug] Restoring atom data from '{targetAtom["id"]?.Value}' directly to '{atom.name}'");
+
+                                                            // Handle Suppress Root (Load in Place)
+                                                            if (suppressRoot)
+                                                            {
+                                                                // Strip control position/rotation from the source JSON before restoring
+                                                                JSONArray targetStorables = targetAtom["storables"] as JSONArray;
+                                                                if (targetStorables != null)
+                                                                {
+                                                                    for(int k=0; k<targetStorables.Count; k++)
+                                                                    {
+                                                                        JSONClass s = targetStorables[k] as JSONClass;
+                                                                        if (s != null && s["id"].Value == "control")
+                                                                        {
+                                                                             if (s.HasKey("position")) s.Remove("position");
+                                                                             if (s.HasKey("rotation")) s.Remove("rotation");
+                                                                             LogUtil.Log($"[DragDropDebug] Suppressed root motion in legacy atom dump.");
+                                                                             break;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // EXECUTE NATIVE RESTORE PIPELINE
+                                                            // We set restoreAppearance=false to ensure we only load the Pose (Physics/Transform)
+                                                            // We set restorePhysical=true
+                                                            
+                                                            atom.PreRestore(true, false);
+                                                            
+                                                            // Only restore main transform if not suppressing root
+                                                            if (!suppressRoot)
+                                                            {
+                                                                atom.RestoreTransform(targetAtom);
+                                                            }
+                                                            
+                                                            // Restore(jc, restorePhysical, restoreAppearance, restoreParent)
+                                                            atom.Restore(targetAtom, true, false, false);
+                                                            
+                                                            atom.LateRestore(targetAtom, true, false, false);
+                                                            atom.PostRestore(true, false);
+                                                            
+                                                            LogUtil.Log($"[DragDropDebug] Native Atom Restoration complete.");
+                                                            presetLoaded = true;
+                                                            return; // Skip the rest of the PresetManager logic
+                                                        }
+                                                    }
+                                                }
+
+                                                // If we have a 'storables' root key now (either from conversion or original), 
+                                                // we don't need to inject ID. It's a Package-style preset.
+                                                if (presetJSON["storables"] == null)
+                                                {
+                                                    if (presetJSON["id"] == null || presetJSON["id"].Value != storableId)
+                                                    {
+                                                        LogUtil.Log($"[DragDropDebug] Injecting missing/correcting ID '{storableId}' into preset JSON (No 'storables' detected)");
+                                                        presetJSON["id"] = storableId;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    LogUtil.Log($"[DragDropDebug] 'storables' detected (or created). Preserving container structure.");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                LogUtil.Log($"[DragDropDebug] 'storables' detected in JSON. Keeping existing ID '{presetJSON["id"]?.Value}' to preserve container structure.");
+                                            }
+
+                                            // Special handling for legacy .json files:
+                                            // They might not have the "presets" array wrapper if they are direct dumps.
+                                            // But if they are direct dumps, they usually have "id" matched or null.
+                                            // The CleanPresets logic already handles "presets" vs "storables" vs direct.
+                                            
+                                            // Ensure we are setting the last restored data so 'Undo' might work (or just system consistency)
                                             atom.SetLastRestoredData(presetJSON, true, true);
-                                            presetManager.LoadPresetFromJSON(presetJSON, false);
+                                            
+                                            LogUtil.Log($"[DragDropDebug] Calling LoadPresetFromJSON...");
+                                            presetManager.LoadPresetFromJSON(presetJSON, true); 
                                             presetLoaded = true;
-                                            LogUtil.Log($"[DragDropDebug] Successfully loaded preset via PresetManager");
+                                            LogUtil.Log($"[DragDropDebug] Successfully loaded preset via PresetManager.LoadPresetFromJSON");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            LogUtil.LogError("[DragDropDebug] Direct PresetManager load failed: " + ex.Message);
                                         }
                                     }
                                     else
@@ -1192,6 +1449,15 @@ namespace VPB
                  
                  if (ghostText != null)
                  {
+                     if (CheckDualPose())
+                     {
+                         bool isMale = IsAtomMale(atom);
+                         string genderStr = isMale ? "Male" : "Female";
+                         ghostText.text = $"Applying Dual Pose ({genderStr}) to\n{atom.name}";
+                         ghostText.color = new Color(0.5f, 1f, 0.5f);
+                         return;
+                     }
+
                      HashSet<string> regions = isHair ? GetHairRegions(FileEntry) : GetClothingRegions(FileEntry);
 
                      string typeStr;
@@ -1442,6 +1708,188 @@ namespace VPB
         }
 
 
+
+        private void ApplyDualPose(Atom targetAtom, JSONNode dualPoseNode)
+        {
+            if (dualPoseNode == null) return;
+            
+            try
+            {
+                LogUtil.Log("[Gallery] Applying Dual Pose...");
+                
+                string p1Id = dualPoseNode["Person1"]?.Value;
+                string p2Id = dualPoseNode["Person2"]?.Value;
+                
+                if (string.IsNullOrEmpty(p1Id) || string.IsNullOrEmpty(p2Id))
+                {
+                    LogUtil.LogError("[Gallery] Dual Pose missing Person1/Person2 fields.");
+                    return;
+                }
+                
+                JSONArray atomsArray = dualPoseNode["atoms"] as JSONArray;
+                if (atomsArray == null) return;
+                
+                JSONClass p1AtomData = null;
+                JSONClass p2AtomData = null;
+                bool p1IsMale = false;
+                bool p2IsMale = false;
+                
+                for(int i=0; i<atomsArray.Count; i++)
+                {
+                    JSONClass a = atomsArray[i] as JSONClass;
+                    if (a == null) continue;
+                    string aid = a["id"].Value;
+                    
+                    if (aid == p1Id) 
+                    {
+                         p1AtomData = a;
+                         p1IsMale = CheckGenderInJSON(a);
+                    }
+                    else if (aid == p2Id)
+                    {
+                         p2AtomData = a;
+                         p2IsMale = CheckGenderInJSON(a);
+                    }
+                }
+                
+                if (p1AtomData == null || p2AtomData == null)
+                {
+                     LogUtil.LogError("[Gallery] Could not find atom data for Person1 or Person2.");
+                     return;
+                }
+                
+                bool targetIsMale = IsAtomMale(targetAtom);
+                
+                JSONClass targetData = null;
+                JSONClass partnerData = null;
+                
+                if (targetIsMale == p1IsMale) { targetData = p1AtomData; partnerData = p2AtomData; }
+                else if (targetIsMale == p2IsMale) { targetData = p2AtomData; partnerData = p1AtomData; }
+                else 
+                {
+                    if (targetIsMale)
+                    {
+                        if (p1IsMale) { targetData = p1AtomData; partnerData = p2AtomData; }
+                        else if (p2IsMale) { targetData = p2AtomData; partnerData = p1AtomData; }
+                    }
+                    else
+                    {
+                        if (!p1IsMale) { targetData = p1AtomData; partnerData = p2AtomData; }
+                        else if (!p2IsMale) { targetData = p2AtomData; partnerData = p1AtomData; }
+                    }
+                }
+                
+                if (targetData == null)
+                {
+                    targetData = p1AtomData;
+                    partnerData = p2AtomData;
+                }
+                
+                Atom partnerAtom = null;
+                List<Atom> allAtoms = SuperController.singleton.GetAtoms();
+                float closestDist = float.MaxValue;
+                bool requiredPartnerMale = CheckGenderInJSON(partnerData);
+                
+                foreach(Atom a in allAtoms)
+                {
+                    if (a == targetAtom) continue;
+                    if (a.type != "Person") continue;
+                    
+                    bool aIsMale = IsAtomMale(a);
+                    if (aIsMale == requiredPartnerMale)
+                    {
+                        float d = Vector3.Distance(targetAtom.transform.position, a.transform.position);
+                        if (d < closestDist)
+                        {
+                            closestDist = d;
+                            partnerAtom = a;
+                        }
+                    }
+                }
+                
+                if (partnerAtom == null)
+                {
+                    foreach(Atom a in allAtoms)
+                    {
+                        if (a == targetAtom) continue;
+                        if (a.type != "Person") continue;
+                        float d = Vector3.Distance(targetAtom.transform.position, a.transform.position);
+                        if (d < closestDist)
+                        {
+                            closestDist = d;
+                            partnerAtom = a;
+                        }
+                    }
+                }
+                
+                if (targetAtom != null && targetData != null)
+                {
+                     LogUtil.Log($"[Gallery] Applying dual pose to target {targetAtom.name}");
+                     ApplyPoseToAtom(targetAtom, targetData);
+                }
+                
+                if (partnerAtom != null && partnerData != null)
+                {
+                     LogUtil.Log($"[Gallery] Applying dual pose to partner {partnerAtom.name}");
+                     ApplyPoseToAtom(partnerAtom, partnerData);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[Gallery] Error applying dual pose: {ex.Message}");
+            }
+        }
+        
+        private bool CheckGenderInJSON(JSONClass atomData)
+        {
+             if (atomData == null) return false;
+             JSONArray storables = atomData["storables"] as JSONArray;
+             if (storables != null)
+             {
+                 for(int i=0; i<storables.Count; i++)
+                 {
+                     JSONClass s = storables[i] as JSONClass;
+                     if (s != null && s["id"].Value == "geometry")
+                     {
+                         string c = s["character"]?.Value;
+                         if (!string.IsNullOrEmpty(c) && c.StartsWith("Male", StringComparison.OrdinalIgnoreCase)) return true;
+                     }
+                 }
+             }
+             return false;
+        }
+
+        private void ApplyPoseToAtom(Atom atom, JSONClass data)
+        {
+             bool suppressRoot = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
+             
+             if (suppressRoot)
+             {
+                 JSONArray targetStorables = data["storables"] as JSONArray;
+                 if (targetStorables != null)
+                 {
+                      for(int k=0; k<targetStorables.Count; k++)
+                      {
+                           JSONClass s = targetStorables[k] as JSONClass;
+                           if (s != null && s["id"].Value == "control")
+                           {
+                                if (s.HasKey("position")) s.Remove("position");
+                                if (s.HasKey("rotation")) s.Remove("rotation");
+                                break;
+                           }
+                      }
+                 }
+             }
+
+             atom.PreRestore(true, false);
+             if (!suppressRoot)
+             {
+                 atom.RestoreTransform(data);
+             }
+             atom.Restore(data, true, false, false);
+             atom.LateRestore(data, true, false, false);
+             atom.PostRestore(true, false);
+        }
 
         private void DestroyGhost()
         {
