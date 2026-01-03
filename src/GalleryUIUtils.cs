@@ -369,6 +369,12 @@ namespace VPB
             {
                 return ItemType.Scene;
             }
+
+            // Pose fallback for loose .json pose presets (non-.vap) when path/name indicates pose
+            if (p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && p.IndexOf("pose", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return ItemType.Pose;
+            }
             
             return ItemType.Other;
         }
@@ -668,6 +674,29 @@ namespace VPB
 
             JSONStorable geometry = atom.GetStorableByID("geometry");
             ItemType itemType = GetItemType(FileEntry);
+            string ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
+
+            bool isPoseCategory = false;
+            if (Panel != null)
+            {
+                string catPath = Panel.GetCurrentPath();
+                if (!string.IsNullOrEmpty(catPath))
+                {
+                    catPath = catPath.Replace("\\", "/");
+                    if (catPath.IndexOf("/Pose", StringComparison.OrdinalIgnoreCase) >= 0 || catPath.IndexOf("Saves/Person", StringComparison.OrdinalIgnoreCase) >= 0)
+                        isPoseCategory = true;
+                }
+
+                string catTitle = Panel.GetTitle();
+                if (!string.IsNullOrEmpty(catTitle) && catTitle.IndexOf("pose", StringComparison.OrdinalIgnoreCase) >= 0)
+                    isPoseCategory = true;
+
+                string catExt = Panel.GetCurrentExtension();
+                if (!string.IsNullOrEmpty(catExt) && catExt.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0 && catExt.IndexOf("vap", StringComparison.OrdinalIgnoreCase) >= 0)
+                    isPoseCategory = true;
+            }
+
+            if (ext == ".json" && atom.type == "Person" && (itemType == ItemType.Other || itemType == ItemType.Scene || isPoseCategory)) itemType = ItemType.Pose;
 
             // Capture state for Undo
             if (Panel != null)
@@ -799,7 +828,7 @@ namespace VPB
             }
 
             // Try to load as preset first (standard for Clothing/Hair presets and Poses)
-            string ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
+            ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
             if (ext == ".vap" || ext == ".json" || ext == ".vac")
             {
                 string storableId = GetStorableIdForItemType(itemType);
@@ -830,54 +859,132 @@ namespace VPB
                         JSONStorable presetStorable = atom.GetStorableByID(storableId);
                         if (presetStorable != null)
                         {
-                            // Get the PresetManager component
                             MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
                             if (presetManager != null)
                             {
-                                // Load the preset JSON
-                                JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
-                                if (presetJSON != null)
+                                bool actionLoaded = false;
+                                bool isVarPath = normalizedPath.Contains(":");
+                                bool isPosePath = normalizedPath.IndexOf("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0;
+                                if (!isVarPath && isPosePath)
                                 {
-                                    // Replace SELF: and ./ references with actual package paths
-                                    string presetPackageName = "";
-                                    string folderFullPath = "";
-                                    
-                                    if (normalizedPath.Contains(":"))
+                                    try
                                     {
-                                        presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
-                                        folderFullPath = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(normalizedPath);
-                                        folderFullPath = MVR.FileManagementSecure.FileManagerSecure.NormalizeLoadPath(folderFullPath);
-                                        
-                                        string presetJSONString = presetJSON.ToString();
-                                        bool modified = false;
-                                        
-                                        if (presetJSONString.Contains("SELF:"))
+                                        JSONStorableBool loadOnSelect = presetStorable.GetBoolJSONParam("loadPresetOnSelect");
+                                        JSONStorableString presetName = presetStorable.GetStringJSONParam("presetName");
+                                        bool loadOnSelectPrev = loadOnSelect != null ? loadOnSelect.val : false;
+                                        string presetNamePrev = presetName != null ? presetName.val : null;
+
+                                        if (loadOnSelect != null) loadOnSelect.val = false;
+                                        if (presetName != null)
                                         {
-                                            presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
-                                            modified = true;
+                                            presetName.val = presetManager.GetPresetNameFromFilePath(SuperController.singleton.NormalizePath(normalizedPath));
                                         }
+
+                                        presetStorable.CallAction("LoadPreset");
+
+                                        if (loadOnSelect != null) loadOnSelect.val = loadOnSelectPrev;
+                                        if (presetName != null) presetName.valNoCallback = presetNamePrev;
+
+                                        actionLoaded = true;
+                                        LogUtil.Log("[DragDropDebug] Loaded preset via storable action");
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        LogUtil.LogError("[DragDropDebug] PresetManager action load failed: " + ex.Message);
+                                    }
+                                }
+
+                                if (!actionLoaded)
+                                {
+                                    JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
+                                    if (presetJSON != null)
+                                    {
+                                        string presetPackageName = "";
+                                        string folderFullPath = "";
                                         
-                                        if (presetJSONString.Contains("\":\"./"))
+                                        if (normalizedPath.Contains(":"))
                                         {
-                                            presetJSONString = presetJSONString.Replace("\":\"./", "\":\"" + folderFullPath + "/");
-                                            modified = true;
+                                            presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
+                                            folderFullPath = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(normalizedPath);
+                                            folderFullPath = MVR.FileManagementSecure.FileManagerSecure.NormalizeLoadPath(folderFullPath);
+                                            
+                                            string presetJSONString = presetJSON.ToString();
+                                            bool modified = false;
+                                            
+                                            if (presetJSONString.Contains("SELF:"))
+                                            {
+                                                presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
+                                                modified = true;
+                                            }
+                                            
+                                            if (presetJSONString.Contains("\":\"./"))
+                                            {
+                                                presetJSONString = presetJSONString.Replace("\":\"./", "\":\"" + folderFullPath + "/");
+                                                modified = true;
+                                            }
+                                            
+                                            if (modified)
+                                            {
+                                                presetJSON = SimpleJSON.JSON.Parse(presetJSONString).AsObject;
+                                            }
                                         }
-                                        
-                                        if (modified)
+
+                                        bool nativePoseLoad = itemType == ItemType.Pose;
+                                        if (nativePoseLoad)
                                         {
-                                            presetJSON = SimpleJSON.JSON.Parse(presetJSONString).AsObject;
+                                            try
+                                            {
+                                                string tempFolder = "Custom/Atom/Person/Pose/VPBTemp";
+                                                string tempPath = Path.Combine(tempFolder, "VPB_PoseTemp_" + Guid.NewGuid().ToString("N") + ".vap");
+                                                tempPath = FileManager.NormalizePath(tempPath);
+                                                string tempDir = Path.GetDirectoryName(tempPath);
+                                                if (!string.IsNullOrEmpty(tempDir) && !Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+
+                                                SuperController.singleton.SaveJSON(presetJSON, tempPath);
+
+                                                JSONStorableBool loadOnSelect = presetStorable.GetBoolJSONParam("loadPresetOnSelect");
+                                                JSONStorableString presetName = presetStorable.GetStringJSONParam("presetName");
+                                                bool loadOnSelectPrev = loadOnSelect != null ? loadOnSelect.val : false;
+                                                string presetNamePrev = presetName != null ? presetName.val : null;
+
+                                                if (loadOnSelect != null) loadOnSelect.val = false;
+                                                if (presetName != null)
+                                                {
+                                                    presetName.val = presetManager.GetPresetNameFromFilePath(SuperController.singleton.NormalizePath(tempPath));
+                                                }
+
+                                                presetStorable.CallAction("LoadPreset");
+
+                                                if (loadOnSelect != null) loadOnSelect.val = loadOnSelectPrev;
+                                                if (presetName != null) presetName.valNoCallback = presetNamePrev;
+
+                                                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+
+                                                presetLoaded = true;
+                                                LogUtil.Log("[DragDropDebug] Loaded pose via native storable action from temp copy");
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                LogUtil.LogError("[DragDropDebug] Native pose load failed: " + ex.Message);
+                                            }
+                                        }
+
+                                        if (!presetLoaded)
+                                        {
+                                            atom.SetLastRestoredData(presetJSON, true, true);
+                                            presetManager.LoadPresetFromJSON(presetJSON, false);
+                                            presetLoaded = true;
+                                            LogUtil.Log($"[DragDropDebug] Successfully loaded preset via PresetManager");
                                         }
                                     }
-                                    
-                                    // Apply the preset
-                                    atom.SetLastRestoredData(presetJSON, true, true);
-                                    presetManager.LoadPresetFromJSON(presetJSON, false);
-                                    presetLoaded = true;
-                                    LogUtil.Log($"[DragDropDebug] Successfully loaded preset via PresetManager");
+                                    else
+                                    {
+                                        LogUtil.LogError($"[DragDropDebug] Failed to load preset JSON from {normalizedPath}");
+                                    }
                                 }
                                 else
                                 {
-                                    LogUtil.LogError($"[DragDropDebug] Failed to load preset JSON from {normalizedPath}");
+                                    presetLoaded = true;
                                 }
                             }
                             else
@@ -1487,7 +1594,7 @@ namespace VPB
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
             scrollRect.verticalScrollbar = scrollbarGO.GetComponent<Scrollbar>();
-            scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+            scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
 
             return scrollableContentGO;
         }
@@ -1570,6 +1677,66 @@ namespace VPB
             buttonGO.AddComponent<UIHoverBorder>();
 
             return buttonGO;
+        }
+
+        public static GameObject CreateUIToggle(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction<bool> onValueChanged)
+        {
+            GameObject toggleGO = AddChildGOImage(parentGO, new Color(0, 0, 0, 0), anchorPreset, width, height, new Vector2(xOffset, yOffset));
+            toggleGO.name = "Toggle_" + label;
+            Toggle toggle = toggleGO.AddComponent<Toggle>();
+
+            // Outer Box (Border - White)
+            GameObject boxGO = new GameObject("Box");
+            boxGO.transform.SetParent(toggleGO.transform, false);
+            RectTransform boxRT = boxGO.AddComponent<RectTransform>();
+            boxRT.anchorMin = new Vector2(0, 0.5f);
+            boxRT.anchorMax = new Vector2(0, 0.5f);
+            boxRT.pivot = new Vector2(0, 0.5f);
+            boxRT.anchoredPosition = new Vector2(10, 0);
+            boxRT.sizeDelta = new Vector2(20, 20);
+            Image boxImg = boxGO.AddComponent<Image>();
+            boxImg.color = Color.white;
+            toggle.targetGraphic = boxImg;
+
+            // Inner Box (Background - Black)
+            GameObject innerGO = new GameObject("Inner");
+            innerGO.transform.SetParent(boxGO.transform, false);
+            RectTransform innerRT = innerGO.AddComponent<RectTransform>();
+            innerRT.anchorMin = new Vector2(0.5f, 0.5f);
+            innerRT.anchorMax = new Vector2(0.5f, 0.5f);
+            innerRT.pivot = new Vector2(0.5f, 0.5f);
+            innerRT.sizeDelta = new Vector2(16, 16);
+            Image innerImg = innerGO.AddComponent<Image>();
+            innerImg.color = Color.black;
+
+            // Checkmark (Fill - White)
+            GameObject checkGO = new GameObject("Checkmark");
+            checkGO.transform.SetParent(innerGO.transform, false); 
+            RectTransform checkRT = checkGO.AddComponent<RectTransform>();
+            checkRT.anchorMin = new Vector2(0.5f, 0.5f);
+            checkRT.anchorMax = new Vector2(0.5f, 0.5f);
+            checkRT.pivot = new Vector2(0.5f, 0.5f);
+            checkRT.sizeDelta = new Vector2(14, 14); 
+            Image checkImg = checkGO.AddComponent<Image>();
+            checkImg.color = Color.white;
+            toggle.graphic = checkImg;
+
+            GameObject labelGO = new GameObject("Label");
+            labelGO.transform.SetParent(toggleGO.transform, false);
+            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+            labelRT.anchorMin = new Vector2(0, 0);
+            labelRT.anchorMax = new Vector2(1, 1);
+            labelRT.offsetMin = new Vector2(35, 0);
+            labelRT.offsetMax = new Vector2(0, 0);
+            Text t = labelGO.AddComponent<Text>();
+            t.text = label;
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = fontSize;
+            t.color = Color.white;
+            t.alignment = TextAnchor.MiddleLeft;
+
+            toggle.onValueChanged.AddListener(onValueChanged);
+            return toggleGO;
         }
 
         public static GameObject CreateToggle(GameObject parentGO, string label, float width, float height, float xOffset, float yOffset, int anchorPreset, UnityAction<bool> onValueChanged)

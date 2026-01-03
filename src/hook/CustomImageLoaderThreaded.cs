@@ -930,6 +930,14 @@ namespace VPB
 			return null;
 		}
 
+        public void AddCachedThumbnail(string path, Texture2D tex)
+        {
+            if (thumbnailCache != null && !thumbnailCache.ContainsKey(path))
+            {
+                thumbnailCache.Add(path, tex);
+            }
+        }
+
         public void CancelGroup(string groupId)
         {
             if (string.IsNullOrEmpty(groupId)) return;

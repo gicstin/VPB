@@ -18,6 +18,7 @@ namespace VPB
         public ConfigEntry<string> UIKey;
         public ConfigEntry<string> GalleryKey;
         public ConfigEntry<string> CreateGalleryKey;
+        public ConfigEntry<string> HubKey;
         public ConfigEntry<float> UIScale;
         public ConfigEntry<Vector2> UIPosition;
         public ConfigEntry<bool> MiniMode;
@@ -47,6 +48,7 @@ namespace VPB
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<bool> EnableGalleryFade;
         public ConfigEntry<bool> DragDropReplaceMode;
+        public ConfigEntry<bool> AutoPageEnabled;
         
         internal static void Init(ConfigFile config)
         {
@@ -55,8 +57,9 @@ namespace VPB
         private void Load(ConfigFile config)
         {
             UIKey = config.Bind<string>("UI", "UIKey", "Ctrl+V", "Shortcut key for Show/Hide Var Browser.");
-            GalleryKey = config.Bind<string>("UI", "GalleryKey", "Ctrl+Shift+G", "Shortcut key for Show/Hide Gallery Panes.");
-            CreateGalleryKey = config.Bind<string>("UI", "CreateGalleryKey", "Ctrl+Shift+N", "Shortcut key for Create Gallery Pane.");
+            GalleryKey = config.Bind<string>("UI", "GalleryKey", "Ctrl+G", "Shortcut key for Show/Hide Gallery Panes.");
+            CreateGalleryKey = config.Bind<string>("UI", "CreateGalleryKey", "Ctrl+N", "Shortcut key for Create Gallery Pane.");
+            HubKey = config.Bind<string>("UI", "HubKey", "Ctrl+H", "Shortcut key for Open Hub Browser.");
             UIScale = config.Bind<float>("UI", "Scale", 1, "Set UI Scale.");
             UIPosition = config.Bind<Vector2>("UI", "Position", Vector2.zero, "Set UI Position.");
             MiniMode = config.Bind<bool>("UI", "MiniMode", false, "Set Mini Mode.");
@@ -75,6 +78,7 @@ namespace VPB
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             EnableGalleryFade = config.Bind<bool>("UI", "EnableGalleryFade", true, "Enable Gallery Side Buttons Fade.");
             DragDropReplaceMode = config.Bind<bool>("UI", "DragDropReplaceMode", false, "Enable Replace mode for Drag and Drop in Gallery.");
+            AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
             
             OptimizeGameObjectFind = config.Bind<bool>("Unity Patches", "OptimizeGameObjectFind", true, "Cache GameObject.Find results.");
             OptimizePhysicsRaycast = config.Bind<bool>("Unity Patches", "OptimizePhysicsRaycast", true, "Cache Physics.Raycast results per frame.");

@@ -57,6 +57,7 @@ namespace VPB
         }
         static int ReadString(StringBuilder builder, string text, ref int idx, int leastLeftCntToRead)
         {
+            if (idx >= text.Length) return 0;
             char peek = text[idx];
             if (peek == '\\' || peek == '/' || peek == ':' || peek == '*' || peek == '?' || peek == '"'
                     || peek == '<' || peek == '>' || peek == '.' || peek == '\n' || peek == '\r')
@@ -79,13 +80,14 @@ namespace VPB
                 if (text.Length <= leastLeftCntToRead + idx)
                     break;
                 idx++;
+                if (idx >= text.Length) break;
                 peek = text[idx];
             }
             return cnt;
         }
         static bool ReadDot(StringBuilder builder, string text, ref int idx)
         {
-            if (text[idx] == '.')
+            if (idx < text.Length && text[idx] == '.')
             {
                 idx++;
                 builder.Append('.');
@@ -95,7 +97,7 @@ namespace VPB
         }
         static bool ReadColon(string text, ref int idx)
         {
-            if (text[idx] == ':')
+            if (idx < text.Length && text[idx] == ':')
             {
                 idx++;
                 return true;
@@ -104,7 +106,7 @@ namespace VPB
         }
         static int ReadVersion(StringBuilder builder, string text, ref int idx, int leastLeftCntToRead)
         {
-            if (text.Length > idx + 6 + leastLeftCntToRead)// Reserve space to read "latest"
+            if (idx + 6 + leastLeftCntToRead < text.Length)// Reserve space to read "latest"
             {
                 if (text[idx] == 'l'
                     && text[idx + 1] == 'a'
@@ -123,6 +125,7 @@ namespace VPB
         }
         static int ReadVersionNumber(StringBuilder builder, string text, ref int idx, int leastLeftCntToRead)
         {
+            if (idx >= text.Length) return 0;
             int cnt = 0;
             char peek = text[idx];
             // Version numbers cannot start with 0
@@ -138,6 +141,7 @@ namespace VPB
                 // Must reserve at least this many characters, otherwise parsing cannot continue
                 if (text.Length <= leastLeftCntToRead + idx++)
                     break;
+                if (idx >= text.Length) break;
                 peek = text[idx];
             }
             return cnt;

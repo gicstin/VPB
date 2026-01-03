@@ -28,6 +28,7 @@ namespace VPB
 
         private List<GameObject> activeButtons = new List<GameObject>();
         private Stack<GameObject> fileButtonPool = new Stack<GameObject>();
+        private Stack<GameObject> navButtonPool = new Stack<GameObject>(); // NEW: Separate pool for Nav buttons
         private Dictionary<string, Image> fileButtonImages = new Dictionary<string, Image>();
         private string selectedPath = null;
         private List<GameObject> leftActiveTabButtons = new List<GameObject>();
@@ -101,13 +102,17 @@ namespace VPB
         private GameObject rightSubSortBtn;
         private Text rightSubSortBtnText;
         private InputField rightSubSearchInput;
-
-        // Data
+        private GameObject rightSubClearBtn; // NEW
+        private Text rightSubClearBtnText; // NEW
+        
+        private GameObject leftSubClearBtn; // NEW
+        private Text leftSubClearBtnText; // NEW
         private string currentCreator = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
         private string tagFilter = ""; // NEW
         private string currentLoadingGroupId = "";
+        private Coroutine refreshCoroutine;
         
         private bool filterFavorite = false;
         private string nameFilter = "";
@@ -116,7 +121,6 @@ namespace VPB
         // Tagging
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private GameObject leftTagsBtnGO;
 
         private void UpdateSideButtonsVisibility()
         {
@@ -166,8 +170,13 @@ namespace VPB
         // Follow Mode Fields
         private bool followUser = true;
         private float lastFollowUpdateTime = 0f;
-        private const float FollowUpdateInterval = 0.5f; 
+        private const float FollowUpdateInterval = 0.5f;
+        private const float FollowRotateStepDegrees = 120f;
         private Quaternion targetFollowRotation;
+        private bool isReorienting = false;
+        private const float ReorientStartAngle = 20f;
+        private const float ReorientStopAngle = 0.5f;
+        
         private Text rightFollowBtnText;
         private Image rightFollowBtnImage;
         private Text leftFollowBtnText;
@@ -182,6 +191,13 @@ namespace VPB
         
         private Dictionary<string, int> tagCounts = new Dictionary<string, int>();
         private bool tagsCached = false;
+
+        // Pagination
+        private int currentPage = 0;
+        private int itemsPerPage = 200;
+        private Text paginationText;
+        private GameObject paginationPrevBtn;
+        private GameObject paginationNextBtn;
 
         // Define colors for different content types
         public static readonly Color ColorCategory = new Color(0.7f, 0.2f, 0.2f, 1f); // Desaturated Red
@@ -348,6 +364,8 @@ namespace VPB
 
             // File Sort Button
             GameObject fileSortBtn = UI.CreateUIButton(titleBarGO, 40, 40, "Az↑", 16, 0, 0, AnchorPresets.middleCenter, null);
+            fileSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            fileSortBtn.GetComponentInChildren<Text>().color = Color.white;
             RectTransform fileSortRT = fileSortBtn.GetComponent<RectTransform>();
             fileSortRT.anchorMin = new Vector2(0.5f, 0.5f);
             fileSortRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -398,12 +416,14 @@ namespace VPB
                 rightSubTabScrollGO.SetActive(false); // Hidden by default
 
                 // Right Sub Sort Button
-                rightSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 30, "Az↑", 14, 0, 0, AnchorPresets.topRight, null);
+                rightSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "Az↑", 14, 0, 0, AnchorPresets.topRight, null);
+                rightSubSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+                rightSubSortBtn.GetComponentInChildren<Text>().color = Color.white;
                 RectTransform rsSubRT = rightSubSortBtn.GetComponent<RectTransform>();
                 rsSubRT.anchorMin = new Vector2(1, 0.5f);
                 rsSubRT.anchorMax = new Vector2(1, 0.5f);
                 rsSubRT.pivot = new Vector2(1, 1);
-                rsSubRT.anchoredPosition = new Vector2(-150, -10); // Below split line
+                rsSubRT.anchoredPosition = new Vector2(-190, -10); // Below split line
                 
                 rightSubSortBtnText = rightSubSortBtn.GetComponentInChildren<Text>();
                 Button rightSubSortButton = rightSubSortBtn.GetComponent<Button>();
@@ -426,6 +446,24 @@ namespace VPB
                 rSubSearchRT.pivot = new Vector2(1, 1);
                 rSubSearchRT.anchoredPosition = new Vector2(-10, -10);
                 
+                // Right Sub Clear Button
+                rightSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, "Clear Selected", 14, 0, 0, AnchorPresets.bottomRight, () => {
+                    activeTags.Clear();
+                    currentPage = 0;
+                    RefreshFiles();
+                    UpdateTabs();
+                });
+                rightSubClearBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f); // Dark Red
+                rightSubClearBtnText = rightSubClearBtn.GetComponentInChildren<Text>();
+                rightSubClearBtnText.color = Color.white;
+                
+                RectTransform rSubClearRT = rightSubClearBtn.GetComponent<RectTransform>();
+                rSubClearRT.anchorMin = new Vector2(1, 0);
+                rSubClearRT.anchorMax = new Vector2(1, 0);
+                rSubClearRT.pivot = new Vector2(1, 0);
+                rSubClearRT.anchoredPosition = new Vector2(-10, 10);
+                rightSubClearBtn.SetActive(false);
+
                 // Init Sub Sort Text
                 UpdateSortButtonText(rightSubSortBtnText, GetSortState("Tags"));
                 
@@ -433,12 +471,14 @@ namespace VPB
                 rightSubSearchInput.gameObject.SetActive(false);
 
                 // Right Sort Button
-                rightSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 30, "Az↑", 14, 0, 0, AnchorPresets.topRight, null);
+                rightSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "Az↑", 14, 0, 0, AnchorPresets.topRight, null);
+                rightSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+                rightSortBtn.GetComponentInChildren<Text>().color = Color.white;
                 RectTransform rsRT = rightSortBtn.GetComponent<RectTransform>();
                 rsRT.anchorMin = new Vector2(1, 1);
                 rsRT.anchorMax = new Vector2(1, 1);
                 rsRT.pivot = new Vector2(1, 1);
-                rsRT.anchoredPosition = new Vector2(-150, -55); // Left of Search
+                rsRT.anchoredPosition = new Vector2(-190, -55); // Left of Search
                 
                 rightSortBtnText = rightSortBtn.GetComponentInChildren<Text>();
                 Button rightSortButton = rightSortBtn.GetComponent<Button>();
@@ -489,7 +529,9 @@ namespace VPB
                 leftSubTabScrollGO.SetActive(false); // Hidden by default
 
                 // Left Sub Sort Button
-                leftSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 30, "Az↑", 14, 0, 0, AnchorPresets.topLeft, null);
+                leftSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "Az↑", 14, 0, 0, AnchorPresets.topLeft, null);
+                leftSubSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+                leftSubSortBtn.GetComponentInChildren<Text>().color = Color.white;
                 RectTransform lsSubRT = leftSubSortBtn.GetComponent<RectTransform>();
                 lsSubRT.anchorMin = new Vector2(0, 0.5f);
                 lsSubRT.anchorMax = new Vector2(0, 0.5f);
@@ -517,6 +559,24 @@ namespace VPB
                 lSubSearchRT.pivot = new Vector2(0, 1);
                 lSubSearchRT.anchoredPosition = new Vector2(55, -10);
 
+                // Left Sub Clear Button
+                leftSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, "Clear Selected", 14, 0, 0, AnchorPresets.bottomLeft, () => {
+                    activeTags.Clear();
+                    currentPage = 0;
+                    RefreshFiles();
+                    UpdateTabs();
+                });
+                leftSubClearBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f); // Dark Red
+                leftSubClearBtnText = leftSubClearBtn.GetComponentInChildren<Text>();
+                leftSubClearBtnText.color = Color.white;
+                
+                RectTransform lSubClearRT = leftSubClearBtn.GetComponent<RectTransform>();
+                lSubClearRT.anchorMin = new Vector2(0, 0);
+                lSubClearRT.anchorMax = new Vector2(0, 0);
+                lSubClearRT.pivot = new Vector2(0, 0);
+                lSubClearRT.anchoredPosition = new Vector2(10, 10);
+                leftSubClearBtn.SetActive(false);
+
                 // Init Sub Sort Text
                 UpdateSortButtonText(leftSubSortBtnText, GetSortState("Tags"));
 
@@ -524,7 +584,9 @@ namespace VPB
                 leftSubSearchInput.gameObject.SetActive(false);
 
                 // Left Sort Button
-                leftSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 30, "Az↑", 14, 0, 0, AnchorPresets.topLeft, null);
+                leftSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "Az↑", 14, 0, 0, AnchorPresets.topLeft, null);
+                leftSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+                leftSortBtn.GetComponentInChildren<Text>().color = Color.white;
                 RectTransform lsRT = leftSortBtn.GetComponent<RectTransform>();
                 lsRT.anchorMin = new Vector2(0, 1);
                 lsRT.anchorMax = new Vector2(0, 1);
@@ -747,7 +809,63 @@ namespace VPB
             dotRT.sizeDelta = new Vector2(10, 10);
             pointerDotGO.SetActive(false);
 
+            CreatePaginationControls();
+
             Hide();
+        }
+
+        private void CreatePaginationControls()
+        {
+            // Pagination Container (Bottom Center)
+            GameObject pageContainer = new GameObject("PaginationContainer");
+            pageContainer.transform.SetParent(backgroundBoxGO.transform, false);
+            RectTransform pageRT = pageContainer.AddComponent<RectTransform>();
+            pageRT.anchorMin = new Vector2(0.5f, 0);
+            pageRT.anchorMax = new Vector2(0.5f, 0);
+            pageRT.pivot = new Vector2(0.5f, 0);
+            pageRT.anchoredPosition = new Vector2(0, 10);
+            pageRT.sizeDelta = new Vector2(400, 40);
+
+            // Prev Button
+            paginationPrevBtn = UI.CreateUIButton(pageContainer, 40, 40, "<", 20, -80, 0, AnchorPresets.middleCenter, PrevPage);
+            
+            // Text
+            GameObject textGO = new GameObject("PageText");
+            textGO.transform.SetParent(pageContainer.transform, false);
+            paginationText = textGO.AddComponent<Text>();
+            paginationText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            paginationText.fontSize = 18;
+            paginationText.color = Color.white;
+            paginationText.alignment = TextAnchor.MiddleCenter;
+            paginationText.text = "1 / 1";
+            RectTransform textRT = textGO.GetComponent<RectTransform>();
+            textRT.anchorMin = new Vector2(0.5f, 0.5f);
+            textRT.anchorMax = new Vector2(0.5f, 0.5f);
+            textRT.pivot = new Vector2(0.5f, 0.5f);
+            textRT.anchoredPosition = new Vector2(0, 0);
+            textRT.sizeDelta = new Vector2(100, 40);
+
+            // Next Button
+            paginationNextBtn = UI.CreateUIButton(pageContainer, 40, 40, ">", 20, 80, 0, AnchorPresets.middleCenter, NextPage);
+
+            // Hover support
+            AddHoverDelegate(paginationPrevBtn);
+            AddHoverDelegate(paginationNextBtn);
+        }
+
+        private void NextPage()
+        {
+            currentPage++;
+            RefreshFiles();
+        }
+
+        private void PrevPage()
+        {
+            if (currentPage > 0)
+            {
+                currentPage--;
+                RefreshFiles(false, true);
+            }
         }
 
         private void CreateCancelButtonsGroup(GameObject parent, float btnWidth, float btnHeight, float yOffset)
@@ -843,22 +961,26 @@ namespace VPB
         private Camera _cachedCamera;
         void Update()
         {
-            // Sorting Logic
+            // Sorting Logic - DISABLED to prevent FPS drops
+            /*
             if (canvas != null && canvas.gameObject.activeSelf)
             {
                 if (_cachedCamera == null) _cachedCamera = canvas.worldCamera;
                 if (_cachedCamera == null) _cachedCamera = Camera.main;
 
-                if (_cachedCamera != null)
+                // Throttled and reduced sensitivity to prevent constant canvas rebuilds
+                if (_cachedCamera != null && Time.time - lastSortUpdate > SortUpdateInterval)
                 {
+                    lastSortUpdate = Time.time;
                     float dist = Vector3.Distance(_cachedCamera.transform.position, canvas.transform.position);
-                    int order = -10000 - (int)(dist * 100);
+                    int order = -10000 - (int)(dist * 10); // 10cm steps
                     if (canvas.sortingOrder != order)
                     {
                         canvas.sortingOrder = order;
                     }
                 }
             }
+            */
 
             // Status Bar Logic
             if (dragStatusMsg != null)
@@ -906,32 +1028,33 @@ namespace VPB
                 }
             }
 
-            if (followUser)
+            if (followUser && canvas != null)
             {
-                if (Time.time - lastFollowUpdateTime > FollowUpdateInterval)
-                {
-                    lastFollowUpdateTime = Time.time;
-                    
-                    // Always refresh camera to ensure we track VR/Desktop switches
-                    Camera cam = Camera.main;
-                    _cachedCamera = cam;
+                if (_cachedCamera == null || !_cachedCamera.isActiveAndEnabled)
+                    _cachedCamera = Camera.main;
 
-                    if (canvas != null && cam != null)
+                if (_cachedCamera != null)
+                {
+                    float now = Time.unscaledTime;
+                    if (lastFollowUpdateTime <= 0f || now - lastFollowUpdateTime >= FollowUpdateInterval)
                     {
-                        Vector3 lookDir = canvas.transform.position - cam.transform.position;
+                        lastFollowUpdateTime = now;
+                        Vector3 lookDir = canvas.transform.position - _cachedCamera.transform.position;
                         
                         if (lookDir.sqrMagnitude > 0.001f)
                         {
-                            // Face camera including pitch, but keep upright (no roll)
                             targetFollowRotation = Quaternion.LookRotation(lookDir, Vector3.up);
+
+                            float angleDiff = Quaternion.Angle(canvas.transform.rotation, targetFollowRotation);
+                            if (!isReorienting && angleDiff > ReorientStartAngle) isReorienting = true;
+
+                            if (isReorienting)
+                            {
+                                canvas.transform.rotation = Quaternion.RotateTowards(canvas.transform.rotation, targetFollowRotation, FollowRotateStepDegrees);
+                                if (Quaternion.Angle(canvas.transform.rotation, targetFollowRotation) < ReorientStopAngle) isReorienting = false;
+                            }
                         }
                     }
-                }
-                
-                // Smooth interpolation
-                if (canvas != null)
-                {
-                    canvas.transform.rotation = Quaternion.Slerp(canvas.transform.rotation, targetFollowRotation, Time.deltaTime * 2.0f);
                 }
             }
 
@@ -1136,7 +1259,7 @@ namespace VPB
                 if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
             }
             
-            contentScrollRT.offsetMin = new Vector2(leftOffset, 20);
+            contentScrollRT.offsetMin = new Vector2(leftOffset, 60);
             contentScrollRT.offsetMax = new Vector2(rightOffset, -55);
             
             UpdateButtonStates();
@@ -1470,6 +1593,7 @@ namespace VPB
                     subRT.anchorMin = new Vector2(0, 0);
                     subRT.anchorMax = new Vector2(0, 0.5f);
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
+                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, 60); // Gap for clear button
 
                     // Populate Top (Category)
                     UpdateTabs(ContentType.Category, leftTabContainerGO, leftActiveTabButtons, true);
@@ -1483,6 +1607,7 @@ namespace VPB
                     if (leftSubTabScrollGO != null) leftSubTabScrollGO.SetActive(false);
                     if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
                     if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
+                    if (leftSubClearBtn != null) leftSubClearBtn.SetActive(false);
 
                     RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
                     leftRT.anchorMin = new Vector2(0, 0);
@@ -1533,6 +1658,7 @@ namespace VPB
                     subRT.anchorMin = new Vector2(1, 0);
                     subRT.anchorMax = new Vector2(1, 0.5f);
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
+                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, 60); // Gap for clear button
 
                     // Populate Top (Category)
                     UpdateTabs(ContentType.Category, rightTabContainerGO, rightActiveTabButtons, false);
@@ -1546,6 +1672,7 @@ namespace VPB
                     if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
                     if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
                     if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
+                    if (rightSubClearBtn != null) rightSubClearBtn.SetActive(false);
 
                     RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
                     rightRT.anchorMin = new Vector2(1, 0);
@@ -1624,6 +1751,7 @@ namespace VPB
                     CreateTabButton(container.transform, label, btnColor, isActive, () => {
                         if (currentCreator == cName) currentCreator = "";
                         else currentCreator = cName;
+                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs(); 
                     }, trackedButtons);
@@ -1654,6 +1782,7 @@ namespace VPB
                         {
                             filterFavorite = !filterFavorite;
                             UpdateTabs();
+                            currentPage = 0;
                             RefreshFiles();
                         }
                     }, trackedButtons);
@@ -1724,9 +1853,27 @@ namespace VPB
                         if (activeTags.Contains(tag)) activeTags.Remove(tag);
                         else activeTags.Add(tag);
                         
+                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
                     }, trackedButtons);
+                }
+
+                // Update Clear Button
+                GameObject clearBtn = isLeft ? leftSubClearBtn : rightSubClearBtn;
+                Text clearBtnText = isLeft ? leftSubClearBtnText : rightSubClearBtnText;
+                
+                if (clearBtn != null)
+                {
+                    if (activeTags.Count > 0)
+                    {
+                        clearBtn.SetActive(true);
+                        if (clearBtnText != null) clearBtnText.text = "Clear Selected (" + activeTags.Count + ")";
+                    }
+                    else
+                    {
+                        clearBtn.SetActive(false);
+                    }
                 }
             }
             
@@ -1906,6 +2053,7 @@ namespace VPB
                 tagsCached = false;
                 currentCreator = "";
                 activeTags.Clear();
+                currentPage = 0;
             }
             currentExtension = extension;
             currentPath = path;
@@ -1969,23 +2117,35 @@ namespace VPB
             if (f == nameFilter) return;
             nameFilter = f;
             nameFilterLower = string.IsNullOrEmpty(f) ? "" : f.ToLowerInvariant();
+            currentPage = 0;
             RefreshFiles();
         }
 
-        public void RefreshFiles()
+        public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false)
         {
-            // Cancel previous loading group
+            if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
+            refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
+        }
+
+        private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
+        {
             if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
             {
                 CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
             }
             currentLoadingGroupId = Guid.NewGuid().ToString();
 
-            // Clear existing
             foreach (var btn in activeButtons)
             {
                 btn.SetActive(false);
-                fileButtonPool.Push(btn);
+                if (btn.name.StartsWith("NavButton_"))
+                {
+                    navButtonPool.Push(btn);
+                }
+                else
+                {
+                    fileButtonPool.Push(btn);
+                }
             }
             activeButtons.Clear();
             fileButtonImages.Clear();
@@ -1993,15 +2153,13 @@ namespace VPB
             List<FileEntry> files = new List<FileEntry>();
             string[] extensions = currentExtension.Split('|');
             bool hasNameFilter = !string.IsNullOrEmpty(nameFilterLower);
+            int yieldCounter = 0;
 
-            // 1. Search in .var packages via FileManager
             if (FileManager.PackagesByUid != null)
             {
                 foreach (var pkg in FileManager.PackagesByUid.Values)
                 {
-                    // Filter by Creator if in Creator mode or Undocked for a creator
                     string filterCreator = currentCreator;
-                    
                     if (!string.IsNullOrEmpty(filterCreator))
                     {
                         if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
@@ -2011,16 +2169,6 @@ namespace VPB
                     {
                         foreach (var entry in pkg.FileEntries)
                         {
-                            // In Creator mode, we accept ANY extension match (or still filter by currentExtension?)
-                            // Usually a creator makes Scenes, Looks, etc. 
-                            // If we filter by currentExtension, we might only see JSONs if that's what's selected.
-                            // But when in Creator mode, we might want to see EVERYTHING or default to JSON?
-                            // Let's stick to currentExtension for consistency, but maybe we need a way to reset extension?
-                            // For now, assume currentExtension is valid (likely .json for scenes)
-                            
-                            // In Category mode, we match path (Saves/scene/...). 
-                            // In Creator mode, we also respect the Category path filter if set.
-                            
                             bool match = IsMatch(entry, currentPaths, currentPath, extensions);
                             if (match && hasNameFilter)
                             {
@@ -2032,8 +2180,6 @@ namespace VPB
                                 try { if (!entry.IsFavorite()) match = false; }
                                 catch { }
                             }
-                            
-                            // Tag Filter
                             if (match && activeTags.Count > 0)
                             {
                                 bool tagMatch = false;
@@ -2052,13 +2198,17 @@ namespace VPB
                             if (match)
                             {
                                 files.Add(entry);
+                                if (++yieldCounter >= 400)
+                                {
+                                    yieldCounter = 0;
+                                    yield return null;
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // 2. Search on local disk (System files) - Only in Category mode?
             List<string> pathsToSearch = new List<string>();
             if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
             else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
@@ -2071,10 +2221,8 @@ namespace VPB
 
                     foreach (var ext in extensions)
                     {
-                        string[] systemFiles = Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories);
-                        foreach (var sysPath in systemFiles)
+                        foreach (var sysPath in Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories))
                         {
-                            // Tag Filter (pre-check)
                             if (activeTags.Count > 0)
                             {
                                 bool tagMatch = false;
@@ -2102,20 +2250,49 @@ namespace VPB
                                 catch { }
                             }
                             
-                            if (include) files.Add(sysEntry);
+                            if (include)
+                            {
+                                files.Add(sysEntry);
+                                if (++yieldCounter >= 400)
+                                {
+                                    yieldCounter = 0;
+                                    yield return null;
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // Sort by date (newest first)
-            // files.Sort((a, b) => b.LastWriteTime.CompareTo(a.LastWriteTime));
             var sortState = GetSortState("Files");
             GallerySortManager.Instance.SortFiles(files, sortState);
 
-            // Limit to avoid performance issues if too many files
-            int count = Mathf.Min(files.Count, 2000);
-            for (int i = 0; i < count; i++)
+            int totalFiles = files.Count;
+            int totalPages = Mathf.CeilToInt((float)totalFiles / itemsPerPage);
+            if (totalPages == 0) totalPages = 1;
+            
+            if (currentPage >= totalPages) currentPage = totalPages - 1;
+            if (currentPage < 0) currentPage = 0;
+            
+            if (paginationText != null) 
+                paginationText.text = (currentPage + 1) + " / " + totalPages + " (" + totalFiles + ")";
+
+            if (paginationPrevBtn != null) 
+                paginationPrevBtn.GetComponent<Button>().interactable = (currentPage > 0);
+            
+            if (paginationNextBtn != null) 
+                paginationNextBtn.GetComponent<Button>().interactable = (currentPage < totalPages - 1);
+
+            int startIndex = currentPage * itemsPerPage;
+            int endIndex = Mathf.Min(startIndex + itemsPerPage, totalFiles);
+
+            if (currentPage > 0)
+            {
+                GameObject prevBtn = InjectButton("Previous\nPage", PrevPage);
+                prevBtn.transform.SetAsFirstSibling();
+            }
+
+            for (int i = startIndex; i < endIndex; i++)
             {
                 try
                 {
@@ -2125,7 +2302,98 @@ namespace VPB
                 {
                     Debug.LogError("[VPB] Error creating button for " + files[i].Name + ": " + ex.ToString());
                 }
+
+                if (++yieldCounter >= 120)
+                {
+                    yieldCounter = 0;
+                    yield return null;
+                }
             }
+
+            if (currentPage < totalPages - 1)
+            {
+                GameObject nextBtn = InjectButton("Next\nPage", NextPage);
+                nextBtn.transform.SetAsLastSibling();
+            }
+            
+            if (scrollRect != null && !keepScroll)
+            {
+                scrollRect.verticalNormalizedPosition = scrollToBottom ? 0f : 1f;
+            }
+
+            refreshCoroutine = null;
+        }
+
+        public GameObject InjectButton(string label, UnityAction action)
+        {
+            GameObject btnGO;
+            if (navButtonPool.Count > 0)
+            {
+                btnGO = navButtonPool.Pop();
+                btnGO.SetActive(true);
+            }
+            else
+            {
+                btnGO = CreateNewNavButtonGO();
+            }
+
+            // Reset/Configure for Navigation
+            BindNavigationButton(btnGO, label, action);
+            activeButtons.Add(btnGO);
+            return btnGO;
+        }
+
+        private GameObject CreateNewNavButtonGO()
+        {
+            GameObject btnGO = new GameObject("NavButton_Template");
+            btnGO.transform.SetParent(contentGO.transform, false);
+            
+            Image img = btnGO.AddComponent<Image>();
+            img.color = new Color(0.2f, 0.4f, 0.6f, 1f);
+
+            // Add Hover Border
+            btnGO.AddComponent<UIHoverBorder>();
+            AddHoverDelegate(btnGO);
+
+            Button btn = btnGO.AddComponent<Button>();
+
+            GameObject navTextGO = new GameObject("NavText");
+            navTextGO.transform.SetParent(btnGO.transform, false);
+            Text t = navTextGO.AddComponent<Text>();
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = 24;
+            t.color = Color.white;
+            t.alignment = TextAnchor.MiddleCenter;
+            t.raycastTarget = false;
+            
+            RectTransform rt = navTextGO.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.sizeDelta = Vector2.zero;
+
+            return btnGO;
+        }
+
+        private void BindNavigationButton(GameObject btnGO, string label, UnityAction action)
+        {
+            btnGO.name = "NavButton_" + label.Replace("\n", ""); // Identification for Pool
+
+            // Reset common elements
+            Button btn = btnGO.GetComponent<Button>();
+            btn.onClick.RemoveAllListeners();
+            if (action != null) btn.onClick.AddListener(action);
+
+            // Set Text
+            Transform navTextT = btnGO.transform.Find("NavText");
+            if (navTextT != null)
+            {
+                Text t = navTextT.GetComponent<Text>();
+                if (t != null) t.text = label;
+            }
+
+            // Set BG Color (Optional reset if changed elsewhere)
+            Image img = btnGO.GetComponent<Image>();
+            if (img != null) img.color = new Color(0.2f, 0.4f, 0.6f, 1f); 
         }
 
         private bool IsMatch(FileEntry entry, List<string> paths, string singlePath, string[] extensions)
@@ -2178,6 +2446,7 @@ namespace VPB
             }
             
             BindFileButton(btnGO, file);
+            btnGO.transform.SetAsLastSibling();
             activeButtons.Add(btnGO);
         }
 
@@ -2313,10 +2582,15 @@ namespace VPB
 
             // Thumbnail
             Transform thumbTr = btnGO.transform.Find("Thumbnail");
+            if (thumbTr != null) thumbTr.gameObject.SetActive(true);
             RawImage thumbImg = thumbTr.GetComponent<RawImage>();
             thumbImg.texture = null; // Clear prev
             thumbImg.color = new Color(0, 0, 0, 0.5f);
             LoadThumbnail(file, thumbImg);
+
+            // Hide NavText
+            Transform navTextTr = btnGO.transform.Find("NavText");
+            if (navTextTr != null) navTextTr.gameObject.SetActive(false);
             
             // Label
             Transform labelTr = btnGO.transform.Find("Card/Label");
@@ -2354,37 +2628,91 @@ namespace VPB
             else if (file.Path.EndsWith(".jpg") || file.Path.EndsWith(".png"))
                 imgPath = file.Path;
 
-            if (string.IsNullOrEmpty(imgPath)) 
-            {
-                return;
-            }
+            if (string.IsNullOrEmpty(imgPath)) return;
 
-            // LogUtil.Log("Loading thumbnail for " + file.Name + " from " + imgPath);
-
-            // Check cache
             if (CustomImageLoaderThreaded.singleton == null) return;
 
+            // 1. Memory Cache
             Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath);
             if (tex != null)
             {
                 target.texture = tex;
                 target.color = Color.white;
+                return;
             }
-            else
+
+            // 2. Disk Cache
+            if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, file.LastWriteTime.Ticks, out byte[] data, out int width, out int height, out TextureFormat format))
             {
-                // Request
-                CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.QIPool.Get();
-                qi.imgPath = imgPath;
-                qi.isThumbnail = true;
-                qi.priority = 10; // High priority for gallery thumbnails
-                qi.groupId = currentLoadingGroupId;
-                qi.callback = (res) => {
-                    if (res != null && res.tex != null && target != null) {
+                tex = new Texture2D(width, height, format, false);
+                tex.LoadImage(data);
+                tex.name = imgPath;
+                target.texture = tex;
+                target.color = Color.white;
+                
+                CustomImageLoaderThreaded.singleton.AddCachedThumbnail(imgPath, tex);
+                return;
+            }
+
+            // 3. Request Load
+            CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.QIPool.Get();
+            qi.imgPath = imgPath;
+            qi.isThumbnail = true;
+            qi.priority = 10; 
+            qi.groupId = currentLoadingGroupId;
+            qi.callback = (res) => {
+                if (res != null && res.tex != null) {
+                    if (target != null) {
                         target.texture = res.tex;
                         target.color = Color.white;
                     }
-                };
-                CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
+                    StartCoroutine(GenerateAndCacheThumbnail(imgPath, res.tex, file.LastWriteTime.Ticks));
+                }
+            };
+            CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
+        }
+
+        private IEnumerator GenerateAndCacheThumbnail(string path, Texture2D sourceTex, long lastWriteTime)
+        {
+            yield return null;
+
+            if (sourceTex == null) yield break;
+
+            int maxDim = 256;
+            byte[] bytes = null;
+            int w = sourceTex.width;
+            int h = sourceTex.height;
+
+            if (w <= maxDim && h <= maxDim)
+            {
+                bytes = sourceTex.EncodeToJPG(75);
+            }
+            else
+            {
+                float aspect = (float)w / h;
+                if (w > h) { w = maxDim; h = Mathf.RoundToInt(maxDim / aspect); }
+                else { h = maxDim; w = Mathf.RoundToInt(maxDim * aspect); }
+
+                RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.Default);
+                Graphics.Blit(sourceTex, rt);
+                
+                RenderTexture prev = RenderTexture.active;
+                RenderTexture.active = rt;
+                
+                Texture2D newTex = new Texture2D(w, h, TextureFormat.RGB24, false);
+                newTex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+                newTex.Apply();
+                
+                RenderTexture.active = prev;
+                RenderTexture.ReleaseTemporary(rt);
+                
+                bytes = newTex.EncodeToJPG(75);
+                Destroy(newTex);
+            }
+
+            if (bytes != null)
+            {
+                GalleryThumbnailCache.Instance.SaveThumbnail(path, bytes, bytes.Length, w, h, TextureFormat.RGB24, lastWriteTime);
             }
         }
 
@@ -2455,7 +2783,11 @@ namespace VPB
             SaveSortState(context, state);
             UpdateSortButtonText(buttonText, state);
             
-            if (context == "Files") RefreshFiles();
+            if (context == "Files") 
+            {
+                currentPage = 0;
+                RefreshFiles();
+            }
             else UpdateTabs();
         }
         
@@ -2466,7 +2798,11 @@ namespace VPB
             SaveSortState(context, state);
             UpdateSortButtonText(buttonText, state);
             
-            if (context == "Files") RefreshFiles();
+            if (context == "Files") 
+            {
+                currentPage = 0;
+                RefreshFiles();
+            }
             else UpdateTabs();
         }
 

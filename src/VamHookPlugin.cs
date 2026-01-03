@@ -18,6 +18,7 @@ namespace VPB
         private KeyUtil UIKey;
         private KeyUtil GalleryKey;
         private KeyUtil CreateGalleryKey;
+        private KeyUtil HubKey;
         private Vector2 UIPosition;
         private bool MiniMode;
         
@@ -63,6 +64,7 @@ namespace VPB
         private string m_SettingsUiKeyDraft;
         private string m_SettingsGalleryKeyDraft;
         private string m_SettingsCreateGalleryKeyDraft;
+        private string m_SettingsHubKeyDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
@@ -157,6 +159,7 @@ namespace VPB
             m_SettingsUiKeyDraft = (Settings.Instance != null && Settings.Instance.UIKey != null) ? Settings.Instance.UIKey.Value : "";
             m_SettingsGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.GalleryKey != null) ? Settings.Instance.GalleryKey.Value : "";
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
+            m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
@@ -238,11 +241,13 @@ namespace VPB
             GUILayout.Label("Settings", m_StyleHeader);
             GUILayout.Space(6);
 
-            m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide VPB", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
-            m_SettingsGalleryKeyDraft = DrawHotkeyField("Show/Hide Panes", "GalleryKeyField", m_SettingsGalleryKeyDraft ?? "", buttonHeight);
-            m_SettingsCreateGalleryKeyDraft = DrawHotkeyField("Create Gallery Pane", "CreateGalleryKeyField", m_SettingsCreateGalleryKeyDraft ?? "", buttonHeight);
+            GUILayout.Label("Hook Settings", m_StyleHeader);
+            GUILayout.Space(4);
 
-            GUILayout.Space(10);
+            m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide VPB", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
+            m_SettingsHubKeyDraft = DrawHotkeyField("Open Hub Browser", "HubKeyField", m_SettingsHubKeyDraft ?? "", buttonHeight);
+
+            GUILayout.Space(6);
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(m_SettingsEnableUiTransparencyDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
@@ -250,14 +255,6 @@ namespace VPB
                 m_SettingsEnableUiTransparencyDraft = !m_SettingsEnableUiTransparencyDraft;
             }
             GUILayout.Label("Enable dynamic transparency (fade when idle)");
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsEnableGalleryFadeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsEnableGalleryFadeDraft = !m_SettingsEnableGalleryFadeDraft;
-            }
-            GUILayout.Label("Enable Gallery Button Fade");
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
@@ -328,6 +325,24 @@ namespace VPB
             });
 
             GUILayout.Space(10);
+
+            GUILayout.Label("Gallery Pane Settings", m_StyleHeader);
+            GUILayout.Space(4);
+
+            m_SettingsGalleryKeyDraft = DrawHotkeyField("Show/Hide Panes", "GalleryKeyField", m_SettingsGalleryKeyDraft ?? "", buttonHeight);
+            m_SettingsCreateGalleryKeyDraft = DrawHotkeyField("Create Gallery Pane", "CreateGalleryKeyField", m_SettingsCreateGalleryKeyDraft ?? "", buttonHeight);
+
+            GUILayout.Space(6);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsEnableGalleryFadeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsEnableGalleryFadeDraft = !m_SettingsEnableGalleryFadeDraft;
+            }
+            GUILayout.Label("Enable Gallery Button Fade");
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(10);
             
             if (!string.IsNullOrEmpty(m_SettingsError))
             {
@@ -348,8 +363,9 @@ namespace VPB
                     var parsed = KeyUtil.Parse(m_SettingsUiKeyDraft ?? "");
                     var parsedGalleryKey = KeyUtil.Parse(m_SettingsGalleryKeyDraft ?? "");
                     var parsedCreateGalleryKey = KeyUtil.Parse(m_SettingsCreateGalleryKeyDraft ?? "");
+                    var parsedHubKey = KeyUtil.Parse(m_SettingsHubKeyDraft ?? "");
 
-                    if (parsed.IsSame(parsedGalleryKey) || parsed.IsSame(parsedCreateGalleryKey) || parsedGalleryKey.IsSame(parsedCreateGalleryKey))
+                    if (parsed.IsSame(parsedGalleryKey) || parsed.IsSame(parsedCreateGalleryKey) || parsed.IsSame(parsedHubKey) || parsedGalleryKey.IsSame(parsedCreateGalleryKey) || parsedGalleryKey.IsSame(parsedHubKey) || parsedCreateGalleryKey.IsSame(parsedHubKey))
                     {
                         m_SettingsError = "Duplicate hotkeys are not allowed.";
                         return;
@@ -366,6 +382,10 @@ namespace VPB
                     if (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null)
                     {
                         Settings.Instance.CreateGalleryKey.Value = parsedCreateGalleryKey.keyPattern;
+                    }
+                    if (Settings.Instance != null && Settings.Instance.HubKey != null)
+                    {
+                        Settings.Instance.HubKey.Value = parsedHubKey.keyPattern;
                     }
                     if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
                     {
@@ -405,6 +425,7 @@ namespace VPB
                     UIKey = parsed;
                     GalleryKey = parsedGalleryKey;
                     CreateGalleryKey = parsedCreateGalleryKey;
+                    HubKey = parsedHubKey;
                     CloseSettings();
                 }
                 catch
@@ -830,6 +851,7 @@ namespace VPB
             UIKey = KeyUtil.Parse(Settings.Instance.UIKey.Value);
             GalleryKey = KeyUtil.Parse(Settings.Instance.GalleryKey.Value);
             CreateGalleryKey = KeyUtil.Parse(Settings.Instance.CreateGalleryKey.Value);
+            HubKey = KeyUtil.Parse(Settings.Instance.HubKey.Value);
             m_UIScale = Settings.Instance.UIScale.Value;
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
@@ -1022,7 +1044,10 @@ namespace VPB
 
             if (m_Inited && m_FileManagerInited)
             {
-                // Future hotkeys that depend on FileManager can go here
+                if (HubKey.TestKeyDown())
+                {
+                    OpenHubBrowse();
+                }
             }
 
             if (!m_Inited)

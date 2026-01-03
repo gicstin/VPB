@@ -104,9 +104,9 @@ namespace VPB
                     if (counts != null)
                     {
                         if (state.Direction == SortDirection.Ascending)
-                            categories.Sort((a, b) => GetCount(a.path, counts).CompareTo(GetCount(b.path, counts)));
+                            categories.Sort((a, b) => GetCount(a.name, counts).CompareTo(GetCount(b.name, counts)));
                         else
-                            categories.Sort((a, b) => GetCount(b.path, counts).CompareTo(GetCount(a.path, counts)));
+                            categories.Sort((a, b) => GetCount(b.name, counts).CompareTo(GetCount(a.name, counts)));
                     }
                     break;
             }
