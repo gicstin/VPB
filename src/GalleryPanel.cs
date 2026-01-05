@@ -234,6 +234,7 @@ namespace VPB
             currentCreator = creator;
             creatorsCached = false;
             tagsCached = false;
+            categoriesCached = false;
         }
 
         void OnDestroy()
@@ -1306,6 +1307,12 @@ namespace VPB
             {
                 foreach (var pkg in FileManager.PackagesByUid.Values)
                 {
+                    // Filter by creator if set
+                    if (!string.IsNullOrEmpty(currentCreator))
+                    {
+                        if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
+                    }
+
                     if (pkg.FileEntries == null) continue;
                     foreach (var entry in pkg.FileEntries)
                     {
@@ -1751,6 +1758,8 @@ namespace VPB
                     CreateTabButton(container.transform, label, btnColor, isActive, () => {
                         if (currentCreator == cName) currentCreator = "";
                         else currentCreator = cName;
+                        categoriesCached = false;
+                        tagsCached = false;
                         currentPage = 0;
                         RefreshFiles();
                         UpdateTabs(); 
@@ -2053,6 +2062,7 @@ namespace VPB
             {
                 creatorsCached = false;
                 tagsCached = false;
+                categoriesCached = false;
                 currentCreator = "";
                 activeTags.Clear();
                 currentPage = 0;

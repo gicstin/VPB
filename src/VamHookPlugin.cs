@@ -1276,7 +1276,7 @@ namespace VPB
         {
             try
             {
-                if (SuperController.singleton.mainHUD == null) return;
+                if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;
                 
                 var existing = SuperController.singleton.mainHUD.Find("VPB_QuickMenuButton_Canvas");
                 if (existing != null) 
@@ -1292,19 +1292,30 @@ namespace VPB
                 }
 
                 if (m_MVRPluginManager == null) return;
+                
+                if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;
+                if (m_MVRPluginManager.configurableButtonPrefab == null) return;
 
                 GameObject canvasObject = new GameObject("VPB_QuickMenuButton_Canvas");
                 m_QuickMenuCanvas = canvasObject.AddComponent<Canvas>();
+                if (m_QuickMenuCanvas == null) return;
+                
                 m_QuickMenuCanvas.renderMode = RenderMode.WorldSpace;
                 m_QuickMenuCanvas.pixelPerfect = false;
 
-                canvasObject.layer = SuperController.singleton.mainHUD.gameObject.layer;
+                if (SuperController.singleton != null && SuperController.singleton.mainHUD != null && SuperController.singleton.mainHUD.gameObject != null)
+                    canvasObject.layer = SuperController.singleton.mainHUD.gameObject.layer;
+                
+                if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;    
                 m_QuickMenuCanvas.transform.SetParent(SuperController.singleton.mainHUD, false);
                 SuperController.singleton.AddCanvas(m_QuickMenuCanvas);
 
                 CanvasScaler cs = canvasObject.AddComponent<CanvasScaler>();
-                cs.scaleFactor = 100.0f;
-                cs.dynamicPixelsPerUnit = 1f;
+                if (cs != null)
+                {
+                    cs.scaleFactor = 100.0f;
+                    cs.dynamicPixelsPerUnit = 1f;
+                }
                 GraphicRaycaster gr = canvasObject.AddComponent<GraphicRaycaster>();
 
                 bool isVR = false;
@@ -1327,7 +1338,7 @@ namespace VPB
 
                 // Button 1: Create Gallery (Left)
                 Transform btnTr = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                if (btnTr != null)
+                if (btnTr != null && m_QuickMenuCanvas.transform != null)
                 {
                     btnTr.SetParent(m_QuickMenuCanvas.transform, false);
                     
@@ -1342,14 +1353,17 @@ namespace VPB
                     if (uiBtn != null)
                     {
                         uiBtn.label = "Create Gallery";
-                        uiBtn.buttonText.fontSize = 24;
-                        uiBtn.button.onClick.AddListener(() => {
-                             if (Gallery.singleton != null)
-                             {
-                                 if (!m_GalleryCatsInited) InitGalleryCategories();
-                                 Gallery.singleton.CreatePane();
-                             }
-                        });
+                        if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
+                        if (uiBtn.button != null)
+                        {
+                            uiBtn.button.onClick.AddListener(() => {
+                                 if (Gallery.singleton != null)
+                                 {
+                                     if (!m_GalleryCatsInited) InitGalleryCategories();
+                                     Gallery.singleton.CreatePane();
+                                 }
+                            });
+                        }
                         
                         // Use HoverHandler for dynamic transparency
                         var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
@@ -1360,7 +1374,7 @@ namespace VPB
 
                 // Button 2: Show/Hide (Right)
                 Transform btnTr2 = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                if (btnTr2 != null)
+                if (btnTr2 != null && m_QuickMenuCanvas.transform != null)
                 {
                     m_ShowHideButtonGO = btnTr2.gameObject;
                     btnTr2.SetParent(m_QuickMenuCanvas.transform, false);
@@ -1377,16 +1391,19 @@ namespace VPB
                     {
                         m_ShowHideButton = uiBtn;
                         uiBtn.label = "Show/Hide";
-                        uiBtn.buttonText.fontSize = 24;
-                        uiBtn.button.onClick.AddListener(() => {
-                            if (Gallery.singleton != null)
-                            {
-                                if (Gallery.singleton.IsVisible)
-                                    Gallery.singleton.Hide();
-                                else
-                                    OpenGallery();
-                            }
-                        });
+                        if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
+                        if (uiBtn.button != null)
+                        {
+                            uiBtn.button.onClick.AddListener(() => {
+                                if (Gallery.singleton != null)
+                                {
+                                    if (Gallery.singleton.IsVisible)
+                                        Gallery.singleton.Hide();
+                                    else
+                                        OpenGallery();
+                                }
+                            });
+                        }
                         
                         // Use HoverHandler for dynamic transparency
                         var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
