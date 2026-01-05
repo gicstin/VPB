@@ -2044,6 +2044,7 @@ namespace VPB
 
         public void Show(string title, string extension, string path)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             if (canvas == null) Init();
 
             titleText.text = title;
@@ -2076,6 +2077,7 @@ namespace VPB
             UpdateSideButtonsVisibility();
 
             canvas.gameObject.SetActive(true);
+            LogUtil.Log("GalleryPanel Show setup took: " + sw.ElapsedMilliseconds + "ms");
             RefreshFiles();
             UpdateTabs();
 
@@ -2129,6 +2131,9 @@ namespace VPB
 
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
         {
+            yield return null; // Allow UI to render first
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            
             if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
             {
                 CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
@@ -2154,6 +2159,7 @@ namespace VPB
             string[] extensions = currentExtension.Split('|');
             bool hasNameFilter = !string.IsNullOrEmpty(nameFilterLower);
             int yieldCounter = 0;
+            int checkCounter = 0;
 
             if (FileManager.PackagesByUid != null)
             {
@@ -2169,6 +2175,12 @@ namespace VPB
                     {
                         foreach (var entry in pkg.FileEntries)
                         {
+                            if (++checkCounter >= 2000)
+                            {
+                                checkCounter = 0;
+                                yield return null;
+                            }
+
                             bool match = IsMatch(entry, currentPaths, currentPath, extensions);
                             if (match && hasNameFilter)
                             {
@@ -2223,6 +2235,12 @@ namespace VPB
                     {
                         foreach (var sysPath in Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories))
                         {
+                            if (++checkCounter >= 500)
+                            {
+                                checkCounter = 0;
+                                yield return null;
+                            }
+
                             if (activeTags.Count > 0)
                             {
                                 bool tagMatch = false;
@@ -2263,7 +2281,8 @@ namespace VPB
                     }
                 }
             }
-
+            
+            yield return null; // Yield before sorting
             var sortState = GetSortState("Files");
             GallerySortManager.Instance.SortFiles(files, sortState);
 
@@ -2303,7 +2322,7 @@ namespace VPB
                     Debug.LogError("[VPB] Error creating button for " + files[i].Name + ": " + ex.ToString());
                 }
 
-                if (++yieldCounter >= 120)
+                if (++yieldCounter >= 30) // Reduced from 120
                 {
                     yieldCounter = 0;
                     yield return null;
@@ -2322,6 +2341,7 @@ namespace VPB
             }
 
             refreshCoroutine = null;
+            LogUtil.Log("RefreshFilesRoutine took: " + sw.ElapsedMilliseconds + "ms");
         }
 
         public GameObject InjectButton(string label, UnityAction action)
@@ -2641,18 +2661,9 @@ namespace VPB
                 return;
             }
 
-            // 2. Disk Cache
-            if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, file.LastWriteTime.Ticks, out byte[] data, out int width, out int height, out TextureFormat format))
-            {
-                tex = new Texture2D(width, height, format, false);
-                tex.LoadImage(data);
-                tex.name = imgPath;
-                target.texture = tex;
-                target.color = Color.white;
-                
-                CustomImageLoaderThreaded.singleton.AddCachedThumbnail(imgPath, tex);
-                return;
-            }
+            // 2. Disk Cache - Removed to prevent blocking main thread
+            // Now handled asynchronously by CustomImageLoaderThreaded
+            // if (GalleryThumbnailCache.Instance.TryGetThumbnail(...)) { ... }
 
             // 3. Request Load
             CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.QIPool.Get();

@@ -32,6 +32,8 @@ namespace VPB
             }
         }
 
+        public int PanelCount => panels.Count;
+
         void Awake()
         {
             singleton = this;

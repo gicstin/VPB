@@ -9,11 +9,19 @@ namespace VPB
     public class GalleryThumbnailCache
     {
         private static GalleryThumbnailCache _instance;
+        private static readonly object instanceLock = new object();
+
         public static GalleryThumbnailCache Instance
         {
             get
             {
-                if (_instance == null) _instance = new GalleryThumbnailCache();
+                if (_instance == null)
+                {
+                    lock (instanceLock)
+                    {
+                        if (_instance == null) _instance = new GalleryThumbnailCache();
+                    }
+                }
                 return _instance;
             }
         }

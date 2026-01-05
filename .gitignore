@@ -1,14 +1,10 @@
 /obj/
 /bin/
-/.vs/var_browser
 /.old
 /.vs
 
 /.sample/sample
 /src/StbImageSharp
-/Custom/Scripts/var_browser/.vs/PluginBuilder
-/Custom/Scripts/var_browser/bin/Debug
-/Custom/Scripts/var_browser/obj/Debug
 /.sample/vb
 /VPB-TODO.md
 /.sample

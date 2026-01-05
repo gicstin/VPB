@@ -7,6 +7,7 @@ using System.IO;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 namespace VPB
 {
@@ -69,6 +70,7 @@ namespace VPB
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
         private bool m_SettingsEnableUiTransparencyDraft;
+        private float m_SettingsUiTransparencyValueDraft;
         private bool m_SettingsEnableGalleryFadeDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
@@ -164,6 +166,7 @@ namespace VPB
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
+            m_SettingsUiTransparencyValueDraft = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
             m_SettingsEnableGalleryFadeDraft = (Settings.Instance != null && Settings.Instance.EnableGalleryFade != null) ? Settings.Instance.EnableGalleryFade.Value : true;
             m_SettingsError = null;
         }
@@ -250,12 +253,15 @@ namespace VPB
             GUILayout.Space(6);
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsEnableUiTransparencyDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsEnableUiTransparencyDraft = !m_SettingsEnableUiTransparencyDraft;
-            }
-            GUILayout.Label("Enable dynamic transparency (fade when idle)");
+            GUILayout.Label("Visibility", GUILayout.Width(100));
+            // Invert the value for display: 1.0 = Opaque (0.0 Transparency), 0.0 = Invisible (1.0 Transparency)
+            float visibilityValue = 1.0f - m_SettingsUiTransparencyValueDraft;
+            visibilityValue = GUILayout.HorizontalSlider(visibilityValue, 0.0f, 1.0f);
+            m_SettingsUiTransparencyValueDraft = 1.0f - visibilityValue;
+            GUILayout.Space(10);
+            GUILayout.Label((visibilityValue * 100).ToString("F0") + "%", GUILayout.Width(35));
             GUILayout.EndHorizontal();
+            GUILayout.Label("Adjust visibility when idle (100% = Opaque, 0% = Invisible).");
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(m_SettingsPluginsAlwaysEnabledDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
@@ -399,6 +405,13 @@ namespace VPB
                         if (Settings.Instance.EnableUiTransparency.Value != m_SettingsEnableUiTransparencyDraft)
                         {
                             Settings.Instance.EnableUiTransparency.Value = m_SettingsEnableUiTransparencyDraft;
+                        }
+                    }
+                    if (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null)
+                    {
+                        if (Math.Abs(Settings.Instance.UiTransparencyValue.Value - m_SettingsUiTransparencyValueDraft) > 0.001f)
+                        {
+                            Settings.Instance.UiTransparencyValue.Value = m_SettingsUiTransparencyValueDraft;
                         }
                     }
                     if (Settings.Instance != null && Settings.Instance.EnableGalleryFade != null)
@@ -932,6 +945,17 @@ namespace VPB
 
             this.Config.Save();
             
+            // Cleanup QuickMenu Button
+            if (SuperController.singleton.mainHUD != null)
+            {
+                var existing = SuperController.singleton.mainHUD.Find("VPB_QuickMenuButton_Canvas");
+                if (existing != null) Destroy(existing.gameObject);
+            }
+            if (m_QuickMenuCanvas != null)
+            {
+                 Destroy(m_QuickMenuCanvas.gameObject);
+            }
+
             // Shutdown Native Hooks
             Native.NativeHookManager.Shutdown();
         }
@@ -1065,6 +1089,25 @@ namespace VPB
                     LogUtil.LogReadyOnce("UI initialized");
                 }
             }
+
+            if (!m_QuickMenuButtonInited)
+            {
+                CreateQuickMenuButton();
+            }
+            else if (m_ShowHideButtonGO != null && Gallery.singleton != null)
+            {
+                int count = Gallery.singleton.PanelCount;
+                bool shouldShow = count > 0;
+                if (m_ShowHideButtonGO.activeSelf != shouldShow)
+                {
+                    m_ShowHideButtonGO.SetActive(shouldShow);
+                }
+                
+                if (shouldShow && m_ShowHideButton != null)
+                {
+                    m_ShowHideButton.label = "Show/Hide (" + count + ")";
+                }
+            }
         }
 
 
@@ -1093,6 +1136,7 @@ namespace VPB
 
         bool m_Inited = false;
         bool m_UIInited = false;
+        bool m_QuickMenuButtonInited = false;
         void Init()
         {
             m_Inited = true;
@@ -1223,6 +1267,144 @@ namespace VPB
             }
             newgo.SetActive(false);
         }
+
+        Canvas m_QuickMenuCanvas;
+        GameObject m_ShowHideButtonGO;
+        UIDynamicButton m_ShowHideButton;
+
+        void CreateQuickMenuButton()
+        {
+            try
+            {
+                if (SuperController.singleton.mainHUD == null) return;
+                
+                var existing = SuperController.singleton.mainHUD.Find("VPB_QuickMenuButton_Canvas");
+                if (existing != null) 
+                {
+                    // Destroy old version if found to ensure update
+                    DestroyImmediate(existing.gameObject);
+                }
+
+                if (m_MVRPluginManager == null)
+                {
+                    var mgrGO = SuperController.singleton.transform.Find("ScenePluginManager");
+                    if (mgrGO != null) m_MVRPluginManager = mgrGO.GetComponent<MVRPluginManager>();
+                }
+
+                if (m_MVRPluginManager == null) return;
+
+                GameObject canvasObject = new GameObject("VPB_QuickMenuButton_Canvas");
+                m_QuickMenuCanvas = canvasObject.AddComponent<Canvas>();
+                m_QuickMenuCanvas.renderMode = RenderMode.WorldSpace;
+                m_QuickMenuCanvas.pixelPerfect = false;
+
+                canvasObject.layer = SuperController.singleton.mainHUD.gameObject.layer;
+                m_QuickMenuCanvas.transform.SetParent(SuperController.singleton.mainHUD, false);
+                SuperController.singleton.AddCanvas(m_QuickMenuCanvas);
+
+                CanvasScaler cs = canvasObject.AddComponent<CanvasScaler>();
+                cs.scaleFactor = 100.0f;
+                cs.dynamicPixelsPerUnit = 1f;
+                GraphicRaycaster gr = canvasObject.AddComponent<GraphicRaycaster>();
+
+                bool isVR = false;
+                try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+
+                float s = 0.001f;
+                m_QuickMenuCanvas.transform.localScale = new Vector3(s, s, s);
+
+                if (isVR)
+                {
+                    m_QuickMenuCanvas.transform.localPosition = new Vector3(0f, 0f, 0f);
+                    m_QuickMenuCanvas.transform.localEulerAngles = new Vector3(32, 180, 0);
+                }
+                else
+                {
+                    // Position at Left side
+                    m_QuickMenuCanvas.transform.localPosition = new Vector3(0f, -0.012f, 0f);
+                    m_QuickMenuCanvas.transform.localEulerAngles = new Vector3(0, 180, 0);
+                }
+
+                // Button 1: Create Gallery (Left)
+                Transform btnTr = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
+                if (btnTr != null)
+                {
+                    btnTr.SetParent(m_QuickMenuCanvas.transform, false);
+                    
+                    RectTransform rt = btnTr.GetComponent<RectTransform>();
+                    if (rt != null)
+                    {
+                        rt.sizeDelta = new Vector2(120f, 50f);
+                        rt.anchoredPosition = new Vector2(-120f, 0f);
+                    }
+
+                    UIDynamicButton uiBtn = btnTr.GetComponent<UIDynamicButton>();
+                    if (uiBtn != null)
+                    {
+                        uiBtn.label = "Create Gallery";
+                        uiBtn.buttonText.fontSize = 24;
+                        uiBtn.button.onClick.AddListener(() => {
+                             if (Gallery.singleton != null)
+                             {
+                                 if (!m_GalleryCatsInited) InitGalleryCategories();
+                                 Gallery.singleton.CreatePane();
+                             }
+                        });
+                        
+                        // Use HoverHandler for dynamic transparency
+                        var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
+                        hover.targetButton = uiBtn;
+                        uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                    }
+                }
+
+                // Button 2: Show/Hide (Right)
+                Transform btnTr2 = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
+                if (btnTr2 != null)
+                {
+                    m_ShowHideButtonGO = btnTr2.gameObject;
+                    btnTr2.SetParent(m_QuickMenuCanvas.transform, false);
+                    
+                    RectTransform rt = btnTr2.GetComponent<RectTransform>();
+                    if (rt != null)
+                    {
+                        rt.sizeDelta = new Vector2(120f, 50f);
+                        rt.anchoredPosition = new Vector2(120f, 0f);
+                    }
+
+                    UIDynamicButton uiBtn = btnTr2.GetComponent<UIDynamicButton>();
+                    if (uiBtn != null)
+                    {
+                        m_ShowHideButton = uiBtn;
+                        uiBtn.label = "Show/Hide";
+                        uiBtn.buttonText.fontSize = 24;
+                        uiBtn.button.onClick.AddListener(() => {
+                            if (Gallery.singleton != null)
+                            {
+                                if (Gallery.singleton.IsVisible)
+                                    Gallery.singleton.Hide();
+                                else
+                                    OpenGallery();
+                            }
+                        });
+                        
+                        // Use HoverHandler for dynamic transparency
+                        var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
+                        hover.targetButton = uiBtn;
+                        uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                    }
+                    m_ShowHideButtonGO.SetActive(false);
+                }
+                
+                m_QuickMenuButtonInited = true;
+                LogUtil.Log("QuickMenuButton created. VR: " + isVR);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("Error creating QuickMenuButton: " + ex.ToString());
+            }
+        }
+
         void DragWnd(int windowsid)
         {
             EnsureStyles();
@@ -1544,15 +1726,15 @@ namespace VPB
                     Vector2 screenMousePos = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
                     bool isHovering = screenRect.Contains(screenMousePos);
 
-                    bool enableTransparency = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null && Settings.Instance.EnableUiTransparency.Value);
+                    float transparencyValue = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
 
-                    if (isHovering || !enableTransparency)
+                    if (isHovering)
                     {
                         m_WindowAlphaState = 1.0f;
                     }
                     else
                     {
-                        m_WindowAlphaState = 0.0f;
+                        m_WindowAlphaState = 1.0f - transparencyValue;
                     }
 
                     GUI.color = new Color(GUI.color.r, GUI.color.g, GUI.color.b, m_WindowAlphaState);
@@ -2166,6 +2348,37 @@ namespace VPB
             if (Event.current.type != EventType.MouseDrag || !resizeRect.Contains(Event.current.mousePosition))
             {
                 GUI.DragWindow();
+            }
+        }
+        
+        public class ButtonHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+        {
+            public UIDynamicButton targetButton;
+            private Color normalColor = new Color(1f, 1f, 1f, 0.5f);
+            private Color hoverColor = new Color(1f, 1f, 1f, 0.8f);
+
+            void Start()
+            {
+                if (targetButton != null)
+                {
+                    targetButton.buttonColor = normalColor;
+                }
+            }
+
+            public void OnPointerEnter(PointerEventData eventData)
+            {
+                if (targetButton != null)
+                {
+                    targetButton.buttonColor = hoverColor;
+                }
+            }
+
+            public void OnPointerExit(PointerEventData eventData)
+            {
+                if (targetButton != null)
+                {
+                    targetButton.buttonColor = normalColor;
+                }
             }
         }
     }

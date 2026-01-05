@@ -35,6 +35,21 @@ namespace VPB
             newgo.transform.localPosition = new Vector3(oldPos.x - 280, oldPos.y, oldPos.z);
             this.showAutoInstallToggle = newgo.GetComponent<Toggle>();
 
+			// Gallery Button
+			if (ui.cancelButton != null)
+			{
+				var galleryBtnGO = GameObject.Instantiate(ui.cancelButton.gameObject, ui.showHiddenToggle.transform.parent);
+				var galleryBtn = galleryBtnGO.GetComponent<Button>();
+				galleryBtn.onClick.RemoveAllListeners();
+				galleryBtn.onClick.AddListener(() =>
+				{
+					if (VamHookPlugin.singleton != null)
+						VamHookPlugin.singleton.OpenGallery();
+				});
+				galleryBtnGO.transform.localPosition = new Vector3(oldPos.x - 450, oldPos.y + 300, oldPos.z + 300);
+				var txt = galleryBtnGO.GetComponentInChildren<Text>();
+				if (txt != null) txt.text = "Gallery";
+			}
 
             this.onlyFavoritesToggle = ui.onlyFavoritesToggle;
 			this.limitSlider = ui.limitSlider;
