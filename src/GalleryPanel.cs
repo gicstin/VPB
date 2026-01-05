@@ -2048,7 +2048,8 @@ namespace VPB
             if (canvas == null) Init();
 
             titleText.text = title;
-            if (currentExtension != extension || currentPath != path)
+            bool paramsChanged = (currentExtension != extension || currentPath != path);
+            if (paramsChanged)
             {
                 creatorsCached = false;
                 tagsCached = false;
@@ -2078,7 +2079,14 @@ namespace VPB
 
             canvas.gameObject.SetActive(true);
             LogUtil.Log("GalleryPanel Show setup took: " + sw.ElapsedMilliseconds + "ms");
-            RefreshFiles();
+            
+            // Only refresh if params changed OR if we are empty (first run) OR explicit refresh needed
+            // Also prevent restart if already running for same params (implied by paramsChanged check)
+            if (paramsChanged || activeButtons.Count == 0)
+            {
+                RefreshFiles();
+            }
+            
             UpdateTabs();
 
             // Position it in front of the user if in VR, ONLY ONCE
@@ -2132,7 +2140,7 @@ namespace VPB
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
         {
             yield return null; // Allow UI to render first
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var swTotal = System.Diagnostics.Stopwatch.StartNew();
             
             if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
             {
@@ -2140,26 +2148,19 @@ namespace VPB
             }
             currentLoadingGroupId = Guid.NewGuid().ToString();
 
-            foreach (var btn in activeButtons)
-            {
-                btn.SetActive(false);
-                if (btn.name.StartsWith("NavButton_"))
-                {
-                    navButtonPool.Push(btn);
-                }
-                else
-                {
-                    fileButtonPool.Push(btn);
-                }
-            }
-            activeButtons.Clear();
-            fileButtonImages.Clear();
+            // DELAY clearing buttons until we have the new list ready, to avoid flickering/blank screen.
+            // But we must capture the state of activeButtons before we do anything that might change them?
+            // actually activeButtons is only touched here.
 
             List<FileEntry> files = new List<FileEntry>();
             string[] extensions = currentExtension.Split('|');
             bool hasNameFilter = !string.IsNullOrEmpty(nameFilterLower);
-            int yieldCounter = 0;
-            int checkCounter = 0;
+            
+            // Time-based yielding configuration
+            var yieldWatch = new System.Diagnostics.Stopwatch();
+            long maxMsPerFrame = 10; // Allow 10ms of work per frame (target 60fps is 16ms, but we have overhead)
+            
+            yieldWatch.Start();
 
             if (FileManager.PackagesByUid != null)
             {
@@ -2175,10 +2176,12 @@ namespace VPB
                     {
                         foreach (var entry in pkg.FileEntries)
                         {
-                            if (++checkCounter >= 2000)
+                            // Time-based yield
+                            if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
                             {
-                                checkCounter = 0;
                                 yield return null;
+                                yieldWatch.Reset();
+                                yieldWatch.Start();
                             }
 
                             bool match = IsMatch(entry, currentPaths, currentPath, extensions);
@@ -2210,11 +2213,6 @@ namespace VPB
                             if (match)
                             {
                                 files.Add(entry);
-                                if (++yieldCounter >= 400)
-                                {
-                                    yieldCounter = 0;
-                                    yield return null;
-                                }
                             }
                         }
                     }
@@ -2233,12 +2231,23 @@ namespace VPB
 
                     foreach (var ext in extensions)
                     {
-                        foreach (var sysPath in Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories))
+                        // Directory.GetFiles is blocking, unfortunately. 
+                        // If this is slow, we can't yield inside it. 
+                        // But we can yield during the processing of results.
+                        string[] sysFiles = new string[0];
+                        try 
                         {
-                            if (++checkCounter >= 500)
+                            sysFiles = Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories);
+                        }
+                        catch { }
+
+                        foreach (var sysPath in sysFiles)
+                        {
+                            if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
                             {
-                                checkCounter = 0;
                                 yield return null;
+                                yieldWatch.Reset();
+                                yieldWatch.Start();
                             }
 
                             if (activeTags.Count > 0)
@@ -2271,11 +2280,6 @@ namespace VPB
                             if (include)
                             {
                                 files.Add(sysEntry);
-                                if (++yieldCounter >= 400)
-                                {
-                                    yieldCounter = 0;
-                                    yield return null;
-                                }
                             }
                         }
                     }
@@ -2285,6 +2289,22 @@ namespace VPB
             yield return null; // Yield before sorting
             var sortState = GetSortState("Files");
             GallerySortManager.Instance.SortFiles(files, sortState);
+
+            // NOW clear the old buttons, just before we are ready to show new ones.
+            foreach (var btn in activeButtons)
+            {
+                btn.SetActive(false);
+                if (btn.name.StartsWith("NavButton_"))
+                {
+                    navButtonPool.Push(btn);
+                }
+                else
+                {
+                    fileButtonPool.Push(btn);
+                }
+            }
+            activeButtons.Clear();
+            fileButtonImages.Clear();
 
             int totalFiles = files.Count;
             int totalPages = Mathf.CeilToInt((float)totalFiles / itemsPerPage);
@@ -2311,6 +2331,15 @@ namespace VPB
                 prevBtn.transform.SetAsFirstSibling();
             }
 
+            // Create buttons. 
+            // Strategy: Create the first batch (e.g. 32) immediately to fill the view.
+            // Then yield more frequently.
+            
+            int createdCount = 0;
+            int firstBatchSize = 32;
+            yieldWatch.Reset();
+            yieldWatch.Start();
+
             for (int i = startIndex; i < endIndex; i++)
             {
                 try
@@ -2322,11 +2351,19 @@ namespace VPB
                     Debug.LogError("[VPB] Error creating button for " + files[i].Name + ": " + ex.ToString());
                 }
 
-                if (++yieldCounter >= 30) // Reduced from 120
+                createdCount++;
+
+                // If we are past the first batch, use time budgeting
+                if (createdCount > firstBatchSize)
                 {
-                    yieldCounter = 0;
-                    yield return null;
+                     if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
+                     {
+                         yield return null;
+                         yieldWatch.Reset();
+                         yieldWatch.Start();
+                     }
                 }
+                // Else: we are in the first batch, just keep going until 32 are done (unless it takes insane time? nah 32 is fast)
             }
 
             if (currentPage < totalPages - 1)
@@ -2341,7 +2378,7 @@ namespace VPB
             }
 
             refreshCoroutine = null;
-            LogUtil.Log("RefreshFilesRoutine took: " + sw.ElapsedMilliseconds + "ms");
+            LogUtil.Log("RefreshFilesRoutine took: " + swTotal.ElapsedMilliseconds + "ms");
         }
 
         public GameObject InjectButton(string label, UnityAction action)

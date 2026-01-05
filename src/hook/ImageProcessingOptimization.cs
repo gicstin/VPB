@@ -5,7 +5,31 @@ namespace VPB
 {
     public static class ImageProcessingOptimization
     {
-        public static void FastBitmapCopy(byte[] srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
+        public static unsafe void FastBitmapCopy(byte* srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
+                                          byte[] dstData, int dstWidth, int dstHeight, int dstStride, int dstBpp,
+                                          bool centered, bool fillWhiteBackground)
+        {
+             if (srcBpp != 4 && srcBpp != 3)
+                throw new ArgumentException("srcBpp must be 3 or 4");
+            if (dstBpp != 4 && dstBpp != 3)
+                throw new ArgumentException("dstBpp must be 3 or 4");
+
+             fixed (byte* dstPtr = dstData)
+             {
+                if (!centered)
+                {
+                    FastBitmapCopyUnscaled(srcData, srcWidth, srcHeight, srcStride, srcBpp,
+                                           dstPtr, dstWidth, dstHeight, dstStride, dstBpp, dstData.Length);
+                }
+                else
+                {
+                    FastBitmapCopyScaled(srcData, srcWidth, srcHeight, srcStride, srcBpp,
+                                         dstPtr, dstWidth, dstHeight, dstStride, dstBpp, fillWhiteBackground, dstData.Length);
+                }
+             }
+        }
+
+        public static unsafe void FastBitmapCopy(byte[] srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
                                           byte[] dstData, int dstWidth, int dstHeight, int dstStride, int dstBpp,
                                           bool centered, bool fillWhiteBackground)
         {
@@ -13,29 +37,35 @@ namespace VPB
                 throw new ArgumentException("srcBpp must be 3 or 4");
             if (dstBpp != 4 && dstBpp != 3)
                 throw new ArgumentException("dstBpp must be 3 or 4");
+            
+            // Validate buffers are large enough for the operation
+            if (srcData.Length < (srcHeight - 1) * srcStride + srcWidth * srcBpp)
+                throw new ArgumentException("Source buffer too small");
 
-            if (!centered)
+            fixed (byte* srcPtr = srcData)
+            fixed (byte* dstPtr = dstData)
             {
-                FastBitmapCopyUnscaled(srcData, srcWidth, srcHeight, srcStride, srcBpp,
-                                       dstData, dstWidth, dstHeight, dstStride, dstBpp);
-            }
-            else
-            {
-                FastBitmapCopyScaled(srcData, srcWidth, srcHeight, srcStride, srcBpp,
-                                     dstData, dstWidth, dstHeight, dstStride, dstBpp, fillWhiteBackground);
+                if (!centered)
+                {
+                    FastBitmapCopyUnscaled(srcPtr, srcWidth, srcHeight, srcStride, srcBpp,
+                                           dstPtr, dstWidth, dstHeight, dstStride, dstBpp, dstData.Length);
+                }
+                else
+                {
+                    FastBitmapCopyScaled(srcPtr, srcWidth, srcHeight, srcStride, srcBpp,
+                                         dstPtr, dstWidth, dstHeight, dstStride, dstBpp, fillWhiteBackground, dstData.Length);
+                }
             }
         }
 
-        private static unsafe void FastBitmapCopyUnscaled(byte[] srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
-                                                    byte[] dstData, int dstWidth, int dstHeight, int dstStride, int dstBpp)
+        private static unsafe void FastBitmapCopyUnscaled(byte* srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
+                                                    byte* dstData, int dstWidth, int dstHeight, int dstStride, int dstBpp, int dstLength)
         {
             int copyWidth = Math.Min(srcWidth, dstWidth);
             int copyHeight = Math.Min(srcHeight, dstHeight);
 
-            // Validate buffers are large enough for the operation
-            if (srcData.Length < (srcHeight - 1) * srcStride + srcWidth * srcBpp)
-                throw new ArgumentException("Source buffer too small");
-            if (dstData.Length < (dstHeight - 1) * dstStride + dstWidth * dstBpp)
+            // Validate destination buffer
+            if (dstLength < (dstHeight - 1) * dstStride + dstWidth * dstBpp)
                 throw new ArgumentException("Destination buffer too small");
 
             if (srcBpp == dstBpp)
@@ -43,72 +73,90 @@ namespace VPB
                 int copyBytes = copyWidth * srcBpp;
                 for (int y = 0; y < copyHeight; y++)
                 {
-                    Buffer.BlockCopy(srcData, y * srcStride, dstData, y * dstStride, copyBytes);
+                    // Buffer.BlockCopy works on arrays, but here we have pointers. Use internal memcpy or Loop.
+                    // We can use the CRuntime.memcpy we just optimized!
+                    // Or just a loop here since we are in Unsafe context anyway
+                    // But CRuntime.memcpy is available in StbImageSharp namespace... 
+                    // This class is in VPB namespace.
+                    // Let's just use a loop or call CRuntime if accessible.
+                    // But CRuntime is internal.
+                    // So we implement a quick copy or loop.
+                    
+                    byte* pSrc = srcData + y * srcStride;
+                    byte* pDst = dstData + y * dstStride;
+                    
+                    // Simple byte copy for now, or use the int/long loop optimization locally
+                    byte* s = pSrc;
+                    byte* d = pDst;
+                    int i = 0;
+                    
+                    // 8-byte unroll
+                    long* dL = (long*)d;
+                    long* sL = (long*)s;
+                    int longCount = copyBytes >> 3;
+                    for(int k=0; k<longCount; k++) dL[k] = sL[k];
+                    
+                    for(i = longCount * 8; i < copyBytes; i++) d[i] = s[i];
                 }
             }
             else
             {
-                fixed (byte* pSrcBase = srcData, pDstBase = dstData)
+                // Format conversion needed (e.g., RGBA -> RGB or RGB -> RGBA)
+                for (int y = 0; y < copyHeight; y++)
                 {
-                    // Format conversion needed (e.g., RGBA -> RGB or RGB -> RGBA)
-                    for (int y = 0; y < copyHeight; y++)
+                    byte* pSrcRow = srcData + y * srcStride;
+                    byte* pDstRow = dstData + y * dstStride;
+
+                    for (int x = 0; x < copyWidth; x++)
                     {
-                        byte* pSrcRow = pSrcBase + y * srcStride;
-                        byte* pDstRow = pDstBase + y * dstStride;
+                        byte* pSrc = pSrcRow + x * srcBpp;
+                        byte* pDst = pDstRow + x * dstBpp;
 
-                        for (int x = 0; x < copyWidth; x++)
+                        pDst[0] = pSrc[0]; // R
+                        pDst[1] = pSrc[1]; // G
+                        pDst[2] = pSrc[2]; // B
+
+                        if (dstBpp == 4)
                         {
-                            byte* pSrc = pSrcRow + x * srcBpp;
-                            byte* pDst = pDstRow + x * dstBpp;
-
-                            pDst[0] = pSrc[0]; // R
-                            pDst[1] = pSrc[1]; // G
-                            pDst[2] = pSrc[2]; // B
-
-                            if (dstBpp == 4)
-                            {
-                                pDst[3] = (srcBpp == 4) ? pSrc[3] : (byte)255; // A
-                            }
+                            pDst[3] = (srcBpp == 4) ? pSrc[3] : (byte)255; // A
                         }
                     }
                 }
             }
         }
 
-        private static unsafe void FastBitmapCopyScaled(byte[] srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
-                                                  byte[] dstData, int dstWidth, int dstHeight, int dstStride, int dstBpp,
-                                                  bool fillWhiteBackground)
+        private static unsafe void FastBitmapCopyScaled(byte* srcData, int srcWidth, int srcHeight, int srcStride, int srcBpp,
+                                                  byte* dstData, int dstWidth, int dstHeight, int dstStride, int dstBpp,
+                                                  bool fillWhiteBackground, int dstLength)
         {
              // Validate buffers are large enough
-            if (srcData.Length < (srcHeight - 1) * srcStride + srcWidth * srcBpp)
-                throw new ArgumentException("Source buffer too small");
-            if (dstData.Length < (dstHeight - 1) * dstStride + dstWidth * dstBpp)
+            if (dstLength < (dstHeight - 1) * dstStride + dstWidth * dstBpp)
                 throw new ArgumentException("Destination buffer too small");
 
-            fixed (byte* pSrcBase = srcData, pDstBase = dstData)
+            byte* pSrcBase = srcData;
+            byte* pDstBase = dstData;
+
+            if (fillWhiteBackground)
             {
-                if (fillWhiteBackground)
+                // Clear with white/transparent
+                // Memset to 0
+                // For large arrays, P/Invoke memset or similar is faster, but loop is okay for now or use Array.Clear
+                // But we have a pointer now.
+                // Manual memset 0
+                long* pDstL = (long*)pDstBase;
+                int len = dstLength;
+                int longCount = len >> 3;
+                for(int i=0; i<longCount; i++) pDstL[i] = 0;
+                for(int i=longCount*8; i<len; i++) pDstBase[i] = 0;
+                
+                if (dstBpp == 4)
                 {
-                    // Clear with white/transparent
-                    // Note: Array.Clear sets to 0. If we want white background we need to set to 255.
-                    // But if BPP is 3, 0 is black. If BPP is 4, 0 is transparent black.
-                    // The logic below mimics original:
-                    // Array.Clear(dstData, 0, dstData.Length); -> Sets everything to 0
-                    // If dstBpp == 4, set alpha to 255.
-                    
-                    // Optimization: Use pointer to clear
-                    int len = dstData.Length;
-                    // Memset to 0
-                    // For large arrays, P/Invoke memset or similar is faster, but loop is okay for now or use Array.Clear
-                    Array.Clear(dstData, 0, len);
-                    
-                    if (dstBpp == 4)
-                    {
-                        // Set Alpha to 255
-                        for (int i = 3; i < len; i += 4)
-                            pDstBase[i] = 255;
-                    }
+                    // Set Alpha to 255
+                    for (int i = 3; i < len; i += 4)
+                        pDstBase[i] = 255;
                 }
+            }
+
 
                 float scaleX = (float)srcWidth / dstWidth;
                 float scaleY = (float)srcHeight / dstHeight;
@@ -152,7 +200,6 @@ namespace VPB
                             pDst[3] = (srcBpp == 4) ? pSrc[3] : (byte)255;
                     }
                 }
-            }
         }
 
         public static unsafe void OptimizedNormalMapGeneration(byte[] raw, int width, int height, float bumpStrength)

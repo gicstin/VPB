@@ -38,15 +38,6 @@ namespace VPB
                 _lastStatLogTime = Time.unscaledTime;
                 if (_statFindCalls > 0 || _statRaycastCalls > 0 || _statMeshNormalsCalled > 0 || _statMeshBoundsCalled > 0 || _statMeshTangentsCalled > 0)
                 {
-                    string findPct = _statFindCalls > 0 ? ((float)_statFindHits / _statFindCalls).ToString("P1") : "0.0%";
-                    string rayPct = _statRaycastCalls > 0 ? ((float)_statRaycastHits / _statRaycastCalls).ToString("P1") : "0.0%";
-
-                    LogUtil.Log($"[Optimization Stats] Find: {_statFindHits}/{_statFindCalls} ({findPct}), " +
-                                $"Raycast: {_statRaycastHits}/{_statRaycastCalls} ({rayPct}), " +
-                                $"Normals: {_statMeshNormalsSkipped}/{_statMeshNormalsCalled}, " +
-                                $"Tangents: {_statMeshTangentsSkipped}/{_statMeshTangentsCalled}, " +
-                                $"Bounds: {_statMeshBoundsSkipped}/{_statMeshBoundsCalled}");
-                    
                     // Reset stats
                     _statFindHits = 0;
                     _statFindCalls = 0;

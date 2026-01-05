@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
 using StbImageSharp; // Requires StbImageSharp library
+using Hebron.Runtime;
 
 namespace VPB
 {
@@ -279,93 +280,105 @@ namespace VPB
 		{
             // Use StbImageSharp for fast, thread-safe loading
             StbImage.stbi_set_flip_vertically_on_load(1);
-            ImageResult image = null;
             
             Stream streamToUse = st;
             MemoryStream ms = null;
             
-            try 
-            {
-                if (!st.CanSeek)
+            int num3 = 3;
+            int num8 = 0;
+
+            unsafe {
+                byte* result = null;
+                int x = 0, y = 0, comp = 0;
+
+                try 
                 {
-                    ms = new MemoryStream();
-                    byte[] buffer = ByteArrayPool.Rent(4096);
-                    try
+                    if (!st.CanSeek)
                     {
-                        int read;
-                        while ((read = st.Read(buffer, 0, buffer.Length)) > 0)
+                        ms = new MemoryStream();
+                        byte[] buffer = ByteArrayPool.Rent(4096);
+                        try
                         {
-                            ms.Write(buffer, 0, read);
+                            int read;
+                            while ((read = st.Read(buffer, 0, buffer.Length)) > 0)
+                            {
+                                ms.Write(buffer, 0, read);
+                            }
+                        }
+                        finally
+                        {
+                            ByteArrayPool.Return(buffer);
+                        }
+                        ms.Position = 0;
+                        streamToUse = ms;
+                    }
+                
+                    var context = new StbImage.stbi__context(streamToUse);
+                    result = StbImage.stbi__load_and_postprocess_8bit(context, &x, &y, &comp, 4);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("StbImage FromStream Error: " + ex);
+                }
+                
+                if (result == null) 
+                {
+                    LogUtil.LogError("StbImage returned null for stream. Reason: " + StbImage.stbi__g_failure_reason);
+                    if (ms != null) ms.Dispose();
+                    return;
+                }
+
+                try
+                {
+                    int srcWidth = x;
+                    int srcHeight = y;
+                    int srcStride = srcWidth * 4; // We requested RGBA
+                    int srcBpp = 4;
+
+                    if (!setSize)
+                    {
+                        width = srcWidth;
+                        height = srcHeight;
+                        if (compress)
+                        {
+                            int num = width / 4;
+                            if (num == 0) num = 1;
+                            width = num * 4;
+                            int num2 = height / 4;
+                            if (num2 == 0) num2 = 1;
+                            height = num2 * 4;
                         }
                     }
-                    finally
+                    
+                    num3 = 3;
+                    textureFormat = TextureFormat.RGB24;
+                    
+                    // Use RGBA if alpha requested or source suggests it (comp == 4)
+                    if (createAlphaFromGrayscale || isNormalMap || createNormalFromBump || comp == 4)
                     {
-                        ByteArrayPool.Return(buffer);
+                        textureFormat = TextureFormat.RGBA32;
+                        num3 = 4;
                     }
-                    ms.Position = 0;
-                    streamToUse = ms;
+                    
+                    // Destination Buffer
+                    int dstStride = width * num3;
+                    int num7 = width * height;
+                    
+                    num8 = num7 * num3;
+
+                    int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
+                    raw = ByteArrayPool.Rent(num9);
+                    
+                    // Use FastBitmapCopy to Resize/Crop/Format Convert directly to raw
+                    ImageProcessingOptimization.FastBitmapCopy(result, srcWidth, srcHeight, srcStride, srcBpp,
+                        raw, width, height, dstStride, num3, setSize, fillBackground);
                 }
-            
-                image = ImageResult.FromStream(streamToUse, ColorComponents.RedGreenBlueAlpha);
+                finally
+                {
+                    CRuntime.free(result);
+                    if (ms != null) ms.Dispose();
+                }
             }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("StbImage FromStream Error: " + ex);
-            }
-            finally
-            {
-                if (ms != null) ms.Dispose();
-            }
-            
-            if (image == null) 
-            {
-                LogUtil.LogError("StbImage returned null for stream. Reason: " + StbImage.stbi__g_failure_reason);
-                return;
-            }
-
-            int srcWidth = image.Width;
-            int srcHeight = image.Height;
-            byte[] srcData = image.Data;
-            int srcStride = srcWidth * 4; // We requested RGBA
-            int srcBpp = 4;
-
-			if (!setSize)
-			{
-				width = srcWidth;
-				height = srcHeight;
-				if (compress)
-				{
-					int num = width / 4;
-					if (num == 0) num = 1;
-					width = num * 4;
-					int num2 = height / 4;
-					if (num2 == 0) num2 = 1;
-					height = num2 * 4;
-				}
-			}
-			int num3 = 3;
-			textureFormat = TextureFormat.RGB24;
-			
-            // Use RGBA if alpha requested or source suggests it
-			if (createAlphaFromGrayscale || isNormalMap || createNormalFromBump || image.SourceComp == ColorComponents.RedGreenBlueAlpha)
-			{
-				textureFormat = TextureFormat.RGBA32;
-				num3 = 4;
-			}
-            
-            // Destination Buffer
-            int dstStride = width * num3;
-			int num7 = width * height;
-			int num8 = num7 * num3;
-            byte[] dstData = new byte[num8];
-
-            // Use FastBitmapCopy to Resize/Crop/Format Convert
-			ImageProcessingOptimization.FastBitmapCopy(srcData, srcWidth, srcHeight, srcStride, srcBpp,
-				dstData, width, height, dstStride, num3, setSize, fillBackground);
-
-			int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
-			raw = ByteArrayPool.Rent(num9);
-            Array.Copy(dstData, raw, num8);
 
             // Post Processing
 			bool flag = isNormalMap && num3 == 4;

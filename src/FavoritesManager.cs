@@ -77,44 +77,47 @@ namespace VPB
                 // But we don't know if it's valid yet.
                 // Let's try to load.
 
-                FileStream fs = null;
                 long lastValidPos = 0;
+                long fileLength = 0;
 
                 try
                 {
-                    fs = new FileStream(cacheFilePath, FileMode.Open, FileAccess.Read);
-                    using (BinaryReader reader = new BinaryReader(fs))
+                    using (FileStream fs = new FileStream(cacheFilePath, FileMode.Open, FileAccess.Read))
                     {
-                        while (fs.Position < fs.Length)
+                        fileLength = fs.Length;
+                        using (BinaryReader reader = new BinaryReader(fs))
                         {
-                            long entryStart = fs.Position;
-                            try 
+                            while (fs.Position < fs.Length)
                             {
-                                // Format: [Action(1)][PathLength(4)][PathBytes(N)]
-                                // Header Check: Ensure we have enough bytes for Action + Length
-                                if (fs.Position + 5 > fs.Length) break;
-
-                                byte action = reader.ReadByte();
-                                int length = reader.ReadInt32();
-
-                                if (length < 0 || fs.Position + length > fs.Length) break;
-
-                                byte[] bytes = reader.ReadBytes(length);
-                                string uid = Encoding.UTF8.GetString(bytes);
-
-                                if (action == 1)
+                                long entryStart = fs.Position;
+                                try 
                                 {
-                                    if (!favoriteUids.Contains(uid)) favoriteUids.Add(uid);
+                                    // Format: [Action(1)][PathLength(4)][PathBytes(N)]
+                                    // Header Check: Ensure we have enough bytes for Action + Length
+                                    if (fs.Position + 5 > fs.Length) break;
+
+                                    byte action = reader.ReadByte();
+                                    int length = reader.ReadInt32();
+
+                                    if (length < 0 || fs.Position + length > fs.Length) break;
+
+                                    byte[] bytes = reader.ReadBytes(length);
+                                    string uid = Encoding.UTF8.GetString(bytes);
+
+                                    if (action == 1)
+                                    {
+                                        if (!favoriteUids.Contains(uid)) favoriteUids.Add(uid);
+                                    }
+                                    else
+                                    {
+                                        if (favoriteUids.Contains(uid)) favoriteUids.Remove(uid);
+                                    }
+                                    lastValidPos = fs.Position;
                                 }
-                                else
+                                catch (Exception) 
                                 {
-                                    if (favoriteUids.Contains(uid)) favoriteUids.Remove(uid);
+                                    break; 
                                 }
-                                lastValidPos = fs.Position;
-                            }
-                            catch (Exception) 
-                            {
-                                break; 
                             }
                         }
                     }
@@ -123,24 +126,9 @@ namespace VPB
                 {
                     Debug.LogError("FavoritesManager: Error loading cache: " + ex.Message);
                 }
-                finally
-                {
-                    if (fs != null)
-                    {
-                        // Check if we need to truncate
-                        if (lastValidPos < fs.Length)
-                        {
-                            Debug.LogWarning("FavoritesManager: Truncating corrupt cache from " + fs.Length + " to " + lastValidPos);
-                            // We need to close reader/fs to truncate? No, we can truncate if we opened with Write access, 
-                            // but we opened Read. 
-                            // We need to reopen to truncate.
-                        }
-                        fs.Dispose();
-                    }
-                }
 
                 // Perform Truncation if needed
-                if (lastValidPos > 0 && lastValidPos < new FileInfo(cacheFilePath).Length)
+                if (lastValidPos > 0 && lastValidPos < fileLength)
                 {
                      try
                      {
@@ -148,6 +136,7 @@ namespace VPB
                          {
                              writeFs.SetLength(lastValidPos);
                          }
+                         Debug.LogWarning("FavoritesManager: Truncated corrupt cache from " + fileLength + " to " + lastValidPos);
                      }
                      catch(Exception ex)
                      {
