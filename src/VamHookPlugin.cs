@@ -1332,7 +1332,7 @@ namespace VPB
                 else
                 {
                     // Position at Left side
-                    m_QuickMenuCanvas.transform.localPosition = new Vector3(0f, -0.012f, 0f);
+                    m_QuickMenuCanvas.transform.localPosition = new Vector3(0f, 0f, 0f);
                     m_QuickMenuCanvas.transform.localEulerAngles = new Vector3(0, 180, 0);
                 }
 
@@ -1345,8 +1345,8 @@ namespace VPB
                     RectTransform rt = btnTr.GetComponent<RectTransform>();
                     if (rt != null)
                     {
-                        rt.sizeDelta = new Vector2(120f, 50f);
-                        rt.anchoredPosition = new Vector2(-120f, 0f);
+                        rt.sizeDelta = new Vector2(100f, 50f);
+                        rt.anchoredPosition = new Vector2(-468f,-76f);
                     }
 
                     UIDynamicButton uiBtn = btnTr.GetComponent<UIDynamicButton>();
@@ -1382,8 +1382,8 @@ namespace VPB
                     RectTransform rt = btnTr2.GetComponent<RectTransform>();
                     if (rt != null)
                     {
-                        rt.sizeDelta = new Vector2(120f, 50f);
-                        rt.anchoredPosition = new Vector2(120f, 0f);
+                        rt.sizeDelta = new Vector2(100f, 50f);
+                        rt.anchoredPosition = new Vector2(-468f, -212f);
                     }
 
                     UIDynamicButton uiBtn = btnTr2.GetComponent<UIDynamicButton>();

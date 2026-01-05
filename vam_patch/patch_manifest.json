@@ -1,0 +1,102 @@
+[
+  {
+    "RelativePath": "BepInEx/core/HarmonyXInterop.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/0Harmony.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/MonoMod.RuntimeDetour.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/MonoMod.Utils.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/Mono.Cecil.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/Mono.Cecil.Mdb.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/Mono.Cecil.Pdb.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/Mono.Cecil.Rocks.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/BepInEx.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/BepInEx.Preloader.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/0Harmony20.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/core/BepInEx.Harmony.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": ".doorstop_version",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "changelog.txt",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "winhttp.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "doorstop_config.ini",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins",
+    "IsDirectory": true
+  },
+  {
+    "RelativePath": "BepInEx/plugins/I18N.West.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/VPB.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/I18N.CJK.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/I18N.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/I18N.MidEast.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/I18N.Other.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/I18N.Rare.dll",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "VaM (Log Mode).bat",
+    "IsDirectory": false
+  }
+]
