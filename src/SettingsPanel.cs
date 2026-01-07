@@ -32,6 +32,9 @@ namespace VPB
         private float pendingFollowDistanceMeters;
         private float backupFollowDistanceMeters;
 
+        private bool pendingFollowEyeHeight;
+        private bool backupFollowEyeHeight;
+
         public SettingsPanel(GameObject parent)
         {
             this.backgroundBoxGO = parent;
@@ -73,6 +76,9 @@ namespace VPB
             pendingFollowDistanceMeters = VPBConfig.Instance.FollowDistanceMeters;
             backupFollowDistanceMeters = VPBConfig.Instance.FollowDistanceMeters;
 
+            pendingFollowEyeHeight = VPBConfig.Instance.FollowEyeHeight;
+            backupFollowEyeHeight = VPBConfig.Instance.FollowEyeHeight;
+
             RectTransform rt = settingsPaneRT;
             if (onRight)
             {
@@ -103,6 +109,7 @@ namespace VPB
             VPBConfig.Instance.FollowAngle = backupFollowAngle;
             VPBConfig.Instance.FollowDistance = backupFollowDistance;
             VPBConfig.Instance.FollowDistanceMeters = backupFollowDistanceMeters;
+            VPBConfig.Instance.FollowEyeHeight = backupFollowEyeHeight;
             VPBConfig.Instance.TriggerChange();
         }
 
@@ -137,6 +144,11 @@ namespace VPB
             VerticalLayoutGroup vlg = settingsScrollContent.GetComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(10, 10, 10, 10);
             vlg.spacing = 10;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandHeight = false;
+
+            ContentSizeFitter csf = settingsScrollContent.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Footer Buttons
             float footerY = 40;
@@ -153,6 +165,7 @@ namespace VPB
                 VPBConfig.Instance.FollowAngle = pendingFollowAngle;
                 VPBConfig.Instance.FollowDistance = pendingFollowDistance;
                 VPBConfig.Instance.FollowDistanceMeters = pendingFollowDistanceMeters;
+                VPBConfig.Instance.FollowEyeHeight = pendingFollowEyeHeight;
                 VPBConfig.Instance.Save();
                 
                 isSettingsOpen = false;
@@ -165,6 +178,9 @@ namespace VPB
         private void RefreshUI()
         {
             foreach (Transform child in settingsScrollContent.transform) GameObject.Destroy(child.gameObject);
+
+            // CATEGORY: Visuals
+            CreateHeader("Visuals");
 
             // Side Button Gaps
             CreateToggleSetting("Side Button Gaps", pendingEnableButtonGaps, (val) => {
@@ -182,10 +198,20 @@ namespace VPB
                 VPBConfig.Instance.TriggerChange();
             });
 
+            // CATEGORY: Follow Mode
+            CreateHeader("Follow Mode");
+
             // Follow Angle
             CreateToggleSetting("Follow Angle", pendingFollowAngle, (val) => {
                 pendingFollowAngle = val;
                 VPBConfig.Instance.FollowAngle = val;
+                VPBConfig.Instance.TriggerChange();
+            });
+
+            // Follow Eye Height
+            CreateToggleSetting("Follow Eye Height", pendingFollowEyeHeight, (val) => {
+                pendingFollowEyeHeight = val;
+                VPBConfig.Instance.FollowEyeHeight = val;
                 VPBConfig.Instance.TriggerChange();
             });
 
@@ -197,13 +223,45 @@ namespace VPB
             });
 
             // Follow Distance (meters)
-            CreateSliderSetting("Follow Distance (m)", pendingFollowDistanceMeters, 1.0f, 5.0f, (val) => {
+            CreateSliderSetting("Distance (m)", pendingFollowDistanceMeters, 1.0f, 5.0f, (val) => {
                 pendingFollowDistanceMeters = val;
                 VPBConfig.Instance.FollowDistanceMeters = val;
                 VPBConfig.Instance.TriggerChange();
             });
-            
-            // Placeholder for more settings...
+        }
+
+        private void CreateHeader(string title)
+        {
+            GameObject container = new GameObject("Header_" + title);
+            container.transform.SetParent(settingsScrollContent.transform, false);
+            LayoutElement le = container.AddComponent<LayoutElement>();
+            le.minHeight = 40; le.preferredHeight = 40;
+            le.flexibleWidth = 1;
+
+            GameObject textGO = new GameObject("Text");
+            textGO.transform.SetParent(container.transform, false);
+            Text t = textGO.AddComponent<Text>();
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.text = title.ToUpper();
+            t.fontSize = 20;
+            t.fontStyle = FontStyle.Bold;
+            t.color = new Color(0.7f, 0.7f, 0.7f);
+            t.alignment = TextAnchor.MiddleLeft;
+            RectTransform rt = textGO.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+            rt.offsetMin = new Vector2(10, 0);
+            rt.offsetMax = new Vector2(-10, 0);
+
+            // Add a small underline
+            GameObject line = new GameObject("Underline");
+            line.transform.SetParent(container.transform, false);
+            Image img = line.AddComponent<Image>();
+            img.color = new Color(0.3f, 0.3f, 0.3f);
+            RectTransform lrt = line.GetComponent<RectTransform>();
+            lrt.anchorMin = new Vector2(0, 0);
+            lrt.anchorMax = new Vector2(1, 0);
+            lrt.sizeDelta = new Vector2(-20, 2);
+            lrt.anchoredPosition = new Vector2(0, 2);
         }
 
         private void CreateSliderSetting(string label, float currentVal, float min, float max, Action<float> onChange)

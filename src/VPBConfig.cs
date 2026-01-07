@@ -40,6 +40,7 @@ namespace VPB
         public bool FollowAngle = true;
         public bool FollowDistance = false;
         public float FollowDistanceMeters = 2.0f;
+        public bool FollowEyeHeight = false;
 
         public delegate void OnConfigChanged();
         public event OnConfigChanged ConfigChanged;
@@ -52,6 +53,7 @@ namespace VPB
             FollowAngle = true;
             FollowDistance = false;
             FollowDistanceMeters = 2.0f;
+            FollowEyeHeight = false;
 
             try
             {
@@ -66,6 +68,7 @@ namespace VPB
                         if (node["FollowAngle"] != null) FollowAngle = node["FollowAngle"].AsBool;
                         if (node["FollowDistance"] != null) FollowDistance = node["FollowDistance"].AsBool;
                         if (node["FollowDistanceMeters"] != null) FollowDistanceMeters = node["FollowDistanceMeters"].AsFloat;
+                        if (node["FollowEyeHeight"] != null) FollowEyeHeight = node["FollowEyeHeight"].AsBool;
                     }
                 }
             }
@@ -85,6 +88,7 @@ namespace VPB
                 node["FollowAngle"].AsBool = FollowAngle;
                 node["FollowDistance"].AsBool = FollowDistance;
                 node["FollowDistanceMeters"].AsFloat = FollowDistanceMeters;
+                node["FollowEyeHeight"].AsBool = FollowEyeHeight;
                 File.WriteAllText(ConfigPath, node.ToString());
                 // No need to Invoke ConfigChanged here if we want to control it from the UI or if Save is the final action.
                 // Actually, Invoke is good if other components listen to file saves.

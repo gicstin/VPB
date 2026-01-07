@@ -182,6 +182,9 @@ namespace VPB
         private bool isReorienting = false;
         private const float ReorientStartAngle = 20f;
         private const float ReorientStopAngle = 0.5f;
+        private float followYOffset = 0f;
+        private Vector2 followXZOffset = Vector2.zero;
+        private bool offsetsInitialized = false;
         
         private Text rightFollowBtnText;
         private Image rightFollowBtnImage;
@@ -526,6 +529,15 @@ namespace VPB
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
                     else if (rightActiveContent == ContentType.Creator) creatorFilter = val;
                     UpdateTabs();
+                }, () => {
+                    if (rightActiveContent == ContentType.Creator) {
+                        currentCreator = "";
+                        categoriesCached = false;
+                        tagsCached = false;
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    }
                 });
                 RectTransform rSearchRT = rightSearchInput.GetComponent<RectTransform>();
                 rSearchRT.anchorMin = new Vector2(1, 1);
@@ -639,6 +651,15 @@ namespace VPB
                     if (leftActiveContent == ContentType.Category) categoryFilter = val;
                     else if (leftActiveContent == ContentType.Creator) creatorFilter = val;
                     UpdateTabs();
+                }, () => {
+                    if (leftActiveContent == ContentType.Creator) {
+                        currentCreator = "";
+                        categoriesCached = false;
+                        tagsCached = false;
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    }
                 });
                 RectTransform lSearchRT = leftSearchInput.GetComponent<RectTransform>();
                 lSearchRT.anchorMin = new Vector2(0, 1);
@@ -994,11 +1015,27 @@ namespace VPB
         }
 
         private string dragStatusMsg = null;
+        private string temporaryStatusMsg = null;
+        private Coroutine temporaryStatusCoroutine = null;
 
         public void SetStatus(string msg)
         {
             if (string.IsNullOrEmpty(msg)) dragStatusMsg = null;
             else dragStatusMsg = msg;
+        }
+
+        public void ShowTemporaryStatus(string msg, float duration = 2.0f)
+        {
+            temporaryStatusMsg = msg;
+            if (temporaryStatusCoroutine != null) StopCoroutine(temporaryStatusCoroutine);
+            temporaryStatusCoroutine = StartCoroutine(ClearTemporaryStatus(duration));
+        }
+
+        private IEnumerator ClearTemporaryStatus(float duration)
+        {
+            yield return new WaitForSeconds(duration);
+            temporaryStatusMsg = null;
+            temporaryStatusCoroutine = null;
         }
 
         public void ShowCancelDropZone(bool show)
@@ -1072,6 +1109,10 @@ namespace VPB
             {
                 if (statusBarText != null) statusBarText.text = dragStatusMsg;
             }
+            else if (temporaryStatusMsg != null)
+            {
+                if (statusBarText != null) statusBarText.text = temporaryStatusMsg;
+            }
             else
             {
                 if (IsVisible && statusBarText != null && !UnityEngine.XR.XRSettings.enabled)
@@ -1124,25 +1165,52 @@ namespace VPB
                     if (lastFollowUpdateTime <= 0f || now - lastFollowUpdateTime >= FollowUpdateInterval)
                     {
                         lastFollowUpdateTime = now;
+
+                        if (!offsetsInitialized)
+                        {
+                            Vector3 offset = canvas.transform.position - _cachedCamera.transform.position;
+                            followYOffset = offset.y;
+                            followXZOffset = new Vector2(offset.x, offset.z);
+                            offsetsInitialized = true;
+                        }
                         
                         // Handle Position Following
+                        Vector3 camPos = _cachedCamera.transform.position;
+                        Vector3 currentPos = canvas.transform.position;
+                        Vector3 targetPos = currentPos;
+
+                        // Horizontal Following
                         if (VPBConfig.Instance.FollowDistance)
                         {
-                            Vector3 camPos = _cachedCamera.transform.position;
-                            Vector3 currentPos = canvas.transform.position;
-                            Vector3 toCanvas = currentPos - camPos;
-                            
-                            if (toCanvas.sqrMagnitude > 0.001f)
-                            {
-                                Vector3 direction = toCanvas.normalized;
-                                Vector3 targetPos = camPos + direction * VPBConfig.Instance.FollowDistanceMeters;
-                                
-                                // Only move if distance changed by more than 0.1m
-                                if (Vector3.Distance(currentPos, targetPos) > 0.1f)
-                                {
-                                    canvas.transform.position = targetPos;
-                                }
-                            }
+                            Vector3 hOffset = new Vector3(followXZOffset.x, 0, followXZOffset.y);
+                            if (hOffset.sqrMagnitude < 0.0001f) hOffset = Vector3.forward;
+                            Vector3 hTarget = camPos + hOffset.normalized * VPBConfig.Instance.FollowDistanceMeters;
+                            targetPos.x = hTarget.x;
+                            targetPos.z = hTarget.z;
+                        }
+                        else
+                        {
+                            // Even if FollowDistance is OFF, we follow user in world space
+                            // so it stays at same relative position to user (no rotation/orbit)
+                            targetPos.x = camPos.x + followXZOffset.x;
+                            targetPos.z = camPos.z + followXZOffset.y;
+                        }
+
+                        // Vertical Following (Eye Height)
+                        if (VPBConfig.Instance.FollowEyeHeight)
+                        {
+                            targetPos.y = camPos.y + followYOffset;
+                        }
+                        else
+                        {
+                            // Stay at current Y (world fixed if not following eye height)
+                            targetPos.y = currentPos.y;
+                        }
+
+                        // Only move if position changed by more than 0.1m
+                        if (Vector3.Distance(currentPos, targetPos) > 0.1f)
+                        {
+                            canvas.transform.position = targetPos;
                         }
 
                         // Handle Rotation Following
@@ -2044,7 +2112,7 @@ namespace VPB
             if (targetList != null) targetList.Add(groupGO);
         }
 
-        private InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged)
+        private InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged, Action onClear = null)
         {
             GameObject inputGO = new GameObject("SearchInput");
             inputGO.transform.SetParent(parent.transform, false);
@@ -2107,6 +2175,7 @@ namespace VPB
                 input.text = "";
                 input.ActivateInputField();
                 input.MoveTextEnd(false);
+                onClear?.Invoke();
             });
             RectTransform clearRT = clearBtn.GetComponent<RectTransform>();
             clearRT.anchorMin = new Vector2(1, 0.5f);
@@ -2172,7 +2241,7 @@ namespace VPB
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
-                currentCreator = "";
+                // currentCreator = ""; // Keep creator filter across categories
                 activeTags.Clear();
                 currentPage = 0;
             }
@@ -2370,61 +2439,66 @@ namespace VPB
 
             if (activeContentType == ContentType.Category)
             {
-                foreach (var searchPath in pathsToSearch)
+                // If a creator filter is active, we should skip raw disk files 
+                // because they don't have creator metadata.
+                if (string.IsNullOrEmpty(currentCreator))
                 {
-                    if (!Directory.Exists(searchPath)) continue;
-
-                    foreach (var ext in extensions)
+                    foreach (var searchPath in pathsToSearch)
                     {
-                        // Directory.GetFiles is blocking, unfortunately. 
-                        // If this is slow, we can't yield inside it. 
-                        // But we can yield during the processing of results.
-                        string[] sysFiles = new string[0];
-                        try 
-                        {
-                            sysFiles = Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories);
-                        }
-                        catch { }
+                        if (!Directory.Exists(searchPath)) continue;
 
-                        foreach (var sysPath in sysFiles)
+                        foreach (var ext in extensions)
                         {
-                            if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
+                            // Directory.GetFiles is blocking, unfortunately. 
+                            // If this is slow, we can't yield inside it. 
+                            // But we can yield during the processing of results.
+                            string[] sysFiles = new string[0];
+                            try 
                             {
-                                yield return null;
-                                yieldWatch.Reset();
-                                yieldWatch.Start();
+                                sysFiles = Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories);
                             }
+                            catch { }
 
-                            if (activeTags.Count > 0)
+                            foreach (var sysPath in sysFiles)
                             {
-                                bool tagMatch = false;
-                                string pathLower = sysPath.ToLowerInvariant();
-                                foreach(var tag in activeTags)
+                                if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
                                 {
-                                    if (pathLower.Contains(tag.ToLowerInvariant())) 
-                                    {
-                                        tagMatch = true; 
-                                        break; 
-                                    }
+                                    yield return null;
+                                    yieldWatch.Reset();
+                                    yieldWatch.Start();
                                 }
-                                if (!tagMatch) continue;
-                            }
 
-                            var sysEntry = new SystemFileEntry(sysPath);
-                            bool include = true;
-                            if (hasNameFilter)
-                            {
-                                if (sysEntry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) include = false;
-                            }
-                            if (include && filterFavorite)
-                            {
-                                try { if (!sysEntry.IsFavorite()) include = false; }
-                                catch { }
-                            }
-                            
-                            if (include)
-                            {
-                                files.Add(sysEntry);
+                                if (activeTags.Count > 0)
+                                {
+                                    bool tagMatch = false;
+                                    string pathLower = sysPath.ToLowerInvariant();
+                                    foreach(var tag in activeTags)
+                                    {
+                                        if (pathLower.Contains(tag.ToLowerInvariant())) 
+                                        {
+                                            tagMatch = true; 
+                                            break; 
+                                        }
+                                    }
+                                    if (!tagMatch) continue;
+                                }
+
+                                var sysEntry = new SystemFileEntry(sysPath);
+                                bool include = true;
+                                if (hasNameFilter)
+                                {
+                                    if (sysEntry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) include = false;
+                                }
+                                if (include && filterFavorite)
+                                {
+                                    try { if (!sysEntry.IsFavorite()) include = false; }
+                                    catch { }
+                                }
+                                
+                                if (include)
+                                {
+                                    files.Add(sysEntry);
+                                }
                             }
                         }
                     }
@@ -2928,6 +3002,20 @@ namespace VPB
 
         private void OnFileClick(FileEntry file)
         {
+            if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) &&
+                (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)))
+            {
+                string copyName = file.Name;
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                {
+                    copyName = vfe.Package.Uid + ".var";
+                }
+                
+                GUIUtility.systemCopyBuffer = copyName;
+                ShowTemporaryStatus("Copied to clipboard: " + copyName, 2f);
+                return;
+            }
+
             if (selectedPath == file.Path) return; // Already selected
             
             // Deselect old
@@ -3062,7 +3150,19 @@ namespace VPB
             if (followUser)
             {
                 lastFollowUpdateTime = 0f; // Force immediate update
-                if (canvas != null) targetFollowRotation = canvas.transform.rotation;
+                if (canvas != null)
+                {
+                    targetFollowRotation = canvas.transform.rotation;
+                    
+                    if (_cachedCamera == null) _cachedCamera = Camera.main;
+                    if (_cachedCamera != null)
+                    {
+                        Vector3 offset = canvas.transform.position - _cachedCamera.transform.position;
+                        followYOffset = offset.y;
+                        followXZOffset = new Vector2(offset.x, offset.z);
+                        offsetsInitialized = true;
+                    }
+                }
             }
             UpdateFollowButtonState();
         }
