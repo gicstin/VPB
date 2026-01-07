@@ -613,6 +613,11 @@ namespace VPB
             sceneLoadInternalActive = true;
             sceneLoadInternalStopwatch.Reset();
             sceneLoadInternalStopwatch.Start();
+
+            if (VPBConfig.Instance != null)
+            {
+                VPBConfig.Instance.StartSceneLoad();
+            }
         }
 
         public static bool IsSceneLoadActive()
@@ -961,6 +966,11 @@ namespace VPB
             slowDisk.Clear();
             sceneLoadAutoEndFailedLogged = false;
             sceneLoadNotBusyStableFrames = 0;
+
+            if (VPBConfig.Instance != null)
+            {
+                VPBConfig.Instance.EndSceneLoad();
+            }
         }
 
         static void LogTextureOffenderSummary()

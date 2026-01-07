@@ -1134,6 +1134,7 @@ namespace VPB
                     }
                 }
             }
+            VPBConfig.Instance.EndSceneLoad();
         }
 
         private bool EnsureInstalled()

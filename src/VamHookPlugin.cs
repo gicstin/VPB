@@ -167,7 +167,7 @@ namespace VPB
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
             m_SettingsUiTransparencyValueDraft = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
-            m_SettingsEnableGalleryFadeDraft = (Settings.Instance != null && Settings.Instance.EnableGalleryFade != null) ? Settings.Instance.EnableGalleryFade.Value : true;
+            m_SettingsEnableGalleryFadeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.EnableGalleryFade : true;
             m_SettingsError = null;
         }
 
@@ -421,11 +421,13 @@ namespace VPB
                             Settings.Instance.UiTransparencyValue.Value = m_SettingsUiTransparencyValueDraft;
                         }
                     }
-                    if (Settings.Instance != null && Settings.Instance.EnableGalleryFade != null)
+                    if (VPBConfig.Instance != null)
                     {
-                        if (Settings.Instance.EnableGalleryFade.Value != m_SettingsEnableGalleryFadeDraft)
+                        if (VPBConfig.Instance.EnableGalleryFade != m_SettingsEnableGalleryFadeDraft)
                         {
-                            Settings.Instance.EnableGalleryFade.Value = m_SettingsEnableGalleryFadeDraft;
+                            VPBConfig.Instance.EnableGalleryFade = m_SettingsEnableGalleryFadeDraft;
+                            VPBConfig.Instance.Save();
+                            VPBConfig.Instance.TriggerChange();
                         }
                     }
                     if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)

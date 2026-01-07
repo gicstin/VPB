@@ -112,7 +112,7 @@ namespace VPB
             }
         }
 
-        public void SortCreators(List<GalleryPanel.CreatorCacheEntry> creators, SortState state)
+        public void SortCreators(List<CreatorCacheEntry> creators, SortState state)
         {
             if (creators == null || state == null) return;
 

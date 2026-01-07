@@ -1,0 +1,253 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace VPB
+{
+    public partial class GalleryPanel
+    {
+        public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false)
+        {
+            if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
+            refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
+        }
+
+        private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
+        {
+            yield return null; // Allow UI to render first
+            var swTotal = System.Diagnostics.Stopwatch.StartNew();
+            
+            if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
+            {
+                CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
+            }
+            currentLoadingGroupId = Guid.NewGuid().ToString();
+
+            List<FileEntry> files = new List<FileEntry>();
+            string[] extensions = currentExtension.Split('|');
+            bool hasNameFilter = !string.IsNullOrEmpty(nameFilterLower);
+            
+            // Time-based yielding configuration
+            var yieldWatch = new System.Diagnostics.Stopwatch();
+            long maxMsPerFrame = 10; // Allow 10ms of work per frame
+            
+            yieldWatch.Start();
+
+            if (FileManager.PackagesByUid != null)
+            {
+                foreach (var pkg in FileManager.PackagesByUid.Values)
+                {
+                    string filterCreator = currentCreator;
+                    if (!string.IsNullOrEmpty(filterCreator))
+                    {
+                        if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
+                    }
+
+                    if (pkg.FileEntries != null)
+                    {
+                        foreach (var entry in pkg.FileEntries)
+                        {
+                            // Time-based yield
+                            if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
+                            {
+                                yield return null;
+                                yieldWatch.Reset();
+                                yieldWatch.Start();
+                            }
+
+                            bool match = IsMatch(entry, currentPaths, currentPath, extensions);
+                            if (match && hasNameFilter)
+                            {
+                                if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
+                                    match = false;
+                            }
+                            if (match && filterFavorite)
+                            {
+                                try { if (!entry.IsFavorite()) match = false; }
+                                catch { }
+                            }
+                            if (match && activeTags.Count > 0)
+                            {
+                                bool tagMatch = false;
+                                string pathLower = entry.Path.ToLowerInvariant();
+                                foreach(var tag in activeTags)
+                                {
+                                    if (pathLower.Contains(tag.ToLowerInvariant())) 
+                                    {
+                                        tagMatch = true; 
+                                        break; 
+                                    }
+                                }
+                                if (!tagMatch) match = false;
+                            }
+
+                            if (match)
+                            {
+                                files.Add(entry);
+                            }
+                        }
+                    }
+                }
+            }
+
+            List<string> pathsToSearch = new List<string>();
+            if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
+            else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
+
+            if (activeContentType == ContentType.Category)
+            {
+                if (string.IsNullOrEmpty(currentCreator))
+                {
+                    foreach (var searchPath in pathsToSearch)
+                    {
+                        if (!Directory.Exists(searchPath)) continue;
+
+                        foreach (var ext in extensions)
+                        {
+                            string[] sysFiles = new string[0];
+                            try 
+                            {
+                                sysFiles = Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories);
+                            }
+                            catch { }
+
+                            foreach (var sysPath in sysFiles)
+                            {
+                                if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
+                                {
+                                    yield return null;
+                                    yieldWatch.Reset();
+                                    yieldWatch.Start();
+                                }
+
+                                if (activeTags.Count > 0)
+                                {
+                                    bool tagMatch = false;
+                                    string pathLower = sysPath.ToLowerInvariant();
+                                    foreach(var tag in activeTags)
+                                    {
+                                        if (pathLower.Contains(tag.ToLowerInvariant())) 
+                                        {
+                                            tagMatch = true; 
+                                            break; 
+                                        }
+                                    }
+                                    if (!tagMatch) continue;
+                                }
+
+                                var sysEntry = new SystemFileEntry(sysPath);
+                                bool include = true;
+                                if (hasNameFilter)
+                                {
+                                    if (sysEntry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) include = false;
+                                }
+                                if (include && filterFavorite)
+                                {
+                                    try { if (!sysEntry.IsFavorite()) include = false; }
+                                    catch { }
+                                }
+                                
+                                if (include)
+                                {
+                                    files.Add(sysEntry);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            yield return null; // Yield before sorting
+            var sortState = GetSortState("Files");
+            GallerySortManager.Instance.SortFiles(files, sortState);
+
+            // NOW clear the old buttons, just before we are ready to show new ones.
+            foreach (var btn in activeButtons)
+            {
+                btn.SetActive(false);
+                if (btn.name.StartsWith("NavButton_"))
+                {
+                    navButtonPool.Push(btn);
+                }
+                else
+                {
+                    fileButtonPool.Push(btn);
+                }
+            }
+            activeButtons.Clear();
+            fileButtonImages.Clear();
+
+            int totalFiles = files.Count;
+            int totalPages = Mathf.CeilToInt((float)totalFiles / itemsPerPage);
+            if (totalPages == 0) totalPages = 1;
+            
+            if (currentPage >= totalPages) currentPage = totalPages - 1;
+            if (currentPage < 0) currentPage = 0;
+            
+            if (paginationText != null) 
+                paginationText.text = (currentPage + 1) + " / " + totalPages + " (" + totalFiles + ")";
+
+            if (paginationPrevBtn != null) 
+                paginationPrevBtn.GetComponent<Button>().interactable = (currentPage > 0);
+            
+            if (paginationNextBtn != null) 
+                paginationNextBtn.GetComponent<Button>().interactable = (currentPage < totalPages - 1);
+
+            int startIndex = currentPage * itemsPerPage;
+            int endIndex = Mathf.Min(startIndex + itemsPerPage, totalFiles);
+
+            if (currentPage > 0)
+            {
+                GameObject prevBtn = InjectButton("Previous\nPage", PrevPage);
+                prevBtn.transform.SetAsFirstSibling();
+            }
+
+            int createdCount = 0;
+            int firstBatchSize = 32;
+            yieldWatch.Reset();
+            yieldWatch.Start();
+
+            for (int i = startIndex; i < endIndex; i++)
+            {
+                try
+                {
+                    CreateFileButton(files[i]);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("[VPB] Error creating button for " + files[i].Name + ": " + ex.ToString());
+                }
+
+                createdCount++;
+
+                if (createdCount > firstBatchSize)
+                {
+                     if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
+                     {
+                         yield return null;
+                         yieldWatch.Reset();
+                         yieldWatch.Start();
+                     }
+                }
+            }
+
+            if (currentPage < totalPages - 1)
+            {
+                GameObject nextBtn = InjectButton("Next\nPage", NextPage);
+                nextBtn.transform.SetAsLastSibling();
+            }
+            
+            if (scrollRect != null && !keepScroll)
+            {
+                scrollRect.verticalNormalizedPosition = scrollToBottom ? 0f : 1f;
+            }
+
+            refreshCoroutine = null;
+            LogUtil.Log("RefreshFilesRoutine took: " + swTotal.ElapsedMilliseconds + "ms");
+        }
+    }
+}

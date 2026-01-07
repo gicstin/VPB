@@ -55,8 +55,6 @@ namespace VPB
         public ConfigEntry<bool> ScenePrewarmEnabled;
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<float> UiTransparencyValue;
-        public ConfigEntry<bool> EnableGalleryFade;
-        public ConfigEntry<bool> DragDropReplaceMode;
         public ConfigEntry<bool> AutoPageEnabled;
         
         internal static void Init(ConfigFile config)
@@ -94,8 +92,6 @@ namespace VPB
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
-            EnableGalleryFade = config.Bind<bool>("UI", "EnableGalleryFade", true, "Enable Gallery Side Buttons Fade.");
-            DragDropReplaceMode = config.Bind<bool>("UI", "DragDropReplaceMode", false, "Enable Replace mode for Drag and Drop in Gallery.");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
             
             OptimizeGameObjectFind = config.Bind<bool>("Unity Patches", "OptimizeGameObjectFind", true, "Cache GameObject.Find results.");
