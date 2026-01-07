@@ -2690,8 +2690,8 @@ namespace VPB
         private void LoadThumbnail(FileEntry file, RawImage target)
         {
             string imgPath = "";
-            if (file.Path.EndsWith(".json") || file.Path.EndsWith(".vap") || file.Path.EndsWith(".vam"))
-                imgPath = Regex.Replace(file.Path, "\\.(json|vac|vap|vam|scene|assetbundle)$", ".jpg");
+            if (file.Path.EndsWith(".json") || file.Path.EndsWith(".vap") || file.Path.EndsWith(".vam") || file.Path.EndsWith(".assetbundle") || file.Path.EndsWith(".unity3d"))
+                imgPath = Regex.Replace(file.Path, "\\.(json|vac|vap|vam|scene|assetbundle|unity3d)$", ".jpg");
             else if (file.Path.EndsWith(".jpg") || file.Path.EndsWith(".png"))
                 imgPath = file.Path;
 
@@ -2724,7 +2724,7 @@ namespace VPB
                         target.texture = res.tex;
                         target.color = Color.white;
                     }
-                    StartCoroutine(GenerateAndCacheThumbnail(imgPath, res.tex, file.LastWriteTime.Ticks));
+                    StartCoroutine(GenerateAndCacheThumbnail(imgPath, res.tex, file.LastWriteTime.ToFileTime()));
                 }
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
@@ -2743,7 +2743,7 @@ namespace VPB
 
             if (w <= maxDim && h <= maxDim)
             {
-                bytes = sourceTex.EncodeToJPG(75);
+                bytes = sourceTex.GetRawTextureData();
             }
             else
             {
@@ -2764,7 +2764,7 @@ namespace VPB
                 RenderTexture.active = prev;
                 RenderTexture.ReleaseTemporary(rt);
                 
-                bytes = newTex.EncodeToJPG(75);
+                bytes = newTex.GetRawTextureData();
                 Destroy(newTex);
             }
 

@@ -243,6 +243,10 @@ namespace VPB
 			{
 				if (tex == null)
 				{
+					if (width <= 0 || height <= 0)
+					{
+						return;
+					}
 					try
 					{
 						tex = new Texture2D(width, height, textureFormat, createMipMaps, linear);
@@ -251,7 +255,10 @@ namespace VPB
 					{
 						LogUtil.LogError(imgPath + " " + ex);
 					}
-					tex.name = cacheSignature;
+					if (tex != null)
+					{
+						tex.name = cacheSignature;
+					}
 				}
 			}
 
@@ -325,6 +332,7 @@ namespace VPB
                 {
                     LogUtil.LogError("StbImage returned null for stream. Reason: " + StbImage.stbi__g_failure_reason);
                     if (ms != null) ms.Dispose();
+                    hadError = true;
                     return;
                 }
 
@@ -485,26 +493,26 @@ namespace VPB
 					}
 					else if (FileManager.FileExists(imgPath))
 					{
-                        bool loadedFromGalleryCache = false;
-                        if (isThumbnail)
-                        {
-                            FileEntry fe = FileManager.GetFileEntry(imgPath);
-                            if (fe != null)
-                            {
-                                int w, h;
-                                TextureFormat fmt;
-                                byte[] data;
-                                if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, fe.LastWriteTime.ToFileTime(), out data, out w, out h, out fmt))
-                                {
-                                    raw = data;
-                                    width = w;
-                                    height = h;
-                                    textureFormat = fmt;
-                                    preprocessed = true;
-                                    loadedFromGalleryCache = true;
-                                }
-                            }
-                        }
+						bool loadedFromGalleryCache = false;
+						if (isThumbnail)
+						{
+							FileEntry fe = FileManager.GetFileEntry(imgPath);
+							if (fe != null)
+							{
+								int w, h;
+								TextureFormat fmt;
+								byte[] data;
+								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, fe.LastWriteTime.ToFileTime(), out data, out w, out h, out fmt))
+								{
+									raw = data;
+									width = w;
+									height = h;
+									textureFormat = fmt;
+									preprocessed = true;
+									loadedFromGalleryCache = true;
+								}
+							}
+						}
 
 						string diskCachePath = GetDiskCachePath();
 						if (!loadedFromGalleryCache && MVR.FileManagement.CacheManager.CachingEnabled && diskCachePath != null && FileManager.FileExists(diskCachePath))
@@ -545,31 +553,36 @@ namespace VPB
 						}
 						else
 						{
-                            if (!loadedFromGalleryCache)
-                            {
-							    try
-							    {
-								    // Load image from a var package
-								    using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
-								    {
-									    Stream stream = fileEntryStream.Stream;
-									    ProcessFromStream(stream);
-								    }
-							    }
-							    catch (Exception ex4)
-							    {
-								    hadError = true;
-								    LogUtil.LogError("Exception " + ex4 + " " + imgPath);
-								    errorText = ex4.ToString();
-							    }
-                            }
+							if (!loadedFromGalleryCache)
+							{
+								try
+								{
+									// Load image from a var package
+									using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
+									{
+										Stream stream = fileEntryStream.Stream;
+										ProcessFromStream(stream);
+									}
+								}
+								catch (Exception ex4)
+								{
+									hadError = true;
+									LogUtil.LogError("Exception " + ex4 + " " + imgPath);
+									errorText = ex4.ToString();
+								}
+							}
 						}
 					}
-					//else
-					//{
-					//	hadError = true;
-					//	errorText = "Path " + imgPath + " is not valid";
-					//}
+					else
+					{
+						hadError = true;
+						errorText = "Path " + imgPath + " not found via FileManager";
+						// Log only for loose files, as VAR files might legitimately have missing thumbnails
+						if (!imgPath.Contains(":/")) 
+						{
+							LogUtil.LogWarning("[VPB] Image not found: " + imgPath);
+						}
+					}
 				}
 				else
 				{
@@ -656,9 +669,13 @@ namespace VPB
                                  FileEntry fe = FileManager.GetFileEntry(imgPath);
                                  if (fe != null)
                                  {
-                                     byte[] rawTextureData2 = tex.GetRawTextureData();
-                                     GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, fe.LastWriteTime.ToFileTime());
-                                     savedToGalleryCache = true;
+                                     // Only save to thumbnail cache if it's reasonably small
+                                     if (tex.width <= 512 && tex.height <= 512)
+                                     {
+                                         byte[] rawTextureData2 = tex.GetRawTextureData();
+                                         GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, fe.LastWriteTime.ToFileTime());
+                                         savedToGalleryCache = true;
+                                     }
                                  }
                              }
                          }

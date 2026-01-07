@@ -41,7 +41,7 @@ namespace VPB.Native
                 }
                 else
                 {
-                    LogUtil.LogError("NativeHookManager: MinHook.x64.dll not found at " + dllPath);
+                    LogUtil.LogWarning("NativeHookManager: MinHook.x64.dll not found. Native hooks (BoehmGC) will be disabled.");
                     // We might fail gracefully if it's not found
                     return;
                 }

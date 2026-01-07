@@ -639,7 +639,7 @@ namespace VPB
 
             if (!Settings.Instance.ReduceTextureSize.Value) return;
 
-            if (LogUtil.IsSceneLoadActive() && __instance.isThumbnail) return;
+
 
             // Ignore hub browse
             if (__instance.tex != null)

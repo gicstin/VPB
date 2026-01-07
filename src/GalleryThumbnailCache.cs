@@ -181,6 +181,10 @@ namespace VPB
                         try
                         {
                             fileStream.Position = entry.Offset;
+                            if (entry.Width <= 0 || entry.Height <= 0)
+                            {
+                                return false;
+                            }
                             data = ByteArrayPool.Rent(entry.Length);
                             int bytesRead = fileStream.Read(data, 0, entry.Length);
                             if (bytesRead == entry.Length)
@@ -213,7 +217,7 @@ namespace VPB
 
         public void SaveThumbnail(string path, byte[] data, int dataLength, int width, int height, TextureFormat format, long lastWriteTime)
         {
-            if (fileStream == null) return;
+            if (fileStream == null || width <= 0 || height <= 0) return;
 
             lock (lockObj)
             {

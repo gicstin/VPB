@@ -31,6 +31,65 @@ namespace VPB
             }
         }
 
+        /* [HarmonyPrefix]
+        [HarmonyPatch(typeof(DAZClothingItem), "LoadPreset", new Type[] { typeof(string) })]
+        public static void PreDAZClothingItemLoadPreset(DAZClothingItem __instance, string path)
+        {
+            LogUtil.Log($"[clothing hook] DAZClothingItem LoadPreset {__instance.name} path={path}");
+        } */
+
+        /* Moved to DAZClothingHook.cs
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(DAZCharacterSelector), "SetActiveClothingItem", new Type[] { typeof(DAZClothingItem), typeof(bool), typeof(bool), typeof(bool) })]
+        public static void PreSetActiveClothingItem(DAZCharacterSelector __instance, DAZClothingItem item, bool active, bool fromRestore, bool skipSyncAnatomy)
+        {
+            if (item != null)
+            {
+                string atomName = "unknown";
+                try
+                {
+                    var atom = __instance.GetComponentInParent<Atom>();
+                    if (atom != null) atomName = atom.name;
+                }
+                catch { }
+                LogUtil.Log($"[clothing hook] SetActiveClothingItem {item.name} active={active} on {atomName}");
+            }
+        }
+        */
+
+        /* [HarmonyPrefix]
+        [HarmonyPatch(typeof(DAZCharacterSelector), "RemoveClothing", new Type[] { typeof(DAZClothingItem) })]
+        public static void PreRemoveClothing(DAZCharacterSelector __instance, DAZClothingItem item)
+        {
+            if (item != null)
+            {
+                string atomName = "unknown";
+                try
+                {
+                    var atom = __instance.GetComponentInParent<Atom>();
+                    if (atom != null) atomName = atom.name;
+                }
+                catch { }
+                LogUtil.Log($"[clothing hook] RemoveClothing {item.name} from {atomName}");
+            }
+        } */
+
+        /* Moved to DAZClothingHook.cs
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(DAZCharacterSelector), "RemoveAllClothing")]
+        public static void PreClearClothing(DAZCharacterSelector __instance)
+        {
+            string atomName = "unknown";
+            try
+            {
+                var atom = __instance.GetComponentInParent<Atom>();
+                if (atom != null) atomName = atom.name;
+            }
+            catch { }
+            LogUtil.Log($"[clothing hook] RemoveAllClothing on {atomName}");
+        }
+        */
+
         // ky1001.PresetLoader loads using this method
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Atom), "LoadPreset", new Type[] { typeof(string) })]
@@ -124,7 +183,24 @@ namespace VPB
                 processJSON = JSONOptimization.FilterTimelinePlugins(inputJSON);
             }
             
-            LogUtil.Log("[var browser hook]PresetManager PreLoadPresetPreFromJSON " + __instance.presetName);
+            string storableId = "unknown";
+            string atomName = "unknown";
+            try
+            {
+                var storable = __instance.GetComponentInParent<JSONStorable>();
+                if (storable != null)
+                {
+                    storableId = storable.storeId;
+                    var atom = storable.GetComponentInParent<Atom>();
+                    if (atom != null)
+                    {
+                        atomName = atom.name;
+                    }
+                }
+            }
+            catch { }
+
+            LogUtil.Log($"[var browser hook]PresetManager PreLoadPresetPreFromJSON {atomName} {storableId} {__instance.presetName}");
             if (processJSON != null)
             {
                 EnsureInstalledFromJSON(processJSON);
@@ -142,6 +218,21 @@ namespace VPB
                 {
                     MVR.FileManagement.FileManager.Refresh();
                     VPB.FileManager.Refresh();
+                }
+
+                foreach (var key in results)
+                {
+                    var pkg = FileManager.GetPackage(key) ?? FileManager.GetPackage(key + ".latest");
+                    if (pkg != null && !pkg.IsInstalled())
+                    {
+                        LogUtil.Log($"Waiting for install: {pkg.Uid}");
+                        bool moved = pkg.InstallRecursive();
+                        if (moved)
+                        {
+                            MVR.FileManagement.FileManager.Refresh();
+                            VPB.FileManager.Refresh();
+                        }
+                    }
                 }
             }
         }

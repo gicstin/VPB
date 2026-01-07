@@ -335,6 +335,7 @@ namespace VPB
         private Camera dragCam;
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
+        private static string _lastAppearanceClothingMode = "keep";
 
         private bool CheckDualPose()
         {
@@ -405,6 +406,221 @@ namespace VPB
             return _isDualPose.Value;
         }
 
+        public static void ActivateClothingHairItemPreset(Atom atom, FileEntry entry, bool isClothing)
+        {
+            if (atom == null || entry == null) return;
+            string path = entry.Path;
+            string normalizedPath = SuperController.singleton.NormalizePath(path);
+            
+            // 1. Identify the specific clothing/hair item UID from the file path
+            // Presets for specific items are usually in Custom/Clothing/[Gender]/[Creator]/[ItemName]/[Preset].vap
+            // We need to find which item this preset belongs to.
+            
+            string itemName = "";
+            string p = path.Replace('\\', '/');
+            string[] parts = p.Split('/');
+            
+            // Heuristic: The item name is usually the parent directory of the preset file
+            if (parts.Length >= 2)
+            {
+                itemName = parts[parts.Length - 2];
+            }
+            
+            if (string.IsNullOrEmpty(itemName)) return;
+            
+            LogUtil.Log($"[DragDropDebug] Target Item Name from path: {itemName}");
+            
+            // 2. Find the corresponding storable on the atom
+            // Clothing items have storables like "clothing:[ItemUID]"
+            // And presets for them are "[ItemUID]Preset"
+            
+            JSONStorable geometry = atom.GetStorableByID("geometry");
+            if (geometry == null) return;
+            
+            string itemUid = "";
+            string prefix = isClothing ? "clothing:" : "hair:";
+            
+            foreach (string paramName in geometry.GetBoolParamNames())
+            {
+                if (paramName.StartsWith(prefix))
+                {
+                    string actualItemName = paramName.Substring(prefix.Length);
+                    // Match if actual name contains the item name from path or vice-versa
+                    if (actualItemName.Equals(itemName, StringComparison.OrdinalIgnoreCase) || 
+                        actualItemName.Contains(itemName) || 
+                        itemName.Contains(actualItemName))
+                    {
+                        itemUid = actualItemName;
+                        break;
+                    }
+                }
+            }
+            
+            // If not found by name, try a more aggressive search
+            if (string.IsNullOrEmpty(itemUid))
+            {
+                 // Clean up itemName for better matching (remove spaces, underscores)
+                 string cleanItemName = itemName.Replace(" ", "").Replace("_", "").ToLower();
+                 
+                 foreach (string paramName in geometry.GetBoolParamNames())
+                 {
+                     if (paramName.StartsWith(prefix))
+                     {
+                         string actualItemName = paramName.Substring(prefix.Length);
+                         string cleanActual = actualItemName.Replace(" ", "").Replace("_", "").ToLower();
+                         
+                         if (cleanActual.Contains(cleanItemName) || cleanItemName.Contains(cleanActual))
+                         {
+                             itemUid = actualItemName;
+                             break;
+                         }
+                     }
+                 }
+            }
+
+            if (string.IsNullOrEmpty(itemUid))
+            {
+                // Fallback: If not found, try to load the .vam parent file
+                // Usually the .vam is named the same as the parent directory
+                string vamPath = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(path) + "/" + itemName + ".vam";
+                if (MVR.FileManagementSecure.FileManagerSecure.FileExists(vamPath))
+                {
+                    LogUtil.Log($"[DragDropDebug] Clothing item not found on atom. Attempting to load parent .vam: {vamPath}");
+                    
+                    // To load a .vam, we can use the main ClothingPresets storable and its LoadPreset action
+                    // which handles .vam files by adding them to the atom.
+                    string presetsStorableId = isClothing ? "ClothingPresets" : "HairPresets";
+                    JSONStorable presetsStorable = atom.GetStorableByID(presetsStorableId);
+                    if (presetsStorable != null)
+                    {
+                        try
+                        {
+                            JSONStorableString presetNameJSS = presetsStorable.GetStringJSONParam("presetName");
+                            if (presetNameJSS != null) presetNameJSS.val = vamPath;
+                            presetsStorable.CallAction("LoadPreset");
+                            
+                            // After loading, we need to refresh the geometry storable to find the new itemUid
+                            // Wait, the UID for a loaded .vam is usually its normalized path or legacy path
+                            // Let's try to find it again after a short delay? No, we are not in a coroutine.
+                            // But we can try to guess it.
+                            itemUid = SuperController.singleton.NormalizePath(vamPath);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError($"[DragDropDebug] Failed to load parent .vam: {ex.Message}");
+                        }
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(itemUid))
+            {
+                LogUtil.LogWarning($"[DragDropDebug] Could not identify target item UID for preset: {itemName}");
+                return;
+            }
+            
+            LogUtil.Log($"[DragDropDebug] Identified Item UID: {itemUid}");
+            
+            // 3. Ensure the item is active
+            JSONStorableBool activeJSB = geometry.GetBoolJSONParam(prefix + itemUid);
+            if (activeJSB != null && !activeJSB.val)
+            {
+                activeJSB.val = true;
+            }
+            
+            // 4. Load the preset into the item's PresetManager
+            // Preset storables usually strip the .vam extension if it exists
+            string baseId = itemUid;
+            if (baseId.EndsWith(".vam", StringComparison.OrdinalIgnoreCase))
+                baseId = baseId.Substring(0, baseId.Length - 4);
+
+            // Handle potential creator prefix in itemUid (e.g. "Creator.ItemName" -> "ItemName")
+            string shortBaseId = baseId;
+            int lastDot = baseId.LastIndexOf('.');
+            if (lastDot >= 0 && lastDot < baseId.Length - 1)
+            {
+                shortBaseId = baseId.Substring(lastDot + 1);
+            }
+
+            string storableId = baseId + "Preset";
+            JSONStorable presetStorable = atom.GetStorableByID(storableId);
+            
+            // Try fallback with short name if not found
+            if (presetStorable == null && shortBaseId != baseId)
+            {
+                 storableId = shortBaseId + "Preset";
+                 presetStorable = atom.GetStorableByID(storableId);
+            }
+
+            // Try another fallback without stripping .vam just in case
+            if (presetStorable == null)
+            {
+                 storableId = itemUid + "Preset";
+                 presetStorable = atom.GetStorableByID(storableId);
+            }
+
+            if (presetStorable != null)
+            {
+                MeshVR.PresetManager pm = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
+                if (pm != null)
+                {
+                    JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
+                    if (presetJSON != null)
+                    {
+                        // Handle Package SELF references if needed
+                        if (normalizedPath.Contains(":"))
+                        {
+                            string presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
+                            string presetJSONString = presetJSON.ToString();
+                            if (presetJSONString.Contains("SELF:"))
+                            {
+                                presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
+                                presetJSON = SimpleJSON.JSON.Parse(presetJSONString).AsObject;
+                            }
+                        }
+                        
+                        // Set preset name and load
+                        JSONStorableString presetNameJSS = presetStorable.GetStringJSONParam("presetName");
+                        if (presetNameJSS != null)
+                        {
+                            presetNameJSS.val = pm.GetPresetNameFromFilePath(normalizedPath);
+                        }
+                        
+                        LogUtil.Log($"[DragDropDebug] Loading preset into {storableId}");
+                        pm.LoadPresetFromJSON(presetJSON, false);
+
+                        // Explicitly re-enable after loading to ensure it's on if the preset had it off
+                        if (activeJSB != null) activeJSB.val = true;
+                    }
+                }
+            }
+            else
+            {
+                LogUtil.LogWarning($"[DragDropDebug] Preset storable {storableId} not found on atom. Attempting fallback via main { (isClothing ? "Clothing" : "Hair") }Presets.");
+                
+                // Fallback: Try loading via main presets storable
+                string mainPresetsId = isClothing ? "ClothingPresets" : "HairPresets";
+                JSONStorable mainPresets = atom.GetStorableByID(mainPresetsId);
+                if (mainPresets != null)
+                {
+                    try
+                    {
+                        JSONStorableString presetNameJSS = mainPresets.GetStringJSONParam("presetName");
+                        if (presetNameJSS != null) presetNameJSS.val = normalizedPath;
+                        mainPresets.CallAction("LoadPreset");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError($"[DragDropDebug] Fallback load failed: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    LogUtil.LogError($"[DragDropDebug] Could not find {storableId} or {mainPresetsId} to apply preset.");
+                }
+            }
+        }
+
         private bool IsAtomMale(Atom atom)
         {
             if (atom == null) return false;
@@ -421,7 +637,7 @@ namespace VPB
             return false; 
         }
 
-        private enum ItemType { Clothing, Hair, Pose, Skin, Morphs, Appearance, Animation, BreastPhysics, GlutePhysics, Plugins, General, ClothingItem, HairItem, SubScene, Scene, Other }
+        private enum ItemType { Clothing, Hair, Pose, Skin, Morphs, Appearance, Animation, BreastPhysics, GlutePhysics, Plugins, General, ClothingItem, HairItem, ClothingPreset, HairPreset, SubScene, Scene, CUA, Other }
 
         private ItemType GetItemType(FileEntry entry)
         {
@@ -442,8 +658,16 @@ namespace VPB
             if (p.IndexOf("Custom/Atom/Person/General", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.General;
             
             // Check for clothing/hair items (these use .vam and toggle on/off)
-            if (p.IndexOf("Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.ClothingItem;
-            if (p.IndexOf("Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.HairItem;
+            if (p.IndexOf("Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                if (p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase)) return ItemType.ClothingPreset;
+                return ItemType.ClothingItem;
+            }
+            if (p.IndexOf("Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                if (p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase)) return ItemType.HairPreset;
+                return ItemType.HairItem;
+            }
             
             // Check for subscenes
             if (p.IndexOf("Custom/SubScene", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.SubScene;
@@ -463,6 +687,12 @@ namespace VPB
             {
                 return ItemType.Pose;
             }
+
+            // CUA
+            if (p.IndexOf("Custom/Assets", StringComparison.OrdinalIgnoreCase) >= 0 || p.EndsWith(".assetbundle", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".unity3d", StringComparison.OrdinalIgnoreCase))
+            {
+                return ItemType.CUA;
+            }
             
             return ItemType.Other;
         }
@@ -480,6 +710,8 @@ namespace VPB
                 case ItemType.GlutePhysics: return "FemaleGlutePhysicsPresets";
                 case ItemType.Hair: return "HairPresets";
                 case ItemType.HairItem: return "HairPresets";
+                case ItemType.ClothingPreset: return null; // Targets specific clothing items
+                case ItemType.HairPreset: return null; // Targets specific hair items
                 case ItemType.Morphs: return "MorphPresets";
                 case ItemType.Plugins: return "PluginPresets";
                 case ItemType.Pose: return "PosePresets";
@@ -557,15 +789,70 @@ namespace VPB
                 }
                 else if (itemType == ItemType.Scene && FileEntry != null)
                 {
-                    LoadSceneFile(FileEntry.Uid);
+                    string msg;
+                    float dist;
+                    Atom atom = DetectAtom(eventData, out msg, out dist);
+
+                    // Calculate Drop Position for Context Menu
+                    Vector3 dropPos = transform.position;
+                    Camera cam = dragCam;
+                    if (cam == null) cam = Camera.main;
+                    if (cam != null)
+                    {
+                         Ray ray = cam.ScreenPointToRay(eventData.position);
+                         if (atom != null)
+                             dropPos = ray.GetPoint(dist);
+                         else
+                             dropPos = ray.GetPoint(planeDistance);
+                    }
+                    
+                    if (IsAmbiguousDrop(atom, FileEntry))
+                    {
+                        HandleDropWithContext(atom, FileEntry, dropPos);
+                    }
+                    else
+                    {
+                        LoadSceneFile(FileEntry.Uid);
+                    }
+                }
+                else if (itemType == ItemType.CUA && FileEntry != null)
+                {
+                    string msg;
+                    Atom atom = DetectAtom(eventData, out msg);
+                    if (atom != null && atom.type == "CustomUnityAsset")
+                    {
+                        LoadCUAIntoAtom(atom, FileEntry.Uid);
+                    }
+                    else
+                    {
+                        LoadCUA(FileEntry.Uid);
+                    }
                 }
                 else
                 {
                     string msg;
-                    Atom atom = DetectAtom(eventData, out msg);
+                    float dist;
+                    Atom atom = DetectAtom(eventData, out msg, out dist);
                     if (atom != null && FileEntry != null)
                     {
-                        ApplyClothingToAtom(atom, FileEntry.Uid);
+                        // Calculate Drop Position
+                        Vector3 dropPos = transform.position;
+                        Camera cam = dragCam;
+                        if (cam == null) cam = Camera.main;
+                        if (cam != null)
+                        {
+                            Ray ray = cam.ScreenPointToRay(eventData.position);
+                            dropPos = ray.GetPoint(dist);
+                        }
+
+                        if (IsAmbiguousDrop(atom, FileEntry))
+                        {
+                            HandleDropWithContext(atom, FileEntry, dropPos);
+                        }
+                        else
+                        {
+                            ApplyClothingToAtom(atom, FileEntry.Uid);
+                        }
                     }
                 }
                 dragCam = null;
@@ -619,10 +906,28 @@ namespace VPB
             {
                 statusMsg = $"Release to launch scene {FileEntry.Name}";
             }
+            else if (itemType == ItemType.CUA)
+            {
+                 if (atom != null && atom.type == "CustomUnityAsset")
+                 {
+                     statusMsg = $"Drop to load into {atom.name}";
+                 }
+                 else
+                 {
+                     statusMsg = $"Drop to create new Custom Unity Asset";
+                 }
+            }
             else if (atom != null && atom.type == "Person")
             {
                  string action = (Panel != null && Panel.DragDropReplaceMode) ? "Replacing" : "Adding";
-                 statusMsg = $"{action} {FileEntry.Name} to {atom.name}";
+                 if (itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset)
+                 {
+                     statusMsg = $"{action} Preset {FileEntry.Name} to {atom.name}";
+                 }
+                 else
+                 {
+                     statusMsg = $"{action} {FileEntry.Name} to {atom.name}";
+                 }
             }
             return atom;
         }
@@ -631,6 +936,119 @@ namespace VPB
         {
             float dummy;
             return DetectAtom(eventData, out statusMsg, out dummy);
+        }
+
+        private void LoadCUA(string path)
+        {
+            string normalizedPath = NormalizePath(path);
+            LogUtil.Log($"[DragDropDebug] Loading CUA: {normalizedPath}");
+            StartCoroutine(LoadCUACoroutine(normalizedPath));
+        }
+
+        private System.Collections.IEnumerator LoadCUACoroutine(string path)
+        {
+            yield return SuperController.singleton.AddAtomByType("CustomUnityAsset", Path.GetFileNameWithoutExtension(path), true, true, true);
+            
+            Atom newAtom = SuperController.singleton.GetSelectedAtom();
+            if (newAtom != null && newAtom.type == "CustomUnityAsset")
+            {
+                LoadCUAIntoAtom(newAtom, path);
+            }
+        }
+
+        private void LoadCUAIntoAtom(Atom atom, string path)
+        {
+            StartCoroutine(LoadCUAIntoAtomCoroutine(atom, path));
+        }
+
+        private System.Collections.IEnumerator LoadCUAIntoAtomCoroutine(Atom atom, string path)
+        {
+            string atomUid = atom.uid;
+            bool installed = EnsureInstalled();
+            if (installed)
+            {
+                MVR.FileManagement.FileManager.Refresh();
+                FileManager.Refresh();
+                yield return new WaitForSeconds(1.0f);
+            }
+
+            // Refresh atom reference
+            Atom targetAtom = SuperController.singleton.GetAtomByUid(atomUid);
+            if (targetAtom == null)
+            {
+                 LogUtil.LogError("[DragDropDebug] Atom " + atomUid + " not found after refresh");
+                 yield break;
+            }
+
+            string normalizedPath = NormalizePath(path);
+            JSONStorableUrl urlParam = targetAtom.GetUrlJSONParam("assetUrl");
+            if (urlParam == null)
+            {
+                // Try getting from "asset" storable explicitly
+                JSONStorable assetStorable = targetAtom.GetStorableByID("asset");
+                if (assetStorable != null)
+                {
+                    urlParam = assetStorable.GetUrlJSONParam("assetUrl");
+                }
+            }
+
+            if (urlParam != null)
+            {
+                LogUtil.Log("[DragDropDebug] Setting assetUrl to " + normalizedPath);
+                urlParam.val = normalizedPath;
+                
+                // Automatically set assetName if possible
+                bool done = false;
+                List<string> assetNames = null;
+                yield return CustomAssetLoader.GetAssetBundleContent(path, (names) => {
+                     assetNames = names;
+                     done = true;
+                });
+                
+                while (!done) yield return null;
+                
+                if (assetNames != null && assetNames.Count > 0)
+                {
+                     LogUtil.Log($"[DragDropDebug] Found {assetNames.Count} assets in bundle.");
+                     JSONStorableString nameParam = targetAtom.GetStringJSONParam("assetName");
+                     if (nameParam == null)
+                     {
+                          JSONStorable assetStorable = targetAtom.GetStorableByID("asset");
+                          if (assetStorable != null) nameParam = assetStorable.GetStringJSONParam("assetName");
+                     }
+                     
+                     if (nameParam != null)
+                     {
+                          // Sort assets alphabetically to match VaM UI
+                          assetNames.Sort();
+                          
+                          // Default to the first asset (Position 1)
+                          string match = assetNames[0];
+                          
+                          LogUtil.Log($"[DragDropDebug] Auto-setting assetName to: {match}");
+                          nameParam.val = match;
+                     }
+                }
+            }
+            else
+            {
+                LogUtil.LogError("[DragDropDebug] assetUrl param not found on " + targetAtom.name);
+                foreach (string sid in targetAtom.GetStorableIDs())
+                {
+                    LogUtil.Log("[DragDropDebug] Storable: " + sid);
+                    JSONStorable storable = targetAtom.GetStorableByID(sid);
+                    if (storable != null)
+                    {
+                        List<string> urlParams = storable.GetUrlParamNames();
+                        if (urlParams != null)
+                            foreach (string pid in urlParams) LogUtil.Log("  UrlParam: " + pid);
+                            
+                        List<string> stringParams = storable.GetStringParamNames();
+                        if (stringParams != null)
+                            foreach (string pid in stringParams) LogUtil.Log("  StringParam: " + pid);
+                    }
+                }
+            }
         }
 
         private void LoadSubScene(string path)
@@ -741,7 +1159,7 @@ namespace VPB
             return normalizedPath;
         }
 
-        private void ApplyClothingToAtom(Atom atom, string path)
+        private void ApplyClothingToAtom(Atom atom, string path, string appearanceClothingMode = null)
         {
             bool installed = EnsureInstalled();
 
@@ -765,6 +1183,7 @@ namespace VPB
             JSONStorable geometry = atom.GetStorableByID("geometry");
             ItemType itemType = GetItemType(FileEntry);
             string ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
+            string appearanceMode = string.IsNullOrEmpty(appearanceClothingMode) ? "merge" : appearanceClothingMode;
 
             bool isPoseCategory = false;
             if (Panel != null)
@@ -831,7 +1250,25 @@ namespace VPB
                                 JSONStorable s = targetAtom.GetStorableByID(sid);
                                 if (s != null)
                                 {
-                                    s.RestoreFromJSON(snap);
+                                    if (sid == "geometry")
+                                    {
+                                        // For geometry, only restore clothing/hair toggles to avoid changing character/gender/uid
+                                        foreach(string key in snap.Keys)
+                                        {
+                                            if (key.StartsWith("clothing:") || key.StartsWith("hair:"))
+                                            {
+                                                JSONStorableBool b = s.GetBoolJSONParam(key);
+                                                if (b != null)
+                                                {
+                                                    b.val = snap[key].AsBool;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        s.RestoreFromJSON(snap);
+                                    }
                                 }
                             }
                             LogUtil.Log($"[Gallery] Undo performed on {atomUid} (Storables)");
@@ -849,13 +1286,13 @@ namespace VPB
             }
             
             bool replaceMode = Panel != null && Panel.DragDropReplaceMode;
-            bool isClothingOrHair = (itemType == ItemType.Clothing || itemType == ItemType.Hair || itemType == ItemType.ClothingItem || itemType == ItemType.HairItem);
+            bool isClothingOrHair = (itemType == ItemType.Clothing || itemType == ItemType.Hair || itemType == ItemType.ClothingItem || itemType == ItemType.HairItem || itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset);
             LogUtil.Log($"[DragDropDebug] Panel={Panel != null}, ReplaceMode={replaceMode}, ItemType={itemType}, IsClothingOrHair={isClothingOrHair}");
 
-            if (Panel != null && Panel.DragDropReplaceMode && (itemType == ItemType.Clothing || itemType == ItemType.Hair || itemType == ItemType.ClothingItem || itemType == ItemType.HairItem))
+            if (Panel != null && Panel.DragDropReplaceMode && isClothingOrHair)
             {
-                bool isHair = (itemType == ItemType.Hair || itemType == ItemType.HairItem);
-                bool isClothing = !isHair;
+                bool isHair = (itemType == ItemType.Hair || itemType == ItemType.HairItem || itemType == ItemType.HairPreset);
+                bool isClothing = (itemType == ItemType.Clothing || itemType == ItemType.ClothingItem || itemType == ItemType.ClothingPreset);
 
                 if (geometry != null)
                 {
@@ -923,9 +1360,29 @@ namespace VPB
                 LogUtil.Log($"[DragDropDebug] Add Mode (Replace OFF). Skipping overlap checks for {normalizedPath}");
             }
 
+            if (itemType == ItemType.Appearance && appearanceMode == "replace" && geometry != null)
+            {
+                foreach (var name in geometry.GetBoolParamNames())
+                {
+                    if (name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase) || name.StartsWith("hair:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        JSONStorableBool p = geometry.GetBoolJSONParam(name);
+                        if (p != null) p.val = false;
+                    }
+                }
+            }
+
+            if (itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset)
+            {
+                // Clothing/Hair Item Presets (.vap)
+                LogUtil.Log($"[DragDropDebug] Applying {itemType}: {normalizedPath}");
+                ActivateClothingHairItemPreset(atom, FileEntry, itemType == ItemType.ClothingPreset);
+                return;
+            }
+
             // Try to load as preset first (standard for Clothing/Hair presets and Poses)
             ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
-            if (ext == ".vap" || ext == ".json" || ext == ".vac")
+            if (ext == ".vap" || ext == ".json" || ext == ".vac" || (ext == ".vam" && itemType == ItemType.Appearance))
             {
                 string storableId = GetStorableIdForItemType(itemType);
                 if (storableId != null && atom.type == "Person")
@@ -1036,6 +1493,21 @@ namespace VPB
                                             {
                                                 presetJSON = SimpleJSON.JSON.Parse(presetJSONString).AsObject;
                                             }
+                                        }
+
+                                        if (itemType == ItemType.Appearance && appearanceMode == "keep" && presetJSON["storables"] != null)
+                                        {
+                                            JSONArray storables = presetJSON["storables"].AsArray;
+                                            JSONArray filteredStorables = new JSONArray();
+                                            foreach (JSONNode node in storables)
+                                            {
+                                                string sid = node["id"].Value;
+                                                bool isClothing = sid.StartsWith("clothing", StringComparison.OrdinalIgnoreCase) || sid.StartsWith("wearable", StringComparison.OrdinalIgnoreCase);
+                                                bool isHair = sid.StartsWith("hair", StringComparison.OrdinalIgnoreCase);
+                                                if (isClothing || isHair) continue;
+                                                filteredStorables.Add(node);
+                                            }
+                                            presetJSON["storables"] = filteredStorables;
                                         }
 
                                         // Function to clean presets array (Shared logic)
@@ -1899,6 +2371,286 @@ namespace VPB
                 ghostObject = null;
                 ghostBorder = null;
             }
+        }
+
+        private bool IsAmbiguousDrop(Atom atom, FileEntry entry)
+        {
+            if (entry == null) return false;
+            ItemType type = GetItemType(entry);
+            
+            if (type == ItemType.Scene) return true;
+            if (atom != null && atom.type == "Person" && type == ItemType.Appearance) return true;
+            
+            return false;
+        }
+
+        private void HandleDropWithContext(Atom atom, FileEntry entry, Vector3 position)
+        {
+            List<ContextMenuPanel.Option> options = new List<ContextMenuPanel.Option>();
+            ItemType type = GetItemType(entry);
+
+            if (type == ItemType.Scene)
+            {
+                 options.Add(new ContextMenuPanel.Option("Load Scene", () => LoadSceneFile(entry.Uid)));
+
+                 if (atom != null && atom.type == "Person")
+                 {
+                     options.Add(new ContextMenuPanel.Option("Import From Scene", () => {
+                         ShowImportCategories(entry, atom);
+                     }, false, true));
+                 } 
+            }
+            else if (type == ItemType.Appearance && atom != null && atom.type == "Person")
+            {
+                 AddAppearanceOptions(options, mode => ApplyClothingToAtom(atom, entry.Uid, mode));
+            }
+            
+            if (options.Count > 0)
+            {
+                ContextMenuPanel.Instance.Show(position, options);
+            }
+            else
+            {
+                if (type == ItemType.Scene) LoadSceneFile(entry.Uid);
+                else if (atom != null) ApplyClothingToAtom(atom, entry.Uid);
+            }
+        }
+
+        private void ShowImportCategories(FileEntry entry, Atom targetAtom)
+        {
+            List<ContextMenuPanel.Option> options = new List<ContextMenuPanel.Option>();
+
+            options.Add(new ContextMenuPanel.Option("Clothing", () => {
+                ShowSourceAtomsForImport(entry, targetAtom, "Clothing", "merge");
+            }, false, true));
+
+            options.Add(new ContextMenuPanel.Option("Appearance", () => {
+                ShowAppearanceClothingModes(entry, targetAtom);
+            }, false, true));
+
+            ContextMenuPanel.Instance.PushPage("Import Category", options);
+        }
+
+        private string GetAppearanceModeLabel(string clothingMode)
+        {
+            if (clothingMode == "replace") return "Replace Clothing";
+            if (clothingMode == "merge") return "Merge Clothing";
+            return "Keep Existing Clothing";
+        }
+
+        private void ApplyAppearanceMode(string clothingMode, Action<string> action)
+        {
+            if (string.IsNullOrEmpty(clothingMode)) clothingMode = "keep";
+            _lastAppearanceClothingMode = clothingMode;
+            action(clothingMode);
+        }
+
+        private void AddAppearanceOptions(List<ContextMenuPanel.Option> options, Action<string> handler)
+        {
+            string mode = string.IsNullOrEmpty(_lastAppearanceClothingMode) ? "keep" : _lastAppearanceClothingMode;
+            string lastLabel = "Last Used (" + GetAppearanceModeLabel(mode) + ")";
+
+            options.Add(new ContextMenuPanel.Option(lastLabel, () => {
+                ApplyAppearanceMode(mode, handler);
+            }, false, true));
+
+            options.Add(new ContextMenuPanel.Option("Keep Existing Clothing", () => {
+                ApplyAppearanceMode("keep", handler);
+            }, false, true));
+
+            options.Add(new ContextMenuPanel.Option("Replace Clothing", () => {
+                ApplyAppearanceMode("replace", handler);
+            }, false, true));
+
+            options.Add(new ContextMenuPanel.Option("Merge Clothing", () => {
+                ApplyAppearanceMode("merge", handler);
+            }, false, true));
+        }
+
+        private void ShowAppearanceClothingModes(FileEntry entry, Atom targetAtom)
+        {
+            List<ContextMenuPanel.Option> options = new List<ContextMenuPanel.Option>();
+            AddAppearanceOptions(options, mode => ShowSourceAtomsForImport(entry, targetAtom, "Appearance", mode));
+            ContextMenuPanel.Instance.PushPage("Appearance Options", options);
+        }
+
+        private void ShowSourceAtomsForImport(FileEntry entry, Atom targetAtom, string category, string clothingMode)
+        {
+            if (ContextMenuPanel.Instance != null)
+            {
+                ContextMenuPanel.Instance.StartCoroutine(ParseSceneAndShowAtoms(entry, targetAtom, category, clothingMode));
+            }
+        }
+
+        private System.Collections.IEnumerator ParseSceneAndShowAtoms(FileEntry entry, Atom targetAtom, string category, string clothingMode)
+        {
+            string content = null;
+            using (var reader = entry.OpenStreamReader())
+            {
+                content = reader.ReadToEnd();
+            }
+
+            if (string.IsNullOrEmpty(content)) yield break;
+
+            JSONNode root = JSON.Parse(content);
+            if (root == null) yield break;
+
+            JSONArray atoms = root["atoms"].AsArray;
+            List<ContextMenuPanel.Option> atomOptions = new List<ContextMenuPanel.Option>();
+            List<JSONClass> personNodes = new List<JSONClass>();
+
+            foreach (JSONNode node in atoms)
+            {
+                if (node["type"].Value == "Person")
+                {
+                    personNodes.Add(node.AsObject);
+                    string atomId = node["id"].Value;
+
+                    atomOptions.Add(new ContextMenuPanel.Option(atomId, () => {
+                        if (targetAtom == null)
+                        {
+                            LogUtil.LogError("No target atom selected for import.");
+                        }
+                        else
+                        {
+                            ApplyImport(node.AsObject, targetAtom, category, clothingMode);
+                        }
+                    }));
+                }
+            }
+
+            if (personNodes.Count == 1 && targetAtom != null)
+            {
+                ApplyImport(personNodes[0], targetAtom, category, clothingMode);
+                yield break;
+            }
+
+            ContextMenuPanel.Instance.PushPage("Select Source Person", atomOptions);
+        }
+
+        private void ApplyImport(JSONClass sourceAtomNode, Atom targetAtom, string category, string clothingMode)
+        {
+            JSONClass preset = new JSONClass();
+            JSONArray storables = new JSONArray();
+            preset["storables"] = storables;
+
+            JSONArray sourceStorables = sourceAtomNode["storables"].AsArray;
+
+            foreach (JSONNode snode in sourceStorables)
+            {
+                string id = snode["id"].Value;
+                string url = snode["url"] != null ? snode["url"].Value : "";
+
+                bool include = false;
+
+                bool isAnimation = id.EndsWith("Animation", StringComparison.OrdinalIgnoreCase) && snode["steps"] != null;
+                bool isPlugin = id.IndexOf("plugin#", StringComparison.OrdinalIgnoreCase) >= 0 || id.Equals("PluginManager", StringComparison.OrdinalIgnoreCase);
+                bool isClothing = id.StartsWith("clothing", StringComparison.OrdinalIgnoreCase) || id.StartsWith("wearable", StringComparison.OrdinalIgnoreCase) || url.IndexOf("/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isHair = id.StartsWith("hair", StringComparison.OrdinalIgnoreCase) || url.IndexOf("/Hair/", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (category == "Clothing")
+                {
+                    if (isClothing || isHair) include = true;
+                }
+                else if (category == "Appearance")
+                {
+                    if (!isAnimation && !isPlugin)
+                    {
+                        if (clothingMode == "keep")
+                        {
+                            if (!isClothing && !isHair) include = true;
+                        }
+                        else
+                        {
+                            include = true;
+                        }
+                    }
+                }
+
+                if (include) storables.Add(snode.AsObject);
+            }
+
+            string presetJson = preset.ToString();
+            if (FileButton.EnsureInstalledByText(presetJson))
+            {
+                MVR.FileManagement.FileManager.Refresh();
+                FileManager.Refresh();
+            }
+
+            bool appliedViaPresetManager = false;
+
+            if (category == "Appearance" && storables.Count > 0)
+            {
+                preset["setUnlistedParamsToDefault"].AsBool = true;
+
+                JSONStorable presetStorable = targetAtom.GetStorableByID("AppearancePresets");
+                MeshVR.PresetManager presetManager = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+
+                if (presetManager != null)
+                {
+                    try
+                    {
+                        if (clothingMode == "replace")
+                        {
+                            JSONStorable geometry = targetAtom.GetStorableByID("geometry");
+                            if (geometry != null)
+                            {
+                                foreach (var name in geometry.GetBoolParamNames())
+                                {
+                                    if (name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase) || name.StartsWith("hair:", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        JSONStorableBool p = geometry.GetBoolJSONParam(name);
+                                        if (p != null) p.val = false;
+                                    }
+                                }
+                            }
+                        }
+
+                        targetAtom.SetLastRestoredData(preset, true, true);
+                        presetManager.LoadPresetFromJSON(preset, false);
+                        appliedViaPresetManager = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[Import] Appearance preset load failed: " + ex.Message);
+                    }
+                }
+                else
+                {
+                    LogUtil.LogError("[Import] AppearancePresets storable or PresetManager missing on target atom.");
+                }
+            }
+
+            if (!appliedViaPresetManager)
+            {
+                if (category == "Appearance" && clothingMode == "replace")
+                {
+                    JSONStorable geometry = targetAtom.GetStorableByID("geometry");
+                    if (geometry != null)
+                    {
+                        foreach (var name in geometry.GetBoolParamNames())
+                        {
+                            if (name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase) || name.StartsWith("hair:", StringComparison.OrdinalIgnoreCase))
+                            {
+                                JSONStorableBool p = geometry.GetBoolJSONParam(name);
+                                if (p != null) p.val = false;
+                            }
+                        }
+                    }
+                }
+
+                foreach (JSONNode snode in storables)
+                {
+                    string id = snode["id"].Value;
+                    JSONStorable storable = targetAtom.GetStorableByID(id);
+                    if (storable != null)
+                    {
+                        storable.RestoreFromJSON(snode.AsObject);
+                    }
+                }
+            }
+
+            ContextMenuPanel.Instance.Hide();
         }
     }
 

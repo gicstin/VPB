@@ -57,28 +57,9 @@ namespace VPB
 					}
 					else
 					{
-						string text = vfe.Size.ToString();
-
-						string fileName = Path.GetFileName(vfe.InternalPath);
-						fileName = fileName.Replace('.', '_');
-
-						var abPath = string.Format("{0}/{1}_{2}.ab", VamHookPlugin.GetAssetBundleCacheDir(), fileName, text);
-
-						if (File.Exists(abPath))
-                        {
-							LogUtil.Log("Load assetbundle from cache:" + path+", "+abPath);
-							abcr2 = AssetBundle.LoadFromFileAsync(abPath);
-						}
-                        else
-                        {
-							byte[] assetbundleBytes = new byte[vfe.Size];
-							yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, assetbundleBytes);
-							File.WriteAllBytes(abPath, assetbundleBytes);
-							LogUtil.Log("generate assetbundle cache:" + path);
-
-							//abcr2 = AssetBundle.LoadFromMemoryAsync(assetbundleBytes);
-							abcr2 = AssetBundle.LoadFromFileAsync(abPath);
-						}
+						byte[] assetbundleBytes = new byte[vfe.Size];
+						yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, assetbundleBytes);
+						abcr2 = AssetBundle.LoadFromMemoryAsync(assetbundleBytes);
 					}
 				}
 				else
@@ -290,6 +271,81 @@ namespace VPB
 			StartCoroutine(AssetBundleFromFileQueueProcessor());
 			StartCoroutine(SceneLoadIntoTransfromQueueProcessor());
 		}
+
+        public static IEnumerator GetAssetBundleContent(string path, Action<List<string>> callback)
+        {
+            AssetBundle ab = null;
+            bool shouldUnload = false;
+
+            // 1. Check if already tracked in our cache
+            if (singleton != null && singleton.pathToAssetBundle != null && singleton.pathToAssetBundle.TryGetValue(path, out ab))
+            {
+                shouldUnload = false;
+            }
+
+            // 2. If not in cache, try loading
+            if (ab == null)
+            {
+                if (MVR.FileManagement.FileManager.IsFileInPackage(path))
+                {
+                    var vfe = MVR.FileManagement.FileManager.GetVarFileEntry(path);
+                    if (vfe.Simulated)
+                    {
+                        string path2 = vfe.Package.Path + "\\" + vfe.InternalPath;
+                        AssetBundleCreateRequest req = AssetBundle.LoadFromFileAsync(path2);
+                        yield return req;
+                        ab = req.assetBundle;
+                    }
+                    else
+                    {
+                        byte[] assetbundleBytes = new byte[vfe.Size];
+                        yield return MVR.FileManagement.FileManager.ReadAllBytesCoroutine(vfe, assetbundleBytes);
+                        AssetBundleCreateRequest req = AssetBundle.LoadFromMemoryAsync(assetbundleBytes);
+                        yield return req;
+                        ab = req.assetBundle;
+                    }
+                }
+                else
+                {
+                    AssetBundleCreateRequest req = AssetBundle.LoadFromFileAsync(path);
+                    yield return req;
+                    ab = req.assetBundle;
+                }
+                
+                if (ab != null) shouldUnload = true;
+            }
+
+            // 3. If still null, it might be loaded by VaM but not in our cache. 
+            // AssetBundle.LoadFromFile returns null if already loaded.
+            // Try to find it in all loaded bundles.
+            if (ab == null)
+            {
+                // Heuristic: Check by file name
+                string fileName = Path.GetFileNameWithoutExtension(path);
+                var allBundles = AssetBundle.GetAllLoadedAssetBundles();
+                foreach (var b in allBundles)
+                {
+                    if (b.name.Equals(fileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ab = b;
+                        shouldUnload = false;
+                        break;
+                    }
+                }
+            }
+
+            if (ab != null)
+            {
+                string[] names = ab.GetAllAssetNames();
+                List<string> result = new List<string>(names);
+                if (shouldUnload) ab.Unload(true);
+                callback?.Invoke(result);
+            }
+            else
+            {
+                callback?.Invoke(null);
+            }
+        }
 
 		private void OnDestroy()
 		{

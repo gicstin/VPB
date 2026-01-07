@@ -14,6 +14,7 @@ namespace VPB
             CategoryClothing,
             CategoryHair,
             CategoryPose,
+            CategoryCUA,
             CustomScene,
             CustomSavedPerson,
             CustomPersonPreset,
@@ -78,6 +79,7 @@ namespace VPB
                 case GalleryPage.CategoryClothing: OpenCategoryClothing(); break;
                 case GalleryPage.CategoryHair: OpenCategoryHair(); break;
                 case GalleryPage.CategoryPose: OpenCategoryPose(); break;
+                case GalleryPage.CategoryCUA: OpenCategoryCUA(); break;
                 case GalleryPage.CustomScene: OpenCustomScene(); break;
                 case GalleryPage.CustomSavedPerson: OpenCustomSavedPerson(); break;
                 case GalleryPage.CustomPersonPreset: OpenPersonPreset(); break;
@@ -159,7 +161,8 @@ namespace VPB
                 addCat("Pose", "json", "Saves/Person"); // Was Person
                 addCat("Clothing", "vap", "Custom/Clothing"); // Was P.Clothing
                 addCat("Hair", "vap", "Custom/Hair"); // Was P.Hair
-                
+                // addCat("CUA", "assetbundle|unity3d", "Custom/Assets");
+
                 // 2. Dynamic Discovery from Custom/Atom
                 string atomRoot = "Custom/Atom";
                 if (Directory.Exists(atomRoot))
@@ -416,6 +419,11 @@ namespace VPB
         {
             SetLastGalleryPage(GalleryPage.PresetOther);
             ShowGallery("Preset Other", "vap", "Custom");
+        }
+        public void OpenCategoryCUA()
+        {
+            SetLastGalleryPage(GalleryPage.CategoryCUA);
+            ShowGallery("CUA", "assetbundle|unity3d", "Custom/Assets");
         }
         public void OpenMiscCUA()
         {

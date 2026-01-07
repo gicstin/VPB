@@ -160,7 +160,18 @@ namespace VPB
 				string s = array[2];
 				try
 				{
-					int version = int.Parse(s);
+					int version;
+                    if (!int.TryParse(s, out version))
+                    {
+                         // Relaxed parsing for malformed versions like "1_1" -> 11, "1 (1)" -> 11
+                         string cleanS = Regex.Replace(s, "[^0-9]", "");
+                         if (!int.TryParse(cleanS, out version))
+                         {
+                             throw new FormatException($"Cannot parse version from '{s}'");
+                         }
+                         LogUtil.LogWarning($"[VPB] Parsed malformed version '{s}' as '{version}' for package {text}");
+                    }
+
 					if (!packagesByUid.ContainsKey(text))
 					{
 						VarPackageGroup value;
@@ -484,11 +495,16 @@ namespace VPB
                 }
                 if (Directory.Exists("AllPackages"))
                 {
-                    string[] addonVarPaths = Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories);
-                    string[] allVarPaths = Directory.GetFiles("AllPackages", "*.var", SearchOption.AllDirectories);
-                    string[] varPaths = new string[addonVarPaths.Length + allVarPaths.Length];
-                    Array.Copy(addonVarPaths, 0, varPaths, 0, addonVarPaths.Length);
-                    Array.Copy(allVarPaths, 0, varPaths, addonVarPaths.Length, allVarPaths.Length);
+                    List<string> allVarFiles = new List<string>();
+                    string[] scanRoots = new string[] { "AddonPackages", "AllPackages", "Custom", "Saves" };
+                    foreach (string root in scanRoots)
+                    {
+                        if (Directory.Exists(root))
+                        {
+                            SafeGetFiles(root, "*.var", allVarFiles);
+                        }
+                    }
+                    string[] varPaths = allVarFiles.ToArray();
 
                     HashSet<string> hashSet = new HashSet<string>();
                     HashSet<string> addSet = new HashSet<string>();
@@ -1475,7 +1491,24 @@ namespace VPB
 			{
 				packagesByPath.TryGetValue(packageUidOrPath, out value);
 			}
+			if (value != null) EnsurePackageInstalled(value);
 			return value;
+		}
+
+		private static void EnsurePackageInstalled(VarPackage package)
+		{
+			if (package == null) return;
+
+			if (package.Path != null && package.Path.StartsWith("AllPackages/"))
+			{
+				LogUtil.Log($"Installing package from AllPackages: {package.Uid}");
+				bool moved = package.InstallSelf();
+				if (moved)
+				{
+					MVR.FileManagement.FileManager.Refresh();
+					FileManager.Refresh();
+				}
+			}
 		}
 
 		public static List<VarPackageGroup> GetPackageGroups()
@@ -1500,6 +1533,31 @@ namespace VPB
 		public static string CleanFilePath(string path)
 		{
 			return path?.Replace('\\', '/');
+		}
+
+		public static void SafeGetFiles(string path, string pattern, List<string> results)
+		{
+			try
+			{
+				string[] files = Directory.GetFiles(path, pattern);
+				if (files != null)
+					results.AddRange(files);
+
+				string[] dirs = Directory.GetDirectories(path);
+				if (dirs != null)
+				{
+					foreach (string dir in dirs)
+					{
+						// Skip InvalidPackages to avoid re-scanning rejected files
+						if (Path.GetFileName(dir).Equals("InvalidPackages", StringComparison.OrdinalIgnoreCase)) continue;
+						SafeGetFiles(dir, pattern, results);
+					}
+				}
+			}
+			catch (Exception)
+			{
+				// Ignore access denied or other errors
+			}
 		}
 
 		//public static void FindAllFiles(string dir, string pattern, List<FileEntry> foundFiles, bool restrictPath = false)
@@ -1616,7 +1674,7 @@ namespace VPB
 				if (!onlySystemFiles)
 				{
 					string key = CleanFilePath(path);
-					if (uidToVarFileEntry != null && uidToVarFileEntry.ContainsKey(path))
+					if (uidToVarFileEntry != null && uidToVarFileEntry.ContainsKey(key))
 					{
 						return true;
 					}

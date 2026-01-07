@@ -263,12 +263,20 @@ namespace VPB
                 VarPackage package = FileManager.GetPackage(key);
                 if (package != null)
                 {
-                    bool dirty=package.InstallRecursive();
-                    if (dirty) flag = true;
+                    string path = package.Path;
+                    bool dirty = package.InstallRecursive();
+                    if (dirty)
+                    {
+                        LogUtil.Log("Install Success " + key + " path=" + path);
+                        flag = true;
+                    }
+                    else
+                    {
+                        LogUtil.Log("Install Skipped (already installed) " + key + " path=" + path);
+                    }
                 }
                 else
                 {
-                    // If lookup fails for a specific var version, try installing the latest.
                     if (!key.EndsWith(".latest"))
                     {
                         string newKey = key.Substring(0, key.LastIndexOf('.'))+ ".latest";
@@ -276,9 +284,26 @@ namespace VPB
                         VarPackage packageNewest = FileManager.GetPackage(newKey);
                         if (packageNewest != null)
                         {
+                            string pathLatest = packageNewest.Path;
                             bool dirty = packageNewest.InstallRecursive();
-                            if (dirty) flag = true;
+                            if (dirty)
+                            {
+                                LogUtil.Log("Install Success " + newKey + " path=" + pathLatest);
+                                flag = true;
+                            }
+                            else
+                            {
+                                LogUtil.Log("Install Skipped (already installed) " + newKey + " path=" + pathLatest);
+                            }
                         }
+                        else
+                        {
+                            LogUtil.LogError("Install Failed (package not found) " + newKey);
+                        }
+                    }
+                    else
+                    {
+                        LogUtil.LogError("Install Failed (package not found) " + key);
                     }
                 }
             }

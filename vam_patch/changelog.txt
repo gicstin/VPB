@@ -1,0 +1,4 @@
+1 commits since v5.3
+
+Changelog (excluding merges):
+* (bf79ce8) [ghorsington] Fix HarmonyX version for core

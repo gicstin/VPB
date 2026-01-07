@@ -340,6 +340,13 @@ namespace VPB
 
             GUILayout.Space(6);
 
+            if (GUILayout.Button("Adjust Position", m_StyleButton, GUILayout.Height(buttonHeight)))
+            {
+                OpenQuickMenuPositionWindow();
+            }
+
+            GUILayout.Space(6);
+
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(m_SettingsEnableGalleryFadeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
             {
@@ -448,6 +455,259 @@ namespace VPB
             }
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
+        }
+
+        private void OpenQuickMenuPositionWindow()
+        {
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            if (isVR)
+                return;
+
+            Vector2 createPos = Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
+            Vector2 showHidePos = Settings.Instance.QuickMenuShowHidePosDesktop.Value;
+            Vector2 createPosVR = Settings.Instance.QuickMenuCreateGalleryPosVR.Value;
+            Vector2 showHidePosVR = Settings.Instance.QuickMenuShowHidePosVR.Value;
+
+            m_QuickMenuPosOriginalCreate = createPos;
+            m_QuickMenuPosOriginalShowHide = showHidePos;
+
+            m_QuickMenuPosCreateX = createPos.x;
+            m_QuickMenuPosCreateY = createPos.y;
+            m_QuickMenuPosShowHideX = showHidePos.x;
+            m_QuickMenuPosShowHideY = showHidePos.y;
+            m_QuickMenuPosCreateXVR = createPosVR.x;
+            m_QuickMenuPosCreateYVR = createPosVR.y;
+            m_QuickMenuPosShowHideXVR = showHidePosVR.x;
+            m_QuickMenuPosShowHideYVR = showHidePosVR.y;
+
+            m_QuickMenuPosCreateXText = ((int)m_QuickMenuPosCreateX).ToString();
+            m_QuickMenuPosCreateYText = ((int)m_QuickMenuPosCreateY).ToString();
+            m_QuickMenuPosShowHideXText = ((int)m_QuickMenuPosShowHideX).ToString();
+            m_QuickMenuPosShowHideYText = ((int)m_QuickMenuPosShowHideY).ToString();
+            m_QuickMenuPosCreateXVRText = ((int)m_QuickMenuPosCreateXVR).ToString();
+            m_QuickMenuPosCreateYVRText = ((int)m_QuickMenuPosCreateYVR).ToString();
+            m_QuickMenuPosShowHideXVRText = ((int)m_QuickMenuPosShowHideXVR).ToString();
+            m_QuickMenuPosShowHideYVRText = ((int)m_QuickMenuPosShowHideYVR).ToString();
+
+            m_QuickMenuPosUseSameCreateInVR = Settings.Instance.QuickMenuCreateGalleryUseSameInVR != null && Settings.Instance.QuickMenuCreateGalleryUseSameInVR.Value;
+            m_QuickMenuPosUseSameShowHideInVR = Settings.Instance.QuickMenuShowHideUseSameInVR != null && Settings.Instance.QuickMenuShowHideUseSameInVR.Value;
+
+            m_ShowQuickMenuPosWindow = true;
+        }
+
+        private void ApplyQuickMenuPositionPreview()
+        {
+            if (!m_ShowQuickMenuPosWindow)
+                return;
+
+            if (m_CreateGalleryButtonRT != null)
+            {
+                m_CreateGalleryButtonRT.anchoredPosition = new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
+            }
+            if (m_ShowHideButtonRT != null)
+            {
+                m_ShowHideButtonRT.anchoredPosition = new Vector2(m_QuickMenuPosShowHideX, m_QuickMenuPosShowHideY);
+            }
+        }
+
+        private void DrawQuickMenuPosRow(string label, string controlNamePrefix, ref float x, ref string xText, ref float y, ref string yText, float xMin, float xMax, float yMin, float yMax)
+        {
+            GUILayout.BeginVertical(m_StyleSection);
+            GUILayout.Label(label, m_StyleSubHeader);
+
+            void ApplyWheelNudgeIfHovered(Rect r, ref float v, float min, float max)
+            {
+                if (Event.current == null)
+                    return;
+                if (Event.current.type != EventType.ScrollWheel)
+                    return;
+                if (!r.Contains(Event.current.mousePosition))
+                    return;
+
+                float delta = Event.current.delta.y;
+                if (Math.Abs(delta) < 0.001f)
+                    return;
+
+                // Scroll up (negative delta.y) should increase value.
+                float step = delta > 0f ? -1f : 1f;
+                v = Mathf.Clamp(Mathf.Round(v + step), min, max);
+                Event.current.Use();
+            }
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("X", GUILayout.Width(16));
+            float prevX = x;
+            var xSliderRect = GUILayoutUtility.GetRect(0f, 18f, GUI.skin.horizontalSlider, GUILayout.ExpandWidth(true));
+            x = GUI.HorizontalSlider(xSliderRect, x, xMin, xMax);
+            x = Mathf.Clamp(Mathf.Round(x), xMin, xMax);
+            ApplyWheelNudgeIfHovered(xSliderRect, ref x, xMin, xMax);
+
+            GUILayout.Space(8);
+
+            string xControl = controlNamePrefix + "_XText";
+            bool xFocused = GUI.GetNameOfFocusedControl() == xControl;
+            var xTextRect = GUILayoutUtility.GetRect(80f, 20f, GUI.skin.textField, GUILayout.Width(80));
+            GUI.SetNextControlName(xControl);
+            string newXText = GUI.TextField(xTextRect, xText ?? "");
+            if (newXText != xText)
+                xText = newXText;
+            if (xFocused)
+            {
+                float parsed;
+                if (float.TryParse(xText ?? "", out parsed))
+                    x = Mathf.Clamp(Mathf.Round(parsed), xMin, xMax);
+            }
+            if (Math.Abs(prevX - x) > 0.0001f && !xFocused)
+            {
+                xText = ((int)x).ToString();
+            }
+            ApplyWheelNudgeIfHovered(xTextRect, ref x, xMin, xMax);
+            if (!xFocused)
+            {
+                xText = ((int)x).ToString();
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Y", GUILayout.Width(16));
+            float prevY = y;
+            var ySliderRect = GUILayoutUtility.GetRect(0f, 18f, GUI.skin.horizontalSlider, GUILayout.ExpandWidth(true));
+            y = GUI.HorizontalSlider(ySliderRect, y, yMin, yMax);
+            y = Mathf.Clamp(Mathf.Round(y), yMin, yMax);
+            ApplyWheelNudgeIfHovered(ySliderRect, ref y, yMin, yMax);
+
+            GUILayout.Space(8);
+
+            string yControl = controlNamePrefix + "_YText";
+            bool yFocused = GUI.GetNameOfFocusedControl() == yControl;
+            var yTextRect = GUILayoutUtility.GetRect(80f, 20f, GUI.skin.textField, GUILayout.Width(80));
+            GUI.SetNextControlName(yControl);
+            string newYText = GUI.TextField(yTextRect, yText ?? "");
+            if (newYText != yText)
+                yText = newYText;
+            if (yFocused)
+            {
+                float parsed;
+                if (float.TryParse(yText ?? "", out parsed))
+                    y = Mathf.Clamp(Mathf.Round(parsed), yMin, yMax);
+            }
+            if (Math.Abs(prevY - y) > 0.0001f && !yFocused)
+            {
+                yText = ((int)y).ToString();
+            }
+            ApplyWheelNudgeIfHovered(yTextRect, ref y, yMin, yMax);
+            if (!yFocused)
+            {
+                yText = ((int)y).ToString();
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.EndVertical();
+        }
+
+        private void CloseQuickMenuPositionWindow(bool save)
+        {
+            if (save)
+            {
+                var newCreate = new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
+                var newShowHide = new Vector2(m_QuickMenuPosShowHideX, m_QuickMenuPosShowHideY);
+
+                var newCreateVR = m_QuickMenuPosUseSameCreateInVR ? newCreate : new Vector2(m_QuickMenuPosCreateXVR, m_QuickMenuPosCreateYVR);
+                var newShowHideVR = m_QuickMenuPosUseSameShowHideInVR ? newShowHide : new Vector2(m_QuickMenuPosShowHideXVR, m_QuickMenuPosShowHideYVR);
+
+                Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value = newCreate;
+                Settings.Instance.QuickMenuShowHidePosDesktop.Value = newShowHide;
+                Settings.Instance.QuickMenuCreateGalleryPosVR.Value = newCreateVR;
+                Settings.Instance.QuickMenuShowHidePosVR.Value = newShowHideVR;
+
+                if (Settings.Instance.QuickMenuCreateGalleryUseSameInVR != null)
+                    Settings.Instance.QuickMenuCreateGalleryUseSameInVR.Value = m_QuickMenuPosUseSameCreateInVR;
+                if (Settings.Instance.QuickMenuShowHideUseSameInVR != null)
+                    Settings.Instance.QuickMenuShowHideUseSameInVR.Value = m_QuickMenuPosUseSameShowHideInVR;
+                try { this.Config.Save(); } catch { }
+            }
+            else
+            {
+                if (m_CreateGalleryButtonRT != null)
+                    m_CreateGalleryButtonRT.anchoredPosition = m_QuickMenuPosOriginalCreate;
+                if (m_ShowHideButtonRT != null)
+                    m_ShowHideButtonRT.anchoredPosition = m_QuickMenuPosOriginalShowHide;
+            }
+
+            m_ShowQuickMenuPosWindow = false;
+        }
+
+        private void DrawQuickMenuPosWindow(int windowId)
+        {
+            EnsureStyles();
+
+            const float xMin = -1000f;
+            const float xMax = 2000f;
+            const float yMin = -500f;
+            const float yMax = 1500f;
+
+            GUILayout.BeginVertical(m_StylePanel);
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Quick Menu Positions (Desktop)", m_StyleHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
+            {
+                CloseQuickMenuPositionWindow(false);
+                GUILayout.EndHorizontal();
+                GUILayout.EndVertical();
+                return;
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(6);
+
+            DrawQuickMenuPosRow("Create Gallery", "QmCreate", ref m_QuickMenuPosCreateX, ref m_QuickMenuPosCreateXText, ref m_QuickMenuPosCreateY, ref m_QuickMenuPosCreateYText, xMin, xMax, yMin, yMax);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_QuickMenuPosUseSameCreateInVR ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_QuickMenuPosUseSameCreateInVR = !m_QuickMenuPosUseSameCreateInVR;
+            }
+            GUILayout.Label("Use same position in VR mode");
+            GUILayout.EndHorizontal();
+
+            if (!m_QuickMenuPosUseSameCreateInVR)
+            {
+                GUILayout.Space(4);
+                DrawQuickMenuPosRow("Create Gallery (VR)", "QmCreateVR", ref m_QuickMenuPosCreateXVR, ref m_QuickMenuPosCreateXVRText, ref m_QuickMenuPosCreateYVR, ref m_QuickMenuPosCreateYVRText, xMin, xMax, yMin, yMax);
+            }
+            GUILayout.Space(6);
+            DrawQuickMenuPosRow("Show/Hide", "QmShowHide", ref m_QuickMenuPosShowHideX, ref m_QuickMenuPosShowHideXText, ref m_QuickMenuPosShowHideY, ref m_QuickMenuPosShowHideYText, xMin, xMax, yMin, yMax);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_QuickMenuPosUseSameShowHideInVR ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_QuickMenuPosUseSameShowHideInVR = !m_QuickMenuPosUseSameShowHideInVR;
+            }
+            GUILayout.Label("Use same position in VR mode");
+            GUILayout.EndHorizontal();
+
+            if (!m_QuickMenuPosUseSameShowHideInVR)
+            {
+                GUILayout.Space(4);
+                DrawQuickMenuPosRow("Show/Hide (VR)", "QmShowHideVR", ref m_QuickMenuPosShowHideXVR, ref m_QuickMenuPosShowHideXVRText, ref m_QuickMenuPosShowHideYVR, ref m_QuickMenuPosShowHideYVRText, xMin, xMax, yMin, yMax);
+            }
+
+            GUILayout.Space(8);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Cancel", m_StyleButton, GUILayout.Height(26)))
+            {
+                CloseQuickMenuPositionWindow(false);
+            }
+            if (GUILayout.Button("Save", m_StyleButtonPrimary, GUILayout.Height(26)))
+            {
+                CloseQuickMenuPositionWindow(true);
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.EndVertical();
+            GUI.DragWindow();
         }
 
 
@@ -887,6 +1147,8 @@ namespace VPB
             harmony.PatchAll(typeof(SuperControllerHook));
             harmony.PatchAll(typeof(PatchAssetLoader));
             harmony.PatchAll(typeof(UnityEngineHook));
+            GenericTextureHook.PatchAll(harmony);
+            DAZClothingHook.PatchAll(harmony);
 
             // Initialize Native Hooks (MinHook)
             Native.NativeHookManager.Initialize();
@@ -1096,6 +1358,13 @@ namespace VPB
             }
             else if (m_ShowHideButtonGO != null && Gallery.singleton != null)
             {
+                if (!Settings.Instance.QuickMenuShowHideEnabled.Value)
+                {
+                    if (m_ShowHideButtonGO.activeSelf)
+                        m_ShowHideButtonGO.SetActive(false);
+                    return;
+                }
+
                 int count = Gallery.singleton.PanelCount;
                 bool shouldShow = count > 0;
                 if (m_ShowHideButtonGO.activeSelf != shouldShow)
@@ -1271,6 +1540,32 @@ namespace VPB
         Canvas m_QuickMenuCanvas;
         GameObject m_ShowHideButtonGO;
         UIDynamicButton m_ShowHideButton;
+        GameObject m_CreateGalleryButtonGO;
+        RectTransform m_CreateGalleryButtonRT;
+        RectTransform m_ShowHideButtonRT;
+
+        private bool m_ShowQuickMenuPosWindow;
+        private Rect m_QuickMenuPosWindowRect = new Rect(300, 200, 520, 320);
+        private Vector2 m_QuickMenuPosOriginalCreate;
+        private Vector2 m_QuickMenuPosOriginalShowHide;
+        private float m_QuickMenuPosCreateX;
+        private float m_QuickMenuPosCreateY;
+        private float m_QuickMenuPosShowHideX;
+        private float m_QuickMenuPosShowHideY;
+        private float m_QuickMenuPosCreateXVR;
+        private float m_QuickMenuPosCreateYVR;
+        private float m_QuickMenuPosShowHideXVR;
+        private float m_QuickMenuPosShowHideYVR;
+        private string m_QuickMenuPosCreateXText;
+        private string m_QuickMenuPosCreateYText;
+        private string m_QuickMenuPosShowHideXText;
+        private string m_QuickMenuPosShowHideYText;
+        private string m_QuickMenuPosCreateXVRText;
+        private string m_QuickMenuPosCreateYVRText;
+        private string m_QuickMenuPosShowHideXVRText;
+        private string m_QuickMenuPosShowHideYVRText;
+        private bool m_QuickMenuPosUseSameCreateInVR;
+        private bool m_QuickMenuPosUseSameShowHideInVR;
 
         void CreateQuickMenuButton()
         {
@@ -1337,80 +1632,89 @@ namespace VPB
                 }
 
                 // Button 1: Create Gallery (Left)
-                Transform btnTr = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                if (btnTr != null && m_QuickMenuCanvas.transform != null)
+                if (Settings.Instance.QuickMenuCreateGalleryEnabled.Value)
                 {
-                    btnTr.SetParent(m_QuickMenuCanvas.transform, false);
-                    
-                    RectTransform rt = btnTr.GetComponent<RectTransform>();
-                    if (rt != null)
+                    Transform btnTr = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
+                    if (btnTr != null && m_QuickMenuCanvas.transform != null)
                     {
-                        rt.sizeDelta = new Vector2(100f, 50f);
-                        rt.anchoredPosition = new Vector2(-468f,-76f);
-                    }
-
-                    UIDynamicButton uiBtn = btnTr.GetComponent<UIDynamicButton>();
-                    if (uiBtn != null)
-                    {
-                        uiBtn.label = "Create Gallery";
-                        if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
-                        if (uiBtn.button != null)
-                        {
-                            uiBtn.button.onClick.AddListener(() => {
-                                 if (Gallery.singleton != null)
-                                 {
-                                     if (!m_GalleryCatsInited) InitGalleryCategories();
-                                     Gallery.singleton.CreatePane();
-                                 }
-                            });
-                        }
+                        m_CreateGalleryButtonGO = btnTr.gameObject;
+                        btnTr.SetParent(m_QuickMenuCanvas.transform, false);
                         
-                        // Use HoverHandler for dynamic transparency
-                        var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                        hover.targetButton = uiBtn;
-                        uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                        RectTransform rt = btnTr.GetComponent<RectTransform>();
+                        if (rt != null)
+                        {
+                            m_CreateGalleryButtonRT = rt;
+                            rt.sizeDelta = new Vector2(100f, 40f);
+                            rt.anchoredPosition = isVR ? Settings.Instance.QuickMenuCreateGalleryPosVR.Value : Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
+                        }
+
+                        UIDynamicButton uiBtn = btnTr.GetComponent<UIDynamicButton>();
+                        if (uiBtn != null)
+                        {
+                            uiBtn.label = "Create Gallery";
+                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
+                            if (uiBtn.button != null)
+                            {
+                                uiBtn.button.onClick.AddListener(() => {
+                                     if (Gallery.singleton != null)
+                                     {
+                                         if (!m_GalleryCatsInited) InitGalleryCategories();
+                                         Gallery.singleton.CreatePane();
+                                     }
+                                });
+                            }
+                            
+                            // Use HoverHandler for dynamic transparency
+                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
+                            hover.targetButton = uiBtn;
+                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                        }
                     }
                 }
 
                 // Button 2: Show/Hide (Right)
-                Transform btnTr2 = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                if (btnTr2 != null && m_QuickMenuCanvas.transform != null)
+                if (Settings.Instance.QuickMenuShowHideEnabled.Value)
                 {
-                    m_ShowHideButtonGO = btnTr2.gameObject;
-                    btnTr2.SetParent(m_QuickMenuCanvas.transform, false);
-                    
-                    RectTransform rt = btnTr2.GetComponent<RectTransform>();
-                    if (rt != null)
+                    Transform btnTr2 = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
+                    if (btnTr2 != null && m_QuickMenuCanvas.transform != null)
                     {
-                        rt.sizeDelta = new Vector2(100f, 50f);
-                        rt.anchoredPosition = new Vector2(-468f, -212f);
-                    }
-
-                    UIDynamicButton uiBtn = btnTr2.GetComponent<UIDynamicButton>();
-                    if (uiBtn != null)
-                    {
-                        m_ShowHideButton = uiBtn;
-                        uiBtn.label = "Show/Hide";
-                        if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
-                        if (uiBtn.button != null)
-                        {
-                            uiBtn.button.onClick.AddListener(() => {
-                                if (Gallery.singleton != null)
-                                {
-                                    if (Gallery.singleton.IsVisible)
-                                        Gallery.singleton.Hide();
-                                    else
-                                        OpenGallery();
-                                }
-                            });
-                        }
+                        m_ShowHideButtonGO = btnTr2.gameObject;
+                        btnTr2.SetParent(m_QuickMenuCanvas.transform, false);
                         
-                        // Use HoverHandler for dynamic transparency
-                        var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                        hover.targetButton = uiBtn;
-                        uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                        RectTransform rt = btnTr2.GetComponent<RectTransform>();
+                        if (rt != null)
+                        {
+                            m_ShowHideButtonRT = rt;
+                            rt.sizeDelta = new Vector2(100f, 40f);
+                            rt.anchoredPosition = isVR ? Settings.Instance.QuickMenuShowHidePosVR.Value : Settings.Instance.QuickMenuShowHidePosDesktop.Value;
+                        }
+
+                        UIDynamicButton uiBtn = btnTr2.GetComponent<UIDynamicButton>();
+                        if (uiBtn != null)
+                        {
+                            m_ShowHideButton = uiBtn;
+                            uiBtn.label = "Show/Hide";
+                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
+                            if (uiBtn.button != null)
+                            {
+                                uiBtn.button.onClick.AddListener(() => {
+                                    if (Gallery.singleton != null)
+                                    {
+                                        if (Gallery.singleton.IsVisible)
+                                            Gallery.singleton.Hide();
+                                        else
+                                            OpenGallery();
+                                    }
+                                });
+                            }
+                            
+                            // Use HoverHandler for dynamic transparency
+                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
+                            hover.targetButton = uiBtn;
+                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                        }
+                        m_ShowHideButtonGO.SetActive(false);
                     }
-                    m_ShowHideButtonGO.SetActive(false);
                 }
                 
                 m_QuickMenuButtonInited = true;
@@ -1929,6 +2233,12 @@ namespace VPB
                     {
                         m_RemoveWindowRect = GUILayout.Window(2, m_RemoveWindowRect, DrawRemoveWindow, "Remove Old/Damaged", m_StyleWindow);
                         GUI.BringWindowToFront(2);
+                    }
+                    if (m_ShowQuickMenuPosWindow)
+                    {
+                        ApplyQuickMenuPositionPreview();
+                        m_QuickMenuPosWindowRect = GUILayout.Window(3, m_QuickMenuPosWindowRect, DrawQuickMenuPosWindow, "Quick Menu Positions", m_StyleWindow);
+                        GUI.BringWindowToFront(3);
                     }
                 }
             }

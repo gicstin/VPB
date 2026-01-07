@@ -266,6 +266,7 @@
     <Compile Include="src\hook\JSONOptimization.cs" />
     <Compile Include="src\hook\ImageProcessingOptimization.cs" />
     <Compile Include="src\hook\DAZMorphMgr.cs" />
+    <Compile Include="src\hook\DAZClothingHook.cs" />
     <Compile Include="src\hook\FileManagement\VarPackageMgr.cs" />
     <Compile Include="src\hook\HubResourcePackageHook.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
@@ -289,6 +290,7 @@
     <Compile Include="src\StbImageSharp\Hebron.Runtime\MemoryStats.cs" />
     <Compile Include="src\StbImageSharp\Hebron.Runtime\CRuntime.cs" />
     <Compile Include="src\hook\CustomAssetLoader.cs" />
+    <Compile Include="src\hook\GenericTextureHook.cs" />
     <Compile Include="src\hook\ImageLoadingMgr.cs" />
     <Compile Include="src\hook\SuperControllerHook.cs" />
     <Compile Include="src\hook\TagFilter.cs" />
@@ -322,6 +324,7 @@
     <Compile Include="src\unity-object-pool\PoolManager.cs" />
     <Compile Include="src\unity-object-pool\Singleton.cs" />
     <Compile Include="src\VamHookPlugin.cs" />
+    <Compile Include="src\ContextMenuPanel.cs" />
     <Compile Include="src\Gallery.cs" />
     <Compile Include="src\GalleryPanel.cs" />
     <Compile Include="src\GallerySortManager.cs" />

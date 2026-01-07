@@ -1095,7 +1095,15 @@ namespace VPB
 			}
 		}
 		public bool InstallRecursive()
+        {
+            return InstallRecursive(new HashSet<string>());
+        }
+
+		public bool InstallRecursive(HashSet<string> visited)
 		{
+            if (visited.Contains(this.Uid)) return false;
+            visited.Add(this.Uid);
+
 			bool flag = false;
 			bool dirty= InstallSelf();
 			if (dirty) flag = true;
@@ -1108,7 +1116,7 @@ namespace VPB
 					VarPackage package = FileManager.GetPackage(key);
 					if (package != null)
 					{
-						bool dirty2= package.InstallSelf();
+						bool dirty2= package.InstallRecursive(visited);
 						if (dirty2) flag = true;
 					}
 				}
@@ -1119,15 +1127,26 @@ namespace VPB
 		}
 		public bool InstallSelf()
 		{
-			if (!this.Path.StartsWith("AllPackages/")) return false;
+			if (this.Path.StartsWith("AddonPackages/")) return false;
 
-			string linkvar ="AddonPackages"+ this.Path.Substring("AllPackages".Length);
+			string linkvar = null;
+			if (this.Path.StartsWith("AllPackages/"))
+			{
+				linkvar = "AddonPackages" + this.Path.Substring("AllPackages".Length);
+			}
+			else
+			{
+				linkvar = "AddonPackages/" + System.IO.Path.GetFileName(this.Path);
+			}
+
 			if (File.Exists(linkvar)) return false;
 			if (Directory.Exists(linkvar))// A directory with the same name may exist
             {
 				LogUtil.LogError("InstallSelf " + this.Path+" exist directory with same name");
 				return false;
             }
+
+			LogUtil.Log($"Installing package: {Uid} from {this.Path} to {linkvar}");
 
 			// Move the file
 			string dir = System.IO.Path.GetDirectoryName(linkvar);
@@ -1136,6 +1155,8 @@ namespace VPB
 
 			File.Move(this.Path, linkvar);
 			this.Path = linkvar.Replace('\\', '/');
+			if (this.Path.StartsWith("AddonPackages/"))
+				RelativePath = this.Path.Substring("AddonPackages/".Length);
 			FileInfo info = new FileInfo(linkvar);
 			if (info != null)
 				info.Refresh();

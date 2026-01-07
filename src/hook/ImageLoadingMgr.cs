@@ -200,8 +200,8 @@ namespace VPB
             // If no resize would occur, don't generate cache.
             int w = qi.tex.width;
             int h = qi.tex.height;
-            GetResizedSize(ref w, ref h);
-            if (w == qi.tex.width && h == qi.tex.height) return false;
+            GetResizedSize(ref w, ref h, qi.imgPath);
+            //if (w == qi.tex.width && h == qi.tex.height) return false;
 
             // If disk cache already exists, skip.
             try
@@ -218,6 +218,7 @@ namespace VPB
 
             resizeQueuedKeys.Add(key);
             resizeQueue.Enqueue(new ResizeJob { qi = qi, key = key });
+            LogUtil.Log("Enqueued resize for " + qi.imgPath);
             EnsureResizeCoroutine();
             return true;
         }
@@ -284,13 +285,15 @@ namespace VPB
 
             int width = qi.tex.width;
             int height = qi.tex.height;
-            GetResizedSize(ref width, ref height);
+            GetResizedSize(ref width, ref height, qi.imgPath);
 
             var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
             if (string.IsNullOrEmpty(realDiskCachePath)) return;
             var realDiskCachePathCache = realDiskCachePath + ".cache";
 
             if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath)) return;
+
+            LogUtil.Log("Generating cache for " + qi.imgPath + " -> " + realDiskCachePathCache);
 
             // Generate the resized/compressed texture and write to disk cache.
             Texture2D tmp = null;
@@ -370,7 +373,10 @@ namespace VPB
                     if (!string.IsNullOrEmpty(metaContent) && !string.IsNullOrEmpty(pathMeta))
                         File.WriteAllText(pathMeta, metaContent);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("WriteDiskCacheAsync failed: " + pathCache + " " + ex.ToString());
+                }
                 finally
                 {
                     if (bytes != null) ByteArrayPool.Return(bytes);
@@ -441,7 +447,7 @@ namespace VPB
                     if (asObject["format"] != null) textureFormat = (TextureFormat)System.Enum.Parse(typeof(TextureFormat), asObject["format"]);
                 }
 
-                GetResizedSize(ref width, ref height);
+                GetResizedSize(ref width, ref height, qi.imgPath);
 
                 var realDiskCachePath = GetDiskCachePath(qi, true,width, height);
                 var diskPathToUse = realDiskCachePath + ".cache";
@@ -885,7 +891,7 @@ namespace VPB
                         if (asObject["height"] != null) height = asObject["height"].AsInt;
                     }
 
-                    GetResizedSize(ref width, ref height);
+                    GetResizedSize(ref width, ref height, req.imgPath);
                     var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
                     var realDiskCachePathCache = realDiskCachePath + ".cache";
                     if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath))
@@ -898,7 +904,7 @@ namespace VPB
 
                 if (width > 0 && height > 0)
                 {
-                    GetResizedSize(ref width, ref height);
+                    GetResizedSize(ref width, ref height, req.imgPath);
                     var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
                     var realDiskCachePathCache = realDiskCachePath + ".cache";
                     if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath))
@@ -1361,7 +1367,7 @@ namespace VPB
             int width = qi.tex.width;
             int height = qi.tex.height;
 
-            GetResizedSize(ref width, ref height);
+            GetResizedSize(ref width, ref height, qi.imgPath);
 
             var diskCachePath = GetDiskCachePath(qi,false,0,0);
             var realDiskCachePath = GetDiskCachePath(qi,true,width,height);
@@ -1508,7 +1514,21 @@ namespace VPB
             }
         }
 
-        void GetResizedSize(ref int width,ref int height)
+        static bool Has(string source, string value)
+        {
+            if (source == null || value == null) return false;
+            return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static bool IsLikelyTorsoPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string p = path;
+            if (Has(p, "torso") || Has(p, "body")) return true;
+            return false;
+        }
+
+        void GetResizedSize(ref int width, ref int height, string path = null)
         {
             int originalWidth = width;
             int originalHeight = height;
@@ -1520,6 +1540,13 @@ namespace VPB
 
             int maxSize = Settings.Instance.MaxTextureSize.Value;
             if (maxSize < minSize) maxSize = minSize;
+
+            // Exception for Torso textures to support Genital blending
+            if (originalWidth >= 4096 && IsLikelyTorsoPath(path))
+            {
+                if (maxSize < 4096) maxSize = 4096;
+                if (minSize < 4096) minSize = 4096;
+            }
 
             if (originalWidth != originalHeight)
             {
