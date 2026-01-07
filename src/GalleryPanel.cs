@@ -124,12 +124,18 @@ namespace VPB
 
         private void UpdateSideButtonsVisibility()
         {
-            // Removed Tag Button Logic
+            string mode = VPBConfig.Instance.ShowSideButtons;
+            if (leftSideContainer != null) 
+                leftSideContainer.SetActive(mode == "Both" || mode == "Left");
+            if (rightSideContainer != null) 
+                rightSideContainer.SetActive(mode == "Both" || mode == "Right");
         }
 
         private InputField leftSearchInput;
         private InputField rightSearchInput;
         private InputField titleSearchInput;
+        private GameObject leftSideContainer;
+        private GameObject rightSideContainer;
         private Stack<GameObject> tabButtonPool = new Stack<GameObject>();
 
         private List<CanvasGroup> sideButtonGroups = new List<CanvasGroup>();
@@ -181,6 +187,15 @@ namespace VPB
         private Image rightFollowBtnImage;
         private Text leftFollowBtnText;
         private Image leftFollowBtnImage;
+
+        // Side buttons for dynamic positioning
+        private List<RectTransform> rightSideButtons = new List<RectTransform>();
+        private List<RectTransform> leftSideButtons = new List<RectTransform>();
+        private List<GameObject> rightCancelGroups = new List<GameObject>();
+        private List<GameObject> leftCancelGroups = new List<GameObject>();
+
+        // Settings Pane
+        private SettingsPanel settingsPanel;
         
         public struct CreatorCacheEntry { public string Name; public int Count; }
         private List<CreatorCacheEntry> cachedCreators = new List<CreatorCacheEntry>();
@@ -196,6 +211,7 @@ namespace VPB
         private int currentPage = 0;
         private int itemsPerPage = 200;
         private Text paginationText;
+        private Text hoverPathText;
         private GameObject paginationPrevBtn;
         private GameObject paginationNextBtn;
 
@@ -239,6 +255,12 @@ namespace VPB
 
         void OnDestroy()
         {
+            if (VPBConfig.Instance != null)
+            {
+                VPBConfig.Instance.ConfigChanged -= UpdateSideButtonPositions;
+                VPBConfig.Instance.ConfigChanged -= UpdateSideButtonsVisibility;
+            }
+
             if (canvas != null)
             {
                 if (SuperController.singleton != null)
@@ -258,7 +280,14 @@ namespace VPB
         {
             if (canvas != null) return;
 
-            // IsUndocked = isUndocked; // Removed
+            // Subscribe to config changes
+            if (VPBConfig.Instance != null)
+            {
+                VPBConfig.Instance.ConfigChanged += UpdateSideButtonPositions;
+                VPBConfig.Instance.ConfigChanged += UpdateSideButtonsVisibility;
+            }
+
+            // ... standard Init code follows ...
             // string nameSuffix = isUndocked ? "_Undocked" : "";
             GameObject canvasGO = new GameObject("VPB_GalleryCanvas");
             canvasGO.layer = 5; // UI layer
@@ -314,6 +343,8 @@ namespace VPB
             
             UIDraggable dragger = backgroundBoxGO.AddComponent<UIDraggable>();
             dragger.target = canvasGO.transform;
+
+            settingsPanel = new SettingsPanel(backgroundBoxGO);
 
             // Title Bar
             GameObject titleBarGO = new GameObject("TitleBar");
@@ -394,7 +425,7 @@ namespace VPB
                 RectTransform rightTabRT = rightTabScrollGO.GetComponent<RectTransform>();
                 rightTabRT.anchorMin = new Vector2(1, 0);
                 rightTabRT.anchorMax = new Vector2(1, 1);
-                rightTabRT.offsetMin = new Vector2(-tabAreaWidth - 10, 20); 
+                rightTabRT.offsetMin = new Vector2(-tabAreaWidth - 10, 68); 
                 rightTabRT.offsetMax = new Vector2(-10, -90); 
                 
                 rightTabContainerGO = rightTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
@@ -407,7 +438,7 @@ namespace VPB
                 RectTransform rightSubTabRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                 rightSubTabRT.anchorMin = new Vector2(1, 0);
                 rightSubTabRT.anchorMax = new Vector2(1, 0.5f); // Bottom half default
-                rightSubTabRT.offsetMin = new Vector2(-tabAreaWidth - 10, 20);
+                rightSubTabRT.offsetMin = new Vector2(-tabAreaWidth - 10, 68);
                 rightSubTabRT.offsetMax = new Vector2(-10, -45);
                 
                 rightSubTabContainerGO = rightSubTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
@@ -462,7 +493,7 @@ namespace VPB
                 rSubClearRT.anchorMin = new Vector2(1, 0);
                 rSubClearRT.anchorMax = new Vector2(1, 0);
                 rSubClearRT.pivot = new Vector2(1, 0);
-                rSubClearRT.anchoredPosition = new Vector2(-10, 10);
+                rSubClearRT.anchoredPosition = new Vector2(-10, 68);
                 rightSubClearBtn.SetActive(false);
 
                 // Init Sub Sort Text
@@ -507,7 +538,7 @@ namespace VPB
                 RectTransform leftTabRT = leftTabScrollGO.GetComponent<RectTransform>();
                 leftTabRT.anchorMin = new Vector2(0, 0);
                 leftTabRT.anchorMax = new Vector2(0, 1);
-                leftTabRT.offsetMin = new Vector2(10, 20);
+                leftTabRT.offsetMin = new Vector2(10, 70);
                 leftTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -90);
                 
                 leftTabContainerGO = leftTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
@@ -520,7 +551,7 @@ namespace VPB
                 RectTransform leftSubTabRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                 leftSubTabRT.anchorMin = new Vector2(0, 0);
                 leftSubTabRT.anchorMax = new Vector2(0, 0.5f); // Bottom half default
-                leftSubTabRT.offsetMin = new Vector2(10, 20);
+                leftSubTabRT.offsetMin = new Vector2(10, 68);
                 leftSubTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -45);
                 
                 leftSubTabContainerGO = leftSubTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
@@ -575,7 +606,7 @@ namespace VPB
                 lSubClearRT.anchorMin = new Vector2(0, 0);
                 lSubClearRT.anchorMax = new Vector2(0, 0);
                 lSubClearRT.pivot = new Vector2(0, 0);
-                lSubClearRT.anchoredPosition = new Vector2(10, 10);
+                lSubClearRT.anchoredPosition = new Vector2(10, 68);
                 leftSubClearBtn.SetActive(false);
 
                 // Init Sub Sort Text
@@ -616,103 +647,133 @@ namespace VPB
                 lSearchRT.anchoredPosition = new Vector2(55, -55);
 
                 // Right Button Container
-                GameObject rightButtonsContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleRight, 130, 430, new Vector2(120, 0));
-                sideButtonGroups.Add(rightButtonsContainer.AddComponent<CanvasGroup>());
+                rightSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleRight, 130, 580, new Vector2(120, 0));
+                sideButtonGroups.Add(rightSideContainer.AddComponent<CanvasGroup>());
 
                 // Right Toggle Buttons
                 int btnFontSize = 20;
                 float btnWidth = 120;
                 float btnHeight = 50;
                 float spacing = 60f;
-                float startY = 180f;
+                float groupGap = 20f;
+                float startY = 260f;
+
+                // Settings (Topmost)
+                GameObject rightSettingsBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Settings", btnFontSize, 0, startY, AnchorPresets.centre, () => {
+                    ToggleSettings(true);
+                });
+                rightSettingsBtn.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.6f, 1f); // Blueish
+                rightSideButtons.Add(rightSettingsBtn.GetComponent<RectTransform>());
 
                 // Follow (Top)
-                GameObject rightFollowBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY, AnchorPresets.centre, ToggleFollowMode);
+                GameObject rightFollowBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
                 rightFollowBtnImage = rightFollowBtn.GetComponent<Image>();
                 rightFollowBtnText = rightFollowBtn.GetComponentInChildren<Text>();
                 rightFollowBtnImage.color = Color.gray;
+                rightSideButtons.Add(rightFollowBtn.GetComponent<RectTransform>());
 
                 // Clone (Gray)
-                GameObject rightCloneBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing, AnchorPresets.centre, () => {
+                GameObject rightCloneBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing * 2 - groupGap, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true);
                 });
                 rightCloneBtn.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 1f);
+                rightSideButtons.Add(rightCloneBtn.GetComponent<RectTransform>());
 
                 // Category (Red)
-                GameObject rightCatBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Category));
+                GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Category));
                 rightCategoryBtnImage = rightCatBtn.GetComponent<Image>();
                 rightCategoryBtnImage.color = ColorCategory;
                 rightCategoryBtnText = rightCatBtn.GetComponentInChildren<Text>();
-                // rightCategoryBtnText.text = "<"; // Set by create
+                rightSideButtons.Add(rightCatBtn.GetComponent<RectTransform>());
                 
                 // Creator (Green)
-                GameObject rightCreatorBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 3, AnchorPresets.centre, () => ToggleRight(ContentType.Creator));
+                GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 4 - groupGap * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Creator));
                 rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
                 rightCreatorBtnImage.color = ColorCreator;
                 rightCreatorBtnText = rightCreatorBtn.GetComponentInChildren<Text>();
-                // rightCreatorBtnText.text = ">"; // Set by create
+                rightSideButtons.Add(rightCreatorBtn.GetComponent<RectTransform>());
 
                 // Status (Blue) - NEW
-                GameObject rightStatusBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 4, AnchorPresets.centre, () => ToggleRight(ContentType.Status));
+                GameObject rightStatusBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 5 - groupGap * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Status));
                 rightStatusBtn.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.7f, 1f);
+                rightSideButtons.Add(rightStatusBtn.GetComponent<RectTransform>());
 
                 // Replace Toggle (Right)
-                GameObject rightReplaceBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 5, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
                 rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
+                rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
 
                 // Undo (Right)
-                GameObject rightUndoBtn = UI.CreateUIButton(rightButtonsContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 6, AnchorPresets.centre, Undo);
+                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 7 - groupGap * 4, AnchorPresets.centre, Undo);
                 rightUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
                 rightUndoBtn.GetComponentInChildren<Text>().color = Color.white;
+                rightSideButtons.Add(rightUndoBtn.GetComponent<RectTransform>());
 
                 // Left Button Container
-                GameObject leftButtonsContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleLeft, 130, 430, new Vector2(-120, 0));
-                sideButtonGroups.Add(leftButtonsContainer.AddComponent<CanvasGroup>());
+                leftSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleLeft, 130, 580, new Vector2(-120, 0));
+                sideButtonGroups.Add(leftSideContainer.AddComponent<CanvasGroup>());
 
                 // Left Toggle Buttons
+                // Settings (Topmost)
+                GameObject leftSettingsBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Settings", btnFontSize, 0, startY, AnchorPresets.centre, () => {
+                    ToggleSettings(false);
+                });
+                leftSettingsBtn.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.6f, 1f); // Blueish
+                leftSideButtons.Add(leftSettingsBtn.GetComponent<RectTransform>());
+
                 // Follow (Top)
-                GameObject leftFollowBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY, AnchorPresets.centre, ToggleFollowMode);
+                GameObject leftFollowBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
                 leftFollowBtnImage = leftFollowBtn.GetComponent<Image>();
                 leftFollowBtnText = leftFollowBtn.GetComponentInChildren<Text>();
                 leftFollowBtnImage.color = Color.gray;
+                leftSideButtons.Add(leftFollowBtn.GetComponent<RectTransform>());
 
                 // Clone (Gray)
-                GameObject leftCloneBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing, AnchorPresets.centre, () => {
+                GameObject leftCloneBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing * 2 - groupGap, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, false);
                 });
                 leftCloneBtn.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 1f);
+                leftSideButtons.Add(leftCloneBtn.GetComponent<RectTransform>());
 
                 // Category (Red)
-                GameObject leftCatBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
+                GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
                 leftCategoryBtnImage = leftCatBtn.GetComponent<Image>();
                 leftCategoryBtnImage.color = ColorCategory;
                 leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>();
-                // leftCategoryBtnText.text = "<"; // Set by create
+                leftSideButtons.Add(leftCatBtn.GetComponent<RectTransform>());
                 
                 // Creator (Green)
-                GameObject leftCreatorBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
+                GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 4 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
                 leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
                 leftCreatorBtnImage.color = ColorCreator;
                 leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>();
-                // leftCreatorBtnText.text = "<"; // Set by create
+                leftSideButtons.Add(leftCreatorBtn.GetComponent<RectTransform>());
 
                 // Status (Blue) - NEW
-                GameObject leftStatusBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 4, AnchorPresets.centre, () => ToggleLeft(ContentType.Status));
+                GameObject leftStatusBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 5 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Status));
                 leftStatusBtn.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.7f, 1f);
+                leftSideButtons.Add(leftStatusBtn.GetComponent<RectTransform>());
 
                 // Replace Toggle (Left)
-                GameObject leftReplaceBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 5, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
                 leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
+                leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
 
                 // Undo (Left)
-                GameObject leftUndoBtn = UI.CreateUIButton(leftButtonsContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 6, AnchorPresets.centre, Undo);
+                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 7 - groupGap * 4, AnchorPresets.centre, Undo);
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
                 leftUndoBtn.GetComponentInChildren<Text>().color = Color.white;
+                leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
 
-                CreateCancelButtonsGroup(rightButtonsContainer, btnWidth, btnHeight, startY - spacing * 8 - 80f);
-                CreateCancelButtonsGroup(leftButtonsContainer, btnWidth, btnHeight, startY - spacing * 8 - 80f);
+                GameObject rightCancelGO = CreateCancelButtonsGroup(rightSideContainer, btnWidth, btnHeight, startY - spacing * 9 - 80f - groupGap * 5);
+                rightCancelGroups.Add(rightCancelGO);
+
+                GameObject leftCancelGO = CreateCancelButtonsGroup(leftSideContainer, btnWidth, btnHeight, startY - spacing * 9 - 80f - groupGap * 5);
+                leftCancelGroups.Add(leftCancelGO);
+
+                UpdateSideButtonPositions();
             }
 
             // Add Hover Delegates to all side buttons and containers
@@ -817,18 +878,18 @@ namespace VPB
 
         private void CreatePaginationControls()
         {
-            // Pagination Container (Bottom Center)
+            // Pagination Container (Bottom Left)
             GameObject pageContainer = new GameObject("PaginationContainer");
             pageContainer.transform.SetParent(backgroundBoxGO.transform, false);
             RectTransform pageRT = pageContainer.AddComponent<RectTransform>();
-            pageRT.anchorMin = new Vector2(0.5f, 0);
-            pageRT.anchorMax = new Vector2(0.5f, 0);
-            pageRT.pivot = new Vector2(0.5f, 0);
-            pageRT.anchoredPosition = new Vector2(0, 10);
-            pageRT.sizeDelta = new Vector2(400, 40);
+            pageRT.anchorMin = new Vector2(0, 0);
+            pageRT.anchorMax = new Vector2(0, 0);
+            pageRT.pivot = new Vector2(0, 0.5f);
+            pageRT.anchoredPosition = new Vector2(50, 30); // Centered in 60px footer area, moved right from corner
+            pageRT.sizeDelta = new Vector2(300, 40);
 
             // Prev Button
-            paginationPrevBtn = UI.CreateUIButton(pageContainer, 40, 40, "<", 20, -80, 0, AnchorPresets.middleCenter, PrevPage);
+            paginationPrevBtn = UI.CreateUIButton(pageContainer, 40, 40, "<", 20, 0, 0, AnchorPresets.middleLeft, PrevPage);
             
             // Text
             GameObject textGO = new GameObject("PageText");
@@ -840,18 +901,40 @@ namespace VPB
             paginationText.alignment = TextAnchor.MiddleCenter;
             paginationText.text = "1 / 1";
             RectTransform textRT = textGO.GetComponent<RectTransform>();
-            textRT.anchorMin = new Vector2(0.5f, 0.5f);
-            textRT.anchorMax = new Vector2(0.5f, 0.5f);
-            textRT.pivot = new Vector2(0.5f, 0.5f);
-            textRT.anchoredPosition = new Vector2(0, 0);
+            textRT.anchorMin = new Vector2(0, 0.5f);
+            textRT.anchorMax = new Vector2(0, 0.5f);
+            textRT.pivot = new Vector2(0, 0.5f);
+            textRT.anchoredPosition = new Vector2(50, 0);
             textRT.sizeDelta = new Vector2(100, 40);
 
             // Next Button
-            paginationNextBtn = UI.CreateUIButton(pageContainer, 40, 40, ">", 20, 80, 0, AnchorPresets.middleCenter, NextPage);
+            paginationNextBtn = UI.CreateUIButton(pageContainer, 40, 40, ">", 20, 160, 0, AnchorPresets.middleLeft, NextPage);
 
             // Hover support
             AddHoverDelegate(paginationPrevBtn);
             AddHoverDelegate(paginationNextBtn);
+
+            // Hover Path Text (Bottom Right - now much wider)
+            GameObject pathGO = new GameObject("HoverPathText");
+            pathGO.transform.SetParent(backgroundBoxGO.transform, false);
+            hoverPathText = pathGO.AddComponent<Text>();
+            hoverPathText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            hoverPathText.fontSize = 16;
+            hoverPathText.color = new Color(1f, 1f, 1f, 0.7f);
+            hoverPathText.alignment = TextAnchor.LowerRight;
+            hoverPathText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            hoverPathText.verticalOverflow = VerticalWrapMode.Overflow;
+            hoverPathText.text = "";
+            hoverPathText.raycastTarget = false;
+            RectTransform pathRT = pathGO.GetComponent<RectTransform>();
+            pathRT.anchorMin = new Vector2(0, 0); // Stretch from left
+            pathRT.anchorMax = new Vector2(1, 0); // To right
+            pathRT.pivot = new Vector2(1, 0);
+            pathRT.anchoredPosition = new Vector2(-60, 10); // Offset from right scrollbar
+            pathRT.offsetMin = new Vector2(360, 10); // Start after pagination
+            pathRT.offsetMax = new Vector2(-60, 70); // End before scrollbar
+
+            UpdateSideButtonsVisibility();
         }
 
         private void NextPage()
@@ -869,7 +952,7 @@ namespace VPB
             }
         }
 
-        private void CreateCancelButtonsGroup(GameObject parent, float btnWidth, float btnHeight, float yOffset)
+        private GameObject CreateCancelButtonsGroup(GameObject parent, float btnWidth, float btnHeight, float yOffset)
         {
             float tallHeight = btnHeight * 3f + 8f;
             GameObject container = UI.AddChildGOImage(parent, new Color(0, 0, 0, 0.02f), AnchorPresets.centre, btnWidth, tallHeight, new Vector2(0, yOffset));
@@ -907,6 +990,7 @@ namespace VPB
             AddHoverDelegate(container);
             container.SetActive(false);
             cancelDropGroups.Add(container);
+            return container;
         }
 
         private string dragStatusMsg = null;
@@ -1040,19 +1124,44 @@ namespace VPB
                     if (lastFollowUpdateTime <= 0f || now - lastFollowUpdateTime >= FollowUpdateInterval)
                     {
                         lastFollowUpdateTime = now;
-                        Vector3 lookDir = canvas.transform.position - _cachedCamera.transform.position;
                         
-                        if (lookDir.sqrMagnitude > 0.001f)
+                        // Handle Position Following
+                        if (VPBConfig.Instance.FollowDistance)
                         {
-                            targetFollowRotation = Quaternion.LookRotation(lookDir, Vector3.up);
-
-                            float angleDiff = Quaternion.Angle(canvas.transform.rotation, targetFollowRotation);
-                            if (!isReorienting && angleDiff > ReorientStartAngle) isReorienting = true;
-
-                            if (isReorienting)
+                            Vector3 camPos = _cachedCamera.transform.position;
+                            Vector3 currentPos = canvas.transform.position;
+                            Vector3 toCanvas = currentPos - camPos;
+                            
+                            if (toCanvas.sqrMagnitude > 0.001f)
                             {
-                                canvas.transform.rotation = Quaternion.RotateTowards(canvas.transform.rotation, targetFollowRotation, FollowRotateStepDegrees);
-                                if (Quaternion.Angle(canvas.transform.rotation, targetFollowRotation) < ReorientStopAngle) isReorienting = false;
+                                Vector3 direction = toCanvas.normalized;
+                                Vector3 targetPos = camPos + direction * VPBConfig.Instance.FollowDistanceMeters;
+                                
+                                // Only move if distance changed by more than 0.1m
+                                if (Vector3.Distance(currentPos, targetPos) > 0.1f)
+                                {
+                                    canvas.transform.position = targetPos;
+                                }
+                            }
+                        }
+
+                        // Handle Rotation Following
+                        if (VPBConfig.Instance.FollowAngle)
+                        {
+                            Vector3 lookDir = canvas.transform.position - _cachedCamera.transform.position;
+                            
+                            if (lookDir.sqrMagnitude > 0.001f)
+                            {
+                                targetFollowRotation = Quaternion.LookRotation(lookDir, Vector3.up);
+
+                                float angleDiff = Quaternion.Angle(canvas.transform.rotation, targetFollowRotation);
+                                if (!isReorienting && angleDiff > ReorientStartAngle) isReorienting = true;
+
+                                if (isReorienting)
+                                {
+                                    canvas.transform.rotation = Quaternion.RotateTowards(canvas.transform.rotation, targetFollowRotation, FollowRotateStepDegrees);
+                                    if (Quaternion.Angle(canvas.transform.rotation, targetFollowRotation) < ReorientStopAngle) isReorienting = false;
+                                }
                             }
                         }
                     }
@@ -1600,7 +1709,7 @@ namespace VPB
                     subRT.anchorMin = new Vector2(0, 0);
                     subRT.anchorMax = new Vector2(0, 0.5f);
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
-                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, 60); // Gap for clear button
+                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, 110); // Gap for clear button (moved up)
 
                     // Populate Top (Category)
                     UpdateTabs(ContentType.Category, leftTabContainerGO, leftActiveTabButtons, true);
@@ -1619,7 +1728,7 @@ namespace VPB
                     RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
                     leftRT.anchorMin = new Vector2(0, 0);
                     leftRT.anchorMax = new Vector2(0, 1);
-                    leftRT.offsetMin = new Vector2(10, 20); // Restore default
+                    leftRT.offsetMin = new Vector2(10, 68); // Restore default
 
                     UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                 }
@@ -1665,7 +1774,7 @@ namespace VPB
                     subRT.anchorMin = new Vector2(1, 0);
                     subRT.anchorMax = new Vector2(1, 0.5f);
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
-                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, 60); // Gap for clear button
+                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, 110); // Gap for clear button (moved up)
 
                     // Populate Top (Category)
                     UpdateTabs(ContentType.Category, rightTabContainerGO, rightActiveTabButtons, false);
@@ -1684,7 +1793,7 @@ namespace VPB
                     RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
                     rightRT.anchorMin = new Vector2(1, 0);
                     rightRT.anchorMax = new Vector2(1, 1);
-                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, 20); // Restore default
+                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, 68); // Restore default
 
                     UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                 }
@@ -2121,6 +2230,32 @@ namespace VPB
                     }
                     
                     hasBeenPositioned = true;
+                }
+            }
+        }
+
+        public void SetHoverPath(string path)
+        {
+            if (hoverPathText != null)
+            {
+                // Intelligent wrapping for paths: add zero-width space after separators
+                if (string.IsNullOrEmpty(path))
+                {
+                    hoverPathText.text = "";
+                }
+                else
+                {
+                    string displayPath = path;
+                    // Always split when entering inside a .var package
+                    if (displayPath.Contains(".var:/"))
+                    {
+                        displayPath = displayPath.Replace(".var:/", ".var\n\\");
+                    }
+                    else if (displayPath.Contains(".var:"))
+                    {
+                        displayPath = displayPath.Replace(".var:", ".var\n\\");
+                    }
+                    hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B").Replace(".", ".\u200B");
                 }
             }
         }
@@ -2580,7 +2715,8 @@ namespace VPB
             labelText.color = Color.white;
             labelText.alignment = TextAnchor.MiddleCenter;
             labelText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            labelText.verticalOverflow = VerticalWrapMode.Truncate;
+            labelText.verticalOverflow = VerticalWrapMode.Overflow;
+            labelText.supportRichText = true;
             labelText.raycastTarget = false;
             
             // Label Layout
@@ -2590,6 +2726,7 @@ namespace VPB
             // Hover Logic
             UIHoverReveal hover = btnGO.AddComponent<UIHoverReveal>();
             hover.card = cardGO;
+            hover.panel = this;
             
             // Drag Logic
             UIDraggableItem draggable = btnGO.AddComponent<UIDraggableItem>();
@@ -2659,10 +2796,25 @@ namespace VPB
             Transform navTextTr = btnGO.transform.Find("NavText");
             if (navTextTr != null) navTextTr.gameObject.SetActive(false);
             
+            // Hover Path
+            UIHoverReveal hover = btnGO.GetComponent<UIHoverReveal>();
+            if (hover != null) hover.file = file;
+
             // Label
             Transform labelTr = btnGO.transform.Find("Card/Label");
             Text labelText = labelTr.GetComponent<Text>();
-            labelText.text = file.Name;
+            
+            string nameStr = file.Name;
+            if (file is VarFileEntry vfe && vfe.Package != null)
+            {
+                string ext = Path.GetExtension(nameStr);
+                // Creator.PackageName.Version.var (.json)
+                labelText.text = $"{vfe.Package.Uid}.var ({ext})";
+            }
+            else
+            {
+                labelText.text = nameStr;
+            }
             
             // Draggable
             UIDraggableItem draggable = btnGO.GetComponent<UIDraggableItem>();
@@ -2925,6 +3077,49 @@ namespace VPB
             
             if (leftFollowBtnText != null) leftFollowBtnText.text = text;
             if (leftFollowBtnImage != null) leftFollowBtnImage.color = color;
+        }
+
+        private void UpdateSideButtonPositions()
+        {
+            float spacing = 60f;
+            float groupGap = VPBConfig.Instance.EnableButtonGaps ? 20f : 0f;
+            float startY = 260f;
+
+            // Settings
+            UpdateListPositions(rightSideButtons, startY, spacing, groupGap);
+            UpdateListPositions(leftSideButtons, startY, spacing, groupGap);
+
+            // Cancel zones
+            float cancelY = startY - spacing * 9 - 80f - groupGap * 5;
+            foreach (var go in rightCancelGroups) if (go != null) go.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, cancelY);
+            foreach (var go in leftCancelGroups) if (go != null) go.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, cancelY);
+        }
+
+        private void UpdateListPositions(List<RectTransform> buttons, float startY, float spacing, float gap)
+        {
+            if (buttons == null || buttons.Count < 8) return;
+            
+            // 0: Settings
+            buttons[0].anchoredPosition = new Vector2(0, startY);
+            // 1: Follow
+            buttons[1].anchoredPosition = new Vector2(0, startY - spacing - gap);
+            // 2: Clone
+            buttons[2].anchoredPosition = new Vector2(0, startY - spacing * 2 - gap);
+            // 3: Category
+            buttons[3].anchoredPosition = new Vector2(0, startY - spacing * 3 - gap * 2);
+            // 4: Creator
+            buttons[4].anchoredPosition = new Vector2(0, startY - spacing * 4 - gap * 2);
+            // 5: Status
+            buttons[5].anchoredPosition = new Vector2(0, startY - spacing * 5 - gap * 2);
+            // 6: Add/Replace
+            buttons[6].anchoredPosition = new Vector2(0, startY - spacing * 6 - gap * 3);
+            // 7: Undo
+            buttons[7].anchoredPosition = new Vector2(0, startY - spacing * 7 - gap * 4);
+        }
+
+        public void ToggleSettings(bool onRight)
+        {
+            if (settingsPanel != null) settingsPanel.Toggle(onRight);
         }
 
     }

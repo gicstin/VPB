@@ -246,15 +246,19 @@ namespace VPB
     public class UIHoverReveal : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         public GameObject card;
+        public GalleryPanel panel;
+        public FileEntry file;
         
         public void OnPointerEnter(PointerEventData eventData)
         {
             if (card) card.SetActive(true);
+            if (panel != null && file != null) panel.SetHoverPath(file.Path);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             if (card) card.SetActive(false);
+            if (panel != null) panel.SetHoverPath("");
         }
     }
 
@@ -2407,7 +2411,12 @@ namespace VPB
             
             if (options.Count > 0)
             {
-                ContextMenuPanel.Instance.Show(position, options);
+                string title = entry != null ? entry.Name : "Menu";
+                if (entry is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Creator))
+                {
+                    title += "\n<color=#aaaaaa><size=18>by " + vfe.Package.Creator + "</size></color>";
+                }
+                ContextMenuPanel.Instance.Show(position, options, title);
             }
             else
             {

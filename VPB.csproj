@@ -319,6 +319,8 @@
     <Compile Include="src\MessageKit\MessageKitLite.cs" />
     <Compile Include="src\Messager.cs" />
     <Compile Include="src\Settings.cs" />
+    <Compile Include="src\SettingsPanel.cs" />
+    <Compile Include="src\VPBConfig.cs" />
     <Compile Include="src\unity-object-pool\ObjectPool.cs" />
     <Compile Include="src\unity-object-pool\ObjectPoolContainer.cs" />
     <Compile Include="src\unity-object-pool\PoolManager.cs" />

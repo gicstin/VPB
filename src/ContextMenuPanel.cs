@@ -97,19 +97,45 @@ namespace VPB
         {
             headerGO = new GameObject("Header");
             headerGO.transform.SetParent(parent.transform, false);
+            
+            // Add Image for dragging (needs to be raycast target)
+            Image bg = headerGO.AddComponent<Image>();
+            bg.color = new Color(0, 0, 0, 0.01f); // Nearly transparent but still catches raycasts
+            
+            // Add Draggable
+            UIDraggable drag = headerGO.AddComponent<UIDraggable>();
+            drag.target = transform;
+
             LayoutElement le = headerGO.AddComponent<LayoutElement>();
-            le.minHeight = 50;
-            le.preferredHeight = 50;
+            le.minHeight = 80;
+            le.preferredHeight = 80;
             le.minWidth = 400;
             
-            HorizontalLayoutGroup hlg = headerGO.AddComponent<HorizontalLayoutGroup>();
+            // Title (centered in the whole header)
+            headerText = CreateText(headerGO, "Menu", 24);
+            headerText.alignment = TextAnchor.MiddleCenter;
+            headerText.supportRichText = true;
+            headerText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            headerText.verticalOverflow = VerticalWrapMode.Overflow;
+
+            // Layout for buttons (on top of title)
+            GameObject buttonBarGO = new GameObject("ButtonBar");
+            buttonBarGO.transform.SetParent(headerGO.transform, false);
+            RectTransform bbRT = buttonBarGO.AddComponent<RectTransform>();
+            bbRT.anchorMin = Vector2.zero;
+            bbRT.anchorMax = Vector2.one;
+            bbRT.offsetMin = Vector2.zero;
+            bbRT.offsetMax = Vector2.zero;
+
+            HorizontalLayoutGroup hlg = buttonBarGO.AddComponent<HorizontalLayoutGroup>();
             hlg.childControlWidth = false;
             hlg.childForceExpandWidth = false;
+            hlg.childAlignment = TextAnchor.MiddleLeft;
             hlg.padding = new RectOffset(5, 5, 5, 5);
             
             // Back Button
             GameObject backBtnGO = new GameObject("BackBtn");
-            backBtnGO.transform.SetParent(headerGO.transform, false);
+            backBtnGO.transform.SetParent(buttonBarGO.transform, false);
             Image backImg = backBtnGO.AddComponent<Image>();
             backImg.color = new Color(0.4f, 0.4f, 0.4f);
             backButton = backBtnGO.AddComponent<Button>();
@@ -118,18 +144,10 @@ namespace VPB
             LayoutElement backLE = backBtnGO.AddComponent<LayoutElement>();
             backLE.minWidth = 80;
             backLE.preferredWidth = 80;
+            backLE.minHeight = 40;
+            backLE.preferredHeight = 40;
             
             Text backText = CreateText(backBtnGO, "< Back", 20);
-            
-            // Title
-            GameObject titleGO = new GameObject("Title");
-            titleGO.transform.SetParent(headerGO.transform, false);
-            LayoutElement titleLE = titleGO.AddComponent<LayoutElement>();
-            titleLE.minWidth = 300;
-            titleLE.flexibleWidth = 1;
-            
-            headerText = CreateText(titleGO, "Menu", 24);
-            headerText.alignment = TextAnchor.MiddleCenter;
         }
         
         private Text CreateText(GameObject parent, string content, int size)
@@ -157,17 +175,26 @@ namespace VPB
             if (canvasGO != null) canvasGO.SetActive(false);
         }
 
-        public void Show(Vector3 position, List<Option> options)
+        public void Show(Vector3 position, List<Option> options, string title = "Menu")
         {
             // Reset stack
             pageStack.Clear();
-            PushPage("Menu", options); // Initial page
+            PushPage(title, options); // Initial page
             
+            Camera cam = Camera.main;
+            if (cam != null)
+            {
+                Vector3 dir = position - cam.transform.position;
+                if (dir.magnitude > 2.0f)
+                {
+                    position = cam.transform.position + dir.normalized * 2.0f;
+                }
+            }
+
             transform.position = position;
             if (canvasGO != null) canvasGO.SetActive(true);
             
             // Face camera
-            Camera cam = Camera.main;
             if (cam != null)
             {
                 Vector3 lookPos = transform.position - cam.transform.position;
