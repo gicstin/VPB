@@ -8,8 +8,8 @@ namespace VPB
 {
     public class SettingsPanel
     {
+        public GameObject settingsPaneGO;
         private GameObject backgroundBoxGO;
-        private GameObject settingsPaneGO;
         private RectTransform settingsPaneRT;
         private GameObject settingsScrollContent;
         
@@ -40,6 +40,12 @@ namespace VPB
 
         private float pendingMovementThreshold;
         private float backupMovementThreshold;
+
+        private bool pendingEnableCurvature;
+        private bool backupEnableCurvature;
+
+        private float pendingCurvatureIntensity;
+        private float backupCurvatureIntensity;
 
         private bool pendingEnableGalleryFade;
         private bool backupEnableGalleryFade;
@@ -80,6 +86,10 @@ namespace VPB
             isSettingsOpen = true;
             settingsOnRight = onRight;
             settingsPaneGO.SetActive(true);
+            UpdateCurvatureLayout();
+
+            // Force a curvature refresh to ensure the newly active settings pane gets subdivided and colliders updated
+            VPBConfig.Instance.TriggerChange();
             
             // Initialize pending settings from current config
             pendingEnableButtonGaps = VPBConfig.Instance.EnableButtonGaps;
@@ -105,6 +115,12 @@ namespace VPB
 
             pendingMovementThreshold = VPBConfig.Instance.MovementThreshold;
             backupMovementThreshold = VPBConfig.Instance.MovementThreshold;
+
+            pendingEnableCurvature = VPBConfig.Instance.EnableCurvature;
+            backupEnableCurvature = VPBConfig.Instance.EnableCurvature;
+
+            pendingCurvatureIntensity = VPBConfig.Instance.CurvatureIntensity;
+            backupCurvatureIntensity = VPBConfig.Instance.CurvatureIntensity;
 
             pendingEnableGalleryFade = VPBConfig.Instance.EnableGalleryFade;
             backupEnableGalleryFade = VPBConfig.Instance.EnableGalleryFade;
@@ -152,6 +168,8 @@ namespace VPB
             VPBConfig.Instance.FollowEyeHeight = backupFollowEyeHeight;
             VPBConfig.Instance.ReorientStartAngle = backupReorientStartAngle;
             VPBConfig.Instance.MovementThreshold = backupMovementThreshold;
+            VPBConfig.Instance.EnableCurvature = backupEnableCurvature;
+            VPBConfig.Instance.CurvatureIntensity = backupCurvatureIntensity;
             VPBConfig.Instance.EnableGalleryFade = backupEnableGalleryFade;
             VPBConfig.Instance.EnableGalleryTranslucency = backupEnableGalleryTranslucency;
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
@@ -214,6 +232,8 @@ namespace VPB
                 VPBConfig.Instance.FollowEyeHeight = pendingFollowEyeHeight;
                 VPBConfig.Instance.ReorientStartAngle = pendingReorientStartAngle;
                 VPBConfig.Instance.MovementThreshold = pendingMovementThreshold;
+                // VPBConfig.Instance.EnableCurvature = pendingEnableCurvature;
+                VPBConfig.Instance.CurvatureIntensity = pendingCurvatureIntensity;
                 VPBConfig.Instance.EnableGalleryFade = pendingEnableGalleryFade;
                 VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
@@ -275,6 +295,21 @@ namespace VPB
                 VPBConfig.Instance.GalleryOpacity = val;
                 VPBConfig.Instance.TriggerChange();
             }, "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque.");
+
+            // Curvature (Disabled for now)
+            /*
+            CreateToggleSetting("Enable Curvature", pendingEnableCurvature, (val) => {
+                pendingEnableCurvature = val;
+                VPBConfig.Instance.EnableCurvature = val;
+                VPBConfig.Instance.TriggerChange();
+            }, "Wraps the side panels around you for a more immersive VR experience.");
+
+            CreateSliderSetting("Curvature Intensity", pendingCurvatureIntensity, 0.1f, 1.5f, (val) => {
+                pendingCurvatureIntensity = val;
+                VPBConfig.Instance.CurvatureIntensity = val;
+                VPBConfig.Instance.TriggerChange();
+            }, "How much the side panels wrap around. 1.0 is default, max is 1.5.");
+            */
 
             // Side Button Gaps
             CreateToggleSetting("Side Button Gaps", pendingEnableButtonGaps, (val) => {
@@ -687,6 +722,76 @@ namespace VPB
                     onToggle(true);
                 }
             });
+        }
+
+        public void UpdateCurvatureLayout()
+        {
+            if (settingsPaneGO == null || backgroundBoxGO == null || settingsPaneRT == null) return;
+            
+            Transform canvasT = backgroundBoxGO.transform.parent;
+            if (canvasT == null) return;
+            RectTransform canvasRT = canvasT.GetComponent<RectTransform>();
+            if (canvasRT == null) return;
+            
+            bool enabled = VPBConfig.Instance != null && VPBConfig.Instance.EnableCurvature;
+            float intensity = VPBConfig.Instance != null ? VPBConfig.Instance.CurvatureIntensity : 1.0f;
+            
+            if (!enabled)
+            {
+                // Reset to standard side-docked position
+                settingsPaneRT.anchorMin = new Vector2(settingsOnRight ? 1 : 0, 0.5f);
+                settingsPaneRT.anchorMax = new Vector2(settingsOnRight ? 1 : 0, 0.5f);
+                settingsPaneRT.anchoredPosition3D = new Vector3(settingsOnRight ? 130 : -130, 0, 0);
+                settingsPaneRT.localRotation = Quaternion.identity;
+                return;
+            }
+
+            // Set anchors to center to make 3D positioning absolute relative to parent center
+            settingsPaneRT.anchorMin = new Vector2(0.5f, 0.5f);
+            settingsPaneRT.anchorMax = new Vector2(0.5f, 0.5f);
+
+            // Calculate radius and scale same as the vertex modifier
+            float radius = 2.0f * (1.0f / intensity);
+            if (radius < 0.1f) radius = 0.1f;
+            float scaleX = canvasRT.lossyScale.x;
+            if (scaleX == 0) scaleX = 0.001f;
+
+            // Find where the main panel ends (Background is 1200 wide, so edge is at 600)
+            float edgeX = 600f; 
+            float worldEdgeX = edgeX * scaleX;
+            float angleRad = worldEdgeX / radius;
+            
+            // Calculate edge position in curved space (relative to canvas center)
+            float curvedX = Mathf.Sin(angleRad) * radius / scaleX;
+            float curvedZ = (Mathf.Cos(angleRad) - 1.0f) * radius / scaleX;
+            
+            // If it's on the left, flip X and Angle
+            float sideSign = settingsOnRight ? 1f : -1f;
+            float finalAngleRad = angleRad * sideSign;
+            float finalCurvedX = curvedX * sideSign;
+            
+            // Rotate the panel to be angled toward user
+            // We use the same angle as the curve's end to make it a tangent "wing"
+            settingsPaneRT.localRotation = Quaternion.Euler(0, finalAngleRad * Mathf.Rad2Deg, 0);
+            
+            // The settings pane pivot is middle (0.5, 0.5). 
+            float halfWidth = settingsPaneRT.rect.width * 0.5f;
+            // Overlap slightly with the main panel (as it was originally)
+            float overlap = 100f; 
+            
+            // Direction of the wing (perpendicular to the radius at the edge)
+            // We want the direction to point AWAY from the center on both sides.
+            float dirX = Mathf.Cos(finalAngleRad) * sideSign;
+            float dirZ = -Mathf.Sin(finalAngleRad) * sideSign;
+            
+            float centerX = finalCurvedX + (halfWidth - overlap) * dirX;
+            float centerZ = curvedZ + (halfWidth - overlap) * dirZ;
+            
+            // Apply a small Z-bias toward the user to ensure it stays in front of the main panel where they overlap
+            centerZ += 5f; 
+            
+            // Position relative to backgroundBoxGO center
+            settingsPaneRT.anchoredPosition3D = new Vector3(centerX, 0, centerZ);
         }
     }
 }

@@ -35,6 +35,7 @@ namespace VPB
 
         private string currentPath = "";
         private string currentExtension = "json";
+        private string currentCategoryTitle = "";
         
         public bool IsVisible => canvas != null && canvas.gameObject.activeSelf;
         
@@ -78,10 +79,16 @@ namespace VPB
         private Text rightCreatorBtnText;
         private Image rightCreatorBtnImage;
         
+        private Text rightHubBtnText; // NEW
+        private Image rightHubBtnImage; // NEW
+
         private Text leftCategoryBtnText;
         private Image leftCategoryBtnImage;
         private Text leftCreatorBtnText;
         private Image leftCreatorBtnImage;
+
+        private Text leftHubBtnText; // NEW
+        private Image leftHubBtnImage; // NEW
 
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
@@ -132,6 +139,7 @@ namespace VPB
         private float sideButtonsAlpha = 1f;
         private bool isResizing = false;
         private int hoverCount = 0;
+        private UIDraggable dragger;
         private GameObject pointerDotGO;
         private PointerEventData currentPointerData;
         private List<RectTransform> cancelDropZoneRTs = new List<RectTransform>();
@@ -192,6 +200,7 @@ namespace VPB
         // Define colors for different content types
         public static readonly Color ColorCategory = new Color(0.7f, 0.2f, 0.2f, 1f); // Desaturated Red
         public static readonly Color ColorCreator = new Color(0.3f, 0.6f, 0.3f, 1f); // Desaturated Green
+        public static readonly Color ColorHub = new Color(1f, 0.5f, 0f, 1f); // Orange
         public static readonly Color ColorLicense = new Color(1f, 0f, 1f, 1f); // Magenta
 
         private string dragStatusMsg = null;

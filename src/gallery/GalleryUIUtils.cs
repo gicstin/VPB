@@ -11,15 +11,20 @@ using SimpleJSON;
 
 namespace VPB
 {
-    public class UIDraggable : MonoBehaviour, IBeginDragHandler, IDragHandler
+    public class UIDraggable : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         public Transform target;
+        public bool isDragging { get; private set; }
+        public UnityAction OnDragEnd;
         private float planeDistance;
         private Vector3 offset;
         private Camera dragCam;
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+            isDragging = true;
+
             if (target == null) target = transform;
             dragCam = eventData.pressEventCamera;
             if (dragCam == null) dragCam = Camera.main;
@@ -50,6 +55,12 @@ namespace VPB
                 }
             }
         }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            isDragging = false;
+            if (OnDragEnd != null) OnDragEnd();
+        }
     }
 
     public class UIResizable : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHandler
@@ -63,6 +74,8 @@ namespace VPB
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+
             // Consume the drag start event so it doesn't bubble up to parent UIDraggable
             dragCam = eventData.pressEventCamera;
             if (dragCam == null) dragCam = Camera.main;
@@ -223,6 +236,7 @@ namespace VPB
         
         public void OnBeginDrag(PointerEventData eventData)
         {
+            if (eventData.button != PointerEventData.InputButton.Left) return;
             isDragging = true;
             SetColor(hoverColor);
         }
@@ -318,6 +332,216 @@ namespace VPB
             }
 
             grid.cellSize = new Vector2(cellSize, cellSize);
+        }
+    }
+
+    /// <summary>
+    /// <summary>
+    /// Smoothly bends UI vertices along a cylinder.
+    /// </summary>
+    public class CurvedUIVertexModifier : MonoBehaviour, IMeshModifier
+    {
+        public RectTransform canvasRT;
+        
+        public void ModifyMesh(Mesh mesh) { }
+        public void ModifyMesh(VertexHelper vh)
+        {
+            if (!enabled || VPBConfig.Instance == null || !VPBConfig.Instance.EnableCurvature) return;
+            if (canvasRT == null) return;
+
+            // 0. Subdivide if it's just a simple quad (like background images)
+            // Use a higher subdivision for larger elements to avoid artifacts
+            if (vh.currentVertCount == 4)
+            {
+                RectTransform rt = transform as RectTransform;
+                float width = rt != null ? rt.rect.width : 100f;
+                int segments = width > 500 ? 50 : 15; 
+                SubdivideQuad(vh, segments);
+            }
+
+            // Use a stable reference distance for radius calculation (2 meters)
+            float radius = 2.0f;
+            radius *= (1.0f / VPBConfig.Instance.CurvatureIntensity);
+            if (radius < 0.1f) radius = 0.1f;
+
+            // We need to know the scale to convert between local (pixels) and world units
+            float scaleX = canvasRT.lossyScale.x;
+            if (scaleX == 0) scaleX = 0.001f;
+
+            // Cache transformations
+            Matrix4x4 localToCanvas = canvasRT.worldToLocalMatrix * transform.localToWorldMatrix;
+            Matrix4x4 canvasToLocal = transform.worldToLocalMatrix * canvasRT.localToWorldMatrix;
+
+            // Small Z-bias based on hierarchy depth to prevent Z-fighting
+            float zBias = 0f;
+            Transform p = transform.parent;
+            while (p != null && p != canvasRT.transform) { zBias += 0.1f; p = p.parent; }
+
+            UIVertex v = new UIVertex();
+            for (int i = 0; i < vh.currentVertCount; i++)
+            {
+                vh.PopulateUIVertex(ref v, i);
+                
+                // 1. To Canvas Local Space
+                Vector3 cPos = localToCanvas.MultiplyPoint3x4(v.position);
+                
+                // 2. Apply Cylinder Bend
+                // Convert local X to world-scale X for the angle calculation
+                float worldX = cPos.x * scaleX;
+                float angle = worldX / radius;
+                
+                // Calculate new position in world-scale local space
+                // Wrapping TOWARD user: z becomes negative as |x| increases
+                float newWorldX = Mathf.Sin(angle) * radius;
+                float newWorldZ = (Mathf.Cos(angle) - 1.0f) * radius;
+                
+                // 3. Back to Local Space
+                cPos.x = newWorldX / scaleX;
+                cPos.z = (newWorldZ - zBias * 0.001f) / scaleX; // Apply small Z-bias toward camera
+                
+                v.position = canvasToLocal.MultiplyPoint3x4(cPos);
+                vh.SetUIVertex(v, i);
+            }
+        }
+
+        private void SubdivideQuad(VertexHelper vh, int segments)
+        {
+            List<UIVertex> verts = new List<UIVertex>();
+            // PopulateUIVertex is safer than GetUIVertexStream for raw quads
+            for (int i = 0; i < 4; i++) { UIVertex v = new UIVertex(); vh.PopulateUIVertex(ref v, i); verts.Add(v); }
+
+            UIVertex vLB = verts[0];
+            UIVertex vLT = verts[1];
+            UIVertex vRT = verts[2];
+            UIVertex vRB = verts[3];
+
+            vh.Clear();
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float t = (float)i / segments;
+                UIVertex vBottom = LerpVertex(vLB, vRB, t);
+                UIVertex vTop = LerpVertex(vLT, vRT, t);
+                vh.AddVert(vBottom);
+                vh.AddVert(vTop);
+            }
+
+            for (int i = 0; i < segments; i++)
+            {
+                int baseIdx = i * 2;
+                vh.AddTriangle(baseIdx, baseIdx + 1, baseIdx + 3);
+                vh.AddTriangle(baseIdx, baseIdx + 3, baseIdx + 2);
+            }
+        }
+
+        private UIVertex LerpVertex(UIVertex a, UIVertex b, float t)
+        {
+            UIVertex v = new UIVertex();
+            v.position = Vector3.Lerp(a.position, b.position, t);
+            v.color = Color32.Lerp(a.color, b.color, t);
+            v.uv0 = Vector2.Lerp(a.uv0, b.uv0, t);
+            v.uv1 = Vector2.Lerp(a.uv1, b.uv1, t);
+            v.normal = Vector3.Lerp(a.normal, b.normal, t);
+            v.tangent = Vector4.Lerp(a.tangent, b.tangent, t);
+            return v;
+        }
+    }
+
+    /// <summary>
+    /// Custom raycaster that un-bends the laser ray to match the curved UI.
+    /// </summary>
+    public class CylindricalGraphicRaycaster : GraphicRaycaster
+    {
+        private RectTransform canvasRT;
+
+        protected override void Start()
+        {
+            base.Start();
+            canvasRT = GetComponent<RectTransform>();
+        }
+
+        public override void Raycast(PointerEventData eventData, List<RaycastResult> resultAppend)
+        {
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.EnableCurvature || canvasRT == null)
+            {
+                base.Raycast(eventData, resultAppend);
+                return;
+            }
+
+            Camera eventCam = eventData.pressEventCamera ?? Camera.main;
+            if (eventCam == null) return;
+            Ray ray = eventCam.ScreenPointToRay(eventData.position);
+
+            // 1. Check for hits on flat colliders (like the Settings Panel)
+            // We use RaycastAll to find if we hit any of our UI colliders, even if something else is in the way.
+            RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
+            foreach (var h in hits)
+            {
+                if (h.collider is BoxCollider && h.collider.transform.IsChildOf(canvasRT))
+                {
+                    // For flat panels that are just rotated/moved in 3D (no vertex distortion),
+                    // we map the physical hit point to screen space for the standard raycaster.
+                    Vector3 localHit = h.collider.transform.InverseTransformPoint(h.point);
+                    localHit.z = 0; // Map to the UI plane
+                    Vector3 worldHit = h.collider.transform.TransformPoint(localHit);
+                    
+                    Vector2 originalScreenPos = eventData.position;
+                    eventData.position = eventCam.WorldToScreenPoint(worldHit);
+                    base.Raycast(eventData, resultAppend);
+                    eventData.position = originalScreenPos;
+                    
+                    // If we found a valid UI hit on our panel, we can stop
+                    if (resultAppend.Count > 0) return;
+                }
+            }
+
+            // 2. Perform cylindrical unwrapping for the curved parts
+            // We no longer guard this with a physical raycast check to ensure standard UI elements 
+            // without colliders still work correctly if they are within the curved volume.
+            Vector3 localOrigin = canvasRT.InverseTransformPoint(ray.origin);
+            Vector3 localDir = canvasRT.InverseTransformDirection(ray.direction);
+
+            // Use same stable reference distance as the modifier
+            float radius = 2.0f;
+            radius *= (1.0f / VPBConfig.Instance.CurvatureIntensity);
+            if (radius < 0.1f) radius = 0.1f;
+
+            float scaleX = canvasRT.lossyScale.x;
+            if (scaleX == 0) scaleX = 0.001f;
+            
+            // Convert local units to world-scale for intersection math
+            localOrigin.x *= scaleX;
+            localOrigin.z *= scaleX;
+            localDir.x *= scaleX;
+            localDir.z *= scaleX;
+
+            // Intersection with Cylinder: x^2 + (z + R)^2 = R^2
+            // Center is at (0, 0, -R)
+            float A = localDir.x * localDir.x + localDir.z * localDir.z;
+            float B = 2 * (localOrigin.x * localDir.x + (localOrigin.z + radius) * localDir.z);
+            float C = localOrigin.x * localOrigin.x + (localOrigin.z + radius) * (localOrigin.z + radius) - radius * radius;
+
+            float disc = B * B - 4 * A * C;
+            if (disc < 0) return;
+
+            float t = (-B - Mathf.Sqrt(disc)) / (2 * A);
+            if (t < 0) t = (-B + Mathf.Sqrt(disc)) / (2 * A);
+            if (t < 0) return;
+
+            Vector3 hitPoint = localOrigin + localDir * t;
+
+            // Map back to flat plane coordinates: x_flat = angle * radius
+            float x_flat_world = Mathf.Atan2(hitPoint.x, hitPoint.z + radius) * radius;
+            float x_flat_local = x_flat_world / scaleX;
+            float y_flat_local = hitPoint.y; // Y is unaffected by cylinder wrap
+
+            Vector3 flatWorldPos = canvasRT.TransformPoint(new Vector3(x_flat_local, y_flat_local, 0));
+            Vector2 screenPos = eventCam.WorldToScreenPoint(flatWorldPos);
+
+            Vector2 originalPos = eventData.position;
+            eventData.position = screenPos;
+            base.Raycast(eventData, resultAppend);
+            eventData.position = originalPos;
         }
     }
 
@@ -726,6 +950,8 @@ namespace VPB
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+
             _isDualPose = null;
             _dualPoseNode = null;
             dragCam = eventData.pressEventCamera;
@@ -2862,6 +3088,76 @@ namespace VPB
             return go;
         }
 
+        public static Mesh GenerateCurvedMesh(RectTransform targetRT, RectTransform canvasRT, float radiusBase = 2.0f, int segments = 50)
+        {
+            if (targetRT == null || canvasRT == null || VPBConfig.Instance == null) return null;
+
+            float intensity = VPBConfig.Instance.CurvatureIntensity;
+            float radius = radiusBase * (1.0f / (intensity > 0 ? intensity : 0.001f));
+
+            Mesh mesh = new Mesh();
+            mesh.name = "CurvedUIMesh";
+
+            Rect rect = targetRT.rect;
+            float scaleX = canvasRT.lossyScale.x;
+            if (scaleX == 0) scaleX = 0.001f;
+
+            Matrix4x4 localToCanvas = canvasRT.worldToLocalMatrix * targetRT.localToWorldMatrix;
+
+            List<Vector3> vertices = new List<Vector3>();
+            List<int> triangles = new List<int>();
+            List<Vector2> uvs = new List<Vector2>();
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float t = (float)i / segments;
+                float x = Mathf.Lerp(rect.xMin, rect.xMax, t);
+
+                for (int j = 0; j <= 1; j++)
+                {
+                    float y = (j == 0) ? rect.yMin : rect.yMax;
+                    Vector3 pos = new Vector3(x, y, 0);
+
+                    // To Canvas Local Space
+                    Vector3 cPos = localToCanvas.MultiplyPoint3x4(pos);
+
+                    // Apply Cylinder Bend
+                    float worldX = cPos.x * scaleX;
+                    float angle = worldX / radius;
+
+                    float newWorldX = Mathf.Sin(angle) * radius;
+                    float newWorldZ = (Mathf.Cos(angle) - 1.0f) * radius;
+
+                    cPos.x = newWorldX / scaleX;
+                    cPos.z = newWorldZ / scaleX;
+
+                    // Back to Target Local Space
+                    vertices.Add(targetRT.worldToLocalMatrix.MultiplyPoint3x4(canvasRT.localToWorldMatrix.MultiplyPoint3x4(cPos)));
+                    uvs.Add(new Vector2(t, j));
+                }
+            }
+
+            for (int i = 0; i < segments; i++)
+            {
+                int baseIdx = i * 2;
+                triangles.Add(baseIdx);
+                triangles.Add(baseIdx + 1);
+                triangles.Add(baseIdx + 3);
+
+                triangles.Add(baseIdx);
+                triangles.Add(baseIdx + 3);
+                triangles.Add(baseIdx + 2);
+            }
+
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            return mesh;
+        }
+
         public static GameObject CreateUIButton(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction onClick)
         {
             GameObject buttonGO = AddChildGOImage(parentGO, Color.white, anchorPreset, width, height, new Vector2(xOffset, yOffset));
@@ -3034,23 +3330,13 @@ namespace VPB
             if (Physics.Raycast(ray, out hit, 1000f, layerMask))
             {
                  Atom atom = hit.collider.GetComponentInParent<Atom>();
-                 if (atom != null)
+                 if (atom != null && atom.type == "Person")
                  {
-                     if (atom.type == "Person")
-                     {
-                         statusMsg = $"Target: {atom.name}";
-                         return atom;
-                     }
-                     else
-                     {
-                         statusMsg = $"Hit Atom: {atom.name} ({atom.type})";
-                         return atom;
-                     }
+                     statusMsg = $"Target: {atom.name}";
+                     return atom;
                  }
-                 else
-                 {
-                     statusMsg = $"Hit: {hit.collider.name}";
-                 }
+                 // Return the atom for drag-drop logic even if it's not a Person, but skip message processing
+                 return atom;
             }
             return null;
         }

@@ -10,6 +10,18 @@ namespace VPB
     {
         private void UpdateTabs()
         {
+            if (titleText != null)
+            {
+                if (IsHubMode) titleText.text = "HUB: " + currentHubCategory;
+                else titleText.text = currentCategoryTitle;
+            }
+
+            if (IsHubMode)
+            {
+                UpdateHubLayout();
+                return;
+            }
+
             if (leftActiveContent.HasValue) 
             {
                 UpdateSortButtonText(leftSortBtnText, GetSortState(leftActiveContent.Value.ToString()));
@@ -25,8 +37,12 @@ namespace VPB
                         splitView = true;
                     }
                 }
+                else if (leftActiveContent == ContentType.Hub)
+                {
+                    splitView = true;
+                }
 
-                if (splitView && leftActiveContent == ContentType.Category && leftSubTabScrollGO != null)
+                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub) && leftSubTabScrollGO != null)
                 {
                     // Split Layout
                     leftSubTabScrollGO.SetActive(true);
@@ -53,11 +69,12 @@ namespace VPB
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, 110); // Gap for clear button (moved up)
 
-                    // Populate Top (Category)
-                    UpdateTabs(ContentType.Category, leftTabContainerGO, leftActiveTabButtons, true);
+                    // Populate Top (Category / Hub Category)
+                    UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                     
-                    // Populate Bottom (Tags)
-                    UpdateTabs(ContentType.Tags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+                    // Populate Bottom (Tags / Hub Tags)
+                    ContentType subType = leftActiveContent == ContentType.Hub ? ContentType.HubTags : ContentType.Tags;
+                    UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
                 }
                 else
                 {
@@ -90,8 +107,12 @@ namespace VPB
                         splitView = true;
                     }
                 }
+                else if (rightActiveContent == ContentType.Hub)
+                {
+                    splitView = true;
+                }
 
-                if (splitView && rightActiveContent == ContentType.Category && rightSubTabScrollGO != null)
+                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub) && rightSubTabScrollGO != null)
                 {
                     // Split Layout
                     rightSubTabScrollGO.SetActive(true);
@@ -105,6 +126,18 @@ namespace VPB
                     {
                         rightSubSearchInput.gameObject.SetActive(true);
                         if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
+
+                        // Reset anchor to 0.5f for non-Hub split
+                        RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
+                        rt.anchorMin = new Vector2(1, 0.5f);
+                        rt.anchorMax = new Vector2(1, 0.5f);
+                    }
+
+                    if (rightSubSortBtn != null)
+                    {
+                        RectTransform rt = rightSubSortBtn.GetComponent<RectTransform>();
+                        rt.anchorMin = new Vector2(1, 0.5f);
+                        rt.anchorMax = new Vector2(1, 0.5f);
                     }
                     
                     RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
@@ -118,11 +151,12 @@ namespace VPB
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, 110); // Gap for clear button (moved up)
 
-                    // Populate Top (Category)
-                    UpdateTabs(ContentType.Category, rightTabContainerGO, rightActiveTabButtons, false);
+                    // Populate Top (Category / Hub Category)
+                    UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                     
-                    // Populate Bottom (Tags)
-                    UpdateTabs(ContentType.Tags, rightSubTabContainerGO, rightSubActiveTabButtons, false);
+                    // Populate Bottom (Tags / Hub Tags)
+                    ContentType subType = rightActiveContent == ContentType.Hub ? ContentType.HubTags : ContentType.Tags;
+                    UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
                 else
                 {
@@ -139,6 +173,90 @@ namespace VPB
 
                     UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                 }
+            }
+        }
+
+        private void UpdateHubLayout()
+        {
+            // Left Side: Category (Top) / Tags (Bottom)
+            if (leftTabScrollGO != null && leftSubTabScrollGO != null)
+            {
+                leftTabScrollGO.SetActive(true);
+                leftSubTabScrollGO.SetActive(true);
+                
+                // Left Search Top (Category)
+                if (leftSearchInput != null) 
+                {
+                    leftSearchInput.gameObject.SetActive(true);
+                    // For now, no separate search for categories on left, but let's clear it
+                    if (leftSearchInput.placeholder is Text ph) ph.text = "Categories...";
+                }
+
+                // Left Search Bottom (Tags)
+                if (leftSubSearchInput != null)
+                {
+                    leftSubSearchInput.gameObject.SetActive(true);
+                    if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
+                    if (leftSubSearchInput.placeholder is Text ph) ph.text = "Search Tags...";
+                }
+
+                RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
+                leftRT.anchorMin = new Vector2(0, 0.5f);
+                leftRT.anchorMax = new Vector2(0, 1);
+                leftRT.offsetMin = new Vector2(10, 5); 
+
+                RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
+                subRT.anchorMin = new Vector2(0, 0);
+                subRT.anchorMax = new Vector2(0, 0.5f);
+                subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); 
+                subRT.offsetMin = new Vector2(subRT.offsetMin.x, 110); 
+
+                UpdateTabs(ContentType.Hub, leftTabContainerGO, leftActiveTabButtons, true);
+                UpdateTabs(ContentType.HubTags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+            }
+
+            // Right Side: Pay Type (Top 20%) / Creator (Bottom 80%)
+            if (rightTabScrollGO != null && rightSubTabScrollGO != null)
+            {
+                rightTabScrollGO.SetActive(true);
+                rightSubTabScrollGO.SetActive(true);
+
+                // Right Search Top (Pay Type) - Hide search
+                if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
+
+                // Right Search Bottom (Creators)
+                if (rightSubSearchInput != null)
+                {
+                    rightSubSearchInput.gameObject.SetActive(true);
+                    if (rightSubSearchInput.text != creatorFilter) rightSubSearchInput.text = creatorFilter;
+                    if (rightSubSearchInput.placeholder is Text ph) ph.text = "Search Creators...";
+                    
+                    // Adjust anchor for 70/30 split
+                    RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
+                    rt.anchorMin = new Vector2(1, 0.7f);
+                    rt.anchorMax = new Vector2(1, 0.7f);
+                }
+
+                if (rightSubSortBtn != null)
+                {
+                    RectTransform rt = rightSubSortBtn.GetComponent<RectTransform>();
+                    rt.anchorMin = new Vector2(1, 0.7f);
+                    rt.anchorMax = new Vector2(1, 0.7f);
+                }
+
+                RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
+                rightRT.anchorMin = new Vector2(1, 0.7f);
+                rightRT.anchorMax = new Vector2(1, 1);
+                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, 5);
+
+                RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
+                subRT.anchorMin = new Vector2(1, 0);
+                subRT.anchorMax = new Vector2(1, 0.7f);
+                subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55);
+                subRT.offsetMin = new Vector2(subRT.offsetMin.x, 110); // Gap for clear button? Hub Creators doesn't have one yet but consistent
+
+                UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
+                UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);
             }
         }
 
@@ -247,6 +365,22 @@ namespace VPB
                         }
                     }, trackedButtons);
                 }
+            }
+            else if (contentType == ContentType.Hub)
+            {
+                 UpdateHubCategories(container, trackedButtons, isLeft);
+            }
+            else if (contentType == ContentType.HubTags)
+            {
+                 UpdateHubTags(container, trackedButtons, isLeft);
+            }
+            else if (contentType == ContentType.HubPayTypes)
+            {
+                 UpdateHubPayTypes(container, trackedButtons, isLeft);
+            }
+            else if (contentType == ContentType.HubCreators)
+            {
+                 UpdateHubCreators(container, trackedButtons, isLeft);
             }
             else if (contentType == ContentType.Tags)
             {

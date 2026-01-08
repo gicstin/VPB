@@ -188,8 +188,10 @@ namespace VPB
             float leftOffset = 20;
             float rightOffset = -20;
             
+            bool forceBoth = IsHubMode;
+            
             // Left Side
-            if (leftActiveContent.HasValue && leftTabScrollGO != null)
+            if ((forceBoth || leftActiveContent.HasValue) && leftTabScrollGO != null)
             {
                 leftTabScrollGO.SetActive(true);
                 leftOffset = 230; 
@@ -200,19 +202,21 @@ namespace VPB
                 {
                     leftSearchInput.gameObject.SetActive(true);
                     string target = "";
-                    if (leftActiveContent.Value == ContentType.Category) target = categoryFilter;
-                    else if (leftActiveContent.Value == ContentType.Creator) target = creatorFilter;
+                    ContentType type = leftActiveContent.HasValue ? leftActiveContent.Value : ContentType.Hub;
+
+                    if (type == ContentType.Category) target = categoryFilter;
+                    else if (type == ContentType.Creator) target = creatorFilter;
                     else target = ""; // Status filter?
 
                     if (leftSearchInput.text != target) leftSearchInput.text = target;
                     
                     if (leftSearchInput.placeholder is Text ph)
                     {
-                        ph.text = leftActiveContent.Value.ToString() + "...";
+                        ph.text = type.ToString() + "...";
                     }
                     
                     // Hide search input for Status for now
-                    if (leftActiveContent.Value == ContentType.Status) leftSearchInput.gameObject.SetActive(false);
+                    if (type == ContentType.Status) leftSearchInput.gameObject.SetActive(false);
                 }
             }
             else if (leftTabScrollGO != null)
@@ -228,7 +232,7 @@ namespace VPB
             }
             
             // Right Side
-            if (rightActiveContent.HasValue && rightTabScrollGO != null)
+            if ((forceBoth || rightActiveContent.HasValue) && rightTabScrollGO != null)
             {
                 rightTabScrollGO.SetActive(true);
                 rightOffset = -230;
@@ -239,19 +243,21 @@ namespace VPB
                 {
                     rightSearchInput.gameObject.SetActive(true);
                     string target = "";
-                    if (rightActiveContent.Value == ContentType.Category) target = categoryFilter;
-                    else if (rightActiveContent.Value == ContentType.Creator) target = creatorFilter;
+                    ContentType type = rightActiveContent.HasValue ? rightActiveContent.Value : ContentType.Hub;
+
+                    if (type == ContentType.Category) target = categoryFilter;
+                    else if (type == ContentType.Creator) target = creatorFilter;
                     else target = "";
 
                     if (rightSearchInput.text != target) rightSearchInput.text = target;
 
                     if (rightSearchInput.placeholder is Text ph)
                     {
-                        ph.text = rightActiveContent.Value.ToString() + "...";
+                        ph.text = type.ToString() + "...";
                     }
 
                     // Hide search input for Status for now
-                    if (rightActiveContent.Value == ContentType.Status) rightSearchInput.gameObject.SetActive(false);
+                    if (type == ContentType.Status) rightSearchInput.gameObject.SetActive(false);
                 }
             }
             else if (rightTabScrollGO != null)
@@ -274,6 +280,7 @@ namespace VPB
 
         private void UpdateButtonStates()
         {
+             ApplyCurvatureToChildren();
              // Text updates disabled as per request to keep static labels
              /*
              UpdateButtonState(rightCategoryBtnText, true, ContentType.Category);
@@ -281,6 +288,103 @@ namespace VPB
              UpdateButtonState(leftCategoryBtnText, false, ContentType.Category);
              UpdateButtonState(leftCreatorBtnText, false, ContentType.Creator);
              */
+        }
+
+        private void ApplyCurvatureToChildren()
+        {
+            if (canvas == null) return;
+            RectTransform canvasRT = canvas.GetComponent<RectTransform>();
+            bool enabled = VPBConfig.Instance != null && VPBConfig.Instance.EnableCurvature;
+
+            // Apply to all Graphic components in the canvas
+            Graphic[] graphics = canvas.GetComponentsInChildren<Graphic>(true);
+            foreach (var g in graphics)
+            {
+                // Skip if it's part of the settings panel - we want that to stay flat for better slider interaction
+                bool isSettingsChild = settingsPanel != null && settingsPanel.settingsPaneGO != null && 
+                                     g.transform.IsChildOf(settingsPanel.settingsPaneGO.transform);
+
+                // Also skip side panes (tabs, search, sort) to avoid clipping artifacts on large widths
+                bool isSidePaneChild = (leftTabScrollGO != null && g.transform.IsChildOf(leftTabScrollGO.transform)) ||
+                                     (rightTabScrollGO != null && g.transform.IsChildOf(rightTabScrollGO.transform)) ||
+                                     (leftSubTabScrollGO != null && g.transform.IsChildOf(leftSubTabScrollGO.transform)) ||
+                                     (rightSubTabScrollGO != null && g.transform.IsChildOf(rightSubTabScrollGO.transform)) ||
+                                     (leftSearchInput != null && g.transform.IsChildOf(leftSearchInput.transform)) ||
+                                     (rightSearchInput != null && g.transform.IsChildOf(rightSearchInput.transform)) ||
+                                     (leftSortBtn != null && g.transform.IsChildOf(leftSortBtn.transform)) ||
+                                     (rightSortBtn != null && g.transform.IsChildOf(rightSortBtn.transform)) ||
+                                     (leftSubSortBtn != null && g.transform.IsChildOf(leftSubSortBtn.transform)) ||
+                                     (rightSubSortBtn != null && g.transform.IsChildOf(rightSubSortBtn.transform)) ||
+                                     (leftSubSearchInput != null && g.transform.IsChildOf(leftSubSearchInput.transform)) ||
+                                     (rightSubSearchInput != null && g.transform.IsChildOf(rightSubSearchInput.transform)) ||
+                                     (leftSubClearBtn != null && g.transform.IsChildOf(leftSubClearBtn.transform)) ||
+                                     (rightSubClearBtn != null && g.transform.IsChildOf(rightSubClearBtn.transform));
+                
+                var mod = g.gameObject.GetComponent<CurvedUIVertexModifier>();
+                
+                if (isSettingsChild || isSidePaneChild)
+                {
+                    if (mod != null) mod.enabled = false;
+                    continue;
+                }
+
+                if (mod == null && enabled)
+                {
+                    mod = g.gameObject.AddComponent<CurvedUIVertexModifier>();
+                }
+                
+                if (mod != null)
+                {
+                    mod.canvasRT = canvasRT;
+                    mod.enabled = enabled;
+                    g.SetVerticesDirty(); // Force remesh
+                }
+            }
+
+            // Update Background MeshCollider for accurate laser dot and physical interaction
+            UpdateMeshCollider(backgroundBoxGO, canvasRT, enabled, true);
+
+            // Also update Settings Panel if it exists - but use a FLAT collider for it
+            if (settingsPanel != null)
+            {
+                settingsPanel.UpdateCurvatureLayout();
+                UpdateMeshCollider(settingsPanel.settingsPaneGO, canvasRT, enabled, false);
+            }
+        }
+
+        private void UpdateMeshCollider(GameObject go, RectTransform canvasRT, bool enabled, bool curved)
+        {
+            if (go == null) return;
+            
+            if (!curved || !enabled)
+            {
+                var existingMC = go.GetComponent<MeshCollider>();
+                if (existingMC != null) Destroy(existingMC);
+                
+                var bc = go.GetComponent<BoxCollider>();
+                if (enabled)
+                {
+                    if (bc == null) bc = go.AddComponent<BoxCollider>();
+                    RectTransform rt = go.GetComponent<RectTransform>();
+                    // Make collider significantly thicker (20 units) for more reliable interaction in 3D space
+                    bc.size = new Vector3(rt.rect.width, rt.rect.height, 20f);
+                    // Adjust center based on RectTransform pivot
+                    Vector2 pivot = rt.pivot;
+                    bc.center = new Vector3((0.5f - pivot.x) * rt.rect.width, (0.5f - pivot.y) * rt.rect.height, 0f);
+                }
+                else if (bc != null)
+                {
+                    Destroy(bc);
+                }
+                return;
+            }
+
+            var existingBC = go.GetComponent<BoxCollider>();
+            if (existingBC != null) Destroy(existingBC);
+
+            var mc = go.GetComponent<MeshCollider>();
+            if (mc == null) mc = go.AddComponent<MeshCollider>();
+            mc.sharedMesh = UI.GenerateCurvedMesh(go.GetComponent<RectTransform>(), canvasRT);
         }
 
         private void UpdateButtonState(Text btnText, bool isRight, ContentType type)
@@ -362,7 +466,7 @@ namespace VPB
 
         private void UpdateListPositions(List<RectTransform> buttons, float startY, float spacing, float gap)
         {
-            if (buttons == null || buttons.Count < 8) return;
+            if (buttons == null || buttons.Count < 9) return;
             
             // 0: Settings
             buttons[0].anchoredPosition = new Vector2(0, startY);
@@ -376,10 +480,12 @@ namespace VPB
             buttons[4].anchoredPosition = new Vector2(0, startY - spacing * 4 - gap * 2);
             // 5: Status
             buttons[5].anchoredPosition = new Vector2(0, startY - spacing * 5 - gap * 2);
-            // 6: Add/Replace
-            buttons[6].anchoredPosition = new Vector2(0, startY - spacing * 6 - gap * 3);
-            // 7: Undo
-            buttons[7].anchoredPosition = new Vector2(0, startY - spacing * 7 - gap * 4);
+            // 6: Hub
+            buttons[6].anchoredPosition = new Vector2(0, startY - spacing * 6 - gap * 2);
+            // 7: Add/Replace
+            buttons[7].anchoredPosition = new Vector2(0, startY - spacing * 7 - gap * 3);
+            // 8: Undo
+            buttons[8].anchoredPosition = new Vector2(0, startY - spacing * 8 - gap * 4);
         }
 
         private void SetLayerRecursive(GameObject go, int layer)

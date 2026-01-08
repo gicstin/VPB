@@ -53,6 +53,8 @@ namespace VPB
         }
         public float ReorientStartAngle = 20f;
         public float MovementThreshold = 0.1f;
+        public bool EnableCurvature = false;
+        public float CurvatureIntensity = 1.0f;
         public bool EnableGalleryFade = true;
         public bool EnableGalleryTranslucency = false;
         public float GalleryOpacity = 1.0f;
@@ -85,6 +87,8 @@ namespace VPB
             _followEyeHeight = false;
             ReorientStartAngle = 20f;
             MovementThreshold = 0.1f;
+            EnableCurvature = false;
+            CurvatureIntensity = 1.0f;
             EnableGalleryFade = true;
             EnableGalleryTranslucency = false;
             GalleryOpacity = 1.0f;
@@ -106,6 +110,9 @@ namespace VPB
                         if (node["FollowEyeHeight"] != null) _followEyeHeight = node["FollowEyeHeight"].AsBool;
                         if (node["ReorientStartAngle"] != null) ReorientStartAngle = node["ReorientStartAngle"].AsFloat;
                         if (node["MovementThreshold"] != null) MovementThreshold = node["MovementThreshold"].AsFloat;
+                        // if (node["EnableCurvature"] != null) EnableCurvature = node["EnableCurvature"].AsBool;
+                        EnableCurvature = false; // Force disabled for now
+                        if (node["CurvatureIntensity"] != null) CurvatureIntensity = node["CurvatureIntensity"].AsFloat;
                         if (node["EnableGalleryFade"] != null) EnableGalleryFade = node["EnableGalleryFade"].AsBool;
                         if (node["EnableGalleryTranslucency"] != null) EnableGalleryTranslucency = node["EnableGalleryTranslucency"].AsBool;
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
@@ -132,6 +139,8 @@ namespace VPB
                 node["FollowEyeHeight"].AsBool = _followEyeHeight;
                 node["ReorientStartAngle"].AsFloat = ReorientStartAngle;
                 node["MovementThreshold"].AsFloat = MovementThreshold;
+                node["EnableCurvature"].AsBool = EnableCurvature;
+                node["CurvatureIntensity"].AsFloat = CurvatureIntensity;
                 node["EnableGalleryFade"].AsBool = EnableGalleryFade;
                 node["EnableGalleryTranslucency"].AsBool = EnableGalleryTranslucency;
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;

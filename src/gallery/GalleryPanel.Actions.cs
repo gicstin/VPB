@@ -14,6 +14,7 @@ namespace VPB
             if (canvas == null) Init();
 
             titleText.text = title;
+            currentCategoryTitle = title;
             bool paramsChanged = (currentExtension != extension || currentPath != path);
             if (paramsChanged)
             {

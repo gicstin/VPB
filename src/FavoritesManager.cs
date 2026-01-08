@@ -104,6 +104,18 @@ namespace VPB
                                     byte[] bytes = reader.ReadBytes(length);
                                     string uid = Encoding.UTF8.GetString(bytes);
 
+                                    if (uid.Contains("KarmaggedonVAM.DanaD3Lor3nz0_KARVAM.3.var") ||
+                                        uid.Contains("caelryn.Jade_r.6.var") ||
+                                        uid.Contains("caelryn.Aiko.3.var") ||
+                                        uid.Contains("GilgameshVR.Gabriela.1.var") ||
+                                        uid.Contains("via5.Synergy.3.var") ||
+                                        uid.Contains("SupaRioAmateur.Scarlet_FF7R.4.var") ||
+                                        uid.Contains("MeshedVR.BonusScenes.9.var") ||
+                                        uid.Contains("MeshedVR.OlderContent.1.var"))
+                                    {
+                                        Debug.Log($"[VPB-DEBUG] Loading favorite from cache: {uid} | Action: {action}");
+                                    }
+
                                     if (action == 1)
                                     {
                                         if (!favoriteUids.Contains(uid)) favoriteUids.Add(uid);
@@ -234,6 +246,18 @@ namespace VPB
         {
             if (entry == null) return;
             
+            if (entry.Uid.Contains("KarmaggedonVAM.DanaD3Lor3nz0_KARVAM.3.var") ||
+                entry.Uid.Contains("caelryn.Jade_r.6.var") ||
+                entry.Uid.Contains("caelryn.Aiko.3.var") ||
+                entry.Uid.Contains("GilgameshVR.Gabriela.1.var") ||
+                entry.Uid.Contains("via5.Synergy.3.var") ||
+                entry.Uid.Contains("SupaRioAmateur.Scarlet_FF7R.4.var") ||
+                entry.Uid.Contains("MeshedVR.BonusScenes.9.var") ||
+                entry.Uid.Contains("MeshedVR.OlderContent.1.var"))
+            {
+                Debug.Log($"[VPB-DEBUG] SetFavorite: {entry.Uid} | NewValue: {isFavorite}");
+            }
+
             bool current = IsFavorite(entry);
             if (current == isFavorite) return;
 
@@ -288,12 +312,11 @@ namespace VPB
             }
             else if (entry is VarFileEntry varEntry)
             {
-                // Saves/AddonPackagesFilePrefs/[PackageUID]/[InternalPath].fav
+                // AddonPackagesFilePrefs/[PackageUID]/[InternalPath].fav
                 string internalPath = varEntry.InternalPath.Replace('/', Path.DirectorySeparatorChar);
                 string packageUid = varEntry.Package.Uid;
                 
-                string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "Saves");
-                baseDir = Path.Combine(baseDir, "AddonPackagesFilePrefs");
+                string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "AddonPackagesFilePrefs");
                 return Path.Combine(baseDir, Path.Combine(packageUid, internalPath + ".fav"));
             }
             return null;

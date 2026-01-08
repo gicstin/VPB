@@ -12,6 +12,11 @@ namespace VPB
     {
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false)
         {
+            if (IsHubMode)
+            {
+                RefreshHubItems();
+                return;
+            }
             if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }

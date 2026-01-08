@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.IO;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,10 +12,29 @@ namespace VPB
         private void LoadThumbnail(FileEntry file, RawImage target)
         {
             string imgPath = "";
-            if (file.Path.EndsWith(".json") || file.Path.EndsWith(".vap") || file.Path.EndsWith(".vam") || file.Path.EndsWith(".assetbundle") || file.Path.EndsWith(".unity3d"))
-                imgPath = Regex.Replace(file.Path, "\\.(json|vac|vap|vam|scene|assetbundle|unity3d)$", ".jpg");
-            else if (file.Path.EndsWith(".jpg") || file.Path.EndsWith(".png"))
+            string lowerPath = file.Path.ToLowerInvariant();
+            if (lowerPath.EndsWith(".jpg") || lowerPath.EndsWith(".png"))
+            {
                 imgPath = file.Path;
+            }
+            else
+            {
+                // Sister-file rule: same name, .jpg or .png extension
+                // Optimized discovery via archive flattening (FileManager.FileExists)
+                string testJpg = Path.ChangeExtension(file.Path, ".jpg");
+                if (FileManager.FileExists(testJpg))
+                {
+                    imgPath = testJpg;
+                }
+                else
+                {
+                    string testPng = Path.ChangeExtension(file.Path, ".png");
+                    if (FileManager.FileExists(testPng))
+                    {
+                        imgPath = testPng;
+                    }
+                }
+            }
 
             if (string.IsNullOrEmpty(imgPath)) return;
 
@@ -45,7 +65,18 @@ namespace VPB
                         target.texture = res.tex;
                         target.color = Color.white;
                     }
-                    StartCoroutine(GenerateAndCacheThumbnail(imgPath, res.tex, file.LastWriteTime.ToFileTime()));
+                    
+                    long imgTime = file.LastWriteTime.ToFileTime();
+                    if (imgPath != file.Path)
+                    {
+                        FileEntry fe = FileManager.GetFileEntry(imgPath);
+                        if (fe != null) imgTime = fe.LastWriteTime.ToFileTime();
+                    }
+                    
+                    if (!res.loadedFromGalleryCache)
+                    {
+                        StartCoroutine(GenerateAndCacheThumbnail(imgPath, res.tex, imgTime));
+                    }
                 }
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
@@ -61,6 +92,8 @@ namespace VPB
             byte[] bytes = null;
             int w = sourceTex.width;
             int h = sourceTex.height;
+
+            TextureFormat format = sourceTex.format;
 
             if (w <= maxDim && h <= maxDim)
             {
@@ -78,7 +111,8 @@ namespace VPB
                 RenderTexture prev = RenderTexture.active;
                 RenderTexture.active = rt;
                 
-                Texture2D newTex = new Texture2D(w, h, TextureFormat.RGB24, false);
+                format = TextureFormat.RGB24;
+                Texture2D newTex = new Texture2D(w, h, format, false);
                 newTex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
                 newTex.Apply();
                 
@@ -91,7 +125,7 @@ namespace VPB
 
             if (bytes != null)
             {
-                GalleryThumbnailCache.Instance.SaveThumbnail(path, bytes, bytes.Length, w, h, TextureFormat.RGB24, lastWriteTime);
+                GalleryThumbnailCache.Instance.SaveThumbnail(path, bytes, bytes.Length, w, h, format, lastWriteTime);
             }
         }
     }

@@ -44,6 +44,7 @@ namespace VPB
             {
                 VPBConfig.Instance.ConfigChanged -= UpdateSideButtonPositions;
                 VPBConfig.Instance.ConfigChanged -= UpdateSideButtonsVisibility;
+                VPBConfig.Instance.ConfigChanged -= ApplyCurvatureToChildren;
             }
 
             if (canvas != null)
@@ -70,6 +71,7 @@ namespace VPB
             {
                 VPBConfig.Instance.ConfigChanged += UpdateSideButtonPositions;
                 VPBConfig.Instance.ConfigChanged += UpdateSideButtonsVisibility;
+                VPBConfig.Instance.ConfigChanged += ApplyCurvatureToChildren;
             }
 
             // ... standard Init code follows ...
@@ -91,11 +93,19 @@ namespace VPB
             // So if resize handles work WITHOUT collider, we should aim for that.
             
             // Standard GraphicRaycaster is needed for UI elements without colliders.
-            GraphicRaycaster gr = canvasGO.AddComponent<GraphicRaycaster>();
+            // We use our custom CylindricalGraphicRaycaster to support curvature.
+            CylindricalGraphicRaycaster gr = canvasGO.AddComponent<CylindricalGraphicRaycaster>();
             gr.ignoreReversedGraphics = true;
             
             if (SuperController.singleton != null)
                 SuperController.singleton.AddCanvas(canvas);
+
+            // VaM's AddCanvas often adds a BoxCollider to the canvasGO or its children.
+            // We need to remove it so it doesn't interfere with our curved interaction/MeshCollider.
+            foreach (var bc in canvasGO.GetComponentsInChildren<BoxCollider>(true))
+            {
+                Destroy(bc);
+            }
 
             if (Application.isPlaying)
             {
@@ -128,8 +138,19 @@ namespace VPB
             // AddHoverDelegate
             AddHoverDelegate(backgroundBoxGO);
             
-            UIDraggable dragger = backgroundBoxGO.AddComponent<UIDraggable>();
+            dragger = backgroundBoxGO.AddComponent<UIDraggable>();
             dragger.target = canvasGO.transform;
+            dragger.OnDragEnd = () => {
+                // Toggle active state to force VaM/Unity to refresh interaction state after move
+                if (canvasGO != null)
+                {
+                    canvasGO.SetActive(false);
+                    canvasGO.SetActive(true);
+                    
+                    // Also ensure curvature is correctly aligned with new position
+                    ApplyCurvatureToChildren();
+                }
+            };
 
             settingsPanel = new SettingsPanel(backgroundBoxGO);
 
@@ -261,6 +282,7 @@ namespace VPB
                 // Right Sub Search
                 rightSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
                     tagFilter = val;
+                    hubTagPage = 0;
                     UpdateTabs();
                 });
                 RectTransform rSubSearchRT = rightSubSearchInput.GetComponent<RectTransform>();
@@ -382,6 +404,7 @@ namespace VPB
                 // Left Sub Search
                 leftSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
                     tagFilter = val;
+                    hubTagPage = 0;
                     UpdateTabs();
                 });
                 RectTransform lSubSearchRT = leftSubSearchInput.GetComponent<RectTransform>();
@@ -506,14 +529,23 @@ namespace VPB
                 rightStatusBtn.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.7f, 1f);
                 rightSideButtons.Add(rightStatusBtn.GetComponent<RectTransform>());
 
+                // Hub (Orange) - NEW (Disabled for now)
+                /*
+                GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 6 - groupGap * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Hub));
+                rightHubBtnImage = rightHubBtn.GetComponent<Image>();
+                rightHubBtnImage.color = ColorHub;
+                rightHubBtnText = rightHubBtn.GetComponentInChildren<Text>();
+                rightSideButtons.Add(rightHubBtn.GetComponent<RectTransform>());
+                */
+
                 // Replace Toggle (Right)
-                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
                 rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
 
                 // Undo (Right)
-                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 7 - groupGap * 4, AnchorPresets.centre, Undo);
+                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, Undo);
                 rightUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
                 rightUndoBtn.GetComponentInChildren<Text>().color = Color.white;
                 rightSideButtons.Add(rightUndoBtn.GetComponent<RectTransform>());
@@ -563,14 +595,23 @@ namespace VPB
                 leftStatusBtn.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.7f, 1f);
                 leftSideButtons.Add(leftStatusBtn.GetComponent<RectTransform>());
 
+                // Hub (Orange) - NEW (Disabled for now)
+                /*
+                GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 6 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Hub));
+                leftHubBtnImage = leftHubBtn.GetComponent<Image>();
+                leftHubBtnImage.color = ColorHub;
+                leftHubBtnText = leftHubBtn.GetComponentInChildren<Text>();
+                leftSideButtons.Add(leftHubBtn.GetComponent<RectTransform>());
+                */
+
                 // Replace Toggle (Left)
-                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
                 leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
 
                 // Undo (Left)
-                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 7 - groupGap * 4, AnchorPresets.centre, Undo);
+                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, Undo);
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
                 leftUndoBtn.GetComponentInChildren<Text>().color = Color.white;
                 leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
@@ -755,16 +796,7 @@ namespace VPB
             }
             else
             {
-                if (IsVisible && statusBarText != null && !UnityEngine.XR.XRSettings.enabled)
-                {
-                     string msg;
-                     Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : Camera.main;
-                     if (cam != null)
-                     {
-                         SceneUtils.DetectAtom(Input.mousePosition, cam, out msg);
-                         if (!string.IsNullOrEmpty(msg)) finalStatus = msg;
-                     }
-                }
+                // Hover detection for items in scene removed as per request
             }
 
             if (statusBarText != null)
@@ -808,7 +840,7 @@ namespace VPB
                 }
             }
 
-            if (followUser && canvas != null)
+            if (canvas != null)
             {
                 if (_cachedCamera == null || !_cachedCamera.isActiveAndEnabled)
                     _cachedCamera = Camera.main;
@@ -822,70 +854,104 @@ namespace VPB
                     {
                         lastFollowUpdateTime = now;
 
-                        if (!offsetsInitialized)
+                        if (followUser)
                         {
-                            Vector3 offset = canvas.transform.position - _cachedCamera.transform.position;
-                            followYOffset = offset.y;
-                            followXZOffset = new Vector2(offset.x, offset.z);
-                            offsetsInitialized = true;
-                        }
-                        
-                        // Handle Position Following
-                        Vector3 camPos = _cachedCamera.transform.position;
-                        Vector3 currentPos = canvas.transform.position;
-                        Vector3 targetPos = currentPos;
-
-                        // Horizontal Following (Strictly respect FollowDistance)
-                        if (VPBConfig.Instance.FollowDistance)
-                        {
-                            Vector3 hOffset = new Vector3(followXZOffset.x, 0, followXZOffset.y);
-                            if (hOffset.sqrMagnitude < 0.0001f) hOffset = Vector3.forward;
-                            Vector3 hTarget = camPos + hOffset.normalized * VPBConfig.Instance.FollowDistanceMeters;
-                            targetPos.x = hTarget.x;
-                            targetPos.z = hTarget.z;
-                        }
-
-                        // Vertical Following (Eye Height)
-                        if (VPBConfig.Instance.FollowEyeHeight)
-                        {
-                            targetPos.y = camPos.y + followYOffset;
-                        }
-                        else
-                        {
-                            // Stay at current Y
-                            targetPos.y = currentPos.y;
-                        }
-
-                        // Only move if position changed by more than threshold
-                        bool bypassThreshold = VPBConfig.Instance.IsLoadingScene;
-                        if (bypassThreshold || Vector3.Distance(currentPos, targetPos) > VPBConfig.Instance.MovementThreshold)
-                        {
-                            canvas.transform.position = targetPos;
-                        }
-
-                        // Handle Rotation Following (Respect FollowAngle setting)
-                        if (VPBConfig.Instance.FollowAngle || bypassThreshold)
-                        {
-                            Vector3 lookDir = canvas.transform.position - _cachedCamera.transform.position;
-                            if (lookDir.sqrMagnitude > 0.001f)
+                            if (!offsetsInitialized)
                             {
-                                targetFollowRotation = Quaternion.LookRotation(lookDir, Vector3.up);
+                                Vector3 offset = canvas.transform.position - _cachedCamera.transform.position;
+                                followYOffset = offset.y;
+                                followXZOffset = new Vector2(offset.x, offset.z);
+                                offsetsInitialized = true;
+                            }
+                            
+                            // Handle Position Following
+                            Vector3 camPos = _cachedCamera.transform.position;
+                            Vector3 currentPos = canvas.transform.position;
+                            Vector3 targetPos = currentPos;
+
+                            // Capture manual movement as new reference if not following OR if being dragged
+                            if (!VPBConfig.Instance.FollowEyeHeight || (dragger != null && dragger.isDragging))
+                            {
+                                followYOffset = currentPos.y - camPos.y;
+                            }
+
+                            if (!VPBConfig.Instance.FollowDistance || (dragger != null && dragger.isDragging))
+                            {
+                                Vector3 horizontalDiff = new Vector3(currentPos.x - camPos.x, 0, currentPos.z - camPos.z);
+                                followXZOffset = new Vector2(horizontalDiff.x, horizontalDiff.z);
                                 
-                                if (bypassThreshold)
+                                // If dragging, update the target distance config to match the new position
+                                if (dragger != null && dragger.isDragging && VPBConfig.Instance.FollowDistance)
                                 {
-                                    canvas.transform.rotation = targetFollowRotation; // Immediate during load
-                                }
-                                else
-                                {
-                                    float angleDiff = Quaternion.Angle(canvas.transform.rotation, targetFollowRotation);
-                                    if (!isReorienting && angleDiff > VPBConfig.Instance.ReorientStartAngle) isReorienting = true;
-                                    if (isReorienting)
+                                    float newDist = horizontalDiff.magnitude;
+                                    if (newDist > 0.1f) // Avoid zero or near-zero distances
                                     {
-                                        canvas.transform.rotation = Quaternion.RotateTowards(canvas.transform.rotation, targetFollowRotation, FollowRotateStepDegrees);
-                                        if (Quaternion.Angle(canvas.transform.rotation, targetFollowRotation) < ReorientStopAngle) isReorienting = false;
+                                        VPBConfig.Instance.FollowDistanceMeters = Mathf.Clamp(newDist, 1.0f, 5.0f);
+                                        VPBConfig.Instance.TriggerChange();
                                     }
                                 }
                             }
+
+                            // Horizontal Following (Strictly respect FollowDistance)
+                            if (VPBConfig.Instance.FollowDistance)
+                            {
+                                Vector3 hOffset = new Vector3(followXZOffset.x, 0, followXZOffset.y);
+                                if (hOffset.sqrMagnitude < 0.0001f) hOffset = Vector3.forward;
+                                Vector3 hTarget = camPos + hOffset.normalized * VPBConfig.Instance.FollowDistanceMeters;
+                                targetPos.x = hTarget.x;
+                                targetPos.z = hTarget.z;
+                            }
+
+                            // Vertical Following (Eye Height)
+                            if (VPBConfig.Instance.FollowEyeHeight)
+                            {
+                                targetPos.y = camPos.y + followYOffset;
+                            }
+                            else
+                            {
+                                // Stay at current Y
+                                targetPos.y = currentPos.y;
+                            }
+
+                            // Only move if position changed by more than threshold AND we're not currently dragging
+                            bool bypassThreshold = VPBConfig.Instance.IsLoadingScene;
+                            bool isDragging = dragger != null && dragger.isDragging;
+
+                            if (!isDragging && (bypassThreshold || Vector3.Distance(currentPos, targetPos) > VPBConfig.Instance.MovementThreshold))
+                            {
+                                canvas.transform.position = targetPos;
+                            }
+
+                            // Handle Rotation Following (Respect FollowAngle setting)
+                            if (VPBConfig.Instance.FollowAngle || bypassThreshold)
+                            {
+                                Vector3 lookDir = canvas.transform.position - _cachedCamera.transform.position;
+                                if (lookDir.sqrMagnitude > 0.001f)
+                                {
+                                    targetFollowRotation = Quaternion.LookRotation(lookDir, Vector3.up);
+                                    
+                                    if (bypassThreshold)
+                                    {
+                                        canvas.transform.rotation = targetFollowRotation; // Immediate during load
+                                    }
+                                    else
+                                    {
+                                        float angleDiff = Quaternion.Angle(canvas.transform.rotation, targetFollowRotation);
+                                        if (!isReorienting && angleDiff > VPBConfig.Instance.ReorientStartAngle) isReorienting = true;
+                                        if (isReorienting)
+                                        {
+                                            canvas.transform.rotation = Quaternion.RotateTowards(canvas.transform.rotation, targetFollowRotation, FollowRotateStepDegrees);
+                                            if (Quaternion.Angle(canvas.transform.rotation, targetFollowRotation) < ReorientStopAngle) isReorienting = false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Curvature logic (Independent of follow mode)
+                        if (VPBConfig.Instance.EnableCurvature)
+                        {
+                            ApplyCurvatureToChildren();
                         }
                     }
                 }

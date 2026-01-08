@@ -343,6 +343,9 @@
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.cs" />
+    <Compile Include="src\gallery\Hub\GalleryHubController.cs" />
+    <Compile Include="src\gallery\Hub\GalleryHubItem.cs" />
+    <Compile Include="src\gallery\Hub\GalleryPanel.Hub.cs" />
     <Compile Include="src\FavoritesManager.cs" />
     <Compile Include="src\hook\FileManagement\DirectoryEntry.cs" />
     <Compile Include="src\hook\FileManagement\FileEntry.cs" />

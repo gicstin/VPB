@@ -45,6 +45,7 @@ namespace VPB
                 if (_instance == null)
                 {
                     GameObject go = new GameObject("VPB_ContextMenu");
+                    go.layer = 5;
                     _instance = go.AddComponent<ContextMenuPanel>();
                     // Don't destroy on load if needed, but for now just keep it simple
                 }
@@ -61,9 +62,16 @@ namespace VPB
             // Create Canvas
             canvasGO = new GameObject("Canvas");
             canvasGO.transform.SetParent(transform, false);
+            canvasGO.layer = 5; // UI layer
             Canvas canvas = canvasGO.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
-            canvasGO.AddComponent<GraphicRaycaster>();
+            canvas.worldCamera = Camera.main;
+
+            GraphicRaycaster gr = canvasGO.AddComponent<GraphicRaycaster>();
+            gr.ignoreReversedGraphics = true;
+            
+            if (SuperController.singleton != null)
+                SuperController.singleton.AddCanvas(canvas);
             
             RectTransform canvasRT = canvasGO.GetComponent<RectTransform>();
             canvasRT.localScale = new Vector3(0.001f, 0.001f, 0.001f); // VR friendly scale
@@ -71,6 +79,7 @@ namespace VPB
             // Create Panel
             GameObject panelGO = new GameObject("Panel");
             panelGO.transform.SetParent(canvasGO.transform, false);
+            panelGO.layer = 5;
             panelRT = panelGO.AddComponent<RectTransform>();
             // Size will be controlled by ContentSizeFitter
             
@@ -93,10 +102,23 @@ namespace VPB
             CreateHeader(panelGO);
         }
         
+        void OnDestroy()
+        {
+            if (canvasGO != null)
+            {
+                Canvas canvas = canvasGO.GetComponent<Canvas>();
+                if (canvas != null && SuperController.singleton != null)
+                {
+                    SuperController.singleton.RemoveCanvas(canvas);
+                }
+            }
+        }
+
         private void CreateHeader(GameObject parent)
         {
             headerGO = new GameObject("Header");
             headerGO.transform.SetParent(parent.transform, false);
+            headerGO.layer = 5;
             
             // Add Image for dragging (needs to be raycast target)
             Image bg = headerGO.AddComponent<Image>();
@@ -121,6 +143,7 @@ namespace VPB
             // Layout for buttons (on top of title)
             GameObject buttonBarGO = new GameObject("ButtonBar");
             buttonBarGO.transform.SetParent(headerGO.transform, false);
+            buttonBarGO.layer = 5;
             RectTransform bbRT = buttonBarGO.AddComponent<RectTransform>();
             bbRT.anchorMin = Vector2.zero;
             bbRT.anchorMax = Vector2.one;
@@ -136,6 +159,7 @@ namespace VPB
             // Back Button
             GameObject backBtnGO = new GameObject("BackBtn");
             backBtnGO.transform.SetParent(buttonBarGO.transform, false);
+            backBtnGO.layer = 5;
             Image backImg = backBtnGO.AddComponent<Image>();
             backImg.color = new Color(0.4f, 0.4f, 0.4f);
             backButton = backBtnGO.AddComponent<Button>();
@@ -154,6 +178,7 @@ namespace VPB
         {
             GameObject tGO = new GameObject("Text");
             tGO.transform.SetParent(parent.transform, false);
+            tGO.layer = 5;
             RectTransform rt = tGO.AddComponent<RectTransform>();
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
@@ -286,6 +311,7 @@ namespace VPB
         {
             GameObject btnGO = new GameObject("Button");
             btnGO.transform.SetParent(panelRT, false);
+            btnGO.layer = 5;
             
             Image img = btnGO.AddComponent<Image>();
             img.color = new Color(0.3f, 0.3f, 0.3f);
@@ -305,6 +331,7 @@ namespace VPB
             
             GameObject textGO = new GameObject("Text");
             textGO.transform.SetParent(btnGO.transform, false);
+            textGO.layer = 5;
             RectTransform textRT = textGO.AddComponent<RectTransform>();
             textRT.anchorMin = Vector2.zero;
             textRT.anchorMax = Vector2.one;
