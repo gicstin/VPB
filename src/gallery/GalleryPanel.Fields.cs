@@ -229,6 +229,11 @@ namespace VPB
         private Coroutine temporaryStatusCoroutine = null;
 
         public bool isFixedLocally = false;
+        private bool isCollapsed = false;
+        private GameObject collapseTriggerGO;
+        private Text collapseHandleText;
+        private float collapseTimer = 0f;
+        private bool isHoveringTrigger = false;
         private Camera _cachedCamera;
 
         // Sorting

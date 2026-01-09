@@ -17,11 +17,14 @@ namespace VPB
             bool fixedMode = isFixedLocally;
 
             if (leftSideContainer != null) 
-                leftSideContainer.SetActive(mode == "Both" || mode == "Left");
+            {
+                if (isCollapsed) leftSideContainer.SetActive(false);
+                else leftSideContainer.SetActive(mode == "Both" || mode == "Left");
+            }
             
             if (rightSideContainer != null) 
             {
-                if (fixedMode) rightSideContainer.SetActive(false);
+                if (fixedMode || isCollapsed) rightSideContainer.SetActive(false);
                 else rightSideContainer.SetActive(mode == "Both" || mode == "Right");
             }
         }
@@ -150,6 +153,29 @@ namespace VPB
             
             // AddHoverDelegate
             AddHoverDelegate(backgroundBoxGO);
+            
+            // Collapse Trigger Area (Right edge)
+            collapseTriggerGO = UI.AddChildGOImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchRight, 30, 0, Vector2.zero);
+            collapseTriggerGO.name = "FixedModeCollapseTrigger";
+            
+            GameObject ctTextGO = new GameObject("Text");
+            ctTextGO.transform.SetParent(collapseTriggerGO.transform, false);
+            collapseHandleText = ctTextGO.AddComponent<Text>();
+            collapseHandleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            collapseHandleText.text = "<";
+            collapseHandleText.fontSize = 30;
+            collapseHandleText.color = new Color(1, 1, 1, 0.5f);
+            collapseHandleText.alignment = TextAnchor.MiddleCenter;
+            RectTransform ctTextRT = ctTextGO.GetComponent<RectTransform>();
+            ctTextRT.anchorMin = Vector2.zero;
+            ctTextRT.anchorMax = Vector2.one;
+            ctTextRT.sizeDelta = Vector2.zero;
+
+            var ctHover = collapseTriggerGO.AddComponent<UIHoverDelegate>();
+            ctHover.OnHoverChange += (enter) => {
+                isHoveringTrigger = enter;
+            };
+            collapseTriggerGO.SetActive(false); // Hidden by default, only used in fixed mode
             
             dragger = backgroundBoxGO.AddComponent<UIDraggable>();
             dragger.target = canvasGO.transform;
@@ -805,6 +831,41 @@ namespace VPB
             {
                 if (isFixedLocally)
                 {
+                    bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
+                    if (collapseTriggerGO != null) collapseTriggerGO.SetActive(autoCollapse);
+
+                    if (autoCollapse)
+                    {
+                        if (isCollapsed)
+                        {
+                            if (isHoveringTrigger)
+                            {
+                                SetCollapsed(false);
+                            }
+                        }
+                        else
+                        {
+                            // If NOT hovering gallery and NOT hovering side buttons, collapse after delay
+                            bool isHoveringAny = hoverCount > 0 || (settingsPanel != null && settingsPanel.settingsPaneGO != null && settingsPanel.settingsPaneGO.activeSelf);
+                            if (!isHoveringAny)
+                            {
+                                collapseTimer += Time.deltaTime;
+                                if (collapseTimer >= 1.0f) // 1 second delay
+                                {
+                                    SetCollapsed(true);
+                                }
+                            }
+                            else
+                            {
+                                collapseTimer = 0f;
+                            }
+                        }
+                    }
+                    else if (isCollapsed)
+                    {
+                        SetCollapsed(false);
+                    }
+
                     if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
                     {
                         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -817,8 +878,18 @@ namespace VPB
                         bgRT.anchorMax = new Vector2(1, 1);
                         bgRT.offsetMin = Vector2.zero;
                         bgRT.offsetMax = Vector2.zero;
-                        bgRT.anchoredPosition = Vector2.zero;
+                        bgRT.anchoredPosition = isCollapsed ? new Vector2(bgRT.rect.width, 0) : Vector2.zero;
                         
+                        if (collapseTriggerGO != null)
+                        {
+                            Image img = collapseTriggerGO.GetComponent<Image>();
+                            if (img != null) img.color = isCollapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
+                        }
+                        if (collapseHandleText != null)
+                        {
+                            collapseHandleText.gameObject.SetActive(isCollapsed);
+                        }
+
                         UpdateSideButtonsVisibility();
                         
                         if (actionsPanel != null && actionsPanel.actionsPaneGO != null)
@@ -840,6 +911,9 @@ namespace VPB
                 }
                 else
                 {
+                    if (collapseTriggerGO != null) collapseTriggerGO.SetActive(false);
+                    if (isCollapsed) SetCollapsed(false);
+
                     if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
                     {
                         canvas.renderMode = RenderMode.WorldSpace;

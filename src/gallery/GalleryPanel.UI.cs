@@ -208,7 +208,34 @@ namespace VPB
         {
             if (isFixedLocally == fixedMode) return;
             isFixedLocally = fixedMode;
+            if (!fixedMode) SetCollapsed(false);
             UpdateDesktopModeButton();
+            UpdateSideButtonsVisibility();
+            UpdateLayout();
+        }
+
+        public void SetCollapsed(bool collapsed)
+        {
+            if (isCollapsed == collapsed) return;
+            isCollapsed = collapsed;
+            collapseTimer = 0f;
+            
+            if (backgroundBoxGO != null)
+            {
+                RectTransform rt = backgroundBoxGO.GetComponent<RectTransform>();
+                rt.anchoredPosition = collapsed ? new Vector2(rt.rect.width, 0) : Vector2.zero;
+            }
+
+            if (collapseTriggerGO != null)
+            {
+                Image img = collapseTriggerGO.GetComponent<Image>();
+                if (img != null) img.color = collapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
+            }
+            if (collapseHandleText != null)
+            {
+                collapseHandleText.gameObject.SetActive(collapsed);
+            }
+            
             UpdateSideButtonsVisibility();
             UpdateLayout();
         }

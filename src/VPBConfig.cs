@@ -64,6 +64,7 @@ namespace VPB
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
         public bool DesktopFixedMode = false;
+        public bool DesktopFixedAutoCollapse = false;
         public bool IsLoadingScene { get; private set; }
 
         private bool? _isDevMode;
@@ -127,6 +128,7 @@ namespace VPB
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
             DesktopFixedMode = false;
+            DesktopFixedAutoCollapse = false;
 
             try
             {
@@ -180,6 +182,7 @@ namespace VPB
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
+                        if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                     }
                 }
             }
@@ -208,6 +211,7 @@ namespace VPB
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
+                node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
                 File.WriteAllText(ConfigPath, node.ToString());
                 // No need to Invoke ConfigChanged here if we want to control it from the UI or if Save is the final action.
                 // Actually, Invoke is good if other components listen to file saves.
