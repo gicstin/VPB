@@ -86,6 +86,7 @@ namespace VPB
         {
             if (canvas != null)
                 canvas.gameObject.SetActive(false);
+            actionsPanel?.Hide();
         }
 
         public void SetHoverPath(string path)
@@ -153,6 +154,8 @@ namespace VPB
             }
             
             selectedPath = file.Path;
+            selectedFile = file;
+            selectedHubItem = null;
             
             // Select new
             if (fileButtonImages.ContainsKey(selectedPath))
@@ -160,6 +163,8 @@ namespace VPB
                 if (fileButtonImages[selectedPath] != null)
                     fileButtonImages[selectedPath].color = Color.yellow;
             }
+
+            actionsPanel?.HandleSelectionChanged(selectedFile, selectedHubItem);
         }
 
         public void ToggleSettings(bool onRight)

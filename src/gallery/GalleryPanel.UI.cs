@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using UnityEngine.Events;
 
 namespace VPB
 {
@@ -14,12 +15,12 @@ namespace VPB
             // Pagination Container (Bottom Left)
             GameObject pageContainer = new GameObject("PaginationContainer");
             pageContainer.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform pageRT = pageContainer.AddComponent<RectTransform>();
-            pageRT.anchorMin = new Vector2(0, 0);
-            pageRT.anchorMax = new Vector2(0, 0);
-            pageRT.pivot = new Vector2(0, 0.5f);
-            pageRT.anchoredPosition = new Vector2(50, 30); // Centered in 60px footer area, moved right from corner
-            pageRT.sizeDelta = new Vector2(300, 40);
+            paginationRT = pageContainer.AddComponent<RectTransform>();
+            paginationRT.anchorMin = new Vector2(0, 0);
+            paginationRT.anchorMax = new Vector2(0, 0);
+            paginationRT.pivot = new Vector2(0, 0.5f);
+            paginationRT.anchoredPosition = new Vector2(50, 30); // Centered in 60px footer area, moved right from corner
+            paginationRT.sizeDelta = new Vector2(300, 40);
 
             // Prev Button
             paginationPrevBtn = UI.CreateUIButton(pageContainer, 40, 40, "<", 20, 0, 0, AnchorPresets.middleLeft, PrevPage);
@@ -42,10 +43,37 @@ namespace VPB
 
             // Next Button
             paginationNextBtn = UI.CreateUIButton(pageContainer, 40, 40, ">", 20, 160, 0, AnchorPresets.middleLeft, NextPage);
+            AddTooltip(paginationNextBtn, "Next Page");
+
+            // Expansion Toggle Button (Arrow Up/Down)
+            // actionsPanel.IsExpanded is true by default, but it might be initialized as collapsed if no selection.
+            // When expanded, show ▼. When collapsed, show ▲.
+            string initialArrow = (actionsPanel != null && actionsPanel.IsExpanded) ? "▼" : "▲";
+            expansionToggleBtn = UI.CreateUIButton(pageContainer, 40, 40, initialArrow, 20, 210, 0, AnchorPresets.middleLeft, ToggleExpansion);
+            expansionToggleText = expansionToggleBtn.GetComponentInChildren<Text>();
+            AddTooltip(expansionToggleBtn, "Toggle Action Pane");
+
+            // Follow Quick Toggles
+            footerFollowAngleBtn = UI.CreateUIButton(pageContainer, 40, 40, "∡", 20, 260, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Angle"));
+            footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
+            AddTooltip(footerFollowAngleBtn, "Follow Angle");
+            
+            footerFollowDistanceBtn = UI.CreateUIButton(pageContainer, 40, 40, "↕", 20, 310, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Distance"));
+            footerFollowDistanceImage = footerFollowDistanceBtn.GetComponent<Image>();
+            AddTooltip(footerFollowDistanceBtn, "Follow Distance");
+            
+            footerFollowHeightBtn = UI.CreateUIButton(pageContainer, 40, 40, "⊙", 20, 360, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Height"));
+            footerFollowHeightImage = footerFollowHeightBtn.GetComponent<Image>();
+            AddTooltip(footerFollowHeightBtn, "Follow Eye Height");
 
             // Hover support
             AddHoverDelegate(paginationPrevBtn);
+            AddTooltip(paginationPrevBtn, "Previous Page");
             AddHoverDelegate(paginationNextBtn);
+            AddHoverDelegate(expansionToggleBtn);
+            AddHoverDelegate(footerFollowAngleBtn);
+            AddHoverDelegate(footerFollowDistanceBtn);
+            AddHoverDelegate(footerFollowHeightBtn);
 
             // Hover Path Text (Bottom Right - now much wider)
             GameObject pathGO = new GameObject("HoverPathText");
@@ -56,18 +84,133 @@ namespace VPB
             hoverPathText.color = new Color(1f, 1f, 1f, 0.7f);
             hoverPathText.alignment = TextAnchor.LowerRight;
             hoverPathText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            hoverPathText.verticalOverflow = VerticalWrapMode.Overflow;
+            hoverPathText.verticalOverflow = VerticalWrapMode.Truncate;
             hoverPathText.text = "";
             hoverPathText.raycastTarget = false;
-            RectTransform pathRT = pathGO.GetComponent<RectTransform>();
-            pathRT.anchorMin = new Vector2(0, 0); // Stretch from left
-            pathRT.anchorMax = new Vector2(1, 0); // To right
-            pathRT.pivot = new Vector2(1, 0);
-            pathRT.anchoredPosition = new Vector2(-60, 10); // Offset from right scrollbar
-            pathRT.offsetMin = new Vector2(360, 10); // Start after pagination
-            pathRT.offsetMax = new Vector2(-60, 70); // End before scrollbar
+            hoverPathRT = pathGO.GetComponent<RectTransform>();
+            hoverPathRT.anchorMin = new Vector2(0, 0); // Stretch from left
+            hoverPathRT.anchorMax = new Vector2(1, 0); // To right
+            hoverPathRT.pivot = new Vector2(1, 0);
+            hoverPathRT.anchoredPosition = new Vector2(-60, 10); // Offset from right scrollbar
+            hoverPathRT.offsetMin = new Vector2(510, 10); // Start after pagination + new buttons
+            hoverPathRT.offsetMax = new Vector2(-60, 55); // End before scrollbar, height ~45 for 2 rows
 
             UpdateSideButtonsVisibility();
+            UpdateFooterFollowStates();
+        }
+
+        private void ToggleFollowQuick(string type)
+        {
+            if (VPBConfig.Instance == null) return;
+            
+            if (type == "Angle") {
+                VPBConfig.Instance.FollowAngle = (VPBConfig.Instance.FollowAngle == "Off") ? "Both" : "Off";
+            } else if (type == "Distance") {
+                VPBConfig.Instance.FollowDistance = (VPBConfig.Instance.FollowDistance == "Off") ? "Both" : "Off";
+            } else if (type == "Height") {
+                VPBConfig.Instance.FollowEyeHeight = (VPBConfig.Instance.FollowEyeHeight == "Off") ? "Both" : "Off";
+            }
+            
+            VPBConfig.Instance.TriggerChange();
+            UpdateFooterFollowStates();
+        }
+
+        private void UpdateFooterFollowStates()
+        {
+            if (VPBConfig.Instance == null) return;
+            
+            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
+            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            
+            if (footerFollowAngleImage != null)
+                footerFollowAngleImage.color = VPBConfig.Instance.FollowAngle != "Off" ? activeColor : inactiveColor;
+                
+            if (footerFollowDistanceImage != null)
+                footerFollowDistanceImage.color = VPBConfig.Instance.FollowDistance != "Off" ? activeColor : inactiveColor;
+                
+            if (footerFollowHeightImage != null)
+                footerFollowHeightImage.color = VPBConfig.Instance.FollowEyeHeight != "Off" ? activeColor : inactiveColor;
+        }
+
+        private void AddTooltip(GameObject go, string tooltip)
+        {
+            if (go == null) return;
+            var del = go.GetComponent<UIHoverDelegate>();
+            if (del == null) del = go.AddComponent<UIHoverDelegate>();
+            
+            del.OnHoverChange += (enter) => {
+                if (enter) temporaryStatusMsg = tooltip;
+                else if (temporaryStatusMsg == tooltip) temporaryStatusMsg = null;
+            };
+        }
+
+        private void ToggleExpansion()
+        {
+            if (actionsPanel != null)
+            {
+                actionsPanel.ToggleExpand();
+                if (expansionToggleText != null)
+                {
+                    expansionToggleText.text = actionsPanel.IsExpanded ? "▼" : "▲";
+                }
+            }
+        }
+
+        private void UpdateDesktopModeButton()
+        {
+            if (VPBConfig.Instance == null) return;
+            bool fixedMode = isFixedLocally;
+            string text = fixedMode ? "Floating" : "Fixed";
+            Color color = fixedMode ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.15f, 0.15f, 0.15f, 1f);
+
+            if (rightDesktopModeBtnText != null) rightDesktopModeBtnText.text = text;
+            if (rightDesktopModeBtnImage != null) rightDesktopModeBtnImage.color = color;
+
+            if (leftDesktopModeBtnText != null) leftDesktopModeBtnText.text = text;
+            if (leftDesktopModeBtnImage != null) leftDesktopModeBtnImage.color = color;
+
+            if (footerFollowAngleBtn != null) footerFollowAngleBtn.SetActive(!fixedMode);
+            if (footerFollowDistanceBtn != null) footerFollowDistanceBtn.SetActive(!fixedMode);
+            if (footerFollowHeightBtn != null) footerFollowHeightBtn.SetActive(!fixedMode);
+        }
+
+        private void ToggleDesktopMode()
+        {
+            if (VPBConfig.Instance == null) return;
+            
+            bool targetFixed = !isFixedLocally;
+            
+            if (targetFixed)
+            {
+                // Only one can be fixed. Revert others.
+                if (Gallery.singleton != null)
+                {
+                    foreach (var p in Gallery.singleton.Panels)
+                    {
+                        if (p != this) p.SetFixedLocally(false);
+                    }
+                }
+                isFixedLocally = true;
+                VPBConfig.Instance.DesktopFixedMode = true;
+            }
+            else
+            {
+                isFixedLocally = false;
+                VPBConfig.Instance.DesktopFixedMode = false;
+            }
+            
+            VPBConfig.Instance.Save();
+            UpdateDesktopModeButton();
+            UpdateLayout();
+        }
+
+        public void SetFixedLocally(bool fixedMode)
+        {
+            if (isFixedLocally == fixedMode) return;
+            isFixedLocally = fixedMode;
+            UpdateDesktopModeButton();
+            UpdateSideButtonsVisibility();
+            UpdateLayout();
         }
 
         private void NextPage()
@@ -163,7 +306,7 @@ namespace VPB
         private void UpdateReplaceButtonState()
         {
             string text = DragDropReplaceMode ? "Replace" : "Add";
-            Color color = DragDropReplaceMode ? new Color(0.8f, 0.2f, 0.2f, 1f) : new Color(0.2f, 0.6f, 0.2f, 1f);
+            Color color = DragDropReplaceMode ? new Color(0.6f, 0.15f, 0.15f, 1f) : new Color(0.15f, 0.45f, 0.15f, 1f);
 
             if (rightReplaceBtnText != null) rightReplaceBtnText.text = text;
             if (rightReplaceBtnImage != null) rightReplaceBtnImage.color = color;
@@ -178,7 +321,7 @@ namespace VPB
             UpdateReplaceButtonState();
         }
 
-        private void UpdateLayout()
+        public void UpdateLayout()
         {
             if (!creatorsCached) CacheCreators();
             if (!categoriesCached) CacheCategoryCounts();
@@ -272,8 +415,65 @@ namespace VPB
                 if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
             }
             
-            contentScrollRT.offsetMin = new Vector2(leftOffset, 60);
+            float bottomOffset = 60;
+            if (isFixedLocally)
+            {
+                if (actionsPanel != null && actionsPanel.actionsPaneGO != null && actionsPanel.actionsPaneGO.activeSelf)
+                {
+                    bottomOffset = 410; // Footer (60) + Action Pane (350)
+                }
+            }
+
+            contentScrollRT.offsetMin = new Vector2(leftOffset, bottomOffset);
             contentScrollRT.offsetMax = new Vector2(rightOffset, -55);
+
+            if (leftTabScrollGO != null)
+            {
+                RectTransform rt = leftTabScrollGO.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
+            }
+            if (rightTabScrollGO != null)
+            {
+                RectTransform rt = rightTabScrollGO.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
+            }
+            if (leftSubTabScrollGO != null)
+            {
+                RectTransform rt = leftSubTabScrollGO.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
+            }
+            if (rightSubTabScrollGO != null)
+            {
+                RectTransform rt = rightSubTabScrollGO.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
+            }
+            if (leftSubClearBtn != null)
+            {
+                RectTransform rt = leftSubClearBtn.GetComponent<RectTransform>();
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, bottomOffset + 8);
+            }
+            if (rightSubClearBtn != null)
+            {
+                RectTransform rt = rightSubClearBtn.GetComponent<RectTransform>();
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, bottomOffset + 8);
+            }
+
+            // Move Footer (Pagination and Hover Path)
+            if (paginationRT != null)
+            {
+                float footerY = 0;
+                if (isFixedLocally && actionsPanel != null && actionsPanel.actionsPaneGO != null && actionsPanel.actionsPaneGO.activeSelf)
+                {
+                    footerY = 350; // Above action pane
+                }
+                paginationRT.anchoredPosition = new Vector2(50, footerY + 30);
+                
+                if (hoverPathRT != null)
+                {
+                    hoverPathRT.offsetMin = new Vector2(510, footerY + 10);
+                    hoverPathRT.offsetMax = new Vector2(-60, footerY + 55);
+                }
+            }
             
             UpdateButtonStates();
         }
@@ -304,6 +504,9 @@ namespace VPB
                 bool isSettingsChild = settingsPanel != null && settingsPanel.settingsPaneGO != null && 
                                      g.transform.IsChildOf(settingsPanel.settingsPaneGO.transform);
 
+                bool isActionsChild = actionsPanel != null && actionsPanel.actionsPaneGO != null &&
+                                     g.transform.IsChildOf(actionsPanel.actionsPaneGO.transform);
+
                 // Also skip side panes (tabs, search, sort) to avoid clipping artifacts on large widths
                 bool isSidePaneChild = (leftTabScrollGO != null && g.transform.IsChildOf(leftTabScrollGO.transform)) ||
                                      (rightTabScrollGO != null && g.transform.IsChildOf(rightTabScrollGO.transform)) ||
@@ -322,7 +525,7 @@ namespace VPB
                 
                 var mod = g.gameObject.GetComponent<CurvedUIVertexModifier>();
                 
-                if (isSettingsChild || isSidePaneChild)
+                if (isSettingsChild || isActionsChild || isSidePaneChild)
                 {
                     if (mod != null) mod.enabled = false;
                     continue;
@@ -349,6 +552,12 @@ namespace VPB
             {
                 settingsPanel.UpdateCurvatureLayout();
                 UpdateMeshCollider(settingsPanel.settingsPaneGO, canvasRT, enabled, false);
+            }
+
+            // Also update Actions Panel if it exists - but use a FLAT collider for it
+            if (actionsPanel != null)
+            {
+                UpdateMeshCollider(actionsPanel.actionsPaneGO, canvasRT, enabled, false);
             }
         }
 
@@ -438,7 +647,7 @@ namespace VPB
         private void UpdateFollowButtonState()
         {
             string text = followUser ? "Follow" : "Static";
-            Color color = followUser ? new Color(0.2f, 0.6f, 0.8f, 1f) : Color.gray;
+            Color color = followUser ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.3f, 0.3f, 0.3f, 1f);
             
             if (rightFollowBtnText != null) rightFollowBtnText.text = text;
             if (rightFollowBtnImage != null) rightFollowBtnImage.color = color;
@@ -466,26 +675,28 @@ namespace VPB
 
         private void UpdateListPositions(List<RectTransform> buttons, float startY, float spacing, float gap)
         {
-            if (buttons == null || buttons.Count < 9) return;
+            if (buttons == null || buttons.Count < 10) return;
             
-            // 0: Settings
+            // 0: Fixed/Floating
             buttons[0].anchoredPosition = new Vector2(0, startY);
-            // 1: Follow
-            buttons[1].anchoredPosition = new Vector2(0, startY - spacing - gap);
-            // 2: Clone
+            // 1: Settings
+            buttons[1].anchoredPosition = new Vector2(0, startY - spacing);
+            // 2: Follow
             buttons[2].anchoredPosition = new Vector2(0, startY - spacing * 2 - gap);
-            // 3: Category
-            buttons[3].anchoredPosition = new Vector2(0, startY - spacing * 3 - gap * 2);
-            // 4: Creator
+            // 3: Clone
+            buttons[3].anchoredPosition = new Vector2(0, startY - spacing * 3 - gap);
+            // 4: Category
             buttons[4].anchoredPosition = new Vector2(0, startY - spacing * 4 - gap * 2);
-            // 5: Status
+            // 5: Creator
             buttons[5].anchoredPosition = new Vector2(0, startY - spacing * 5 - gap * 2);
-            // 6: Hub
+            // 6: Status
             buttons[6].anchoredPosition = new Vector2(0, startY - spacing * 6 - gap * 2);
-            // 7: Add/Replace
-            buttons[7].anchoredPosition = new Vector2(0, startY - spacing * 7 - gap * 3);
-            // 8: Undo
-            buttons[8].anchoredPosition = new Vector2(0, startY - spacing * 8 - gap * 4);
+            // 7: Hub
+            buttons[7].anchoredPosition = new Vector2(0, startY - spacing * 7 - gap * 2);
+            // 8: Add/Replace
+            buttons[8].anchoredPosition = new Vector2(0, startY - spacing * 8 - gap * 3);
+            // 9: Undo
+            buttons[9].anchoredPosition = new Vector2(0, startY - spacing * 9 - gap * 4);
         }
 
         private void SetLayerRecursive(GameObject go, int layer)

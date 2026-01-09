@@ -204,7 +204,7 @@ namespace VPB
                 leftRT.anchorMin = new Vector2(0, 0.5f);
                 leftRT.anchorMax = new Vector2(0, 1);
                 leftRT.offsetMin = new Vector2(10, 5); 
-
+                
                 RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                 subRT.anchorMin = new Vector2(0, 0);
                 subRT.anchorMax = new Vector2(0, 0.5f);
@@ -247,13 +247,13 @@ namespace VPB
                 RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
                 rightRT.anchorMin = new Vector2(1, 0.7f);
                 rightRT.anchorMax = new Vector2(1, 1);
-                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, 5);
+                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, 5); 
 
                 RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                 subRT.anchorMin = new Vector2(1, 0);
                 subRT.anchorMax = new Vector2(1, 0.7f);
                 subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55);
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, 110); // Gap for clear button? Hub Creators doesn't have one yet but consistent
+                subRT.offsetMin = new Vector2(subRT.offsetMin.x, 110); 
 
                 UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
                 UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);
@@ -286,7 +286,7 @@ namespace VPB
 
                     var c = cat;
                     bool isActive = (c.path == currentPath && c.extension == currentExtension);
-                    Color btnColor = isActive ? ColorCategory : new Color(0.7f, 0.7f, 0.7f, 1f);
+                    Color btnColor = isActive ? ColorCategory : new Color(0.25f, 0.25f, 0.25f, 1f);
 
                     int count = 0;
                     if (categoryCounts.ContainsKey(c.name)) count = categoryCounts[c.name];
@@ -320,7 +320,7 @@ namespace VPB
 
                     string cName = creator.Name;
                     bool isActive = (currentCreator == cName);
-                    Color btnColor = isActive ? ColorCreator : new Color(0.7f, 0.7f, 0.7f, 1f);
+                    Color btnColor = isActive ? ColorCreator : new Color(0.25f, 0.25f, 0.25f, 1f);
 
                     string label = cName + " (" + creator.Count + ")";
 
@@ -353,7 +353,7 @@ namespace VPB
                     bool isActive = false;
                     if (status == "Favorite") isActive = filterFavorite;
                     
-                    Color btnColor = isActive ? statusColor : new Color(0.7f, 0.7f, 0.7f, 1f);
+                    Color btnColor = isActive ? statusColor : new Color(0.25f, 0.25f, 0.25f, 1f);
 
                     CreateTabButton(container.transform, status, btnColor, isActive, () => {
                         if (status == "Favorite")
@@ -437,7 +437,7 @@ namespace VPB
                     if (count == 0 && !isActive) continue;
 
                     string label = tag + " (" + count + ")";
-                    Color btnColor = isActive ? new Color(0.5f, 0.2f, 0.5f, 1f) : new Color(0.7f, 0.7f, 0.7f, 1f);
+                    Color btnColor = isActive ? new Color(0.5f, 0.2f, 0.5f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
 
                     CreateTabButton(container.transform, label, btnColor, isActive, () => {
                         if (activeTags.Contains(tag)) activeTags.Remove(tag);
@@ -511,7 +511,7 @@ namespace VPB
             Text txt = btnGO_Reuse.GetComponentInChildren<Text>();
             txt.text = label;
             txt.fontSize = 18;
-            txt.color = isActive ? Color.white : Color.black;
+            txt.color = Color.white;
             
             if (targetList != null) targetList.Add(groupGO);
         }

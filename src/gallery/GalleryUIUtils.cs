@@ -548,6 +548,7 @@ namespace VPB
     public class UIDraggableItem : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         public FileEntry FileEntry;
+        public Hub.GalleryHubItem HubItem;
         public RawImage ThumbnailImage;
         public GalleryPanel Panel;
         
@@ -1010,6 +1011,14 @@ namespace VPB
                     return;
                 }
 
+                if (HubItem != null)
+                {
+                    LogUtil.Log("Dropped Hub Item: " + HubItem.Title);
+                    // Handle Hub Item drop (e.g. Download)
+                    dragCam = null;
+                    return;
+                }
+
                 ItemType itemType = GetItemType(FileEntry);
                 
                 // Handle subscenes differently - load directly without requiring atom
@@ -1125,6 +1134,12 @@ namespace VPB
             
             statusMsg = hitMsg;
             distance = (hit.collider != null) ? hit.distance : planeDistance;
+
+            if (HubItem != null)
+            {
+                statusMsg = $"Drop to download/view {HubItem.Title}";
+                return atom;
+            }
 
             ItemType itemType = GetItemType(FileEntry);
             
@@ -2128,6 +2143,19 @@ namespace VPB
              }
              
              bool isValidTarget = (atom != null && atom.type == "Person");
+
+             if (HubItem != null)
+             {
+                 UpdateGhostPosition(eventData, false, distance);
+                 if (ghostBorder != null) ghostBorder.color = new Color(1f, 0.5f, 0f, 0.4f); // Orange
+                 if (ghostText != null)
+                 {
+                     ghostText.text = $"Release to download/view\n{HubItem.Title}";
+                     ghostText.color = new Color(1f, 0.8f, 0.4f);
+                 }
+                 return;
+             }
+
              ItemType itemType = GetItemType(FileEntry);
              bool isHair = (itemType == ItemType.Hair || itemType == ItemType.HairItem);
              bool isClothing = (itemType == ItemType.Clothing || itemType == ItemType.ClothingItem);
@@ -3160,10 +3188,18 @@ namespace VPB
 
         public static GameObject CreateUIButton(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction onClick)
         {
-            GameObject buttonGO = AddChildGOImage(parentGO, Color.white, anchorPreset, width, height, new Vector2(xOffset, yOffset));
+            GameObject buttonGO = AddChildGOImage(parentGO, new Color(0.2f, 0.2f, 0.2f, 1f), anchorPreset, width, height, new Vector2(xOffset, yOffset));
             buttonGO.name = "Button_" + label;
             Button btn = buttonGO.AddComponent<Button>();
             if (onClick != null) btn.onClick.AddListener(onClick);
+
+            // Configure button colors to ensure dark background by default (avoiding white boxes)
+            ColorBlock cb = btn.colors;
+            cb.normalColor = Color.white;
+            cb.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f); // Slightly brighter on hover
+            cb.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+            cb.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f); // Darker and more transparent when disabled
+            btn.colors = cb;
 
             GameObject textGO = new GameObject("Text");
             textGO.transform.SetParent(buttonGO.transform, false);
@@ -3171,7 +3207,7 @@ namespace VPB
             t.text = label;
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             t.fontSize = fontSize;
-            t.color = Color.black;
+            t.color = Color.white;
             t.alignment = TextAnchor.MiddleCenter;
 
             RectTransform textRT = textGO.GetComponent<RectTransform>();

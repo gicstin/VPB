@@ -164,12 +164,20 @@ namespace VPB
         private const float ReorientStopAngle = 0.5f;
         private float followYOffset = 0f;
         private Vector2 followXZOffset = Vector2.zero;
+        private float followDistanceReference = 1.5f;
         private bool offsetsInitialized = false;
         
         private Text rightFollowBtnText;
         private Image rightFollowBtnImage;
         private Text leftFollowBtnText;
         private Image leftFollowBtnImage;
+
+        private GameObject footerFollowAngleBtn;
+        private Image footerFollowAngleImage;
+        private GameObject footerFollowDistanceBtn;
+        private Image footerFollowDistanceImage;
+        private GameObject footerFollowHeightBtn;
+        private Image footerFollowHeightImage;
 
         // Side buttons for dynamic positioning
         private List<RectTransform> rightSideButtons = new List<RectTransform>();
@@ -179,6 +187,7 @@ namespace VPB
 
         // Settings Pane
         private SettingsPanel settingsPanel;
+        private GalleryActionsPanel actionsPanel;
         
         private List<CreatorCacheEntry> cachedCreators = new List<CreatorCacheEntry>();
         private bool creatorsCached = false;
@@ -191,22 +200,35 @@ namespace VPB
 
         // Pagination
         private int currentPage = 0;
-        private int itemsPerPage = 200;
+        private int itemsPerPage = 100;
         private Text paginationText;
+        private RectTransform paginationRT;
         private Text hoverPathText;
+        private RectTransform hoverPathRT;
         private GameObject paginationPrevBtn;
         private GameObject paginationNextBtn;
+        private GameObject expansionToggleBtn;
+        private Text expansionToggleText;
 
+        private Text rightDesktopModeBtnText;
+        private Image rightDesktopModeBtnImage;
+        private Text leftDesktopModeBtnText;
+        private Image leftDesktopModeBtnImage;
+
+        private FileEntry selectedFile;
+        private Hub.GalleryHubItem selectedHubItem;
+        
         // Define colors for different content types
-        public static readonly Color ColorCategory = new Color(0.7f, 0.2f, 0.2f, 1f); // Desaturated Red
-        public static readonly Color ColorCreator = new Color(0.3f, 0.6f, 0.3f, 1f); // Desaturated Green
-        public static readonly Color ColorHub = new Color(1f, 0.5f, 0f, 1f); // Orange
-        public static readonly Color ColorLicense = new Color(1f, 0f, 1f, 1f); // Magenta
+        public static readonly Color ColorCategory = new Color(0.5f, 0.15f, 0.15f, 1f); // Darker Red
+        public static readonly Color ColorCreator = new Color(0.15f, 0.45f, 0.15f, 1f); // Darker Green
+        public static readonly Color ColorHub = new Color(0.8f, 0.4f, 0f, 1f); // Darker Orange
+        public static readonly Color ColorLicense = new Color(0.6f, 0f, 0.6f, 1f); // Darker Magenta
 
         private string dragStatusMsg = null;
         private string temporaryStatusMsg = null;
         private Coroutine temporaryStatusCoroutine = null;
 
+        public bool isFixedLocally = false;
         private Camera _cachedCamera;
 
         // Sorting

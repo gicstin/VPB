@@ -14,10 +14,16 @@ namespace VPB
         {
             if (VPBConfig.Instance == null) return;
             string mode = VPBConfig.Instance.ShowSideButtons;
+            bool fixedMode = isFixedLocally;
+
             if (leftSideContainer != null) 
                 leftSideContainer.SetActive(mode == "Both" || mode == "Left");
+            
             if (rightSideContainer != null) 
-                rightSideContainer.SetActive(mode == "Both" || mode == "Right");
+            {
+                if (fixedMode) rightSideContainer.SetActive(false);
+                else rightSideContainer.SetActive(mode == "Both" || mode == "Right");
+            }
         }
 
         private void AddHoverDelegate(GameObject go)
@@ -45,6 +51,9 @@ namespace VPB
                 VPBConfig.Instance.ConfigChanged -= UpdateSideButtonPositions;
                 VPBConfig.Instance.ConfigChanged -= UpdateSideButtonsVisibility;
                 VPBConfig.Instance.ConfigChanged -= ApplyCurvatureToChildren;
+                VPBConfig.Instance.ConfigChanged -= UpdateFooterFollowStates;
+                VPBConfig.Instance.ConfigChanged -= UpdateDesktopModeButton;
+                VPBConfig.Instance.ConfigChanged -= UpdateLayout;
             }
 
             if (canvas != null)
@@ -69,9 +78,13 @@ namespace VPB
             // Subscribe to config changes
             if (VPBConfig.Instance != null)
             {
+                isFixedLocally = VPBConfig.Instance.DesktopFixedMode && (Gallery.singleton == null || Gallery.singleton.PanelCount == 0);
                 VPBConfig.Instance.ConfigChanged += UpdateSideButtonPositions;
                 VPBConfig.Instance.ConfigChanged += UpdateSideButtonsVisibility;
                 VPBConfig.Instance.ConfigChanged += ApplyCurvatureToChildren;
+                VPBConfig.Instance.ConfigChanged += UpdateFooterFollowStates;
+                VPBConfig.Instance.ConfigChanged += UpdateDesktopModeButton;
+                VPBConfig.Instance.ConfigChanged += UpdateLayout;
             }
 
             // ... standard Init code follows ...
@@ -152,7 +165,8 @@ namespace VPB
                 }
             };
 
-            settingsPanel = new SettingsPanel(backgroundBoxGO);
+            settingsPanel = new SettingsPanel(this, backgroundBoxGO);
+            actionsPanel = new GalleryActionsPanel(this, backgroundBoxGO);
 
             // Register Panel
             if (Gallery.singleton != null)
@@ -489,65 +503,75 @@ namespace VPB
                 float groupGap = 20f;
                 float startY = 260f;
 
-                // Settings (Topmost)
-                GameObject rightSettingsBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Settings", btnFontSize, 0, startY, AnchorPresets.centre, () => {
+                // Fixed/Floating (Topmost)
+                GameObject rightDesktopBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Floating", btnFontSize, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
+                rightDesktopModeBtnImage = rightDesktopBtn.GetComponent<Image>();
+                rightDesktopModeBtnText = rightDesktopBtn.GetComponentInChildren<Text>();
+                rightSideButtons.Add(rightDesktopBtn.GetComponent<RectTransform>());
+
+                // Settings
+                GameObject rightSettingsBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Settings", btnFontSize, 0, startY - spacing, AnchorPresets.centre, () => {
                     ToggleSettings(true);
                 });
-                rightSettingsBtn.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.6f, 1f); // Blueish
+                rightSettingsBtn.GetComponent<Image>().color = new Color(0.15f, 0.3f, 0.45f, 1f); // Darker Blueish
                 rightSideButtons.Add(rightSettingsBtn.GetComponent<RectTransform>());
 
-                // Follow (Top)
-                GameObject rightFollowBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
+                // Follow
+                GameObject rightFollowBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY - spacing * 2 - groupGap, AnchorPresets.centre, ToggleFollowMode);
                 rightFollowBtnImage = rightFollowBtn.GetComponent<Image>();
                 rightFollowBtnText = rightFollowBtn.GetComponentInChildren<Text>();
-                rightFollowBtnImage.color = Color.gray;
+                rightFollowBtnImage.color = new Color(0.15f, 0.45f, 0.6f, 1f); // Darker Follow Blue
                 rightSideButtons.Add(rightFollowBtn.GetComponent<RectTransform>());
 
                 // Clone (Gray)
-                GameObject rightCloneBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing * 2 - groupGap, AnchorPresets.centre, () => {
+                GameObject rightCloneBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing * 3 - groupGap, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true);
                 });
-                rightCloneBtn.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 1f);
+                rightCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
                 rightSideButtons.Add(rightCloneBtn.GetComponent<RectTransform>());
 
                 // Category (Red)
-                GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Category));
+                GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 4 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
                 rightCategoryBtnImage = rightCatBtn.GetComponent<Image>();
                 rightCategoryBtnImage.color = ColorCategory;
                 rightCategoryBtnText = rightCatBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightCatBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(rightCatBtn, () => ToggleRight(ContentType.Category));
                 
                 // Creator (Green)
-                GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 4 - groupGap * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Creator));
+                GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 5 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
                 rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
                 rightCreatorBtnImage.color = ColorCreator;
                 rightCreatorBtnText = rightCreatorBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightCreatorBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
 
                 // Status (Blue) - NEW
-                GameObject rightStatusBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 5 - groupGap * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Status));
-                rightStatusBtn.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.7f, 1f);
+                GameObject rightStatusBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 6 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Status));
+                rightStatusBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.5f, 1f); // Darker Blue
                 rightSideButtons.Add(rightStatusBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(rightStatusBtn, () => ToggleRight(ContentType.Status));
 
-                // Hub (Orange) - NEW (Disabled for now)
-                /*
-                GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 6 - groupGap * 2, AnchorPresets.centre, () => ToggleRight(ContentType.Hub));
-                rightHubBtnImage = rightHubBtn.GetComponent<Image>();
-                rightHubBtnImage.color = ColorHub;
-                rightHubBtnText = rightHubBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightHubBtn.GetComponent<RectTransform>());
-                */
+                // Hub (Orange) - NEW (DevMode Only)
+                if (VPBConfig.Instance.IsDevMode)
+                {
+                    GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 7 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Hub));
+                    rightHubBtnImage = rightHubBtn.GetComponent<Image>();
+                    rightHubBtnImage.color = ColorHub;
+                    rightHubBtnText = rightHubBtn.GetComponentInChildren<Text>();
+                    rightSideButtons.Add(rightHubBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightHubBtn, () => ToggleRight(ContentType.Hub));
+                }
 
                 // Replace Toggle (Right)
-                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
                 rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
 
                 // Undo (Right)
-                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, Undo);
-                rightUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
-                rightUndoBtn.GetComponentInChildren<Text>().color = Color.white;
+                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, Undo);
+                rightUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 rightSideButtons.Add(rightUndoBtn.GetComponent<RectTransform>());
 
                 // Left Button Container
@@ -555,66 +579,78 @@ namespace VPB
                 sideButtonGroups.Add(leftSideContainer.AddComponent<CanvasGroup>());
 
                 // Left Toggle Buttons
-                // Settings (Topmost)
-                GameObject leftSettingsBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Settings", btnFontSize, 0, startY, AnchorPresets.centre, () => {
+                // Fixed/Floating (Topmost)
+                GameObject leftDesktopBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Floating", btnFontSize, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
+                leftDesktopModeBtnImage = leftDesktopBtn.GetComponent<Image>();
+                leftDesktopModeBtnText = leftDesktopBtn.GetComponentInChildren<Text>();
+                leftSideButtons.Add(leftDesktopBtn.GetComponent<RectTransform>());
+
+                // Settings
+                GameObject leftSettingsBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Settings", btnFontSize, 0, startY - spacing, AnchorPresets.centre, () => {
                     ToggleSettings(false);
                 });
-                leftSettingsBtn.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.6f, 1f); // Blueish
+                leftSettingsBtn.GetComponent<Image>().color = new Color(0.15f, 0.3f, 0.45f, 1f); // Darker Blueish
                 leftSideButtons.Add(leftSettingsBtn.GetComponent<RectTransform>());
 
-                // Follow (Top)
-                GameObject leftFollowBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
+                // Follow
+                GameObject leftFollowBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY - spacing * 2 - groupGap, AnchorPresets.centre, ToggleFollowMode);
                 leftFollowBtnImage = leftFollowBtn.GetComponent<Image>();
                 leftFollowBtnText = leftFollowBtn.GetComponentInChildren<Text>();
-                leftFollowBtnImage.color = Color.gray;
+                leftFollowBtnImage.color = new Color(0.15f, 0.45f, 0.6f, 1f); // Darker Follow Blue
                 leftSideButtons.Add(leftFollowBtn.GetComponent<RectTransform>());
 
                 // Clone (Gray)
-                GameObject leftCloneBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing * 2 - groupGap, AnchorPresets.centre, () => {
+                GameObject leftCloneBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing * 3 - groupGap, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, false);
                 });
-                leftCloneBtn.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 1f);
+                leftCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
                 leftSideButtons.Add(leftCloneBtn.GetComponent<RectTransform>());
 
                 // Category (Red)
-                GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
+                GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 4 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
                 leftCategoryBtnImage = leftCatBtn.GetComponent<Image>();
                 leftCategoryBtnImage.color = ColorCategory;
                 leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftCatBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(leftCatBtn, () => ToggleRight(ContentType.Category));
                 
                 // Creator (Green)
-                GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 4 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
+                GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 5 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
                 leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
                 leftCreatorBtnImage.color = ColorCreator;
                 leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftCreatorBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
 
                 // Status (Blue) - NEW
-                GameObject leftStatusBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 5 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Status));
-                leftStatusBtn.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.7f, 1f);
+                GameObject leftStatusBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 6 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Status));
+                leftStatusBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.5f, 1f); // Darker Blue
                 leftSideButtons.Add(leftStatusBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(leftStatusBtn, () => ToggleRight(ContentType.Status));
 
-                // Hub (Orange) - NEW (Disabled for now)
-                /*
-                GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 6 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Hub));
-                leftHubBtnImage = leftHubBtn.GetComponent<Image>();
-                leftHubBtnImage.color = ColorHub;
-                leftHubBtnText = leftHubBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftHubBtn.GetComponent<RectTransform>());
-                */
+                // Hub (Orange) - NEW (DevMode Only)
+                if (VPBConfig.Instance.IsDevMode)
+                {
+                    GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 7 - groupGap * 2, AnchorPresets.centre, () => ToggleLeft(ContentType.Hub));
+                    leftHubBtnImage = leftHubBtn.GetComponent<Image>();
+                    leftHubBtnImage.color = ColorHub;
+                    leftHubBtnText = leftHubBtn.GetComponentInChildren<Text>();
+                    leftSideButtons.Add(leftHubBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftHubBtn, () => ToggleRight(ContentType.Hub));
+                }
 
                 // Replace Toggle (Left)
-                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, ToggleReplaceMode);
                 leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
 
                 // Undo (Left)
-                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, Undo);
-                leftUndoBtn.GetComponent<Image>().color = new Color(0.6f, 0.4f, 0.2f, 1f); // Brown/Orange
-                leftUndoBtn.GetComponentInChildren<Text>().color = Color.white;
+                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, Undo);
+                leftUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
+
+                UpdateDesktopModeButton();
             }
 
             // Main Content Area
@@ -691,10 +727,11 @@ namespace VPB
                 
                 Destroy(this.gameObject);
             });
-            closeBtn.GetComponent<Image>().color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            closeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(closeBtn);
 
             UpdateSideButtonsVisibility();
+            UpdateDesktopModeButton();
             UpdateLayout();
             UpdateFollowButtonState();
             UpdateReplaceButtonState();
@@ -764,6 +801,80 @@ namespace VPB
 
         void Update()
         {
+            if (canvas != null && VPBConfig.Instance != null)
+            {
+                if (isFixedLocally)
+                {
+                    if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    {
+                        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                        canvas.transform.localScale = Vector3.one;
+                        
+                        RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                        float leftRatio = 1.618f / 2.618f;
+                        
+                        bgRT.anchorMin = new Vector2(leftRatio, 0);
+                        bgRT.anchorMax = new Vector2(1, 1);
+                        bgRT.offsetMin = Vector2.zero;
+                        bgRT.offsetMax = Vector2.zero;
+                        bgRT.anchoredPosition = Vector2.zero;
+                        
+                        UpdateSideButtonsVisibility();
+                        
+                        if (actionsPanel != null && actionsPanel.actionsPaneGO != null)
+                        {
+                            RectTransform apRT = actionsPanel.actionsPaneGO.GetComponent<RectTransform>();
+                            apRT.anchorMin = new Vector2(0, 0);
+                            apRT.anchorMax = new Vector2(1, 0);
+                            apRT.pivot = new Vector2(0.5f, 0);
+                            apRT.anchoredPosition = new Vector2(0, 0); // At bottom in Fixed mode
+                            apRT.sizeDelta = new Vector2(0, 350);
+                        }
+
+                        if (dragger != null) dragger.enabled = false;
+                        foreach (Transform child in backgroundBoxGO.transform)
+                        {
+                            if (child.name.StartsWith("ResizeHandle_")) child.gameObject.SetActive(false);
+                        }
+                    }
+                }
+                else
+                {
+                    if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+                    {
+                        canvas.renderMode = RenderMode.WorldSpace;
+                        canvas.worldCamera = Camera.main;
+                        canvas.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+                        
+                        RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                        bgRT.anchorMin = new Vector2(0.5f, 0.5f);
+                        bgRT.anchorMax = new Vector2(0.5f, 0.5f);
+                        bgRT.sizeDelta = new Vector2(1200, 800);
+                        bgRT.anchoredPosition = Vector2.zero;
+                        
+                        UpdateSideButtonsVisibility();
+                        
+                        if (actionsPanel != null && actionsPanel.actionsPaneGO != null)
+                        {
+                            RectTransform apRT = actionsPanel.actionsPaneGO.GetComponent<RectTransform>();
+                            apRT.anchorMin = new Vector2(0.5f, 0);
+                            apRT.anchorMax = new Vector2(0.5f, 0);
+                            apRT.pivot = new Vector2(0.5f, 1);
+                            apRT.anchoredPosition = new Vector2(0, -10);
+                            apRT.sizeDelta = new Vector2(1200, 400);
+                        }
+
+                        if (dragger != null) dragger.enabled = true;
+                        foreach (Transform child in backgroundBoxGO.transform)
+                        {
+                            if (child.name.StartsWith("ResizeHandle_")) child.gameObject.SetActive(true);
+                        }
+
+                        RepositionInFront();
+                    }
+                }
+            }
+
             // Gallery Translucency Logic
             if (backgroundCanvasGroup != null && VPBConfig.Instance != null)
             {
@@ -848,19 +959,22 @@ namespace VPB
                 if (_cachedCamera != null)
                 {
                     float now = Time.unscaledTime;
+                    bool fixedMode = isFixedLocally;
 
                     // Position and Rotation following throttled for VR comfort (discrete updates)
-                    if (lastFollowUpdateTime <= 0f || now - lastFollowUpdateTime >= FollowUpdateInterval)
+                    if (!fixedMode && (lastFollowUpdateTime <= 0f || now - lastFollowUpdateTime >= FollowUpdateInterval))
                     {
                         lastFollowUpdateTime = now;
-
+                        
                         if (followUser)
                         {
                             if (!offsetsInitialized)
                             {
                                 Vector3 offset = canvas.transform.position - _cachedCamera.transform.position;
                                 followYOffset = offset.y;
-                                followXZOffset = new Vector2(offset.x, offset.z);
+                                Vector3 horizontalDiff = new Vector3(offset.x, 0, offset.z);
+                                followXZOffset = new Vector2(horizontalDiff.x, horizontalDiff.z);
+                                followDistanceReference = horizontalDiff.magnitude;
                                 offsetsInitialized = true;
                             }
                             
@@ -870,40 +984,30 @@ namespace VPB
                             Vector3 targetPos = currentPos;
 
                             // Capture manual movement as new reference if not following OR if being dragged
-                            if (!VPBConfig.Instance.FollowEyeHeight || (dragger != null && dragger.isDragging))
+                            if (!VPBConfig.Instance.IsFollowEnabled(VPBConfig.Instance.FollowEyeHeight) || (dragger != null && dragger.isDragging))
                             {
                                 followYOffset = currentPos.y - camPos.y;
                             }
 
-                            if (!VPBConfig.Instance.FollowDistance || (dragger != null && dragger.isDragging))
+                            if (!VPBConfig.Instance.IsFollowEnabled(VPBConfig.Instance.FollowDistance) || (dragger != null && dragger.isDragging))
                             {
                                 Vector3 horizontalDiff = new Vector3(currentPos.x - camPos.x, 0, currentPos.z - camPos.z);
                                 followXZOffset = new Vector2(horizontalDiff.x, horizontalDiff.z);
-                                
-                                // If dragging, update the target distance config to match the new position
-                                if (dragger != null && dragger.isDragging && VPBConfig.Instance.FollowDistance)
-                                {
-                                    float newDist = horizontalDiff.magnitude;
-                                    if (newDist > 0.1f) // Avoid zero or near-zero distances
-                                    {
-                                        VPBConfig.Instance.FollowDistanceMeters = Mathf.Clamp(newDist, 1.0f, 5.0f);
-                                        VPBConfig.Instance.TriggerChange();
-                                    }
-                                }
+                                followDistanceReference = horizontalDiff.magnitude;
                             }
 
-                            // Horizontal Following (Strictly respect FollowDistance)
-                            if (VPBConfig.Instance.FollowDistance)
+                            // Horizontal Following (Strictly respect followDistanceReference)
+                            if (VPBConfig.Instance.IsFollowEnabled(VPBConfig.Instance.FollowDistance))
                             {
                                 Vector3 hOffset = new Vector3(followXZOffset.x, 0, followXZOffset.y);
                                 if (hOffset.sqrMagnitude < 0.0001f) hOffset = Vector3.forward;
-                                Vector3 hTarget = camPos + hOffset.normalized * VPBConfig.Instance.FollowDistanceMeters;
+                                Vector3 hTarget = camPos + hOffset.normalized * followDistanceReference;
                                 targetPos.x = hTarget.x;
                                 targetPos.z = hTarget.z;
                             }
 
                             // Vertical Following (Eye Height)
-                            if (VPBConfig.Instance.FollowEyeHeight)
+                            if (VPBConfig.Instance.IsFollowEnabled(VPBConfig.Instance.FollowEyeHeight))
                             {
                                 targetPos.y = camPos.y + followYOffset;
                             }
@@ -923,7 +1027,7 @@ namespace VPB
                             }
 
                             // Handle Rotation Following (Respect FollowAngle setting)
-                            if (VPBConfig.Instance.FollowAngle || bypassThreshold)
+                            if (VPBConfig.Instance.IsFollowEnabled(VPBConfig.Instance.FollowAngle))
                             {
                                 Vector3 lookDir = canvas.transform.position - _cachedCamera.transform.position;
                                 if (lookDir.sqrMagnitude > 0.001f)
@@ -949,7 +1053,7 @@ namespace VPB
                         }
 
                         // Curvature logic (Independent of follow mode)
-                        if (VPBConfig.Instance.EnableCurvature)
+                        if (!fixedMode && VPBConfig.Instance.EnableCurvature)
                         {
                             ApplyCurvatureToChildren();
                         }
@@ -971,6 +1075,22 @@ namespace VPB
                 {
                     if (pointerDotGO.activeSelf) pointerDotGO.SetActive(false);
                 }
+            }
+        }
+
+        public void TriggerCurvatureRefresh()
+        {
+            ApplyCurvatureToChildren();
+        }
+
+        public void RepositionInFront()
+        {
+            if (Camera.main != null)
+            {
+                Transform cam = Camera.main.transform;
+                canvas.transform.position = cam.position + cam.forward * 1.5f;
+                canvas.transform.rotation = Quaternion.LookRotation(canvas.transform.position - cam.position, Vector3.up);
+                offsetsInitialized = false; // Reset follow offsets
             }
         }
     }

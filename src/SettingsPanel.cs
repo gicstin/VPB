@@ -9,6 +9,7 @@ namespace VPB
     public class SettingsPanel
     {
         public GameObject settingsPaneGO;
+        private GalleryPanel parentPanel;
         private GameObject backgroundBoxGO;
         private RectTransform settingsPaneRT;
         private GameObject settingsScrollContent;
@@ -23,17 +24,14 @@ namespace VPB
         private string pendingShowSideButtons;
         private string backupShowSideButtons;
 
-        private bool pendingFollowAngle;
-        private bool backupFollowAngle;
+        private string pendingFollowAngle;
+        private string backupFollowAngle;
 
-        private bool pendingFollowDistance;
-        private bool backupFollowDistance;
+        private string pendingFollowDistance;
+        private string backupFollowDistance;
 
-        private float pendingFollowDistanceMeters;
-        private float backupFollowDistanceMeters;
-
-        private bool pendingFollowEyeHeight;
-        private bool backupFollowEyeHeight;
+        private string pendingFollowEyeHeight;
+        private string backupFollowEyeHeight;
 
         private float pendingReorientStartAngle;
         private float backupReorientStartAngle;
@@ -62,9 +60,10 @@ namespace VPB
         private GameObject tooltipGO;
         private Text tooltipText;
 
-        public SettingsPanel(GameObject parent)
+        public SettingsPanel(GalleryPanel parentPanel, GameObject backgroundBoxGO)
         {
-            this.backgroundBoxGO = parent;
+            this.parentPanel = parentPanel;
+            this.backgroundBoxGO = backgroundBoxGO;
         }
 
         public void Toggle(bool onRight)
@@ -104,11 +103,8 @@ namespace VPB
             pendingFollowDistance = VPBConfig.Instance._followDistance;
             backupFollowDistance = VPBConfig.Instance._followDistance;
 
-            pendingFollowDistanceMeters = VPBConfig.Instance.FollowDistanceMeters;
-            backupFollowDistanceMeters = VPBConfig.Instance.FollowDistanceMeters;
-
-            pendingFollowEyeHeight = VPBConfig.Instance.FollowEyeHeight;
-            backupFollowEyeHeight = VPBConfig.Instance.FollowEyeHeight;
+            pendingFollowEyeHeight = VPBConfig.Instance._followEyeHeight;
+            backupFollowEyeHeight = VPBConfig.Instance._followEyeHeight;
 
             pendingReorientStartAngle = VPBConfig.Instance.ReorientStartAngle;
             backupReorientStartAngle = VPBConfig.Instance.ReorientStartAngle;
@@ -164,7 +160,6 @@ namespace VPB
             VPBConfig.Instance.ShowSideButtons = backupShowSideButtons;
             VPBConfig.Instance.FollowAngle = backupFollowAngle;
             VPBConfig.Instance._followDistance = backupFollowDistance;
-            VPBConfig.Instance.FollowDistanceMeters = backupFollowDistanceMeters;
             VPBConfig.Instance.FollowEyeHeight = backupFollowEyeHeight;
             VPBConfig.Instance.ReorientStartAngle = backupReorientStartAngle;
             VPBConfig.Instance.MovementThreshold = backupMovementThreshold;
@@ -228,8 +223,7 @@ namespace VPB
                 VPBConfig.Instance.ShowSideButtons = pendingShowSideButtons;
                 VPBConfig.Instance.FollowAngle = pendingFollowAngle;
                 VPBConfig.Instance._followDistance = pendingFollowDistance;
-                VPBConfig.Instance.FollowDistanceMeters = pendingFollowDistanceMeters;
-                VPBConfig.Instance.FollowEyeHeight = pendingFollowEyeHeight;
+                VPBConfig.Instance._followEyeHeight = pendingFollowEyeHeight;
                 VPBConfig.Instance.ReorientStartAngle = pendingReorientStartAngle;
                 VPBConfig.Instance.MovementThreshold = pendingMovementThreshold;
                 // VPBConfig.Instance.EnableCurvature = pendingEnableCurvature;
@@ -318,14 +312,19 @@ namespace VPB
                 VPBConfig.Instance.TriggerChange(); 
             }, "Adds small gaps between groups of side buttons for better visual separation.");
             
-            // Show Side Buttons
-            string[] sideButtonOptions = { "Both", "Left", "Right" };
-            string[] sideButtonLabels = { "Both Sides", "Left Side", "Right Side" };
-            CreateCycleSetting("Show Side Buttons", pendingShowSideButtons, sideButtonOptions, sideButtonLabels, (val) => {
-                pendingShowSideButtons = val;
-                VPBConfig.Instance.ShowSideButtons = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "Choose which sides of the gallery show the action buttons.");
+            bool isFixed = parentPanel != null && parentPanel.isFixedLocally;
+
+            if (!isFixed)
+            {
+                // Show Side Buttons
+                string[] sideButtonOptions = { "Both", "Left", "Right" };
+                string[] sideButtonLabels = { "Both Sides", "Left Side", "Right Side" };
+                CreateCycleSetting("Show Side Buttons", pendingShowSideButtons, sideButtonOptions, sideButtonLabels, (val) => {
+                    pendingShowSideButtons = val;
+                    VPBConfig.Instance.ShowSideButtons = val;
+                    VPBConfig.Instance.TriggerChange();
+                }, "Choose which sides of the gallery show the action buttons.");
+            }
 
             // CATEGORY: Interaction
             //CreateHeader("Interaction");
@@ -339,50 +338,49 @@ namespace VPB
             }, "When ON, dragging an item onto another replaces it. When OFF, it adds to it.");
             */
 
-            // CATEGORY: Follow Mode
-            CreateHeader("Follow Mode");
+            if (!isFixed)
+            {
+                // CATEGORY: Follow Mode
+                CreateHeader("Follow Mode");
 
-            // Follow Angle
-            CreateToggleSetting("Follow Angle", pendingFollowAngle, (val) => {
-                pendingFollowAngle = val;
-                VPBConfig.Instance.FollowAngle = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "When ON, the panel will rotate to face the user.");
+                string[] followOptions = { "Off", "Desktop", "VR", "Both" };
+                string[] followLabels = { "Off", "Desktop", "VR", "Both" };
 
-            // Follow Eye Height
-            CreateToggleSetting("Follow Eye Height", pendingFollowEyeHeight, (val) => {
-                pendingFollowEyeHeight = val;
-                VPBConfig.Instance.FollowEyeHeight = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "When ON, the panel will move vertically to stay at your eye level.");
+                // Follow Angle
+                CreateCycleSetting("Follow Angle", pendingFollowAngle, followOptions, followLabels, (val) => {
+                    pendingFollowAngle = val;
+                    VPBConfig.Instance.FollowAngle = val;
+                    VPBConfig.Instance.TriggerChange();
+                }, "When enabled, the panel will rotate to face the user. 'Both' = both VR and Desktop.");
 
-            // Follow Distance (ON/OFF)
-            CreateToggleSetting("Follow Distance", pendingFollowDistance, (val) => {
-                pendingFollowDistance = val;
-                VPBConfig.Instance.FollowDistance = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "When ON, the panel will maintain the specified horizontal distance from the user.");
+                // Follow Eye Height
+                CreateCycleSetting("Follow Eye Height", pendingFollowEyeHeight, followOptions, followLabels, (val) => {
+                    pendingFollowEyeHeight = val;
+                    VPBConfig.Instance.FollowEyeHeight = val;
+                    VPBConfig.Instance.TriggerChange();
+                }, "When enabled, the panel will stay at eye level. 'Both' = both VR and Desktop.");
 
-            // Follow Distance (meters)
-            CreateSliderSetting("Distance (m)", pendingFollowDistanceMeters, 1.0f, 5.0f, (val) => {
-                pendingFollowDistanceMeters = val;
-                VPBConfig.Instance.FollowDistanceMeters = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "The target horizontal distance to maintain when Follow Distance is enabled.");
+                // Follow Distance (ON/OFF)
+                CreateCycleSetting("Follow Distance", pendingFollowDistance, followOptions, followLabels, (val) => {
+                    pendingFollowDistance = val;
+                    VPBConfig.Instance.FollowDistance = val;
+                    VPBConfig.Instance.TriggerChange();
+                }, "When enabled, the panel will maintain its distance from the user. 'Both' = both VR and Desktop.");
 
-            // Reorient Start Angle
-            CreateSliderSetting("Reorient Angle", pendingReorientStartAngle, 5f, 90f, (val) => {
-                pendingReorientStartAngle = val;
-                VPBConfig.Instance.ReorientStartAngle = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "The angle difference required before the panel starts rotating to face you. Higher values reduce frequent rotations.");
+                // Reorient Start Angle
+                CreateSliderSetting("Reorient Angle", pendingReorientStartAngle, 5f, 90f, (val) => {
+                    pendingReorientStartAngle = val;
+                    VPBConfig.Instance.ReorientStartAngle = val;
+                    VPBConfig.Instance.TriggerChange();
+                }, "The angle difference required before the panel starts rotating to face you. Higher values reduce frequent rotations.");
 
-            // Movement Threshold
-            CreateSliderSetting("Move Threshold", pendingMovementThreshold, 0.01f, 1.0f, (val) => {
-                pendingMovementThreshold = val;
-                VPBConfig.Instance.MovementThreshold = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "The distance you must move before the panel updates its position. Higher values provide more stable 'discrete' updates.");
+                // Movement Threshold
+                CreateSliderSetting("Move Threshold", pendingMovementThreshold, 0.01f, 1.0f, (val) => {
+                    pendingMovementThreshold = val;
+                    VPBConfig.Instance.MovementThreshold = val;
+                    VPBConfig.Instance.TriggerChange();
+                }, "The distance you must move before the panel updates its position. Higher values provide more stable 'discrete' updates.");
+            }
         }
 
         private void CreateHeader(string title)
@@ -400,7 +398,7 @@ namespace VPB
             t.text = title.ToUpper();
             t.fontSize = 20;
             t.fontStyle = FontStyle.Bold;
-            t.color = new Color(0.7f, 0.7f, 0.7f);
+            t.color = Color.white;
             t.alignment = TextAnchor.MiddleLeft;
             RectTransform rt = textGO.GetComponent<RectTransform>();
             rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
@@ -700,10 +698,10 @@ namespace VPB
             Text onTxt = onBtn.GetComponentInChildren<Text>();
 
             Action updateColors = () => {
-                offImg.color = currentVal ? new Color(0.25f, 0.25f, 0.25f) : new Color(0.7f, 0.3f, 0.3f);
-                offTxt.color = currentVal ? new Color(0.7f, 0.7f, 0.7f) : Color.white;
-                onImg.color = currentVal ? new Color(0.3f, 0.7f, 0.3f) : new Color(0.25f, 0.25f, 0.25f);
-                onTxt.color = currentVal ? Color.white : new Color(0.7f, 0.7f, 0.7f);
+                offImg.color = currentVal ? new Color(0.2f, 0.2f, 0.2f) : new Color(0.6f, 0.2f, 0.2f);
+                offTxt.color = Color.white;
+                onImg.color = currentVal ? new Color(0.2f, 0.6f, 0.2f) : new Color(0.2f, 0.2f, 0.2f);
+                onTxt.color = Color.white;
             };
             updateColors();
 

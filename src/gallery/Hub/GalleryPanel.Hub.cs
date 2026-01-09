@@ -50,7 +50,7 @@ namespace VPB
                  foreach (var cat in info.Categories)
                  {
                     bool isActive = (currentHubCategory == cat);
-                    Color btnColor = isActive ? ColorHub : new Color(0.7f, 0.7f, 0.7f, 1f);
+                    Color btnColor = isActive ? ColorHub : new Color(0.25f, 0.25f, 0.25f, 1f);
 
                     CreateTabButton(container.transform, cat, btnColor, isActive, () => {
                         currentHubCategory = cat;
@@ -88,7 +88,7 @@ namespace VPB
                  foreach (var pt in info.PayTypes)
                  {
                     bool isActive = (currentHubPayType == pt);
-                    Color btnColor = isActive ? new Color(0.2f, 0.6f, 0.8f, 1f) : new Color(0.7f, 0.7f, 0.7f, 1f);
+                    Color btnColor = isActive ? new Color(0.2f, 0.6f, 0.8f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
 
                     CreateTabButton(container.transform, pt, btnColor, isActive, () => {
                         currentHubPayType = pt;
@@ -147,7 +147,7 @@ namespace VPB
                  foreach (var creator in pageCreators)
                  {
                     bool isActive = (currentHubCreator == creator);
-                    Color btnColor = isActive ? ColorCreator : new Color(0.7f, 0.7f, 0.7f, 1f);
+                    Color btnColor = isActive ? ColorCreator : new Color(0.25f, 0.25f, 0.25f, 1f);
 
                     CreateTabButton(container.transform, creator, btnColor, isActive, () => {
                         currentHubCreator = creator;
@@ -245,7 +245,7 @@ namespace VPB
                  foreach (var tag in pageTags)
                  {
                     bool isActive = currentHubTags.Contains(tag);
-                    Color btnColor = isActive ? new Color(0.5f, 0.2f, 0.5f, 1f) : new Color(0.7f, 0.7f, 0.7f, 1f);
+                    Color btnColor = isActive ? new Color(0.5f, 0.2f, 0.5f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
 
                     CreateTabButton(container.transform, tag, btnColor, isActive, () => {
                         if (currentHubTags.Contains(tag)) currentHubTags.Remove(tag);
@@ -434,7 +434,17 @@ namespace VPB
             {
                 btn.onClick.RemoveAllListeners();
                 btn.onClick.AddListener(() => {
-                    Debug.Log("Clicked Hub Item: " + item.Title);
+                    // Deselect old file
+                    if (selectedFile != null && fileButtonImages.ContainsKey(selectedFile.Path))
+                    {
+                        if (fileButtonImages[selectedFile.Path] != null)
+                            fileButtonImages[selectedFile.Path].color = Color.gray;
+                    }
+
+                    selectedFile = null;
+                    selectedPath = null;
+                    selectedHubItem = item;
+                    actionsPanel?.HandleSelectionChanged(selectedFile, selectedHubItem);
                 });
             }
             

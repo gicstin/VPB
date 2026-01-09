@@ -33,6 +33,7 @@ namespace VPB
         }
 
         public int PanelCount => panels.Count;
+        public List<GalleryPanel> Panels => panels;
 
         void Awake()
         {
@@ -62,16 +63,8 @@ namespace VPB
 
         public void Init()
         {
-            // if (mainPanel != null) return; // Removed
-
-            // Only create if NO panels exist at all? 
-            // Or is this called to initialize the "main" one?
             // VamHookPlugin calls this on hotkey if panels are hidden or empty.
-            
-            if (panels.Count == 0)
-            {
-                 CreatePane();
-            }
+            // We no longer automatically create a pane here to avoid ghosts.
         }
 
         public void SetCategories(List<Category> cats)
