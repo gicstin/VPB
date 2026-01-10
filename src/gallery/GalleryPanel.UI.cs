@@ -10,6 +10,19 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
+        private struct SideButtonLayoutEntry
+        {
+            public int buttonIndex;
+            public int row;
+            public int gapTier;
+
+            public SideButtonLayoutEntry(int buttonIndex, int row, int gapTier)
+            {
+                this.buttonIndex = buttonIndex;
+                this.row = row;
+                this.gapTier = gapTier;
+            }
+        }
         private void CreatePaginationControls()
         {
             // Pagination Container (Bottom Left)
@@ -45,14 +58,6 @@ namespace VPB
             paginationNextBtn = UI.CreateUIButton(pageContainer, 40, 40, ">", 20, 160, 0, AnchorPresets.middleLeft, NextPage);
             AddTooltip(paginationNextBtn, "Next Page");
 
-            // Expansion Toggle Button (Arrow Up/Down)
-            // actionsPanel.IsExpanded is true by default, but it might be initialized as collapsed if no selection.
-            // When expanded, show ▼. When collapsed, show ▲.
-            string initialArrow = (actionsPanel != null && actionsPanel.IsExpanded) ? "▼" : "▲";
-            expansionToggleBtn = UI.CreateUIButton(pageContainer, 40, 40, initialArrow, 20, 210, 0, AnchorPresets.middleLeft, ToggleExpansion);
-            expansionToggleText = expansionToggleBtn.GetComponentInChildren<Text>();
-            AddTooltip(expansionToggleBtn, "Toggle Action Pane");
-
             // Follow Quick Toggles
             footerFollowAngleBtn = UI.CreateUIButton(pageContainer, 40, 40, "∡", 20, 260, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
@@ -70,7 +75,6 @@ namespace VPB
             AddHoverDelegate(paginationPrevBtn);
             AddTooltip(paginationPrevBtn, "Previous Page");
             AddHoverDelegate(paginationNextBtn);
-            if (expansionToggleBtn != null) AddHoverDelegate(expansionToggleBtn);
             AddHoverDelegate(footerFollowAngleBtn);
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
@@ -144,17 +148,6 @@ namespace VPB
             };
         }
 
-        private void ToggleExpansion()
-        {
-            if (actionsPanel != null)
-            {
-                actionsPanel.ToggleExpand();
-                if (expansionToggleText != null)
-                {
-                    expansionToggleText.text = actionsPanel.IsExpanded ? "▼" : "▲";
-                }
-            }
-        }
 
         private void UpdateDesktopModeButton()
         {
@@ -465,13 +458,6 @@ namespace VPB
             }
             
             float bottomOffset = 60;
-            if (isFixedLocally)
-            {
-                if (actionsPanel != null && actionsPanel.actionsPaneGO != null && actionsPanel.actionsPaneGO.activeSelf)
-                {
-                    bottomOffset = 410; // Footer (60) + Action Pane (350)
-                }
-            }
 
             contentScrollRT.offsetMin = new Vector2(leftOffset, bottomOffset);
             contentScrollRT.offsetMax = new Vector2(rightOffset, -55);
@@ -511,10 +497,6 @@ namespace VPB
             if (paginationRT != null)
             {
                 float footerY = 0;
-                if (isFixedLocally && actionsPanel != null && actionsPanel.actionsPaneGO != null && actionsPanel.actionsPaneGO.activeSelf)
-                {
-                    footerY = 350; // Above action pane
-                }
                 paginationRT.anchoredPosition = new Vector2(50, footerY + 30);
                 
                 if (hoverPathRT != null)
@@ -527,13 +509,13 @@ namespace VPB
             if (leftSideContainer != null)
             {
                 RectTransform rt = leftSideContainer.GetComponent<RectTransform>();
-                float yShift = (isFixedLocally && actionsPanel != null && actionsPanel.actionsPaneGO != null && actionsPanel.actionsPaneGO.activeSelf) ? 175 : 0;
+                float yShift = 0;
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yShift);
             }
             if (rightSideContainer != null)
             {
                 RectTransform rt = rightSideContainer.GetComponent<RectTransform>();
-                float yShift = (isFixedLocally && actionsPanel != null && actionsPanel.actionsPaneGO != null && actionsPanel.actionsPaneGO.activeSelf) ? 175 : 0;
+                float yShift = 0;
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yShift);
             }
 
@@ -723,21 +705,64 @@ namespace VPB
             if (VPBConfig.Instance == null) return;
             float spacing = 60f;
             float groupGap = VPBConfig.Instance.EnableButtonGaps ? 20f : 0f;
-            float startY = 260f;
+            float stackHeight = GetSideButtonsStackHeight(spacing, groupGap);
+            float topY = stackHeight * 0.5f;
 
             // Settings
-            UpdateListPositions(rightSideButtons, startY, spacing, groupGap);
-            UpdateListPositions(leftSideButtons, startY, spacing, groupGap);
+            UpdateListPositions(rightSideButtons, topY, spacing, groupGap);
+            UpdateListPositions(leftSideButtons, topY, spacing, groupGap);
 
             // Cancel zones
-            float cancelY = startY - spacing * 9 - 80f - groupGap * 5;
+            float cancelY = -topY - 80f;
             foreach (var go in rightCancelGroups) if (go != null) go.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, cancelY);
             foreach (var go in leftCancelGroups) if (go != null) go.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, cancelY);
         }
 
+        private SideButtonLayoutEntry[] GetSideButtonsLayout()
+        {
+            // gapBeforeUnits is how many "groupGap" units to insert before this row (in addition to normal spacing)
+            return new SideButtonLayoutEntry[]
+            {
+                new SideButtonLayoutEntry(0, 0, 0),
+                new SideButtonLayoutEntry(1, 0, 0),
+                new SideButtonLayoutEntry(2, 0, 1),
+                new SideButtonLayoutEntry(3, 0, 0),
+                new SideButtonLayoutEntry(4, 0, 1),
+                new SideButtonLayoutEntry(5, 0, 0),
+                new SideButtonLayoutEntry(6, 0, 0),
+                new SideButtonLayoutEntry(10, 0, 0),
+                new SideButtonLayoutEntry(7, 0, 1),
+                new SideButtonLayoutEntry(8, 0, 0),
+                new SideButtonLayoutEntry(9, 0, 0),
+                new SideButtonLayoutEntry(11, 0, 1),
+            };
+        }
+
+        private float GetSideButtonsStackHeight(float spacing, float gap)
+        {
+            SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
+            if (layout == null || layout.Length <= 1) return 0f;
+
+            int gapUnits = 0;
+            for (int i = 1; i < layout.Length; i++) gapUnits += layout[i].gapTier;
+            return (layout.Length - 1) * spacing + gapUnits * gap;
+        }
+
         private void UpdateListPositions(List<RectTransform> buttons, float startY, float spacing, float gap)
         {
-            if (buttons == null || buttons.Count < 11) return;
+            if (buttons == null) return;
+
+            SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
+            float y = startY;
+            for (int i = 0; i < layout.Length; i++)
+            {
+                if (i > 0) y -= (spacing + gap * layout[i].gapTier);
+                RectTransform rt = (layout[i].buttonIndex >= 0 && layout[i].buttonIndex < buttons.Count) ? buttons[layout[i].buttonIndex] : null;
+                if (rt != null) rt.anchoredPosition = new Vector2(0, y);
+            }
+
+#if false
+            if (buttons == null || buttons.Count < 12) return;
             
             // 0: Fixed/Floating
             buttons[0].anchoredPosition = new Vector2(0, startY);
@@ -753,16 +778,21 @@ namespace VPB
             buttons[5].anchoredPosition = new Vector2(0, startY - spacing * 5 - gap * 2);
             // 6: Status
             buttons[6].anchoredPosition = new Vector2(0, startY - spacing * 6 - gap * 2);
-            // 7: Hub
-            buttons[7].anchoredPosition = new Vector2(0, startY - spacing * 7 - gap * 2);
-            
-            // 8: Apply Mode (NEW)
-            buttons[8].anchoredPosition = new Vector2(0, startY - spacing * 8 - gap * 3);
-            
-            // 9: Add/Replace
-            buttons[9].anchoredPosition = new Vector2(0, startY - spacing * 9 - gap * 3);
-            // 10: Undo
-            buttons[10].anchoredPosition = new Vector2(0, startY - spacing * 10 - gap * 4);
+            // 7: Hub (under Status)
+            buttons[10].anchoredPosition = new Vector2(0, startY - spacing * 7 - gap * 2);
+
+            // 8: Target (start lower group with extra gap)
+            buttons[7].anchoredPosition = new Vector2(0, startY - spacing * 8 - gap * 4);
+
+            // 9: Apply Mode
+            buttons[8].anchoredPosition = new Vector2(0, startY - spacing * 9 - gap * 4);
+
+            // 10: Add/Replace
+            buttons[9].anchoredPosition = new Vector2(0, startY - spacing * 10 - gap * 4);
+
+            // 11: Undo
+            buttons[11].anchoredPosition = new Vector2(0, startY - spacing * 12 - gap * 3);
+#endif
         }
 
         private void SetLayerRecursive(GameObject go, int layer)

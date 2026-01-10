@@ -13,16 +13,10 @@ namespace VPB
         private GameObject backgroundBoxGO; // The gallery's background box
         private RectTransform actionsPaneRT;
         private GameObject contentGO;
-        private RawImage previewImage;
-        private Text previewTitle;
-        private GameObject previewContainer;
-        private AspectRatioFitter previewARF;
         private FileEntry selectedFile;
         private Hub.GalleryHubItem selectedHubItem;
         private GalleryPanel parentPanel;
         private bool isOpen = false;
-        private bool isExpanded = false;
-        public bool IsExpanded => isExpanded;
 
         private List<UnityAction<UIDraggableItem>> activeActions = new List<UnityAction<UIDraggableItem>>();
         private List<UIDraggableItem> activeDraggables = new List<UIDraggableItem>();
@@ -66,183 +60,25 @@ namespace VPB
             }
         }
 
-        public void ToggleExpand()
-        {
-            isExpanded = !isExpanded;
-            if (isExpanded)
-            {
-                if (selectedFile != null || selectedHubItem != null)
-                    Open();
-            }
-            else
-            {
-                Close();
-            }
-        }
-
         private void CreatePane()
         {
-            // Create anchored to the bottom of the mother pane
-            // Daughter pane 1200 wide (matching mother), fixed height 400
-            actionsPaneGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0.05f, 0.05f, 0.05f, 0.95f), AnchorPresets.bottomMiddle, 1200, 400, new Vector2(0, -10));
-            actionsPaneRT = actionsPaneGO.GetComponent<RectTransform>();
+            // Create a hidden container for logic/state
+            actionsPaneGO = new GameObject("ActionsPane_Hidden");
+            actionsPaneGO.transform.SetParent(backgroundBoxGO.transform, false);
+            actionsPaneGO.SetActive(false);
             
+            actionsPaneRT = actionsPaneGO.AddComponent<RectTransform>();
+            actionsPaneRT.sizeDelta = Vector2.zero;
+
+            // Content container (for potential children components/logic)
+            contentGO = new GameObject("ActionsContent_Hidden");
+            contentGO.transform.SetParent(actionsPaneGO.transform, false);
+            contentGO.AddComponent<RectTransform>();
+
             // Add Input Handler
             var inputHandler = actionsPaneGO.AddComponent<GalleryActionsInputHandler>();
             inputHandler.panel = this;
-
-            // Anchoring: Bottom of parent, pivot top
-            actionsPaneRT.anchorMin = new Vector2(0.5f, 0);
-            actionsPaneRT.anchorMax = new Vector2(0.5f, 0);
-            actionsPaneRT.pivot = new Vector2(0.5f, 1);
-            actionsPaneRT.anchoredPosition = new Vector2(0, -10); // 10px gap below bottom
-            
-            // Ensure it's on top of other siblings
-            actionsPaneGO.transform.SetAsLastSibling();
-
-            UIHoverColor bgHover = actionsPaneGO.AddComponent<UIHoverColor>();
-            bgHover.normalColor = new Color(0.05f, 0.05f, 0.05f, 0.95f);
-            bgHover.hoverColor = new Color(0.08f, 0.08f, 0.08f, 0.95f);
-
-            // 1. Main ScrollView Container (Left Column)
-            GameObject scrollViewGO = new GameObject("ScrollView");
-            scrollViewGO.transform.SetParent(actionsPaneGO.transform, false);
-            
-            Image scrollBg = scrollViewGO.AddComponent<Image>();
-            scrollBg.color = new Color(0, 0, 0, 0);
-
-            RectTransform scrollViewRT = scrollViewGO.GetComponent<RectTransform>();
-            scrollViewRT.anchorMin = new Vector2(0, 0);
-            scrollViewRT.anchorMax = new Vector2(1, 1);
-            scrollViewRT.pivot = new Vector2(0, 1);
-            scrollViewRT.offsetMin = new Vector2(20, 10);
-            scrollViewRT.offsetMax = new Vector2(-320, -10);
-
-            ScrollRect sr = scrollViewGO.AddComponent<ScrollRect>();
-            sr.horizontal = false;
-            sr.vertical = true;
-            sr.scrollSensitivity = 2.5f;
-            
-            // Viewport
-            GameObject viewportGO = new GameObject("Viewport");
-            viewportGO.transform.SetParent(scrollViewGO.transform, false);
-            RectTransform viewportRT = viewportGO.AddComponent<RectTransform>();
-            viewportRT.anchorMin = Vector2.zero;
-            viewportRT.anchorMax = Vector2.one;
-            viewportRT.sizeDelta = Vector2.zero;
-            viewportRT.pivot = new Vector2(0, 1);
-            
-            viewportGO.AddComponent<RectMask2D>();
-            
-            // Content
-            contentGO = new GameObject("Content");
-            contentGO.transform.SetParent(viewportGO.transform, false);
-            RectTransform contentRT = contentGO.AddComponent<RectTransform>();
-            contentRT.anchorMin = new Vector2(0, 1);
-            contentRT.anchorMax = new Vector2(1, 1);
-            contentRT.pivot = new Vector2(0, 1);
-            contentRT.sizeDelta = Vector2.zero;
-
-            sr.content = contentRT;
-            sr.viewport = viewportRT;
-
-            VerticalLayoutGroup glg = contentGO.AddComponent<VerticalLayoutGroup>();
-            glg.spacing = 15;
-            glg.padding = new RectOffset(10, 10, 10, 40); // Added bottom padding for scrolling room
-            glg.childAlignment = TextAnchor.UpperLeft;
-            glg.childControlHeight = true;
-            glg.childControlWidth = true;
-            glg.childForceExpandHeight = false;
-            glg.childForceExpandWidth = true;
-            
-            ContentSizeFitter csf = contentGO.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-
-            // Vertical Scrollbar
-            GameObject scrollbarGO = UI.CreateScrollBar(scrollViewGO, 15, 0, Scrollbar.Direction.BottomToTop);
-            RectTransform scrollbarRT = scrollbarGO.GetComponent<RectTransform>();
-            scrollbarRT.anchorMin = new Vector2(1, 0);
-            scrollbarRT.anchorMax = new Vector2(1, 1);
-            scrollbarRT.pivot = new Vector2(1, 0.5f);
-            scrollbarRT.sizeDelta = new Vector2(15, 0);
-            scrollbarRT.anchoredPosition = Vector2.zero;
-
-            sr.verticalScrollbar = scrollbarGO.GetComponent<Scrollbar>();
-            sr.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
-            sr.verticalScrollbarSpacing = 5;
-
-            // Adjust viewport to accommodate scrollbar
-            viewportRT.offsetMax = new Vector2(-20, 0);
-
-            // 3. Preview Container (Right Side)
-            previewContainer = new GameObject("PreviewContainer");
-            previewContainer.transform.SetParent(actionsPaneGO.transform, false);
-            RectTransform pRT = previewContainer.AddComponent<RectTransform>();
-            pRT.anchorMin = new Vector2(1, 0.5f);
-            pRT.anchorMax = new Vector2(1, 0.5f);
-            pRT.pivot = new Vector2(1, 0.5f);
-            pRT.anchoredPosition = new Vector2(0, 0); 
-            pRT.sizeDelta = new Vector2(300, 360); // Slightly wider
-
-            // Thumbnail Area (Top)
-            GameObject thumbAreaGO = new GameObject("ThumbnailArea");
-            thumbAreaGO.transform.SetParent(previewContainer.transform, false);
-            RectTransform taRT = thumbAreaGO.AddComponent<RectTransform>();
-            taRT.anchorMin = new Vector2(0, 1);
-            taRT.anchorMax = new Vector2(1, 1);
-            taRT.pivot = new Vector2(0.5f, 1);
-            taRT.anchoredPosition = new Vector2(0, 0);
-            taRT.sizeDelta = new Vector2(0, 260);
-
-            GameObject thumbGO = new GameObject("Thumbnail");
-            thumbGO.transform.SetParent(thumbAreaGO.transform, false);
-            previewImage = thumbGO.AddComponent<RawImage>();
-            previewImage.color = new Color(0, 0, 0, 0.5f);
-
-            previewARF = thumbGO.AddComponent<AspectRatioFitter>();
-            previewARF.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
-            previewARF.aspectRatio = 1.333f;
-
-            // Package Name Text with Border
-            GameObject titleBorderGO = new GameObject("TitleBorder");
-            titleBorderGO.transform.SetParent(thumbGO.transform, false);
-            Image borderImg = titleBorderGO.AddComponent<Image>();
-            borderImg.color = new Color(0.1f, 0.1f, 0.1f, 0.8f);
-            
-            // 1px Outline as a border
-            Outline outline = titleBorderGO.AddComponent<Outline>();
-            outline.effectColor = new Color(1, 1, 1, 0.3f);
-            outline.effectDistance = new Vector2(1, 1);
-
-            RectTransform borderRT = titleBorderGO.GetComponent<RectTransform>();
-            borderRT.anchorMin = new Vector2(0, 0); // Stretch horizontally relative to thumb
-            borderRT.anchorMax = new Vector2(1, 0);
-            borderRT.pivot = new Vector2(0.5f, 1); // Pivot top of border to bottom of thumb
-            borderRT.anchoredPosition = new Vector2(0, -5); // Small gap below image
-            borderRT.sizeDelta = new Vector2(0, 90);
-
-            GameObject titleGO = new GameObject("Title");
-            titleGO.transform.SetParent(titleBorderGO.transform, false);
-            previewTitle = titleGO.AddComponent<Text>();
-            previewTitle.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            previewTitle.fontSize = 18;
-            previewTitle.color = Color.white;
-            previewTitle.alignment = TextAnchor.MiddleCenter;
-            previewTitle.horizontalOverflow = HorizontalWrapMode.Wrap;
-            previewTitle.verticalOverflow = VerticalWrapMode.Truncate;
-            previewTitle.supportRichText = true;
-            previewTitle.text = "Package Name";
-            
-            RectTransform titleRT = titleGO.GetComponent<RectTransform>();
-            titleRT.anchorMin = Vector2.zero;
-            titleRT.anchorMax = Vector2.one;
-            titleRT.sizeDelta = new Vector2(-10, -10); // Margin inside border
-            titleRT.anchoredPosition = Vector2.zero;
-
-            actionsPaneGO.SetActive(false);
         }
-
         public void HandleSelectionChanged(FileEntry file, Hub.GalleryHubItem hubItem)
         {
             selectedFile = file;
@@ -250,49 +86,30 @@ namespace VPB
 
             if (selectedFile == null && selectedHubItem == null)
             {
-                Close();
                 return;
             }
 
-            if (isExpanded) Open();
             UpdateUI();
         }
 
         public void Open()
         {
             isOpen = true;
-            actionsPaneGO.SetActive(true);
-            // Refresh curvature on parent change if needed
-            parentPanel.TriggerCurvatureRefresh();
-            parentPanel.UpdateLayout();
         }
 
         public void Close()
         {
             isOpen = false;
-            actionsPaneGO.SetActive(false);
-            parentPanel.UpdateLayout();
         }
 
         private void UpdateUI()
         {
-            foreach (Transform child in contentGO.transform)
-            {
-                UnityEngine.Object.Destroy(child.gameObject);
-            }
-
-            // Persistence: Don't clear expandedRow fields here.
-            // They will be matched in CreateExpandableButton.
-
             activeActions.Clear();
             activeDraggables.Clear();
             int buttonCount = 0;
 
             if (selectedHubItem != null)
             {
-                previewTitle.text = "<b>" + selectedHubItem.Title + "</b>\n<size=14>" + selectedHubItem.Creator + "</size>";
-                LoadHubThumbnail(selectedHubItem.ThumbnailUrl, previewImage);
-
                 CreateButton(++buttonCount, "Download", (dragger) => LogUtil.Log("Downloading: " + selectedHubItem.Title));
                 CreateButton(++buttonCount, "View on HUB", (dragger) => Application.OpenURL("https://hub.virtamate.com/resources/" + selectedHubItem.ResourceId));
                 CreateButton(++buttonCount, "Install Dependencies*", (dragger) => {});
@@ -300,14 +117,6 @@ namespace VPB
             }
             else if (selectedFile != null)
             {
-                string title = "<b>" + selectedFile.Name + "</b>";
-                if (selectedFile is VarFileEntry vfe)
-                {
-                    title = "<b>" + vfe.Package.Uid + "</b>\n<size=14>" + vfe.InternalPath + "</size>";
-                }
-                previewTitle.text = title;
-                LoadThumbnail(selectedFile, previewImage);
-
                 string pathLower = selectedFile.Path.ToLowerInvariant();
                 string category = parentPanel.CurrentCategoryTitle ?? "";
                 
@@ -316,7 +125,7 @@ namespace VPB
                     CreateButton(++buttonCount, "Load Clothing\nto Person", (dragger) => {
                         Atom target = GetBestTargetAtom();
                         if (target != null) dragger.LoadClothing(target);
-                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); Open(); }
+                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
                     });
                     CreateButton(++buttonCount, "Add to Favorites", (dragger) => selectedFile.SetFavorite(true));
                     CreateButton(++buttonCount, "Set as Default*", (dragger) => {});
@@ -328,116 +137,13 @@ namespace VPB
                 {
                     CreateButton(++buttonCount, "Load Scene", (dragger) => dragger.LoadSceneFile(selectedFile.Uid));
                     CreateButton(++buttonCount, "Merge Scene", (dragger) => dragger.MergeSceneFile(selectedFile.Uid, false));
-                    CreateExpandableButton(++buttonCount, "Merge Person\nOnly",
-                        (dragger) => dragger.MergeScenePersonsOnly(selectedFile.Uid),
-                        (optionsParent, dragger) => {
-                            bool ignoreRoot = true;
-                            bool renameUnique = true;
-                            string selectedPerson = null;
-                            string applyToTarget = null; // null means "New Person"
-                            List<string> personIds = new List<string> { "All Persons" };
-                            List<string> scenePersonIds = new List<string> { "New Person" };
-
-                            try
-                            {
-                                if (selectedFile == null) LogUtil.LogError("SelectedFile is null in submenu");
-                                else
-                                {
-                                    // Use native VaM LoadJSON with fallback for manual read if needed
-                                    JSONNode node = UI.LoadJSONWithFallback(selectedFile.Uid, selectedFile);
-                                    if (node != null && node["atoms"] != null)
-                                    {
-                                        int count = 0;
-                                        List<string> foundTypes = new List<string>();
-                                        foreach (JSONNode atom in node["atoms"].AsArray)
-                                        {
-                                            string type = atom["type"].Value;
-                                            if (!foundTypes.Contains(type)) foundTypes.Add(type);
-                                            
-                                            if (type == "Person")
-                                            {
-                                                string pid = atom["id"];
-                                                if (!string.IsNullOrEmpty(pid))
-                                                {
-                                                    personIds.Add(pid);
-                                                    count++;
-                                                }
-                                            }
-                                        }
-                                        LogUtil.Log($"[VPB] Found {count} persons in file {selectedFile.Name}. Found atom types: {string.Join(", ", foundTypes.ToArray())}");
-                                    }
-                                }
-
-                                // Populate scene persons
-                                if (SuperController.singleton != null)
-                                {
-                                    foreach (Atom a in SuperController.singleton.GetAtoms())
-                                    {
-                                        if (a.type == "Person") scenePersonIds.Add(a.uid);
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                LogUtil.LogError($"[VPB] Error parsing persons: {ex.Message}");
-                            }
-
-                            CreateInlineToggle(optionsParent, "Ignore Root (Teleport)", true, (val) => ignoreRoot = val);
-                            CreateInlineToggle(optionsParent, "Import as New (Rename)", true, (val) => renameUnique = val);
-                            
-                            Button mergeBtn = null;
-                            var sourceDd = CreateInlineDropdown(optionsParent, "Source Person", personIds, 0, (idx) => {
-                                selectedPerson = (idx == 0) ? null : personIds[idx];
-                                if (mergeBtn != null)
-                                {
-                                    Text t = mergeBtn.GetComponentInChildren<Text>();
-                                    if (t != null) t.text = (selectedPerson == null) ? "Merge All Persons" : "Merge " + selectedPerson;
-                                }
-                            });
-                            // Set custom color for Source dropdown
-                            Image sourceImg = sourceDd.GetComponent<Image>();
-                            if (sourceImg != null) sourceImg.color = new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                            var applyDd = CreateInlineDropdown(optionsParent, "Apply To", scenePersonIds, 0, (idx) => {
-                                applyToTarget = (idx == 0) ? null : scenePersonIds[idx];
-                            });
-                            // Set custom color for Apply To dropdown
-                            Image applyImg = applyDd.GetComponent<Image>();
-                            if (applyImg != null) applyImg.color = new Color(0.2f, 0.25f, 0.3f, 1f);
-
-                            mergeBtn = CreateInlineButton(optionsParent, "Merge All Persons", () => {
-                                dragger.MergeScenePersonsOnly(selectedFile.Uid, ignoreRoot, selectedPerson, renameUnique, applyToTarget);
-                            });
-
-                            CreateInlineButton(optionsParent, "Merge Appearance", () => {
-                                if (string.IsNullOrEmpty(selectedPerson) || selectedPerson == "All Persons")
-                                {
-                                    LogUtil.LogWarning("[VPB] Please select a specific source person for Appearance merge.");
-                                    return;
-                                }
-                                dragger.MergeSceneAppearanceOnly(selectedFile.Uid, selectedPerson, renameUnique, applyToTarget);
-                            });
-
-                            CreateInlineButton(optionsParent, "Merge Pose", () => {
-                                if (string.IsNullOrEmpty(selectedPerson) || selectedPerson == "All Persons")
-                                {
-                                    LogUtil.LogWarning("[VPB] Please select a specific source person for Pose merge.");
-                                    return;
-                                }
-                                dragger.MergeScenePoseOnly(selectedFile.Uid, selectedPerson, renameUnique, applyToTarget);
-                            });
-                        });
-                    CreateButton(++buttonCount, "Replace Scene\nKeep Person", (dragger) => dragger.ReplaceSceneKeepPersons(selectedFile.Uid));
-                    CreateButton(++buttonCount, "Save as template*", (dragger) => {});
-                    CreateButton(++buttonCount, "Export as package*", (dragger) => {});
-                    CreateButton(++buttonCount, "Load Random*", (dragger) => {});
                 }
                 else if (pathLower.Contains("/hair/") || pathLower.Contains("\\hair\\") || category.Contains("Hair"))
                 {
                     CreateButton(++buttonCount, "Load Hair", (dragger) => {
                         Atom target = GetBestTargetAtom();
                         if (target != null) dragger.LoadHair(target);
-                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); Open(); }
+                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
                     });
                     CreateButton(++buttonCount, "Quick Hair*", (dragger) => {});
                     CreateButton(++buttonCount, "Favorite Hair*", (dragger) => {});
@@ -449,7 +155,7 @@ namespace VPB
                     CreateButton(++buttonCount, "Load Pose", (dragger) => {
                         Atom target = GetBestTargetAtom();
                         if (target != null) dragger.LoadPose(target);
-                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); Open(); }
+                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
                     });
                     CreateButton(++buttonCount, "Load Pose (Silent)*", (dragger) => {});
                     CreateButton(++buttonCount, "Mirror Pose*", (dragger) => {});
@@ -458,55 +164,10 @@ namespace VPB
                 else if (pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || category.Contains("SubScene"))
                 {
                     CreateButton(++buttonCount, "Load SubScene", (dragger) => dragger.MergeSceneFile(selectedFile.Uid, false));
-                    CreateButton(++buttonCount, "Merge SubScene*", (dragger) => {});
-                    CreateButton(++buttonCount, "Export SubScene*", (dragger) => {});
-                }
-                else if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || category.Contains("Asset") || category.Contains("CUA"))
-                {
-                    CreateButton(++buttonCount, "Spawn Asset*", (dragger) => {});
-                    CreateButton(++buttonCount, "Quick Spawn*", (dragger) => {});
-                    CreateButton(++buttonCount, "CUA Load Options*", (dragger) => {});
-                }
-                else if (pathLower.Contains("/morphs/") || pathLower.Contains("\\morphs\\") || category.Contains("Morph"))
-                {
-                    CreateButton(++buttonCount, "Apply Morph*", (dragger) => {});
-                    CreateButton(++buttonCount, "Favorite Morph*", (dragger) => {});
-                    CreateButton(++buttonCount, "Reset Morph*", (dragger) => {});
-                }
-                else if (pathLower.Contains("/audio/") || pathLower.Contains("\\audio\\") || category.Contains("Audio"))
-                {
-                    CreateButton(++buttonCount, "Play Audio*", (dragger) => {});
-                    CreateButton(++buttonCount, "Queue Audio*", (dragger) => {});
-                    CreateButton(++buttonCount, "Test Audio*", (dragger) => {});
-                    CreateButton(++buttonCount, "Stop All Audio*", (dragger) => {});
-                }
-                else if (pathLower.Contains("/plugins/") || pathLower.Contains("\\plugins\\") || category.Contains("Plugin"))
-                {
-                    CreateButton(++buttonCount, "Load Plugin*", (dragger) => {});
-                    CreateButton(++buttonCount, "Toggle Plugin*", (dragger) => {});
-                    CreateButton(++buttonCount, "Plugin Settings*", (dragger) => {});
-                }
-                else if (pathLower.EndsWith(".var") || category.Contains("All") || category.Contains("Package"))
-                {
-                    CreateButton(++buttonCount, "Enable VAR*", (dragger) => {});
-                    CreateButton(++buttonCount, "Disable VAR*", (dragger) => {});
-                    CreateButton(++buttonCount, "Offload VAR*", (dragger) => {});
-                    CreateButton(++buttonCount, "Scan for Deps*", (dragger) => {});
                 }
                 else
                 {
                     CreateButton(++buttonCount, "Add to Scene", (dragger) => LogUtil.Log("Adding to scene: " + selectedFile.Name));
-                    CreateButton(++buttonCount, "Quick Look*", (dragger) => {});
-                }
-
-                // Global actions for any file
-                if (selectedFile != null)
-                {
-                    CreateButton(++buttonCount, "Delete File*", (dragger) => {});
-                    CreateButton(++buttonCount, "Open in Explorer*", (dragger) => {});
-                    CreateButton(++buttonCount, "Adjust Position*", (dragger) => {});
-                    CreateButton(++buttonCount, "View Dependencies*", (dragger) => {});
-                    CreateButton(++buttonCount, "Used By VARs*", (dragger) => {});
                 }
             }
         }
@@ -547,11 +208,6 @@ namespace VPB
             }
             return btn;
         }
-
-        private GameObject expandedRowOptionsContainer;
-        private Text expandedRowArrowText;
-        private string expandedRowLabel;
-        private Action<Transform, UIDraggableItem> activeExpandedOptionsBuilder;
 
         private void CreateExpandableButton(int number, string label, UnityAction<UIDraggableItem> mainAction, Action<Transform, UIDraggableItem> populateOptions)
         {
@@ -621,86 +277,6 @@ namespace VPB
                 activeActions.Add(mainAction);
                 activeDraggables.Add(draggable);
             }
-
-            GameObject arrowBtn = UI.CreateUIButton(headerGO, 50, 80, "▼", 18, 0, 0, AnchorPresets.middleCenter, () => {});
-            LayoutElement arrowLE = arrowBtn.AddComponent<LayoutElement>();
-            arrowLE.preferredWidth = 50;
-            arrowLE.preferredHeight = 80;
-
-            Text arrowText = arrowBtn.GetComponentInChildren<Text>();
-
-            GameObject optionsGO = new GameObject("Options");
-            optionsGO.transform.SetParent(rowGO.transform, false);
-            RectTransform optionsRT = optionsGO.AddComponent<RectTransform>();
-            optionsRT.anchorMin = new Vector2(0, 1);
-            optionsRT.anchorMax = new Vector2(1, 1);
-            optionsRT.pivot = new Vector2(0.5f, 1);
-            optionsRT.sizeDelta = new Vector2(0, 0);
-
-            Image optionsImg = optionsGO.AddComponent<Image>();
-            optionsImg.color = new Color(0, 0, 0, 0.15f);
-
-            LayoutElement optionsLE = optionsGO.AddComponent<LayoutElement>();
-            optionsLE.flexibleWidth = 1;
-
-            VerticalLayoutGroup optionsVLG = optionsGO.AddComponent<VerticalLayoutGroup>();
-            optionsVLG.spacing = 6;
-            optionsVLG.padding = new RectOffset(10, 10, 10, 20);
-            optionsVLG.childAlignment = TextAnchor.UpperLeft;
-            optionsVLG.childControlHeight = true;
-            optionsVLG.childControlWidth = true;
-            optionsVLG.childForceExpandHeight = false;
-            optionsVLG.childForceExpandWidth = true;
-
-            ContentSizeFitter optionsCSF = optionsGO.AddComponent<ContentSizeFitter>();
-            optionsCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            optionsCSF.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-
-            optionsGO.SetActive(false);
-
-            Button arrowButton = arrowBtn.GetComponent<Button>();
-            arrowButton.onClick.RemoveAllListeners();
-            arrowButton.onClick.AddListener(() => {
-                if (expandedRowOptionsContainer != null && expandedRowOptionsContainer != optionsGO)
-                {
-                    expandedRowOptionsContainer.SetActive(false);
-                    if (expandedRowArrowText != null) expandedRowArrowText.text = "▼";
-                }
-
-                if (optionsGO.activeSelf && activeExpandedOptionsBuilder == populateOptions)
-                {
-                    optionsGO.SetActive(false);
-                    arrowText.text = "▼";
-                    expandedRowOptionsContainer = null;
-                    expandedRowArrowText = null;
-                    expandedRowLabel = null;
-                    activeExpandedOptionsBuilder = null;
-                    return;
-                }
-
-                foreach (Transform child in optionsGO.transform)
-                {
-                    UnityEngine.Object.Destroy(child.gameObject);
-                }
-
-                optionsGO.SetActive(true);
-                arrowText.text = "▲";
-                expandedRowOptionsContainer = optionsGO;
-                expandedRowArrowText = arrowText;
-                expandedRowLabel = label;
-                activeExpandedOptionsBuilder = populateOptions;
-                populateOptions(optionsGO.transform, draggable);
-            });
-
-            // Check if this button was previously expanded
-            if (activeExpandedOptionsBuilder == populateOptions && expandedRowLabel == label)
-            {
-                optionsGO.SetActive(true);
-                arrowText.text = "▲";
-                expandedRowOptionsContainer = optionsGO;
-                expandedRowArrowText = arrowText;
-                populateOptions(optionsGO.transform, draggable);
-            }
         }
 
         private Toggle CreateInlineToggle(Transform parent, string label, bool defaultOn, UnityAction<bool> onValueChanged)
@@ -749,7 +325,7 @@ namespace VPB
         }
 
         public void Hide() => actionsPaneGO?.SetActive(false);
-        public void Show() { if (isOpen) actionsPaneGO?.SetActive(true); }
+        public void Show() { actionsPaneGO?.SetActive(false); }
 
         private void LoadThumbnail(FileEntry file, RawImage target)
         {
@@ -782,7 +358,6 @@ namespace VPB
             {
                 target.texture = tex;
                 target.color = Color.white;
-                if (previewARF != null) previewARF.aspectRatio = (float)tex.width / (float)tex.height;
                 return;
             }
 
@@ -794,7 +369,6 @@ namespace VPB
                 if (res != null && res.tex != null && target != null) {
                     target.texture = res.tex;
                     target.color = Color.white;
-                    if (previewARF != null) previewARF.aspectRatio = (float)res.tex.width / (float)res.tex.height;
                 }
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
@@ -813,7 +387,6 @@ namespace VPB
                 if (res != null && res.tex != null && target != null) {
                     target.texture = res.tex;
                     target.color = Color.white;
-                    if (previewARF != null) previewARF.aspectRatio = (float)res.tex.width / (float)res.tex.height;
                 }
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);

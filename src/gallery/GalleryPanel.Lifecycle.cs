@@ -72,6 +72,62 @@ namespace VPB
             {
                 Gallery.singleton.RemovePanel(this);
             }
+
+            if (targetMarkerGO != null)
+            {
+                Destroy(targetMarkerGO);
+                targetMarkerGO = null;
+                targetMarkerAtomUid = null;
+            }
+        }
+
+        private void EnsureTargetMarker()
+        {
+            if (targetMarkerGO != null) return;
+            
+            targetMarkerGO = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            targetMarkerGO.name = "VPB_TargetMarker";
+            
+            Collider c = targetMarkerGO.GetComponent<Collider>();
+            if (c != null) Destroy(c);
+
+            targetMarkerGO.transform.localScale = Vector3.one * 0.08f;
+
+            Renderer r = targetMarkerGO.GetComponent<Renderer>();
+            if (r != null)
+            {
+                Material m = new Material(Shader.Find("Unlit/Color"));
+                m.color = Color.magenta;
+                r.material = m;
+            }
+
+            targetMarkerGO.SetActive(false);
+        }
+
+        private void UpdateTargetMarker()
+        {
+            bool shouldShow = hoverCount > 0;
+            Atom target = SelectedTargetAtom;
+            if (!shouldShow || target == null || target.type != "Person")
+            {
+                if (targetMarkerGO != null) targetMarkerGO.SetActive(false);
+                return;
+            }
+
+            EnsureTargetMarker();
+            if (targetMarkerGO == null) return;
+
+            Transform desiredParent = (target.mainController != null) ? target.mainController.transform : target.transform;
+
+            if (targetMarkerAtomUid != target.uid || targetMarkerGO.transform.parent != desiredParent)
+            {
+                targetMarkerAtomUid = target.uid;
+                targetMarkerGO.transform.SetParent(desiredParent, false);
+                targetMarkerGO.transform.localPosition = Vector3.zero;
+                targetMarkerGO.transform.localRotation = Quaternion.identity;
+            }
+
+            if (!targetMarkerGO.activeSelf) targetMarkerGO.SetActive(true);
         }
 
         public void Init()
@@ -246,7 +302,7 @@ namespace VPB
             fpsRT.anchorMin = new Vector2(1, 0.5f);
             fpsRT.anchorMax = new Vector2(1, 0.5f);
             fpsRT.pivot = new Vector2(1, 0.5f);
-            fpsRT.anchoredPosition = new Vector2(-70, 0);
+            fpsRT.anchoredPosition = new Vector2(-120, 0);
             fpsRT.sizeDelta = new Vector2(100, 40);
 
             titleSearchInput = CreateSearchInput(titleBarGO, 300f, (val) => {
@@ -616,17 +672,32 @@ namespace VPB
                 rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
 
                 // Hub (Orange)
-                if (VPBConfig.Instance.IsDevMode)
-                {
-                    GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => {
+                GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => {
+                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
+                    {
                         if (isFixedLocally) ToggleLeft(ContentType.Hub); else ToggleRight(ContentType.Hub);
-                    });
-                    rightHubBtnImage = rightHubBtn.GetComponent<Image>();
-                    rightHubBtnImage.color = ColorHub;
-                    rightHubBtnText = rightHubBtn.GetComponentInChildren<Text>();
-                    rightSideButtons.Add(rightHubBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(rightHubBtn, () => ToggleRight(ContentType.Hub));
-                }
+                    }
+                    else
+                    {
+                        VamHookPlugin.singleton?.OpenHubBrowse();
+                        Hide();
+                    }
+                });
+                rightHubBtnImage = rightHubBtn.GetComponent<Image>();
+                rightHubBtnImage.color = ColorHub;
+                rightHubBtnText = rightHubBtn.GetComponentInChildren<Text>();
+                rightSideButtons.Add(rightHubBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(rightHubBtn, () => {
+                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
+                    {
+                        ToggleRight(ContentType.Hub);
+                    }
+                    else
+                    {
+                        VamHookPlugin.singleton?.OpenHubBrowse();
+                        Hide();
+                    }
+                });
 
                 // Undo (Right)
                 GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 11 - groupGap * 3, AnchorPresets.centre, Undo);
@@ -708,15 +779,32 @@ namespace VPB
                 leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
 
                 // Hub (Orange)
-                if (VPBConfig.Instance.IsDevMode)
-                {
-                    GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleLeft(ContentType.Hub));
-                    leftHubBtnImage = leftHubBtn.GetComponent<Image>();
-                    leftHubBtnImage.color = ColorHub;
-                    leftHubBtnText = leftHubBtn.GetComponentInChildren<Text>();
-                    leftSideButtons.Add(leftHubBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(leftHubBtn, () => ToggleRight(ContentType.Hub));
-                }
+                GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => {
+                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
+                    {
+                        ToggleLeft(ContentType.Hub);
+                    }
+                    else
+                    {
+                        VamHookPlugin.singleton?.OpenHubBrowse();
+                        Hide();
+                    }
+                });
+                leftHubBtnImage = leftHubBtn.GetComponent<Image>();
+                leftHubBtnImage.color = ColorHub;
+                leftHubBtnText = leftHubBtn.GetComponentInChildren<Text>();
+                leftSideButtons.Add(leftHubBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(leftHubBtn, () => {
+                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
+                    {
+                        ToggleRight(ContentType.Hub);
+                    }
+                    else
+                    {
+                        VamHookPlugin.singleton?.OpenHubBrowse();
+                        Hide();
+                    }
+                });
 
                 // Undo (Left)
                 GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 11 - groupGap * 3, AnchorPresets.centre, Undo);
@@ -787,6 +875,15 @@ namespace VPB
 
             CreateResizeHandles();
 
+            // Minimize button
+            GameObject minimizeBtn = UI.CreateUIButton(backgroundBoxGO, 50, 50, "_", 30, 0, 0, AnchorPresets.topRight, () => {
+                Hide();
+            });
+            RectTransform minRT = minimizeBtn.GetComponent<RectTransform>();
+            minRT.anchoredPosition = new Vector2(-55, 0);
+            minimizeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
+            AddHoverDelegate(minimizeBtn);
+
             // Close button - Rendered last to be on top
             GameObject closeBtn = UI.CreateUIButton(backgroundBoxGO, 50, 50, "X", 30, 0, 0, AnchorPresets.topRight, () => {
                 if (Gallery.singleton != null) Gallery.singleton.RemovePanel(this);
@@ -803,6 +900,7 @@ namespace VPB
             closeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(closeBtn);
 
+            UpdateSideButtonPositions();
             UpdateSideButtonsVisibility();
             UpdateDesktopModeButton();
             UpdateLayout();
@@ -877,6 +975,8 @@ namespace VPB
         {
             if (canvas != null && VPBConfig.Instance != null)
             {
+                UpdateTargetMarker();
+
                 if (isFixedLocally)
                 {
                     bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;

@@ -151,6 +151,8 @@ namespace VPB
         private UIDraggable dragger;
         private GameObject pointerDotGO;
         private PointerEventData currentPointerData;
+        private GameObject targetMarkerGO;
+        private string targetMarkerAtomUid;
         private List<RectTransform> cancelDropZoneRTs = new List<RectTransform>();
         private List<Image> cancelDropZoneImages = new List<Image>();
         private List<Text> cancelDropZoneTexts = new List<Text>();
@@ -216,8 +218,6 @@ namespace VPB
         private RectTransform hoverPathRT;
         private GameObject paginationPrevBtn;
         private GameObject paginationNextBtn;
-        private GameObject expansionToggleBtn;
-        private Text expansionToggleText;
 
         // Apply Mode
         public ApplyMode ItemApplyMode = ApplyMode.DoubleClick;

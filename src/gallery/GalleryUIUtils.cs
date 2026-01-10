@@ -2465,17 +2465,43 @@ namespace VPB
                     // Only snapshot relevant storables to avoid breaking physics/scene state
                     // We primarily care about geometry (clothing/hair items) and StorableIds for presets
                     List<JSONClass> storableSnapshots = new List<JSONClass>();
+                    Dictionary<string, bool> geometryToggleSnapshot = null;
                     
                     // 1. Geometry (Direct toggle items)
                     JSONStorable geometryStorable = atom.GetStorableByID("geometry");
-                    if (geometryStorable != null) storableSnapshots.Add(geometryStorable.GetJSON());
+                    if (geometryStorable != null)
+                    {
+                        geometryToggleSnapshot = new Dictionary<string, bool>();
+                        List<string> names = geometryStorable.GetBoolParamNames();
+                        if (names != null)
+                        {
+                            foreach (string key in names)
+                            {
+                                if (key.StartsWith("clothing:") || key.StartsWith("hair:"))
+                                {
+                                    JSONStorableBool b = geometryStorable.GetBoolJSONParam(key);
+                                    if (b != null) geometryToggleSnapshot[key] = b.val;
+                                }
+                            }
+                        }
+                    }
 
                     // 2. Preset Managers (Clothing, Hair, Pose, Skin, etc)
                     // We can snapshot all PresetManagers on the atom as they control the state of what's applied
                     foreach(var storable in atom.GetStorableIDs())
                     {
                          // Heuristic: If it ends in "Presets"/"Preset" or is a known manager
+                         bool snapshot = false;
                          if (storable.EndsWith("Presets") || storable.EndsWith("Preset") || storable == "Skin" || storable.EndsWith("Physics"))
+                         {
+                             snapshot = true;
+                         }
+                         else if (storable.StartsWith("clothingItem", StringComparison.OrdinalIgnoreCase) || storable.StartsWith("hairItem", StringComparison.OrdinalIgnoreCase) || storable.IndexOf("ClothingItem", StringComparison.OrdinalIgnoreCase) >= 0 || storable.IndexOf("HairItem", StringComparison.OrdinalIgnoreCase) >= 0)
+                         {
+                             snapshot = true;
+                         }
+
+                         if (snapshot)
                          {
                              JSONStorable s = atom.GetStorableByID(storable);
                              if (s != null) storableSnapshots.Add(s.GetJSON());
@@ -2487,6 +2513,32 @@ namespace VPB
                         Atom targetAtom = SuperController.singleton.GetAtomByUid(atomUid);
                         if (targetAtom != null)
                         {
+                            if (geometryToggleSnapshot != null)
+                            {
+                                JSONStorable geo = targetAtom.GetStorableByID("geometry");
+                                if (geo != null)
+                                {
+                                    foreach (var kvp in geometryToggleSnapshot)
+                                    {
+                                        JSONStorableBool b = geo.GetBoolJSONParam(kvp.Key);
+                                        if (b != null) b.val = kvp.Value;
+                                    }
+
+                                    List<string> currentNames = geo.GetBoolParamNames();
+                                    if (currentNames != null)
+                                    {
+                                        foreach (string key in currentNames)
+                                        {
+                                            if ((key.StartsWith("clothing:") || key.StartsWith("hair:")) && !geometryToggleSnapshot.ContainsKey(key))
+                                            {
+                                                JSONStorableBool b = geo.GetBoolJSONParam(key);
+                                                if (b != null) b.val = false;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             // Restore specific storables
                             foreach(var snap in storableSnapshots)
                             {
@@ -2494,33 +2546,7 @@ namespace VPB
                                 JSONStorable s = targetAtom.GetStorableByID(sid);
                                 if (s != null)
                                 {
-                                    if (sid == "geometry")
-                                    {
-                                        // For geometry, only restore clothing/hair toggles to avoid changing character/gender/uid
-                                        // First, restore everything that was in the snapshot
-                                        foreach(KeyValuePair<string, JSONNode> kvp in snap)
-                                        {
-                                            string key = kvp.Key;
-                                            if (key.StartsWith("clothing:") || key.StartsWith("hair:"))
-                                            {
-                                                JSONStorableBool b = s.GetBoolJSONParam(key);
-                                                if (b != null) b.val = kvp.Value.AsBool;
-                                            }
-                                        }
-                                        // Second, turn OFF any clothing/hair that wasn't in the snapshot (newly added)
-                                        foreach(string key in s.GetBoolParamNames())
-                                        {
-                                            if ((key.StartsWith("clothing:") || key.StartsWith("hair:")) && !snap.HasKey(key))
-                                            {
-                                                JSONStorableBool b = s.GetBoolJSONParam(key);
-                                                if (b != null) b.val = false;
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        s.RestoreFromJSON(snap);
-                                    }
+                                    s.RestoreFromJSON(snap);
                                 }
                             }
                             LogUtil.Log($"[Gallery] Undo performed on {atomUid} (Storables)");
