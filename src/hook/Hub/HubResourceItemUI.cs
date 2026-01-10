@@ -39,6 +39,14 @@ namespace VPB
 
         public HubResourceItem connectedItem;
 
+        protected void OnEnable()
+        {
+            if (connectedItem != null)
+            {
+                connectedItem.Show();
+            }
+        }
+
         public Text titleText;
         public Text tagLineText;
         public Text versionText;

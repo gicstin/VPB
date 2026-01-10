@@ -405,7 +405,7 @@ namespace VPB
             // Load Thumbnail
             if (!string.IsNullOrEmpty(item.ThumbnailUrl) && thumbImg != null)
             {
-                 CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.QIPool.Get();
+                 CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
                  qi.imgPath = item.ThumbnailUrl;
                  qi.callback = (q) => {
                      if (thumbImg != null && q.tex != null)

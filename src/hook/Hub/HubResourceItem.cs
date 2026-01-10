@@ -39,7 +39,7 @@ namespace VPB
 
         protected bool useQueueImmediate;
 
-        protected VPB.CustomImageLoaderThreaded.QueuedImage creatorIconQueuedImage;
+        protected VPB.HubImageLoaderThreaded.QueuedImage creatorIconQueuedImage;
 
         protected JSONStorableUrl creatorIconUrlJSON;
 
@@ -47,7 +47,9 @@ namespace VPB
 
         protected Texture2D thumbnailTexture;
 
-        protected VPB.CustomImageLoaderThreaded.QueuedImage thumbnailQueuedImage;
+        protected VPB.HubImageLoaderThreaded.QueuedImage thumbnailQueuedImage;
+
+        protected string groupId;
 
         protected JSONStorableUrl thumbnailUrlJSON;
 
@@ -169,8 +171,9 @@ namespace VPB
 
         public DateTime LastUpdateTimestamp { get; protected set; }
 
-        public HubResourceItem(JSONClass resource, HubBrowse hubBrowse, bool queueImagesImmediate = false)
+        public HubResourceItem(JSONClass resource, HubBrowse hubBrowse, string page, bool queueImagesImmediate = false)
         {
+            groupId = "HubPage_" + page;
             useQueueImmediate = queueImagesImmediate;
             browser = hubBrowse;
             resource_id = resource["resource_id"];
@@ -230,7 +233,7 @@ namespace VPB
             browser.CreatorFilterOnly = creatorJSON.val;
         }
 
-        protected void SyncCreatorIconTexture(VPB.CustomImageLoaderThreaded.QueuedImage qi)
+        protected void SyncCreatorIconTexture(VPB.HubImageLoaderThreaded.QueuedImage qi)
         {
             creatorIconTexture = qi.tex;
             if (creatorIconImage != null && creatorIconTexture != null)
@@ -241,48 +244,66 @@ namespace VPB
 
         protected void SyncCreatorIconUrl(string url)
         {
-            if (VPB.CustomImageLoaderThreaded.singleton != null && url != null && url != string.Empty)
+            if (url == null || url == string.Empty) return;
+            if (VPB.HubImageLoaderThreaded.singleton != null)
             {
-                VPB.CustomImageLoaderThreaded.QueuedImage queuedImage = VPB.CustomImageLoaderThreaded.QIPool.Get();
+                VPB.HubImageLoaderThreaded.QueuedImage queuedImage = VPB.HubImageLoaderThreaded.singleton.GetQI();
                 queuedImage.imgPath = url;
+                queuedImage.groupId = groupId;
                 queuedImage.callback = SyncCreatorIconTexture;
                 creatorIconQueuedImage = queuedImage;
                 if (useQueueImmediate)
                 {
-                    VPB.CustomImageLoaderThreaded.singleton.QueueThumbnailImmediate(queuedImage);
+                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnailImmediate(queuedImage);
                 }
                 else
                 {
-                    VPB.CustomImageLoaderThreaded.singleton.QueueThumbnail(queuedImage);
+                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnail(queuedImage);
                 }
+            }
+            else
+            {
+                LogUtil.LogWarning("[VPB] HubImageLoaderThreaded.singleton is null during SyncCreatorIconUrl for " + url);
+                // The URL is already stored in creatorIconUrlJSON, so it might be retried later if needed, 
+                // but let's try a small delay or just rely on Show() calling it again.
             }
         }
 
-        protected void SyncThumbnailTexture(VPB.CustomImageLoaderThreaded.QueuedImage qi)
+        protected void SyncThumbnailTexture(VPB.HubImageLoaderThreaded.QueuedImage qi)
         {
             thumbnailTexture = qi.tex;
-            if (thumbnailImage != null && thumbnailTexture != null)
+            if (thumbnailImage != null)
             {
                 thumbnailImage.texture = thumbnailTexture;
+                if (thumbnailTexture != null)
+                {
+                    thumbnailImage.color = Color.white;
+                }
             }
         }
 
         protected void SyncThumbnailUrl(string url)
         {
-            if (VPB.CustomImageLoaderThreaded.singleton != null && url != null && url != string.Empty)
+            if (url == null || url == string.Empty) return;
+            if (VPB.HubImageLoaderThreaded.singleton != null)
             {
-                VPB.CustomImageLoaderThreaded.QueuedImage queuedImage = VPB.CustomImageLoaderThreaded.QIPool.Get();
+                VPB.HubImageLoaderThreaded.QueuedImage queuedImage = VPB.HubImageLoaderThreaded.singleton.GetQI();
                 queuedImage.imgPath = url;
+                queuedImage.groupId = groupId;
                 queuedImage.callback = SyncThumbnailTexture;
                 thumbnailQueuedImage = queuedImage;
                 if (useQueueImmediate)
                 {
-                    VPB.CustomImageLoaderThreaded.singleton.QueueThumbnailImmediate(queuedImage);
+                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnailImmediate(queuedImage);
                 }
                 else
                 {
-                    VPB.CustomImageLoaderThreaded.singleton.QueueThumbnail(queuedImage);
+                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnail(queuedImage);
                 }
+            }
+            else
+            {
+                LogUtil.LogWarning("[VPB] HubImageLoaderThreaded.singleton is null during SyncThumbnailUrl for " + url);
             }
         }
         protected DateTime UnixTimeStampToDateTime(int unixTimeStamp)
@@ -369,29 +390,40 @@ namespace VPB
 
         public void Show()
         {
-            if (creatorIconQueuedImage != null && !creatorIconQueuedImage.preprocessed)
+            if (VPB.HubImageLoaderThreaded.singleton == null) return;
+
+            if (creatorIconQueuedImage != null && !creatorIconQueuedImage.processed)
             {
                 creatorIconQueuedImage.cancel = false;
                 if (useQueueImmediate)
                 {
-                    VPB.CustomImageLoaderThreaded.singleton.QueueThumbnailImmediate(creatorIconQueuedImage);
+                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnailImmediate(creatorIconQueuedImage);
                 }
                 else
                 {
-                    VPB.CustomImageLoaderThreaded.singleton.QueueThumbnail(creatorIconQueuedImage);
+                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnail(creatorIconQueuedImage);
                 }
             }
-            if (thumbnailQueuedImage != null && !thumbnailQueuedImage.preprocessed)
+            else if (creatorIconQueuedImage == null && !string.IsNullOrEmpty(creatorIconUrlJSON.val))
+            {
+                SyncCreatorIconUrl(creatorIconUrlJSON.val);
+            }
+
+            if (thumbnailQueuedImage != null && !thumbnailQueuedImage.processed)
             {
                 thumbnailQueuedImage.cancel = false;
                 if (useQueueImmediate)
                 {
-                    VPB.CustomImageLoaderThreaded.singleton.QueueThumbnailImmediate(thumbnailQueuedImage);
+                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnailImmediate(thumbnailQueuedImage);
                 }
                 else
                 {
-                    VPB.CustomImageLoaderThreaded.singleton.QueueThumbnail(thumbnailQueuedImage);
+                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnail(thumbnailQueuedImage);
                 }
+            }
+            else if (thumbnailQueuedImage == null && !string.IsNullOrEmpty(thumbnailUrlJSON.val))
+            {
+                SyncThumbnailUrl(thumbnailUrlJSON.val);
             }
         }
 

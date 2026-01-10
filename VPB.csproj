@@ -270,6 +270,7 @@
     <Compile Include="src\hook\FileManagement\VarPackageMgr.cs" />
     <Compile Include="src\hook\HubResourcePackageHook.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
+    <Compile Include="src\hook\HubImageLoaderThreaded.cs" />
     <Compile Include="src\StbImageSharp\AnimatedFrameResult.cs" />
     <Compile Include="src\StbImageSharp\AnimatedGifEnumerator.cs" />
     <Compile Include="src\StbImageSharp\ColorComponents.cs" />

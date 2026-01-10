@@ -90,7 +90,7 @@ namespace VPB
         }
 
         public HubResourceItemDetail(JSONClass resource, HubBrowse hubBrowse)
-            : base(resource, hubBrowse, true)
+            : base(resource, hubBrowse, "Detail", true)
         {
             if (resource_id != null)
             {

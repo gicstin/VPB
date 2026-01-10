@@ -428,10 +428,15 @@ namespace VPB
 
 			public void Process()
 			{
-				if (processed)
+				if (processed || cancel)
 				{
+                    processed = true;
 					return;
 				}
+                if (imgPath != null && imgPath.StartsWith("http"))
+                {
+                    LogUtil.Log("[VPB] [Loader] Thread processing: " + imgPath);
+                }
 				if (imgPath != null && imgPath != "NULL")
 				{
 					if (useWebCache)
@@ -801,12 +806,12 @@ namespace VPB
 			}
         }
 
-		public static class QIPool
+		public class QueuedImagePool
         {
-            static Stack<QueuedImage> stack = new Stack<QueuedImage>();
-            static object lockObj = new object();
+            Stack<QueuedImage> stack = new Stack<QueuedImage>();
+            object lockObj = new object();
 
-            public static QueuedImage Get()
+            public QueuedImage Get()
             {
                 lock(lockObj)
                 {
@@ -815,7 +820,7 @@ namespace VPB
                 return new QueuedImage();
             }
 
-            public static void Return(QueuedImage qi)
+            public void Return(QueuedImage qi)
             {
                 if (qi == null) return;
                 qi.Reset();
@@ -824,6 +829,13 @@ namespace VPB
                     stack.Push(qi);
                 }
             }
+        }
+
+        protected QueuedImagePool pool = new QueuedImagePool();
+
+        public QueuedImage GetQI()
+        {
+            return pool.Get();
         }
 
 		protected class ImageLoaderTaskInfo
@@ -876,13 +888,23 @@ namespace VPB
 			ImageLoaderTaskInfo imageLoaderTaskInfo = (ImageLoaderTaskInfo)info;
 			while (_threadsRunning)
 			{
-				imageLoaderTaskInfo.resetEvent.WaitOne(-1, true);
-				if (imageLoaderTaskInfo.kill)
+				try
 				{
-					break;
+					imageLoaderTaskInfo.resetEvent.WaitOne(-1, true);
+					if (imageLoaderTaskInfo.kill)
+					{
+						break;
+					}
+					ProcessImageQueueThreaded();
 				}
-				ProcessImageQueueThreaded();
-				imageLoaderTaskInfo.working = false;
+				catch (Exception ex)
+				{
+					LogUtil.LogError("ImageLoaderThread Error: " + ex);
+				}
+				finally
+				{
+					imageLoaderTaskInfo.working = false;
+				}
 			}
 		}
 
@@ -1106,68 +1128,81 @@ namespace VPB
 
 		protected void PostProcessImageQueue()
 		{
-			if (queuedImages == null || queuedImages.Count <= 0)
+            int maxPerFrame = 20;
+			while (queuedImages != null && queuedImages.Count > 0 && maxPerFrame > 0)
 			{
-				return;
-			}
-			QueuedImage value = queuedImages.Peek();
-			if (value.processed)
-			{
-				queuedImages.Dequeue();
-				if (!value.isThumbnail)
+                maxPerFrame--;
+				QueuedImage value = queuedImages.Peek();
+				if (value.processed || value.cancel)
 				{
-					progress++;
-					numRealQueuedImages--;
-                    
-                    // Log stats every 50 images so we can see it working during heavy loads
-                    if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
+					queuedImages.Dequeue();
+                    if (value.cancel)
                     {
-                        LogUtil.Log(ByteArrayPool.GetStatus());
+                        pool.Return(value);
+                        continue;
                     }
 
-					if (numRealQueuedImages == 0)
+					if (!value.isThumbnail)
 					{
-						progress = 0;
-						progressMax = 0;
-						if (progressHUD != null)
+						progress++;
+						numRealQueuedImages--;
+						
+						// Log stats every 50 images so we can see it working during heavy loads
+						if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
 						{
-							progressHUD.SetActive(false);
+							LogUtil.Log(ByteArrayPool.GetStatus());
 						}
-                        if(ByteArrayPool.TotalRented > 0)
-                            LogUtil.Log(ByteArrayPool.GetStatus());
+
+						if (numRealQueuedImages == 0)
+						{
+							progress = 0;
+							progressMax = 0;
+							if (progressHUD != null)
+							{
+								progressHUD.SetActive(false);
+							}
+							if(ByteArrayPool.TotalRented > 0)
+								LogUtil.Log(ByteArrayPool.GetStatus());
+						}
+						else
+						{
+							if (progressHUD != null)
+							{
+								progressHUD.SetActive(true);
+							}
+							if (progressSlider != null)
+							{
+								progressSlider.maxValue = progressMax;
+								progressSlider.value = progress;
+							}
+						}
 					}
-					else
+					value.Finish();
+					if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
 					{
-						if (progressHUD != null)
+						if (value.isThumbnail)
 						{
-							progressHUD.SetActive(true);
+							if (!thumbnailCache.ContainsKey(value.imgPath) && value.tex != null)
+							{
+								thumbnailCache.Add(value.imgPath, value.tex);
+							}
 						}
-						if (progressSlider != null)
+						else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
 						{
-							progressSlider.maxValue = progressMax;
-							progressSlider.value = progress;
+							textureCache.Add(value.cacheSignature, value.tex);
+							textureTrackedCache.Add(value.tex, true);
 						}
 					}
+					value.DoCallback();
+                    if (value.imgPath != null && value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath);
+					pool.Return(value);
 				}
-				value.Finish();
-				if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
-				{
-					if (value.isThumbnail)
-					{
-						if (!thumbnailCache.ContainsKey(value.imgPath) && value.tex != null)
-						{
-							thumbnailCache.Add(value.imgPath, value.tex);
-						}
-					}
-					else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
-					{
-						textureCache.Add(value.cacheSignature, value.tex);
-						textureTrackedCache.Add(value.tex, true);
-					}
-				}
-				value.DoCallback();
-                QIPool.Return(value);
+                else
+                {
+                    break;
+                }
 			}
+
 			if (numRealQueuedImages != 0)
 			{
 				if (loadFlag == null)
@@ -1208,7 +1243,7 @@ namespace VPB
 				{
                     QueuedImage qi = queuedImages.Peek();
 					queuedImages.Dequeue();
-                    QIPool.Return(qi);
+                    pool.Return(qi);
 				}
 			}
 		}
@@ -1268,7 +1303,9 @@ namespace VPB
 					if (value.webRequest == null)
 					{
 						value.webRequest = UnityWebRequest.Get(value.imgPath);
+                        value.webRequest.timeout = 30;
 						value.webRequest.SendWebRequest();
+                        if (value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Started WebRequest: " + value.imgPath);
 					}
 					if (value.webRequest.isDone)
 					{
@@ -1276,11 +1313,13 @@ namespace VPB
 						{
 							if (value.webRequest.responseCode == 200)
 							{
+                                if (value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] WebRequest Success: " + value.imgPath);
 								value.webRequestData = value.webRequest.downloadHandler.data;
 								value.webRequestDone = true;
 							}
 							else
 							{
+                                LogUtil.LogWarning("[VPB] [Loader] WebRequest Status Error: " + value.webRequest.responseCode + " for " + value.imgPath);
 								value.webRequestHadError = true;
 								value.webRequestDone = true;
 								value.hadError = true;
@@ -1289,6 +1328,7 @@ namespace VPB
 						}
 						else
 						{
+                            LogUtil.LogWarning("[VPB] [Loader] WebRequest Network Error: " + value.webRequest.error + " for " + value.imgPath);
 							value.webRequestHadError = true;
 							value.webRequestDone = true;
 							value.hadError = true;
@@ -1303,7 +1343,7 @@ namespace VPB
 			}
 		}
 
-		private void Update()
+		protected virtual void Update()
 		{
 			StartThreads();
 			if (!imageLoaderTask.working)
@@ -1312,13 +1352,18 @@ namespace VPB
 				if (queuedImages != null && queuedImages.Count > 0)
 				{
 					PreprocessImageQueue();
-					imageLoaderTask.working = true;
-					imageLoaderTask.resetEvent.Set();
+                    
+                    QueuedImage head = queuedImages.Peek();
+                    if (head != null && !head.processed && !head.cancel && (head.webRequestDone || head.webRequest == null))
+                    {
+					    imageLoaderTask.working = true;
+					    imageLoaderTask.resetEvent.Set();
+                    }
 				}
 			}
 		}
 
-		public void OnDestroy()
+		public virtual void OnDestroy()
 		{
 			if (Application.isPlaying)
 			{
@@ -1340,9 +1385,9 @@ namespace VPB
 			}
 		}
 
-		private void Awake()
+		protected virtual void Awake()
 		{
-			singleton = this;
+			if (singleton == null) singleton = this;
             LogUtil.Log("CustomImageLoaderThreaded initialized. ByteArrayPool ready.");
 			immediateTextureCache = new Dictionary<string, Texture2D>();
 			textureCache = new Dictionary<string, Texture2D>();
@@ -1420,6 +1465,5 @@ namespace VPB
                 data.Clear();
             }
         }
-	}
-
+    }
 }

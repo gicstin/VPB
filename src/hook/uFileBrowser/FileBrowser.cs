@@ -1099,7 +1099,7 @@ namespace VPB
 
 				fb.altIcon.texture = null;
 
-				CustomImageLoaderThreaded.QueuedImage queuedImage = CustomImageLoaderThreaded.QIPool.Get();
+				CustomImageLoaderThreaded.QueuedImage queuedImage = CustomImageLoaderThreaded.singleton.GetQI();
 				queuedImage.imgPath = fb.imgPath;
 				queuedImage.width = 256;
 				queuedImage.height = 256;

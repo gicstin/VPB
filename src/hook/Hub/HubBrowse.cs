@@ -99,6 +99,14 @@ namespace VPB
 
         protected GameObject isWebLoadingIndicator;
 
+        public string CurrentPage
+        {
+            get
+            {
+                return _currentPageString;
+            }
+        }
+
         protected GameObject refreshIndicator;
 
         protected bool _isShowing;
@@ -441,7 +449,6 @@ namespace VPB
                     }
                     if (request.stop)
                     {
-                        LogUtil.Log("stop request " + uri);
                         break;
                     }
                     yield return null;
@@ -547,7 +554,6 @@ namespace VPB
 
         public void Show()
         {
-            LogUtil.Log("HubBrowse Show");
             if (preShowCallbacks != null)
             {
                 preShowCallbacks();
@@ -587,7 +593,6 @@ namespace VPB
 
         public void Hide()
         {
-            LogUtil.Log("HubBrowse Hide");
             _isShowing = false;
             if (hubBrowseUI != null)
             {
@@ -615,7 +620,7 @@ namespace VPB
             SuperController.LogError("Error during hub request " + err);
         }
 
-        protected void RefreshCallback(SimpleJSON.JSONNode jsonNode)
+        protected void RefreshCallback(SimpleJSON.JSONNode jsonNode, string page)
         {
             if (refreshIndicator != null)
             {
@@ -680,7 +685,7 @@ namespace VPB
                         // Do not show items that cannot be downloaded
                         if (canShow)
                         {
-                            HubResourceItem hubResourceItem = new HubResourceItem(resource, this);
+                            HubResourceItem hubResourceItem = new HubResourceItem(resource, this, page);
                             hubResourceItem.Refresh();
 
                             RectTransform rectTransform = UnityEngine.Object.Instantiate(itemPrefab);
@@ -705,7 +710,7 @@ namespace VPB
                 }
             }
             string text2 = jsonNode["error"];
-            LogUtil.Log("Refresh returned error " + text2);
+            //LogUtil.Log("Refresh returned error " + text2);
         }
 
         public void RefreshResources()
@@ -722,7 +727,8 @@ namespace VPB
                 jSONClass["action"] = "getResources";
                 jSONClass["latest_image"] = "Y";
                 jSONClass["perpage"] = _numPerPageInt.ToString();
-                jSONClass["page"] = _currentPageString;
+                string page = _currentPageString;
+                jSONClass["page"] = page;
                 if (_hostedOption != "All")
                 {
                     jSONClass["location"] = _hostedOption;
@@ -760,7 +766,9 @@ namespace VPB
                 }
                 jSONClass["sort"] = text;
                 string postData = jSONClass.ToString();
-                refreshResourcesRoutine = StartCoroutine(PostRequest(apiUrl, postData, RefreshCallback, RefreshErrorCallback));
+                refreshResourcesRoutine = StartCoroutine(PostRequest(apiUrl, postData, 
+                    jsonNode => { RefreshCallback(jsonNode, page); }, 
+                    RefreshErrorCallback));
                 if (refreshIndicator != null)
                 {
                     refreshIndicator.SetActive(true);
@@ -793,8 +801,17 @@ namespace VPB
             ResetRefresh();
         }
 
+        protected void CancelOldPageImages()
+        {
+            if (VPB.HubImageLoaderThreaded.singleton != null)
+            {
+                VPB.HubImageLoaderThreaded.singleton.CancelGroup("HubPage_" + _currentPageString);
+            }
+        }
+
         protected void ResetRefresh()
         {
+            CancelOldPageImages();
             _currentPageString = "1";
             _currentPageInt = 1;
             currentPageJSON.valNoCallback = _currentPageString;
@@ -804,6 +821,7 @@ namespace VPB
 
         protected void SyncCurrentPage(string s)
         {
+            CancelOldPageImages();
             _currentPageString = s;
             int result;
             if (int.TryParse(s, out result))
@@ -978,7 +996,7 @@ namespace VPB
 
         protected void GetResourceDetailErrorCallback(string err, HubResourceItemDetailUI hridui)
         {
-            LogUtil.Log("Error during fetch of resource detail from Hub");
+            //LogUtil.Log("Error during fetch of resource detail from Hub");
             CloseDetail(null);
         }
 
@@ -1379,7 +1397,7 @@ namespace VPB
 
         protected void FindUpdatesErrorCallback(string err)
         {
-            LogUtil.Log("Error during hub request " + err);
+            //LogUtil.Log("Error during hub request " + err);
         }
 
         protected void FindUpdatesCallback(SimpleJSON.JSONNode jsonNode)
@@ -1397,7 +1415,7 @@ namespace VPB
             if (text != null && text == "error")
             {
                 string text2 = jsonNode["error"];
-                LogUtil.Log("findPackages returned error " + text2);
+                //LogUtil.Log("findPackages returned error " + text2);
                 return;
             }
             JSONClass asObject2 = jsonNode["packages"].AsObject;
@@ -1502,7 +1520,7 @@ namespace VPB
             }
             else
             {
-                LogUtil.Log("Cannot perform action. Hub is disabled in User Preferences");
+                //LogUtil.Log("Cannot perform action. Hub is disabled in User Preferences");
             }
         }
 
@@ -1615,7 +1633,6 @@ namespace VPB
 
         public DownloadRequest QueueDownload(string url, string promotionalUrl, BinaryRequestStartedCallback startedCallback, RequestProgressCallback progressCallback, BinaryRequestSuccessCallback successCallback, RequestErrorCallback errorCallback)
         {
-            LogUtil.Log("QueueDownload "+url);
             DownloadRequest downloadRequest = new DownloadRequest();
             downloadRequest.url = url;
             if (downloadQueue.Count == 0)

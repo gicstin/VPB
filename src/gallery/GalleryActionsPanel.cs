@@ -272,7 +272,7 @@ namespace VPB
                 return;
             }
 
-            CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.QIPool.Get();
+            CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
             qi.imgPath = imgPath;
             qi.isThumbnail = true;
             qi.priority = 20; 
@@ -292,7 +292,7 @@ namespace VPB
             target.texture = null;
             target.color = new Color(0, 0, 0, 0.5f);
 
-            CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.QIPool.Get();
+            CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
             qi.imgPath = url;
             qi.priority = 20;
             qi.callback = (res) => {

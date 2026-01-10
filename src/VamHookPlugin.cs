@@ -1411,10 +1411,12 @@ namespace VPB
             if (m_FileManager == null)
             {
                 var child = Tools.AddChild(this.gameObject);
+                child.name = "VarBrowser_Base";
                 m_FileManager = child.AddComponent<FileManager>();
                 child.AddComponent<VPB.CustomImageLoaderThreaded>();
                 child.AddComponent<VPB.ImageLoadingMgr>();
                 child.AddComponent<VPB.Gallery>();
+                LogUtil.Log("Base components initialized on " + child.name);
                 FileManager.RegisterRefreshHandler(() =>
                 {
                     m_FileManagerInited = true;
@@ -1458,6 +1460,7 @@ namespace VPB
 
                 var child = Tools.AddChild(this.gameObject);
                 child.name = "VarBrowser_HubBrowse";
+                child.AddComponent<VPB.HubImageLoaderThreaded>();
                 m_HubBrowse = child.AddComponent<HubBrowse>();
 
                 {

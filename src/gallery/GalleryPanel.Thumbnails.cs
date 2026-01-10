@@ -54,7 +54,7 @@ namespace VPB
             // if (GalleryThumbnailCache.Instance.TryGetThumbnail(...)) { ... }
 
             // 3. Request Load
-            CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.QIPool.Get();
+            CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
             qi.imgPath = imgPath;
             qi.isThumbnail = true;
             qi.priority = 10; 
