@@ -93,6 +93,15 @@ namespace VPB
             }
         }
 
+        public void OpenCreateGallery()
+        {
+            if (Gallery.singleton != null)
+            {
+                if (!m_GalleryCatsInited) InitGalleryCategories();
+                Gallery.singleton.CreatePane();
+            }
+        }
+
 		// liu modification: show/hide
 		public void LgShow()
 		{

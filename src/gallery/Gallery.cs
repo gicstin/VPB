@@ -90,6 +90,9 @@ namespace VPB
             GalleryPanel p = go.AddComponent<GalleryPanel>();
             
             p.Init();
+            // Force floating mode for clones
+            p.SetFixedLocally(false);
+            
             p.SetCategories(original.categories);
             
             // Sync state
@@ -103,7 +106,12 @@ namespace VPB
             RectTransform pRT = p.GetBackgroundRT();
             if (originalRT != null && pRT != null)
             {
-                pRT.sizeDelta = originalRT.sizeDelta;
+                // If original is fixed, it has no sizeDelta (it's stretched in ScreenSpaceOverlay).
+                // Clones are always floating, so use the default 1200x800 size for fixed-to-floating clones.
+                if (original.isFixedLocally)
+                    pRT.sizeDelta = new Vector2(1200, 800);
+                else
+                    pRT.sizeDelta = originalRT.sizeDelta;
             }
 
             // Sync position and rotation
@@ -115,34 +123,51 @@ namespace VPB
             if (camTrans != null)
             {
                 Vector3 camPos = camTrans.position;
-                Vector3 toOriginal = original.canvas.transform.position - camPos;
-                float radius = toOriginal.magnitude;
-                // Avoid division by zero
-                if (radius < 0.1f) radius = 0.1f;
-
-                float width = originalRT != null ? originalRT.sizeDelta.x * 0.001f : 1.2f;
-                float padding = 0.05f;
-                // Calculate angle for arc: angle = arcLength / radius (in radians)
-                float angle = ((width + padding) / radius) * Mathf.Rad2Deg;
-                if (!toRight) angle = -angle;
-
-                // Force leveled rotation (no roll)
-                Vector3 upAxis = Vector3.up;
+                Vector3 toOriginal;
                 
-                Quaternion rot = Quaternion.AngleAxis(angle, upAxis);
-                Vector3 toNew = rot * toOriginal;
+                if (original.isFixedLocally)
+                {
+                    // Fixed panels are in ScreenSpaceOverlay. Place the floating clone directly 1.5m in front of the user.
+                    // We don't use the "cloning principle" (offset) here because the source is screen-pinned, not world-placed.
+                    toOriginal = camTrans.forward * 1.5f;
+                    p.canvas.transform.position = camPos + toOriginal;
+                    p.canvas.transform.rotation = Quaternion.LookRotation(toOriginal, Vector3.up);
+                }
+                else
+                {
+                    // For floating panels, use the standard cloning principle (place it to the side)
+                    toOriginal = original.canvas.transform.position - camPos;
+                    float radius = toOriginal.magnitude;
+                    if (radius < 0.1f) radius = 0.1f;
 
-                p.canvas.transform.position = camPos + toNew;
-                p.canvas.transform.rotation = Quaternion.LookRotation(toNew, upAxis);
+                    float width = originalRT != null ? originalRT.sizeDelta.x * 0.001f : 1.2f;
+                    float padding = 0.05f;
+                    float angle = ((width + padding) / radius) * Mathf.Rad2Deg;
+                    if (!toRight) angle = -angle;
+
+                    Quaternion rot = Quaternion.AngleAxis(angle, Vector3.up);
+                    Vector3 toNew = rot * toOriginal;
+
+                    p.canvas.transform.position = camPos + toNew;
+                    p.canvas.transform.rotation = Quaternion.LookRotation(toNew, Vector3.up);
+                }
             }
             else
             {
-                p.canvas.transform.rotation = original.canvas.transform.rotation;
-                float width = originalRT != null ? originalRT.sizeDelta.x * 0.001f : 1.2f;
-                float padding = 0.05f;
-                Vector3 offset = original.canvas.transform.right * (width + padding);
-                if (!toRight) offset = -offset;
-                p.canvas.transform.position = original.canvas.transform.position + offset;
+                if (original.isFixedLocally)
+                {
+                    p.canvas.transform.rotation = original.canvas.transform.rotation;
+                    p.canvas.transform.position = original.canvas.transform.position + new Vector3(-1.25f, 0, 0);
+                }
+                else
+                {
+                    p.canvas.transform.rotation = original.canvas.transform.rotation;
+                    float width = originalRT != null ? originalRT.sizeDelta.x * 0.001f : 1.2f;
+                    float padding = 0.05f;
+                    Vector3 offset = original.canvas.transform.right * (width + padding);
+                    if (!toRight) offset = -offset;
+                    p.canvas.transform.position = original.canvas.transform.position + offset;
+                }
             }
             
             p.hasBeenPositioned = true;

@@ -1315,11 +1315,7 @@ namespace VPB
             {
                 if (CreateGalleryKey.TestKeyDown())
                 {
-                    if (Gallery.singleton != null)
-                    {
-                        if (!m_GalleryCatsInited) InitGalleryCategories();
-                        Gallery.singleton.CreatePane();
-                    }
+                    OpenCreateGallery();
                 }
                 if (GalleryKey.TestKeyDown())
                 {
@@ -1658,11 +1654,7 @@ namespace VPB
                             if (uiBtn.button != null)
                             {
                                 uiBtn.button.onClick.AddListener(() => {
-                                     if (Gallery.singleton != null)
-                                     {
-                                         if (!m_GalleryCatsInited) InitGalleryCategories();
-                                         Gallery.singleton.CreatePane();
-                                     }
+                                     OpenCreateGallery();
                                 });
                             }
                             
@@ -1798,7 +1790,7 @@ namespace VPB
             if (MiniMode)
             {
                 // ========== MINI MODE: QUICK ACCESS ==========
-                DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Gallery", m_StyleButton, OpenGallery, 1.618f, buttonHeight);
+                DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Create Gallery", m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
 
                 GUILayout.EndVertical();
                 return;
@@ -1969,7 +1961,7 @@ namespace VPB
 					});
 
                     // ========== HUB BROWSE ==========
-                    DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Gallery", m_StyleButton, OpenGallery, 1.618f, buttonHeight);
+                    DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Create Gallery", m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
 
 
 

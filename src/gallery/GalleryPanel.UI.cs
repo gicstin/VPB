@@ -229,7 +229,11 @@ namespace VPB
             if (collapseTriggerGO != null)
             {
                 Image img = collapseTriggerGO.GetComponent<Image>();
-                if (img != null) img.color = collapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
+                if (img != null) 
+                {
+                    img.color = collapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
+                    img.raycastTarget = collapsed;
+                }
             }
             if (collapseHandleText != null)
             {
@@ -502,6 +506,19 @@ namespace VPB
                 }
             }
             
+            if (leftSideContainer != null)
+            {
+                RectTransform rt = leftSideContainer.GetComponent<RectTransform>();
+                float yShift = (isFixedLocally && actionsPanel != null && actionsPanel.actionsPaneGO != null && actionsPanel.actionsPaneGO.activeSelf) ? 175 : 0;
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yShift);
+            }
+            if (rightSideContainer != null)
+            {
+                RectTransform rt = rightSideContainer.GetComponent<RectTransform>();
+                float yShift = (isFixedLocally && actionsPanel != null && actionsPanel.actionsPaneGO != null && actionsPanel.actionsPaneGO.activeSelf) ? 175 : 0;
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yShift);
+            }
+
             UpdateButtonStates();
         }
 
