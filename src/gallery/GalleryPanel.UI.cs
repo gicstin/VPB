@@ -70,7 +70,7 @@ namespace VPB
             AddHoverDelegate(paginationPrevBtn);
             AddTooltip(paginationPrevBtn, "Previous Page");
             AddHoverDelegate(paginationNextBtn);
-            AddHoverDelegate(expansionToggleBtn);
+            if (expansionToggleBtn != null) AddHoverDelegate(expansionToggleBtn);
             AddHoverDelegate(footerFollowAngleBtn);
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
@@ -80,7 +80,7 @@ namespace VPB
             pathGO.transform.SetParent(backgroundBoxGO.transform, false);
             hoverPathText = pathGO.AddComponent<Text>();
             hoverPathText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            hoverPathText.fontSize = 16;
+            hoverPathText.fontSize = 14;
             hoverPathText.color = new Color(1f, 1f, 1f, 0.7f);
             hoverPathText.alignment = TextAnchor.LowerRight;
             hoverPathText.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -93,7 +93,7 @@ namespace VPB
             hoverPathRT.pivot = new Vector2(1, 0);
             hoverPathRT.anchoredPosition = new Vector2(-60, 10); // Offset from right scrollbar
             hoverPathRT.offsetMin = new Vector2(510, 10); // Start after pagination + new buttons
-            hoverPathRT.offsetMax = new Vector2(-60, 55); // End before scrollbar, height ~45 for 2 rows
+            hoverPathRT.offsetMax = new Vector2(-60, 75); // End before scrollbar, taller to show full file name
 
             UpdateSideButtonsVisibility();
             UpdateFooterFollowStates();
@@ -350,6 +350,24 @@ namespace VPB
         {
             DragDropReplaceMode = !DragDropReplaceMode;
             UpdateReplaceButtonState();
+        }
+
+        private void UpdateApplyModeButtonState()
+        {
+            string text = ItemApplyMode == ApplyMode.SingleClick ? "1-Click" : "2-Click";
+            Color color = ItemApplyMode == ApplyMode.SingleClick ? new Color(0.6f, 0.45f, 0.15f, 1f) : new Color(0.15f, 0.15f, 0.45f, 1f);
+
+            if (rightApplyModeBtnText != null) rightApplyModeBtnText.text = text;
+            if (rightApplyModeBtnImage != null) rightApplyModeBtnImage.color = color;
+            
+            if (leftApplyModeBtnText != null) leftApplyModeBtnText.text = text;
+            if (leftApplyModeBtnImage != null) leftApplyModeBtnImage.color = color;
+        }
+
+        private void ToggleApplyMode()
+        {
+            ItemApplyMode = (ItemApplyMode == ApplyMode.SingleClick) ? ApplyMode.DoubleClick : ApplyMode.SingleClick;
+            UpdateApplyModeButtonState();
         }
 
         public void UpdateLayout()
@@ -719,7 +737,7 @@ namespace VPB
 
         private void UpdateListPositions(List<RectTransform> buttons, float startY, float spacing, float gap)
         {
-            if (buttons == null || buttons.Count < 10) return;
+            if (buttons == null || buttons.Count < 11) return;
             
             // 0: Fixed/Floating
             buttons[0].anchoredPosition = new Vector2(0, startY);
@@ -737,10 +755,14 @@ namespace VPB
             buttons[6].anchoredPosition = new Vector2(0, startY - spacing * 6 - gap * 2);
             // 7: Hub
             buttons[7].anchoredPosition = new Vector2(0, startY - spacing * 7 - gap * 2);
-            // 8: Add/Replace
+            
+            // 8: Apply Mode (NEW)
             buttons[8].anchoredPosition = new Vector2(0, startY - spacing * 8 - gap * 3);
-            // 9: Undo
-            buttons[9].anchoredPosition = new Vector2(0, startY - spacing * 9 - gap * 4);
+            
+            // 9: Add/Replace
+            buttons[9].anchoredPosition = new Vector2(0, startY - spacing * 9 - gap * 3);
+            // 10: Undo
+            buttons[10].anchoredPosition = new Vector2(0, startY - spacing * 10 - gap * 4);
         }
 
         private void SetLayerRecursive(GameObject go, int layer)

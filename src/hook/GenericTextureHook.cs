@@ -130,6 +130,7 @@ namespace VPB
 
         private static bool ProcessWithCache(Texture2D tex, string path, byte[] originalData, bool markNonReadable)
         {
+            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value) return false;
             try
             {
                 // Use default settings for generic loads

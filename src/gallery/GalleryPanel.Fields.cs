@@ -37,6 +37,8 @@ namespace VPB
         private string currentExtension = "json";
         private string currentCategoryTitle = "";
         
+        private float lastClickTime = 0f;
+        
         public bool IsVisible => canvas != null && canvas.gameObject.activeSelf;
         
         // Configuration
@@ -131,6 +133,13 @@ namespace VPB
         private InputField leftSearchInput;
         private InputField rightSearchInput;
         private InputField titleSearchInput;
+        private Text leftTargetBtnText;
+        private Image leftTargetBtnImage;
+        private Text rightTargetBtnText;
+        private Image rightTargetBtnImage;
+        private int targetDropdownValue = 0;
+        private List<string> targetDropdownOptions = new List<string>();
+        private List<Atom> personAtoms = new List<Atom>();
         private GameObject leftSideContainer;
         private GameObject rightSideContainer;
         private Stack<GameObject> tabButtonPool = new Stack<GameObject>();
@@ -209,6 +218,13 @@ namespace VPB
         private GameObject paginationNextBtn;
         private GameObject expansionToggleBtn;
         private Text expansionToggleText;
+
+        // Apply Mode
+        public ApplyMode ItemApplyMode = ApplyMode.DoubleClick;
+        private Text rightApplyModeBtnText;
+        private Image rightApplyModeBtnImage;
+        private Text leftApplyModeBtnText;
+        private Image leftApplyModeBtnImage;
 
         private Text rightDesktopModeBtnText;
         private Image rightDesktopModeBtnImage;

@@ -10,6 +10,18 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
+        public string CurrentCategoryTitle => currentCategoryTitle;
+
+        public Atom SelectedTargetAtom
+        {
+            get
+            {
+                if (personAtoms == null || targetDropdownValue < 0 || targetDropdownValue >= personAtoms.Count)
+                    return null;
+                return personAtoms[targetDropdownValue];
+            }
+        }
+
         private void CacheCategoryCounts()
         {
             if (categories == null) return;
@@ -164,7 +176,7 @@ namespace VPB
             // If we have categories but no path, set title to first category
             if (categories.Count > 0 && string.IsNullOrEmpty(currentPath))
             {
-                 titleText.text = categories[0].name;
+                titleText.text = categories[0].name;
             }
         }
 
@@ -178,7 +190,86 @@ namespace VPB
                 // Or we can just let it grow a bit. 20 is safe.
             }
         }
-        
+
+        public void RefreshTargetDropdown()
+        {
+            string currentSelectionUid = null;
+            if (targetDropdownValue >= 0 && targetDropdownValue < personAtoms.Count)
+            {
+                currentSelectionUid = personAtoms[targetDropdownValue]?.uid;
+            }
+
+            personAtoms.Clear();
+            targetDropdownOptions.Clear();
+
+            if (SuperController.singleton != null)
+            {
+                foreach (Atom a in SuperController.singleton.GetAtoms())
+                {
+                    if (a.type == "Person")
+                    {
+                        personAtoms.Add(a);
+                        targetDropdownOptions.Add(a.uid);
+                    }
+                }
+            }
+
+            if (targetDropdownOptions.Count == 0)
+            {
+                targetDropdownOptions.Add("None");
+                personAtoms.Add(null);
+            }
+
+            // Try to restore selection
+            if (currentSelectionUid != null)
+            {
+                int idx = personAtoms.FindIndex(a => a != null && a.uid == currentSelectionUid);
+                if (idx >= 0) targetDropdownValue = idx;
+                else targetDropdownValue = 0;
+            }
+            else
+            {
+                // Auto-select first person if we are in Clothing/Hair mode and nothing selected
+                string title = titleText != null ? titleText.text : "";
+                bool isClothingOrHair = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                       title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (isClothingOrHair && personAtoms.Count > 0 && personAtoms[0] != null)
+                {
+                    targetDropdownValue = 0;
+                }
+                else
+                {
+                    targetDropdownValue = 0;
+                }
+            }
+            
+            UpdateTargetDropdownUI();
+        }
+
+        public void CycleTarget(bool forward)
+        {
+            if (targetDropdownOptions.Count > 0)
+            {
+                if (forward)
+                    targetDropdownValue = (targetDropdownValue + 1) % targetDropdownOptions.Count;
+                else
+                    targetDropdownValue = (targetDropdownValue - 1 + targetDropdownOptions.Count) % targetDropdownOptions.Count;
+                UpdateTargetDropdownUI();
+            }
+        }
+
+        private void UpdateTargetDropdownUI()
+        {
+            string valText = (targetDropdownValue >= 0 && targetDropdownValue < targetDropdownOptions.Count) 
+                ? targetDropdownOptions[targetDropdownValue] 
+                : "None";
+            string fullText = "Target: " + valText;
+
+            if (leftTargetBtnText != null) leftTargetBtnText.text = fullText;
+            if (rightTargetBtnText != null) rightTargetBtnText.text = fullText;
+        }
+
         private void Undo()
         {
             if (undoStack.Count > 0)

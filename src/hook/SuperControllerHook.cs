@@ -120,7 +120,10 @@ namespace VPB
         public static void PatchOptional(Harmony harmony)
         {
             PatchFileExists(harmony);
-            PatchProcessImage(harmony);
+            if (Settings.Instance.EnableTextureOptimizations.Value)
+            {
+                PatchProcessImage(harmony);
+            }
         }
 
         static void PatchFileExists(Harmony harmony)
@@ -354,7 +357,7 @@ namespace VPB
 
             try
             {
-                if (ImageLoadingMgr.singleton != null && !string.IsNullOrEmpty(saveName))
+                if (Settings.Instance.EnableTextureOptimizations.Value && ImageLoadingMgr.singleton != null && !string.IsNullOrEmpty(saveName))
                 {
                     string sceneJsonText = null;
                     if (File.Exists(saveName))
@@ -423,6 +426,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
             if (!Settings.Instance.ReduceTextureSize.Value) return;
 
             if (ImageLoadingMgr.singleton.Request(qi))
@@ -450,6 +454,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
             if (!Settings.Instance.ReduceTextureSize.Value) return;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
@@ -514,6 +519,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
             if (!Settings.Instance.ReduceTextureSize.Value) return;
 
             //LogUtil.Log("PostQueueThumbnailImmediate:" + qi.imgPath + " " + qi.textureFormat);
@@ -575,6 +581,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
             if (!Settings.Instance.ReduceTextureSize.Value) return;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
@@ -637,6 +644,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
             if (!Settings.Instance.ReduceTextureSize.Value) return;
 
 

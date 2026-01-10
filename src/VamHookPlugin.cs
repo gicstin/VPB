@@ -66,6 +66,7 @@ namespace VPB
         private string m_SettingsGalleryKeyDraft;
         private string m_SettingsCreateGalleryKeyDraft;
         private string m_SettingsHubKeyDraft;
+        private bool m_SettingsReduceTextureSizeDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
@@ -162,6 +163,7 @@ namespace VPB
             m_SettingsGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.GalleryKey != null) ? Settings.Instance.GalleryKey.Value : "";
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
+            m_SettingsReduceTextureSizeDraft = (Settings.Instance != null && Settings.Instance.ReduceTextureSize != null) ? Settings.Instance.ReduceTextureSize.Value : false;
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
@@ -172,6 +174,100 @@ namespace VPB
         }
 
 
+
+        private void SaveSettings()
+        {
+            try
+            {
+                var parsed = KeyUtil.Parse(m_SettingsUiKeyDraft ?? "");
+                var parsedGalleryKey = KeyUtil.Parse(m_SettingsGalleryKeyDraft ?? "");
+                var parsedCreateGalleryKey = KeyUtil.Parse(m_SettingsCreateGalleryKeyDraft ?? "");
+                var parsedHubKey = KeyUtil.Parse(m_SettingsHubKeyDraft ?? "");
+
+                if (parsed.IsSame(parsedGalleryKey) || parsed.IsSame(parsedCreateGalleryKey) || parsed.IsSame(parsedHubKey) || parsedGalleryKey.IsSame(parsedCreateGalleryKey) || parsedGalleryKey.IsSame(parsedHubKey) || parsedCreateGalleryKey.IsSame(parsedHubKey))
+                {
+                    m_SettingsError = "Duplicate hotkeys are not allowed.";
+                    return;
+                }
+
+                if (Settings.Instance != null && Settings.Instance.UIKey != null)
+                {
+                    Settings.Instance.UIKey.Value = parsed.keyPattern;
+                }
+                if (Settings.Instance != null && Settings.Instance.GalleryKey != null)
+                {
+                    Settings.Instance.GalleryKey.Value = parsedGalleryKey.keyPattern;
+                }
+                if (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null)
+                {
+                    Settings.Instance.CreateGalleryKey.Value = parsedCreateGalleryKey.keyPattern;
+                }
+                if (Settings.Instance != null && Settings.Instance.HubKey != null)
+                {
+                    Settings.Instance.HubKey.Value = parsedHubKey.keyPattern;
+                }
+                if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
+                {
+                    if (Settings.Instance.PluginsAlwaysEnabled.Value != m_SettingsPluginsAlwaysEnabledDraft)
+                    {
+                        Settings.Instance.PluginsAlwaysEnabled.Value = m_SettingsPluginsAlwaysEnabledDraft;
+                    }
+                }
+                if (Settings.Instance != null && Settings.Instance.ReduceTextureSize != null)
+                {
+                    if (Settings.Instance.ReduceTextureSize.Value != m_SettingsReduceTextureSizeDraft)
+                    {
+                        Settings.Instance.ReduceTextureSize.Value = m_SettingsReduceTextureSizeDraft;
+                    }
+                }
+                if (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null)
+                {
+                    if (Settings.Instance.EnableUiTransparency.Value != m_SettingsEnableUiTransparencyDraft)
+                    {
+                        Settings.Instance.EnableUiTransparency.Value = m_SettingsEnableUiTransparencyDraft;
+                    }
+                }
+                if (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null)
+                {
+                    if (Math.Abs(Settings.Instance.UiTransparencyValue.Value - m_SettingsUiTransparencyValueDraft) > 0.001f)
+                    {
+                        Settings.Instance.UiTransparencyValue.Value = m_SettingsUiTransparencyValueDraft;
+                    }
+                }
+                if (VPBConfig.Instance != null)
+                {
+                    if (VPBConfig.Instance.EnableGalleryFade != m_SettingsEnableGalleryFadeDraft)
+                    {
+                        VPBConfig.Instance.EnableGalleryFade = m_SettingsEnableGalleryFadeDraft;
+                        VPBConfig.Instance.Save();
+                        VPBConfig.Instance.TriggerChange();
+                    }
+                }
+                if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)
+                {
+                    if (Settings.Instance.PrioritizeFaceTextures.Value != m_SettingsPrioritizeFaceTexturesDraft)
+                    {
+                        Settings.Instance.PrioritizeFaceTextures.Value = m_SettingsPrioritizeFaceTexturesDraft;
+                    }
+                }
+                if (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null)
+                {
+                    if (Settings.Instance.PrioritizeHairTextures.Value != m_SettingsPrioritizeHairTexturesDraft)
+                    {
+                        Settings.Instance.PrioritizeHairTextures.Value = m_SettingsPrioritizeHairTexturesDraft;
+                    }
+                }
+                UIKey = parsed;
+                GalleryKey = parsedGalleryKey;
+                CreateGalleryKey = parsedCreateGalleryKey;
+                HubKey = parsedHubKey;
+                CloseSettings();
+            }
+            catch
+            {
+                m_SettingsError = "Invalid setting. Example hotkey: Ctrl+Shift+V";
+            }
+        }
 
         private void CloseSettings()
         {
@@ -284,51 +380,84 @@ namespace VPB
                 GUILayout.Label("Tip: Leave this OFF if you want VaM to respect per-package/per-scene plugin enable state.", m_StyleInfoCardText);
             });
 
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsPrioritizeFaceTexturesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsPrioritizeFaceTexturesDraft = !m_SettingsPrioritizeFaceTexturesDraft;
-            }
-            GUILayout.Label("Textures: Prioritize face/makeup");
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
-            {
-                ToggleInfoCard(ref m_ShowPrioritizeFaceTexturesInfo);
-            }
-            GUILayout.EndHorizontal();
-
-            DrawInfoCard(ref m_ShowPrioritizeFaceTexturesInfo, "Prioritize face/makeup textures", () =>
-            {
-                GUILayout.Space(4);
-                GUILayout.Label("When this is ON, VPB tries to process face textures and face overlays (makeup/freckles/etc.) earlier during scene load.", m_StyleInfoCardText);
-                GUILayout.Space(2);
-                GUILayout.Label("It does this by reordering VaM's image load queue (it does not download anything extra).", m_StyleInfoCardText);
-                GUILayout.Space(2);
-                GUILayout.Label("Tip: Leave this ON if you want faces to resolve sooner while clothing/hair textures continue loading.", m_StyleInfoCardText);
-            });
-
             GUILayout.Space(6);
 
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsPrioritizeHairTexturesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsPrioritizeHairTexturesDraft = !m_SettingsPrioritizeHairTexturesDraft;
-            }
-            GUILayout.Label("Textures: Prioritize hair");
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
-            {
-                ToggleInfoCard(ref m_ShowPrioritizeHairTexturesInfo);
-            }
-            GUILayout.EndHorizontal();
 
-            DrawInfoCard(ref m_ShowPrioritizeHairTexturesInfo, "Prioritize hair textures", () =>
+            if (Settings.Instance.EnableTextureOptimizations.Value)
             {
-                GUILayout.Space(4);
-                GUILayout.Label("When this is ON, VPB tries to process hair earlier during scene load.", m_StyleInfoCardText);
-                GUILayout.Space(2);
-                GUILayout.Label("It does this by reordering VaM's image load queue (it does not download anything extra).", m_StyleInfoCardText);
-            });
+                GUILayout.Space(6);
+
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(m_SettingsReduceTextureSizeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                {
+                    m_SettingsReduceTextureSizeDraft = !m_SettingsReduceTextureSizeDraft;
+                }
+                GUILayout.Label("Textures: Downscale");
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
+                {
+                    ToggleInfoCard(ref m_ShowDownscaleTexturesInfo);
+                }
+                GUILayout.EndHorizontal();
+
+                DrawInfoCard(ref m_ShowDownscaleTexturesInfo, "Downscale Textures", () =>
+                {
+                    GUILayout.Space(4);
+                    GUILayout.Label("When this is ON, VPB makes big textures smaller and saves them so VaM can reuse them.", m_StyleInfoCardText);
+                    GUILayout.Space(2);
+                    GUILayout.Label("This can lower memory use and help performance. The tradeoff is textures may look a bit less sharp.", m_StyleInfoCardText);
+                    GUILayout.Space(6);
+                    GUILayout.Label("Notes: Smaller textures won't be made bigger. The first time can take longer while VPB builds the cache.", m_StyleInfoCardText);
+                });
+
+                GUILayout.Space(6);
+
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(m_SettingsPrioritizeFaceTexturesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                {
+                    m_SettingsPrioritizeFaceTexturesDraft = !m_SettingsPrioritizeFaceTexturesDraft;
+                }
+                GUILayout.Label("Textures: Prioritize face/makeup");
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
+                {
+                    ToggleInfoCard(ref m_ShowPrioritizeFaceTexturesInfo);
+                }
+                GUILayout.EndHorizontal();
+
+                DrawInfoCard(ref m_ShowPrioritizeFaceTexturesInfo, "Prioritize face/makeup textures", () =>
+                {
+                    GUILayout.Space(4);
+                    GUILayout.Label("When this is ON, VPB tries to process face textures and face overlays (makeup/freckles/etc.) earlier during scene load.", m_StyleInfoCardText);
+                    GUILayout.Space(2);
+                    GUILayout.Label("It does this by reordering VaM's image load queue (it does not download anything extra).", m_StyleInfoCardText);
+                    GUILayout.Space(2);
+                    GUILayout.Label("Tip: Leave this ON if you want faces to resolve sooner while clothing/hair textures continue loading.", m_StyleInfoCardText);
+                });
+
+                GUILayout.Space(6);
+
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(m_SettingsPrioritizeHairTexturesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                {
+                    m_SettingsPrioritizeHairTexturesDraft = !m_SettingsPrioritizeHairTexturesDraft;
+                }
+                GUILayout.Label("Textures: Prioritize hair");
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
+                {
+                    ToggleInfoCard(ref m_ShowPrioritizeHairTexturesInfo);
+                }
+                GUILayout.EndHorizontal();
+
+                DrawInfoCard(ref m_ShowPrioritizeHairTexturesInfo, "Prioritize hair textures", () =>
+                {
+                    GUILayout.Space(4);
+                    GUILayout.Label("When this is ON, VPB tries to process hair earlier during scene load.", m_StyleInfoCardText);
+                    GUILayout.Space(2);
+                    GUILayout.Label("It does this by reordering VaM's image load queue (it does not download anything extra).", m_StyleInfoCardText);
+                });
+            }
 
             GUILayout.Space(10);
 
@@ -371,89 +500,7 @@ namespace VPB
             }
             if (GUILayout.Button("Save", m_StyleButtonPrimary, GUILayout.Height(buttonHeight)))
             {
-                try
-                {
-                    var parsed = KeyUtil.Parse(m_SettingsUiKeyDraft ?? "");
-                    var parsedGalleryKey = KeyUtil.Parse(m_SettingsGalleryKeyDraft ?? "");
-                    var parsedCreateGalleryKey = KeyUtil.Parse(m_SettingsCreateGalleryKeyDraft ?? "");
-                    var parsedHubKey = KeyUtil.Parse(m_SettingsHubKeyDraft ?? "");
-
-                    if (parsed.IsSame(parsedGalleryKey) || parsed.IsSame(parsedCreateGalleryKey) || parsed.IsSame(parsedHubKey) || parsedGalleryKey.IsSame(parsedCreateGalleryKey) || parsedGalleryKey.IsSame(parsedHubKey) || parsedCreateGalleryKey.IsSame(parsedHubKey))
-                    {
-                        m_SettingsError = "Duplicate hotkeys are not allowed.";
-                        return;
-                    }
-
-                    if (Settings.Instance != null && Settings.Instance.UIKey != null)
-                    {
-                        Settings.Instance.UIKey.Value = parsed.keyPattern;
-                    }
-                    if (Settings.Instance != null && Settings.Instance.GalleryKey != null)
-                    {
-                        Settings.Instance.GalleryKey.Value = parsedGalleryKey.keyPattern;
-                    }
-                    if (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null)
-                    {
-                        Settings.Instance.CreateGalleryKey.Value = parsedCreateGalleryKey.keyPattern;
-                    }
-                    if (Settings.Instance != null && Settings.Instance.HubKey != null)
-                    {
-                        Settings.Instance.HubKey.Value = parsedHubKey.keyPattern;
-                    }
-                    if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
-                    {
-                        if (Settings.Instance.PluginsAlwaysEnabled.Value != m_SettingsPluginsAlwaysEnabledDraft)
-                        {
-                            Settings.Instance.PluginsAlwaysEnabled.Value = m_SettingsPluginsAlwaysEnabledDraft;
-                        }
-                    }
-                    if (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null)
-                    {
-                        if (Settings.Instance.EnableUiTransparency.Value != m_SettingsEnableUiTransparencyDraft)
-                        {
-                            Settings.Instance.EnableUiTransparency.Value = m_SettingsEnableUiTransparencyDraft;
-                        }
-                    }
-                    if (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null)
-                    {
-                        if (Math.Abs(Settings.Instance.UiTransparencyValue.Value - m_SettingsUiTransparencyValueDraft) > 0.001f)
-                        {
-                            Settings.Instance.UiTransparencyValue.Value = m_SettingsUiTransparencyValueDraft;
-                        }
-                    }
-                    if (VPBConfig.Instance != null)
-                    {
-                        if (VPBConfig.Instance.EnableGalleryFade != m_SettingsEnableGalleryFadeDraft)
-                        {
-                            VPBConfig.Instance.EnableGalleryFade = m_SettingsEnableGalleryFadeDraft;
-                            VPBConfig.Instance.Save();
-                            VPBConfig.Instance.TriggerChange();
-                        }
-                    }
-                    if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)
-                    {
-                        if (Settings.Instance.PrioritizeFaceTextures.Value != m_SettingsPrioritizeFaceTexturesDraft)
-                        {
-                            Settings.Instance.PrioritizeFaceTextures.Value = m_SettingsPrioritizeFaceTexturesDraft;
-                        }
-                    }
-                    if (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null)
-                    {
-                        if (Settings.Instance.PrioritizeHairTextures.Value != m_SettingsPrioritizeHairTexturesDraft)
-                        {
-                            Settings.Instance.PrioritizeHairTextures.Value = m_SettingsPrioritizeHairTexturesDraft;
-                        }
-                    }
-                    UIKey = parsed;
-                    GalleryKey = parsedGalleryKey;
-                    CreateGalleryKey = parsedCreateGalleryKey;
-                    HubKey = parsedHubKey;
-                    CloseSettings();
-                }
-                catch
-                {
-                    m_SettingsError = "Invalid setting. Example hotkey: Ctrl+Shift+V";
-                }
+                SaveSettings();
             }
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
@@ -1149,8 +1196,12 @@ namespace VPB
             harmony.PatchAll(typeof(SuperControllerHook));
             harmony.PatchAll(typeof(PatchAssetLoader));
             harmony.PatchAll(typeof(UnityEngineHook));
-            GenericTextureHook.PatchAll(harmony);
-            DAZClothingHook.PatchAll(harmony);
+
+            if (Settings.Instance.EnableTextureOptimizations.Value)
+            {
+                GenericTextureHook.PatchAll(harmony);
+                DAZClothingHook.PatchAll(harmony);
+            }
 
             // Initialize Native Hooks (MinHook)
             Native.NativeHookManager.Initialize();
@@ -1786,7 +1837,14 @@ namespace VPB
             }
             if (GUILayout.Button("...", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
-                OpenSettings();
+                if (m_ShowSettings)
+                {
+                    SaveSettings();
+                }
+                else
+                {
+                    OpenSettings();
+                }
             }
             GUILayout.EndHorizontal();
 
@@ -1818,70 +1876,74 @@ namespace VPB
                     const float optionIndent = 12f;
 
                     // ========== TEXTURE OPTIMIZATION SETTINGS ==========
-                    GUILayout.BeginVertical(m_StyleSection);
-                    GUILayout.BeginHorizontal();
-                    if (GUILayout.Button(Settings.Instance.ReduceTextureSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                    bool textureOptimizationsEnabled = Settings.Instance.EnableTextureOptimizations.Value;
+                    if (textureOptimizationsEnabled && Settings.Instance.ReduceTextureSize.Value)
                     {
-                        Settings.Instance.ReduceTextureSize.Value = !Settings.Instance.ReduceTextureSize.Value;
-                    }
-                    GUILayout.Label("Textures: Downscale");
-                    GUILayout.FlexibleSpace();
-                    if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
-                    {
-						ToggleInfoCard(ref m_ShowDownscaleTexturesInfo);
-                    }
-                    GUILayout.EndHorizontal();
-					DrawInfoCard(ref m_ShowDownscaleTexturesInfo, "Downscale Textures", () =>
-					{
-						GUILayout.Space(4);
-						GUILayout.Label("When this is ON, VPB makes big textures smaller and saves them so VaM can reuse them.", m_StyleInfoCardText);
-						GUILayout.Space(2);
-						GUILayout.Label("This can lower memory use and help performance. The tradeoff is textures may look a bit less sharp.", m_StyleInfoCardText);
-						GUILayout.Space(6);
-						GUILayout.Label("Min: Anything bigger than this gets reduced down to this size.", m_StyleInfoCardText);
-						GUILayout.Label("Force all to minimum: Makes almost everything use the minimum size (stronger effect).", m_StyleInfoCardText);
-						GUILayout.Space(6);
-						GUILayout.Label("Notes: Smaller textures won't be made bigger. The first time can take longer while VPB builds the cache.", m_StyleInfoCardText);
-					});
-
-                    if (Settings.Instance.ReduceTextureSize.Value)
-                    {
+                        GUILayout.BeginVertical(m_StyleSection);
                         GUILayout.BeginHorizontal();
-                        GUILayout.Space(optionIndent);
-                        GUILayout.Label("Min", GUILayout.Width(30));
-                        int minTextureSize = Settings.Instance.MinTextureSize.Value;
-                        var style2k = (minTextureSize == 2048) ? m_StyleButtonPrimary : m_StyleButton;
-                        var style4k = (minTextureSize == 4096) ? m_StyleButtonPrimary : m_StyleButton;
-                        var style8k = (minTextureSize == 8192) ? m_StyleButtonPrimary : m_StyleButton;
-                        if (GUILayout.Button("2K", style2k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
+                        if (GUILayout.Button(Settings.Instance.ReduceTextureSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
                         {
-                            Settings.Instance.MinTextureSize.Value = 2048;
+                            Settings.Instance.ReduceTextureSize.Value = !Settings.Instance.ReduceTextureSize.Value;
                         }
-                        if (GUILayout.Button("4K", style4k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
-                        {
-                            Settings.Instance.MinTextureSize.Value = 4096;
-                        }
-                        if (GUILayout.Button("8K", style8k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
-                        {
-                            Settings.Instance.MinTextureSize.Value = 8192;
-                        }
-                        if (Settings.Instance.MaxTextureSize != null)
-                        {
-                            Settings.Instance.MaxTextureSize.Value = Settings.Instance.MinTextureSize.Value;
-                        }
-                        GUILayout.EndHorizontal();
-
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Space(optionIndent);
-                        if (GUILayout.Button(Settings.Instance.ForceTextureToMinSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                        {
-                            Settings.Instance.ForceTextureToMinSize.Value = !Settings.Instance.ForceTextureToMinSize.Value;
-                        }
-                        GUILayout.Label("Force all to minimum size");
+                        GUILayout.Label("Textures: Downscale");
                         GUILayout.FlexibleSpace();
+                        if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
+                        {
+                            ToggleInfoCard(ref m_ShowDownscaleTexturesInfo);
+                        }
                         GUILayout.EndHorizontal();
+                        DrawInfoCard(ref m_ShowDownscaleTexturesInfo, "Downscale Textures", () =>
+                        {
+                            GUILayout.Space(4);
+                            GUILayout.Label("When this is ON, VPB makes big textures smaller and saves them so VaM can reuse them.", m_StyleInfoCardText);
+                            GUILayout.Space(2);
+                            GUILayout.Label("This can lower memory use and help performance. The tradeoff is textures may look a bit less sharp.", m_StyleInfoCardText);
+                            GUILayout.Space(6);
+                            GUILayout.Label("Min: Anything bigger than this gets reduced down to this size.", m_StyleInfoCardText);
+                            GUILayout.Label("Force all to minimum: Makes almost everything use the minimum size (stronger effect).", m_StyleInfoCardText);
+                            GUILayout.Space(6);
+                            GUILayout.Label("Notes: Smaller textures won't be made bigger. The first time can take longer while VPB builds the cache.", m_StyleInfoCardText);
+                        });
+
+                        if (Settings.Instance.ReduceTextureSize.Value)
+                        {
+                            GUILayout.BeginHorizontal();
+                            GUILayout.Space(optionIndent);
+                            GUILayout.Label("Min", GUILayout.Width(30));
+                            int minTextureSize = Settings.Instance.MinTextureSize.Value;
+                            var style2k = (minTextureSize == 2048) ? m_StyleButtonPrimary : m_StyleButton;
+                            var style4k = (minTextureSize == 4096) ? m_StyleButtonPrimary : m_StyleButton;
+                            var style8k = (minTextureSize == 8192) ? m_StyleButtonPrimary : m_StyleButton;
+                            if (GUILayout.Button("2K", style2k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
+                            {
+                                Settings.Instance.MinTextureSize.Value = 2048;
+                            }
+                            if (GUILayout.Button("4K", style4k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
+                            {
+                                Settings.Instance.MinTextureSize.Value = 4096;
+                            }
+                            if (GUILayout.Button("8K", style8k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
+                            {
+                                Settings.Instance.MinTextureSize.Value = 8192;
+                            }
+                            if (Settings.Instance.MaxTextureSize != null)
+                            {
+                                Settings.Instance.MaxTextureSize.Value = Settings.Instance.MinTextureSize.Value;
+                            }
+                            GUILayout.EndHorizontal();
+
+                            GUILayout.BeginHorizontal();
+                            GUILayout.Space(optionIndent);
+                            if (GUILayout.Button(Settings.Instance.ForceTextureToMinSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                            {
+                                Settings.Instance.ForceTextureToMinSize.Value = !Settings.Instance.ForceTextureToMinSize.Value;
+                            }
+                            GUILayout.Label("Force all to minimum size");
+                            GUILayout.FlexibleSpace();
+                            GUILayout.EndHorizontal();
+                        }
+                        GUILayout.EndVertical();
                     }
-                    GUILayout.EndVertical();
 
                     // ========== MAINTENANCE & CACHE TOOLS ==========
                     GUILayout.BeginVertical(m_StyleSection);

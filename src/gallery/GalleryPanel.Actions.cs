@@ -45,6 +45,7 @@ namespace VPB
             
             UpdateSideButtonsVisibility();
             UpdateLayout();
+            RefreshTargetDropdown();
 
             canvas.gameObject.SetActive(true);
             LogUtil.Log("GalleryPanel Show setup took: " + sw.ElapsedMilliseconds + "ms");
@@ -110,9 +111,15 @@ namespace VPB
                     {
                         displayPath = displayPath.Replace(".var:", ".var\n\\");
                     }
-                    hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B").Replace(".", ".\u200B");
+                    hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B");
                 }
             }
+        }
+
+        public void RestoreSelectedHoverPath()
+        {
+            if (selectedFile != null) SetHoverPath(selectedFile.Path);
+            else SetHoverPath("");
         }
 
         private void SetNameFilter(string val)
@@ -127,6 +134,8 @@ namespace VPB
 
         private void OnFileClick(FileEntry file)
         {
+            if (file == null) return;
+
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
             
@@ -144,27 +153,62 @@ namespace VPB
                 return;
             }
 
-            if (selectedPath == file.Path) return; // Already selected
-            
-            // Deselect old
-            if (!string.IsNullOrEmpty(selectedPath) && fileButtonImages.ContainsKey(selectedPath))
+            float time = Time.realtimeSinceStartup;
+            bool isDoubleClick = (time - lastClickTime < 0.3f && selectedPath == file.Path);
+            lastClickTime = time;
+
+            if (selectedPath != file.Path)
             {
-                if (fileButtonImages[selectedPath] != null)
-                    fileButtonImages[selectedPath].color = Color.gray;
+                // Deselect old
+                foreach (var btn in activeButtons)
+                {
+                    if (btn == null || !btn.name.StartsWith("FileButton_")) continue;
+                    Image img = btn.GetComponent<Image>();
+                    if (img != null) img.color = Color.gray;
+                }
+                
+                selectedPath = file.Path;
+                selectedFile = file;
+                selectedHubItem = null;
+
+                SetHoverPath(selectedFile.Path);
+                
+                // Select new
+                if (fileButtonImages.ContainsKey(selectedPath))
+                {
+                    if (fileButtonImages[selectedPath] != null)
+                        fileButtonImages[selectedPath].color = Color.yellow;
+                }
+
+                actionsPanel?.HandleSelectionChanged(selectedFile, selectedHubItem);
             }
-            
-            selectedPath = file.Path;
-            selectedFile = file;
-            selectedHubItem = null;
-            
-            // Select new
-            if (fileButtonImages.ContainsKey(selectedPath))
+            else if (ItemApplyMode == ApplyMode.DoubleClick && !isDoubleClick)
             {
-                if (fileButtonImages[selectedPath] != null)
-                    fileButtonImages[selectedPath].color = Color.yellow;
+                return;
             }
 
-            actionsPanel?.HandleSelectionChanged(selectedFile, selectedHubItem);
+            // Apply Logic
+            bool shouldApply = (ItemApplyMode == ApplyMode.SingleClick) || (ItemApplyMode == ApplyMode.DoubleClick && isDoubleClick);
+            
+            if (shouldApply)
+            {
+                string pathLower = file.Path.ToLowerInvariant();
+                // Exclude Scenes from auto-apply
+                bool isScene = pathLower.EndsWith(".json") && (pathLower.Contains("/scenes/") || pathLower.Contains("\\scenes\\"));
+                
+                if (!isScene && actionsPanel != null)
+                {
+                    bool success = actionsPanel.ExecuteAutoAction();
+                    if (!success)
+                    {
+                        // actionsPanel.Open();
+                    }
+                }
+                else if (isScene)
+                {
+                    // actionsPanel?.Open();
+                }
+            }
         }
 
         public void ToggleSettings(bool onRight)

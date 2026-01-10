@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -272,7 +273,7 @@ namespace VPB
         public void OnPointerExit(PointerEventData eventData)
         {
             if (card) card.SetActive(false);
-            if (panel != null) panel.SetHoverPath("");
+            if (panel != null) panel.RestoreSelectedHoverPath();
         }
     }
 
@@ -581,7 +582,7 @@ namespace VPB
                 try
                 {
                     // Prefer using FileManager or SuperController which handles reading better
-                    string normalized = NormalizePath(FileEntry.Path);
+                    string normalized = UI.NormalizePath(FileEntry.Path);
                     if (normalized.Contains(":")) // Var
                     {
                          // Use OpenStreamReader for vars as it handles the archive access
@@ -635,18 +636,430 @@ namespace VPB
             return _isDualPose.Value;
         }
 
+        private static string GetItemKeyForMatching(string actualItemName)
+        {
+            if (string.IsNullOrEmpty(actualItemName)) return "";
+
+            string s = actualItemName;
+            int colonIndex = s.IndexOf(":/", StringComparison.Ordinal);
+            if (colonIndex >= 0)
+            {
+                s = s.Substring(colonIndex + 2);
+            }
+
+            s = s.Replace('\\', '/');
+            int slash = s.LastIndexOf('/');
+            if (slash >= 0 && slash < s.Length - 1)
+            {
+                s = s.Substring(slash + 1);
+            }
+
+            if (s.EndsWith(".vam", StringComparison.OrdinalIgnoreCase))
+            {
+                s = s.Substring(0, s.Length - 4);
+            }
+
+            return s;
+        }
+
+        private static void TryGetCreatorFromPresetPath(string presetPath, bool isClothing, out string creator)
+        {
+            creator = "";
+            if (string.IsNullOrEmpty(presetPath)) return;
+
+            string p = presetPath.Replace('\\', '/');
+            string[] parts = p.Split('/');
+            if (parts == null || parts.Length < 6) return;
+
+            int idx = -1;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (string.Equals(parts[i], "Clothing", StringComparison.OrdinalIgnoreCase) && isClothing)
+                {
+                    idx = i;
+                    break;
+                }
+                if (string.Equals(parts[i], "Hair", StringComparison.OrdinalIgnoreCase) && !isClothing)
+                {
+                    idx = i;
+                    break;
+                }
+            }
+
+            // Expected: Custom/Clothing/Female/<creator>/<item>/<preset>.vap
+            // Expected: Custom/Hair/Female/<creator>/<item>/<preset>.vap
+            if (idx >= 0 && idx + 2 < parts.Length)
+            {
+                int creatorIdx = idx + 2;
+                if (creatorIdx >= 0 && creatorIdx < parts.Length)
+                {
+                    creator = parts[creatorIdx] ?? "";
+                }
+            }
+        }
+
+        private static JSONStorable FindItemPresetStorable(Atom atom, string itemUid, string itemName, string creator, out string storableId)
+        {
+            storableId = null;
+            if (atom == null) return null;
+
+            // Preferred ids (match VaM / BrowserAssist patterns)
+            if (!string.IsNullOrEmpty(creator) && !string.IsNullOrEmpty(itemName))
+            {
+                storableId = creator + ":" + itemName + "Preset";
+                JSONStorable s = atom.GetStorableByID(storableId);
+                if (s != null) return s;
+
+                // Check without Preset suffix (e.g. Sim storables)
+                storableId = creator + ":" + itemName;
+                s = atom.GetStorableByID(storableId);
+                if (s != null && s.GetComponentInChildren<MeshVR.PresetManager>() != null) return s;
+            }
+
+            if (!string.IsNullOrEmpty(itemName))
+            {
+                storableId = itemName + "Preset";
+                JSONStorable s = atom.GetStorableByID(storableId);
+                if (s != null) return s;
+
+                // Check without Preset suffix
+                storableId = itemName;
+                s = atom.GetStorableByID(storableId);
+                if (s != null && s.GetComponentInChildren<MeshVR.PresetManager>() != null) return s;
+            }
+
+            if (!string.IsNullOrEmpty(itemUid))
+            {
+                storableId = itemUid + "Preset";
+                JSONStorable s = atom.GetStorableByID(storableId);
+                if (s != null) return s;
+            }
+
+            // Fallback: search all storables for name match
+            foreach (string sid in atom.GetStorableIDs())
+            {
+                if (sid.EndsWith("Preset", StringComparison.OrdinalIgnoreCase) &&
+                    (!string.IsNullOrEmpty(itemName) && sid.IndexOf(itemName, StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    JSONStorable s = atom.GetStorableByID(sid);
+                    if (s != null && s.GetComponentInChildren<MeshVR.PresetManager>() != null)
+                    {
+                        storableId = sid;
+                        return s;
+                    }
+                }
+            }
+
+            storableId = null;
+            return null;
+        }
+
+        private static JSONClass LoadPresetJsonWithPathFixups(string normalizedPresetPath)
+        {
+            if (string.IsNullOrEmpty(normalizedPresetPath)) return null;
+
+            JSONNode node = SuperController.singleton.LoadJSON(normalizedPresetPath);
+            JSONClass presetJSON = (node != null) ? node.AsObject : null;
+            if (presetJSON == null) return null;
+
+            if (normalizedPresetPath.Contains(":"))
+            {
+                string presetPackageName = normalizedPresetPath.Substring(0, normalizedPresetPath.IndexOf(':'));
+                string folderFullPath = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(normalizedPresetPath);
+                folderFullPath = MVR.FileManagementSecure.FileManagerSecure.NormalizeLoadPath(folderFullPath);
+
+                string presetJSONString = presetJSON.ToString();
+                bool modified = false;
+
+                if (presetJSONString.Contains("SELF:"))
+                {
+                    presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
+                    modified = true;
+                }
+
+                if (presetJSONString.Contains("\":\"./"))
+                {
+                    presetJSONString = presetJSONString.Replace("\":\"./", "\":\"" + folderFullPath + "/");
+                    modified = true;
+                }
+
+                if (modified)
+                {
+                    JSONNode parsed = SimpleJSON.JSON.Parse(presetJSONString);
+                    presetJSON = (parsed != null) ? parsed.AsObject : presetJSON;
+                }
+
+                bool fixedCustomPaths = false;
+                FixupUnprefixedCustomPathsInVarPreset(presetJSON, presetPackageName, ref fixedCustomPaths);
+            }
+
+            return presetJSON;
+        }
+
+        private static void FixupUnprefixedCustomPathsInVarPreset(JSONNode node, string presetPackageName, ref bool modified)
+        {
+            if (node == null || string.IsNullOrEmpty(presetPackageName)) return;
+
+            JSONClass obj = node as JSONClass;
+            if (obj != null)
+            {
+                foreach (KeyValuePair<string, JSONNode> kvp in obj)
+                {
+                    FixupUnprefixedCustomPathsInVarPreset(kvp.Value, presetPackageName, ref modified);
+                }
+                return;
+            }
+
+            JSONArray arr = node as JSONArray;
+            if (arr != null)
+            {
+                for (int i = 0; i < arr.Count; i++)
+                {
+                    FixupUnprefixedCustomPathsInVarPreset(arr[i], presetPackageName, ref modified);
+                }
+                return;
+            }
+
+            string v = node.Value;
+            if (string.IsNullOrEmpty(v)) return;
+            if (v.IndexOf(':') >= 0) return;
+
+            string vNorm = v.Replace('\\', '/');
+            if (!vNorm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return;
+
+            string candidate = presetPackageName + ":/" + vNorm;
+            string normalizedCandidate = MVR.FileManagementSecure.FileManagerSecure.NormalizePath(candidate);
+            if (MVR.FileManagementSecure.FileManagerSecure.FileExists(normalizedCandidate))
+            {
+                node.Value = candidate;
+                modified = true;
+            }
+        }
+
+        private static string LongestCommonPrefix(List<string> values)
+        {
+            if (values == null || values.Count == 0) return "";
+            string prefix = values[0] ?? "";
+            for (int i = 1; i < values.Count; i++)
+            {
+                string s = values[i] ?? "";
+                int j = 0;
+                int max = Mathf.Min(prefix.Length, s.Length);
+                while (j < max && prefix[j] == s[j]) j++;
+                prefix = prefix.Substring(0, j);
+                if (prefix.Length == 0) break;
+            }
+            return prefix;
+        }
+
+        private static string InferClothingHairBaseIdFromPresetJson(JSONClass presetJSON)
+        {
+            if (presetJSON == null || presetJSON["storables"] == null) return "";
+            JSONArray storables = presetJSON["storables"].AsArray;
+            if (storables == null || storables.Count == 0) return "";
+
+            var baseCandidates = new List<string>();
+            var allIds = new List<string>();
+
+            for (int i = 0; i < storables.Count; i++)
+            {
+                JSONNode node = storables[i];
+                if (node == null || node["id"] == null) continue;
+                string id = node["id"].Value;
+                if (string.IsNullOrEmpty(id)) continue;
+
+                allIds.Add(id);
+
+                if (id.EndsWith("Material", StringComparison.Ordinal))
+                {
+                    baseCandidates.Add(id.Substring(0, id.Length - 8));
+                    continue;
+                }
+
+                if (id.EndsWith("Sim", StringComparison.Ordinal))
+                {
+                    baseCandidates.Add(id.Substring(0, id.Length - 3));
+                    continue;
+                }
+
+                if (id.EndsWith("Physics", StringComparison.Ordinal))
+                {
+                    baseCandidates.Add(id.Substring(0, id.Length - 7));
+                    continue;
+                }
+            }
+
+            // Prefer the most common candidate base (best signal for clothing item presets)
+            if (baseCandidates.Count > 0)
+            {
+                var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (string c in baseCandidates)
+                {
+                    if (string.IsNullOrEmpty(c)) continue;
+                    counts[c] = counts.TryGetValue(c, out int n) ? (n + 1) : 1;
+                }
+                if (counts.Count > 0)
+                {
+                    string best = null;
+                    int bestCount = -1;
+                    foreach (var kvp in counts)
+                    {
+                        if (kvp.Value > bestCount)
+                        {
+                            best = kvp.Key;
+                            bestCount = kvp.Value;
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(best)) return NormalizeInferredBaseId(best);
+                }
+            }
+
+            // Fallback: longest common prefix across all ids, then trim to a safe boundary
+            string lcp = LongestCommonPrefix(allIds);
+            if (string.IsNullOrEmpty(lcp)) return "";
+            return NormalizeInferredBaseId(lcp);
+        }
+
+        private static string NormalizeInferredBaseId(string baseId)
+        {
+            if (string.IsNullOrEmpty(baseId)) return "";
+            string s = baseId;
+
+            // Many "Sim" / "Material" storables use an underscore separator before the suffix.
+            while (s.EndsWith("_", StringComparison.Ordinal) || s.EndsWith("-", StringComparison.Ordinal) || s.EndsWith(" ", StringComparison.Ordinal))
+            {
+                s = s.Substring(0, s.Length - 1);
+                if (s.Length == 0) break;
+            }
+
+            return s;
+        }
+
+        private static string ExtractKeyFromInferredBaseId(string inferredBaseId)
+        {
+            if (string.IsNullOrEmpty(inferredBaseId)) return "";
+            string s = NormalizeInferredBaseId(inferredBaseId);
+            int colon = s.IndexOf(':');
+            if (colon >= 0 && colon < s.Length - 1)
+            {
+                s = s.Substring(colon + 1);
+            }
+            return s;
+        }
+
+        private static IEnumerator ActivateClothingHairItemPresetCoroutine(Atom atom, FileEntry entry, bool isClothing, string itemUid, string itemName)
+        {
+            if (atom == null || entry == null) yield break;
+
+            string normalizedPath = UI.NormalizePath(entry.Path);
+            string creator;
+            TryGetCreatorFromPresetPath(entry.Path, isClothing, out creator);
+
+            // Load preset JSON first so we can infer the real storable prefix for variant folders.
+            JSONClass presetJSON = LoadPresetJsonWithPathFixups(normalizedPath);
+            string inferredBaseId = InferClothingHairBaseIdFromPresetJson(presetJSON);
+
+            string lookupName = !string.IsNullOrEmpty(inferredBaseId) ? inferredBaseId : itemName;
+            LogUtil.Log($"[DragDropDebug] Waiting for item preset storable. isClothing={isClothing}, itemName={itemName}, inferredBaseId={inferredBaseId}, itemUid={itemUid}, creator={creator}, presetPath={normalizedPath}");
+
+            DateTime startDelayTime = DateTime.Now;
+            while ((DateTime.Now - startDelayTime).TotalSeconds < 10)
+            {
+                string storableId;
+                JSONStorable presetStorable = FindItemPresetStorable(atom, itemUid, itemName, creator, out storableId);
+                MeshVR.PresetManager pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+
+                if (pm == null && !string.IsNullOrEmpty(inferredBaseId))
+                {
+                    presetStorable = FindItemPresetStorable(atom, itemUid, inferredBaseId, creator, out storableId);
+                    pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+                }
+
+                if (pm == null && !string.IsNullOrEmpty(inferredBaseId))
+                {
+                    // Direct check by inferred base id
+                    string directId = inferredBaseId + "Preset";
+                    presetStorable = atom.GetStorableByID(directId);
+                    pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+                    if (pm != null)
+                    {
+                        storableId = directId;
+                    }
+                }
+
+                if (pm != null)
+                {
+                    if (presetJSON == null)
+                    {
+                        LogUtil.LogWarning($"[DragDropDebug] Failed to load preset JSON from path: {normalizedPath}");
+                        yield break;
+                    }
+
+                    LogUtil.Log($"[DragDropDebug] Found item preset storable: {storableId}. Applying preset now.");
+
+                    JSONStorableString presetNameJSS = presetStorable.GetStringJSONParam("presetName");
+                    if (presetNameJSS != null)
+                    {
+                        string fileNameNoExt = Path.GetFileNameWithoutExtension(normalizedPath);
+                        if (normalizedPath.Contains(":"))
+                        {
+                            string presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
+                            presetNameJSS.val = presetPackageName + ":" + fileNameNoExt + ".vap";
+                        }
+                        else
+                        {
+                            presetNameJSS.val = fileNameNoExt + ".vap";
+                        }
+                    }
+
+                    LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
+
+                    try
+                    {
+                        MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath);
+                    }
+                    catch { }
+
+                    try
+                    {
+                        pm.LoadPresetFromJSON(presetJSON, false);
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            MVR.FileManagement.FileManager.PopLoadDir();
+                        }
+                        catch { }
+                    }
+                    yield break;
+                }
+
+                yield return new WaitForEndOfFrame();
+            }
+
+            LogUtil.LogWarning($"[DragDropDebug] Timed out waiting for item preset storable for {lookupName} ({itemUid}). Preset not applied: {entry.Path}");
+        }
+
         public static void ActivateClothingHairItemPreset(Atom atom, FileEntry entry, bool isClothing)
         {
             if (atom == null || entry == null) return;
             string path = entry.Path;
-            string normalizedPath = SuperController.singleton.NormalizePath(path);
+            string normalizedPath = UI.NormalizePath(path);
             
             // 1. Identify the specific clothing/hair item UID from the file path
             // Presets for specific items are usually in Custom/Clothing/[Gender]/[Creator]/[ItemName]/[Preset].vap
             // We need to find which item this preset belongs to.
             
             string itemName = "";
+            string packageName = "";
             string p = path.Replace('\\', '/');
+            
+            if (p.Contains(":"))
+            {
+                packageName = p.Substring(0, p.IndexOf(':'));
+            }
+
             string[] parts = p.Split('/');
             
             // Heuristic: The item name is usually the parent directory of the preset file
@@ -657,7 +1070,7 @@ namespace VPB
             
             if (string.IsNullOrEmpty(itemName)) return;
             
-            LogUtil.Log($"[DragDropDebug] Target Item Name from path: {itemName}");
+            LogUtil.Log($"[DragDropDebug] Target Item Name from path: {itemName} (Package: {packageName})");
             
             // 2. Find the corresponding storable on the atom
             // Clothing items have storables like "clothing:[ItemUID]"
@@ -665,27 +1078,90 @@ namespace VPB
             
             JSONStorable geometry = atom.GetStorableByID("geometry");
             if (geometry == null) return;
+
+            // Optional: infer the underlying item key from preset JSON (helps with variant folders like *_Mini/_Sim)
+            string inferredKey = "";
+            try
+            {
+                JSONClass presetJSON = LoadPresetJsonWithPathFixups(normalizedPath);
+                string inferredBaseId = InferClothingHairBaseIdFromPresetJson(presetJSON);
+                inferredKey = ExtractKeyFromInferredBaseId(inferredBaseId);
+            }
+            catch { }
             
             string itemUid = "";
             string prefix = isClothing ? "clothing:" : "hair:";
+
+            if (!string.IsNullOrEmpty(inferredKey))
+            {
+                foreach (string paramName in geometry.GetBoolParamNames())
+                {
+                    if (!paramName.StartsWith(prefix)) continue;
+                    string actualItemName = paramName.Substring(prefix.Length);
+                    string actualKey = GetItemKeyForMatching(actualItemName);
+                    if (actualKey.Equals(inferredKey, StringComparison.OrdinalIgnoreCase))
+                    {
+                        itemUid = actualItemName;
+                        LogUtil.Log($"[DragDropDebug] Matched item via inferredKey: {inferredKey} -> {itemUid}");
+                        break;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(itemUid))
+            {
+                LogUtil.Log($"[DragDropDebug] Identified Item UID (inferred): {itemUid}");
+                JSONStorableBool inferredActive = geometry.GetBoolJSONParam(prefix + itemUid);
+                if (inferredActive != null && !inferredActive.val) inferredActive.val = true;
+                SuperController.singleton.StartCoroutine(ActivateClothingHairItemPresetCoroutine(atom, entry, isClothing, itemUid, itemName));
+                return;
+            }
             
             foreach (string paramName in geometry.GetBoolParamNames())
             {
                 if (paramName.StartsWith(prefix))
                 {
                     string actualItemName = paramName.Substring(prefix.Length);
+                    string actualKey = GetItemKeyForMatching(actualItemName);
+                    
                     // Match if actual name contains the item name from path or vice-versa
-                    if (actualItemName.Equals(itemName, StringComparison.OrdinalIgnoreCase) || 
-                        actualItemName.Contains(itemName) || 
-                        itemName.Contains(actualItemName))
+                    // If we have a package name, prioritize matching items from the SAME package
+                    bool packageMatch = string.IsNullOrEmpty(packageName) ||
+                                       actualItemName.StartsWith(packageName + ".") ||
+                                       actualItemName.StartsWith(packageName + ":") ||
+                                       actualItemName.StartsWith(packageName + ":/");
+                    
+                    if (packageMatch)
                     {
-                        itemUid = actualItemName;
-                        break;
+                        if (actualKey.Equals(itemName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            itemUid = actualItemName;
+                            break;
+                        }
                     }
                 }
             }
             
-            // If not found by name, try a more aggressive search
+            // If not found by name in same package, try a broader search
+            if (string.IsNullOrEmpty(itemUid))
+            {
+                foreach (string paramName in geometry.GetBoolParamNames())
+                {
+                    if (paramName.StartsWith(prefix))
+                    {
+                        string actualItemName = paramName.Substring(prefix.Length);
+                        string actualKey = GetItemKeyForMatching(actualItemName);
+                        if (actualKey.Equals(itemName, StringComparison.OrdinalIgnoreCase) ||
+                            actualKey.IndexOf(itemName, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            itemUid = actualItemName;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // If still not found, try aggressive clean matching
             if (string.IsNullOrEmpty(itemUid))
             {
                  // Clean up itemName for better matching (remove spaces, underscores)
@@ -696,7 +1172,8 @@ namespace VPB
                      if (paramName.StartsWith(prefix))
                      {
                          string actualItemName = paramName.Substring(prefix.Length);
-                         string cleanActual = actualItemName.Replace(" ", "").Replace("_", "").ToLower();
+                         string actualKey = GetItemKeyForMatching(actualItemName);
+                         string cleanActual = actualKey.Replace(" ", "").Replace("_", "").ToLower();
                          
                          if (cleanActual.Contains(cleanItemName) || cleanItemName.Contains(cleanActual))
                          {
@@ -714,25 +1191,52 @@ namespace VPB
                 string vamPath = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(path) + "/" + itemName + ".vam";
                 if (MVR.FileManagementSecure.FileManagerSecure.FileExists(vamPath))
                 {
-                    LogUtil.Log($"[DragDropDebug] Clothing item not found on atom. Attempting to load parent .vam: {vamPath}");
+                    LogUtil.Log($"[DragDropDebug] Clothing item not found on atom. Attempting to load parent .vam via JSON: {vamPath}");
                     
-                    // To load a .vam, we can use the main ClothingPresets storable and its LoadPreset action
-                    // which handles .vam files by adding them to the atom.
                     string presetsStorableId = isClothing ? "ClothingPresets" : "HairPresets";
                     JSONStorable presetsStorable = atom.GetStorableByID(presetsStorableId);
                     if (presetsStorable != null)
                     {
                         try
                         {
-                            JSONStorableString presetNameJSS = presetsStorable.GetStringJSONParam("presetName");
-                            if (presetNameJSS != null) presetNameJSS.val = vamPath;
-                            presetsStorable.CallAction("LoadPreset");
-                            
-                            // After loading, we need to refresh the geometry storable to find the new itemUid
-                            // Wait, the UID for a loaded .vam is usually its normalized path or legacy path
-                            // Let's try to find it again after a short delay? No, we are not in a coroutine.
-                            // But we can try to guess it.
-                            itemUid = SuperController.singleton.NormalizePath(vamPath);
+                            MeshVR.PresetManager pm = presetsStorable.GetComponentInChildren<MeshVR.PresetManager>();
+                            if (pm != null)
+                            {
+                                string normalizedVam = UI.NormalizePath(vamPath);
+                                JSONNode node = SuperController.singleton.LoadJSON(normalizedVam);
+                                JSONClass vamJSON = (node != null) ? node.AsObject : null;
+                                if (vamJSON != null)
+                                {
+                                    // Handle package relative paths (SELF:)
+                                    if (normalizedVam.Contains(":"))
+                                    {
+                                        string pkg = normalizedVam.Substring(0, normalizedVam.IndexOf(':'));
+                                        string jsonStr = vamJSON.ToString();
+                                        if (jsonStr.Contains("SELF:"))
+                                        {
+                                            JSONNode parsed = SimpleJSON.JSON.Parse(jsonStr.Replace("SELF:", pkg + ":"));
+                                            vamJSON = (parsed != null) ? parsed.AsObject : null;
+                                        }
+                                    }
+
+                                    JSONStorableString presetNameJSS = presetsStorable.GetStringJSONParam("presetName");
+                                    if (presetNameJSS != null)
+                                    {
+                                        try {
+                                            presetNameJSS.val = pm.GetPresetNameFromFilePath(normalizedVam);
+                                        } catch {
+                                            presetNameJSS.val = Path.GetFileNameWithoutExtension(normalizedVam);
+                                        }
+                                    }
+
+                                    pm.LoadPresetFromJSON(vamJSON, false);
+                                    itemUid = UI.NormalizePath(vamPath);
+                                }
+                                else
+                                {
+                                    LogUtil.LogError($"[DragDropDebug] Failed to load parent .vam JSON: {normalizedVam}");
+                                }
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -756,98 +1260,11 @@ namespace VPB
             {
                 activeJSB.val = true;
             }
-            
-            // 4. Load the preset into the item's PresetManager
-            // Preset storables usually strip the .vam extension if it exists
-            string baseId = itemUid;
-            if (baseId.EndsWith(".vam", StringComparison.OrdinalIgnoreCase))
-                baseId = baseId.Substring(0, baseId.Length - 4);
 
-            // Handle potential creator prefix in itemUid (e.g. "Creator.ItemName" -> "ItemName")
-            string shortBaseId = baseId;
-            int lastDot = baseId.LastIndexOf('.');
-            if (lastDot >= 0 && lastDot < baseId.Length - 1)
-            {
-                shortBaseId = baseId.Substring(lastDot + 1);
-            }
-
-            string storableId = baseId + "Preset";
-            JSONStorable presetStorable = atom.GetStorableByID(storableId);
-            
-            // Try fallback with short name if not found
-            if (presetStorable == null && shortBaseId != baseId)
-            {
-                 storableId = shortBaseId + "Preset";
-                 presetStorable = atom.GetStorableByID(storableId);
-            }
-
-            // Try another fallback without stripping .vam just in case
-            if (presetStorable == null)
-            {
-                 storableId = itemUid + "Preset";
-                 presetStorable = atom.GetStorableByID(storableId);
-            }
-
-            if (presetStorable != null)
-            {
-                MeshVR.PresetManager pm = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
-                if (pm != null)
-                {
-                    JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
-                    if (presetJSON != null)
-                    {
-                        // Handle Package SELF references if needed
-                        if (normalizedPath.Contains(":"))
-                        {
-                            string presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
-                            string presetJSONString = presetJSON.ToString();
-                            if (presetJSONString.Contains("SELF:"))
-                            {
-                                presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
-                                presetJSON = SimpleJSON.JSON.Parse(presetJSONString).AsObject;
-                            }
-                        }
-                        
-                        // Set preset name and load
-                        JSONStorableString presetNameJSS = presetStorable.GetStringJSONParam("presetName");
-                        if (presetNameJSS != null)
-                        {
-                            presetNameJSS.val = pm.GetPresetNameFromFilePath(normalizedPath);
-                        }
-                        
-                        LogUtil.Log($"[DragDropDebug] Loading preset into {storableId}");
-                        pm.LoadPresetFromJSON(presetJSON, false);
-
-                        // Explicitly re-enable after loading to ensure it's on if the preset had it off
-                        if (activeJSB != null) activeJSB.val = true;
-                    }
-                }
-            }
-            else
-            {
-                LogUtil.LogWarning($"[DragDropDebug] Preset storable {storableId} not found on atom. Attempting fallback via main { (isClothing ? "Clothing" : "Hair") }Presets.");
-                
-                // Fallback: Try loading via main presets storable
-                string mainPresetsId = isClothing ? "ClothingPresets" : "HairPresets";
-                JSONStorable mainPresets = atom.GetStorableByID(mainPresetsId);
-                if (mainPresets != null)
-                {
-                    try
-                    {
-                        JSONStorableString presetNameJSS = mainPresets.GetStringJSONParam("presetName");
-                        if (presetNameJSS != null) presetNameJSS.val = normalizedPath;
-                        mainPresets.CallAction("LoadPreset");
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogError($"[DragDropDebug] Fallback load failed: {ex.Message}");
-                    }
-                }
-                else
-                {
-                    LogUtil.LogError($"[DragDropDebug] Could not find {storableId} or {mainPresetsId} to apply preset.");
-                }
-            }
+            // 4. Load the preset into the item's PresetManager.
+            // The preset storable may not exist immediately after toggling the clothing/hair item on.
+            // We must wait until the item is fully loaded, otherwise we fall into VaM store-folder mismatch errors.
+            SuperController.singleton.StartCoroutine(ActivateClothingHairItemPresetCoroutine(atom, entry, isClothing, itemUid, itemName));
         }
 
         private bool IsAtomMale(Atom atom)
@@ -1185,7 +1602,7 @@ namespace VPB
 
         private void LoadCUA(string path)
         {
-            string normalizedPath = NormalizePath(path);
+            string normalizedPath = UI.NormalizePath(path);
             LogUtil.Log($"[DragDropDebug] Loading CUA: {normalizedPath}");
             StartCoroutine(LoadCUACoroutine(normalizedPath));
         }
@@ -1225,7 +1642,7 @@ namespace VPB
                  yield break;
             }
 
-            string normalizedPath = NormalizePath(path);
+            string normalizedPath = UI.NormalizePath(path);
             JSONStorableUrl urlParam = targetAtom.GetUrlJSONParam("assetUrl");
             if (urlParam == null)
             {
@@ -1306,7 +1723,7 @@ namespace VPB
                 FileManager.Refresh();
             }
 
-            string normalizedPath = NormalizePath(path);
+            string normalizedPath = UI.NormalizePath(path);
 
             LogUtil.Log($"[DragDropDebug] Loading SubScene: {normalizedPath}");
             
@@ -1320,29 +1737,615 @@ namespace VPB
             }
         }
 
-        private void LoadSceneFile(string path)
+        public void LoadSceneFile(string path)
         {
-            bool installed = EnsureInstalled();
-
-            if (installed)
-            {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
-            }
-
-            string normalizedPath = NormalizePath(path);
-            LogUtil.Log($"[DragDropDebug] Loading Scene: {normalizedPath}");
             try
             {
+                LogUtil.Log($"[VPB] LoadSceneFile started for: {path}");
+                if (string.IsNullOrEmpty(path))
+                {
+                    LogUtil.LogError("[VPB] LoadSceneFile: path is null or empty");
+                    return;
+                }
+
+                bool installed = EnsureInstalled();
+                LogUtil.Log($"[VPB] EnsureInstalled result: {installed}");
+
+                if (installed)
+                {
+                    LogUtil.Log("[VPB] Refreshing FileManagers...");
+                    if (MVR.FileManagement.FileManager.singleton != null)
+                        MVR.FileManagement.FileManager.Refresh();
+                    
+                    FileManager.Refresh();
+                }
+
+                string normalizedPath = UI.NormalizePath(path);
+                LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
+                
                 SuperController sc = SuperController.singleton;
                 if (sc != null)
                 {
+                    LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
                     sc.Load(normalizedPath);
+                }
+                else
+                {
+                    LogUtil.LogError("[VPB] SuperController.singleton is null!");
                 }
             }
             catch (Exception ex)
             {
-                LogUtil.LogError($"[DragDropDebug] Failed to load scene: {ex.Message}");
+                LogUtil.LogError($"[VPB] LoadSceneFile crash: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        public void LoadClothing(Atom target)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadClothing: No target atom provided.");
+                return;
+            }
+            LogUtil.Log($"[VPB] LoadClothing: Applying {FileEntry.Name} to {target.uid}");
+            ApplyClothingToAtom(target, FileEntry.Uid);
+        }
+
+        public void LoadHair(Atom target)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadHair: No target atom provided.");
+                return;
+            }
+            LogUtil.Log($"[VPB] LoadHair: Applying {FileEntry.Name} to {target.uid}");
+            ApplyClothingToAtom(target, FileEntry.Uid);
+        }
+
+        public void LoadPose(Atom target, bool suppressRoot = true)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadPose: No target atom provided.");
+                return;
+            }
+            
+            string normalizedPath = UI.NormalizePath(FileEntry.Path);
+            LogUtil.Log($"[VPB] LoadPose: Applying {FileEntry.Name} to {target.uid} (SuppressRoot: {suppressRoot})");
+
+            JSONNode node = SuperController.singleton.LoadJSON(normalizedPath);
+            if (node == null) return;
+            JSONClass presetJSON = node.AsObject;
+            
+            if (suppressRoot)
+            {
+                if (presetJSON["storables"] != null)
+                {
+                    JSONArray storables = presetJSON["storables"] as JSONArray;
+                    if (storables != null)
+                    {
+                        foreach(JSONNode s in storables)
+                        {
+                            if (s["id"].Value == "PosePresets" || s["id"].Value == "control")
+                            {
+                                if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
+                            }
+                        }
+                    }
+                }
+                else if (presetJSON["presets"] != null)
+                {
+                    CleanPresets(presetJSON["presets"] as JSONArray);
+                }
+            }
+            
+            JSONStorable presetStorable = target.GetStorableByID("PosePresets");
+            if (presetStorable != null)
+            {
+                 var pm = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
+                 if (pm != null) pm.LoadPresetFromJSON(presetJSON, false);
+            }
+        }
+        
+        private void CleanPresets(JSONArray presets)
+        {
+            if (presets == null) return;
+            for (int j = 0; j < presets.Count; j++)
+            {
+                JSONClass p = presets[j] as JSONClass;
+                if (p != null && p["id"].Value == "control")
+                {
+                    if (p.HasKey("position")) p.Remove("position");
+                    if (p.HasKey("rotation")) p.Remove("rotation");
+                }
+            }
+        }
+
+        public void MergeSceneFile(string path, bool atPlayer = false)
+        {
+            try
+            {
+                LogUtil.Log($"[VPB] MergeSceneFile started: {path} (atPlayer: {atPlayer})");
+                bool installed = EnsureInstalled();
+
+                if (installed)
+                {
+                    LogUtil.Log("[VPB] Refreshing FileManagers...");
+                    MVR.FileManagement.FileManager.Refresh();
+                    FileManager.Refresh();
+                }
+
+                string normalizedPath = UI.NormalizePath(path);
+                LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
+                
+                SuperController sc = SuperController.singleton;
+                if (sc != null)
+                {
+                    // Track atoms before merge to identify new ones if atPlayer is requested
+                    HashSet<string> atomsBefore = null;
+                    if (atPlayer)
+                    {
+                        atomsBefore = new HashSet<string>();
+                        foreach (Atom a in sc.GetAtoms()) atomsBefore.Add(a.uid);
+                    }
+
+                    // Try LoadMerge first (public in some versions/scripts)
+                    MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
+                    if (loadMerge != null)
+                    {
+                        LogUtil.Log("[VPB] Calling sc.LoadMerge");
+                        loadMerge.Invoke(sc, new object[] { normalizedPath });
+                    }
+                    else
+                    {
+                        // Use reflection to call LoadInternal which supports merging
+                        MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (loadInternal != null)
+                        {
+                            LogUtil.Log("[VPB] Calling sc.LoadInternal(merge=true)");
+                            loadInternal.Invoke(sc, new object[] { normalizedPath, true, false });
+                        }
+                        else
+                        {
+                            LogUtil.LogWarning("[VPB] No merge method found, falling back to sc.Load");
+                            sc.Load(normalizedPath);
+                        }
+                    }
+
+                    if (atPlayer)
+                    {
+                        StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] MergeSceneFile crash: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        public void MergeScenePersonsOnly(string path, bool atPlayer = false, string personUidToImport = null, bool ensureUniqueIds = true, string targetUid = null)
+        {
+            LogUtil.Log($"[VPB] MergeScenePersonsOnly: {path}, atPlayer={atPlayer}, person='{personUidToImport}', unique={ensureUniqueIds}, target='{targetUid}'");
+            
+            if (!string.IsNullOrEmpty(targetUid))
+            {
+                ApplySceneDataToAtom(path, personUidToImport, targetUid, (atomNode) => true, "Full Person Preset");
+                return;
+            }
+
+            MergeSceneFiltered(path, (atom) => {
+                if (atom == null) return false;
+                string type = atom["type"].Value;
+                string id = atom["id"].Value;
+                
+                if (type != "Person") return false;
+                
+                // If a specific person is requested, check the ID
+                if (!string.IsNullOrEmpty(personUidToImport))
+                {
+                    if (id != personUidToImport) 
+                    {
+                        // LogUtil.Log($"[VPB] Skipping person '{id}' (looking for '{personUidToImport}')");
+                        return false;
+                    }
+                }
+                
+                LogUtil.Log($"[VPB] Including person: {id}");
+                // Force atom to be On
+                atom["on"] = "true";
+                return true;
+            }, "Merge Scene (Persons Only)", ensureUniqueIds, atPlayer);
+        }
+
+        public void MergeSceneAppearanceOnly(string path, string personUidToImport, bool ensureUniqueIds = true, string targetUid = null)
+        {
+            LogUtil.Log($"[VPB] MergeSceneAppearanceOnly: {path}, person='{personUidToImport}', target='{targetUid}'");
+            
+            if (!string.IsNullOrEmpty(targetUid))
+            {
+                ApplySceneDataToAtom(path, personUidToImport, targetUid, (storableId) => storableId == "AppearancePresets", "Appearance Only");
+                return;
+            }
+
+            MergeSceneFiltered(path, (atom) => {
+                if (atom == null) return false;
+                if (atom["type"].Value != "Person") return false;
+                if (atom["id"].Value != personUidToImport) return false;
+
+                // Strip everything except basic info and AppearancePresets storable
+                JSONArray storables = atom["storables"].AsArray;
+                JSONArray filteredStorables = new JSONArray();
+                foreach (JSONNode storable in storables)
+                {
+                    string id = storable["id"].Value;
+                    if (id == "AppearancePresets")
+                    {
+                        filteredStorables.Add(storable);
+                    }
+                }
+                atom["storables"] = filteredStorables;
+                return true;
+            }, "Merge Appearance Only", ensureUniqueIds, false);
+        }
+
+        public void MergeScenePoseOnly(string path, string personUidToImport, bool ensureUniqueIds = true, string targetUid = null)
+        {
+            LogUtil.Log($"[VPB] MergeScenePoseOnly: {path}, person='{personUidToImport}', target='{targetUid}'");
+
+            if (!string.IsNullOrEmpty(targetUid))
+            {
+                ApplySceneDataToAtom(path, personUidToImport, targetUid, (storableId) => storableId == "PosePresets" || storableId == "control" || storableId.Contains("Control"), "Pose Only");
+                return;
+            }
+
+            MergeSceneFiltered(path, (atom) => {
+                if (atom == null) return false;
+                if (atom["type"].Value != "Person") return false;
+                if (atom["id"].Value != personUidToImport) return false;
+
+                // Keep only Control storables (pose) and PosePresets if present
+                JSONArray storables = atom["storables"].AsArray;
+                JSONArray filteredStorables = new JSONArray();
+                foreach (JSONNode storable in storables)
+                {
+                    string id = storable["id"].Value;
+                    // Most pose info is in 'control' or 'PosePresets' or atom-specific pose storables
+                    if (id == "PosePresets" || id == "control" || id.Contains("Control"))
+                    {
+                        filteredStorables.Add(storable);
+                    }
+                }
+                atom["storables"] = filteredStorables;
+                return true;
+            }, "Merge Pose Only", ensureUniqueIds, false);
+        }
+
+        private void ApplySceneDataToAtom(string path, string sourcePersonId, string targetUid, Func<string, bool> storableFilter, string label)
+        {
+            try
+            {
+                JSONNode root = UI.LoadJSONWithFallback(path, this.FileEntry);
+                if (root == null || root["atoms"] == null) return;
+
+                JSONNode sourceAtom = null;
+                foreach (JSONNode atom in root["atoms"].AsArray)
+                {
+                    if (atom["type"].Value == "Person" && atom["id"].Value == sourcePersonId)
+                    {
+                        sourceAtom = atom;
+                        break;
+                    }
+                }
+
+                if (sourceAtom == null)
+                {
+                    LogUtil.LogError($"[VPB] Source person '{sourcePersonId}' not found in {path}");
+                    return;
+                }
+
+                Atom targetAtom = SuperController.singleton.GetAtomByUid(targetUid);
+                if (targetAtom == null)
+                {
+                    LogUtil.LogError($"[VPB] Target person '{targetUid}' not found in scene");
+                    return;
+                }
+
+                LogUtil.Log($"[VPB] Applying {label} from {sourcePersonId} to {targetUid}");
+                
+                int appliedCount = 0;
+                int skippedCount = 0;
+                
+                foreach (JSONNode storable in sourceAtom["storables"].AsArray)
+                {
+                    string id = storable["id"].Value;
+                    if (storableFilter(id))
+                    {
+                        JSONStorable targetStorable = targetAtom.GetStorableByID(id);
+                        if (targetStorable != null)
+                        {
+                            // Try using PresetManager if it exists (cleaner load)
+                            var pm = targetStorable.GetComponentInChildren<MeshVR.PresetManager>();
+                            if (pm != null)
+                            {
+                                pm.LoadPresetFromJSON(storable.AsObject, false);
+                                appliedCount++;
+                            }
+                            else
+                            {
+                                targetStorable.RestoreFromJSON(storable.AsObject);
+                                appliedCount++;
+                            }
+                        }
+                        else
+                        {
+                            skippedCount++;
+                        }
+                    }
+                }
+                LogUtil.Log($"[VPB] Scene data application complete: {appliedCount} storables applied, {skippedCount} storables missing on target.");
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] Error applying scene data: {ex.Message}");
+            }
+        }
+
+        public void ReplaceSceneKeepPersons(string path)
+        {
+            StartCoroutine(ReplaceSceneKeepPersonsCoroutine(path));
+        }
+
+        private void MergeSceneFiltered(string path, Func<JSONNode, bool> atomFilter, string label, bool ensureUniqueIds = false, bool atPlayer = false)
+        {
+            string normalizedPath = UI.NormalizePath(path);
+            LogUtil.Log($"[VPB] {label}: {normalizedPath}");
+            
+            SuperController sc = SuperController.singleton;
+            HashSet<string> atomsBefore = null;
+            if (atPlayer && sc != null)
+            {
+                atomsBefore = new HashSet<string>();
+                foreach (Atom a in sc.GetAtoms()) atomsBefore.Add(a.uid);
+                LogUtil.Log($"[VPB] Tracking {atomsBefore.Count} atoms before merge for teleport.");
+            }
+
+            string tempPath = CreateFilteredSceneJSON(normalizedPath, this.FileEntry, atomFilter, ensureUniqueIds);
+            if (!string.IsNullOrEmpty(tempPath))
+            {
+                LogUtil.Log($"[VPB] Created filtered temp file: {tempPath}");
+                try
+                {
+                    MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
+                    if (loadMerge != null)
+                    {
+                        LogUtil.Log("[VPB] Calling sc.LoadMerge");
+                        loadMerge.Invoke(sc, new object[] { tempPath });
+                    }
+                    else
+                    {
+                        MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (loadInternal != null) 
+                        {
+                            LogUtil.Log("[VPB] Calling sc.LoadInternal(merge=true)");
+                            loadInternal.Invoke(sc, new object[] { tempPath, true, false });
+                        }
+                        else
+                        {
+                            LogUtil.LogWarning("[VPB] Neither LoadMerge nor LoadInternal found, falling back to sc.Load (might not merge!)");
+                            sc.Load(tempPath);
+                        }
+                    }
+                    
+                    if (atPlayer && atomsBefore != null)
+                    {
+                        StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
+                    }
+
+                    // Keep temp file for a bit to ensure VaM finishes loading it? 
+                    // Actually LoadMerge is synchronous for the file read, but asynchronous for the actual loading?
+                    // Usually it's safe to delete after the call returns.
+                    if (File.Exists(tempPath)) File.Delete(tempPath);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError($"[VPB] Failed to {label}: {ex.Message}\n{ex.StackTrace}");
+                }
+            }
+            else
+            {
+                LogUtil.LogError($"[VPB] Failed to create filtered scene JSON for {normalizedPath}");
+            }
+        }
+
+        private System.Collections.IEnumerator ReplaceSceneKeepPersonsCoroutine(string path)
+        {
+            string normalizedPath = UI.NormalizePath(path);
+            LogUtil.Log($"[VPB] Replace Scene Keep Persons: {normalizedPath}");
+
+            SuperController sc = SuperController.singleton;
+            if (sc == null) yield break;
+
+            List<string> personUids = new List<string>();
+            foreach (Atom a in sc.GetAtoms())
+            {
+                if (a.type == "Person") personUids.Add(a.uid);
+            }
+            
+            if (personUids.Count == 0)
+            {
+                sc.Load(normalizedPath);
+                yield break;
+            }
+
+            string currentSceneTemp = Path.Combine(sc.savesDir, "vpb_temp_current_" + Guid.NewGuid().ToString() + ".json");
+            sc.Save(currentSceneTemp);
+            
+            string personsOnlyTemp = CreateFilteredSceneJSON(currentSceneTemp, null, (atom) => atom["type"].Value == "Person", false);
+            if (File.Exists(currentSceneTemp)) File.Delete(currentSceneTemp);
+            
+            if (string.IsNullOrEmpty(personsOnlyTemp))
+            {
+                LogUtil.LogError("[VPB] Failed to extract persons from current scene.");
+                yield break;
+            }
+            
+            // Remove persons from new scene to prevent duplication/conflict
+            string newSceneNoPersons = CreateFilteredSceneJSON(normalizedPath, this.FileEntry, (atom) => atom["type"].Value != "Person", false);
+            string sceneToLoad = string.IsNullOrEmpty(newSceneNoPersons) ? normalizedPath : newSceneNoPersons;
+            
+            sc.Load(sceneToLoad);
+            
+            // Wait for load
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame(); // Extra frame
+            
+            MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
+            if (loadMerge != null)
+            {
+                loadMerge.Invoke(sc, new object[] { personsOnlyTemp });
+            }
+            else
+            {
+                 // Fallback reflection
+                 MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                 if (loadInternal != null) loadInternal.Invoke(sc, new object[] { personsOnlyTemp, true, false });
+            }
+            
+            if (File.Exists(personsOnlyTemp)) File.Delete(personsOnlyTemp);
+            if (File.Exists(newSceneNoPersons)) File.Delete(newSceneNoPersons);
+        }
+
+        private string CreateFilteredSceneJSON(string path, FileEntry entry, Func<JSONNode, bool> atomFilter, bool ensureUniqueIds = false)
+        {
+            try
+            {
+                LogUtil.Log($"[VPB] CreateFilteredSceneJSON: {path}");
+                
+                // Use helper which handles LoadJSON + manual read fallback
+                JSONNode root = UI.LoadJSONWithFallback(path, entry);
+                
+                if (root == null || root["atoms"] == null) 
+                {
+                    LogUtil.LogError($"[VPB] Failed to load scene JSON from {path}");
+                    return null;
+                }
+                
+                JSONArray atoms = root["atoms"].AsArray;
+                JSONArray newAtoms = new JSONArray();
+                
+                Dictionary<string, string> idMapping = new Dictionary<string, string>();
+
+                foreach(JSONNode atom in atoms)
+                {
+                    if (atomFilter(atom))
+                    {
+                        if (ensureUniqueIds)
+                        {
+                            string oldId = atom["id"].Value;
+                            string newId = oldId;
+                            
+                            if (SuperController.singleton.GetAtomByUid(newId) != null || idMapping.ContainsValue(newId))
+                            {
+                                int count = 2;
+                                while (SuperController.singleton.GetAtomByUid(newId + "#" + count) != null || idMapping.ContainsValue(newId + "#" + count))
+                                {
+                                    count++;
+                                }
+                                newId = newId + "#" + count;
+                                atom["id"] = newId;
+                                idMapping[oldId] = newId;
+                                LogUtil.Log($"[VPB] Renamed atom {oldId} to {newId} to avoid collision.");
+                            }
+                        }
+                        
+                        newAtoms.Add(atom);
+                    }
+                }
+                
+                LogUtil.Log($"[VPB] Filtered {newAtoms.Count} atoms out of {atoms.Count}");
+
+                if (newAtoms.Count == 0)
+                {
+                    LogUtil.LogWarning("[VPB] No atoms passed the filter.");
+                    return null;
+                }
+
+                root["atoms"] = newAtoms;
+                
+                string tempPath = Path.Combine(SuperController.singleton.savesDir, "vpb_temp_" + Guid.NewGuid().ToString() + ".json");
+                File.WriteAllText(tempPath, root.ToString());
+                return tempPath;
+            }
+            catch(Exception e) 
+            { 
+                LogUtil.LogError("[VPB] Error creating filtered scene: " + e.Message + "\n" + e.StackTrace); 
+                return null; 
+            }
+        }
+
+        private System.Collections.IEnumerator TeleportNewAtomsToPlayer(HashSet<string> atomsBefore)
+        {
+            // Wait for merge to finish (usually synchronous for the structure, but some components might take a frame)
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+
+            SuperController sc = SuperController.singleton;
+            if (sc == null || sc.centerCameraTarget == null) yield break;
+
+            Vector3 targetPos = sc.centerCameraTarget.transform.position + sc.centerCameraTarget.transform.forward * 1.5f;
+            // Keep height reasonable
+            targetPos.y = sc.centerCameraTarget.transform.position.y;
+            
+            Quaternion targetRot = Quaternion.LookRotation(-sc.centerCameraTarget.transform.forward, Vector3.up);
+            // Level out the rotation
+            Vector3 euler = targetRot.eulerAngles;
+            euler.x = 0;
+            euler.z = 0;
+            targetRot = Quaternion.Euler(euler);
+
+            Atom atomToSelect = null;
+            Atom lastAddedAtom = null;
+            foreach (Atom atom in sc.GetAtoms())
+            {
+                if (!atomsBefore.Contains(atom.uid))
+                {
+                    if (atom != null && atom.mainController != null)
+                    {
+                        atom.mainController.transform.position = targetPos;
+                        atom.mainController.transform.rotation = targetRot;
+                        lastAddedAtom = atom;
+                        // If we found a person, prioritize selecting them
+                        if (atom.type == "Person")
+                        {
+                            atomToSelect = atom;
+                        }
+                    }
+                }
+            }
+            
+            if (atomToSelect == null && lastAddedAtom != null)
+            {
+                atomToSelect = lastAddedAtom;
+            }
+
+            if (atomToSelect != null)
+            {
+                // Use reflection for SelectAtom since it might be missing from the build-time references
+                // but is usually present in the VaM environment.
+                try
+                {
+                    MethodInfo selectAtom = sc.GetType().GetMethod("SelectAtom", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (selectAtom != null)
+                    {
+                        selectAtom.Invoke(sc, new object[] { atomToSelect });
+                    }
+                }
+                catch
+                {
+                    // Ignore if selection fails
+                }
             }
         }
 
@@ -1380,29 +2383,24 @@ namespace VPB
 
         private bool EnsureInstalled()
         {
-            bool installed = false;
-            if (FileEntry is VarFileEntry varEntry && varEntry.Package != null)
+            try
             {
-                installed = varEntry.Package.InstallRecursive();
+                bool installed = false;
+                if (FileEntry is VarFileEntry varEntry && varEntry.Package != null)
+                {
+                    installed = varEntry.Package.InstallRecursive();
+                }
+                else if (FileEntry is SystemFileEntry sysEntry && sysEntry.package != null)
+                {
+                    installed = sysEntry.package.InstallRecursive();
+                }
+                return installed;
             }
-            else if (FileEntry is SystemFileEntry sysEntry && sysEntry.package != null)
+            catch (Exception ex)
             {
-                installed = sysEntry.package.InstallRecursive();
+                LogUtil.LogError($"[VPB] EnsureInstalled error: {ex.Message}\n{ex.StackTrace}");
+                return false;
             }
-            return installed;
-        }
-
-        private string NormalizePath(string path)
-        {
-            string normalizedPath = path.Replace('\\', '/');
-            string currentDir = Directory.GetCurrentDirectory().Replace('\\', '/');
-            
-            if (normalizedPath.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase))
-            {
-                normalizedPath = normalizedPath.Substring(currentDir.Length);
-                if (normalizedPath.StartsWith("/")) normalizedPath = normalizedPath.Substring(1);
-            }
-            return normalizedPath;
         }
 
         private void ApplyClothingToAtom(Atom atom, string path, string appearanceClothingMode = null)
@@ -1415,7 +2413,7 @@ namespace VPB
                 FileManager.Refresh();
             }
 
-            string normalizedPath = NormalizePath(path);
+            string normalizedPath = UI.NormalizePath(path);
 
             string legacyPath = normalizedPath;
             int colonIndex = normalizedPath.IndexOf(":/");
@@ -1476,8 +2474,8 @@ namespace VPB
                     // We can snapshot all PresetManagers on the atom as they control the state of what's applied
                     foreach(var storable in atom.GetStorableIDs())
                     {
-                         // Heuristic: If it ends in "Presets" or is a known manager
-                         if (storable.EndsWith("Presets") || storable == "Skin" || storable.EndsWith("Physics"))
+                         // Heuristic: If it ends in "Presets"/"Preset" or is a known manager
+                         if (storable.EndsWith("Presets") || storable.EndsWith("Preset") || storable == "Skin" || storable.EndsWith("Physics"))
                          {
                              JSONStorable s = atom.GetStorableByID(storable);
                              if (s != null) storableSnapshots.Add(s.GetJSON());
@@ -1499,15 +2497,23 @@ namespace VPB
                                     if (sid == "geometry")
                                     {
                                         // For geometry, only restore clothing/hair toggles to avoid changing character/gender/uid
-                                        foreach(string key in snap.Keys)
+                                        // First, restore everything that was in the snapshot
+                                        foreach(KeyValuePair<string, JSONNode> kvp in snap)
                                         {
+                                            string key = kvp.Key;
                                             if (key.StartsWith("clothing:") || key.StartsWith("hair:"))
                                             {
                                                 JSONStorableBool b = s.GetBoolJSONParam(key);
-                                                if (b != null)
-                                                {
-                                                    b.val = snap[key].AsBool;
-                                                }
+                                                if (b != null) b.val = kvp.Value.AsBool;
+                                            }
+                                        }
+                                        // Second, turn OFF any clothing/hair that wasn't in the snapshot (newly added)
+                                        foreach(string key in s.GetBoolParamNames())
+                                        {
+                                            if ((key.StartsWith("clothing:") || key.StartsWith("hair:")) && !snap.HasKey(key))
+                                            {
+                                                JSONStorableBool b = s.GetBoolJSONParam(key);
+                                                if (b != null) b.val = false;
                                             }
                                         }
                                     }
@@ -1592,7 +2598,7 @@ namespace VPB
                                          p.val = false;
                                      }
                                  }
-                                 else
+                                 else if (VPBConfig.Instance.IsDevMode)
                                  {
                                      LogUtil.Log($"[DragDropDebug] Preserving {paramType} {n} (Regions: {string.Join(",", existingRegions.ToArray())}) - No overlap.");
                                  }
@@ -1664,7 +2670,6 @@ namespace VPB
                             MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
                             if (presetManager != null)
                             {
-                                bool actionLoaded = false;
                                 bool isVarPath = normalizedPath.Contains(":");
                                 bool isPosePath = normalizedPath.IndexOf("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0;
                                 // NEW: For .json legacy files, check if they are in Saves/Person/Pose too
@@ -1673,73 +2678,42 @@ namespace VPB
                                     isPosePath = normalizedPath.IndexOf("Saves/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0;
                                 }
 
-                                
-                                // Only use direct action if we don't need to modify the JSON (suppressRoot)
-                                // AND we are not a .json file, because .json files might not work well with "LoadPreset" action if they lack ID
-                                // Actually, for .json files, we should probably prefer the new direct load method anyway if suppressRoot is true
-                                if (!isVarPath && isPosePath && !suppressRoot)
+                                // Standardizing on JSON loading for all presets to avoid "not compatible with store folder path" errors
+                                // This also ensures that VAR paths and loose files work identically.
+                                JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
+                                if (presetJSON != null)
                                 {
-                                    try
+                                    string presetPackageName = "";
+                                    string folderFullPath = "";
+                                    
+                                    if (normalizedPath.Contains(":"))
                                     {
-                                        JSONStorableBool loadOnSelect = presetStorable.GetBoolJSONParam("loadPresetOnSelect");
-                                        JSONStorableString presetName = presetStorable.GetStringJSONParam("presetName");
-                                        bool loadOnSelectPrev = loadOnSelect != null ? loadOnSelect.val : false;
-                                        string presetNamePrev = presetName != null ? presetName.val : null;
-
-                                        if (loadOnSelect != null) loadOnSelect.val = false;
-                                        if (presetName != null)
-                                        {
-                                            presetName.val = presetManager.GetPresetNameFromFilePath(SuperController.singleton.NormalizePath(normalizedPath));
-                                        }
-
-                                        presetStorable.CallAction("LoadPreset");
-
-                                        if (loadOnSelect != null) loadOnSelect.val = loadOnSelectPrev;
-                                        if (presetName != null) presetName.valNoCallback = presetNamePrev;
-
-                                        actionLoaded = true;
-                                        LogUtil.Log("[DragDropDebug] Loaded preset via storable action");
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        LogUtil.LogError("[DragDropDebug] PresetManager action load failed: " + ex.Message);
-                                    }
-                                }
-
-                                if (!actionLoaded)
-                                {
-                                    JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
-                                    if (presetJSON != null)
-                                    {
-                                        string presetPackageName = "";
-                                        string folderFullPath = "";
+                                        presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
+                                        folderFullPath = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(normalizedPath);
+                                        folderFullPath = MVR.FileManagementSecure.FileManagerSecure.NormalizeLoadPath(folderFullPath);
                                         
-                                        if (normalizedPath.Contains(":"))
+                                        string presetJSONString = presetJSON.ToString();
+                                        bool modified = false;
+                                        
+                                        if (presetJSONString.Contains("SELF:"))
                                         {
-                                            presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
-                                            folderFullPath = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(normalizedPath);
-                                            folderFullPath = MVR.FileManagementSecure.FileManagerSecure.NormalizeLoadPath(folderFullPath);
-                                            
-                                            string presetJSONString = presetJSON.ToString();
-                                            bool modified = false;
-                                            
-                                            if (presetJSONString.Contains("SELF:"))
-                                            {
-                                                presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
-                                                modified = true;
-                                            }
-                                            
-                                            if (presetJSONString.Contains("\":\"./"))
-                                            {
-                                                presetJSONString = presetJSONString.Replace("\":\"./", "\":\"" + folderFullPath + "/");
-                                                modified = true;
-                                            }
-                                            
-                                            if (modified)
-                                            {
-                                                presetJSON = SimpleJSON.JSON.Parse(presetJSONString).AsObject;
-                                            }
+                                            presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
+                                            modified = true;
                                         }
+                                        
+                                        if (presetJSONString.Contains("\":\"./"))
+                                        {
+                                            presetJSONString = presetJSONString.Replace("\":\"./", "\":\"" + folderFullPath + "/");
+                                            modified = true;
+                                        }
+                                        
+                                        if (modified)
+                                        {
+                                            presetJSON = SimpleJSON.JSON.Parse(presetJSONString).AsObject;
+                                        }
+                                    }
+                                    
+                                    LogUtil.Log($"[DragDropDebug] JSON loaded successfully from {normalizedPath}");
 
                                         if (itemType == ItemType.Appearance && appearanceMode == "keep" && presetJSON["storables"] != null)
                                         {
@@ -1959,42 +2933,37 @@ namespace VPB
                                 }
                                 else
                                 {
-                                    presetLoaded = true;
+                                    LogUtil.LogError($"[DragDropDebug] PresetManager not found on storable {storableId}");
                                 }
                             }
                             else
                             {
-                                LogUtil.LogError($"[DragDropDebug] PresetManager not found on storable {storableId}");
+                                LogUtil.LogError($"[DragDropDebug] Storable {storableId} not found on atom");
                             }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            LogUtil.LogError($"[DragDropDebug] Storable {storableId} not found on atom");
+                             LogUtil.LogError("[DragDropDebug] LoadPreset failed for " + normalizedPath + ": " + ex.Message);
+                             // Fallthrough to legacy toggle
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                         LogUtil.LogError("[DragDropDebug] LoadPreset failed for " + normalizedPath + ": " + ex.Message);
-                         // Fallthrough to legacy toggle
-                    }
-                    finally
-                    {
-                        // Restore locks
-                        if (isPose && atom.presetManagerControls != null)
+                        finally
                         {
-                            foreach (var pmc in atom.presetManagerControls)
+                            // Restore locks
+                            if (isPose && atom.presetManagerControls != null)
                             {
-                                if (pmc != null && originalLocks.ContainsKey(pmc.name))
+                                foreach (var pmc in atom.presetManagerControls)
                                 {
-                                    pmc.lockParams = originalLocks[pmc.name];
+                                    if (pmc != null && originalLocks.ContainsKey(pmc.name))
+                                    {
+                                        pmc.lockParams = originalLocks[pmc.name];
+                                    }
                                 }
                             }
                         }
+                        
+                        if (presetLoaded) return;
                     }
-                    
-                    if (presetLoaded) return;
                 }
-            }
 
             if (geometry != null)
             {
@@ -2651,6 +3620,7 @@ namespace VPB
             if (type == ItemType.Scene)
             {
                  options.Add(new ContextMenuPanel.Option("Load Scene", () => LoadSceneFile(entry.Uid)));
+                 options.Add(new ContextMenuPanel.Option("Merge Scene", () => MergeSceneFile(entry.Uid, false)));
 
                  if (atom != null && atom.type == "Person")
                  {
@@ -2871,8 +3841,10 @@ namespace VPB
                         }
 
                         targetAtom.SetLastRestoredData(preset, true, true);
+                        LogUtil.Log($"[Import] Applying Appearance preset via PresetManager.LoadPresetFromJSON ({storables.Count} storables)");
                         presetManager.LoadPresetFromJSON(preset, false);
                         appliedViaPresetManager = true;
+                        LogUtil.Log("[Import] Appearance preset application successful.");
                     }
                     catch (Exception ex)
                     {
@@ -2881,12 +3853,16 @@ namespace VPB
                 }
                 else
                 {
-                    LogUtil.LogError("[Import] AppearancePresets storable or PresetManager missing on target atom.");
+                    LogUtil.LogWarning("[Import] AppearancePresets storable or PresetManager missing on target atom. Falling back to direct storable restoration.");
                 }
             }
-
+            
             if (!appliedViaPresetManager)
             {
+                LogUtil.Log($"[Import] Restoring {storables.Count} storables directly to atom {targetAtom.name}");
+                int directApplied = 0;
+                int directSkipped = 0;
+                
                 if (category == "Appearance" && clothingMode == "replace")
                 {
                     JSONStorable geometry = targetAtom.GetStorableByID("geometry");
@@ -2910,8 +3886,14 @@ namespace VPB
                     if (storable != null)
                     {
                         storable.RestoreFromJSON(snode.AsObject);
+                        directApplied++;
+                    }
+                    else
+                    {
+                        directSkipped++;
                     }
                 }
+                LogUtil.Log($"[Import] Direct restoration complete: {directApplied} applied, {directSkipped} skipped.");
             }
 
             ContextMenuPanel.Instance.Hide();
@@ -3045,6 +4027,83 @@ namespace VPB
 
     public static class UI
     {
+        public static string NormalizePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+
+            try
+            {
+                // FileManager.NormalizePath is more reliable in this codebase
+                return FileManager.NormalizePath(path);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] FileManager.NormalizePath error: {ex.Message}");
+            }
+                
+            string normalizedPath = path.Replace('\\', '/');
+            try
+            {
+                string currentDir = Directory.GetCurrentDirectory().Replace('\\', '/');
+                
+                if (normalizedPath.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    normalizedPath = normalizedPath.Substring(currentDir.Length);
+                    if (normalizedPath.StartsWith("/")) normalizedPath = normalizedPath.Substring(1);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] UI.NormalizePath fallback error: {ex.Message}");
+            }
+            return normalizedPath;
+        }
+
+        public static JSONNode LoadJSONWithFallback(string path, FileEntry entry = null)
+        {
+            // Use SuperController.singleton.LoadJSON which is most reliable for VARs and various paths
+            JSONNode root = SuperController.singleton.LoadJSON(path);
+            
+            if (root == null)
+            {
+                LogUtil.LogWarning($"[VPB] SuperController.singleton.LoadJSON returned null for {path}, trying manual read...");
+                string content = null;
+                
+                // If we have an entry, it's the best way to read (handles VAR streams)
+                if (entry != null && (entry.Uid == path || entry.Path == path))
+                {
+                    using (var reader = entry.OpenStreamReader()) content = reader.ReadToEnd();
+                }
+                else 
+                {
+                    // If no entry, try to find it in the file manager or loose file
+                    string normalized = UI.NormalizePath(path);
+                    if (normalized.Contains(":")) // Likely a VAR path like Creator.Package:/path
+                    {
+                        // We don't have a direct package reader here without entry, 
+                        // but sometimes entry is provided. 
+                    }
+                    else if (File.Exists(path))
+                    {
+                        content = File.ReadAllText(path);
+                    }
+                }
+                
+                if (!string.IsNullOrEmpty(content))
+                {
+                    // Fix SELF:/ paths if we are extracting from a VAR package
+                    if (entry is VarFileEntry varEntry && varEntry.Package != null)
+                    {
+                        string packageUid = varEntry.Package.Uid;
+                        content = content.Replace("SELF:/", packageUid + ":/");
+                        content = content.Replace("SELF:\\", packageUid + ":/");
+                    }
+                    root = JSON.Parse(content);
+                }
+            }
+            return root;
+        }
+
         public static GameObject CreateVScrollableContent(GameObject parentGO, Color backgroundColor, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, float scrollBarWidth = 15f, float spacing = 0f)
         {
             GameObject scrollableContentGO = AddChildGOImage(parentGO, backgroundColor, anchorPreset, horizontalSize, verticalSize, anchoredPositionOffset);
@@ -3387,6 +4446,106 @@ namespace VPB
 
             toggle.onValueChanged.AddListener(onValueChanged);
             return toggleGO;
+        }
+
+        public static GameObject CreateSlider(GameObject parentGO, string label, float width, float height, float min, float max, float currentVal, UnityAction<float> onValueChanged)
+        {
+            GameObject container = AddChildGOImage(parentGO, new Color(0,0,0,0), AnchorPresets.middleCenter, width, height, Vector2.zero);
+            
+            // Label
+            GameObject labelGO = new GameObject("Label");
+            labelGO.transform.SetParent(container.transform, false);
+            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+            labelRT.anchorMin = new Vector2(0, 0.5f);
+            labelRT.anchorMax = new Vector2(0.5f, 1f);
+            labelRT.offsetMin = new Vector2(5, 0);
+            Text t = labelGO.AddComponent<Text>();
+            t.text = label + ": " + currentVal.ToString("F2");
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = 14;
+            t.color = Color.white;
+            t.alignment = TextAnchor.MiddleLeft;
+
+            // Slider
+            GameObject sliderGO = new GameObject("Slider");
+            sliderGO.transform.SetParent(container.transform, false);
+            RectTransform sliderRT = sliderGO.AddComponent<RectTransform>();
+            sliderRT.anchorMin = new Vector2(0.5f, 0.1f);
+            sliderRT.anchorMax = new Vector2(0.95f, 0.9f);
+            
+            Slider slider = sliderGO.AddComponent<Slider>();
+            slider.minValue = min;
+            slider.maxValue = max;
+            slider.value = currentVal;
+            
+            // Background
+            GameObject bg = new GameObject("Background");
+            bg.transform.SetParent(sliderGO.transform, false);
+            Image bgImg = bg.AddComponent<Image>();
+            bgImg.color = new Color(0.2f, 0.2f, 0.2f);
+            RectTransform bgRT = bg.GetComponent<RectTransform>();
+            bgRT.anchorMin = new Vector2(0, 0.25f);
+            bgRT.anchorMax = new Vector2(1, 0.75f);
+            
+            // Fill Area
+            GameObject fillArea = new GameObject("Fill Area");
+            fillArea.transform.SetParent(sliderGO.transform, false);
+            RectTransform fillAreaRT = fillArea.AddComponent<RectTransform>();
+            fillAreaRT.anchorMin = new Vector2(0, 0.25f);
+            fillAreaRT.anchorMax = new Vector2(1, 0.75f);
+            
+            GameObject fill = new GameObject("Fill");
+            fill.transform.SetParent(fillArea.transform, false);
+            Image fillImg = fill.AddComponent<Image>();
+            fillImg.color = new Color(0.25f, 0.5f, 0.8f);
+            RectTransform fillRT = fill.GetComponent<RectTransform>();
+            fillRT.anchorMin = Vector2.zero;
+            fillRT.anchorMax = Vector2.one;
+            slider.fillRect = fillRT;
+            
+            // Handle
+            GameObject handleArea = new GameObject("Handle Area");
+            handleArea.transform.SetParent(sliderGO.transform, false);
+            RectTransform handleAreaRT = handleArea.AddComponent<RectTransform>();
+            handleAreaRT.anchorMin = Vector2.zero;
+            handleAreaRT.anchorMax = Vector2.one;
+            
+            GameObject handle = new GameObject("Handle");
+            handle.transform.SetParent(handleArea.transform, false);
+            Image handleImg = handle.AddComponent<Image>();
+            handleImg.color = Color.white;
+            RectTransform handleRT = handle.GetComponent<RectTransform>();
+            handleRT.sizeDelta = new Vector2(20, 0);
+            slider.handleRect = handleRT;
+            slider.targetGraphic = handleImg;
+
+            slider.onValueChanged.AddListener((val) => {
+                t.text = label + ": " + val.ToString("F2");
+                onValueChanged(val);
+            });
+            
+            return container;
+        }
+
+        public static GameObject CreateDropdown(GameObject parentGO, string label, float width, float height, List<string> options, int currentIdx, UnityAction<int> onValueChanged)
+        {
+            GameObject container = AddChildGOImage(parentGO, new Color(0,0,0,0), AnchorPresets.middleCenter, width, height, Vector2.zero);
+            
+            GameObject btnGO = CreateUIButton(container, width, height, label + ": " + (options.Count > currentIdx ? options[currentIdx] : ""), 14, 0, 0, AnchorPresets.middleCenter, null);
+            Button btn = btnGO.GetComponent<Button>();
+            Text t = btnGO.GetComponentInChildren<Text>();
+            
+            // Use a local variable to capture index if possible, but UnityAction works with captured vars
+            // We need a wrapper class to hold state if we want it to persist, but for now closure is fine
+            int idx = currentIdx;
+            
+            btn.onClick.AddListener(() => {
+                idx = (idx + 1) % options.Count;
+                t.text = label + ": " + options[idx];
+                onValueChanged(idx);
+            });
+            
+            return container;
         }
     }
 

@@ -190,6 +190,7 @@ namespace VPB
             try
             {
                 if (Settings.Instance == null) return false;
+                if (!Settings.Instance.EnableTextureOptimizations.Value) return false;
                 if (Settings.Instance.ReduceTextureSize == null || !Settings.Instance.ReduceTextureSize.Value) return false;
             }
             catch { return false; }
@@ -387,6 +388,7 @@ namespace VPB
         public bool Request(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null) return false;
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return false;
             var imgPath = qi.imgPath;
             if (string.IsNullOrEmpty(imgPath)) return false;
 
@@ -529,7 +531,9 @@ namespace VPB
 
         public void StartScenePrewarm(string sceneSaveName, string sceneJsonText)
         {
-            if (Settings.Instance == null || Settings.Instance.ScenePrewarmEnabled == null || !Settings.Instance.ScenePrewarmEnabled.Value)
+            if (Settings.Instance == null) return;
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
+            if (Settings.Instance.ScenePrewarmEnabled == null || !Settings.Instance.ScenePrewarmEnabled.Value)
             {
                 return;
             }
@@ -770,6 +774,8 @@ namespace VPB
 
         bool TryEnqueuePrewarm(PrewarmRequest req)
         {
+            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value) return false;
+
             string canonicalPath = ResolveCanonicalImagePath(req.imgPath);
             if (string.IsNullOrEmpty(canonicalPath))
             {
@@ -811,8 +817,10 @@ namespace VPB
             System.Diagnostics.Stopwatch swFrame = new System.Diagnostics.Stopwatch();
             while (true)
             {
-                if (prewarmQueue.Count == 0)
+                if (prewarmQueue.Count == 0 || Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value)
                 {
+                    prewarmQueue.Clear();
+                    prewarmQueuedKeys.Clear();
                     prewarmCoroutine = null;
                     yield break;
                 }
@@ -851,6 +859,8 @@ namespace VPB
 
         void PrewarmImage(PrewarmRequest req)
         {
+            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value) return;
+
             var qi = new ImageLoaderThreaded.QueuedImage();
             qi.imgPath = req.imgPath;
             qi.isThumbnail = req.isThumbnail;
@@ -1340,6 +1350,7 @@ namespace VPB
         /// <returns></returns>
         public Texture2D GetResizedTextureFromBytes(ImageLoaderThreaded.QueuedImage qi)
         {
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return null;
             var path = qi.imgPath;
 
             if (LogUtil.IsSceneLoadActive() && qi.isThumbnail)

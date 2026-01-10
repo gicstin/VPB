@@ -31,6 +31,7 @@ namespace VPB
         public ConfigEntry<bool> QuickMenuCreateGalleryEnabled;
         public ConfigEntry<bool> QuickMenuShowHideEnabled;
         public ConfigEntry<bool> PluginsAlwaysEnabled;
+        public ConfigEntry<bool> EnableTextureOptimizations;
         public ConfigEntry<bool> ReduceTextureSize;
         public ConfigEntry<int> MinTextureSize;
         public ConfigEntry<bool> ForceTextureToMinSize;
@@ -80,6 +81,7 @@ namespace VPB
             QuickMenuShowHideEnabled = config.Bind<bool>("UI", "QuickMenuShowHideEnabled", true, "Show the Quick Menu Show/Hide button.");
             PluginsAlwaysEnabled = config.Bind<bool>("Settings", "PluginsAlwaysEnabled", false, "Plugins will always enabled.");
             
+            EnableTextureOptimizations = config.Bind<bool>("Optimze", "EnableTextureOptimizations", false, "Master toggle for all texture optimizations (caching, resizing, compression, prewarm, etc.).");
             ReduceTextureSize = config.Bind<bool>("Optimze", "ReduceTextureSize", false, "reduce texture size.");
             MinTextureSize = config.Bind<int>("Optimze", "MinTextureSize", 2048, "min size for resized texture.");
             ForceTextureToMinSize = config.Bind<bool>("Optimze", "ForceTextureToMinSize", false, "force resized textures to minimum size.");

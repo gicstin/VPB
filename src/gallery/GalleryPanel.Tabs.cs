@@ -856,7 +856,9 @@ namespace VPB
             Image img = btnGO.GetComponent<Image>();
             if (selectedPath == file.Path) img.color = Color.yellow;
             else img.color = Color.gray;
-            if (!fileButtonImages.ContainsKey(file.Path)) fileButtonImages.Add(file.Path, img);
+            
+            // Update mapping (buttons are pooled, so we must always update this)
+            fileButtonImages[file.Path] = img;
 
             // Button
             Button btn = btnGO.GetComponent<Button>();

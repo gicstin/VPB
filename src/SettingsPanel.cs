@@ -60,6 +60,9 @@ namespace VPB
         private bool pendingDesktopFixedAutoCollapse;
         private bool backupDesktopFixedAutoCollapse;
 
+        private bool pendingEnableTextureOptimizations;
+        private bool backupEnableTextureOptimizations;
+
         private GameObject tooltipGO;
         private Text tooltipText;
 
@@ -136,6 +139,9 @@ namespace VPB
             pendingDesktopFixedAutoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
             backupDesktopFixedAutoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
 
+            pendingEnableTextureOptimizations = Settings.Instance.EnableTextureOptimizations.Value;
+            backupEnableTextureOptimizations = Settings.Instance.EnableTextureOptimizations.Value;
+
             RectTransform rt = settingsPaneRT;
             if (onRight)
             {
@@ -176,6 +182,7 @@ namespace VPB
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
             VPBConfig.Instance.DesktopFixedAutoCollapse = backupDesktopFixedAutoCollapse;
+            Settings.Instance.EnableTextureOptimizations.Value = backupEnableTextureOptimizations;
             VPBConfig.Instance.TriggerChange();
         }
 
@@ -240,6 +247,7 @@ namespace VPB
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
                 VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
                 VPBConfig.Instance.DesktopFixedAutoCollapse = pendingDesktopFixedAutoCollapse;
+                Settings.Instance.EnableTextureOptimizations.Value = pendingEnableTextureOptimizations;
                 VPBConfig.Instance.Save();
                 
                 isSettingsOpen = false;
@@ -395,6 +403,15 @@ namespace VPB
                     VPBConfig.Instance.MovementThreshold = val;
                     VPBConfig.Instance.TriggerChange();
                 }, "The distance you must move before the panel updates its position. Higher values provide more stable 'discrete' updates.");
+            }
+
+            if (VPBConfig.Instance.IsDevMode)
+            {
+                CreateHeader("Developer");
+                CreateToggleSetting("Texture Optimizations", pendingEnableTextureOptimizations, (val) => {
+                    pendingEnableTextureOptimizations = val;
+                    Settings.Instance.EnableTextureOptimizations.Value = val;
+                }, "Master toggle for all texture optimizations (caching, resizing, compression, prewarm, etc.).");
             }
         }
 
