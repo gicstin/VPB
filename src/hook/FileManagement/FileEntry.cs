@@ -62,22 +62,15 @@ namespace VPB
 		{
 		}
 
-		public virtual bool IsFavorite()
-		{
-			return false;
-		}
-
 		public virtual bool IsInstalled()
 		{
 			return false;
 		}
+
 		public virtual bool IsAutoInstall()
         {
 			return false;
         }
-		public virtual void SetFavorite(bool b)
-		{
-		}
         public virtual bool SetAutoInstall(bool b)
         {
 			return false;
@@ -90,42 +83,6 @@ namespace VPB
 
 		public virtual void SetHidden(bool b)
 		{
-		}
-
-        protected static HashSet<string> s_FavoriteLookup;
-        protected static HashSet<string> FavoriteLookup
-        {
-			get
-			{
-				if (s_FavoriteLookup == null)
-				{
-					s_FavoriteLookup = new HashSet<string>();
-					if (File.Exists(GlobalInfo.FavoritePath))
-					{
-						string txt = File.ReadAllText(GlobalInfo.FavoritePath);
-						var favorites = JsonUtility.FromJson<SerializableFavorite>(txt);
-						if (favorites != null && favorites.FavoriteNames != null)
-						{
-							foreach (var item in favorites.FavoriteNames)
-							{
-								string key = item;
-								string[] splits = item.Split(':');
-								if (splits.Length == 2)
-								{
-									string[] array = splits[0].Split('.');
-									if (array.Length == 3)
-									{
-										key = array[0] + "." + array[1] + ":" + splits[1];
-									}
-								}
-								s_FavoriteLookup.Add(key);
-							}
-						}
-					}
-				}
-
-				return s_FavoriteLookup;
-			}
 		}
 
 		protected static HashSet<string> s_AutoInstallLookup;

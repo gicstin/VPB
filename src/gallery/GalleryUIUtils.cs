@@ -180,6 +180,7 @@ namespace VPB
         public Graphic targetGraphic;
         public Color hoverColor = new Color(1f, 1f, 0f, 1f); // Bright yellow visible highlight
         public float borderSize = 2f;
+        public bool isSelected = false; // Add this to keep border visible
         
         private Outline outline;
 
@@ -206,7 +207,7 @@ namespace VPB
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (outline != null) outline.enabled = false;
+            if (outline != null && !isSelected) outline.enabled = false;
         }
     }
 
@@ -277,15 +278,43 @@ namespace VPB
         }
     }
 
+    /// <summary>
+    /// Forces a layout element to have a height based on its current width (or vice versa).
+    /// Used for 1:1 aspect ratio thumbnails in VerticalLayoutGroups.
+    /// </summary>
+    public class AspectRatioLayoutElement : MonoBehaviour, ILayoutElement
+    {
+        public float aspectRatio = 1f;
+        public float minWidth => -1;
+        public float preferredWidth => -1;
+        public float flexibleWidth => -1;
+        public float minHeight => -1;
+        public float preferredHeight 
+        {
+            get {
+                RectTransform rt = transform as RectTransform;
+                if (rt == null) return -1;
+                return rt.rect.width / aspectRatio;
+            }
+        }
+        public float flexibleHeight => 0;
+        public int layoutPriority => 1;
+
+        public void CalculateLayoutInputHorizontal() { }
+        public void CalculateLayoutInputVertical() { }
+    }
+
     public class UIGridAdaptive : MonoBehaviour
     {
         public GridLayoutGroup grid;
         public float minSize = 200f;
         public float maxSize = 260f;
         public float spacing = 10f;
+        public bool isVerticalCard = false;
         
         private RectTransform rt;
         private float lastWidth = -1f;
+        private bool lastIsVerticalCard = false;
 
         void Awake()
         {
@@ -308,30 +337,30 @@ namespace VPB
             if (rt == null || grid == null) return;
             float width = rt.rect.width;
             if (width <= 0) return;
-            if (Mathf.Abs(width - lastWidth) < 0.1f) return;
+            if (Mathf.Abs(width - lastWidth) < 0.1f && isVerticalCard == lastIsVerticalCard && grid.cellSize.x > 0) return;
+            
             lastWidth = width;
+            lastIsVerticalCard = isVerticalCard;
 
             float usableWidth = width - grid.padding.left - grid.padding.right;
             if (usableWidth <= 0) return;
             
-            // Calculate number of columns using a target size that balances between min and max
-            // We want to change column count when the cell size would exceed maxSize or drop below minSize.
-            // A simple approach is to use the floor of (usableWidth + spacing) / (minSize + spacing)
-            // but to avoid the size becoming too large for small column counts, 
-            // we can use a target size in the middle of our range.
-            float targetSize = (minSize + maxSize) * 0.5f;
-            int n = Mathf.FloorToInt((usableWidth + spacing) / (minSize + spacing));
-            if (n < 1) n = 1;
-            
-            float cellSize = (usableWidth - (n - 1) * spacing) / n;
-            
-            // If the resulting cellSize is too much larger than our max, we could force an extra column
-            // even if it drops below minSize slightly, but usually the floor logic is sufficient.
-            if (cellSize > maxSize && n > 0)
+            if (isVerticalCard)
             {
-                // Optional: force n+1 if it's closer to the range
+                // In vertical card mode, we want a fixed-ish width and let it fit as many as possible
+                float cardWidth = 260f; 
+                int n = Mathf.FloorToInt((usableWidth + spacing) / (cardWidth + spacing));
+                if (n < 1) n = 1;
+                float actualCardWidth = (usableWidth - (n - 1) * spacing) / n;
+                grid.cellSize = new Vector2(actualCardWidth, actualCardWidth * 1.45f); 
+                return;
             }
 
+            float targetSize = (minSize + maxSize) * 0.5f;
+            int colCount = Mathf.FloorToInt((usableWidth + spacing) / (minSize + spacing));
+            if (colCount < 1) colCount = 1;
+            
+            float cellSize = (usableWidth - (colCount - 1) * spacing) / colCount;
             grid.cellSize = new Vector2(cellSize, cellSize);
         }
     }
@@ -4331,7 +4360,9 @@ namespace VPB
             cb.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
             cb.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f); // Darker and more transparent when disabled
             btn.colors = cb;
-
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            
             GameObject textGO = new GameObject("Text");
             textGO.transform.SetParent(buttonGO.transform, false);
             Text t = textGO.AddComponent<Text>();

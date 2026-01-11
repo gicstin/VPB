@@ -71,6 +71,12 @@ namespace VPB
             footerFollowHeightImage = footerFollowHeightBtn.GetComponent<Image>();
             AddTooltip(footerFollowHeightBtn, "Follow Eye Height");
 
+            // Layout Mode Toggle
+            footerLayoutBtn = UI.CreateUIButton(pageContainer, 40, 40, "▤", 20, 410, 0, AnchorPresets.middleLeft, ToggleLayoutMode);
+            footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
+            footerLayoutBtnText = footerLayoutBtn.GetComponentInChildren<Text>();
+            AddTooltip(footerLayoutBtn, "Toggle Layout Mode (Grid/Card)");
+
             // Hover support
             AddHoverDelegate(paginationPrevBtn);
             AddTooltip(paginationPrevBtn, "Previous Page");
@@ -78,6 +84,7 @@ namespace VPB
             AddHoverDelegate(footerFollowAngleBtn);
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
+            AddHoverDelegate(footerLayoutBtn);
 
             // Hover Path Text (Bottom Right - now much wider)
             GameObject pathGO = new GameObject("HoverPathText");
@@ -101,6 +108,45 @@ namespace VPB
 
             UpdateSideButtonsVisibility();
             UpdateFooterFollowStates();
+            UpdateFooterLayoutState();
+        }
+
+        private void ToggleLayoutMode()
+        {
+            layoutMode = (layoutMode == GalleryLayoutMode.Grid) ? GalleryLayoutMode.VerticalCard : GalleryLayoutMode.Grid;
+            
+            // Immediately update grid component
+            if (contentGO != null)
+            {
+                UIGridAdaptive adaptive = contentGO.GetComponent<UIGridAdaptive>();
+                if (adaptive != null)
+                {
+                    adaptive.isVerticalCard = (layoutMode == GalleryLayoutMode.VerticalCard);
+                    adaptive.UpdateGrid();
+                }
+            }
+
+            // FULL PURGE: Clear both pooled and active buttons because templates are fundamentally different
+            foreach (var go in fileButtonPool) if (go != null) Destroy(go);
+            fileButtonPool.Clear();
+            
+            foreach (var go in activeButtons) if (go != null) Destroy(go);
+            activeButtons.Clear();
+
+            UpdateFooterLayoutState();
+            RefreshFiles(true); // Force full refresh
+        }
+
+        private void UpdateFooterLayoutState()
+        {
+            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
+            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+
+            if (footerLayoutBtnImage != null)
+                footerLayoutBtnImage.color = (layoutMode == GalleryLayoutMode.VerticalCard) ? activeColor : inactiveColor;
+            
+            if (footerLayoutBtnText != null)
+                footerLayoutBtnText.text = (layoutMode == GalleryLayoutMode.VerticalCard) ? "≣" : "▤";
         }
 
         private void ToggleFollowQuick(string type)

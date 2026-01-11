@@ -51,7 +51,6 @@ namespace VPB
 				if (txt != null) txt.text = "Gallery";
 			}
 
-            this.onlyFavoritesToggle = ui.onlyFavoritesToggle;
 			this.limitSlider = ui.limitSlider;
 			this.limitValueText = ui.limitValueText;
 
@@ -185,17 +184,6 @@ namespace VPB
 					return true;
 				}
 			}
-			public bool isFavorite
-			{
-				get
-				{
-					if (FileEntry != null)
-					{
-						return FileEntry.IsFavorite();
-					}
-					return false;
-				}
-			}
 			public bool isInstalled
 			{
 				get
@@ -290,14 +278,6 @@ namespace VPB
 			//		FileEntry.SetFlagFile("template", b);
 			//	}
 			//}
-
-			public void SetFavorite(bool b)
-			{
-				if (_isWriteable && FileEntry != null)
-				{
-					FileEntry.SetFavorite(b);
-				}
-			}
 
 			public void SetHidden(bool b)
 			{
@@ -439,10 +419,6 @@ namespace VPB
 		public Toggle showHiddenToggle;
 
 		protected bool _showHidden;
-
-		public Toggle onlyFavoritesToggle;
-
-		protected bool _onlyFavorites;
 
 		public Toggle onlyInstalledToggle;
 
@@ -739,26 +715,6 @@ namespace VPB
 			}
 		}
 
-		public bool onlyFavorites
-		{
-			get
-			{
-				return _onlyFavorites;
-			}
-			set
-			{
-				if (_onlyFavorites != value)
-				{
-					_onlyFavorites = value;
-					if (onlyFavoritesToggle != null)
-					{
-						onlyFavoritesToggle.isOn = _onlyFavorites;
-					}
-					ResetDisplayedPage();
-				}
-			}
-		}
-
 		public bool onlyInstalled
 		{
 			get
@@ -932,10 +888,6 @@ namespace VPB
 			showHidden = b;
 		}
 
-		protected void SetOnlyFavorites(bool b)
-		{
-			onlyFavorites = b;
-		}
 		protected void SetOnlyInstalled(bool b)
 		{
 			onlyInstalled = b;
@@ -978,7 +930,7 @@ namespace VPB
 			limit = Mathf.FloorToInt(f);
 		}
 
-		protected FileButton CreateFileButton(string text, string path, bool dir, bool writeable, bool hidden, bool hiddenModifiable, bool favorite,bool isAutoInstall, bool isTemplate, bool isTemplateModifiable)
+		protected FileButton CreateFileButton(string text, string path, bool dir, bool writeable, bool hidden, bool hiddenModifiable, bool isAutoInstall, bool isTemplate, bool isTemplateModifiable)
 		{
 			FileButton component = null;
 			GameObject gameObject = PoolManager.SpawnObject(fileButtonPrefab);
@@ -997,7 +949,7 @@ namespace VPB
 			{
 				text2 = Regex.Replace(text2, "\\.[^\\.]*$", string.Empty);
 			}
-			component.Set(this, text2, path, dir, hidden, hiddenModifiable, favorite, isAutoInstall, allowUseFileAsTemplateSelect, allowUseFileAsTemplateSelect && isTemplate, isTemplateModifiable);
+			component.Set(this, text2, path, dir, hidden, hiddenModifiable, isAutoInstall, allowUseFileAsTemplateSelect, allowUseFileAsTemplateSelect && isTemplate, isTemplateModifiable);
 			if (CustomImageLoaderThreaded.singleton != null)
 			{
 				Transform transform = null;
@@ -1260,16 +1212,6 @@ namespace VPB
 			if (fileEntry != null)
 			{
 				fileEntry.SetHidden(b);
-			}
-		}
-
-		public void OnFavoriteChange(FileButton fb, bool b)
-		{
-			string fullPath = fb.fullPath;
-			FileEntry fileEntry = FileManager.GetFileEntry(fullPath, true);
-			if (fileEntry != null)
-			{
-				fileEntry.SetFavorite(b);
 			}
 		}
 
@@ -2224,12 +2166,6 @@ namespace VPB
 							}
 						}
 
-						if (_onlyFavorites && !sortedFilesAndDir.isFavorite)
-						{
-							//HideButton(button);
-							HideButton(sortedFilesAndDir);
-							continue;
-						}
 						if (_onlyInstalled && !sortedFilesAndDir.isInstalled)
 						{
                             //HideButton(button);
@@ -2306,7 +2242,7 @@ namespace VPB
 							cachedFile2.button = CreateFileButton(cachedFile2.Name,
 								cachedFile2.FullName, false,
 								cachedFile2.isWriteable, cachedFile2.isHidden,
-								cachedFile2.isHiddenModifiable, cachedFile2.isFavorite,
+								cachedFile2.isHiddenModifiable,
 								cachedFile2.isAutoInstall, cachedFile2.isTemplate,
 								cachedFile2.isTemplateModifiable);
 						}
@@ -2530,7 +2466,6 @@ namespace VPB
 			unchecked
 			{
 				int h = 17;
-				h = h * 31 + (_onlyFavorites ? 1 : 0);
 				h = h * 31 + (_onlyInstalled ? 1 : 0);
 				h = h * 31 + (_onlyAutoInstall ? 1 : 0);
 				h = h * 31 + (_showHidden ? 1 : 0);
@@ -2637,7 +2572,7 @@ namespace VPB
 			{
 				displayText = Regex.Replace(displayText, "\\.[^\\.]*$", string.Empty);
 			}
-			button.Set(this, displayText, info.FullName, false, info.isHidden, info.isHiddenModifiable, info.isFavorite, info.isAutoInstall, allowUseFileAsTemplateSelect, allowUseFileAsTemplateSelect && info.isTemplate, info.isTemplateModifiable);
+			button.Set(this, displayText, info.FullName, false, info.isHidden, info.isHiddenModifiable, info.isAutoInstall, allowUseFileAsTemplateSelect, allowUseFileAsTemplateSelect && info.isTemplate, info.isTemplateModifiable);
 			SetupFileButtonThumbnail(button, info.FullName);
 		}
 
@@ -2821,10 +2756,6 @@ namespace VPB
 				}
 			}
 
-			if (_onlyFavorites && !info.isFavorite)
-			{
-				return false;
-			}
 			if (_onlyInstalled && !info.isInstalled)
 			{
 				return false;
@@ -3237,7 +3168,7 @@ namespace VPB
 						cachedFile2.button = CreateFileButton(cachedFile2.Name,
 							cachedFile2.FullName, false,
 							cachedFile2.isWriteable, cachedFile2.isHidden,
-							cachedFile2.isHiddenModifiable, cachedFile2.isFavorite,
+							cachedFile2.isHiddenModifiable,
 							cachedFile2.isAutoInstall, cachedFile2.isTemplate,
 							cachedFile2.isTemplateModifiable);
 
@@ -3290,12 +3221,6 @@ namespace VPB
 				showAutoInstallToggle.isOn = _onlyAutoInstall;
 				showAutoInstallToggle.transform.Find("Label").GetComponent<Text>().text = "Only AutoInstall";
 				showAutoInstallToggle.onValueChanged.AddListener(SetOnlyAutoInstall);
-			}
-
-			if (onlyFavoritesToggle != null)
-			{
-				onlyFavoritesToggle.isOn = _onlyFavorites;
-				onlyFavoritesToggle.onValueChanged.AddListener(SetOnlyFavorites);
 			}
 
 			if (onlyTemplatesToggle != null)

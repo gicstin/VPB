@@ -116,13 +116,15 @@ namespace VPB
         private GameObject leftSubClearBtn; // NEW
         private Text leftSubClearBtnText; // NEW
         private string currentCreator = "";
+        private string currentStatus = "";
+        private string currentRatingFilter = "";
+        private string currentSizeFilter = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
         private string tagFilter = ""; // NEW
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
         
-        private bool filterFavorite = false;
         private string nameFilter = "";
         private string nameFilterLower = "";
 
@@ -254,5 +256,10 @@ namespace VPB
 
         // Sorting
         private Dictionary<string, SortState> contentSortStates = new Dictionary<string, SortState>();
+
+        private GalleryLayoutMode layoutMode = GalleryLayoutMode.Grid;
+        private GameObject footerLayoutBtn;
+        private Text footerLayoutBtnText;
+        private Image footerLayoutBtnImage;
     }
 }

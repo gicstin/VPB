@@ -10,6 +10,104 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private bool PassesFilters(FileEntry entry)
+        {
+            if (entry == null) return false;
+
+            // Status Filter
+            if (!string.IsNullOrEmpty(currentStatus))
+            {
+                if (currentStatus == "Hidden") { if (!entry.IsHidden()) return false; }
+                else if (currentStatus == "Loaded") { if (!entry.IsInstalled()) return false; }
+                else if (currentStatus == "Unloaded") { if (entry.IsInstalled()) return false; }
+                else if (currentStatus == "Autoinstall") { if (!entry.IsAutoInstall()) return false; }
+                else if (currentStatus == "Favorites")
+                {
+                    int rating = RatingsManager.Instance.GetRating(entry);
+                    if (string.IsNullOrEmpty(currentRatingFilter) || currentRatingFilter == "All Ratings")
+                    {
+                        if (rating <= 0) return false;
+                    }
+                    else
+                    {
+                        if (currentRatingFilter == "5 Stars") { if (rating != 5) return false; }
+                        else if (currentRatingFilter == "4 Stars") { if (rating != 4) return false; }
+                        else if (currentRatingFilter == "3 Stars") { if (rating != 3) return false; }
+                        else if (currentRatingFilter == "2 Stars") { if (rating != 2) return false; }
+                        else if (currentRatingFilter == "1 Star") { if (rating != 1) return false; }
+                        else if (currentRatingFilter == "No Ratings") { if (rating != 0) return false; }
+                    }
+                }
+                else if (currentStatus == "Size")
+                {
+                    if (string.IsNullOrEmpty(currentSizeFilter) || currentSizeFilter == "All Sizes")
+                    {
+                        if (entry.Size <= 0) return false;
+                    }
+                    else
+                    {
+                        long size = entry.Size;
+                        long mb = 1024 * 1024;
+                        if (currentSizeFilter == "Tiny (< 10MB)") { if (size >= 10 * mb) return false; }
+                        else if (currentSizeFilter == "Small (10-100MB)") { if (size < 10 * mb || size >= 100 * mb) return false; }
+                        else if (currentSizeFilter == "Medium (100-500MB)") { if (size < 100 * mb || size >= 500 * mb) return false; }
+                        else if (currentSizeFilter == "Large (500MB-1GB)") { if (size < 500 * mb || size >= 1024 * mb) return false; }
+                        else if (currentSizeFilter == "Very Large (> 1GB)") { if (size < 1024 * mb) return false; }
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(currentRatingFilter))
+            {
+                // Rating filter when status is NOT set (or even if it is, as an additional filter)
+                int rating = RatingsManager.Instance.GetRating(entry);
+                if (currentRatingFilter == "All Ratings") { if (rating <= 0) return false; }
+                else if (currentRatingFilter == "5 Stars") { if (rating != 5) return false; }
+                else if (currentRatingFilter == "4 Stars") { if (rating != 4) return false; }
+                else if (currentRatingFilter == "3 Stars") { if (rating != 3) return false; }
+                else if (currentRatingFilter == "2 Stars") { if (rating != 2) return false; }
+                else if (currentRatingFilter == "1 Star") { if (rating != 1) return false; }
+                else if (currentRatingFilter == "No Ratings") { if (rating != 0) return false; }
+            }
+
+            if (!string.IsNullOrEmpty(currentSizeFilter))
+            {
+                // Size filter when status is NOT set
+                long size = entry.Size;
+                long mb = 1024 * 1024;
+                if (currentSizeFilter == "Tiny (< 10MB)") { if (size >= 10 * mb) return false; }
+                else if (currentSizeFilter == "Small (10-100MB)") { if (size < 10 * mb || size >= 100 * mb) return false; }
+                else if (currentSizeFilter == "Medium (100-500MB)") { if (size < 100 * mb || size >= 500 * mb) return false; }
+                else if (currentSizeFilter == "Large (500MB-1GB)") { if (size < 500 * mb || size >= 1024 * mb) return false; }
+                else if (currentSizeFilter == "Very Large (> 1GB)") { if (size < 1024 * mb) return false; }
+            }
+
+            // Name Filter
+            if (!string.IsNullOrEmpty(nameFilterLower))
+            {
+                if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
+                    return false;
+            }
+
+            // Tag Filter
+            if (activeTags != null && activeTags.Count > 0)
+            {
+                bool tagMatch = false;
+                string pathLower = entry.Path.ToLowerInvariant();
+                foreach (var tag in activeTags)
+                {
+                    if (pathLower.Contains(tag.ToLowerInvariant()))
+                    {
+                        tagMatch = true;
+                        break;
+                    }
+                }
+                if (!tagMatch) return false;
+            }
+
+            return true;
+        }
+
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false)
         {
             if (IsHubMode)
@@ -31,6 +129,16 @@ namespace VPB
                 CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
             }
             currentLoadingGroupId = Guid.NewGuid().ToString();
+            
+            if (contentGO != null)
+            {
+                UIGridAdaptive adaptive = contentGO.GetComponent<UIGridAdaptive>();
+                if (adaptive != null)
+                {
+                    adaptive.isVerticalCard = (layoutMode == GalleryLayoutMode.VerticalCard);
+                    adaptive.UpdateGrid();
+                }
+            }
 
             List<FileEntry> files = new List<FileEntry>();
             string[] extensions = currentExtension.Split('|');
@@ -64,33 +172,7 @@ namespace VPB
                                 yieldWatch.Start();
                             }
 
-                            bool match = IsMatch(entry, currentPaths, currentPath, extensions);
-                            if (match && hasNameFilter)
-                            {
-                                if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
-                                    match = false;
-                            }
-                            if (match && filterFavorite)
-                            {
-                                try { if (!entry.IsFavorite()) match = false; }
-                                catch { }
-                            }
-                            if (match && activeTags.Count > 0)
-                            {
-                                bool tagMatch = false;
-                                string pathLower = entry.Path.ToLowerInvariant();
-                                foreach(var tag in activeTags)
-                                {
-                                    if (pathLower.Contains(tag.ToLowerInvariant())) 
-                                    {
-                                        tagMatch = true; 
-                                        break; 
-                                    }
-                                }
-                                if (!tagMatch) match = false;
-                            }
-
-                            if (match)
+                            if (IsMatch(entry, currentPaths, currentPath, extensions) && PassesFilters(entry))
                             {
                                 files.Add(entry);
                             }
@@ -129,34 +211,8 @@ namespace VPB
                                     yieldWatch.Start();
                                 }
 
-                                if (activeTags.Count > 0)
-                                {
-                                    bool tagMatch = false;
-                                    string pathLower = sysPath.ToLowerInvariant();
-                                    foreach(var tag in activeTags)
-                                    {
-                                        if (pathLower.Contains(tag.ToLowerInvariant())) 
-                                        {
-                                            tagMatch = true; 
-                                            break; 
-                                        }
-                                    }
-                                    if (!tagMatch) continue;
-                                }
-
                                 var sysEntry = new SystemFileEntry(sysPath);
-                                bool include = true;
-                                if (hasNameFilter)
-                                {
-                                    if (sysEntry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) include = false;
-                                }
-                                if (include && filterFavorite)
-                                {
-                                    try { if (!sysEntry.IsFavorite()) include = false; }
-                                    catch { }
-                                }
-                                
-                                if (include)
+                                if (PassesFilters(sysEntry))
                                 {
                                     files.Add(sysEntry);
                                 }

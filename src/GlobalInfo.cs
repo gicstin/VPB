@@ -12,9 +12,6 @@ namespace VPB
         public static string PluginInfoDirectory = "Custom/PluginData/sfishere";
         public static string AutoInstallPath = "Custom/PluginData/sfishere/AutoInstall.txt";
 
-        public static string FavoriteDirectory = "Custom/PluginData/sfishere";
-        public static string FavoritePath = "Custom/PluginData/sfishere/Favorites.txt";
-
         //public static string FixVarNamePath = "Custom/PluginData/sfishere/FixVarName.txt";
 
 

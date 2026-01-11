@@ -25,7 +25,6 @@ namespace VPB
             this.selectedSprite = ui.selectedSprite;
             this.renameButton=ui.renameButton;
             this.deleteButton= ui.deleteButton;
-            this.favoriteToggle=ui.favoriteToggle;
             this.hiddenToggle=ui.hiddenToggle;
             this.useFileAsTemplateToggle = ui.useFileAsTemplateToggle;
             this.fullPathLabel=ui.fullPathLabel;
@@ -40,7 +39,6 @@ namespace VPB
         public Sprite selectedSprite;
         public Button renameButton;
         public Button deleteButton;
-        public Toggle favoriteToggle;
         public Toggle hiddenToggle;
         public Toggle useFileAsTemplateToggle;
         public Text fullPathLabel;
@@ -199,15 +197,6 @@ namespace VPB
             if ((bool)browser)
             {
                 browser.OnHiddenChange(this, b);
-            }
-        }
-
-        public void OnFavoriteChange(bool b)
-        {
-            if ((bool)browser)
-            {
-                browser.OnFavoriteChange(this, b);
-                RefreshInstallStatus();
             }
         }
         public void OnSetAutoInstall(bool b)
@@ -389,7 +378,7 @@ namespace VPB
         {
             RefreshInstallStatus();
         }
-        public void Set(FileBrowser b, string txt, string path, bool dir, bool hidden, bool hiddenModifiable, bool favorite,bool isAutoInstall, bool allowUseFileAsTemplateSelect, bool isTemplate, bool isTemplateModifiable)
+        public void Set(FileBrowser b, string txt, string path, bool dir, bool hidden, bool hiddenModifiable, bool isAutoInstall, bool allowUseFileAsTemplateSelect, bool isTemplate, bool isTemplateModifiable)
         {
             altIcon.texture = null;
             rectTransform = GetComponent<RectTransform>();
@@ -451,8 +440,6 @@ namespace VPB
 
                 hiddenToggle.gameObject.SetActive(false);
 
-                favoriteToggle.gameObject.SetActive(false);
-
                 useFileAsTemplateToggle.gameObject.SetActive(false);
             }
             else
@@ -466,11 +453,6 @@ namespace VPB
                 renameButton.onClick.AddListener(InstallInBackground);
 
                 hiddenToggle.gameObject.SetActive(false);
-                // Favorite
-                favoriteToggle.gameObject.SetActive(true);
-                favoriteToggle.onValueChanged.RemoveAllListeners();
-                favoriteToggle.isOn = favorite;
-                favoriteToggle.onValueChanged.AddListener(OnFavoriteChange);
                 // Install
                 useFileAsTemplateToggle.gameObject.SetActive(true);
                 useFileAsTemplateToggle.onValueChanged.RemoveAllListeners();
@@ -484,22 +466,18 @@ namespace VPB
         void RefreshInstallStatus()
         {
             useFileAsTemplateToggle.onValueChanged.RemoveAllListeners();
-                favoriteToggle.onValueChanged.RemoveAllListeners();
             bool isInstalled = false;
             bool isAutoInstall = false;
-            bool isFavorite = false;
             FileEntry fileEntry = VPB.FileManager.GetFileEntry(fullPath, true);
             if (fileEntry != null && fileEntry is VarFileEntry)
             {
                 isInstalled = fileEntry.IsInstalled();
                 isAutoInstall = fileEntry.IsAutoInstall();
-                isFavorite = fileEntry.IsFavorite();
             }
             else if (fileEntry != null && fileEntry is SystemFileEntry)
             {
                 isInstalled = fileEntry.IsInstalled();
                 isAutoInstall = fileEntry.IsAutoInstall();
-                isFavorite = fileEntry.IsFavorite();
             }
             else
             {
@@ -517,7 +495,6 @@ namespace VPB
                 {
                     isInstalled = fileEntry.IsInstalled();
                     isAutoInstall = fileEntry.IsAutoInstall();
-                    isFavorite = fileEntry.IsFavorite();
                 }
                 else
                 {
@@ -525,14 +502,12 @@ namespace VPB
                 }
             }
 
-            favoriteToggle.isOn = isFavorite;
             useFileAsTemplateToggle.isOn = isAutoInstall;
-            favoriteToggle.onValueChanged.AddListener(OnFavoriteChange);
             useFileAsTemplateToggle.onValueChanged.AddListener(OnSetAutoInstall);
 
-            UpdateButtonImageColor(isInstalled, isAutoInstall, isFavorite);
+            UpdateButtonImageColor(isInstalled, isAutoInstall);
         }
-        void UpdateButtonImageColor(bool isInstalled, bool isAutoInstall,bool isFavorite)
+        void UpdateButtonImageColor(bool isInstalled, bool isAutoInstall)
         {
             if (isAutoInstall)
             {
@@ -542,11 +517,6 @@ namespace VPB
             if (isInstalled)
             {
                 this.buttonImage.color = new Color32(120, 220, 255, 255);
-                return;
-            }
-            if (isFavorite)
-            {
-                this.buttonImage.color = new Color32(255, 125, 175, 255);
                 return;
             }
             this.buttonImage.color = Color.white;

@@ -7,11 +7,6 @@ using UnityEngine;
 namespace VPB
 {
 	[System.Serializable]
-	public class SerializableFavorite
-	{
-		public string[] FavoriteNames;
-	}
-	[System.Serializable]
 	public class SerializableNames
 	{
 		public string[] Names;
@@ -23,6 +18,12 @@ namespace VPB
 
 		public string InternalPath { get; protected set; }
 
+		public override long Size 
+		{ 
+			get { return Package != null ? Package.Size : base.Size; }
+			protected set { base.Size = value; }
+		}
+
 		public VarFileEntry(VarPackage vp, string entryName, DateTime lastWriteTime, long size, bool simulated = false)
 		{
 			Package = vp;
@@ -32,7 +33,7 @@ namespace VPB
 			Name = Regex.Replace(Path, ".*/", string.Empty);
 			Exists = true;
 			LastWriteTime = lastWriteTime;
-			Size = size;
+			base.Size = size;
 		}
 
 		public override FileEntryStream OpenStream()
@@ -81,10 +82,6 @@ namespace VPB
             }
 			return false;
 		}
-		public override bool IsFavorite()
-		{
-			return FavoritesManager.Instance.IsFavorite(this);
-		}
 		public override bool IsAutoInstall()
 		{
 			string key = this.Package.Uid;
@@ -92,10 +89,6 @@ namespace VPB
 			if (AutoInstallLookup.Contains(key))
 				return true;
 			return false;
-		}
-		public override void SetFavorite(bool b)
-		{
-			FavoritesManager.Instance.SetFavorite(this, b);
 		}
 
         public override bool SetAutoInstall(bool b)

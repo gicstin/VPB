@@ -13,7 +13,8 @@ namespace VPB
         Date,
         Size,
         Count,
-        Score // Placeholder for future
+        Score,
+        Rating
     }
 
     public enum SortDirection
@@ -73,18 +74,34 @@ namespace VPB
                         files.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
                     break;
                 case SortType.Date:
-                    if (state.Direction == SortDirection.Ascending)
-                        files.Sort((a, b) => a.LastWriteTime.CompareTo(b.LastWriteTime));
-                    else
-                        files.Sort((a, b) => b.LastWriteTime.CompareTo(a.LastWriteTime));
+                    files.Sort((a, b) => {
+                        int res = (state.Direction == SortDirection.Ascending) 
+                            ? a.LastWriteTime.CompareTo(b.LastWriteTime)
+                            : b.LastWriteTime.CompareTo(a.LastWriteTime);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
                     break;
                 case SortType.Size:
-                    if (state.Direction == SortDirection.Ascending)
-                        files.Sort((a, b) => a.Size.CompareTo(b.Size));
-                    else
-                        files.Sort((a, b) => b.Size.CompareTo(a.Size));
+                    files.Sort((a, b) => {
+                        int res = (state.Direction == SortDirection.Ascending)
+                            ? a.Size.CompareTo(b.Size)
+                            : b.Size.CompareTo(a.Size);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
                     break;
-                // Count not applicable for files
+                case SortType.Rating:
+                    files.Sort((a, b) => {
+                        int rA = RatingsManager.Instance.GetRating(a);
+                        int rB = RatingsManager.Instance.GetRating(b);
+                        int res = (state.Direction == SortDirection.Ascending)
+                            ? rA.CompareTo(rB)
+                            : rB.CompareTo(rA);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    break;
             }
         }
 

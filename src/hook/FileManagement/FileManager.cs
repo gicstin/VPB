@@ -1709,26 +1709,6 @@ namespace VPB
 			return false;
 		}
 
-		//public static bool IsFavorite(string path, bool restrictPath = false)
-		//{
-		//	FileEntry fileEntry = GetVarFileEntry(path);
-		//	if (fileEntry == null)
-		//	{
-		//		fileEntry = GetSystemFileEntry(path, restrictPath);
-		//	}
-		//	return fileEntry?.IsFavorite() ?? false;
-		//}
-
-		//public static void SetFavorite(string path, bool fav, bool restrictPath = false)
-		//{
-		//	FileEntry fileEntry = GetVarFileEntry(path);
-		//	if (fileEntry == null)
-		//	{
-		//		fileEntry = GetSystemFileEntry(path, restrictPath);
-		//	}
-		//	fileEntry?.SetFavorite(fav);
-		//}
-
 		//public static bool IsHidden(string path, bool restrictPath = false)
 		//{
 		//	FileEntry fileEntry = GetVarFileEntry(path);

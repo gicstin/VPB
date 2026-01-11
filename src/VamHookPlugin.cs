@@ -70,6 +70,7 @@ namespace VPB
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
+        private bool m_SettingsIsDevModeDraft;
         private bool m_SettingsEnableUiTransparencyDraft;
         private float m_SettingsUiTransparencyValueDraft;
         private bool m_SettingsEnableGalleryFadeDraft;
@@ -170,6 +171,7 @@ namespace VPB
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
             m_SettingsUiTransparencyValueDraft = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
             m_SettingsEnableGalleryFadeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.EnableGalleryFade : true;
+            m_SettingsIsDevModeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.IsDevMode : false;
             m_SettingsError = null;
         }
 
@@ -236,9 +238,20 @@ namespace VPB
                 }
                 if (VPBConfig.Instance != null)
                 {
+                    bool changed = false;
                     if (VPBConfig.Instance.EnableGalleryFade != m_SettingsEnableGalleryFadeDraft)
                     {
                         VPBConfig.Instance.EnableGalleryFade = m_SettingsEnableGalleryFadeDraft;
+                        changed = true;
+                    }
+                    if (VPBConfig.Instance.IsDevMode != m_SettingsIsDevModeDraft)
+                    {
+                        VPBConfig.Instance.IsDevMode = m_SettingsIsDevModeDraft;
+                        changed = true;
+                    }
+
+                    if (changed)
+                    {
                         VPBConfig.Instance.Save();
                         VPBConfig.Instance.TriggerChange();
                     }
@@ -345,6 +358,26 @@ namespace VPB
 
             m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide VPB", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
             m_SettingsHubKeyDraft = DrawHotkeyField("Open Hub Browser", "HubKeyField", m_SettingsHubKeyDraft ?? "", buttonHeight);
+
+            if (VPBConfig.Instance.IsDevMode)
+            {
+                GUILayout.Space(6);
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(m_SettingsIsDevModeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                {
+                    m_SettingsIsDevModeDraft = !m_SettingsIsDevModeDraft;
+                }
+                GUILayout.Label("Developer Mode");
+                GUILayout.EndHorizontal();
+
+                var prevColor = GUI.backgroundColor;
+                GUI.backgroundColor = Color.magenta;
+                if (GUILayout.Button("Run KTX Roundtrip Test", m_StyleButton, GUILayout.Height(buttonHeight * 1.5f)))
+                {
+                    KtxRoundTripTest.RunFullTest();
+                }
+                GUI.backgroundColor = prevColor;
+            }
 
             GUILayout.Space(6);
 
@@ -1197,6 +1230,11 @@ namespace VPB
             harmony.PatchAll(typeof(PatchAssetLoader));
             harmony.PatchAll(typeof(UnityEngineHook));
 
+            if (VPBConfig.Instance.IsDevMode)
+            {
+                Debug.Log("[VPB] Developer Mode is ENABLED");
+            }
+
             if (Settings.Instance.EnableTextureOptimizations.Value)
             {
                 GenericTextureHook.PatchAll(harmony);
@@ -1205,6 +1243,18 @@ namespace VPB
 
             // Initialize Native Hooks (MinHook)
             Native.NativeHookManager.Initialize();
+
+            // Initialize KTX
+            try
+            {
+                var ktx = new KtxRoundTripTest.NativeKtx();
+                ktx.Initialize();
+                LogUtil.Log("[VPB] KTX support initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] KTX support failed to initialize: " + ex.Message);
+            }
         }
 
         private void SetMiniMode(bool enabled)
@@ -1870,6 +1920,21 @@ namespace VPB
             {
                 if (m_FileBrowser != null && m_FileBrowser.window.activeSelf)
                     GUI.enabled = false;
+
+                if (VPBConfig.Instance.IsDevMode)
+                {
+                    GUILayout.BeginVertical(m_StyleSection);
+                    GUILayout.Label("Developer Tools", m_StyleHeader);
+                    var prevColor = GUI.backgroundColor;
+                    GUI.backgroundColor = Color.magenta;
+                    if (GUILayout.Button("Run KTX Roundtrip Test", m_StyleButton, GUILayout.Height(buttonHeight * 1.5f)))
+                    {
+                        KtxRoundTripTest.RunFullTest();
+                    }
+                    GUI.backgroundColor = prevColor;
+                    GUILayout.EndVertical();
+                    GUILayout.Space(4);
+                }
 
                 {
                     const float infoBtnWidth = 28f;

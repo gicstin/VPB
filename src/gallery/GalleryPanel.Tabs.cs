@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
@@ -57,8 +58,15 @@ namespace VPB
                 {
                     splitView = true;
                 }
+                else if (leftActiveContent == ContentType.Status)
+                {
+                    if (currentStatus == "Favorites" || currentStatus == "Size")
+                    {
+                        splitView = true;
+                    }
+                }
 
-                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub) && leftSubTabScrollGO != null)
+                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub || leftActiveContent == ContentType.Status) && leftSubTabScrollGO != null)
                 {
                     // Split Layout
                     leftSubTabScrollGO.SetActive(true);
@@ -85,11 +93,18 @@ namespace VPB
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105); // Gap for clear button (moved up)
 
-                    // Populate Top (Category / Hub Category)
+                    // Populate Top (Category / Hub Category / Status)
                     UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                     
-                    // Populate Bottom (Tags / Hub Tags)
-                    ContentType subType = leftActiveContent == ContentType.Hub ? ContentType.HubTags : ContentType.Tags;
+                    // Populate Bottom (Tags / Hub Tags / Ratings / Size)
+                    ContentType subType = ContentType.Tags;
+                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    else if (leftActiveContent == ContentType.Status)
+                    {
+                         if (currentStatus == "Size") subType = ContentType.Size;
+                         else subType = ContentType.Ratings;
+                    }
+                    
                     UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
                 }
                 else
@@ -127,8 +142,15 @@ namespace VPB
                 {
                     splitView = true;
                 }
+                else if (rightActiveContent == ContentType.Status)
+                {
+                    if (currentStatus == "Favorites" || currentStatus == "Size")
+                    {
+                        splitView = true;
+                    }
+                }
 
-                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub) && rightSubTabScrollGO != null)
+                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub || rightActiveContent == ContentType.Status) && rightSubTabScrollGO != null)
                 {
                     // Split Layout
                     rightSubTabScrollGO.SetActive(true);
@@ -142,7 +164,7 @@ namespace VPB
                     {
                         rightSubSearchInput.gameObject.SetActive(true);
                         if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
-
+                        
                         // Reset anchor to 0.5f for non-Hub split
                         RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
                         rt.anchorMin = new Vector2(1, 0.5f);
@@ -167,11 +189,18 @@ namespace VPB
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105); // Gap for clear button (moved up)
 
-                    // Populate Top (Category / Hub Category)
+                    // Populate Top (Category / Hub Category / Status)
                     UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                     
-                    // Populate Bottom (Tags / Hub Tags)
-                    ContentType subType = rightActiveContent == ContentType.Hub ? ContentType.HubTags : ContentType.Tags;
+                    // Populate Bottom (Tags / Hub Tags / Ratings / Size)
+                    ContentType subType = ContentType.Tags;
+                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    else if (rightActiveContent == ContentType.Status)
+                    {
+                         if (currentStatus == "Size") subType = ContentType.Size;
+                         else subType = ContentType.Ratings;
+                    }
+
                     UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
                 else
@@ -353,7 +382,7 @@ namespace VPB
             }
             else if (contentType == ContentType.Status)
             {
-                var statusList = new List<string> { "Favorite", "Hidden", "Loaded", "Unloaded", "Autoinstall" };
+                var statusList = new List<string> { "Hidden", "Loaded", "Unloaded", "Autoinstall", "Favorites", "Size" };
                 
                 var sortState = GetSortState("Status");
                 if (sortState.Type == SortType.Name)
@@ -366,19 +395,59 @@ namespace VPB
 
                 foreach (var status in statusList)
                 {
-                    bool isActive = false;
-                    if (status == "Favorite") isActive = filterFavorite;
+                    bool isActive = (currentStatus == status);
                     
                     Color btnColor = isActive ? statusColor : new Color(0.25f, 0.25f, 0.25f, 1f);
 
                     CreateTabButton(container.transform, status, btnColor, isActive, () => {
-                        if (status == "Favorite")
-                        {
-                            filterFavorite = !filterFavorite;
-                            UpdateTabs();
-                            currentPage = 0;
-                            RefreshFiles();
-                        }
+                        if (currentStatus == status) currentStatus = "";
+                        else currentStatus = status;
+                        
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    }, trackedButtons);
+                }
+            }
+            else if (contentType == ContentType.Ratings)
+            {
+                var ratingsList = new List<string> { "All Ratings", "5 Stars", "4 Stars", "3 Stars", "2 Stars", "1 Star", "No Ratings" };
+                
+                Color ratingColor = new Color(0.7f, 0.6f, 0.2f, 1f); // Gold-ish
+
+                foreach (var rating in ratingsList)
+                {
+                    bool isActive = (currentRatingFilter == rating);
+                    Color btnColor = isActive ? ratingColor : new Color(0.25f, 0.25f, 0.25f, 1f);
+
+                    CreateTabButton(container.transform, rating, btnColor, isActive, () => {
+                        if (currentRatingFilter == rating) currentRatingFilter = "";
+                        else currentRatingFilter = rating;
+                        
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    }, trackedButtons);
+                }
+            }
+            else if (contentType == ContentType.Size)
+            {
+                var sizeFilters = new List<string> { "All Sizes", "Tiny (< 10MB)", "Small (10-100MB)", "Medium (100-500MB)", "Large (500MB-1GB)", "Very Large (> 1GB)" };
+                
+                Color sizeColor = new Color(0.2f, 0.7f, 0.4f, 1f); // Green-ish
+
+                foreach (var size in sizeFilters)
+                {
+                    bool isActive = (currentSizeFilter == size);
+                    Color btnColor = isActive ? sizeColor : new Color(0.25f, 0.25f, 0.25f, 1f);
+
+                    CreateTabButton(container.transform, size, btnColor, isActive, () => {
+                        if (currentSizeFilter == size) currentSizeFilter = "";
+                        else currentSizeFilter = size;
+                        
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
                     }, trackedButtons);
                 }
             }
@@ -733,6 +802,9 @@ namespace VPB
 
         private GameObject CreateNewFileButtonGO()
         {
+            if (layoutMode == GalleryLayoutMode.VerticalCard)
+                return CreateNewVerticalCardGO();
+
             GameObject btnGO = new GameObject("FileButton_Template");
             btnGO.transform.SetParent(contentGO.transform, false);
             
@@ -744,6 +816,8 @@ namespace VPB
             AddHoverDelegate(btnGO);
 
             Button btn = btnGO.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
 
             // Thumbnail (Fill 1x1)
             GameObject thumbGO = new GameObject("Thumbnail");
@@ -812,38 +886,6 @@ namespace VPB
             draggable.ThumbnailImage = thumbImg;
             draggable.Panel = this;
 
-            // Favorite Button
-            try
-            {
-                GameObject favBtnGO = UI.CreateUIButton(btnGO, 40, 40, "★", 24, 0, 0, AnchorPresets.topRight, null);
-                favBtnGO.name = "Button_Fav"; // Name it to find it later
-                favBtnGO.SetActive(false); 
-                RectTransform favRT = favBtnGO.GetComponent<RectTransform>();
-                favRT.anchoredPosition = new Vector2(-5, -5);
-                
-                Image favBg = favBtnGO.GetComponent<Image>();
-                favBg.color = new Color(0, 0, 0, 0.4f);
-
-                favBtnGO.AddComponent<FavoriteHandler>();
-                
-                // Hover Logic
-                var hoverDelegate = btnGO.AddComponent<UIHoverDelegate>();
-                hoverDelegate.OnHoverChange = (isHovering) => {
-                     var handler = favBtnGO.GetComponent<FavoriteHandler>();
-                     if (handler != null) handler.SetHover(isHovering);
-                };
-                hoverDelegate.OnHoverChange += (enter) => {
-                    if (enter) hoverCount++;
-                    else hoverCount--;
-                };
-
-                if (favBtnGO != null) AddHoverDelegate(favBtnGO);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError("[VPB] Error creating favorite icon template: " + ex.Message);
-            }
-            
             SetLayerRecursive(btnGO, 5);
             return btnGO;
         }
@@ -854,24 +896,51 @@ namespace VPB
             
             // Image
             Image img = btnGO.GetComponent<Image>();
-            if (selectedPath == file.Path) img.color = Color.yellow;
-            else img.color = Color.gray;
+            bool isSelected = selectedPath == file.Path;
+            
+            if (layoutMode == GalleryLayoutMode.VerticalCard)
+                img.color = new Color(0.1f, 0.1f, 0.1f, 0.9f);
+            else
+                img.color = Color.gray;
+
+            // Handle Selection Outline
+            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
+            Outline outline = btnGO.GetComponent<Outline>();
+            if (outline != null)
+            {
+                outline.enabled = isSelected;
+                outline.effectColor = Color.yellow;
+                outline.effectDistance = isSelected ? new Vector2(4f, -4f) : new Vector2(2f, -2f);
+                if (hoverBorder != null) 
+                {
+                    hoverBorder.isSelected = isSelected;
+                    hoverBorder.borderSize = isSelected ? 4f : 2f;
+                }
+            }
             
             // Update mapping (buttons are pooled, so we must always update this)
             fileButtonImages[file.Path] = img;
 
             // Button
             Button btn = btnGO.GetComponent<Button>();
-            btn.onClick.RemoveAllListeners();
-            btn.onClick.AddListener(() => OnFileClick(file));
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(() => OnFileClick(file));
+            }
 
             // Thumbnail
             Transform thumbTr = btnGO.transform.Find("Thumbnail");
-            if (thumbTr != null) thumbTr.gameObject.SetActive(true);
-            RawImage thumbImg = thumbTr.GetComponent<RawImage>();
-            thumbImg.texture = null; // Clear prev
-            thumbImg.color = new Color(0, 0, 0, 0.5f);
-            LoadThumbnail(file, thumbImg);
+            if (thumbTr == null) thumbTr = btnGO.transform.Find("ThumbContainer/Thumbnail");
+
+            if (thumbTr != null)
+            {
+                thumbTr.gameObject.SetActive(true);
+                RawImage thumbImg = thumbTr.GetComponent<RawImage>();
+                thumbImg.texture = null; // Clear prev
+                thumbImg.color = new Color(0, 0, 0, 0); // Transparent until loaded
+                LoadThumbnail(file, thumbImg);
+            }
 
             // Hide NavText
             Transform navTextTr = btnGO.transform.Find("NavText");
@@ -883,41 +952,318 @@ namespace VPB
 
             // Label
             Transform labelTr = btnGO.transform.Find("Card/Label");
-            Text labelText = labelTr.GetComponent<Text>();
-            
-            string nameStr = file.Name;
-            if (file is VarFileEntry vfe && vfe.Package != null)
+            if (labelTr != null)
             {
-                string ext = System.IO.Path.GetExtension(nameStr);
-                // Creator.PackageName.Version.var (.json)
-                labelText.text = $"{vfe.Package.Uid}.var ({ext})";
-            }
-            else
-            {
-                labelText.text = nameStr;
+                Text labelText = labelTr.GetComponent<Text>();
+                if (labelText != null)
+                {
+                    string nameStr = file.Name;
+                    if (file is VarFileEntry vfe && vfe.Package != null)
+                    {
+                        string ext = System.IO.Path.GetExtension(nameStr);
+                        labelText.text = $"{vfe.Package.Uid}.var ({ext})";
+                    }
+                    else
+                    {
+                        labelText.text = nameStr;
+                    }
+                }
             }
             
             // Draggable
             UIDraggableItem draggable = btnGO.GetComponent<UIDraggableItem>();
-            draggable.FileEntry = file;
+            if (draggable != null) draggable.FileEntry = file;
             
-            // Favorite
-            Transform favTr = btnGO.transform.Find("Button_Fav");
-            if (favTr != null)
+            if (layoutMode == GalleryLayoutMode.VerticalCard)
             {
-                GameObject favBtnGO = favTr.gameObject;
-                FavoriteHandler favHandler = favBtnGO.GetComponent<FavoriteHandler>();
-                Text favText = favBtnGO.GetComponentInChildren<Text>();
-                
-                favHandler.Init(file, favText);
-                
-                Button favBtn = favBtnGO.GetComponent<Button>();
-                favBtn.onClick.RemoveAllListeners();
-                favBtn.onClick.AddListener(() => {
-                    try { file.SetFavorite(!file.IsFavorite()); }
-                    catch (Exception ex) { Debug.LogError("[VPB] Error toggling favorite: " + ex.Message); }
-                });
+                try {
+                    BindVerticalCard(btnGO, file);
+                } catch (Exception ex) {
+                    Debug.LogError($"[VPB] Error binding vertical card for {file.Name}: {ex}");
+                }
             }
+        }
+
+        private void BindVerticalCard(GameObject btnGO, FileEntry file)
+        {
+            // Name
+            Transform nameTr = btnGO.transform.Find("Info/Name");
+            if (nameTr != null)
+            {
+                Text t = nameTr.GetComponent<Text>();
+                t.text = file.Name;
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                    t.text = vfe.Package.Uid;
+            }
+
+            // Date & Size
+            Transform dateSizeTr = btnGO.transform.Find("Info/DateSize");
+            if (dateSizeTr != null)
+            {
+                Text t = dateSizeTr.GetComponent<Text>();
+                string ageStr = GetAgeString(file.LastWriteTime);
+                
+                long size = file.Size;
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                    size = vfe.Package.Size;
+
+                string sizeStr = FormatBytes(size);
+                t.text = $"{ageStr} old  |  {sizeStr}";
+            }
+
+            // Tags
+            Transform tagsTr = btnGO.transform.Find("Info/Tags");
+            if (tagsTr != null)
+            {
+                Text t = tagsTr.GetComponent<Text>();
+                t.text = GetTagsString(file);
+            }
+
+            // Stars
+            RatingHandler ratingHandler = btnGO.GetComponent<RatingHandler>();
+            if (ratingHandler != null)
+            {
+                Transform ratingTr = btnGO.transform.Find("Rating");
+                Transform starBtnTr = ratingTr?.Find("Star");
+                Transform selectorTr = ratingTr?.Find("RatingSelector");
+                if (starBtnTr != null && selectorTr != null)
+                {
+                    Text s = starBtnTr.GetComponentInChildren<Text>(); // The "★" text
+                    ratingHandler.Init(file, s, selectorTr.gameObject);
+                }
+            }
+        }
+
+        private string GetAgeString(DateTime lastWriteTime)
+        {
+            TimeSpan age = DateTime.Now - lastWriteTime;
+            if (age.TotalDays < 1) return "Today";
+            if (age.TotalDays < 7) return $"{(int)age.TotalDays}d";
+            if (age.TotalDays < 30) return $"{(int)(age.TotalDays / 7)}w";
+            if (age.TotalDays < 365) return $"{(int)(age.TotalDays / 30)}m";
+            return $"{(int)(age.TotalDays / 365)}y";
+        }
+
+        private string FormatBytes(long bytes)
+        {
+            string[] Suffix = { "B", "KB", "MB", "GB", "TB" };
+            int i;
+            double dblSByte = bytes;
+            for (i = 0; i < Suffix.Length && bytes >= 1024; i++, bytes /= 1024)
+            {
+                dblSByte = bytes / 1024.0;
+            }
+            return String.Format("{0:0.##} {1}", dblSByte, Suffix[i]);
+        }
+
+        private string GetTagsString(FileEntry file)
+        {
+            List<string> tags = new List<string>();
+            string pathLower = file.Path.ToLowerInvariant();
+            
+            // Check common tags based on path
+            foreach (var tag in TagFilter.AllClothingTags)
+                if (pathLower.Contains(tag)) tags.Add(tag);
+            foreach (var tag in TagFilter.AllHairTags)
+                if (pathLower.Contains(tag)) tags.Add(tag);
+
+            if (tags.Count == 0) return "No tags";
+            return string.Join(", ", tags.Take(3).ToArray()) + (tags.Count > 3 ? "..." : "");
+        }
+
+        private GameObject CreateNewVerticalCardGO()
+        {
+            GameObject btnGO = new GameObject("FileButton_Card_Template");
+            btnGO.transform.SetParent(contentGO.transform, false);
+
+            Image img = btnGO.AddComponent<Image>();
+            img.color = new Color(0.1f, 0.1f, 0.1f, 0.9f); // Translucent backdrop matching pane
+
+            // Add Hover Border
+            btnGO.AddComponent<UIHoverBorder>();
+            AddHoverDelegate(btnGO);
+
+            Button btn = btnGO.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+
+            // Vertical Layout for Card Content
+            VerticalLayoutGroup mainVLG = btnGO.AddComponent<VerticalLayoutGroup>();
+            mainVLG.padding = new RectOffset(5, 5, 5, 0); // No bottom padding to tighten
+            mainVLG.spacing = 2; // Much tighter spacing
+            mainVLG.childControlHeight = true;
+            mainVLG.childControlWidth = true;
+            mainVLG.childForceExpandHeight = false;
+            mainVLG.childForceExpandWidth = true;
+            mainVLG.childAlignment = TextAnchor.UpperCenter;
+
+            // Thumbnail (1x1 Aspect Ratio)
+            GameObject thumbContainer = new GameObject("ThumbContainer");
+            thumbContainer.transform.SetParent(btnGO.transform, false);
+            RectTransform thumbContRT = thumbContainer.AddComponent<RectTransform>();
+            thumbContRT.pivot = new Vector2(0.5f, 1f); // Pivot at Top
+            
+            // Forces the LayoutGroup to respect a 1:1 ratio based on the dynamic width
+            AspectRatioLayoutElement thumbALE = thumbContainer.AddComponent<AspectRatioLayoutElement>();
+            thumbALE.aspectRatio = 1f;
+
+            // Masking
+            Image maskImg = thumbContainer.AddComponent<Image>();
+            maskImg.color = new Color(0.15f, 0.15f, 0.15f, 1f); // Match backdrop
+            maskImg.raycastTarget = false;
+            thumbContainer.AddComponent<Mask>().showMaskGraphic = true;
+
+            GameObject thumbGO = new GameObject("Thumbnail");
+            thumbGO.transform.SetParent(thumbContainer.transform, false);
+            RawImage thumbImg = thumbGO.AddComponent<RawImage>();
+            thumbImg.color = new Color(0, 0, 0, 0); // Transparent until loaded
+            
+            // Envelope parent so it fills the 1:1 square completely
+            AspectRatioFitter thumbARF = thumbGO.AddComponent<AspectRatioFitter>();
+            thumbARF.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            thumbARF.aspectRatio = 1f; // Updated when texture loads
+
+            RectTransform thumbRT = thumbGO.GetComponent<RectTransform>();
+            thumbRT.anchorMin = Vector2.zero;
+            thumbRT.anchorMax = Vector2.one;
+            thumbRT.sizeDelta = Vector2.zero;
+            thumbRT.pivot = new Vector2(0.5f, 0.5f);
+
+            // Info Container
+            GameObject infoGO = new GameObject("Info");
+            infoGO.transform.SetParent(btnGO.transform, false);
+            RectTransform infoRT = infoGO.AddComponent<RectTransform>();
+            infoRT.pivot = new Vector2(0.5f, 1f); // Pivot at Top
+
+            VerticalLayoutGroup infoVLG = infoGO.AddComponent<VerticalLayoutGroup>();
+            infoVLG.spacing = 0; // Tightest spacing
+            infoVLG.childControlHeight = true;
+            infoVLG.childControlWidth = true;
+            infoVLG.childForceExpandHeight = false;
+            infoVLG.childForceExpandWidth = true;
+            infoVLG.padding = new RectOffset(5, 5, 0, 0);
+
+            LayoutElement infoLE = infoGO.AddComponent<LayoutElement>();
+            infoLE.minHeight = 85; 
+
+            // Name
+            Text nameText = CreateCardText(infoGO, "Name", 22, FontStyle.Bold);
+            nameText.alignment = TextAnchor.UpperLeft;
+            // Date & Size
+            Text dateSizeText = CreateCardText(infoGO, "DateSize", 16, FontStyle.Normal);
+            dateSizeText.alignment = TextAnchor.UpperLeft;
+            dateSizeText.color = new Color(0.8f, 0.8f, 0.8f, 1f);
+            // Tags
+            Text tagsText = CreateCardText(infoGO, "Tags", 14, FontStyle.Italic);
+            tagsText.alignment = TextAnchor.UpperLeft;
+            tagsText.color = new Color(0.7f, 0.9f, 0.7f, 1f);
+
+            // Rating System (Bottom Left)
+            GameObject ratingGO = new GameObject("Rating");
+            ratingGO.transform.SetParent(btnGO.transform, false);
+            RectTransform ratingRT = ratingGO.AddComponent<RectTransform>();
+            ratingRT.anchorMin = new Vector2(0, 0);
+            ratingRT.anchorMax = new Vector2(1, 0); // Stretch horizontally
+            ratingRT.pivot = new Vector2(0, 0);
+            ratingRT.anchoredPosition = Vector2.zero;
+            ratingRT.sizeDelta = new Vector2(0, 45); // Height 45
+
+            HorizontalLayoutGroup ratingHLG = ratingGO.AddComponent<HorizontalLayoutGroup>();
+            ratingHLG.childAlignment = TextAnchor.MiddleLeft;
+            ratingHLG.childControlWidth = true;
+            ratingHLG.childControlHeight = true;
+            ratingHLG.childForceExpandWidth = false; // Stay square when alone
+            ratingHLG.padding = new RectOffset(0, 0, 0, 0);
+            ratingHLG.spacing = 0;
+            
+            GameObject starBtnGO = UI.CreateUIButton(ratingGO, 45, 45, "★", 26, 0, 0, AnchorPresets.centre, null);
+            starBtnGO.name = "Star";
+            starBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
+            LayoutElement starLE = starBtnGO.AddComponent<LayoutElement>();
+            starLE.preferredWidth = 45;
+            starLE.flexibleWidth = 0;
+            Text starIconText = starBtnGO.GetComponentInChildren<Text>();
+            
+            // Selector Popup
+            GameObject selectorGO = new GameObject("RatingSelector");
+            selectorGO.transform.SetParent(ratingGO.transform, false);
+            selectorGO.SetActive(false);
+            LayoutElement selectorLE = selectorGO.AddComponent<LayoutElement>();
+            selectorLE.flexibleWidth = 1; // Take remaining space
+            
+            Image selectorBg = selectorGO.AddComponent<Image>();
+            selectorBg.color = new Color(0.05f, 0.05f, 0.05f, 0.95f);
+            
+            HorizontalLayoutGroup selectorHLG = selectorGO.AddComponent<HorizontalLayoutGroup>();
+            selectorHLG.childAlignment = TextAnchor.MiddleLeft;
+            selectorHLG.childControlHeight = true;
+            selectorHLG.childControlWidth = true;
+            selectorHLG.childForceExpandWidth = true;
+            selectorHLG.spacing = 1;
+
+            RatingHandler ratingHandler = btnGO.AddComponent<RatingHandler>();
+
+            for (int i = 0; i <= 5; i++) // 0 (clear) to 5
+            {
+                int ratingValue = i;
+                string label = i == 0 ? "X" : i.ToString();
+                GameObject optBtnGO = UI.CreateUIButton(selectorGO, 45, 45, label, 16, 0, 0, AnchorPresets.centre, () => ratingHandler.SetRating(ratingValue));
+                optBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
+                optBtnGO.GetComponent<Image>().color = RatingHandler.RatingColors[i];
+                if (i == 0) optBtnGO.GetComponentInChildren<Text>().color = Color.red;
+                else optBtnGO.GetComponentInChildren<Text>().color = Color.black;
+                AddHoverDelegate(optBtnGO);
+                
+                LayoutElement le = optBtnGO.AddComponent<LayoutElement>();
+                le.flexibleWidth = 1;
+            }
+
+            Button starBtn = starBtnGO.GetComponent<Button>();
+            starBtn.onClick.AddListener(() => ratingHandler.ToggleSelector());
+            AddHoverDelegate(starBtnGO);
+
+            // Drag Logic
+            UIDraggableItem draggable = btnGO.AddComponent<UIDraggableItem>();
+            draggable.ThumbnailImage = thumbImg;
+            draggable.Panel = this;
+
+            // We still want the Hover Reveal card for compatibility with BindFileButton
+            GameObject cardGO = new GameObject("Card");
+            cardGO.transform.SetParent(btnGO.transform, false);
+            cardGO.SetActive(false);
+            
+            GameObject labelGO = new GameObject("Label");
+            labelGO.transform.SetParent(cardGO.transform, false);
+            labelGO.AddComponent<Text>(); // Binding expects this
+
+            UIHoverReveal hover = btnGO.AddComponent<UIHoverReveal>();
+            hover.card = cardGO;
+            hover.panel = this;
+
+            SetLayerRecursive(btnGO, 5);
+            return btnGO;
+        }
+
+        private Text CreateCardText(GameObject parent, string name, int fontSize, FontStyle style)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent.transform, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.pivot = new Vector2(0.5f, 1f); // Pivot at Top for correct stacking
+
+            Text t = go.AddComponent<Text>();
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = fontSize;
+            t.fontStyle = style;
+            t.color = Color.white;
+            t.alignment = TextAnchor.MiddleLeft;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            t.raycastTarget = false;
+            
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            le.minHeight = fontSize + 4;
+            return t;
         }
     }
 }

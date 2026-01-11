@@ -63,6 +63,9 @@ namespace VPB
         private bool pendingEnableTextureOptimizations;
         private bool backupEnableTextureOptimizations;
 
+        private bool pendingIsDevMode;
+        private bool backupIsDevMode;
+
         private GameObject tooltipGO;
         private Text tooltipText;
 
@@ -142,6 +145,9 @@ namespace VPB
             pendingEnableTextureOptimizations = Settings.Instance.EnableTextureOptimizations.Value;
             backupEnableTextureOptimizations = Settings.Instance.EnableTextureOptimizations.Value;
 
+            pendingIsDevMode = VPBConfig.Instance.IsDevMode;
+            backupIsDevMode = VPBConfig.Instance.IsDevMode;
+
             RectTransform rt = settingsPaneRT;
             if (onRight)
             {
@@ -183,6 +189,7 @@ namespace VPB
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
             VPBConfig.Instance.DesktopFixedAutoCollapse = backupDesktopFixedAutoCollapse;
             Settings.Instance.EnableTextureOptimizations.Value = backupEnableTextureOptimizations;
+            VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.TriggerChange();
         }
 
@@ -248,6 +255,7 @@ namespace VPB
                 VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
                 VPBConfig.Instance.DesktopFixedAutoCollapse = pendingDesktopFixedAutoCollapse;
                 Settings.Instance.EnableTextureOptimizations.Value = pendingEnableTextureOptimizations;
+                VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                 VPBConfig.Instance.Save();
                 
                 isSettingsOpen = false;
@@ -408,10 +416,24 @@ namespace VPB
             if (VPBConfig.Instance.IsDevMode)
             {
                 CreateHeader("Developer");
+                CreateToggleSetting("Developer Mode", pendingIsDevMode, (val) => {
+                    pendingIsDevMode = val;
+                }, "Enables developer-only features and debug tools. Requires restart to fully hide/show some elements.");
+
                 CreateToggleSetting("Texture Optimizations", pendingEnableTextureOptimizations, (val) => {
                     pendingEnableTextureOptimizations = val;
                     Settings.Instance.EnableTextureOptimizations.Value = val;
                 }, "Master toggle for all texture optimizations (caching, resizing, compression, prewarm, etc.).");
+
+                CreateHeader("KTX Support");
+                GameObject ktxBtn = UI.CreateUIButton(settingsScrollContent, 400, 50, "Run KTX Roundtrip Test", 22, 0, 0, AnchorPresets.middleCenter, () => {
+                    KtxRoundTripTest.RunFullTest();
+                });
+                ktxBtn.GetComponent<Image>().color = new Color(1f, 0f, 1f, 0.8f); // Magenta
+                ktxBtn.GetComponentInChildren<Text>().color = Color.white;
+                ktxBtn.AddComponent<UIHoverBorder>();
+                LayoutElement ktxLe = ktxBtn.AddComponent<LayoutElement>();
+                ktxLe.minHeight = 60; ktxLe.preferredHeight = 60; ktxLe.flexibleWidth = 1;
             }
         }
 

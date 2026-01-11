@@ -25,7 +25,7 @@ This repo builds a `var_browser.dll` plugin (historical naming preserved for com
 
 - **In-game package browsing**
 - **Hub browsing integration**
-- **Favorites / convenience workflows**
+- **0-5 Star Rating System**
 - **Performance features** (configurable)
   - Texture downscaling + persistent cache
   - AssetBundle cache

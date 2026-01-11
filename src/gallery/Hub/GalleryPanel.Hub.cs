@@ -390,6 +390,8 @@ namespace VPB
             
             // Thumbnail
             Transform thumbTr = btnGO.transform.Find("Thumbnail");
+            if (thumbTr == null) thumbTr = btnGO.transform.Find("ThumbContainer/Thumbnail");
+            
             RawImage thumbImg = null;
             if (thumbTr != null)
             {
@@ -412,6 +414,7 @@ namespace VPB
                      {
                          thumbImg.texture = q.tex;
                          thumbImg.color = Color.white;
+                         UpdateAspectRatio(thumbImg, q.tex);
                      }
                  };
                  CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
@@ -448,24 +451,49 @@ namespace VPB
                 });
             }
             
-            // Hide Favorite for now as not implemented for Hub items yet
-            Transform favTr = btnGO.transform.Find("Button_Fav");
-            if (favTr != null) favTr.gameObject.SetActive(false);
-
-            // Disable HoverReveal for file path since it's a hub item
-            UIHoverReveal hover = btnGO.GetComponent<UIHoverReveal>();
-            if (hover != null) hover.enabled = false; 
-            
-            // Show Card immediately or on hover? 
-            // The template logic hides card by default and UIHoverReveal shows it.
-            // Since we disabled UIHoverReveal, let's enable the card so we can see the title always?
-            // Or maybe we want hover behavior.
-            // Let's keep hover behavior but update what it shows.
-            if (hover != null)
+            if (layoutMode == GalleryLayoutMode.VerticalCard)
             {
-                hover.enabled = true;
-                hover.file = null; // No file entry
-                // We might need to subclass UIHoverReveal to support Hub Items or just set the label text and let it show.
+                BindHubVerticalCard(btnGO, item);
+            }
+        }
+
+        private void BindHubVerticalCard(GameObject btnGO, GalleryHubItem item)
+        {
+            // Name
+            Transform nameTr = btnGO.transform.Find("Info/Name");
+            if (nameTr != null)
+            {
+                Text t = nameTr.GetComponent<Text>();
+                t.text = item.Title;
+            }
+
+            // Date & Size (Hub items might not have date/size in this simple struct, but let's check)
+            Transform dateSizeTr = btnGO.transform.Find("Info/DateSize");
+            if (dateSizeTr != null)
+            {
+                Text t = dateSizeTr.GetComponent<Text>();
+                t.text = item.Creator; // Show creator here for Hub items
+            }
+
+            // Tags
+            Transform tagsTr = btnGO.transform.Find("Info/Tags");
+            if (tagsTr != null)
+            {
+                Text t = tagsTr.GetComponent<Text>();
+                t.text = "Hub Item";
+            }
+
+            // Stars (Hub rating)
+            Transform starBtnTr = btnGO.transform.Find("Rating/Star");
+            if (starBtnTr != null)
+            {
+                Text s = starBtnTr.GetComponentInChildren<Text>();
+                int rating = Mathf.RoundToInt(item.Rating);
+                if (s != null) s.color = RatingHandler.RatingColors[Mathf.Clamp(rating, 0, 5)];
+                
+                // Hide selector for Hub items for now
+                Transform selectorTr = starBtnTr.Find("RatingSelector");
+                if (selectorTr != null) selectorTr.gameObject.SetActive(false);
             }
         }
     }

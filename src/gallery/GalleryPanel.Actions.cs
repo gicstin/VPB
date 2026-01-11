@@ -159,25 +159,33 @@ namespace VPB
 
             if (selectedPath != file.Path)
             {
-                // Deselect old
-                foreach (var btn in activeButtons)
-                {
-                    if (btn == null || !btn.name.StartsWith("FileButton_")) continue;
-                    Image img = btn.GetComponent<Image>();
-                    if (img != null) img.color = Color.gray;
-                }
-                
                 selectedPath = file.Path;
                 selectedFile = file;
                 selectedHubItem = null;
 
                 SetHoverPath(selectedFile.Path);
                 
-                // Select new
-                if (fileButtonImages.ContainsKey(selectedPath))
+                // Refresh all visible buttons to update selection state (border, etc)
+                // We use BindFileButton to ensure consistent styling
+                foreach (var btn in activeButtons)
                 {
-                    if (fileButtonImages[selectedPath] != null)
-                        fileButtonImages[selectedPath].color = Color.yellow;
+                    if (btn == null) continue;
+                    
+                    // Update File Buttons
+                    if (btn.name.StartsWith("FileButton_"))
+                    {
+                        // We need to find the FileEntry for this button. 
+                        // UIDraggableItem usually has it.
+                        var diag = btn.GetComponent<UIDraggableItem>();
+                        if (diag != null && diag.FileEntry != null)
+                        {
+                            BindFileButton(btn, diag.FileEntry);
+                        }
+                    }
+                    
+                    // Auto-close Rating Selector if it's open on any button
+                    var ratingHandler = btn.GetComponent<RatingHandler>();
+                    if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
 
                 actionsPanel?.HandleSelectionChanged(selectedFile, selectedHubItem);

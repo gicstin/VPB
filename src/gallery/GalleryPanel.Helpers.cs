@@ -28,66 +28,62 @@ namespace VPB
         }
     }
 
-    public class FavoriteHandler : MonoBehaviour
+    public class RatingHandler : MonoBehaviour
     {
         private FileEntry entry;
-        private Text iconText;
-        private bool isHovering = false;
-        private bool isFavorite = false;
+        private Text starIconText;
+        private GameObject selectorGO;
+        private int currentRating = 0;
 
-        public void Init(FileEntry e, Text t)
+        public static readonly Color[] RatingColors = new Color[]
+        {
+            new Color(1f, 1f, 1f, 0.2f),     // 0: Ghost White
+            new Color(0.7f, 0.7f, 0.7f, 1f), // 1: Silver/Gray
+            new Color(0.2f, 0.8f, 0.2f, 1f), // 2: Green
+            new Color(1f, 0.85f, 0f, 1f),   // 3: Gold
+            new Color(1f, 0.5f, 0f, 1f),     // 4: Orange
+            new Color(1f, 0.2f, 0.8f, 1f)    // 5: Magenta/Pink
+        };
+
+        public void Init(FileEntry e, Text s, GameObject selector)
         {
             entry = e;
-            iconText = t;
-            try
-            {
-                if (FavoritesManager.Instance != null)
-                {
-                    isFavorite = FavoritesManager.Instance.IsFavorite(entry);
-                    FavoritesManager.Instance.OnFavoriteChanged += OnFavChanged;
-                }
-            }
-            catch (Exception) { }
-            UpdateState();
-        }
-
-        public void SetHover(bool hover)
-        {
-            isHovering = hover;
-            UpdateState();
-        }
-
-        private void OnFavChanged(string uid, bool fav)
-        {
-            if (entry != null && entry.Uid == uid)
-            {
-                isFavorite = fav;
-                UpdateState();
-            }
-        }
-
-        private void UpdateState()
-        {
-            // Logic: Visible if Favorite OR Hovering
-            bool shouldShow = isFavorite || isHovering;
+            starIconText = s;
+            selectorGO = selector;
+            if (selectorGO != null) selectorGO.SetActive(false);
             
-            gameObject.SetActive(shouldShow);
+            currentRating = RatingsManager.Instance.GetRating(entry);
+            UpdateDisplay();
+        }
 
-            if (iconText != null)
+        public void ToggleSelector()
+        {
+            if (selectorGO != null)
             {
-                // Color: Yellow if Favorite, otherwise White with alpha (Ghost)
-                iconText.color = isFavorite ? Color.yellow : new Color(1f, 1f, 1f, 0.5f);
+                bool nextState = !selectorGO.activeSelf;
+                selectorGO.SetActive(nextState);
             }
         }
 
-        void OnDestroy()
+        public void CloseSelector()
         {
-            try
+            if (selectorGO != null) selectorGO.SetActive(false);
+        }
+
+        public void SetRating(int rating)
+        {
+            currentRating = rating;
+            RatingsManager.Instance.SetRating(entry, rating);
+            UpdateDisplay();
+            if (selectorGO != null) selectorGO.SetActive(false);
+        }
+
+        private void UpdateDisplay()
+        {
+            if (starIconText != null)
             {
-                // Only unsubscribe if we successfully subscribed (which means Instance worked)
-                FavoritesManager.Instance.OnFavoriteChanged -= OnFavChanged;
+                starIconText.color = RatingColors[Mathf.Clamp(currentRating, 0, 5)];
             }
-            catch { }
         }
     }
 

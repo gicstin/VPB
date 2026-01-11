@@ -58,14 +58,6 @@ namespace VPB
 			}
 			return false;
 		}
-		public override bool IsFavorite()
-		{
-			return FavoritesManager.Instance.IsFavorite(this);
-		}
-		public override void SetFavorite(bool b)
-		{
-			FavoritesManager.Instance.SetFavorite(this, b);
-		}
 		public override bool IsAutoInstall()
 		{
             string key = System.IO.Path.GetFileNameWithoutExtension(Path);

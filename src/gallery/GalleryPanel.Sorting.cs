@@ -69,7 +69,7 @@ namespace VPB
         {
             if (context == "Files")
             {
-                return type == SortType.Name || type == SortType.Date || type == SortType.Size;
+                return type == SortType.Name || type == SortType.Date || type == SortType.Size || type == SortType.Rating;
             }
             else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags")
             {
@@ -89,6 +89,7 @@ namespace VPB
                 case SortType.Size: symbol = "Sz"; break;
                 case SortType.Count: symbol = "#"; break;
                 case SortType.Score: symbol = "Sc"; break;
+                case SortType.Rating: symbol = "Rt"; break;
             }
             string arrow = state.Direction == SortDirection.Ascending ? "↑" : "↓";
             t.text = symbol + arrow;

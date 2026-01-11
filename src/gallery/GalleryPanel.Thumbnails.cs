@@ -46,6 +46,7 @@ namespace VPB
             {
                 target.texture = tex;
                 target.color = Color.white;
+                UpdateAspectRatio(target, tex);
                 return;
             }
 
@@ -64,6 +65,7 @@ namespace VPB
                     if (target != null) {
                         target.texture = res.tex;
                         target.color = Color.white;
+                        UpdateAspectRatio(target, res.tex);
                     }
                     
                     long imgTime = file.LastWriteTime.ToFileTime();
@@ -126,6 +128,22 @@ namespace VPB
             if (bytes != null)
             {
                 GalleryThumbnailCache.Instance.SaveThumbnail(path, bytes, bytes.Length, w, h, format, lastWriteTime);
+            }
+        }
+
+        private void UpdateAspectRatio(RawImage target, Texture tex)
+        {
+            if (target == null || tex == null) return;
+            AspectRatioFitter arf = target.GetComponent<AspectRatioFitter>();
+            if (arf == null)
+            {
+                arf = target.gameObject.AddComponent<AspectRatioFitter>();
+                arf.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            }
+
+            if (arf != null)
+            {
+                arf.aspectRatio = (float)tex.width / tex.height;
             }
         }
     }

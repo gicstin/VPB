@@ -127,7 +127,6 @@ namespace VPB
                         if (target != null) dragger.LoadClothing(target);
                         else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
                     });
-                    CreateButton(++buttonCount, "Add to Favorites", (dragger) => selectedFile.SetFavorite(true));
                     CreateButton(++buttonCount, "Set as Default*", (dragger) => {});
                     CreateButton(++buttonCount, "Quick load*", (dragger) => {});
                     CreateButton(++buttonCount, "Wear Selected*", (dragger) => {});
@@ -146,7 +145,6 @@ namespace VPB
                         else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
                     });
                     CreateButton(++buttonCount, "Quick Hair*", (dragger) => {});
-                    CreateButton(++buttonCount, "Favorite Hair*", (dragger) => {});
                     CreateButton(++buttonCount, "Wear Selected*", (dragger) => {});
                     CreateButton(++buttonCount, "Remove All Hair*", (dragger) => {});
                 }
