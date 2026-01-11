@@ -15,8 +15,7 @@ namespace VPB
     class LogUtil
     {
         static ManualLogSource logSource;
-        static StreamWriter cleanLogWriter;
-        static string cleanLogLastPath;
+
         static readonly DateTime processStartTime;
         static readonly Stopwatch sincePluginAwake = new Stopwatch();
         static readonly Stopwatch sceneClickStopwatch = new Stopwatch();
@@ -87,11 +86,7 @@ namespace VPB
         static double? readyProcessSeconds;
         static bool startupReadyLogged;
 
-        static readonly Queue<string> logQueue = new Queue<string>();
-        static readonly object logLock = new object();
-        static Thread logThread;
-        static readonly AutoResetEvent logSignal = new AutoResetEvent(false);
-        static volatile bool logThreadRunning;
+
 
         static LogUtil()
         {
@@ -103,52 +98,6 @@ namespace VPB
             {
                 processStartTime = DateTime.Now;
             }
-            StartLogThread();
-        }
-
-        static void StartLogThread()
-        {
-            if (logThreadRunning) return;
-            logThreadRunning = true;
-            logThread = new Thread(LogThreadLoop);
-            logThread.IsBackground = true;
-            logThread.Start();
-        }
-
-        static void LogThreadLoop()
-        {
-            var buffer = new List<string>();
-            while (logThreadRunning)
-            {
-                logSignal.WaitOne();
-                if (!logThreadRunning) break;
-
-                while (true)
-                {
-                    buffer.Clear();
-                    lock (logLock)
-                    {
-                        if (logQueue.Count == 0) break;
-                        while (logQueue.Count > 0 && buffer.Count < 100)
-                        {
-                            buffer.Add(logQueue.Dequeue());
-                        }
-                    }
-
-                    if (buffer.Count > 0 && cleanLogWriter != null)
-                    {
-                        try
-                        {
-                            foreach (var msg in buffer)
-                            {
-                                cleanLogWriter.WriteLine(msg);
-                            }
-                            cleanLogWriter.Flush();
-                        }
-                        catch { }
-                    }
-                }
-            }
         }
 
 
@@ -157,70 +106,7 @@ namespace VPB
             logSource = source;
         }
 
-        public static void ConfigureCleanLog(bool enabled, string path)
-        {
-            try
-            {
-                if (!enabled)
-                {
-                    if (cleanLogWriter != null)
-                    {
-                        try { cleanLogWriter.Flush(); } catch { }
-                        try { cleanLogWriter.Dispose(); } catch { }
-                    }
-                    cleanLogWriter = null;
-                    cleanLogLastPath = null;
-                    return;
-                }
 
-                if (string.IsNullOrEmpty(path))
-                {
-                    return;
-                }
-
-                // Normalize slashes and allow relative paths.
-                path = path.Replace('\\', '/');
-                string fullPath = Path.IsPathRooted(path) ? path : Path.Combine(Environment.CurrentDirectory, path);
-                fullPath = fullPath.Replace('\\', '/');
-
-                if (cleanLogWriter != null && string.Equals(cleanLogLastPath, fullPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
-
-                if (cleanLogWriter != null)
-                {
-                    try { cleanLogWriter.Flush(); } catch { }
-                    try { cleanLogWriter.Dispose(); } catch { }
-                    cleanLogWriter = null;
-                }
-
-                string dir = Path.GetDirectoryName(fullPath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                {
-                    Directory.CreateDirectory(dir);
-                }
-
-                cleanLogWriter = new StreamWriter(new FileStream(fullPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite), Encoding.UTF8);
-                //cleanLogWriter.AutoFlush = true; // Handled by background thread
-                cleanLogLastPath = fullPath;
-            }
-            catch
-            {
-                cleanLogWriter = null;
-                cleanLogLastPath = null;
-            }
-        }
-
-        static void WriteCleanLine(string msg)
-        {
-            if (cleanLogWriter == null) return;
-            lock (logLock)
-            {
-                logQueue.Enqueue(msg);
-            }
-            logSignal.Set();
-        }
 
         static string lastTimeString;
         static long lastTimeTicks;
@@ -253,7 +139,6 @@ namespace VPB
 
         static void LogString(int level, string msg)
         {
-            WriteCleanLine(msg);
             if (logSource != null)
             {
                 if (level == LevelInfo) logSource.LogInfo(msg);

@@ -73,15 +73,6 @@ namespace VPB
                 int copyBytes = copyWidth * srcBpp;
                 for (int y = 0; y < copyHeight; y++)
                 {
-                    // Buffer.BlockCopy works on arrays, but here we have pointers. Use internal memcpy or Loop.
-                    // We can use the CRuntime.memcpy we just optimized!
-                    // Or just a loop here since we are in Unsafe context anyway
-                    // But CRuntime.memcpy is available in StbImageSharp namespace... 
-                    // This class is in VPB namespace.
-                    // Let's just use a loop or call CRuntime if accessible.
-                    // But CRuntime is internal.
-                    // So we implement a quick copy or loop.
-                    
                     byte* pSrc = srcData + y * srcStride;
                     byte* pDst = dstData + y * dstStride;
                     

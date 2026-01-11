@@ -1,12 +1,13 @@
+using System.Drawing;
+using System.Drawing.Imaging;
+using SimpleJSON;
 using HarmonyLib;
 using UnityEngine;
 using System;
 using System.IO;
 using System.Text;
 using System.Collections.Generic;
-using SimpleJSON;
-using StbImageSharp;
-using Hebron.Runtime;
+using System.Runtime.InteropServices;
 
 namespace VPB
 {
@@ -179,50 +180,46 @@ namespace VPB
                 }
 
                 // 2. Cache Miss: Resize Synchronously
-                using (var ms = new MemoryStream(originalData))
+                using (var bitmap = new Bitmap(new MemoryStream(originalData)))
                 {
-                    StbImage.stbi_set_flip_vertically_on_load(1);
-                    int x, y, comp;
-                    unsafe
+                    int w = bitmap.Width;
+                    int h = bitmap.Height;
+                    int newW = w;
+                    int newH = h;
+                    
+                    GetResizedSize(ref newW, ref newH, path);
+                    
+                    byte[] resizedRaw = new byte[newW * newH * 4];
+                    
+                    // We need to flip vertically to match Unity
+                    bitmap.RotateFlip(RotateFlipType.Rotate180FlipX);
+                    
+                    BitmapData data = bitmap.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                    try
                     {
-                        var context = new StbImage.stbi__context(ms);
-                        byte* result = StbImage.stbi__load_and_postprocess_8bit(context, &x, &y, &comp, 4);
-                        
-                        if (result != null)
+                        unsafe
                         {
-                             try
-                             {
-                                 int w = x;
-                                 int h = y;
-                                 int newW = w;
-                                 int newH = h;
-                                 
-                                 GetResizedSize(ref newW, ref newH, path);
-                                 
-                                 byte[] resizedRaw = new byte[newW * newH * 4];
-                                 
-                                 ImageProcessingOptimization.FastBitmapCopy(result, w, h, w*4, 4,
-                                    resizedRaw, newW, newH, newW*4, 4, false, false);
-                                    
-                                 if (tex.width != newW || tex.height != newH)
-                                     tex.Resize(newW, newH);
-                                     
-                                 tex.LoadRawTextureData(resizedRaw);
-                                 tex.Apply(false, !markNonReadable);
-                                 
-                                 // Async Write
-                                 qi.width = w; // Original dims for meta
-                                 qi.height = h;
-                                 WriteCache(qi, resizedRaw, newW, newH, tex.format);
-                                 
-                                 return true;
-                             }
-                             finally
-                             {
-                                 CRuntime.free(result);
-                             }
+                            ImageProcessingOptimization.FastBitmapCopy((byte*)data.Scan0, w, h, data.Stride, 4,
+                                resizedRaw, newW, newH, newW * 4, 4, false, false);
                         }
                     }
+                    finally
+                    {
+                        bitmap.UnlockBits(data);
+                    }
+                        
+                    if (tex.width != newW || tex.height != newH)
+                        tex.Resize(newW, newH);
+                        
+                    tex.LoadRawTextureData(resizedRaw);
+                    tex.Apply(false, !markNonReadable);
+                    
+                    // Async Write
+                    qi.width = w; // Original dims for meta
+                    qi.height = h;
+                    WriteCache(qi, resizedRaw, newW, newH, tex.format);
+                    
+                    return true;
                 }
             }
             catch (Exception ex)

@@ -40,19 +40,12 @@ namespace VPB
         public ConfigEntry<bool> InflightDedupEnabled;
         public ConfigEntry<bool> PrioritizeFaceTextures;
         public ConfigEntry<bool> PrioritizeHairTextures;
-        public ConfigEntry<bool> OptimizeGameObjectFind;
-        public ConfigEntry<bool> OptimizePhysicsRaycast;
-        public ConfigEntry<bool> OptimizeMeshNormals;
-        public ConfigEntry<bool> OptimizeMeshBounds;
-        public ConfigEntry<bool> OptimizeMeshTangents;
 
         public ConfigEntry<string> LastGalleryPage;
         public ConfigEntry<int> TextureLogLevel;
 
         public ConfigEntry<bool> LogImageQueueEvents;
         public ConfigEntry<bool> LogVerboseUi;
-        public ConfigEntry<bool> CleanLogEnabled;
-        public ConfigEntry<string> CleanLogPath;
         public ConfigEntry<bool> ScenePrewarmEnabled;
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<float> UiTransparencyValue;
@@ -95,18 +88,11 @@ namespace VPB
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
-            
-            OptimizeGameObjectFind = config.Bind<bool>("Unity Patches", "OptimizeGameObjectFind", true, "Cache GameObject.Find results.");
-            OptimizePhysicsRaycast = config.Bind<bool>("Unity Patches", "OptimizePhysicsRaycast", true, "Cache Physics.Raycast results per frame.");
-            OptimizeMeshNormals = config.Bind<bool>("Unity Patches", "OptimizeMeshNormals", true, "Debounce Mesh.RecalculateNormals calls.");
-            OptimizeMeshBounds = config.Bind<bool>("Unity Patches", "OptimizeMeshBounds", true, "Debounce Mesh.RecalculateBounds calls.");
-            OptimizeMeshTangents = config.Bind<bool>("Unity Patches", "OptimizeMeshTangents", true, "Debounce Mesh.RecalculateTangents calls.");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 1, "0=off, 1=summary only, 2=verbose per-texture trace.");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");
             LogVerboseUi = config.Bind<bool>("Logging", "LogVerboseUi", false, "Log verbose UI lifecycle messages (can be noisy).");
-            CleanLogEnabled = config.Bind<bool>("Logging", "CleanLogEnabled", true, "Write a separate clean VPB log file (no Unity Filename footer).");
-            CleanLogPath = config.Bind<string>("Logging", "CleanLogPath", "BepInEx/LogOutput/VPB_clean.log", "Path for the clean VPB log file (relative to VaM folder).");
+
 
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "CategoryHair", "Last opened Gallery page.");
         }

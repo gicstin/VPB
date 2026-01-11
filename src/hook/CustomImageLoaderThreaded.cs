@@ -4,12 +4,12 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Drawing;
+using System.Drawing.Imaging;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
-using StbImageSharp; // Requires StbImageSharp library
-using Hebron.Runtime;
 
 namespace VPB
 {
@@ -288,118 +288,74 @@ namespace VPB
 
 		protected void ProcessFromStream(Stream st)
 		{
-            // Use StbImageSharp for fast, thread-safe loading
-            StbImage.stbi_set_flip_vertically_on_load(1);
-            
-            Stream streamToUse = st;
-            MemoryStream ms = null;
-            
-            int num3 = 3;
-            int num8 = 0;
-
-            unsafe {
-                byte* result = null;
-                int x = 0, y = 0, comp = 0;
-
-                try 
-                {
-                    if (!st.CanSeek)
-                    {
-                        ms = new MemoryStream();
-                        byte[] buffer = ByteArrayPool.Rent(4096);
-                        try
-                        {
-                            int read;
-                            while ((read = st.Read(buffer, 0, buffer.Length)) > 0)
-                            {
-                                ms.Write(buffer, 0, read);
-                            }
-                        }
-                        finally
-                        {
-                            ByteArrayPool.Return(buffer);
-                        }
-                        ms.Position = 0;
-                        streamToUse = ms;
-                    }
-                
-                    var context = new StbImage.stbi__context(streamToUse);
-                    result = StbImage.stbi__load_and_postprocess_8bit(context, &x, &y, &comp, 4);
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("StbImage FromStream Error: " + ex);
-                }
-                
-                if (result == null) 
-                {
-                    LogUtil.LogError("StbImage returned null for stream. Reason: " + StbImage.stbi__g_failure_reason);
-                    if (ms != null) ms.Dispose();
-                    hadError = true;
-                    return;
-                }
-
-                try
-                {
-                    int srcWidth = x;
-                    int srcHeight = y;
-                    int srcStride = srcWidth * 4; // We requested RGBA
-                    int srcBpp = 4;
-
-                    if (!setSize)
-                    {
-                        width = srcWidth;
-                        height = srcHeight;
-                        if (compress)
-                        {
-                            int num = width / 4;
-                            if (num == 0) num = 1;
-                            width = num * 4;
-                            int num2 = height / 4;
-                            if (num2 == 0) num2 = 1;
-                            height = num2 * 4;
-                        }
-                    }
-                    
-                    num3 = 3;
-                    textureFormat = TextureFormat.RGB24;
-                    
-                    // Use RGBA if alpha requested or source suggests it (comp == 4)
-                    if (createAlphaFromGrayscale || isNormalMap || createNormalFromBump || comp == 4)
-                    {
-                        textureFormat = TextureFormat.RGBA32;
-                        num3 = 4;
-                    }
-                    
-                    // Destination Buffer
-                    int dstStride = width * num3;
-                    int num7 = width * height;
-                    
-                    num8 = num7 * num3;
-
-                    int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
-                    raw = ByteArrayPool.Rent(num9);
-                    
-                    // Use FastBitmapCopy to Resize/Crop/Format Convert directly to raw
-                    ImageProcessingOptimization.FastBitmapCopy(result, srcWidth, srcHeight, srcStride, srcBpp,
-                        raw, width, height, dstStride, num3, setSize, fillBackground);
-                }
-                finally
-                {
-                    CRuntime.free(result);
-                    if (ms != null) ms.Dispose();
-                }
-            }
-
-            // Post Processing
+			Bitmap bitmap = new Bitmap(st);
+			SolidBrush solidBrush = new SolidBrush(System.Drawing.Color.White);
+			bitmap.RotateFlip(RotateFlipType.Rotate180FlipX);
+			if (!setSize)
+			{
+				width = bitmap.Width;
+				height = bitmap.Height;
+				if (compress)
+				{
+					int num = width / 4;
+					if (num == 0)
+					{
+						num = 1;
+					}
+					width = num * 4;
+					int num2 = height / 4;
+					if (num2 == 0)
+					{
+						num2 = 1;
+					}
+					height = num2 * 4;
+				}
+			}
+			int num3 = 3;
+			textureFormat = TextureFormat.RGB24;
+			PixelFormat format = PixelFormat.Format24bppRgb;
+			if (createAlphaFromGrayscale || isNormalMap || createNormalFromBump || bitmap.PixelFormat == PixelFormat.Format32bppArgb)
+			{
+				textureFormat = TextureFormat.RGBA32;
+				format = PixelFormat.Format32bppArgb;
+				num3 = 4;
+			}
+			Bitmap bitmap2 = new Bitmap(width, height, format);
+			System.Drawing.Graphics graphics = System.Drawing.Graphics.FromImage(bitmap2);
+			Rectangle rect = new Rectangle(0, 0, width, height);
+			if (setSize)
+			{
+				if (fillBackground)
+				{
+					graphics.FillRectangle(solidBrush, rect);
+				}
+				float num4 = Mathf.Min((float)width / (float)bitmap.Width, (float)height / (float)bitmap.Height);
+				int num5 = (int)((float)bitmap.Width * num4);
+				int num6 = (int)((float)bitmap.Height * num4);
+				graphics.DrawImage(bitmap, (width - num5) / 2, (height - num6) / 2, num5, num6);
+			}
+			else
+			{
+				graphics.DrawImage(bitmap, 0, 0, width, height);
+			}
+			BitmapData bitmapData = bitmap2.LockBits(rect, ImageLockMode.ReadOnly, bitmap2.PixelFormat);
+			int num7 = width * height;
+			int num8 = num7 * num3;
+			int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
+			raw = ByteArrayPool.Rent(num9);
+			Marshal.Copy(bitmapData.Scan0, raw, 0, num8);
+			bitmap2.UnlockBits(bitmapData);
 			bool flag = isNormalMap && num3 == 4;
-            if (flag)
-            {
-                for (int i = 0; i < num8; i += 4)
-                {
-                    raw[i + 3] = 255;
-                }
-            }
+			for (int i = 0; i < num8; i += num3)
+			{
+				byte b = raw[i];
+				raw[i] = raw[i + 2];
+				raw[i + 2] = b;
+				if (flag)
+				{
+					raw[i + 3] = byte.MaxValue;
+				}
+			}
 
 			if (invert)
 			{
@@ -422,8 +378,104 @@ namespace VPB
 			}
 			if (createNormalFromBump)
 			{
-				ImageProcessingOptimization.OptimizedNormalMapGeneration(raw, width, height, bumpStrength);
+				byte[] array = new byte[num8 * 2];
+				float[][] array2 = new float[height][];
+				for (int l = 0; l < height; l++)
+				{
+					array2[l] = new float[width];
+					for (int m = 0; m < width; m++)
+					{
+						int num15 = (l * width + m) * 4;
+						int num16 = raw[num15];
+						int num17 = raw[num15 + 1];
+						int num18 = raw[num15 + 2];
+						float num19 = (float)(num16 + num17 + num18) / 768f;
+						array2[l][m] = num19;
+					}
+				}
+				Vector3 vector = default(Vector3);
+				for (int n = 0; n < height; n++)
+				{
+					for (int num20 = 0; num20 < width; num20++)
+					{
+						float num21 = 0.5f;
+						float num22 = 0.5f;
+						float num23 = 0.5f;
+						float num24 = 0.5f;
+						float num25 = 0.5f;
+						float num26 = 0.5f;
+						float num27 = 0.5f;
+						float num28 = 0.5f;
+						int num29 = num20 - 1;
+						int num30 = num20 + 1;
+						int num31 = n + 1;
+						int num32 = n - 1;
+						int num33 = num31;
+						int num34 = num29;
+						int num35 = num32;
+						int num36 = num29;
+						int num37 = num31;
+						int num38 = num30;
+						int num39 = num32;
+						int num40 = num30;
+						if (num33 >= 0 && num33 < height && num34 >= 0 && num34 < width)
+						{
+							num21 = array2[num33][num34];
+						}
+						if (num29 >= 0 && num29 < width)
+						{
+							num22 = array2[n][num29];
+						}
+						if (num35 >= 0 && num35 < height && num36 >= 0 && num36 < width)
+						{
+							num23 = array2[num35][num36];
+						}
+						if (num31 >= 0 && num31 < height)
+						{
+							num24 = array2[num31][num20];
+						}
+						if (num32 >= 0 && num32 < height)
+						{
+							num25 = array2[num32][num20];
+						}
+						if (num37 >= 0 && num37 < height && num38 >= 0 && num38 < width)
+						{
+							num26 = array2[num37][num38];
+						}
+						if (num30 >= 0 && num30 < width)
+						{
+							num27 = array2[n][num30];
+						}
+						if (num39 >= 0 && num39 < height && num40 >= 0 && num40 < width)
+						{
+							num28 = array2[num39][num40];
+						}
+						float num41 = num26 + 2f * num27 + num28 - num21 - 2f * num22 - num23;
+						float num42 = num23 + 2f * num25 + num28 - num21 - 2f * num24 - num26;
+						vector.x = num41 * bumpStrength;
+						vector.y = num42 * bumpStrength;
+						vector.z = 1f;
+						vector.Normalize();
+						vector.x = vector.x * 0.5f + 0.5f;
+						vector.y = vector.y * 0.5f + 0.5f;
+						vector.z = vector.z * 0.5f + 0.5f;
+						int num43 = (int)(vector.x * 255f);
+						int num44 = (int)(vector.y * 255f);
+						int num45 = (int)(vector.z * 255f);
+						int num46 = (n * width + num20) * 4;
+						array[num46] = (byte)num45;
+						array[num46 + 1] = (byte)num44;
+						array[num46 + 2] = (byte)num43;
+						array[num46 + 3] = byte.MaxValue;
+					}
+				}
+				ByteArrayPool.Return(raw);
+				raw = array;
 			}
+			solidBrush.Dispose();
+			graphics.Dispose();
+			bitmap.Dispose();
+			bitmap2.Dispose();
 		}
 
 			public void Process()

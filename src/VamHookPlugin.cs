@@ -1192,16 +1192,7 @@ namespace VPB
 
             Settings.Init(this.Config);
 
-            try
-            {
-                LogUtil.ConfigureCleanLog(
-                    Settings.Instance != null && Settings.Instance.CleanLogEnabled != null && Settings.Instance.CleanLogEnabled.Value,
-                    Settings.Instance != null && Settings.Instance.CleanLogPath != null ? Settings.Instance.CleanLogPath.Value : null
-                );
-            }
-            catch
-            {
-            }
+
 
             UIKey = KeyUtil.Parse(Settings.Instance.UIKey.Value);
             GalleryKey = KeyUtil.Parse(Settings.Instance.GalleryKey.Value);
@@ -1222,13 +1213,11 @@ namespace VPB
             Debug.Log("var browser hook start");
             var harmony = new Harmony("VPB_hook");
             // Patch VaM/Harmony hook points.
-            UnityEngineHook.Init();
             SuperControllerHook.PatchOptional(harmony);
             harmony.PatchAll(typeof(AtomHook));
             harmony.PatchAll(typeof(HubResourcePackageHook));
             harmony.PatchAll(typeof(SuperControllerHook));
             harmony.PatchAll(typeof(PatchAssetLoader));
-            harmony.PatchAll(typeof(UnityEngineHook));
 
             if (VPBConfig.Instance.IsDevMode)
             {
@@ -1369,7 +1358,6 @@ namespace VPB
         static bool m_Show = true; // Made static so it can be toggled via external message calls.
         void Update()
         {
-            UnityEngineHook.Update();
             VdsLauncher.TryExecuteOnce();
             float unscaledDt = Time.unscaledDeltaTime;
             if (LogUtil.IsSceneLoadActive())

@@ -150,8 +150,7 @@ Common useful fields (see `Settings.cs` for the full list):
 - `UIScale` (float)
 - `UIPosition` (`x,y` as `Vector2`, e.g. `120,80`)
 - `MiniMode` (bool)
-- `CleanLogEnabled` (bool)
-- `CleanLogPath` (string)
+
 
 ### Windows `.bat` launcher template
 
@@ -240,7 +239,7 @@ Clear caches, reduce textures, and load a scene:
 - If a setting override “does nothing”, confirm you used the exact **field name** from `Settings.cs`.
 - Check logs:
   - Standard BepInEx log output
-  - Optional clean log path (default): `BepInEx/LogOutput/var_browser_clean.log`
+
 
 ## Building from source
 

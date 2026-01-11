@@ -64,7 +64,7 @@ namespace VPB
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
         public bool DesktopFixedMode = false;
-        public bool DesktopFixedAutoCollapse = false;
+        public bool DesktopFixedAutoCollapse = true;
         public bool IsLoadingScene { get; private set; }
 
         private bool? _isDevMode;
@@ -136,7 +136,7 @@ namespace VPB
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
             DesktopFixedMode = false;
-            DesktopFixedAutoCollapse = false;
+            DesktopFixedAutoCollapse = true;
 
             try
             {
