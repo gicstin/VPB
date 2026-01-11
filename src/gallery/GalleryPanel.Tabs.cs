@@ -894,9 +894,9 @@ namespace VPB
         {
             btnGO.name = "FileButton_" + file.Name;
             
-            // Image
+            // Image - Cached lookup or fast fetch
             Image img = btnGO.GetComponent<Image>();
-            bool isSelected = selectedPath == file.Path;
+            bool isSelected = (selectedPath == file.Path);
             
             if (layoutMode == GalleryLayoutMode.VerticalCard)
                 img.color = new Color(0.1f, 0.1f, 0.1f, 0.9f);
@@ -904,13 +904,25 @@ namespace VPB
                 img.color = Color.gray;
 
             // Handle Selection Outline
+            // Optimize: Get components only once if possible, but pooling makes this tricky without a custom component wrapper
+            // We could add a "FileButtonView" component to cache these references on creation
+            
             UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
             Outline outline = btnGO.GetComponent<Outline>();
+            
             if (outline != null)
             {
-                outline.enabled = isSelected;
-                outline.effectColor = Color.yellow;
-                outline.effectDistance = isSelected ? new Vector2(4f, -4f) : new Vector2(2f, -2f);
+                if (outline.enabled != isSelected) outline.enabled = isSelected;
+                if (isSelected)
+                {
+                    outline.effectColor = Color.yellow;
+                    outline.effectDistance = new Vector2(4f, -4f);
+                }
+                else
+                {
+                    outline.effectDistance = new Vector2(2f, -2f);
+                }
+
                 if (hoverBorder != null) 
                 {
                     hoverBorder.isSelected = isSelected;
@@ -918,13 +930,16 @@ namespace VPB
                 }
             }
             
-            // Update mapping (buttons are pooled, so we must always update this)
+            // Update mapping
             fileButtonImages[file.Path] = img;
 
             // Button
             Button btn = btnGO.GetComponent<Button>();
             if (btn != null)
             {
+                // Optimization: Avoid RemoveAllListeners if we can simply swap the target
+                // But Unity Events are tricky. Ideally we'd have a single listener that checks a field on the button.
+                // For now, keep it safe but cleaner.
                 btn.onClick.RemoveAllListeners();
                 btn.onClick.AddListener(() => OnFileClick(file));
             }
@@ -935,7 +950,7 @@ namespace VPB
 
             if (thumbTr != null)
             {
-                thumbTr.gameObject.SetActive(true);
+                if (!thumbTr.gameObject.activeSelf) thumbTr.gameObject.SetActive(true);
                 RawImage thumbImg = thumbTr.GetComponent<RawImage>();
                 thumbImg.texture = null; // Clear prev
                 thumbImg.color = new Color(0, 0, 0, 0); // Transparent until loaded
@@ -944,7 +959,7 @@ namespace VPB
 
             // Hide NavText
             Transform navTextTr = btnGO.transform.Find("NavText");
-            if (navTextTr != null) navTextTr.gameObject.SetActive(false);
+            if (navTextTr != null && navTextTr.gameObject.activeSelf) navTextTr.gameObject.SetActive(false);
             
             // Hover Path
             UIHoverReveal hover = btnGO.GetComponent<UIHoverReveal>();
@@ -960,6 +975,7 @@ namespace VPB
                     string nameStr = file.Name;
                     if (file is VarFileEntry vfe && vfe.Package != null)
                     {
+                        // Optimization: Use cached UID/Extension if available or fast path
                         string ext = System.IO.Path.GetExtension(nameStr);
                         labelText.text = $"{vfe.Package.Uid}.var ({ext})";
                     }
@@ -991,9 +1007,16 @@ namespace VPB
             if (nameTr != null)
             {
                 Text t = nameTr.GetComponent<Text>();
-                t.text = file.Name;
+                string name = file.Name;
                 if (file is VarFileEntry vfe && vfe.Package != null)
-                    t.text = vfe.Package.Uid;
+                    name = vfe.Package.Uid;
+                
+                // Rough estimate for 2 rows (around 55-60 chars for 20pt bold)
+                if (name.Length > 60)
+                {
+                    name = name.Substring(0, 57) + "...";
+                }
+                t.text = name;
             }
 
             // Date & Size
@@ -1009,14 +1032,6 @@ namespace VPB
 
                 string sizeStr = FormatBytes(size);
                 t.text = $"{ageStr} old  |  {sizeStr}";
-            }
-
-            // Tags
-            Transform tagsTr = btnGO.transform.Find("Info/Tags");
-            if (tagsTr != null)
-            {
-                Text t = tagsTr.GetComponent<Text>();
-                t.text = GetTagsString(file);
             }
 
             // Stars
@@ -1147,16 +1162,18 @@ namespace VPB
             infoLE.minHeight = 85; 
 
             // Name
-            Text nameText = CreateCardText(infoGO, "Name", 22, FontStyle.Bold);
+            Text nameText = CreateCardText(infoGO, "Name", 20, FontStyle.Bold);
             nameText.alignment = TextAnchor.UpperLeft;
+            nameText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            nameText.verticalOverflow = VerticalWrapMode.Truncate;
+            nameText.lineSpacing = 0.9f;
+            nameText.GetComponent<LayoutElement>().preferredHeight = 42; // Fixed height for exactly 2 rows
+            nameText.GetComponent<LayoutElement>().minHeight = 42;
+
             // Date & Size
             Text dateSizeText = CreateCardText(infoGO, "DateSize", 16, FontStyle.Normal);
             dateSizeText.alignment = TextAnchor.UpperLeft;
             dateSizeText.color = new Color(0.8f, 0.8f, 0.8f, 1f);
-            // Tags
-            Text tagsText = CreateCardText(infoGO, "Tags", 14, FontStyle.Italic);
-            tagsText.alignment = TextAnchor.UpperLeft;
-            tagsText.color = new Color(0.7f, 0.9f, 0.7f, 1f);
 
             // Rating System (Bottom Left)
             GameObject ratingGO = new GameObject("Rating");

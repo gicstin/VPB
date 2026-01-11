@@ -141,7 +141,7 @@ namespace VPB
             }
 
             List<FileEntry> files = new List<FileEntry>();
-            string[] extensions = currentExtension.Split('|');
+            string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             bool hasNameFilter = !string.IsNullOrEmpty(nameFilterLower);
             
             // Time-based yielding configuration

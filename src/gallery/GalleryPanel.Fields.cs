@@ -257,7 +257,7 @@ namespace VPB
         // Sorting
         private Dictionary<string, SortState> contentSortStates = new Dictionary<string, SortState>();
 
-        private GalleryLayoutMode layoutMode = GalleryLayoutMode.Grid;
+        private GalleryLayoutMode layoutMode = GalleryLayoutMode.VerticalCard;
         private GameObject footerLayoutBtn;
         private Text footerLayoutBtnText;
         private Image footerLayoutBtnImage;

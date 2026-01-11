@@ -27,14 +27,23 @@ namespace VPB
             if (categories == null) return;
             categoryCounts.Clear();
             
-            var catExtensions = new Dictionary<string, string[]>();
+            // Build optimized lookup map for categories by extension
+            // Map: Extension (lowercase, no dot) -> List of Categories
+            Dictionary<string, List<Gallery.Category>> extToCats = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
+            
             foreach (var c in categories) 
             {
                 categoryCounts[c.name] = 0;
-                catExtensions[c.name] = c.extension.Split('|');
+                if (string.IsNullOrEmpty(c.extension)) continue;
+                string[] exts = c.extension.Split('|');
+                foreach(string ext in exts)
+                {
+                    if (string.IsNullOrEmpty(ext)) continue;
+                    string e = ext.Trim();
+                    if (!extToCats.ContainsKey(e)) extToCats[e] = new List<Gallery.Category>();
+                    extToCats[e].Add(c);
+                }
             }
-
-            var sortedCategories = categories.OrderByDescending(c => c.path.Length).ToList();
 
             if (FileManager.PackagesByUid != null)
             {
@@ -47,14 +56,56 @@ namespace VPB
                     }
 
                     if (pkg.FileEntries == null) continue;
-                    foreach (var entry in pkg.FileEntries)
+                    
+                    int count = pkg.FileEntries.Count;
+                    for (int i = 0; i < count; i++)
                     {
-                        foreach (var cat in sortedCategories)
+                        var entry = pkg.FileEntries[i];
+                        string internalPath = entry.InternalPath;
+                        
+                        // Fast extension extraction
+                        int lastDot = internalPath.LastIndexOf('.');
+                        if (lastDot < 0 || lastDot == internalPath.Length - 1) continue;
+                        
+                        string ext = internalPath.Substring(lastDot + 1);
+                        
+                        List<Gallery.Category> candidates;
+                        if (extToCats.TryGetValue(ext, out candidates))
                         {
-                            if (IsMatch(entry, cat.paths, cat.path, catExtensions[cat.name]))
+                            int candCount = candidates.Count;
+                            for (int j = 0; j < candCount; j++)
                             {
-                                categoryCounts[cat.name]++;
-                                break;
+                                var cat = candidates[j];
+                                // Check path match
+                                bool pathMatch = false;
+                                if (cat.paths != null && cat.paths.Count > 0)
+                                {
+                                    int pCount = cat.paths.Count;
+                                    for(int k=0; k<pCount; k++)
+                                    {
+                                        if (internalPath.StartsWith(cat.paths[k], StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            pathMatch = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                else if (!string.IsNullOrEmpty(cat.path))
+                                {
+                                    if (internalPath.StartsWith(cat.path, StringComparison.OrdinalIgnoreCase))
+                                        pathMatch = true;
+                                }
+                                else
+                                {
+                                    // No path specified means match all (unlikely for category but possible)
+                                    pathMatch = true;
+                                }
+
+                                if (pathMatch)
+                                {
+                                    categoryCounts[cat.name]++;
+                                    break; // File belongs to one category
+                                }
                             }
                         }
                     }
@@ -68,20 +119,50 @@ namespace VPB
             if (FileManager.PackagesByUid == null) return;
             
             Dictionary<string, int> counts = new Dictionary<string, int>();
-            string[] extensions = currentExtension.Split('|');
-            
+            string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
+            HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in extensions) if (!string.IsNullOrEmpty(e)) targetExts.Add(e.Trim());
+
             foreach (var pkg in FileManager.PackagesByUid.Values)
             {
                 if (string.IsNullOrEmpty(pkg.Creator)) continue;
                 if (pkg.FileEntries == null) continue;
 
-                foreach (var entry in pkg.FileEntries)
+                int count = pkg.FileEntries.Count;
+                for (int i = 0; i < count; i++)
                 {
-                     if (IsMatch(entry, currentPaths, currentPath, extensions))
-                     {
-                         if (!counts.ContainsKey(pkg.Creator)) counts[pkg.Creator] = 0;
-                         counts[pkg.Creator]++;
-                     }
+                    var entry = pkg.FileEntries[i];
+                    string internalPath = entry.InternalPath;
+
+                    // 1. Check extension
+                    int lastDot = internalPath.LastIndexOf('.');
+                    if (lastDot < 0 || lastDot == internalPath.Length - 1) continue;
+                    string ext = internalPath.Substring(lastDot + 1);
+                    if (!targetExts.Contains(ext)) continue;
+
+                    // 2. Check path match
+                    bool match = false;
+                    if (currentPaths != null && currentPaths.Count > 0)
+                    {
+                         for(int k=0; k<currentPaths.Count; k++)
+                         {
+                             if (internalPath.StartsWith(currentPaths[k], StringComparison.OrdinalIgnoreCase)) { match = true; break; }
+                         }
+                    }
+                    else if (!string.IsNullOrEmpty(currentPath))
+                    {
+                         if (internalPath.StartsWith(currentPath, StringComparison.OrdinalIgnoreCase)) match = true;
+                    }
+                    else
+                    {
+                        match = true;
+                    }
+
+                    if (match)
+                    {
+                        if (!counts.ContainsKey(pkg.Creator)) counts[pkg.Creator] = 0;
+                        counts[pkg.Creator]++;
+                    }
                 }
             }
             
@@ -95,8 +176,11 @@ namespace VPB
             tagCounts.Clear();
             if (FileManager.PackagesByUid == null) return;
 
-            string[] extensions = currentExtension.Split('|');
-            
+            string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
+            // Build extension set for fast lookup
+            HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in extensions) if (!string.IsNullOrEmpty(e)) targetExts.Add(e.Trim());
+
             // Collect all relevant tags to count
             HashSet<string> tagsToCount = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string title = titleText != null ? titleText.text : "";
@@ -113,6 +197,17 @@ namespace VPB
             
             if (tagsToCount.Count == 0) return;
 
+            // Split tags into single-word and multi-word
+            HashSet<string> singleWordTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> multiWordTags = new List<string>();
+            char[] separators = new char[] { '/', '\\', '.', '_', '-', ' ' };
+
+            foreach (var t in tagsToCount)
+            {
+                if (t.IndexOfAny(new char[] { ' ', '_', '-' }) >= 0) multiWordTags.Add(t);
+                else singleWordTags.Add(t);
+            }
+
             foreach (var pkg in FileManager.PackagesByUid.Values)
             {
                 if (pkg.FileEntries == null) continue;
@@ -123,19 +218,69 @@ namespace VPB
                     if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
                 }
 
-                foreach (var entry in pkg.FileEntries)
+                int count = pkg.FileEntries.Count;
+                for (int i = 0; i < count; i++)
                 {
-                    if (IsMatch(entry, currentPaths, currentPath, extensions))
+                    var entry = pkg.FileEntries[i];
+                    string internalPath = entry.InternalPath;
+
+                    // 1. Check extension
+                    int lastDot = internalPath.LastIndexOf('.');
+                    if (lastDot < 0 || lastDot == internalPath.Length - 1) continue;
+                    string ext = internalPath.Substring(lastDot + 1);
+                    if (!targetExts.Contains(ext)) continue;
+
+                    // 2. Check path match (Inline IsMatch logic)
+                    bool match = false;
+                    if (currentPaths != null && currentPaths.Count > 0)
                     {
-                        string pathLower = entry.Path.ToLowerInvariant();
-                        foreach(var tag in tagsToCount)
+                        for(int k=0; k<currentPaths.Count; k++)
                         {
-                            if (pathLower.Contains(tag)) // tagsToCount are lowercase
-                            {
-                                if (!tagCounts.ContainsKey(tag)) tagCounts[tag] = 0;
-                                tagCounts[tag]++;
-                            }
+                            if (internalPath.StartsWith(currentPaths[k], StringComparison.OrdinalIgnoreCase)) { match = true; break; }
                         }
+                    }
+                    else if (!string.IsNullOrEmpty(currentPath))
+                    {
+                         if (internalPath.StartsWith(currentPath, StringComparison.OrdinalIgnoreCase)) match = true;
+                    }
+                    else
+                    {
+                        match = true;
+                    }
+
+                    if (!match) continue;
+
+                    string pathLower = internalPath.ToLowerInvariant();
+                    
+                    // 3. Count tags
+                    // Optimization: Tokenize path for single-word tags
+                    string[] tokens = pathLower.Split(separators);
+                    
+                    HashSet<string> foundTags = new HashSet<string>();
+
+                    // Check tokens against single word tags
+                    for (int k = 0; k < tokens.Length; k++)
+                    {
+                        if (singleWordTags.Contains(tokens[k]))
+                        {
+                            foundTags.Add(tokens[k]);
+                        }
+                    }
+
+                    // Check multi-word tags using Contains
+                    for (int k = 0; k < multiWordTags.Count; k++)
+                    {
+                        if (pathLower.Contains(multiWordTags[k]))
+                        {
+                            foundTags.Add(multiWordTags[k]);
+                        }
+                    }
+
+                    // Increment counts
+                    foreach (var tag in foundTags)
+                    {
+                        if (!tagCounts.ContainsKey(tag)) tagCounts[tag] = 0;
+                        tagCounts[tag]++;
                     }
                 }
             }
