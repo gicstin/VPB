@@ -12,7 +12,7 @@ using UnityEngine.UI;
 namespace VPB
 {
     // Plugin metadata attribute: plugin ID, plugin name, plugin version (must be numeric)
-    [BepInPlugin("VPB", "VPB", "0.06")]
+    [BepInPlugin("VPB", "VPB", PluginVersionInfo.Version)]
 
     public partial class VamHookPlugin : BaseUnityPlugin // Inherits BaseUnityPlugin
     {

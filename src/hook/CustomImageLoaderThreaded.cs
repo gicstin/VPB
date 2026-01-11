@@ -195,6 +195,7 @@ namespace VPB
 					{
 						text += "_I";
 					}
+					text += "_CS2";
 					return text;
 				}
 			}

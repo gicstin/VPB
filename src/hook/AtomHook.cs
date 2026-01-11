@@ -31,64 +31,7 @@ namespace VPB
             }
         }
 
-        /* [HarmonyPrefix]
-        [HarmonyPatch(typeof(DAZClothingItem), "LoadPreset", new Type[] { typeof(string) })]
-        public static void PreDAZClothingItemLoadPreset(DAZClothingItem __instance, string path)
-        {
-            LogUtil.Log($"[clothing hook] DAZClothingItem LoadPreset {__instance.name} path={path}");
-        } */
-
-        /* Moved to DAZClothingHook.cs
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(DAZCharacterSelector), "SetActiveClothingItem", new Type[] { typeof(DAZClothingItem), typeof(bool), typeof(bool), typeof(bool) })]
-        public static void PreSetActiveClothingItem(DAZCharacterSelector __instance, DAZClothingItem item, bool active, bool fromRestore, bool skipSyncAnatomy)
-        {
-            if (item != null)
-            {
-                string atomName = "unknown";
-                try
-                {
-                    var atom = __instance.GetComponentInParent<Atom>();
-                    if (atom != null) atomName = atom.name;
-                }
-                catch { }
-                LogUtil.Log($"[clothing hook] SetActiveClothingItem {item.name} active={active} on {atomName}");
-            }
-        }
-        */
-
-        /* [HarmonyPrefix]
-        [HarmonyPatch(typeof(DAZCharacterSelector), "RemoveClothing", new Type[] { typeof(DAZClothingItem) })]
-        public static void PreRemoveClothing(DAZCharacterSelector __instance, DAZClothingItem item)
-        {
-            if (item != null)
-            {
-                string atomName = "unknown";
-                try
-                {
-                    var atom = __instance.GetComponentInParent<Atom>();
-                    if (atom != null) atomName = atom.name;
-                }
-                catch { }
-                LogUtil.Log($"[clothing hook] RemoveClothing {item.name} from {atomName}");
-            }
-        } */
-
-        /* Moved to DAZClothingHook.cs
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(DAZCharacterSelector), "RemoveAllClothing")]
-        public static void PreClearClothing(DAZCharacterSelector __instance)
-        {
-            string atomName = "unknown";
-            try
-            {
-                var atom = __instance.GetComponentInParent<Atom>();
-                if (atom != null) atomName = atom.name;
-            }
-            catch { }
-            LogUtil.Log($"[clothing hook] RemoveAllClothing on {atomName}");
-        }
-        */
+        // Clothing-related hooks were moved to DAZClothingHook.cs.
 
         // ky1001.PresetLoader loads using this method
         [HarmonyPrefix]

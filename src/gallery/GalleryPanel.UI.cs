@@ -571,13 +571,7 @@ namespace VPB
         private void UpdateButtonStates()
         {
              ApplyCurvatureToChildren();
-             // Text updates disabled as per request to keep static labels
-             /*
-             UpdateButtonState(rightCategoryBtnText, true, ContentType.Category);
-             UpdateButtonState(rightCreatorBtnText, true, ContentType.Creator);
-             UpdateButtonState(leftCategoryBtnText, false, ContentType.Category);
-             UpdateButtonState(leftCreatorBtnText, false, ContentType.Creator);
-             */
+             // Text updates are intentionally disabled to keep static labels.
         }
 
         private void ApplyCurvatureToChildren()

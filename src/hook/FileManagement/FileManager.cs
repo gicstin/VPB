@@ -7,7 +7,6 @@ using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
-//using System.Threading.Tasks;
 using System.Linq;
 using UnityEngine;
 using Prime31.MessageKit;
@@ -361,7 +360,6 @@ namespace VPB
                     moveToPath = "InvalidPackages/" + subPath + "/" + vpath.Substring("AddonPackages".Length);
                 }
             }
-            //UnityEngine.Debug.Log(moveToPath);
             string dir = Path.GetDirectoryName(moveToPath);
 			if(!Directory.Exists(dir))
             {
@@ -2194,7 +2192,6 @@ namespace VPB
 
 		private void OnDestroy()
 		{
-			//UnityEngine.Debug.Log("Hook FileManager OnDestroy");
 			ClearAll();
 		}
 	}

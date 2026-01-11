@@ -126,6 +126,7 @@ namespace VPB
                     if (createAlphaFromGrayscale) text += "_A";
                     if (createNormalFromBump) text = text + "_BN" + bumpStrength;
                     if (invert) text += "_I";
+                    text += "_CS2";
                     return text;
                 }
             }
@@ -249,9 +250,15 @@ namespace VPB
                 Marshal.Copy(bitmapData.Scan0, raw, 0, num8);
                 bitmap2.UnlockBits(bitmapData);
                 bool flag = isNormalMap && num3 == 4;
-                if (flag)
+                for (int i = 0; i < num8; i += num3)
                 {
-                    for (int i = 0; i < num8; i += 4) raw[i + 3] = 255;
+                    byte b = raw[i];
+                    raw[i] = raw[i + 2];
+                    raw[i + 2] = b;
+                    if (flag)
+                    {
+                        raw[i + 3] = 255;
+                    }
                 }
 
                 if (invert)

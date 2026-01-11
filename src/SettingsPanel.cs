@@ -321,20 +321,7 @@ namespace VPB
                 VPBConfig.Instance.TriggerChange();
             }, "In Desktop Fixed Mode, automatically collapses the gallery to the right edge when not in use. Hover over the right edge to expand.");
 
-            // Curvature (Disabled for now)
-            /*
-            CreateToggleSetting("Enable Curvature", pendingEnableCurvature, (val) => {
-                pendingEnableCurvature = val;
-                VPBConfig.Instance.EnableCurvature = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "Wraps the side panels around you for a more immersive VR experience.");
-
-            CreateSliderSetting("Curvature Intensity", pendingCurvatureIntensity, 0.1f, 1.5f, (val) => {
-                pendingCurvatureIntensity = val;
-                VPBConfig.Instance.CurvatureIntensity = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "How much the side panels wrap around. 1.0 is default, max is 1.5.");
-            */
+            // Curvature settings are currently disabled.
 
             // Side Button Gaps
             CreateToggleSetting("Side Button Gaps", pendingEnableButtonGaps, (val) => {
@@ -360,14 +347,7 @@ namespace VPB
             // CATEGORY: Interaction
             //CreateHeader("Interaction");
 
-            // Drag Drop Replace Mode
-            /*
-            CreateToggleSetting("Drag & Drop Replace", pendingDragDropReplaceMode, (val) => {
-                pendingDragDropReplaceMode = val;
-                VPBConfig.Instance.DragDropReplaceMode = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "When ON, dragging an item onto another replaces it. When OFF, it adds to it.");
-            */
+            // Drag & drop replace mode setting is currently disabled.
 
             if (!isFixed)
             {

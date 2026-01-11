@@ -4,8 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
-//using MVR.FileManagement;
-//using MVR.FileManagementSecure;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -1144,7 +1142,6 @@ namespace VPB
 		}
 		public void Hide()
 		{
-			//LogUtil.LogWarning("FileBrowser Hide");
 			if (window.activeSelf)
 			{
 				if (selected != null)
@@ -1273,7 +1270,7 @@ namespace VPB
 					}
 					catch (Exception ex)
 					{
-						LogUtil.LogError("Could not move directory " + fullPath + " to " + text + " Exception: " + ex.Message);
+						//LogUtil.LogError("Could not move directory " + fullPath + " to " + text + " Exception: " + ex.Message);
 						if (statusField != null)
 						{
 							statusField.text = ex.Message;
@@ -1314,7 +1311,7 @@ namespace VPB
 							text += ".vap";
 						}
 					}
-					LogUtil.Log("Rename file " + fullPath2 + " to " + text);
+					//LogUtil.Log("Rename file " + fullPath2 + " to " + text);
 					try
 					{
 						FileManager.AssertNotCalledFromPlugin();
@@ -1322,7 +1319,7 @@ namespace VPB
 					}
 					catch (Exception ex2)
 					{
-						LogUtil.LogError("Could not move file " + fullPath2 + " to " + text + " Exception: " + ex2.Message);
+						//LogUtil.LogError("Could not move file " + fullPath2 + " to " + text + " Exception: " + ex2.Message);
 						if (statusField != null)
 						{
 							statusField.text = ex2.Message;
@@ -1342,7 +1339,7 @@ namespace VPB
 							}
 							catch (Exception ex3)
 							{
-								LogUtil.LogError("Could not move file " + text2 + " to " + text3 + " Exception: " + ex3.Message);
+								//LogUtil.LogError("Could not move file " + text2 + " to " + text3 + " Exception: " + ex3.Message);
 								if (statusField != null)
 								{
 									statusField.text = ex3.Message;
@@ -1359,7 +1356,7 @@ namespace VPB
 							}
 							catch (Exception ex4)
 							{
-								LogUtil.LogError("Could not move file " + text4 + " to " + text5 + " Exception: " + ex4.Message);
+								//LogUtil.LogError("Could not move file " + text4 + " to " + text5 + " Exception: " + ex4.Message);
 								if (statusField != null)
 								{
 									statusField.text = ex4.Message;
@@ -1433,7 +1430,7 @@ namespace VPB
 						}
 						catch (Exception ex)
 						{
-							LogUtil.LogError("Could not delete directory " + fullPath + " Exception: " + ex.Message);
+							//LogUtil.LogError("Could not delete directory " + fullPath + " Exception: " + ex.Message);
 							if (statusField != null)
 							{
 								statusField.text = ex.Message;
@@ -1454,7 +1451,7 @@ namespace VPB
 						}
 						catch (Exception ex2)
 						{
-							LogUtil.LogError("Could not delete file " + fullPath + " Exception: " + ex2.Message);
+							//LogUtil.LogError("Could not delete file " + fullPath + " Exception: " + ex2.Message);
 							if (statusField != null)
 							{
 								statusField.text = ex2.Message;
@@ -1487,7 +1484,7 @@ namespace VPB
 							}
 							catch (Exception ex3)
 							{
-								LogUtil.LogError("Could not delete file " + text2 + " Exception: " + ex3.Message);
+								//LogUtil.LogError("Could not delete file " + text2 + " Exception: " + ex3.Message);
 								if (statusField != null)
 								{
 									statusField.text = ex3.Message;
@@ -1504,7 +1501,7 @@ namespace VPB
 						}
 						catch (Exception ex4)
 						{
-							LogUtil.LogError("Could not delete file " + text3 + " Exception: " + ex4.Message);
+							//LogUtil.LogError("Could not delete file " + text3 + " Exception: " + ex4.Message);
 							if (statusField != null)
 							{
 								statusField.text = ex4.Message;
@@ -1527,25 +1524,6 @@ namespace VPB
 			deleteFileButton = null;
 		}
 
-		//protected string DeterminePathToGoTo(string pathToGoTo)
-		//{
-		//	DirectoryEntry directoryEntry = FileManager.GetDirectoryEntry(pathToGoTo);
-		//	if (!selectDirectory && directoryEntry != null && directoryEntry is VarDirectoryEntry)
-		//	{
-		//		DirectoryEntry directoryEntry2 = directoryEntry.FindFirstDirectoryWithFiles();
-		//		string uid = directoryEntry.Uid;
-		//		string uid2 = directoryEntry2.Uid;
-		//		if (uid2 != uid)
-		//		{
-		//			string text = uid2.Replace(uid, string.Empty);
-		//			//text = text.Replace('/', '\\');
-		//			text = text.Replace('\\', '/');
-		//			pathToGoTo += text;
-		//		}
-		//	}
-		//	return pathToGoTo;
-		//}
-
 		public void GotoDirectory(string path, string pkgFilter = null, bool flatten = true, bool includeRegularDirs = false)
 		{
 			currentPackageFilter = pkgFilter;
@@ -1557,7 +1535,7 @@ namespace VPB
 			}
 			else if (!FileManager.DirectoryExists(path) && !flatten)
 			{
-				LogUtil.LogError("uFileBrowser: Directory doesn't exist:\n" + path);
+				//LogUtil.LogError("uFileBrowser: Directory doesn't exist:\n" + path);
 				currentPath = string.Empty;
 			}
 			else
@@ -1619,23 +1597,6 @@ namespace VPB
 				fileHighlightField.text = string.Empty;
 			}
 		}
-
-		//public void OnDirectoryClick(DirectoryButton db)
-		//{
-		//	GotoDirectory(db.fullPath, db.packageFilter);
-		//}
-
-		//public void OnShortCutClick(int i)
-		//{
-		//	if (i >= shortCutButtons.Count)
-		//	{
-		//		Debug.LogError("uFileBrowser: Button index is bigger than array, something went wrong.");
-		//	}
-		//	else
-		//	{
-		//		GotoDirectory(DeterminePathToGoTo(shortCutButtons[i].fullPath), shortCutButtons[i].packageFilter, shortCutButtons[i].flatten, shortCutButtons[i].includeRegularDirsInFlatten);
-		//	}
-		//}
 
 		private IEnumerator DelaySetScroll(float scrollPos)
 		{
@@ -2004,11 +1965,6 @@ namespace VPB
 		//int lastSyncFrame = 0;
 		private void SyncDisplayed()
 		{
-#if DEBUG
-			// string stackTrace = new System.Diagnostics.StackTrace().ToString();
-			// LogUtil.LogWarning("SyncDisplayed "+ stackTrace);
-#endif
-			//LogUtil.LogWarning("SyncDisplayed");
 
 			if (sortedFilesAndDirs == null)
 			{
@@ -2055,20 +2011,30 @@ namespace VPB
 			foreach (FileAndDirInfo sortedFilesAndDir in sortedFilesAndDirs)
 			{
 				FileEntry fileEntry = sortedFilesAndDir.FileEntry;
-				//FileButton button = sortedFilesAndDir.button;
-				//if (button != null)
+				if (fileEntry != null)
 				{
-					if (fileEntry != null)
-					{
-                        if (clothTag != null && clothTag.Count > 0)
-                        {
+						if (clothTag != null && clothTag.Count > 0)
+						{
 							bool includeNoTag = clothTag.Contains("no tag");
 							bool includeUnknownTag = clothTag.Contains("unknown");
 
 							VarFileEntry varFileEntry = fileEntry as VarFileEntry;
-                            if (varFileEntry != null)
-                            {
+							if (varFileEntry != null)
+							{
 								bool pass = false;
+								if (varFileEntry.ClothingTags != null)
+								{
+									foreach (var item in varFileEntry.ClothingTags)
+									{
+										if (clothTag.Contains(item))
+										{
+											pass = true;
+											break;
+										}
+									}
+								}
+								if (!pass)
+								{
                                 if (varFileEntry.ClothingTags != null)
                                 {
                                     foreach (var item in varFileEntry.ClothingTags)
@@ -2108,23 +2074,23 @@ namespace VPB
                                 }
                                 if (!pass)
                                 {
-                                    HideButton(sortedFilesAndDir);
-                                    continue;
-                                }
-                            }
-                        }
+									HideButton(sortedFilesAndDir);
+									continue;
+								}
+							}
+						}
 						if (hairTag != null && hairTag.Count > 0)
 						{
-							bool includeNoTag = hairTag.Contains("no tag");
-							bool includeUnknownTag = hairTag.Contains("unknown");
+							bool hairIncludeNoTag = hairTag.Contains("no tag");
+							bool hairIncludeUnknownTag = hairTag.Contains("unknown");
 
-							VarFileEntry varFileEntry = fileEntry as VarFileEntry;
-							if (varFileEntry != null)
+							VarFileEntry hairVarFileEntry = fileEntry as VarFileEntry;
+							if (hairVarFileEntry != null)
 							{
 								bool pass = false;
-								if (varFileEntry.HairTags != null)
+								if (hairVarFileEntry.HairTags != null)
 								{
-									foreach (var item in varFileEntry.HairTags)
+									foreach (var item in hairVarFileEntry.HairTags)
 									{
 										if (hairTag.Contains(item))
 										{
@@ -2133,28 +2099,18 @@ namespace VPB
 										}
 									}
 								}
-								if (!pass)
+								if (!pass && hairIncludeNoTag && (hairVarFileEntry.HairTags == null || hairVarFileEntry.HairTags.Count == 0))
 								{
-									// If "no tag" is included, handle it specially
-									if (includeNoTag)
+									pass = true;
+								}
+								if (!pass && hairIncludeUnknownTag && hairVarFileEntry.HairTags != null)
+								{
+									foreach (var item in hairVarFileEntry.HairTags)
 									{
-										if (varFileEntry.HairTags == null || varFileEntry.HairTags.Count == 0)
+										if (unknownHairTagFilterChooser.val == (item))
 										{
 											pass = true;
-										}
-									}
-								}
-								if (!pass&& includeUnknownTag)
-								{
-									if (varFileEntry.HairTags != null)
-									{
-										foreach (var item in varFileEntry.HairTags)
-										{
-											if (unknownHairTagFilterChooser.val==(item))
-											{
-												pass = true;
-												break;
-											}
+											break;
 										}
 									}
 								}
@@ -2185,17 +2141,17 @@ namespace VPB
 						//}
 						if (!string.IsNullOrEmpty(searchLower) && !fileEntry.UidLowerInvariant.Contains(searchLower))
 						{
-							VarFileEntry varFileEntry = fileEntry as VarFileEntry;
-                            if (varFileEntry == null)
+							VarFileEntry searchVarFileEntry = fileEntry as VarFileEntry;
+							if (searchVarFileEntry == null)
                             {
                                 //HideButton(button);
-							HideButton(sortedFilesAndDir);
+								HideButton(sortedFilesAndDir);
                                 continue;
 							}
-                            if (!varFileEntry.Package.UidLowerInvariant.Contains(searchLower))
+							if (!searchVarFileEntry.Package.UidLowerInvariant.Contains(searchLower))
 							{
 								//HideButton(button);
-							HideButton(sortedFilesAndDir);
+								HideButton(sortedFilesAndDir);
 								continue;
 							}
                         }
@@ -2205,13 +2161,13 @@ namespace VPB
                             string creator = _creatorFilter.Substring(0, _creatorFilter.IndexOf('('));
                             if (fileEntry is VarFileEntry)
                             {
-                                VarFileEntry varFileEntry = fileEntry as VarFileEntry;
-                                if (!varFileEntry.Package.Uid.StartsWith(creator + "."))
+								VarFileEntry creatorVarFileEntry = fileEntry as VarFileEntry;
+								if (!creatorVarFileEntry.Package.Uid.StartsWith(creator + "."))
                                 {
                                     //HideButton(button);
-							HideButton(sortedFilesAndDir);
+								HideButton(sortedFilesAndDir);
                                     continue;
-								}
+							}
                             }
                             else if (fileEntry is SystemFileEntry)
                             {
@@ -2662,7 +2618,6 @@ namespace VPB
 			}
 			FileEntry fileEntry = info.FileEntry;
 
-			if (clothTag != null && clothTag.Count > 0)
 			{
 				bool includeNoTag = clothTag.Contains("no tag");
 				bool includeUnknownTag = clothTag.Contains("unknown");
@@ -2869,7 +2824,6 @@ namespace VPB
 		
 		protected void UpdateFileListCacheThreadSafe()
 		{
-			//LogUtil.Log("UpdateFileListCacheThreadSafe");
 			List<FileAndDirInfo> list = new List<FileAndDirInfo>();
 			if (useFlatten)
 			{
@@ -2975,7 +2929,7 @@ namespace VPB
                         }
                         else
 						{
-							LogUtil.LogError("Unable to read file " + item7.Path);
+							//LogUtil.LogError("Unable to read file " + item7.Path);
 							threadHadException = true;
 							threadException = "Unable to read file " + item7.Path;
 						}
@@ -2983,7 +2937,7 @@ namespace VPB
 				}
 				catch (Exception ex2)
 				{
-					LogUtil.LogError("uFileBrowser: " + ex2);
+					//LogUtil.LogError("uFileBrowser: " + ex2);
 					threadHadException = true;
 					threadException = ex2.Message;
 				}
@@ -3020,7 +2974,7 @@ namespace VPB
                     }
                     if (creator == null)
                     {
-						LogUtil.LogError("no creator:" + item.FileEntry.Path);
+						//LogUtil.LogError("no creator:" + item.FileEntry.Path);
                     }
                     else
                     {
@@ -3081,8 +3035,7 @@ namespace VPB
 
 		private void UpdateFileList()
 		{
-			//Debug.Log("UpdateFileList");
-            if (!cacheDirty)
+			if (!cacheDirty)
             {
                 if (currentPath != lastCacheDir)
                 {
@@ -3129,7 +3082,6 @@ namespace VPB
 					cacheDirty = true;
                 }
 			}
-				//LogUtil.Log("cacheDirty:"+ cacheDirty);
 			if (cacheDirty)
 			{
 				int num = 0;
@@ -3141,7 +3093,6 @@ namespace VPB
 					{
 						if (cachedFile.button != null)
 						{
-							//UnityEngine.Object.Destroy(cachedFile.button.gameObject);
 							PoolManager.ReleaseObject(cachedFile.button.gameObject);
 						}
 					}
@@ -3626,7 +3577,6 @@ namespace VPB
 		public UIDynamicPopup creatorPopup = null;
 		protected void SyncCreatorFilter(string s)
 		{
-			//LogUtil.Log("SyncCreatorFilter "+s);
 			_creatorFilter = s;
 			ResetDisplayedPage();
 		}

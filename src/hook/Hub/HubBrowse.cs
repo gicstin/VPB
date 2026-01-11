@@ -2016,17 +2016,11 @@ namespace VPB
                 updatesPanel = componentInChildren.updatesPanel;
                 updatesContainer = componentInChildren.updatesContainer;
             }
-            //LogUtil.LogWarning("hubEnabledJSON RegisterNegativeIndicator");
             hubEnabledJSON.RegisterNegativeIndicator(componentInChildren.hubEnabledNegativeIndicator, isAlt);
-            //LogUtil.LogWarning("enableHubAction RegisterButton");
             enableHubAction.RegisterButton(componentInChildren.enableHubButton, isAlt);
-            //LogUtil.LogWarning("webBrowserEnabledJSON.RegisterNegativeIndicator");
             webBrowserEnabledJSON.RegisterNegativeIndicator(componentInChildren.webBrowserEnabledNegativeIndicator, isAlt);
-            //LogUtil.LogWarning("enableWebBrowserAction.RegisterButton");
             enableWebBrowserAction.RegisterButton(componentInChildren.enabledWebBrowserButton, isAlt);
-            //LogUtil.LogWarning("cancelGetHubInfoAction.RegisterButton");
             cancelGetHubInfoAction.RegisterButton(componentInChildren.cancelGetHubInfoButton, isAlt);
-            //LogUtil.LogWarning("retryGetHubInfoAction.RegisterButton");
             retryGetHubInfoAction.RegisterButton(componentInChildren.retryGetHubInfoButton, isAlt);
             pageInfoJSON.RegisterText(componentInChildren.pageInfoText, isAlt);
             numResourcesJSON.RegisterText(componentInChildren.numResourcesText, isAlt);
@@ -2036,22 +2030,19 @@ namespace VPB
             refreshResourcesAction.RegisterButton(componentInChildren.refreshButton, isAlt);
             clearFiltersAction.RegisterButton(componentInChildren.clearFiltersButton, isAlt);
 
-            //LogUtil.LogWarning("hostedOptionPopup RegisterPopup");
             try
             {
                 componentInChildren.hostedOptionPopup.useFiltering = false;
                 componentInChildren.hostedOptionPopup.numPopupValues = 0;
                 hostedOptionChooser.RegisterPopup(componentInChildren.hostedOptionPopup, isAlt);
             }
-            catch(Exception /*e*/)
+            catch(Exception)
             {
-                //LogUtil.LogError("hostedOptionPopup " + e.ToString());
             }
 
 
             searchFilterJSON.RegisterInputField(componentInChildren.searchInputField, isAlt);
 
-            //LogUtil.LogWarning("payTypeFilterChooser RegisterPopup");
             try
             {
                 componentInChildren.payTypeFilterPopup.useFiltering = false;
@@ -2063,7 +2054,6 @@ namespace VPB
                 LogUtil.LogError("payTypeFilterPopup " + e.ToString());
             }
 
-            //LogUtil.LogWarning("categoryFilterChooser RegisterPopup");
             try
             {
                 componentInChildren.categoryFilterPopup.useFiltering = false;
@@ -2074,7 +2064,6 @@ namespace VPB
             {
                 LogUtil.LogError("categoryFilterPopup " + e.ToString());
             }
-            //LogUtil.LogWarning("creatorFilterChooser RegisterPopup");
             try
             {
                 componentInChildren.creatorFilterPopup.useFiltering = false;
@@ -2085,7 +2074,6 @@ namespace VPB
             {
                 LogUtil.LogError("creatorFilterPopup " + e.ToString());
             }
-            //LogUtil.LogWarning("tagsFilterChooser RegisterPopup");
             try
             {
                 componentInChildren.tagsFilterPopup.useFiltering = false;
