@@ -279,10 +279,6 @@
     <Compile Include="src\hook\TagFilter.cs" />
     <Compile Include="src\hook\Tools.cs" />
     <Compile Include="src\hook\Native\Kernel32.cs" />
-    <Compile Include="src\hook\Native\MinHook.cs" />
-    <Compile Include="src\hook\Native\NativeHookManager.cs" />
-    <Compile Include="src\hook\Native\BoehmGC.cs" />
-    <Compile Include="src\hook\Native\SigScanner.cs" />
     <Compile Include="src\hook\uFileBrowser\DirectoryButton.cs" />
     <Compile Include="src\hook\uFileBrowser\FileBrowser.cs" />
     <Compile Include="src\hook\uFileBrowser\FileBrowserCallback.cs" />

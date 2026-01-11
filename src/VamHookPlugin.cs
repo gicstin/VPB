@@ -1230,9 +1230,6 @@ namespace VPB
                 DAZClothingHook.PatchAll(harmony);
             }
 
-            // Initialize Native Hooks (MinHook)
-            Native.NativeHookManager.Initialize();
-
             // Initialize KTX
             try
             {
@@ -1309,9 +1306,6 @@ namespace VPB
             {
                  Destroy(m_QuickMenuCanvas.gameObject);
             }
-
-            // Shutdown Native Hooks
-            Native.NativeHookManager.Shutdown();
         }
         // Called on (hard) restart as well.
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
