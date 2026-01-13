@@ -68,7 +68,6 @@ namespace VPB
         private string m_SettingsCreateGalleryKeyDraft;
         private string m_SettingsHubKeyDraft;
         private bool m_SettingsReduceTextureSizeDraft;
-        private bool m_SettingsEnableKtxCompressionDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
@@ -167,7 +166,6 @@ namespace VPB
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
             m_SettingsReduceTextureSizeDraft = (Settings.Instance != null && Settings.Instance.ReduceTextureSize != null) ? Settings.Instance.ReduceTextureSize.Value : false;
-            m_SettingsEnableKtxCompressionDraft = (Settings.Instance != null && Settings.Instance.EnableKtxCompression != null) ? Settings.Instance.EnableKtxCompression.Value : false;
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
@@ -223,13 +221,6 @@ namespace VPB
                     if (Settings.Instance.ReduceTextureSize.Value != m_SettingsReduceTextureSizeDraft)
                     {
                         Settings.Instance.ReduceTextureSize.Value = m_SettingsReduceTextureSizeDraft;
-                    }
-                }
-                if (Settings.Instance != null && Settings.Instance.EnableKtxCompression != null)
-                {
-                    if (Settings.Instance.EnableKtxCompression.Value != m_SettingsEnableKtxCompressionDraft)
-                    {
-                        Settings.Instance.EnableKtxCompression.Value = m_SettingsEnableKtxCompressionDraft;
                     }
                 }
                 if (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null)
@@ -428,16 +419,6 @@ namespace VPB
 
             if (Settings.Instance.EnableTextureOptimizations.Value)
             {
-                GUILayout.Space(6);
-
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(m_SettingsEnableKtxCompressionDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                {
-                    m_SettingsEnableKtxCompressionDraft = !m_SettingsEnableKtxCompressionDraft;
-                }
-                GUILayout.Label("Textures: Compress to KTX");
-                GUILayout.EndHorizontal();
-
                 GUILayout.Space(6);
 
                 GUILayout.BeginHorizontal();
@@ -1941,7 +1922,12 @@ namespace VPB
                     bool textureOptimizationsEnabled = Settings.Instance.EnableTextureOptimizations.Value;
                     if (GUILayout.Button(textureOptimizationsEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
                     {
-                        Settings.Instance.EnableTextureOptimizations.Value = !textureOptimizationsEnabled;
+                        bool newValue = !textureOptimizationsEnabled;
+                        Settings.Instance.EnableTextureOptimizations.Value = newValue;
+                        if (newValue)
+                        {
+                            Settings.Instance.EnableKtxCompression.Value = true;
+                        }
                     }
                     GUILayout.Label("Enable Texture Optimizations");
                     GUILayout.EndHorizontal();
@@ -1959,36 +1945,7 @@ namespace VPB
                             GUILayout.Space(4);
                         }
 
-                        // KTX Compression
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Space(optionIndent);
-                        GUI.enabled = ktxDllsPresent;
-                        if (GUILayout.Button(Settings.Instance.EnableKtxCompression.Value && ktxDllsPresent ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                        {
-                            Settings.Instance.EnableKtxCompression.Value = !Settings.Instance.EnableKtxCompression.Value;
-                        }
-                        GUILayout.Label("Compress to KTX");
-                        GUILayout.FlexibleSpace();
-                        if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
-                        {
-                            ToggleInfoCard(ref m_ShowKtxInfo);
-                        }
-                        GUI.enabled = true;
-                        GUILayout.EndHorizontal();
 
-                        DrawInfoCard(ref m_ShowKtxInfo, "KTX Compression", () =>
-                        {
-                            GUILayout.Space(4);
-                            GUILayout.Label("KTX (Khronos Texture) is a container format for storing GPU textures.", m_StyleInfoCardText);
-                            GUILayout.Space(2);
-                            GUILayout.Label("<b>Benefits:</b>", m_StyleInfoCardText);
-                            GUILayout.Label("• <b>Fast Loading:</b> Data is already in a format the GPU understands.", m_StyleInfoCardText);
-                            GUILayout.Label("• <b>Low Memory:</b> Stays compressed in VRAM, saving significant memory.", m_StyleInfoCardText);
-                            GUILayout.Space(4);
-                            GUILayout.Label("Note: Requires native DLLs (ktx.dll and wrapper) in the plugin folder.", m_StyleInfoCardText);
-                        });
-
-                        GUILayout.Space(4);
 
                         // Downscale
                         GUILayout.BeginHorizontal();

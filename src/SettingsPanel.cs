@@ -403,6 +403,10 @@ namespace VPB
                 CreateToggleSetting("Texture Optimizations", pendingEnableTextureOptimizations, (val) => {
                     pendingEnableTextureOptimizations = val;
                     Settings.Instance.EnableTextureOptimizations.Value = val;
+                    if (val)
+                    {
+                        Settings.Instance.EnableKtxCompression.Value = true;
+                    }
                 }, "Master toggle for all texture optimizations (caching, resizing, compression, prewarm, etc.).");
 
                 CreateHeader("KTX Support");

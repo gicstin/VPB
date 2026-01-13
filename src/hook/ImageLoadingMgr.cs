@@ -361,10 +361,7 @@ namespace VPB
                 }
             }
 
-            if (candidateCount > 0)
-            {
-                LogUtil.Log("Dump candidates: total=" + candidateCount + " withTexture=" + withTextureCount);
-            }
+
 
             int count = 0;
             lock (_trackedImages)
