@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -17,20 +17,6 @@ namespace VPB
     {
         static readonly char[] s_InvalidFileNameChars = Path.GetInvalidFileNameChars();
 
-        class PrewarmRequest
-        {
-            public string imgPath;
-            public bool isThumbnail;
-            public bool compress;
-            public bool linear;
-            public bool isNormalMap;
-            public bool createAlphaFromGrayscale;
-            public bool createNormalFromBump;
-            public float bumpStrength;
-            public bool invert;
-            public string source;
-        }
-
         [System.Serializable]
         public class ImageRequest
         {
@@ -38,16 +24,27 @@ namespace VPB
             public Texture2D texture;
         }
         public static ImageLoadingMgr singleton;
+        private NativeKtx _nativeKtx = new NativeKtx();
         private void Awake()
         {
             singleton = this;
         }
+        private void Start()
+        {
+            StartBulkKtxConversion();
+        }
+
+        private float _lastDumpTime;
+        private void Update()
+        {
+            if (Time.realtimeSinceStartup - _lastDumpTime > 1.0f)
+            {
+                _lastDumpTime = Time.realtimeSinceStartup;
+                DumpTrackedImagesToCache();
+            }
+        }
 
         Dictionary<string, Texture2D> cache = new Dictionary<string, Texture2D>();
-
-        readonly Queue<PrewarmRequest> prewarmQueue = new Queue<PrewarmRequest>();
-        readonly HashSet<string> prewarmQueuedKeys = new HashSet<string>();
-        Coroutine prewarmCoroutine;
 
         class ResizeJob
         {
@@ -57,10 +54,10 @@ namespace VPB
 
         readonly Queue<ResizeJob> resizeQueue = new Queue<ResizeJob>();
         readonly HashSet<string> resizeQueuedKeys = new HashSet<string>();
+        readonly List<ResizeJob> _trackedImages = new List<ResizeJob>();
+        readonly HashSet<ImageLoaderThreaded.QueuedImage> _trackedQiSet = new HashSet<ImageLoaderThreaded.QueuedImage>();
+        readonly List<ImageLoaderThreaded.QueuedImage> _candidateImages = new List<ImageLoaderThreaded.QueuedImage>();
         Coroutine resizeCoroutine;
-
-        double prewarmEwmaMs = 50.0;
-        bool prewarmEwmaInit;
 
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
@@ -184,25 +181,49 @@ namespace VPB
 
         public bool TryEnqueueResizeCache(ImageLoaderThreaded.QueuedImage qi)
         {
-            if (qi == null) return false;
-            if (qi.tex == null) return false;
+            if (qi == null) 
+            {
+                 LogUtil.Log("TryEnqueueResizeCache: qi is null");
+                 return false;
+            }
+
+            lock (_trackedQiSet)
+            {
+                if (_trackedQiSet.Contains(qi)) 
+                {
+                    // LogUtil.Log("TryEnqueueResizeCache: already tracked (set) " + qi.imgPath);
+                    return false;
+                }
+            }
+
+            if (qi.tex == null)
+            {
+                LogUtil.Log("TryEnqueueResizeCache skipped: tex is null for " + qi.imgPath);
+                return false;
+            }
 
             try
             {
-                if (Settings.Instance == null) return false;
-                if (!Settings.Instance.EnableTextureOptimizations.Value) return false;
-                if (Settings.Instance.ReduceTextureSize == null || !Settings.Instance.ReduceTextureSize.Value) return false;
+                if (Settings.Instance == null) { LogUtil.Log("TryEnqueueResizeCache: Settings null"); return false; }
+                if (!Settings.Instance.EnableTextureOptimizations.Value) { LogUtil.Log("TryEnqueueResizeCache: Opts disabled"); return false; }
+                if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) { LogUtil.Log("TryEnqueueResizeCache: Resize/KTX disabled"); return false; }
             }
-            catch { return false; }
+            catch (Exception ex) { LogUtil.LogError("TryEnqueueResizeCache Settings Error: " + ex); return false; }
 
             string key = GetDiskCachePath(qi, false, 0, 0);
-            if (string.IsNullOrEmpty(key)) return false;
+            if (string.IsNullOrEmpty(key)) 
+            {
+                 LogUtil.Log("TryEnqueueResizeCache skipped: key is null for " + qi.imgPath);
+                 return false;
+            }
 
-            // If no resize would occur, don't generate cache.
+            // If no resize would occur (and resize is enabled), don't generate cache unless KTX is on.
             int w = qi.tex.width;
             int h = qi.tex.height;
-            GetResizedSize(ref w, ref h, qi.imgPath);
-            //if (w == qi.tex.width && h == qi.tex.height) return false;
+            if (Settings.Instance.ReduceTextureSize.Value)
+            {
+                GetResizedSize(ref w, ref h, qi.imgPath);
+            }
 
             // If disk cache already exists, skip.
             try
@@ -210,23 +231,170 @@ namespace VPB
                 var real = GetDiskCachePath(qi, true, w, h);
                 if (!string.IsNullOrEmpty(real))
                 {
-                    if (File.Exists(real + ".cache") || File.Exists(real)) return false;
+                    if (File.Exists(real + ".cache") || File.Exists(real + ".ktx2") || File.Exists(real))
+                    {
+                        LogUtil.Log("TryEnqueueResizeCache skipped: exists " + real);
+                        return false;
+                    }
                 }
             }
             catch { }
 
-            if (resizeQueuedKeys.Contains(key)) return false;
+            if (resizeQueuedKeys.Contains(key)) 
+            {
+                LogUtil.Log("TryEnqueueResizeCache: key in resizeQueuedKeys " + key);
+                return false;
+            }
+            
+            lock (_trackedQiSet)
+            {
+                if (_trackedQiSet.Contains(qi)) return false;
+                _trackedQiSet.Add(qi);
+            }
 
-            resizeQueuedKeys.Add(key);
-            resizeQueue.Enqueue(new ResizeJob { qi = qi, key = key });
-            LogUtil.Log("Enqueued resize for " + qi.imgPath);
-            EnsureResizeCoroutine();
+            lock (_trackedImages)
+            {
+                _trackedImages.Add(new ResizeJob { qi = qi, key = key });
+            }
+            LogUtil.Log("Tracked image for later cache: " + qi.imgPath + " (format: " + qi.tex.format + " " + qi.tex.width + "x" + qi.tex.height + ")");
             return true;
+        }
+
+        public ImageLoaderThreaded.QueuedImage FindCandidateByTexture(Texture2D tex)
+        {
+            if (tex == null) return null;
+            lock (_candidateImages)
+            {
+                foreach (var qi in _candidateImages)
+                {
+                    if (qi != null && qi.tex == tex) return qi;
+                }
+            }
+            return null;
+        }
+
+        public ImageLoaderThreaded.QueuedImage FindCandidateByPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            lock (_candidateImages)
+            {
+                foreach (var qi in _candidateImages)
+                {
+                    if (qi != null && string.Equals(qi.imgPath, path, StringComparison.OrdinalIgnoreCase)) return qi;
+                }
+            }
+            return null;
+        }
+
+        public void ClearCandidates()
+        {
+            lock (_candidateImages) { _candidateImages.Clear(); }
+            lock (_trackedQiSet) { _trackedQiSet.Clear(); }
+            lock (_trackedImages) { _trackedImages.Clear(); }
+            lock (resizeQueuedKeys) { resizeQueuedKeys.Clear(); }
+            lock (resizeQueue) { resizeQueue.Clear(); }
+        }
+
+        [ThreadStatic]
+        public static string currentProcessingPath;
+        public void TrackCandidate(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null) return;
+
+            // Wrap callback to capture texture immediately upon completion.
+            // This is more reliable than waiting for scene end, as textures may be cleared from memory.
+            var originalCallback = qi.callback;
+            qi.callback = (newQi) =>
+            {
+                try
+                {
+                    LogUtil.Log("TrackCandidate callback for " + (newQi != null ? newQi.imgPath : "null") + " tex=" + (newQi != null && newQi.tex != null ? newQi.tex.name : "null"));
+                    if (newQi != null && newQi.tex != null)
+                    {
+                        TryEnqueueResizeCache(newQi);
+                    }
+                    else
+                    {
+                        LogUtil.Log("TrackCandidate callback texture missing for " + (newQi != null ? newQi.imgPath : "null"));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("Error in wrapped image callback: " + ex.Message);
+                }
+                finally
+                {
+                    if (originalCallback != null) originalCallback(newQi);
+                }
+            };
+
+            lock (_candidateImages)
+            {
+                if (!_candidateImages.Contains(qi))
+                {
+                    _candidateImages.Add(qi);
+                }
+            }
+        }
+
+        public void DumpTrackedImagesToCache()
+        {
+            int candidateCount = 0;
+            int withTextureCount = 0;
+            // First, promote candidates that now have textures
+            lock (_candidateImages)
+            {
+                candidateCount = _candidateImages.Count;
+                for (int i = _candidateImages.Count - 1; i >= 0; i--)
+                {
+                    var qi = _candidateImages[i];
+                    if (qi != null && qi.tex != null)
+                    {
+                        withTextureCount++;
+                        TryEnqueueResizeCache(qi);
+                        _candidateImages.RemoveAt(i);
+                    }
+                    else if (qi == null)
+                    {
+                        _candidateImages.RemoveAt(i);
+                    }
+                }
+            }
+
+            if (candidateCount > 0)
+            {
+                LogUtil.Log("Dump candidates: total=" + candidateCount + " withTexture=" + withTextureCount);
+            }
+
+            int count = 0;
+            lock (_trackedImages)
+            {
+                count = _trackedImages.Count;
+                if (count == 0) return;
+
+                foreach (var job in _trackedImages)
+                {
+                    if (job != null && !string.IsNullOrEmpty(job.key))
+                    {
+                        if (!resizeQueuedKeys.Contains(job.key))
+                        {
+                            resizeQueuedKeys.Add(job.key);
+                            resizeQueue.Enqueue(job);
+                        }
+                    }
+                }
+                _trackedImages.Clear();
+            }
+
+            LogUtil.Log("Dumped " + count + " tracked images to cache worker");
+            lock (_trackedQiSet) { _trackedQiSet.Clear(); }
+            EnsureResizeCoroutine();
         }
 
         IEnumerator ResizeWorker()
         {
             WaitForEndOfFrame wait = new WaitForEndOfFrame();
+            WaitForSeconds waitASecond = new WaitForSeconds(1f);
             System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
             while (true)
             {
@@ -234,6 +402,12 @@ namespace VPB
                 {
                     resizeCoroutine = null;
                     yield break;
+                }
+
+                if (LogUtil.IsSceneLoading())
+                {
+                    yield return waitASecond;
+                    continue;
                 }
 
                 sw.Reset();
@@ -266,7 +440,9 @@ namespace VPB
                         }
                     }
 
-                    if (sw.Elapsed.TotalMilliseconds > 5.0)
+                    // Process more per frame if we are not loading a scene.
+                    float msLimit = LogUtil.IsSceneLoading() ? 5.0f : 30.0f;
+                    if (sw.Elapsed.TotalMilliseconds > msLimit)
                     {
                         break;
                     }
@@ -286,15 +462,48 @@ namespace VPB
 
             int width = qi.tex.width;
             int height = qi.tex.height;
-            GetResizedSize(ref width, ref height, qi.imgPath);
+            if (Settings.Instance.ReduceTextureSize.Value)
+            {
+                GetResizedSize(ref width, ref height, qi.imgPath);
+            }
 
+            bool enableKtx = Settings.Instance.EnableKtxCompression.Value;
             var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
             if (string.IsNullOrEmpty(realDiskCachePath)) return;
-            var realDiskCachePathCache = realDiskCachePath + ".cache";
+            var realDiskCachePathCache = realDiskCachePath + (enableKtx ? ".ktx2" : ".cache");
 
             if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath)) return;
 
             LogUtil.Log("Generating cache for " + qi.imgPath + " -> " + realDiskCachePathCache);
+
+            // OPTIMIZATION: If no resize needed and already DXT, just grab the bytes.
+            if (width == qi.tex.width && height == qi.tex.height && (qi.tex.format == TextureFormat.DXT1 || qi.tex.format == TextureFormat.DXT5))
+            {
+                try
+                {
+                    var bytes = qi.tex.GetRawTextureData();
+                    if (bytes != null && bytes.Length > 0)
+                    {
+                        byte[] pooledBytes = ByteArrayPool.Rent(bytes.Length);
+                        Array.Copy(bytes, pooledBytes, bytes.Length);
+
+                        JSONClass jSON = new JSONClass();
+                        jSON["type"] = enableKtx ? "ktx" : "image";
+                        jSON["width"].AsInt = qi.tex.width;
+                        jSON["height"].AsInt = qi.tex.height;
+                        jSON["resizedWidth"].AsInt = width;
+                        jSON["resizedHeight"].AsInt = height;
+                        jSON["format"] = qi.tex.format.ToString();
+
+                        WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), enableKtx, width, height, qi.tex.format, qi.linear);
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("Fast-path GetRawTextureData failed, falling back to blit: " + ex.Message);
+                }
+            }
 
             // Generate the resized/compressed texture and write to disk cache.
             Texture2D tmp = null;
@@ -332,14 +541,14 @@ namespace VPB
                 int realLength = bytes.Length;
                 
                 JSONClass jSONClass = new JSONClass();
-                jSONClass["type"] = "image";
+                jSONClass["type"] = enableKtx ? "ktx" : "image";
                 jSONClass["width"].AsInt = qi.tex.width;
                 jSONClass["height"].AsInt = qi.tex.height;
                 jSONClass["resizedWidth"].AsInt = width;
                 jSONClass["resizedHeight"].AsInt = height;
                 jSONClass["format"] = tmp.format.ToString();
                 
-                WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, realLength, diskCachePath + ".meta", jSONClass.ToString(string.Empty));
+                WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, realLength, diskCachePath + ".meta", jSONClass.ToString(string.Empty), enableKtx, width, height, tmp.format, qi.linear);
 
                 // Note: we intentionally do NOT RegisterTexture or swap qi.tex in this async cache path.
                 // This prevents unexpected texture replacement mid-frame; future loads will hit disk/mem cache.
@@ -358,7 +567,7 @@ namespace VPB
             }
         }
 
-        void WriteDiskCacheAsync(string pathCache, byte[] bytes, int length, string pathMeta, string metaContent)
+        void WriteDiskCacheAsync(string pathCache, byte[] bytes, int length, string pathMeta, string metaContent, bool isKtx = false, int w = 0, int h = 0, TextureFormat fmt = TextureFormat.RGBA32, bool linear = false)
         {
             ThreadPool.QueueUserWorkItem((state) =>
             {
@@ -366,9 +575,52 @@ namespace VPB
                 {
                     if (bytes != null && !string.IsNullOrEmpty(pathCache))
                     {
-                        using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
+                        if (isKtx)
                         {
-                            fs.Write(bytes, 0, length);
+                            _nativeKtx.Initialize();
+                            var input = new DxtMipChain();
+                            input.width = w;
+                            input.height = h;
+                            input.mipCount = 1; 
+                            input.data = bytes;
+                            input.isSRGB = !linear;
+                             
+                            if (fmt == TextureFormat.DXT1) input.format = KtxTestFormat.Dxt1;
+                            else if (fmt == TextureFormat.DXT5) input.format = KtxTestFormat.Dxt5;
+                            else if (fmt == TextureFormat.RGB24) input.format = KtxTestFormat.Rgb24;
+                            else if (fmt == TextureFormat.RGBA32) input.format = KtxTestFormat.Rgba32;
+                            else input.format = KtxTestFormat.Rgba32; 
+                            
+                            int mip0Size = length;
+                            int blockSize = 0;
+                            if (fmt == TextureFormat.DXT1) blockSize = 8;
+                            else if (fmt == TextureFormat.DXT5) blockSize = 16;
+                            else if (fmt == TextureFormat.RGB24) blockSize = 3;
+                            else if (fmt == TextureFormat.RGBA32) blockSize = 4;
+
+                            if (blockSize > 0)
+                            {
+                                int expectedSize;
+                                if (fmt == TextureFormat.DXT1 || fmt == TextureFormat.DXT5)
+                                    expectedSize = Math.Max(1, (w + 3) / 4) * Math.Max(1, (h + 3) / 4) * blockSize;
+                                else
+                                    expectedSize = w * h * blockSize;
+
+                                if (length > expectedSize) mip0Size = expectedSize;
+                            }
+                             
+                            input.mipOffsets = new int[] { 0 };
+                            input.mipSizes = new int[] { mip0Size };
+                            input.dataSize = mip0Size;
+                             
+                            _nativeKtx.WriteKtxFromDxt(pathCache, input);
+                        }
+                        else
+                        {
+                            using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
+                            {
+                                fs.Write(bytes, 0, length);
+                            }
                         }
                     }
                     if (!string.IsNullOrEmpty(metaContent) && !string.IsNullOrEmpty(pathMeta))
@@ -389,15 +641,26 @@ namespace VPB
         {
             if (qi == null) return false;
             if (!Settings.Instance.EnableTextureOptimizations.Value) return false;
-            var imgPath = qi.imgPath;
-            if (string.IsNullOrEmpty(imgPath)) return false;
+            if (string.IsNullOrEmpty(qi.imgPath)) return false;
 
+            bool originalLinear = qi.linear;
+            if (RequestImpl(qi)) return true;
+
+            qi.linear = !originalLinear;
+            if (RequestImpl(qi)) return true;
+
+            qi.linear = originalLinear;
+            return false;
+        }
+
+        private bool RequestImpl(ImageLoaderThreaded.QueuedImage qi)
+        {
             LogUtil.MarkImageActivity();
             var swRequest = System.Diagnostics.Stopwatch.StartNew();
             var diskCachePath = GetDiskCachePath(qi,false,0,0);
             if (string.IsNullOrEmpty(diskCachePath)) return false;
 
-            //LogUtil.Log("request img:"+ diskCachePath);
+            LogUtil.Log("Request checking: " + diskCachePath + " linear=" + qi.linear);
 
             var cacheTexture = GetTextureFromCache(diskCachePath);
             if (cacheTexture!=null)
@@ -437,6 +700,11 @@ namespace VPB
             {
                 metaToUse = legacyMetaPath;
             }
+            else
+            {
+                 LogUtil.Log("Request meta missing: " + metaPath + " (legacy: " + legacyMetaPath + ")");
+            }
+            
             if (metaToUse != null)
             {
                 var jsonString = File.ReadAllText(metaToUse);
@@ -449,15 +717,40 @@ namespace VPB
                     if (asObject["format"] != null) textureFormat = (TextureFormat)System.Enum.Parse(typeof(TextureFormat), asObject["format"]);
                 }
 
-                GetResizedSize(ref width, ref height, qi.imgPath);
+                if (Settings.Instance.ReduceTextureSize.Value)
+                {
+                    GetResizedSize(ref width, ref height, qi.imgPath);
+                }
 
                 var realDiskCachePath = GetDiskCachePath(qi, true,width, height);
                 var diskPathToUse = realDiskCachePath + ".cache";
+                bool isKtx = asObject != null && asObject["type"].Value.ToLower() == "ktx";
+                if (isKtx) diskPathToUse = realDiskCachePath + ".ktx2";
+
                 if (!File.Exists(diskPathToUse))
                 {
-                    // Backward-compat for caches previously written without extension.
-                    diskPathToUse = realDiskCachePath;
+                    LogUtil.Log("Request cache missing: " + diskPathToUse + " isKtx=" + isKtx + " type=" + (asObject != null ? asObject["type"].Value : "null") + " meta=" + metaToUse);
+                    if (!isKtx && File.Exists(realDiskCachePath + ".ktx2"))
+                    {
+                        LogUtil.Log("BUT .ktx2 exists! Meta content: " + jsonString);
+                    }
+
+                    if (isKtx)
+                    {
+                        // Fallback to .cache if ktx missing? 
+                        if (File.Exists(realDiskCachePath + ".cache"))
+                        {
+                            diskPathToUse = realDiskCachePath + ".cache";
+                            isKtx = false;
+                        }
+                    }
+                    else
+                    {
+                        // Backward-compat for caches previously written without extension.
+                        diskPathToUse = realDiskCachePath;
+                    }
                 }
+
                 if (File.Exists(diskPathToUse))
                 {
                     LogUtil.PerfAdd("Img.Cache.DiskHit", 0, 0);
@@ -470,49 +763,72 @@ namespace VPB
 
                     try
                     {
-                        using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
+                        if (isKtx)
                         {
-                            int len = (int)fs.Length;
-                            bytes = ByteArrayPool.Rent(len);
-                            bytesLen = len;
-                            int offset = 0;
-                            int remaining = len;
-                            while (remaining > 0)
+                            _nativeKtx.Initialize();
+                            var chain = _nativeKtx.ReadDxtFromKtx(diskPathToUse);
+                            if (chain != null)
                             {
-                                int read = fs.Read(bytes, offset, remaining);
-                                if (read <= 0) break;
-                                offset += read;
-                                remaining -= read;
+                                textureFormat = TextureFormat.DXT1;
+                                if (chain.format == KtxTestFormat.Dxt1) textureFormat = TextureFormat.DXT1;
+                                else if (chain.format == KtxTestFormat.Dxt5) textureFormat = TextureFormat.DXT5;
+                                else if (chain.format == KtxTestFormat.Rgb24) textureFormat = TextureFormat.RGB24;
+                                else if (chain.format == KtxTestFormat.Rgba32) textureFormat = TextureFormat.RGBA32;
+
+                                width = chain.width;
+                                height = chain.height;
+                                bytes = chain.data;
+                                bytesLen = bytes.Length;
+                                success = true;
                             }
                         }
-
-                        LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytesLen);
-                        LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytesLen);
-
-                        tex = new Texture2D(width, height, textureFormat, false, qi.linear);
-                        tex.LoadRawTextureData(bytes);
-                        success = true;
+                        else
+                        {
+                            using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
+                            {
+                                int len = (int)fs.Length;
+                                bytes = ByteArrayPool.Rent(len);
+                                bytesLen = len;
+                                int offset = 0;
+                                int remaining = len;
+                                while (remaining > 0)
+                                {
+                                    int read = fs.Read(bytes, offset, remaining);
+                                    if (read <= 0) break;
+                                    offset += read;
+                                    remaining -= read;
+                                }
+                            }
+                            success = true;
+                        }
                     }
                     catch (System.Exception ex)
                     {
                         LogUtil.LogError("request load disk cache fail:" + diskPathToUse + " " + ex.ToString());
                         try { File.Delete(diskPathToUse); } catch { }
                     }
-                    finally
-                    {
-                        if (bytes != null) ByteArrayPool.Return(bytes);
-                    }
 
                     if (success)
                     {
+                        LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytesLen);
+                        LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytesLen);
+
+                        tex = new Texture2D(width, height, textureFormat, false, qi.linear);
+                        tex.LoadRawTextureData(bytes);
                         tex.Apply();
                         qi.tex = tex;
 
                         RegisterTexture(diskCachePath, tex);
 
+                        if (!isKtx && bytes != null) ByteArrayPool.Return(bytes);
+
                         Messager.singleton.StartCoroutine(DelayDoCallback(qi));
                         LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
                         return true;
+                    }
+                    else
+                    {
+                        if (!isKtx && bytes != null) ByteArrayPool.Return(bytes);
                     }
                 }
             }
@@ -529,473 +845,109 @@ namespace VPB
             return false;
         }
 
-        public void StartScenePrewarm(string sceneSaveName, string sceneJsonText)
+        public void StartBulkKtxConversion()
         {
-            if (Settings.Instance == null) return;
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (Settings.Instance.ScenePrewarmEnabled == null || !Settings.Instance.ScenePrewarmEnabled.Value)
-            {
+            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value || !Settings.Instance.EnableKtxCompression.Value)
                 return;
-            }
-            if (Settings.Instance.ReduceTextureSize == null || !Settings.Instance.ReduceTextureSize.Value)
-            {
-                return;
-            }
-            if (string.IsNullOrEmpty(sceneJsonText))
-            {
-                return;
-            }
 
-            JObject root;
-            try
-            {
-                root = JObject.Parse(sceneJsonText);
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("PREWARM parse scene json failed: " + sceneSaveName + " " + ex.ToString());
-                return;
-            }
+            string cacheDir = VamHookPlugin.GetCacheDir();
+            if (!Directory.Exists(cacheDir)) return;
 
-            var roots = new List<KeyValuePair<string, JObject>>();
-            roots.Add(new KeyValuePair<string, JObject>(sceneSaveName, root));
-
-            try
+            LogUtil.Log("Starting bulk KTX conversion...");
+            ThreadPool.QueueUserWorkItem((state) =>
             {
-                CollectReferencedJsonRoots(root, sceneSaveName, roots);
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("PREWARM deep json scan failed: " + sceneSaveName + " " + ex.ToString());
-            }
-
-            var requests = new List<PrewarmRequest>(64);
-            for (int i = 0; i < roots.Count; i++)
-            {
-                var kv = roots[i];
-                var src = kv.Key;
-                var r = kv.Value;
-                if (r == null) continue;
-                var sub = BuildPrewarmRequestsFromScene(r, src);
-                if (sub == null || sub.Count == 0) continue;
-                requests.AddRange(sub);
-            }
-            if (requests == null || requests.Count == 0)
-            {
-                return;
-            }
-
-            int added = 0;
-            for (int i = 0; i < requests.Count; i++)
-            {
-                var req = requests[i];
-                if (req == null || string.IsNullOrEmpty(req.imgPath)) continue;
-                if (TryEnqueuePrewarm(req))
+                try
                 {
-                    added++;
+                    BulkKtxWorker(cacheDir);
                 }
-            }
-
-            if (added > 0)
-            {
-                LogUtil.Log("PREWARM start scene=" + sceneSaveName + " requests=" + added);
-                EnsurePrewarmCoroutine();
-            }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("Bulk KTX conversion failed: " + ex.ToString());
+                }
+            });
         }
 
-        static bool IsLikelyJsonPathValue(string value)
+        private void BulkKtxWorker(string cacheDir)
         {
-            if (string.IsNullOrEmpty(value)) return false;
+            var native = new NativeKtx();
+            native.Initialize();
 
-            string v;
-            try { v = value.Trim(); } catch { v = value; }
-            if (string.IsNullOrEmpty(v)) return false;
+            string[] files = Directory.GetFiles(cacheDir, "*.cache", SearchOption.TopDirectoryOnly);
+            LogUtil.Log(string.Format("Bulk KTX: Found {0} .cache files", files.Length));
 
-            try
+            int converted = 0;
+            int skipped = 0;
+            int failed = 0;
+
+            foreach (var file in files)
             {
-                if (v.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return false;
-            }
-            catch { }
-
-            string lower;
-            try { lower = v.ToLowerInvariant(); } catch { lower = v; }
-            return lower.EndsWith(".json");
-        }
-
-        static void CollectJsonValues(JToken token, List<string> found)
-        {
-            if (token == null) return;
-
-            var obj = token as JObject;
-            if (obj != null)
-            {
-                foreach (var prop in obj.Properties())
+                try
                 {
-                    if (prop == null) continue;
-                    var v = prop.Value;
-                    if (v != null && v.Type == JTokenType.String)
+                    string ktxPath = file.Substring(0, file.Length - 6) + ".ktx2";
+                    if (File.Exists(ktxPath))
                     {
-                        string s = null;
-                        try { s = v.Value<string>(); } catch { }
-                        if (!string.IsNullOrEmpty(s) && IsLikelyJsonPathValue(s))
-                        {
-                            found.Add(s);
-                        }
-                    }
-                    CollectJsonValues(prop.Value, found);
-                }
-                return;
-            }
-
-            var arr = token as JArray;
-            if (arr != null)
-            {
-                for (int i = 0; i < arr.Count; i++)
-                {
-                    var item = arr[i];
-                    if (item != null && item.Type == JTokenType.String)
-                    {
-                        string s = null;
-                        try { s = item.Value<string>(); } catch { }
-                        if (!string.IsNullOrEmpty(s) && IsLikelyJsonPathValue(s))
-                        {
-                            found.Add(s);
-                        }
+                        skipped++;
                         continue;
                     }
-                    CollectJsonValues(item, found);
+
+                    string metaPath = file.Substring(0, file.Length - 6) + ".meta";
+                    if (!File.Exists(metaPath))
+                    {
+                        // Fallback to old meta path if needed
+                        if (File.Exists(file + ".meta")) metaPath = file + ".meta";
+                        else { skipped++; continue; }
+                    }
+
+                    var metaJson = JSON.Parse(File.ReadAllText(metaPath));
+                    var type = metaJson["type"].Value;
+                    if (type == "ktx") { skipped++; continue; }
+
+                    int w = metaJson["resizedWidth"].AsInt;
+                    int h = metaJson["resizedHeight"].AsInt;
+                    if (w == 0 || h == 0)
+                    {
+                        w = metaJson["width"].AsInt;
+                        h = metaJson["height"].AsInt;
+                    }
+                    if (w == 0 || h == 0) { skipped++; continue; }
+
+                    string fmtStr = metaJson["format"].Value;
+                    KtxTestFormat format = KtxTestFormat.Dxt5;
+                    if (fmtStr == "DXT1") format = KtxTestFormat.Dxt1;
+                    else if (fmtStr == "DXT5") format = KtxTestFormat.Dxt5;
+                    else if (fmtStr == "RGB24") format = KtxTestFormat.Rgb24;
+                    else if (fmtStr == "RGBA32") format = KtxTestFormat.Rgba32;
+                    else { skipped++; continue; }
+
+                    byte[] dxtData = File.ReadAllBytes(file);
+                    var input = new DxtMipChain();
+                    input.width = w;
+                    input.height = h;
+                    input.format = format;
+                    input.mipCount = 1;
+                    input.data = dxtData;
+                    input.mipOffsets = new int[] { 0 };
+                    input.mipSizes = new int[] { dxtData.Length };
+
+                    native.WriteKtxFromDxt(ktxPath, input);
+
+                    // Update meta to reflect KTX type
+                    metaJson["type"] = "ktx";
+                    File.WriteAllText(metaPath, metaJson.ToString(string.Empty));
+
+                    converted++;
                 }
-                return;
+                catch (Exception ex)
+                {
+                    failed++;
+                    LogUtil.LogError("Bulk KTX: Failed to convert " + file + ": " + ex.Message);
+                }
             }
+
+            LogUtil.Log(string.Format("Bulk KTX completed: {0} converted, {1} skipped, {2} failed", converted, skipped, failed));
         }
 
-        static string TryReadAllTextPath(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return null;
-            try
-            {
-                if (File.Exists(path))
-                {
-                    return File.ReadAllText(path);
-                }
-            }
-            catch { }
-
-            try
-            {
-                using (var fileEntryStream = MVR.FileManagement.FileManager.OpenStream(path, true))
-                {
-                    using (var sr = new StreamReader(fileEntryStream.Stream))
-                    {
-                        return sr.ReadToEnd();
-                    }
-                }
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        void CollectReferencedJsonRoots(JObject sceneRoot, string sceneSaveName, List<KeyValuePair<string, JObject>> roots)
-        {
-            if (sceneRoot == null) return;
-            if (roots == null) return;
-
-            int maxDepth = 3;
-            int maxFiles = 64;
-            var visited = new HashSet<string>();
-            var queue = new Queue<KeyValuePair<string, int>>();
-
-            var initial = new List<string>(32);
-            CollectJsonValues(sceneRoot, initial);
-            for (int i = 0; i < initial.Count; i++)
-            {
-                var p = initial[i];
-                if (string.IsNullOrEmpty(p)) continue;
-                queue.Enqueue(new KeyValuePair<string, int>(p, 1));
-            }
-
-            while (queue.Count > 0)
-            {
-                var kv = queue.Dequeue();
-                var jsonPath = kv.Key;
-                var depth = kv.Value;
-
-                if (string.IsNullOrEmpty(jsonPath)) continue;
-                if (depth > maxDepth) continue;
-                if (visited.Count >= maxFiles) break;
-
-                string canonical = ResolveCanonicalImagePath(jsonPath);
-                if (string.IsNullOrEmpty(canonical)) continue;
-                if (visited.Contains(canonical)) continue;
-                visited.Add(canonical);
-
-                var text = TryReadAllTextPath(canonical);
-                if (string.IsNullOrEmpty(text)) continue;
-
-                JObject root;
-                try
-                {
-                    root = JObject.Parse(text);
-                }
-                catch
-                {
-                    continue;
-                }
-
-                roots.Add(new KeyValuePair<string, JObject>(sceneSaveName + ":" + canonical, root));
-
-                var next = new List<string>(16);
-                CollectJsonValues(root, next);
-                for (int i = 0; i < next.Count; i++)
-                {
-                    var p = next[i];
-                    if (string.IsNullOrEmpty(p)) continue;
-                    queue.Enqueue(new KeyValuePair<string, int>(p, depth + 1));
-                }
-            }
-
-            LogUtil.Log("PREWARM deepjson scene=" + sceneSaveName + " roots=" + roots.Count + " jsonFiles=" + visited.Count);
-        }
-
-        void EnsurePrewarmCoroutine()
-        {
-            if (prewarmCoroutine != null) return;
-            try
-            {
-                prewarmCoroutine = StartCoroutine(PrewarmWorker());
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("PREWARM start coroutine failed: " + ex.ToString());
-            }
-        }
-
-        bool TryEnqueuePrewarm(PrewarmRequest req)
-        {
-            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value) return false;
-
-            string canonicalPath = ResolveCanonicalImagePath(req.imgPath);
-            if (string.IsNullOrEmpty(canonicalPath))
-            {
-                return false;
-            }
-
-            var qi = new ImageLoaderThreaded.QueuedImage();
-            qi.imgPath = canonicalPath;
-            qi.isThumbnail = req.isThumbnail;
-            qi.compress = req.compress;
-            qi.linear = req.linear;
-            qi.isNormalMap = req.isNormalMap;
-            qi.createAlphaFromGrayscale = req.createAlphaFromGrayscale;
-            qi.createNormalFromBump = req.createNormalFromBump;
-            qi.bumpStrength = req.bumpStrength;
-            qi.invert = req.invert;
-
-            string key = GetDiskCachePath(qi, false, 0, 0);
-            if (string.IsNullOrEmpty(key))
-            {
-                return false;
-            }
-            if (prewarmQueuedKeys.Contains(key))
-            {
-                return false;
-            }
-
-            req.imgPath = canonicalPath;
-            prewarmQueuedKeys.Add(key);
-            prewarmQueue.Enqueue(req);
-            LogUtil.Log("PREWARM enqueue src=" + (req.source ?? "?") + " path=" + canonicalPath + " flags=" + GetDiskCacheSignature(qi, true, 0, 0));
-
-            return true;
-        }
-
-        IEnumerator PrewarmWorker()
-        {
-            WaitForEndOfFrame wait = new WaitForEndOfFrame();
-            System.Diagnostics.Stopwatch swFrame = new System.Diagnostics.Stopwatch();
-            while (true)
-            {
-                if (prewarmQueue.Count == 0 || Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value)
-                {
-                    prewarmQueue.Clear();
-                    prewarmQueuedKeys.Clear();
-                    prewarmCoroutine = null;
-                    yield break;
-                }
-
-                swFrame.Reset();
-                swFrame.Start();
-
-                while (prewarmQueue.Count > 0)
-                {
-                    var req = prewarmQueue.Dequeue();
-                    if (req != null && !string.IsNullOrEmpty(req.imgPath))
-                    {
-                        try
-                        {
-                            var sw = System.Diagnostics.Stopwatch.StartNew();
-                            PrewarmImage(req);
-                            sw.Stop();
-                            UpdatePrewarmCost(sw.Elapsed.TotalMilliseconds);
-                        }
-                        catch (Exception ex)
-                        {
-                            LogUtil.LogError("PREWARM error path=" + req.imgPath + " " + ex.ToString());
-                        }
-                    }
-
-                    // Budget of 5ms per frame to match ResizeWorker
-                    if (swFrame.Elapsed.TotalMilliseconds > 5.0)
-                    {
-                        break;
-                    }
-                }
-
-                yield return wait;
-            }
-        }
-
-        void PrewarmImage(PrewarmRequest req)
-        {
-            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value) return;
-
-            var qi = new ImageLoaderThreaded.QueuedImage();
-            qi.imgPath = req.imgPath;
-            qi.isThumbnail = req.isThumbnail;
-            qi.compress = req.compress;
-            qi.linear = req.linear;
-            qi.isNormalMap = req.isNormalMap;
-            qi.createAlphaFromGrayscale = req.createAlphaFromGrayscale;
-            qi.createNormalFromBump = req.createNormalFromBump;
-            qi.bumpStrength = req.bumpStrength;
-            qi.invert = req.invert;
-
-            string diskCachePath = GetDiskCachePath(qi, false, 0, 0);
-            if (string.IsNullOrEmpty(diskCachePath))
-            {
-                return;
-            }
-
-            var cacheTexture = GetTextureFromCache(diskCachePath);
-            if (cacheTexture != null)
-            {
-                LogUtil.Log("PREWARM hit.mem path=" + req.imgPath);
-                return;
-            }
-
-            var metaPath = diskCachePath + ".meta";
-            int width = 0;
-            int height = 0;
-            if (File.Exists(metaPath))
-            {
-                try
-                {
-                    var jsonString = File.ReadAllText(metaPath);
-                    JSONNode jSONNode = JSON.Parse(jsonString);
-                    JSONClass asObject = jSONNode.AsObject;
-                    if (asObject != null)
-                    {
-                        if (asObject["width"] != null) width = asObject["width"].AsInt;
-                        if (asObject["height"] != null) height = asObject["height"].AsInt;
-                    }
-
-                    GetResizedSize(ref width, ref height, req.imgPath);
-                    var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
-                    var realDiskCachePathCache = realDiskCachePath + ".cache";
-                    if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath))
-                    {
-                        LogUtil.Log("PREWARM hit.disk path=" + req.imgPath + " cache=" + (File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath));
-                        return;
-                    }
-                }
-                catch { }
-
-                if (width > 0 && height > 0)
-                {
-                    GetResizedSize(ref width, ref height, req.imgPath);
-                    var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
-                    var realDiskCachePathCache = realDiskCachePath + ".cache";
-                    if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath))
-                    {
-                        LogUtil.Log("PREWARM hit.disk path=" + req.imgPath + " cache=" + (File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath));
-                        return;
-                    }
-                }
-            }
-
-            byte[] bytes = null;
-            try
-            {
-                using (var fileEntryStream = MVR.FileManagement.FileManager.OpenStream(req.imgPath, true))
-                {
-                    using (var ms = new MemoryStream())
-                    {
-                        var s = fileEntryStream.Stream;
-                        byte[] buffer = new byte[81920];
-                        int read;
-                        while ((read = s.Read(buffer, 0, buffer.Length)) > 0)
-                        {
-                            ms.Write(buffer, 0, read);
-                        }
-                        bytes = ms.ToArray();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("PREWARM read fail path=" + req.imgPath + " " + ex.ToString());
-                return;
-            }
-
-            if (bytes == null || bytes.Length == 0)
-            {
-                return;
-            }
-
-            Texture2D tex = null;
-            try
-            {
-                tex = new Texture2D(2, 2, TextureFormat.RGBA32, false, qi.linear);
-                if (!tex.LoadImage(bytes, false))
-                {
-                    UnityEngine.Object.Destroy(tex);
-                    return;
-                }
-                qi.tex = tex;
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                
-                Texture2D resized = GetResizedTextureFromBytes(qi);
-                
-                if (resized != null)
-                {
-                    LogUtil.Log("PREWARM generate ok path=" + req.imgPath + " ms=" + sw.Elapsed.TotalMilliseconds.ToString("0") + " resized=" + resized.width + "x" + resized.height);
-
-                    string k = GetDiskCachePath(qi, false, 0, 0);
-                    if (!string.IsNullOrEmpty(k))
-                    {
-                        cache.Remove(k);
-                    }
-                    UnityEngine.Object.Destroy(resized);
-                    qi.tex = null;
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("PREWARM generate fail path=" + req.imgPath + " " + ex.ToString());
-            }
-            finally
-            {
-                if (qi != null && qi.tex != null)
-                {
-                    UnityEngine.Object.Destroy(qi.tex);
-                    qi.tex = null;
-                }
-            }
-        }
-
-        static bool IsUrlFieldName(string name)
+        static bool IsLikelyUrlFieldName(string name)
         {
             if (string.IsNullOrEmpty(name)) return false;
             try
@@ -1025,315 +977,6 @@ namespace VPB
             return false;
         }
 
-        static bool IsLikelyNormalMapSlot(string slotName)
-        {
-            if (string.IsNullOrEmpty(slotName)) return false;
-            string n;
-            try { n = slotName.ToLowerInvariant(); } catch { n = slotName; }
-            return n.Contains("normal");
-        }
-
-        static bool IsLikelyThumbnailSlot(string slotName)
-        {
-            if (string.IsNullOrEmpty(slotName)) return false;
-            string n;
-            try { n = slotName.ToLowerInvariant(); } catch { n = slotName; }
-            return n.Contains("thumb");
-        }
-
-        static bool IsLikelyAlphaPath(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            string p;
-            try { p = path.ToLowerInvariant(); } catch { p = path; }
-            return p.Contains("alpha") || p.Contains("opacity");
-        }
-
-        static bool IsLikelyNormalMapPath(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            string p;
-            try { p = path.ToLowerInvariant(); } catch { p = path; }
-            if (p.Contains("normal")) return true;
-            if (p.Contains("_nrm")) return true;
-            if (p.EndsWith("_n.png") || p.EndsWith("_n.jpg") || p.EndsWith("_n.jpeg")) return true;
-            return false;
-        }
-
-        static bool IsLikelyFilePathValue(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return false;
-
-            string v;
-            try { v = value.Trim(); } catch { v = value; }
-            if (string.IsNullOrEmpty(v)) return false;
-
-            bool looksLikePath = false;
-            try
-            {
-                looksLikePath = v.Contains(":/") || v.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) || v.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                looksLikePath = v.Contains(":/");
-            }
-            if (!looksLikePath) return false;
-
-            string lower;
-            try { lower = v.ToLowerInvariant(); } catch { lower = v; }
-
-            if (lower.EndsWith(".png") || lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".tga") || lower.EndsWith(".bmp") || lower.EndsWith(".tif") || lower.EndsWith(".tiff")) return true;
-            if (lower.EndsWith(".assetbundle") || lower.EndsWith(".shaderbundle") || lower.EndsWith(".audiobundle")) return true;
-
-            return false;
-        }
-
-        List<PrewarmRequest> BuildPrewarmRequestsFromScene(JObject root, string sceneSaveName)
-        {
-            var list = new List<PrewarmRequest>(64);
-            if (root == null) return list;
-
-            var found = new List<KeyValuePair<string, string>>(64);
-            CollectUrlValues(root, found);
-
-            string contextPackageUid = null;
-            try
-            {
-                int idx = sceneSaveName != null ? sceneSaveName.IndexOf(":/", StringComparison.Ordinal) : -1;
-                if (idx > 0)
-                {
-                    contextPackageUid = sceneSaveName.Substring(0, idx);
-                }
-            }
-            catch { }
-
-            for (int i = 0; i < found.Count; i++)
-            {
-                var kv = found[i];
-                var slotName = kv.Key;
-                var path = kv.Value;
-                if (string.IsNullOrEmpty(path)) continue;
-                if (!IsLikelyFilePathValue(path)) continue;
-
-                if (path.StartsWith("SELF:/", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(contextPackageUid))
-                {
-                    try
-                    {
-                        path = contextPackageUid + ":/" + path.Substring("SELF:/".Length);
-                    }
-                    catch { }
-                }
-
-                bool createAlphaFromGrayscale = IsLikelyAlphaPath(slotName) || IsLikelyAlphaPath(path);
-                bool isNormalMap = IsLikelyNormalMapSlot(slotName) || IsLikelyNormalMapPath(path);
-                bool linear = IsLikelyDataTextureSlot(slotName) || isNormalMap;
-                bool isThumb = IsLikelyThumbnailSlot(slotName);
-
-                var req = new PrewarmRequest();
-                req.imgPath = path;
-                req.isThumbnail = isThumb;
-                req.compress = true;
-                req.linear = linear;
-                req.isNormalMap = isNormalMap;
-                req.createAlphaFromGrayscale = createAlphaFromGrayscale;
-                req.createNormalFromBump = false;
-                req.bumpStrength = 1f;
-                req.invert = false;
-                req.source = sceneSaveName + ":" + slotName;
-                list.Add(req);
-
-                if (!isThumb)
-                {
-                    var req2 = new PrewarmRequest();
-                    req2.imgPath = path;
-                    req2.isThumbnail = true;
-                    req2.compress = true;
-                    req2.linear = linear;
-                    req2.isNormalMap = isNormalMap;
-                    req2.createAlphaFromGrayscale = createAlphaFromGrayscale;
-                    req2.createNormalFromBump = false;
-                    req2.bumpStrength = 1f;
-                    req2.invert = false;
-                    req2.source = sceneSaveName + ":" + slotName + ":thumb";
-                    list.Add(req2);
-                }
-            }
-
-            return list;
-        }
-
-        static void CollectUrlValues(JToken token, List<KeyValuePair<string, string>> found)
-        {
-            if (token == null) return;
-
-            var obj = token as JObject;
-            if (obj != null)
-            {
-                foreach (var prop in obj.Properties())
-                {
-                    if (prop == null) continue;
-                    var name = prop.Name;
-                    if (IsUrlFieldName(name))
-                    {
-                        var v = prop.Value;
-                        if (v != null && v.Type == JTokenType.String)
-                        {
-                            string s = null;
-                            try { s = v.Value<string>(); } catch { }
-                            if (!string.IsNullOrEmpty(s))
-                            {
-                                found.Add(new KeyValuePair<string, string>(name, s));
-                            }
-                        }
-                    }
-                    else
-                    {
-                        var v = prop.Value;
-                        if (v != null && v.Type == JTokenType.String)
-                        {
-                            string s = null;
-                            try { s = v.Value<string>(); } catch { }
-                            if (!string.IsNullOrEmpty(s) && IsLikelyFilePathValue(s))
-                            {
-                                found.Add(new KeyValuePair<string, string>(name, s));
-                            }
-                        }
-                    }
-
-                    CollectUrlValues(prop.Value, found);
-                }
-                return;
-            }
-
-            var arr = token as JArray;
-            if (arr != null)
-            {
-                for (int i = 0; i < arr.Count; i++)
-                {
-                    var item = arr[i];
-                    if (item != null && item.Type == JTokenType.String)
-                    {
-                        string s = null;
-                        try { s = item.Value<string>(); } catch { }
-                        if (!string.IsNullOrEmpty(s) && IsLikelyFilePathValue(s))
-                        {
-                            found.Add(new KeyValuePair<string, string>("array", s));
-                        }
-                        continue;
-                    }
-
-                    CollectUrlValues(item, found);
-                }
-                return;
-            }
-        }
-
-        static string ResolveCanonicalImagePath(string imgPath)
-        {
-            if (string.IsNullOrEmpty(imgPath)) return imgPath;
-
-            try
-            {
-                if (imgPath.IndexOf(".latest", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
-                    if (fileEntry != null)
-                    {
-                        try
-                        {
-                            var uid = fileEntry.Uid;
-                            if (!string.IsNullOrEmpty(uid) && uid.IndexOf(".latest", StringComparison.OrdinalIgnoreCase) < 0)
-                            {
-                                return uid;
-                            }
-                        }
-                        catch { }
-                        try
-                        {
-                            var p = fileEntry.Path;
-                            if (!string.IsNullOrEmpty(p) && p.IndexOf(".latest", StringComparison.OrdinalIgnoreCase) < 0)
-                            {
-                                return p;
-                            }
-                        }
-                        catch { }
-                    }
-                }
-            }
-            catch { }
-
-            string packageUid;
-            string internalPath;
-            if (!TrySplitVarPath(imgPath, out packageUid, out internalPath))
-            {
-                return imgPath;
-            }
-
-            if (!packageUid.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
-            {
-                return imgPath;
-            }
-
-            VarPackage resolved = ResolveLatestInstalledPackage(packageUid);
-            if (resolved == null)
-            {
-                return imgPath;
-            }
-
-            return resolved.Uid + ":/" + internalPath;
-        }
-
-        static bool TrySplitVarPath(string path, out string packageUidOrRef, out string internalPath)
-        {
-            packageUidOrRef = null;
-            internalPath = null;
-            if (string.IsNullOrEmpty(path)) return false;
-
-            int idx = path.IndexOf(":/", StringComparison.Ordinal);
-            if (idx <= 0) return false;
-
-            packageUidOrRef = path.Substring(0, idx);
-            internalPath = path.Substring(idx + 2);
-            return !string.IsNullOrEmpty(packageUidOrRef) && !string.IsNullOrEmpty(internalPath);
-        }
-
-        static VarPackage ResolveLatestInstalledPackage(string packageLatestRef)
-        {
-            if (string.IsNullOrEmpty(packageLatestRef)) return null;
-            if (!packageLatestRef.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            try
-            {
-                var pkg = VPB.FileManager.GetPackage(packageLatestRef);
-                if (pkg == null) return null;
-
-                VarPackageGroup group = pkg.Group;
-                if (group == null) return pkg;
-
-                VarPackage bestInstalled = null;
-                if (group.Packages != null)
-                {
-                    for (int i = 0; i < group.Packages.Count; i++)
-                    {
-                        var p = group.Packages[i];
-                        if (p == null) continue;
-                        if (!p.IsInstalled()) continue;
-                        if (bestInstalled == null || p.Version > bestInstalled.Version)
-                        {
-                            bestInstalled = p;
-                        }
-                    }
-                }
-                return bestInstalled ?? pkg;
-            }
-            catch
-            {
-                return null;
-            }
-        }
         static int ClosestPowerOfTwo(int value)
         {
             int power = 1;
@@ -1383,6 +1026,7 @@ namespace VPB
             var diskCachePath = GetDiskCachePath(qi,false,0,0);
             var realDiskCachePath = GetDiskCachePath(qi,true,width,height);
             var realDiskCachePathCache = realDiskCachePath + ".cache";
+            var realDiskCachePathKtx = realDiskCachePath + ".ktx2";
 
             LogUtil.BeginImageWork();
             try
@@ -1401,9 +1045,10 @@ namespace VPB
             }
 
             //var thumbnailPath = diskCachePath + ext
-            string diskPathToUse = File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath;
+            string diskPathToUse = File.Exists(realDiskCachePathKtx) ? realDiskCachePathKtx : (File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath);
             if (File.Exists(diskPathToUse))
             {
+                bool isKtx = diskPathToUse.EndsWith(".ktx2");
                 LogUtil.PerfAdd("Img.Resize.FromDisk", 0, 0);
                 LogUtil.LogTextureTrace("Img.Resize.DiskHit:" + diskPathToUse, "resize use disk cache:" + diskPathToUse);
                 var swRead = System.Diagnostics.Stopwatch.StartNew();
@@ -1412,6 +1057,29 @@ namespace VPB
 
                 try
                 {
+                    if (isKtx)
+                    {
+                        _nativeKtx.Initialize();
+                        var chain = _nativeKtx.ReadDxtFromKtx(diskPathToUse);
+                        if (chain != null)
+                        {
+                            var textureFormat = TextureFormat.DXT1;
+                            if (chain.format == KtxTestFormat.Dxt1) textureFormat = TextureFormat.DXT1;
+                            else if (chain.format == KtxTestFormat.Dxt5) textureFormat = TextureFormat.DXT5;
+                            else if (chain.format == KtxTestFormat.Rgb24) textureFormat = TextureFormat.RGB24;
+                            else if (chain.format == KtxTestFormat.Rgba32) textureFormat = TextureFormat.RGBA32;
+
+                            resultTexture = new Texture2D(width, height, textureFormat, false, qi.linear);
+                            resultTexture.LoadRawTextureData(chain.data);
+                            resultTexture.Apply();
+                            RegisterTexture(diskCachePath, resultTexture);
+                            ResolveInflightWaiters(diskCachePath, resultTexture);
+                            UnityEngine.Object.Destroy(qi.tex);
+                            qi.tex = resultTexture;
+                            return resultTexture;
+                        }
+                    }
+
                     using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
                     {
                         int len = (int)fs.Length;
@@ -1447,6 +1115,43 @@ namespace VPB
 
 
             LogUtil.LogTextureTrace("Img.Resize.Generate:" + realDiskCachePath, "resize generate cache:" + realDiskCachePath);
+
+            // OPTIMIZATION: If no resize needed and already DXT, just grab the bytes.
+            if (width == qi.tex.width && height == qi.tex.height && (qi.tex.format == TextureFormat.DXT1 || qi.tex.format == TextureFormat.DXT5))
+            {
+                try
+                {
+                    var bytes = qi.tex.GetRawTextureData();
+                    if (bytes != null && bytes.Length > 0)
+                    {
+                        byte[] pooledBytes = ByteArrayPool.Rent(bytes.Length);
+                        Array.Copy(bytes, pooledBytes, bytes.Length);
+
+                        bool ktx = Settings.Instance.EnableKtxCompression.Value;
+                        string targetPath = realDiskCachePath + (ktx ? ".ktx2" : ".cache");
+
+                        JSONClass jSON = new JSONClass();
+                        jSON["type"] = ktx ? "ktx" : "image";
+                        jSON["width"].AsInt = qi.tex.width;
+                        jSON["height"].AsInt = qi.tex.height;
+                        jSON["resizedWidth"].AsInt = width;
+                        jSON["resizedHeight"].AsInt = height;
+                        jSON["format"] = qi.tex.format.ToString();
+
+                        WriteDiskCacheAsync(targetPath, pooledBytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), ktx, width, height, qi.tex.format, qi.linear);
+                        
+                        // We still need to return a result texture or update qi.tex
+                        // but since we didn't resize, we can just use qi.tex as is.
+                        RegisterTexture(diskCachePath, qi.tex);
+                        ResolveInflightWaiters(diskCachePath, qi.tex);
+                        return qi.tex;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("Fast-path GetRawTextureData failed (sync), falling back to blit: " + ex.Message);
+                }
+            }
 
             // Whether an image is linear affects how qi.tex is displayed.
             var tempTexture = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32,
@@ -1493,8 +1198,11 @@ namespace VPB
 
             byte[] texBytes = resultTexture.GetRawTextureData();
             
+            bool enableKtx = Settings.Instance.EnableKtxCompression.Value;
+            if (enableKtx) realDiskCachePathCache = realDiskCachePath + ".ktx2";
+
             JSONClass jSONClass = new JSONClass();
-            jSONClass["type"] = "image";
+            jSONClass["type"] = enableKtx ? "ktx" : "image";
             // Record the original texture size here.
             jSONClass["width"].AsInt = qi.tex.width;
             jSONClass["height"].AsInt = qi.tex.height;
@@ -1503,7 +1211,7 @@ namespace VPB
             jSONClass["format"] = resultTexture.format.ToString();
             string contents = jSONClass.ToString(string.Empty);
             
-            WriteDiskCacheAsync(realDiskCachePathCache, texBytes, texBytes.Length, diskCachePath + ".meta", contents);
+            WriteDiskCacheAsync(realDiskCachePathCache, texBytes, texBytes.Length, diskCachePath + ".meta", contents, enableKtx, width, height, resultTexture.format, qi.linear);
 
 
             RegisterTexture(diskCachePath, resultTexture);
@@ -1670,15 +1378,16 @@ namespace VPB
 
             if (textureCacheDir != null)
             {
-                string basePath = textureCacheDir + "/";
                 string fileName = Path.GetFileName(imgPath);
                 fileName = SanitizeFileName(fileName);
                 fileName = fileName.Replace('.', '_');
                 string text = (fileEntry != null) ? fileEntry.Size.ToString() : "0";
                 string token = (fileEntry != null) ? fileEntry.LastWriteTime.ToFileTime().ToString() : "0";
                 var diskCacheSignature = GetDiskCacheSignature(qi, useSize, width, height);
-                result = basePath + fileName + "_" + text + "_" + token + "_" + diskCacheSignature;
+                string finalName = fileName + "_" + text + "_" + token + "_" + diskCacheSignature;
+                result = Path.Combine(textureCacheDir, finalName);
             }
+            if (result == null) LogUtil.Log("GetDiskCachePath null. CacheDir=" + (textureCacheDir??"null") + " ImgPath=" + (imgPath??"null"));
             return result;
         }
 
@@ -1720,54 +1429,13 @@ namespace VPB
             }
             if (qi.createNormalFromBump)
             {
-                text = text + "_BN" + qi.bumpStrength;
+                text += "_B";
             }
             if (qi.invert)
             {
                 text += "_I";
             }
-            if (qi.isThumbnail)
-            {
-                text += "_T";
-            }
             return text;
-        }
-
-        void UpdatePrewarmCost(double ms)
-        {
-            if (ms <= 0) return;
-            if (!prewarmEwmaInit)
-            {
-                prewarmEwmaMs = ms;
-                prewarmEwmaInit = true;
-                return;
-            }
-            double a = 0.15;
-            prewarmEwmaMs = (prewarmEwmaMs * (1.0 - a)) + (ms * a);
-            if (prewarmEwmaMs < 0.1) prewarmEwmaMs = 0.1;
-            if (prewarmEwmaMs > 5000.0) prewarmEwmaMs = 5000.0;
-        }
-
-        int GetAdaptivePrewarmPerFrame(int maxPerFrame)
-        {
-            if (maxPerFrame <= 1) return 1;
-            double frameMs;
-            try { frameMs = Time.unscaledDeltaTime * 1000.0; } catch { frameMs = 0.0; }
-            if (frameMs <= 0.0) return 1;
-
-            double targetFrameMs = 33.33;
-            double spare = targetFrameMs - frameMs;
-            if (spare < 0.0) spare = 0.0;
-
-            double budgetMs = 6.0 + (spare * 0.75);
-            int n = 1;
-            if (prewarmEwmaMs > 0.1)
-            {
-                n = 1 + (int)System.Math.Floor(budgetMs / prewarmEwmaMs);
-            }
-            if (n < 1) n = 1;
-            if (n > maxPerFrame) n = maxPerFrame;
-            return n;
         }
     }
 }

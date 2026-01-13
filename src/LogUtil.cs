@@ -749,6 +749,14 @@ namespace VPB
             sceneLoadNotBusyStableFrames = 0;
         }
 
+        public static bool IsSceneLoading()
+        {
+            if (sceneLoadActive || sceneLoadInternalActive) return true;
+            var loading = TryGetSuperControllerLoading();
+            if (loading.HasValue && loading.Value) return true;
+            return false;
+        }
+
         static bool? TryGetSuperControllerLoading()
         {
             try
@@ -855,6 +863,11 @@ namespace VPB
             if (VPBConfig.Instance != null)
             {
                 VPBConfig.Instance.EndSceneLoad();
+            }
+
+            if (ImageLoadingMgr.singleton != null)
+            {
+                ImageLoadingMgr.singleton.DumpTrackedImagesToCache();
             }
         }
 

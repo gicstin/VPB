@@ -274,6 +274,7 @@
     <Compile Include="src\hook\CustomAssetLoader.cs" />
     <Compile Include="src\hook\GenericTextureHook.cs" />
     <Compile Include="src\hook\KtxRoundTripTest.cs" />
+    <Compile Include="src\hook\NativeKtx.cs" />
     <Compile Include="src\hook\ImageLoadingMgr.cs" />
     <Compile Include="src\hook\SuperControllerHook.cs" />
     <Compile Include="src\hook\TagFilter.cs" />

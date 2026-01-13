@@ -150,6 +150,7 @@ namespace VPB
         {
             var ilt = typeof(ImageLoaderThreaded);
             var prefix = AccessTools.Method(typeof(SuperControllerHook), nameof(PreProcessImage));
+            var postfix = AccessTools.Method(typeof(SuperControllerHook), nameof(PostProcessImage));
             if (prefix == null) return;
             var methods = AccessTools.GetDeclaredMethods(ilt);
             if (methods == null) return;
@@ -160,7 +161,7 @@ namespace VPB
                 var p = m.GetParameters();
                 if (p == null || p.Length == 0) continue;
                 if (p[0].ParameterType != typeof(ImageLoaderThreaded.QueuedImage)) continue;
-                harmony.Patch(m, prefix: new HarmonyMethod(prefix));
+                harmony.Patch(m, prefix: new HarmonyMethod(prefix), postfix: new HarmonyMethod(postfix));
                 return;
             }
         }
@@ -332,6 +333,11 @@ namespace VPB
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
             try
             {
+                if (ImageLoadingMgr.singleton != null)
+                {
+                    ImageLoadingMgr.singleton.ClearCandidates();
+                }
+
                 if (!string.IsNullOrEmpty(saveName))
                 {
                     // Track current scene package UID for UninstallAll protection
@@ -355,36 +361,6 @@ namespace VPB
             catch { }
             LogUtil.BeginSceneLoad(saveName);
 
-            try
-            {
-                if (Settings.Instance.EnableTextureOptimizations.Value && ImageLoadingMgr.singleton != null && !string.IsNullOrEmpty(saveName))
-                {
-                    string sceneJsonText = null;
-                    if (File.Exists(saveName))
-                    {
-                        sceneJsonText = File.ReadAllText(saveName);
-                    }
-                    else if (saveName.Contains(":/"))
-                    {
-                        using (var fileEntryStream = MVR.FileManagement.FileManager.OpenStream(saveName, true))
-                        {
-                            using (var sr = new StreamReader(fileEntryStream.Stream))
-                            {
-                                sceneJsonText = sr.ReadToEnd();
-                            }
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(sceneJsonText))
-                    {
-                        ImageLoadingMgr.singleton.StartScenePrewarm(saveName, sceneJsonText);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("PREWARM scene read failed: " + saveName + " " + ex.ToString());
-            }
             if (saveName == "Saves\\scene\\MeshedVR\\default.json")
             {
                 if (File.Exists(saveName))
@@ -422,12 +398,12 @@ namespace VPB
         public static void PreProcessImageImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
             if (string.IsNullOrEmpty(qi.imgPath)) return;
-
-            // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            ImageLoadingMgr.currentProcessingPath = qi.imgPath;
+
             if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (!Settings.Instance.ReduceTextureSize.Value) return;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -438,28 +414,49 @@ namespace VPB
             }
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ImageLoaderThreaded), "ProcessImageImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
+        public static void PostProcessImageImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
+        {
+            ImageLoadingMgr.currentProcessingPath = null;
+
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
+
+            if (qi.tex != null)
+            {
+                ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi);
+            }
+        }
+
         public static void PreProcessImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage __0)
         {
             var qi = __0;
             if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
             LogUtil.MarkImageActivity();
+
+            ImageLoadingMgr.currentProcessingPath = qi.imgPath;
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnail", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
-        public static void PostQueueThumbnail(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
+        public static void PostProcessImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage __0)
         {
-            if (string.IsNullOrEmpty(qi.imgPath)) return;
+            ImageLoadingMgr.currentProcessingPath = null;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnail", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
+        public static bool PreQueueThumbnail(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return true;
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (!Settings.Instance.ReduceTextureSize.Value) return;
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return true;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return true;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
-            //LogUtil.Log("PostQueueThumbnail:" + qi.imgPath + " " + qi.textureFormat);
 
             qi.isThumbnail = true;
             if (ImageLoadingMgr.singleton.Request(qi))
@@ -476,26 +473,11 @@ namespace VPB
                 catch { }
 
                 // Skip VaM threaded processing for this request.
-                qi.skipCache = true;
-                var field = Traverse.Create(__instance).Field("queuedImages");
-                var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
-
-                if (queuedImages != null)
-                {
-                    var node = queuedImages.First;
-                    while (node != null)
-                    {
-                        var next = node.Next;
-                        if (object.ReferenceEquals(node.Value, qi))
-                        {
-                            queuedImages.Remove(node);
-                            break;
-                        }
-                        node = next;
-                    }
-                }
-                return;
+                return false;
             }
+
+            // Cache miss - wrap callback to capture once loaded
+            ImageLoadingMgr.singleton.TrackCandidate(qi);
 
             try
             {
@@ -508,21 +490,20 @@ namespace VPB
                 LogImageQueueEvent("enqueue.thumb", qi, qCount, realQ, moved);
             }
             catch { }
+            return true;
         }
 
-        [HarmonyPostfix]
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnailImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
-        public static void PostQueueThumbnailImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
+        public static bool PreQueueThumbnailImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (string.IsNullOrEmpty(qi.imgPath)) return;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return true;
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (!Settings.Instance.ReduceTextureSize.Value) return;
-
-            //LogUtil.Log("PostQueueThumbnailImmediate:" + qi.imgPath + " " + qi.textureFormat);
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return true;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return true;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -538,26 +519,11 @@ namespace VPB
                 catch { }
 
                 // Skip VaM threaded processing for this request.
-                qi.skipCache = true;
-                var field = Traverse.Create(__instance).Field("queuedImages");
-                var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
-
-                if (queuedImages != null)
-                {
-                    var node = queuedImages.First;
-                    while (node != null)
-                    {
-                        var next = node.Next;
-                        if (object.ReferenceEquals(node.Value, qi))
-                        {
-                            queuedImages.Remove(node);
-                            break;
-                        }
-                        node = next;
-                    }
-                }
-                return;
+                return false;
             }
+
+            // Cache miss - wrap callback to capture once loaded
+            ImageLoadingMgr.singleton.TrackCandidate(qi);
 
             try
             {
@@ -570,56 +536,32 @@ namespace VPB
                 LogImageQueueEvent("enqueue.thumb.immediate", qi, qCount, realQ, moved);
             }
             catch { }
+            return true;
         }
 
-        [HarmonyPostfix]
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueImage", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
-        public static void PostQueueImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
+        public static bool PreQueueImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (string.IsNullOrEmpty(qi.imgPath)) return;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return true;
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (!Settings.Instance.ReduceTextureSize.Value) return;
+            if (!Settings.Instance.EnableTextureOptimizations.Value) return true;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return true;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
-            //LogUtil.Log("PostQueueImage:" + qi.imgPath + " " + qi.textureFormat);
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
-                qi.skipCache = true;
-                var field = Traverse.Create(__instance).Field("queuedImages");
-                var queuedImages = field.GetValue() as LinkedList<ImageLoaderThreaded.QueuedImage>;
-                bool removed = false;
-                if (queuedImages != null)
-                {
-                    var node = queuedImages.First;
-                    while (node != null)
-                    {
-                        var next = node.Next;
-                        if (object.ReferenceEquals(node.Value, qi))
-                        {
-                            queuedImages.Remove(node);
-                            removed = true;
-                            break;
-                        }
-                        node = next;
-                    }
-                }
-
-                if (removed)
-                {
-                    var field2 = Traverse.Create(__instance).Field("numRealQueuedImages");
-                    var numRealQueuedImages = (int)field2.GetValue();
-                    field2.SetValue(numRealQueuedImages - 1);
-                    var field3 = Traverse.Create(__instance).Field("progressMax");
-                    var progressMax = (int)field3.GetValue();
-                    field3.SetValue(progressMax - 1);
-                }
+                // Skip VaM threaded processing for this request.
+                return false;
             }
+
+            // Cache miss - wrap callback to capture once loaded
+            ImageLoadingMgr.singleton.TrackCandidate(qi);
 
             try
             {
@@ -632,6 +574,7 @@ namespace VPB
                 LogImageQueueEvent("enqueue.img", qi, qCount, realQ, moved);
             }
             catch { }
+            return true;
         }
 
         // It is added to cache before the callback, so we need to set skipCache one step earlier.
@@ -645,7 +588,7 @@ namespace VPB
             LogUtil.MarkImageActivity();
 
             if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (!Settings.Instance.ReduceTextureSize.Value) return;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return;
 
 
 

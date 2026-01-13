@@ -32,6 +32,7 @@ namespace VPB
         public ConfigEntry<bool> QuickMenuShowHideEnabled;
         public ConfigEntry<bool> PluginsAlwaysEnabled;
         public ConfigEntry<bool> EnableTextureOptimizations;
+        public ConfigEntry<bool> EnableKtxCompression;
         public ConfigEntry<bool> ReduceTextureSize;
         public ConfigEntry<int> MinTextureSize;
         public ConfigEntry<bool> ForceTextureToMinSize;
@@ -46,7 +47,6 @@ namespace VPB
 
         public ConfigEntry<bool> LogImageQueueEvents;
         public ConfigEntry<bool> LogVerboseUi;
-        public ConfigEntry<bool> ScenePrewarmEnabled;
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<float> UiTransparencyValue;
         public ConfigEntry<bool> AutoPageEnabled;
@@ -75,15 +75,15 @@ namespace VPB
             PluginsAlwaysEnabled = config.Bind<bool>("Settings", "PluginsAlwaysEnabled", false, "Plugins will always enabled.");
             
             EnableTextureOptimizations = config.Bind<bool>("Optimze", "EnableTextureOptimizations", false, "Master toggle for all texture optimizations (caching, resizing, compression, prewarm, etc.).");
+            EnableKtxCompression = config.Bind<bool>("Optimze", "EnableKtxCompression", false, "Compress cached textures to KTX format.");
             ReduceTextureSize = config.Bind<bool>("Optimze", "ReduceTextureSize", false, "reduce texture size.");
-            MinTextureSize = config.Bind<int>("Optimze", "MinTextureSize", 2048, "min size for resized texture.");
-            ForceTextureToMinSize = config.Bind<bool>("Optimze", "ForceTextureToMinSize", false, "force resized textures to minimum size.");
+            MinTextureSize = config.Bind<int>("Optimze", "MinTextureSize", 2048, "maximum resolution for resized textures.");
+            ForceTextureToMinSize = config.Bind<bool>("Optimze", "ForceTextureToMinSize", true, "force resized textures to the target resolution.");
             MaxTextureSize = config.Bind<int>("Optimze", "MaxTextureSize", 4096, "max size for texture.");
             CacheAssetBundle = config.Bind<bool>("Optimze", "CacheAssetBundle", true, "cache assetbundle.");
             InflightDedupEnabled = config.Bind<bool>("Optimze", "InflightDedupEnabled", false, "coalesce duplicate image requests while the first is still loading.");
             PrioritizeFaceTextures = config.Bind<bool>("Optimze", "PrioritizeFaceTextures", true, "prioritize face/makeup/overlay textures in VaM image load queue.");
             PrioritizeHairTextures = config.Bind<bool>("Optimze", "PrioritizeHairTextures", true, "prioritize hair in VaM image load queue.");
-            ScenePrewarmEnabled = config.Bind<bool>("Optimze", "ScenePrewarmEnabled", true, "prewarm VPB_cache entries for scene textures during scene load.");
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");

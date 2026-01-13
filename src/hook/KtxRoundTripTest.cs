@@ -25,6 +25,10 @@ namespace VPB
             public byte[] data;
             public int[] mipOffsets;
             public int[] mipSizes;
+            public int dataSize;
+            public bool isSRGB;
+            public bool isNormalMap;
+            public bool useZstd;
         }
 
         public static void RunRoundTrip(string outputDir, DxtMipChain input)
@@ -309,7 +313,10 @@ namespace VPB
                 IntPtr mipOffsets,
                 IntPtr mipSizes,
                 IntPtr data,
-                int dataSize);
+                int dataSize,
+                int isSRGB,
+                int isNormalMap,
+                int useZstd);
 
             [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
             private delegate int vpb_ktx_read_to_dxt_Delegate(
@@ -321,7 +328,8 @@ namespace VPB
                 out IntPtr outMipOffsets,
                 out IntPtr outMipSizes,
                 out IntPtr outData,
-                out int outDataSize);
+                out int outDataSize,
+                out int outIsSRGB);
 
             [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
             private delegate void vpb_ktx_free_Delegate(IntPtr p);
@@ -436,7 +444,10 @@ namespace VPB
                         hOffsets.AddrOfPinnedObject(),
                         hSizes.AddrOfPinnedObject(),
                         hData.AddrOfPinnedObject(),
-                        chain.data.Length);
+                        chain.dataSize > 0 ? chain.dataSize : chain.data.Length,
+                        chain.isSRGB ? 1 : 0,
+                        chain.isNormalMap ? 1 : 0,
+                        chain.useZstd ? 1 : 0);
 
                     if (rc != 0)
                     {
@@ -475,8 +486,9 @@ namespace VPB
                 IntPtr pSizes;
                 IntPtr pData;
                 int dataSize;
+                int isSRGB;
 
-                int rc = _read(ktxPath, out fmt, out w, out h, out mipCount, out pOffsets, out pSizes, out pData, out dataSize);
+                int rc = _read(ktxPath, out fmt, out w, out h, out mipCount, out pOffsets, out pSizes, out pData, out dataSize, out isSRGB);
                 if (rc != 0)
                 {
                     string msg = "vpb_ktx_read_to_dxt failed rc=" + rc;
@@ -494,6 +506,7 @@ namespace VPB
                 chain.height = h;
                 chain.format = (KtxTestFormat)fmt;
                 chain.mipCount = mipCount;
+                chain.isSRGB = isSRGB != 0;
 
                 try
                 {

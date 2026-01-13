@@ -55,6 +55,7 @@ namespace VPB
         private Rect m_RemoveWindowRect = new Rect(250, 250, 600, 500);
 
         private bool m_ShowDownscaleTexturesInfo;
+        private bool m_ShowKtxInfo;
         private bool m_ShowPrioritizeFaceTexturesInfo;
         private bool m_ShowPrioritizeHairTexturesInfo;
         private bool m_ShowPluginsAlwaysEnabledInfo;
@@ -67,6 +68,7 @@ namespace VPB
         private string m_SettingsCreateGalleryKeyDraft;
         private string m_SettingsHubKeyDraft;
         private bool m_SettingsReduceTextureSizeDraft;
+        private bool m_SettingsEnableKtxCompressionDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
@@ -165,6 +167,7 @@ namespace VPB
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
             m_SettingsReduceTextureSizeDraft = (Settings.Instance != null && Settings.Instance.ReduceTextureSize != null) ? Settings.Instance.ReduceTextureSize.Value : false;
+            m_SettingsEnableKtxCompressionDraft = (Settings.Instance != null && Settings.Instance.EnableKtxCompression != null) ? Settings.Instance.EnableKtxCompression.Value : false;
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
@@ -220,6 +223,13 @@ namespace VPB
                     if (Settings.Instance.ReduceTextureSize.Value != m_SettingsReduceTextureSizeDraft)
                     {
                         Settings.Instance.ReduceTextureSize.Value = m_SettingsReduceTextureSizeDraft;
+                    }
+                }
+                if (Settings.Instance != null && Settings.Instance.EnableKtxCompression != null)
+                {
+                    if (Settings.Instance.EnableKtxCompression.Value != m_SettingsEnableKtxCompressionDraft)
+                    {
+                        Settings.Instance.EnableKtxCompression.Value = m_SettingsEnableKtxCompressionDraft;
                     }
                 }
                 if (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null)
@@ -418,6 +428,16 @@ namespace VPB
 
             if (Settings.Instance.EnableTextureOptimizations.Value)
             {
+                GUILayout.Space(6);
+
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(m_SettingsEnableKtxCompressionDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                {
+                    m_SettingsEnableKtxCompressionDraft = !m_SettingsEnableKtxCompressionDraft;
+                }
+                GUILayout.Label("Textures: Compress to KTX");
+                GUILayout.EndHorizontal();
+
                 GUILayout.Space(6);
 
                 GUILayout.BeginHorizontal();
@@ -1122,7 +1142,8 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(cacheDir))
             {
-                cacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/VPB_cache";
+                // Use absolute path for native plugin compatibility
+                cacheDir = Path.GetFullPath("Cache/VPB_cache");
                 if (!Directory.Exists(cacheDir))
                 {
                     Directory.CreateDirectory(cacheDir);
@@ -1135,7 +1156,8 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(abCacheDir))
             {
-                abCacheDir = MVR.FileManagement.CacheManager.GetCacheDir() + "/VPB_cache/ab";
+                // Use absolute path for native plugin compatibility
+                abCacheDir = Path.GetFullPath("Cache/VPB_cache/ab");
                 if (!Directory.Exists(abCacheDir))
                 {
                     Directory.CreateDirectory(abCacheDir);
@@ -1900,67 +1922,114 @@ namespace VPB
 
             if (m_FileManagerInited && m_UIInited)
             {
+                const float infoBtnWidth = 28f;
+                const float optionIndent = 12f;
+
                 if (m_FileBrowser != null && m_FileBrowser.window.activeSelf)
                     GUI.enabled = false;
 
-                if (VPBConfig.Instance.IsDevMode)
+                // Removed original Developer Tools section
+                
                 {
-                    GUILayout.BeginVertical(m_StyleSection);
-                    GUILayout.Label("Developer Tools", m_StyleHeader);
-                    var prevColor = GUI.backgroundColor;
-                    GUI.backgroundColor = Color.magenta;
-                    if (GUILayout.Button("Run KTX Roundtrip Test", m_StyleButton, GUILayout.Height(buttonHeight * 1.5f)))
-                    {
-                        KtxRoundTripTest.RunFullTest();
-                    }
-                    GUI.backgroundColor = prevColor;
-                    GUILayout.EndVertical();
-                    GUILayout.Space(4);
-                }
-
-                {
-                    const float infoBtnWidth = 28f;
-                    const float optionIndent = 12f;
-
                     // ========== TEXTURE OPTIMIZATION SETTINGS ==========
+                    GUILayout.BeginVertical(m_StyleSection);
+                    GUILayout.Label("Texture Optimizations", m_StyleHeader);
+                    
+                    bool ktxDllsPresent = NativeKtx.CheckDlls();
+
+                    GUILayout.BeginHorizontal();
                     bool textureOptimizationsEnabled = Settings.Instance.EnableTextureOptimizations.Value;
-                    if (textureOptimizationsEnabled && Settings.Instance.ReduceTextureSize.Value)
+                    if (GUILayout.Button(textureOptimizationsEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
                     {
-                        GUILayout.BeginVertical(m_StyleSection);
+                        Settings.Instance.EnableTextureOptimizations.Value = !textureOptimizationsEnabled;
+                    }
+                    GUILayout.Label("Enable Texture Optimizations");
+                    GUILayout.EndHorizontal();
+
+                    if (Settings.Instance.EnableTextureOptimizations.Value)
+                    {
+                        GUILayout.Space(6);
+                        
+                        if (!ktxDllsPresent)
+                        {
+                            GUILayout.BeginHorizontal();
+                            GUILayout.Space(optionIndent);
+                            GUILayout.Label("<color=red><b>Native KTX DLLs missing!</b> Download them to enable KTX & Resize.</color>", m_StyleInfoCardText);
+                            GUILayout.EndHorizontal();
+                            GUILayout.Space(4);
+                        }
+
+                        // KTX Compression
                         GUILayout.BeginHorizontal();
-                        if (GUILayout.Button(Settings.Instance.ReduceTextureSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                        GUILayout.Space(optionIndent);
+                        GUI.enabled = ktxDllsPresent;
+                        if (GUILayout.Button(Settings.Instance.EnableKtxCompression.Value && ktxDllsPresent ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                        {
+                            Settings.Instance.EnableKtxCompression.Value = !Settings.Instance.EnableKtxCompression.Value;
+                        }
+                        GUILayout.Label("Compress to KTX");
+                        GUILayout.FlexibleSpace();
+                        if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
+                        {
+                            ToggleInfoCard(ref m_ShowKtxInfo);
+                        }
+                        GUI.enabled = true;
+                        GUILayout.EndHorizontal();
+
+                        DrawInfoCard(ref m_ShowKtxInfo, "KTX Compression", () =>
+                        {
+                            GUILayout.Space(4);
+                            GUILayout.Label("KTX (Khronos Texture) is a container format for storing GPU textures.", m_StyleInfoCardText);
+                            GUILayout.Space(2);
+                            GUILayout.Label("<b>Benefits:</b>", m_StyleInfoCardText);
+                            GUILayout.Label("• <b>Fast Loading:</b> Data is already in a format the GPU understands.", m_StyleInfoCardText);
+                            GUILayout.Label("• <b>Low Memory:</b> Stays compressed in VRAM, saving significant memory.", m_StyleInfoCardText);
+                            GUILayout.Space(4);
+                            GUILayout.Label("Note: Requires native DLLs (ktx.dll and wrapper) in the plugin folder.", m_StyleInfoCardText);
+                        });
+
+                        GUILayout.Space(4);
+
+                        // Downscale
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Space(optionIndent);
+                        GUI.enabled = ktxDllsPresent;
+                        if (GUILayout.Button(Settings.Instance.ReduceTextureSize.Value && ktxDllsPresent ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
                         {
                             Settings.Instance.ReduceTextureSize.Value = !Settings.Instance.ReduceTextureSize.Value;
                         }
-                        GUILayout.Label("Textures: Downscale");
+                        GUILayout.Label("Downscale Textures");
                         GUILayout.FlexibleSpace();
                         if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
                         {
                             ToggleInfoCard(ref m_ShowDownscaleTexturesInfo);
                         }
+                        GUI.enabled = true;
                         GUILayout.EndHorizontal();
+                        
                         DrawInfoCard(ref m_ShowDownscaleTexturesInfo, "Downscale Textures", () =>
                         {
                             GUILayout.Space(4);
-                            GUILayout.Label("When this is ON, VPB makes big textures smaller and saves them so VaM can reuse them.", m_StyleInfoCardText);
-                            GUILayout.Space(2);
-                            GUILayout.Label("This can lower memory use and help performance. The tradeoff is textures may look a bit less sharp.", m_StyleInfoCardText);
-                            GUILayout.Space(6);
-                            GUILayout.Label("Min: Anything bigger than this gets reduced down to this size.", m_StyleInfoCardText);
-                            GUILayout.Label("Force all to minimum: Makes almost everything use the minimum size (stronger effect).", m_StyleInfoCardText);
-                            GUILayout.Space(6);
-                            GUILayout.Label("Notes: Smaller textures won't be made bigger. The first time can take longer while VPB builds the cache.", m_StyleInfoCardText);
+                            GUILayout.Label("When enabled, VPB captures high-resolution textures and optimizes them for better performance and lower VRAM usage.", m_StyleInfoCardText);
+                            GUILayout.Space(4);
+                            GUILayout.Label("<b>Optimization Methods:</b>", m_StyleInfoCardText);
+                            GUILayout.Label("• <b>Resize:</b> Textures larger than the 'Max Rez' setting are downscaled to that resolution. This significantly reduces VRAM footprint with minimal visual impact.", m_StyleInfoCardText);
+                            GUILayout.Label("• <b>KTX Compression:</b> Textures are compressed using the KTX format, which is optimized for GPU hardware. This further reduces memory usage and improves loading speeds.", m_StyleInfoCardText);
+                            GUILayout.Space(4);
+                            GUILayout.Label("<b>Notes:</b>", m_StyleInfoCardText);
+                            GUILayout.Label("• Smaller textures are never upscaled.", m_StyleInfoCardText);
+                            GUILayout.Label("• Initial processing may take a moment while the cache is built.", m_StyleInfoCardText);
                         });
 
                         if (Settings.Instance.ReduceTextureSize.Value)
                         {
                             GUILayout.BeginHorizontal();
-                            GUILayout.Space(optionIndent);
-                            GUILayout.Label("Min", GUILayout.Width(30));
+                            GUILayout.Space(optionIndent * 2);
+                            GUILayout.Label("Max Rez", GUILayout.Width(60));
                             int minTextureSize = Settings.Instance.MinTextureSize.Value;
                             var style2k = (minTextureSize == 2048) ? m_StyleButtonPrimary : m_StyleButton;
                             var style4k = (minTextureSize == 4096) ? m_StyleButtonPrimary : m_StyleButton;
-                            var style8k = (minTextureSize == 8192) ? m_StyleButtonPrimary : m_StyleButton;
+                            
                             if (GUILayout.Button("2K", style2k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
                             {
                                 Settings.Instance.MinTextureSize.Value = 2048;
@@ -1969,37 +2038,26 @@ namespace VPB
                             {
                                 Settings.Instance.MinTextureSize.Value = 4096;
                             }
-                            if (GUILayout.Button("8K", style8k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
-                            {
-                                Settings.Instance.MinTextureSize.Value = 8192;
-                            }
+                            // 8K option removed as redundant
                             if (Settings.Instance.MaxTextureSize != null)
                             {
                                 Settings.Instance.MaxTextureSize.Value = Settings.Instance.MinTextureSize.Value;
                             }
                             GUILayout.EndHorizontal();
-
-                            GUILayout.BeginHorizontal();
-                            GUILayout.Space(optionIndent);
-                            if (GUILayout.Button(Settings.Instance.ForceTextureToMinSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                            {
-                                Settings.Instance.ForceTextureToMinSize.Value = !Settings.Instance.ForceTextureToMinSize.Value;
-                            }
-                            GUILayout.Label("Force all to minimum size");
-                            GUILayout.FlexibleSpace();
-                            GUILayout.EndHorizontal();
                         }
-                        GUILayout.EndVertical();
                     }
+                    GUILayout.EndVertical();
+                    GUILayout.Space(4);
+                }
 
-                    // ========== MAINTENANCE & CACHE TOOLS ==========
-                    GUILayout.BeginVertical(m_StyleSection);
-                    {
-                        var fullRowRect = GUILayoutUtility.GetRect(0f, buttonHeight, GUILayout.ExpandWidth(true));
-                        const float rowGutter = 6f;
-                        float infoWidth = infoBtnWidth;
+                // ========== MAINTENANCE & CACHE TOOLS ==========
+                GUILayout.BeginVertical(m_StyleSection);
+                {
+                    var fullRowRect = GUILayoutUtility.GetRect(0f, buttonHeight, GUILayout.ExpandWidth(true));
+                    const float rowGutter = 6f;
+                    float infoWidth = infoBtnWidth;
 
-                        var infoRect = new Rect(fullRowRect.xMax - infoWidth, fullRowRect.y, infoWidth, fullRowRect.height);
+                    var infoRect = new Rect(fullRowRect.xMax - infoWidth, fullRowRect.y, infoWidth, fullRowRect.height);
                         var buttonsRect = new Rect(fullRowRect.x, fullRowRect.y, Mathf.Max(0f, fullRowRect.width - infoWidth - rowGutter), fullRowRect.height);
 
                         DrawPhiSplitButtonsInRect(
@@ -2024,7 +2082,7 @@ namespace VPB
                         {
                             ToggleInfoCard(ref m_ShowGcRefreshInfo);
                         }
-                    }
+                    
 
                     DrawInfoCard(ref m_ShowGcRefreshInfo, "GC & Refresh", () =>
                     {

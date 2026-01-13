@@ -66,43 +66,16 @@ namespace VPB
             return null;
         }
 
-        public static void PreSetActiveClothingItem(DAZCharacterSelector __instance, DAZClothingItem item, bool active, bool fromRestore, bool skipSyncAnatomy)
+        public static void PreSetActiveClothingItem(DAZCharacterSelector __instance, DAZClothingItem item, bool active)
         {
-            if (item != null)
-            {
-                string atomName = "unknown";
-                try
-                {
-                    var atom = __instance.GetComponentInParent<Atom>();
-                    if (atom != null) atomName = atom.name;
-                }
-                catch { }
-                LogUtil.Log($"[clothing hook] SetActiveClothingItem {item.name} active={active} on {atomName}");
-            }
         }
 
-        public static void PreSetActiveClothingItemByUid(DAZCharacterSelector __instance, string itemId, bool active, bool fromRestore)
+        public static void PreSetActiveClothingItemByUid(DAZCharacterSelector __instance, string itemId, bool active)
         {
-            string atomName = "unknown";
-            try
-            {
-                var atom = __instance.GetComponentInParent<Atom>();
-                if (atom != null) atomName = atom.name;
-            }
-            catch { }
-            LogUtil.Log($"[clothing hook] SetActiveClothingItem {itemId} active={active} on {atomName}");
         }
 
         public static void PreRemoveAllClothing(DAZCharacterSelector __instance)
         {
-            string atomName = "unknown";
-            try
-            {
-                var atom = __instance.GetComponentInParent<Atom>();
-                if (atom != null) atomName = atom.name;
-            }
-            catch { }
-            LogUtil.Log($"[clothing hook] RemoveAllClothing on {atomName}");
         }
     }
 }
