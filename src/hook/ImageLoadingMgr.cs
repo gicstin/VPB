@@ -258,10 +258,13 @@ namespace VPB
             }
             catch { }
 
-            if (resizeQueuedKeys.Contains(key)) 
+            lock (resizeQueuedKeys)
             {
-                LogUtil.Log("TryEnqueueResizeCache: key in resizeQueuedKeys " + key);
-                return false;
+                if (resizeQueuedKeys.Contains(key)) 
+                {
+                    LogUtil.Log("TryEnqueueResizeCache: key in resizeQueuedKeys " + key);
+                    return false;
+                }
             }
             
             lock (_trackedQiSet)
@@ -449,9 +452,14 @@ namespace VPB
                         {
                             try
                             {
-                                if (!string.IsNullOrEmpty(job.key)) resizeQueuedKeys.Remove(job.key);
+                                if (!string.IsNullOrEmpty(job.key))
+                                {
+                                    lock (resizeQueuedKeys) { resizeQueuedKeys.Remove(job.key); }
+                                }
                             }
                             catch { }
+                            // Clear reference to help GC
+                            job.qi = null;
                         }
                     }
 
@@ -461,6 +469,13 @@ namespace VPB
                     {
                         break;
                     }
+                }
+
+                // In Unity 2018, manual GC help can be necessary when dealing with many large textures
+                if (sw.Elapsed.TotalMilliseconds > 10.0f)
+                {
+                    Resources.UnloadUnusedAssets();
+                    System.GC.Collect();
                 }
 
                 yield return wait;
@@ -496,12 +511,13 @@ namespace VPB
             {
                 try
                 {
+                    // GetRawTextureData() returns a NEW byte array. 
+                    // Instead of renting another one and copying, we use this one directly and return it to pool if needed,
+                    // but wait - this array isn't from our pool, so we shouldn't return it to ByteArrayPool.
+                    // Actually, to keep WriteDiskCacheAsync simple, we'll continue using the pool but eliminate the extra allocation.
                     var bytes = qi.tex.GetRawTextureData();
                     if (bytes != null && bytes.Length > 0)
                     {
-                        byte[] pooledBytes = ByteArrayPool.Rent(bytes.Length);
-                        Array.Copy(bytes, pooledBytes, bytes.Length);
-
                         JSONClass jSON = new JSONClass();
                         jSON["type"] = enableZstd ? "compressed" : "dxt";
                         jSON["width"].AsInt = qi.tex.width;
@@ -510,7 +526,8 @@ namespace VPB
                         jSON["resizedHeight"].AsInt = height;
                         jSON["format"] = qi.tex.format.ToString();
 
-                        WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), enableZstd, width, height, qi.tex.format, qi.linear);
+                        // We pass isPooled=false so WriteDiskCacheAsync doesn't try to return it to our pool.
+                        WriteDiskCacheAsync(realDiskCachePathCache, bytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), enableZstd, width, height, qi.tex.format, qi.linear, false);
                         return;
                     }
                 }
@@ -550,9 +567,6 @@ namespace VPB
                 }
 
                 var bytes = tmp.GetRawTextureData();
-                // Copy to pooled buffer for async write to avoid GC alloc
-                byte[] pooledBytes = ByteArrayPool.Rent(bytes.Length);
-                Array.Copy(bytes, pooledBytes, bytes.Length);
                 int realLength = bytes.Length;
                 
                 JSONClass jSONClass = new JSONClass();
@@ -563,7 +577,7 @@ namespace VPB
                 jSONClass["resizedHeight"].AsInt = height;
                 jSONClass["format"] = tmp.format.ToString();
                 
-                WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, realLength, diskCachePath + ".meta", jSONClass.ToString(string.Empty), enableZstd, width, height, tmp.format, qi.linear);
+                WriteDiskCacheAsync(realDiskCachePathCache, bytes, realLength, diskCachePath + ".meta", jSONClass.ToString(string.Empty), enableZstd, width, height, tmp.format, qi.linear, false);
 
                 // Note: we intentionally do NOT RegisterTexture or swap qi.tex in this async cache path.
                 // This prevents unexpected texture replacement mid-frame; future loads will hit disk/mem cache.
@@ -582,7 +596,7 @@ namespace VPB
             }
         }
 
-        void WriteDiskCacheAsync(string pathCache, byte[] bytes, int length, string pathMeta, string metaContent, bool isZstd = false, int w = 0, int h = 0, TextureFormat fmt = TextureFormat.RGBA32, bool linear = false)
+        void WriteDiskCacheAsync(string pathCache, byte[] bytes, int length, string pathMeta, string metaContent, bool isZstd = false, int w = 0, int h = 0, TextureFormat fmt = TextureFormat.RGBA32, bool linear = false, bool isPooled = true)
         {
             if (!string.IsNullOrEmpty(pathMeta))
             {
@@ -604,11 +618,7 @@ namespace VPB
                             {
                                 try
                                 {
-                                    byte[] compressed = ZstdCompressor.Compress(bytes, compressionLevel);
-                                    using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
-                                    {
-                                        fs.Write(compressed, 0, compressed.Length);
-                                    }
+                                    ZstdCompressor.SaveCache(pathCache, bytes, compressionLevel, length);
                                     LogUtil.Log("[VPB] WriteDiskCacheAsync: Wrote Zstd-compressed cache (level " + compressionLevel + ") for " + pathCache);
                                 }
                                 catch (Exception zstdEx)
@@ -657,7 +667,7 @@ namespace VPB
                         {
                             lock(diskWriteInFlight) { diskWriteInFlight.Remove(pathMeta); }
                         }
-                        if (bytes != null) ByteArrayPool.Return(bytes);
+                        if (isPooled && bytes != null) ByteArrayPool.Return(bytes);
                     }
                 }
             });
@@ -920,12 +930,7 @@ namespace VPB
                     if (compressionLevel <= 0) { skipped++; continue; }
 
                     byte[] dxtData = File.ReadAllBytes(file);
-                    byte[] compressedData = ZstdCompressor.Compress(dxtData, compressionLevel);
-
-                    string tempPath = file + ".tmp";
-                    File.WriteAllBytes(tempPath, compressedData);
-                    File.Delete(file);
-                    File.Move(tempPath, file);
+                    ZstdCompressor.SaveCache(file, dxtData, compressionLevel);
 
                     metaJson["type"] = "compressed";
                     File.WriteAllText(metaPath, metaJson.ToString(string.Empty));
