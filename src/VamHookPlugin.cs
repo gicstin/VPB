@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using ZstdNet;
 namespace VPB
 {
     // Plugin metadata attribute: plugin ID, plugin name, plugin version (must be numeric)
@@ -55,7 +56,6 @@ namespace VPB
         private Rect m_RemoveWindowRect = new Rect(250, 250, 600, 500);
 
         private bool m_ShowDownscaleTexturesInfo;
-        private bool m_ShowKtxInfo;
         private bool m_ShowPrioritizeFaceTexturesInfo;
         private bool m_ShowPrioritizeHairTexturesInfo;
         private bool m_ShowPluginsAlwaysEnabledInfo;
@@ -372,10 +372,10 @@ namespace VPB
                 GUILayout.EndHorizontal();
 
                 var prevColor = GUI.backgroundColor;
-                GUI.backgroundColor = Color.magenta;
-                if (GUILayout.Button("Run KTX Roundtrip Test", m_StyleButton, GUILayout.Height(buttonHeight * 1.5f)))
+                GUI.backgroundColor = new Color(0.2f, 0.6f, 1f, 1f); // Blue
+                if (GUILayout.Button("Run Zstd Roundtrip Test", m_StyleButton, GUILayout.Height(buttonHeight * 1.5f)))
                 {
-                    KtxRoundTripTest.RunFullTest();
+                    ZstdRoundTripTest.RunFullTest();
                 }
                 GUI.backgroundColor = prevColor;
             }
@@ -1149,6 +1149,9 @@ namespace VPB
         void Awake()
         {
             singleton = this;
+            
+            // Explicitly initialize ZstdNet native library early
+            try { ExternMethods.Initialize(); } catch { }
 
             // Initialize Gallery
             gameObject.AddComponent<Gallery>();
@@ -1233,17 +1236,7 @@ namespace VPB
                 DAZClothingHook.PatchAll(harmony);
             }
 
-            // Initialize KTX
-            try
-            {
-                var ktx = new KtxRoundTripTest.NativeKtx();
-                ktx.Initialize();
-                LogUtil.Log("[VPB] KTX support initialized successfully");
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogWarning("[VPB] KTX support failed to initialize: " + ex.Message);
-            }
+            // Zstd support is now handled by ZstdNet (auto-initialized)
         }
 
         private void SetMiniMode(bool enabled)
@@ -1916,8 +1909,6 @@ namespace VPB
                     GUILayout.BeginVertical(m_StyleSection);
                     GUILayout.Label("Texture Optimizations", m_StyleHeader);
                     
-                    bool ktxDllsPresent = NativeKtx.CheckDlls();
-
                     GUILayout.BeginHorizontal();
                     bool textureOptimizationsEnabled = Settings.Instance.EnableTextureOptimizations.Value;
                     if (GUILayout.Button(textureOptimizationsEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
@@ -1926,7 +1917,7 @@ namespace VPB
                         Settings.Instance.EnableTextureOptimizations.Value = newValue;
                         if (newValue)
                         {
-                            Settings.Instance.EnableKtxCompression.Value = true;
+                            Settings.Instance.EnableZstdCompression.Value = true;
                         }
                     }
                     GUILayout.Label("Enable Texture Optimizations");
@@ -1936,22 +1927,10 @@ namespace VPB
                     {
                         GUILayout.Space(6);
                         
-                        if (!ktxDllsPresent)
-                        {
-                            GUILayout.BeginHorizontal();
-                            GUILayout.Space(optionIndent);
-                            GUILayout.Label("<color=red><b>Native KTX DLLs missing!</b> Download them to enable KTX & Resize.</color>", m_StyleInfoCardText);
-                            GUILayout.EndHorizontal();
-                            GUILayout.Space(4);
-                        }
-
-
-
                         // Downscale
                         GUILayout.BeginHorizontal();
                         GUILayout.Space(optionIndent);
-                        GUI.enabled = ktxDllsPresent;
-                        if (GUILayout.Button(Settings.Instance.ReduceTextureSize.Value && ktxDllsPresent ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                        if (GUILayout.Button(Settings.Instance.ReduceTextureSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
                         {
                             Settings.Instance.ReduceTextureSize.Value = !Settings.Instance.ReduceTextureSize.Value;
                         }
@@ -1961,7 +1940,6 @@ namespace VPB
                         {
                             ToggleInfoCard(ref m_ShowDownscaleTexturesInfo);
                         }
-                        GUI.enabled = true;
                         GUILayout.EndHorizontal();
                         
                         DrawInfoCard(ref m_ShowDownscaleTexturesInfo, "Downscale Textures", () =>
@@ -1971,7 +1949,7 @@ namespace VPB
                             GUILayout.Space(4);
                             GUILayout.Label("<b>Optimization Methods:</b>", m_StyleInfoCardText);
                             GUILayout.Label("• <b>Resize:</b> Textures larger than the 'Max Rez' setting are downscaled to that resolution. This significantly reduces VRAM footprint with minimal visual impact.", m_StyleInfoCardText);
-                            GUILayout.Label("• <b>KTX Compression:</b> Textures are compressed using the KTX format, which is optimized for GPU hardware. This further reduces memory usage and improves loading speeds.", m_StyleInfoCardText);
+                            GUILayout.Label("• <b>Zstd Compression:</b> Textures are compressed using Zstd, which reduces disk cache size and improves loading speeds from disk.", m_StyleInfoCardText);
                             GUILayout.Space(4);
                             GUILayout.Label("<b>Notes:</b>", m_StyleInfoCardText);
                             GUILayout.Label("• Smaller textures are never upscaled.", m_StyleInfoCardText);

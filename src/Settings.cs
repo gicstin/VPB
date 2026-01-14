@@ -32,7 +32,8 @@ namespace VPB
         public ConfigEntry<bool> QuickMenuShowHideEnabled;
         public ConfigEntry<bool> PluginsAlwaysEnabled;
         public ConfigEntry<bool> EnableTextureOptimizations;
-        public ConfigEntry<bool> EnableKtxCompression;
+        public ConfigEntry<bool> EnableZstdCompression;
+        public ConfigEntry<int> ZstdCompressionLevel;
         public ConfigEntry<bool> ReduceTextureSize;
         public ConfigEntry<int> MinTextureSize;
         public ConfigEntry<bool> ForceTextureToMinSize;
@@ -75,7 +76,8 @@ namespace VPB
             PluginsAlwaysEnabled = config.Bind<bool>("Settings", "PluginsAlwaysEnabled", false, "Plugins will always enabled.");
             
             EnableTextureOptimizations = config.Bind<bool>("Optimze", "EnableTextureOptimizations", false, "Master toggle for all texture optimizations (caching, resizing, compression, prewarm, etc.).");
-            EnableKtxCompression = config.Bind<bool>("Optimze", "EnableKtxCompression", false, "Compress cached textures to KTX format.");
+            EnableZstdCompression = config.Bind<bool>("Optimze", "EnableZstdCompression", false, "Compress cached textures using Zstd.");
+            ZstdCompressionLevel = config.Bind<int>("Optimze", "ZstdCompressionLevel", 5, "Zstd compression level (1-22, higher = better compression but slower).");
             ReduceTextureSize = config.Bind<bool>("Optimze", "ReduceTextureSize", false, "reduce texture size.");
             MinTextureSize = config.Bind<int>("Optimze", "MinTextureSize", 2048, "maximum resolution for resized textures.");
             ForceTextureToMinSize = config.Bind<bool>("Optimze", "ForceTextureToMinSize", true, "force resized textures to the target resolution.");

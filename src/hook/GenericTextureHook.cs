@@ -64,7 +64,6 @@ namespace VPB
         private static BufferPathMap _dataToPath = new BufferPathMap();
         
         static readonly char[] s_InvalidFileNameChars = Path.GetInvalidFileNameChars();
-        private static NativeKtx _nativeKtx = new NativeKtx();
 
         public static void PatchAll(Harmony harmony)
         {
@@ -422,8 +421,8 @@ namespace VPB
                 return true;
             }
 
-            // Only proceed if either Resize or KTX is enabled
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value)
+            // Only proceed if either Resize or Zstd is enabled
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value)
             {
                 return true;
             }
@@ -498,7 +497,7 @@ namespace VPB
         {
             if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value) return false;
             
-            bool enableKtx = Settings.Instance.EnableKtxCompression.Value;
+            bool enableZstd = Settings.Instance.EnableZstdCompression.Value;
             bool enableResize = Settings.Instance.ReduceTextureSize.Value;
 
             try
@@ -509,108 +508,83 @@ namespace VPB
                 qi.compress = true;
                 qi.linear = false; 
 
-                // 1. Check Disk Cache (KTX Priority)
-                if (enableKtx)
+                string cacheBase = GetDiskCachePath(qi, false, 0, 0);
+                if (string.IsNullOrEmpty(cacheBase)) return false;
+
+                string metaPath = cacheBase + ".meta";
+                if (!File.Exists(metaPath))
                 {
-                    string ktxBase = GetDiskCachePath(qi, false, 0, 0);
-                    if (!string.IsNullOrEmpty(ktxBase))
+                    // LogUtil.Log("No meta file for: " + path);
+                    return false;
+                }
+
+                try
+                {
+                    var json = JSON.Parse(File.ReadAllText(metaPath));
+                    int w = json["width"].AsInt;
+                    int h = json["height"].AsInt;
+                    int targetW = w;
+                    int targetH = h;
+                    
+                    if (enableResize)
                     {
-                        string metaPath = ktxBase + ".meta";
-                        if (File.Exists(metaPath))
-                        {
-                            try
+                        GetResizedSize(ref targetW, ref targetH, path);
+                    }
+                    
+                    string type = json["type"];
+                    string realCachePath = GetDiskCachePath(qi, true, targetW, targetH);
+                    string realCacheFile = realCachePath + ".cache";
+                    
+                    if (!File.Exists(realCacheFile))
+                    {
+                        if (File.Exists(realCachePath)) realCacheFile = realCachePath;
+                    }
+
+                    if (File.Exists(realCacheFile))
+                    {
+                        LogUtil.Log("Cache HIT: " + realCacheFile + " for " + path);
+                        byte[] fileBytes = File.ReadAllBytes(realCacheFile);
+                        byte[] bytes = null;
+                        if (type == "compressed")
                             {
-                                var json = JSON.Parse(File.ReadAllText(metaPath));
-                                int w = json["width"].AsInt;
-                                int h = json["height"].AsInt;
-                                int targetW = w;
-                                int targetH = h;
-                                
-                                if (Settings.Instance.ReduceTextureSize.Value)
-                                {
-                                    GetResizedSize(ref targetW, ref targetH, path);
-                                }
-                                
-                                string type = json["type"];
-
-                                if (type == "ktx" && targetW > 0 && targetH > 0)
-                                {
-                                    string realCachePath = GetDiskCachePath(qi, true, targetW, targetH);
-                                    string ktxFile = realCachePath + ".ktx2";
-
-                                    if (File.Exists(ktxFile))
-                                    {
-                                        _nativeKtx.Initialize();
-                                        var chain = _nativeKtx.ReadDxtFromKtx(ktxFile);
-                                        if (chain != null)
-                                        {
-                                            TextureFormat tf = TextureFormat.DXT1;
-                                            if (chain.format == KtxTestFormat.Dxt1) tf = TextureFormat.DXT1;
-                                            else if (chain.format == KtxTestFormat.Dxt5) tf = TextureFormat.DXT5;
-                                            else if (chain.format == KtxTestFormat.Rgb24) tf = TextureFormat.RGB24;
-                                            else if (chain.format == KtxTestFormat.Rgba32) tf = TextureFormat.RGBA32;
-
-                                            if (tex.width != chain.width || tex.height != chain.height)
-                                                tex.Resize(chain.width, chain.height, tf, false);
-                                            
-                                            tex.LoadRawTextureData(chain.data);
-                                            tex.Apply(false, !markNonReadable);
-                                            return true;
-                                        }
+                                try { 
+                                    bytes = ZstdCompressor.Decompress(fileBytes); 
+                                    if (bytes == null) {
+                                        LogUtil.LogError("Zstd decompression returned null for: " + realCacheFile);
+                                        return false;
                                     }
                                 }
+                                catch (Exception ex) { LogUtil.LogError("Zstd decompress fail in hook: " + ex.Message); return false; }
                             }
-                            catch {}
+                            else bytes = fileBytes;
+
+                            if (bytes != null)
+                            {
+                                if (tex.width != targetW || tex.height != targetH)
+                                {
+                                    TextureFormat tf = TextureFormat.DXT5;
+                                    if (json["format"] != null)
+                                    {
+                                        try { tf = (TextureFormat)Enum.Parse(typeof(TextureFormat), json["format"]); } catch {}
+                                    }
+                                    tex.Resize(targetW, targetH, tf, false);
+                                }
+                                tex.LoadRawTextureData(bytes);
+                                tex.Apply(false, !markNonReadable);
+                                LogUtil.Log("Successfully loaded from cache: " + path);
+                                return true;
+                            }
                         }
-                    }
-                }
-
-                // Check Standard Cache (Fallback)
-                string cachePath = GetDiskCachePath(qi, false, 0, 0);
-                if (!string.IsNullOrEmpty(cachePath))
-                {
-                    string metaPath = cachePath + ".meta";
-                    if (File.Exists(metaPath))
+                    else
                     {
-                         try
-                         {
-                             var json = JSON.Parse(File.ReadAllText(metaPath));
-                             int w = json["width"].AsInt;
-                             int h = json["height"].AsInt;
-                             int targetW = w;
-                             int targetH = h;
-                             
-                             if (Settings.Instance.ReduceTextureSize.Value)
-                             {
-                                 GetResizedSize(ref targetW, ref targetH, path);
-                             }
-                             
-                             if (targetW > 0 && targetH > 0)
-                             {
-                                 string realCachePath = GetDiskCachePath(qi, true, targetW, targetH);
-                                 string realCacheFile = realCachePath + ".cache";
-                                 if (!File.Exists(realCacheFile)) realCacheFile = realCachePath; 
-
-                                 if (File.Exists(realCacheFile))
-                                 {
-                                     byte[] cacheBytes = File.ReadAllBytes(realCacheFile);
-                                     if (tex.width != w || tex.height != h)
-                                     {
-                                         tex.Resize(w, h);
-                                     }
-                                     tex.LoadRawTextureData(cacheBytes);
-                                     tex.Apply(false, !markNonReadable);
-                                     return true;
-                                 }
-                             }
-                         }
-                         catch {}
+                        // LogUtil.Log("Cache file missing: " + realCacheFile);
                     }
                 }
+                catch (Exception ex) { LogUtil.LogError("TryLoadFromCache error parsing meta: " + ex.Message); }
             }
             catch (Exception ex)
             {
-                LogUtil.LogError("GenericTextureHook Error: " + ex);
+                LogUtil.LogError("GenericTextureHook TryLoadFromCache Error: " + ex);
             }
             return false;
         }
@@ -746,23 +720,32 @@ namespace VPB
             return power;
         }
 
-        static string GetDiskCachePath(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width, int height)
+        private static string GetDiskCachePath(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width, int height)
         {
             string textureCacheDir = VamHookPlugin.GetCacheDir();
             if (string.IsNullOrEmpty(textureCacheDir)) return null;
 
-            string basePath = textureCacheDir + "/";
-            string fileName = Path.GetFileName(qi.imgPath);
+            string imgPath = qi.imgPath;
+            var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
+
+            string fileName = Path.GetFileName(imgPath);
             fileName = SanitizeFileName(fileName).Replace('.', '_');
             
-            var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(qi.imgPath);
             string text = (fileEntry != null) ? fileEntry.Size.ToString() : "0";
             string token = (fileEntry != null) ? fileEntry.LastWriteTime.ToFileTime().ToString() : "0";
 
-            string signature = useSize ? (width + "_" + height) : "";
-            if (qi.compress) signature += "_C";
+            string signature = GetDiskCacheSignature(qi, useSize, width, height);
+           
+            return Path.Combine(textureCacheDir, fileName + "_" + text + "_" + token + "_" + signature);
+        }
 
-            return basePath + fileName + "_" + text + "_" + token + "_" + signature;
+        private static string GetDiskCacheSignature(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width, int height)
+        {
+            string text = useSize ? (width + "_" + height) : "";
+            if (qi.compress) text += "_C";
+            if (qi.linear) text += "_L";
+            // Normal maps and other flags are usually handled by qi properties
+            return text;
         }
         
         static string SanitizeFileName(string value)

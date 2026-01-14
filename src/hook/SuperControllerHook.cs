@@ -403,7 +403,7 @@ namespace VPB
             ImageLoadingMgr.currentProcessingPath = qi.imgPath;
 
             if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -453,7 +453,7 @@ namespace VPB
             LogUtil.MarkImageActivity();
 
             if (!Settings.Instance.EnableTextureOptimizations.Value) return true;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return true;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return true;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
@@ -503,7 +503,7 @@ namespace VPB
             LogUtil.MarkImageActivity();
 
             if (!Settings.Instance.EnableTextureOptimizations.Value) return true;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return true;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return true;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -549,7 +549,7 @@ namespace VPB
             LogUtil.MarkImageActivity();
 
             if (!Settings.Instance.EnableTextureOptimizations.Value) return true;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return true;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return true;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
@@ -588,7 +588,7 @@ namespace VPB
             LogUtil.MarkImageActivity();
 
             if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) return;
+            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return;
 
 
 

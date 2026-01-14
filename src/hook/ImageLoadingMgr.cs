@@ -24,14 +24,16 @@ namespace VPB
             public Texture2D texture;
         }
         public static ImageLoadingMgr singleton;
-        private NativeKtx _nativeKtx = new NativeKtx();
+        private readonly object _diskCacheWriteLock = new object();
+        private readonly Dictionary<string, object> _perPathWriteLocks = new Dictionary<string, object>();
+        
         private void Awake()
         {
             singleton = this;
         }
         private void Start()
         {
-            StartBulkKtxConversion();
+            StartBulkZstdCompression();
         }
 
         private float _lastDumpTime;
@@ -61,6 +63,7 @@ namespace VPB
 
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
+        HashSet<string> diskWriteInFlight = new HashSet<string>();
 
         void EnqueueInflightWaiter(string key, ImageLoaderThreaded.QueuedImage qi)
         {
@@ -166,6 +169,18 @@ namespace VPB
             DoCallback(qi);
         }
 
+        private object GetPathWriteLock(string path)
+        {
+            lock (_diskCacheWriteLock)
+            {
+                if (!_perPathWriteLocks.ContainsKey(path))
+                {
+                    _perPathWriteLocks[path] = new object();
+                }
+                return _perPathWriteLocks[path];
+            }
+        }
+
         void EnsureResizeCoroutine()
         {
             if (resizeCoroutine != null) return;
@@ -206,7 +221,7 @@ namespace VPB
             {
                 if (Settings.Instance == null) { LogUtil.Log("TryEnqueueResizeCache: Settings null"); return false; }
                 if (!Settings.Instance.EnableTextureOptimizations.Value) { LogUtil.Log("TryEnqueueResizeCache: Opts disabled"); return false; }
-                if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableKtxCompression.Value) { LogUtil.Log("TryEnqueueResizeCache: Resize/KTX disabled"); return false; }
+                if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) { LogUtil.Log("TryEnqueueResizeCache: Resize/Zstd disabled"); return false; }
             }
             catch (Exception ex) { LogUtil.LogError("TryEnqueueResizeCache Settings Error: " + ex); return false; }
 
@@ -217,7 +232,7 @@ namespace VPB
                  return false;
             }
 
-            // If no resize would occur (and resize is enabled), don't generate cache unless KTX is on.
+            // If no resize would occur (and resize is enabled), don't generate cache unless Zstd is on.
             int w = qi.tex.width;
             int h = qi.tex.height;
             if (Settings.Instance.ReduceTextureSize.Value)
@@ -231,9 +246,12 @@ namespace VPB
                 var real = GetDiskCachePath(qi, true, w, h);
                 if (!string.IsNullOrEmpty(real))
                 {
-                    if (File.Exists(real + ".cache") || File.Exists(real + ".ktx2") || File.Exists(real))
+                    bool inFlight = false;
+                    lock(diskWriteInFlight) { inFlight = diskWriteInFlight.Contains(key + ".meta"); }
+
+                    if (inFlight || ((File.Exists(real + ".cache") || File.Exists(real)) && File.Exists(key + ".meta")))
                     {
-                        LogUtil.Log("TryEnqueueResizeCache skipped: exists " + real);
+                        LogUtil.Log("TryEnqueueResizeCache skipped: exists or in-flight " + real);
                         return false;
                     }
                 }
@@ -464,12 +482,12 @@ namespace VPB
                 GetResizedSize(ref width, ref height, qi.imgPath);
             }
 
-            bool enableKtx = Settings.Instance.EnableKtxCompression.Value;
+            bool enableZstd = Settings.Instance.EnableZstdCompression.Value;
             var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
             if (string.IsNullOrEmpty(realDiskCachePath)) return;
-            var realDiskCachePathCache = realDiskCachePath + (enableKtx ? ".ktx2" : ".cache");
+            var realDiskCachePathCache = realDiskCachePath + ".cache";
 
-            if (File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath)) return;
+            if ((File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath)) && File.Exists(diskCachePath + ".meta")) return;
 
             LogUtil.Log("Generating cache for " + qi.imgPath + " -> " + realDiskCachePathCache);
 
@@ -485,14 +503,14 @@ namespace VPB
                         Array.Copy(bytes, pooledBytes, bytes.Length);
 
                         JSONClass jSON = new JSONClass();
-                        jSON["type"] = enableKtx ? "ktx" : "image";
+                        jSON["type"] = enableZstd ? "compressed" : "dxt";
                         jSON["width"].AsInt = qi.tex.width;
                         jSON["height"].AsInt = qi.tex.height;
                         jSON["resizedWidth"].AsInt = width;
                         jSON["resizedHeight"].AsInt = height;
                         jSON["format"] = qi.tex.format.ToString();
 
-                        WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), enableKtx, width, height, qi.tex.format, qi.linear);
+                        WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), enableZstd, width, height, qi.tex.format, qi.linear);
                         return;
                     }
                 }
@@ -538,14 +556,14 @@ namespace VPB
                 int realLength = bytes.Length;
                 
                 JSONClass jSONClass = new JSONClass();
-                jSONClass["type"] = enableKtx ? "ktx" : "image";
+                jSONClass["type"] = enableZstd ? "compressed" : "dxt";
                 jSONClass["width"].AsInt = qi.tex.width;
                 jSONClass["height"].AsInt = qi.tex.height;
                 jSONClass["resizedWidth"].AsInt = width;
                 jSONClass["resizedHeight"].AsInt = height;
                 jSONClass["format"] = tmp.format.ToString();
                 
-                WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, realLength, diskCachePath + ".meta", jSONClass.ToString(string.Empty), enableKtx, width, height, tmp.format, qi.linear);
+                WriteDiskCacheAsync(realDiskCachePathCache, pooledBytes, realLength, diskCachePath + ".meta", jSONClass.ToString(string.Empty), enableZstd, width, height, tmp.format, qi.linear);
 
                 // Note: we intentionally do NOT RegisterTexture or swap qi.tex in this async cache path.
                 // This prevents unexpected texture replacement mid-frame; future loads will hit disk/mem cache.
@@ -564,72 +582,83 @@ namespace VPB
             }
         }
 
-        void WriteDiskCacheAsync(string pathCache, byte[] bytes, int length, string pathMeta, string metaContent, bool isKtx = false, int w = 0, int h = 0, TextureFormat fmt = TextureFormat.RGBA32, bool linear = false)
+        void WriteDiskCacheAsync(string pathCache, byte[] bytes, int length, string pathMeta, string metaContent, bool isZstd = false, int w = 0, int h = 0, TextureFormat fmt = TextureFormat.RGBA32, bool linear = false)
         {
+            if (!string.IsNullOrEmpty(pathMeta))
+            {
+                lock(diskWriteInFlight) { diskWriteInFlight.Add(pathMeta); }
+            }
+
             ThreadPool.QueueUserWorkItem((state) =>
             {
-                try
+                object pathLock = GetPathWriteLock(pathCache);
+                lock (pathLock)
                 {
-                    if (bytes != null && !string.IsNullOrEmpty(pathCache))
+                    try
                     {
-                        if (isKtx)
+                        if (bytes != null && !string.IsNullOrEmpty(pathCache))
                         {
-                            _nativeKtx.Initialize();
-                            var input = new DxtMipChain();
-                            input.width = w;
-                            input.height = h;
-                            input.mipCount = 1; 
-                            input.data = bytes;
-                            input.isSRGB = !linear;
-                             
-                            if (fmt == TextureFormat.DXT1) input.format = KtxTestFormat.Dxt1;
-                            else if (fmt == TextureFormat.DXT5) input.format = KtxTestFormat.Dxt5;
-                            else if (fmt == TextureFormat.RGB24) input.format = KtxTestFormat.Rgb24;
-                            else if (fmt == TextureFormat.RGBA32) input.format = KtxTestFormat.Rgba32;
-                            else input.format = KtxTestFormat.Rgba32; 
+                            int compressionLevel = Settings.Instance.ZstdCompressionLevel.Value;
                             
-                            int mip0Size = length;
-                            int blockSize = 0;
-                            if (fmt == TextureFormat.DXT1) blockSize = 8;
-                            else if (fmt == TextureFormat.DXT5) blockSize = 16;
-                            else if (fmt == TextureFormat.RGB24) blockSize = 3;
-                            else if (fmt == TextureFormat.RGBA32) blockSize = 4;
-
-                            if (blockSize > 0)
+                            if (isZstd && compressionLevel > 0)
                             {
-                                int expectedSize;
-                                if (fmt == TextureFormat.DXT1 || fmt == TextureFormat.DXT5)
-                                    expectedSize = Math.Max(1, (w + 3) / 4) * Math.Max(1, (h + 3) / 4) * blockSize;
-                                else
-                                    expectedSize = w * h * blockSize;
-
-                                if (length > expectedSize) mip0Size = expectedSize;
+                                try
+                                {
+                                    byte[] compressed = ZstdCompressor.Compress(bytes, compressionLevel);
+                                    using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
+                                    {
+                                        fs.Write(compressed, 0, compressed.Length);
+                                    }
+                                    LogUtil.Log("[VPB] WriteDiskCacheAsync: Wrote Zstd-compressed cache (level " + compressionLevel + ") for " + pathCache);
+                                }
+                                catch (Exception zstdEx)
+                                {
+                                    LogUtil.LogWarning("[VPB] WriteDiskCacheAsync: Zstd compression failed, writing uncompressed. Error: " + zstdEx.ToString());
+                                    using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
+                                    {
+                                        fs.Write(bytes, 0, length);
+                                    }
+                                }
                             }
-                             
-                            input.mipOffsets = new int[] { 0 };
-                            input.mipSizes = new int[] { mip0Size };
-                            input.dataSize = mip0Size;
-                             
-                            _nativeKtx.WriteKtxFromDxt(pathCache, input);
-                        }
-                        else
-                        {
-                            using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
+                            else
                             {
-                                fs.Write(bytes, 0, length);
+                                using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
+                                {
+                                    fs.Write(bytes, 0, length);
+                                }
+                            }
+                        }
+                        
+                        if (!string.IsNullOrEmpty(metaContent) && !string.IsNullOrEmpty(pathMeta))
+                        {
+                            string tempMetaPath = pathMeta + ".tmp";
+                            try
+                            {
+                                var metaJson = SimpleJSON.JSON.Parse(metaContent);
+                                // The meta content already has correct 'type' set in GenerateResizedDiskCache
+                                File.WriteAllText(tempMetaPath, metaJson.ToString(string.Empty));
+                                if (File.Exists(pathMeta)) File.Delete(pathMeta);
+                                File.Move(tempMetaPath, pathMeta);
+                            }
+                            catch
+                            {
+                                try { if (File.Exists(tempMetaPath)) File.Delete(tempMetaPath); } catch { }
+                                throw;
                             }
                         }
                     }
-                    if (!string.IsNullOrEmpty(metaContent) && !string.IsNullOrEmpty(pathMeta))
-                        File.WriteAllText(pathMeta, metaContent);
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("WriteDiskCacheAsync failed: " + pathCache + " " + ex.ToString());
-                }
-                finally
-                {
-                    if (bytes != null) ByteArrayPool.Return(bytes);
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("WriteDiskCacheAsync failed: " + pathCache + " " + ex.ToString());
+                    }
+                    finally
+                    {
+                        if (!string.IsNullOrEmpty(pathMeta))
+                        {
+                            lock(diskWriteInFlight) { diskWriteInFlight.Remove(pathMeta); }
+                        }
+                        if (bytes != null) ByteArrayPool.Return(bytes);
+                    }
                 }
             });
         }
@@ -699,14 +728,20 @@ namespace VPB
             }
             else
             {
-                 LogUtil.Log("Request meta missing: " + metaPath + " (legacy: " + legacyMetaPath + ")");
+                 LogUtil.LogTextureTrace("Img.Request.MetaMissing:" + diskCachePath, "Request meta missing: " + metaPath + " (legacy: " + legacyMetaPath + ")");
             }
             
             if (metaToUse != null)
             {
                 var jsonString = File.ReadAllText(metaToUse);
                 JSONNode jSONNode = JSON.Parse(jsonString);
-                JSONClass asObject = jSONNode.AsObject;
+                JSONClass asObject = (jSONNode != null) ? jSONNode.AsObject : null;
+                if (asObject == null)
+                {
+                    LogUtil.LogError("Invalid meta JSON in " + metaToUse + ": " + jsonString);
+                    return false;
+                }
+
                 if (asObject != null)
                 {
                     if (asObject["width"] != null) width = asObject["width"].AsInt;
@@ -719,31 +754,19 @@ namespace VPB
                     GetResizedSize(ref width, ref height, qi.imgPath);
                 }
 
-                var realDiskCachePath = GetDiskCachePath(qi, true,width, height);
+                var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
                 var diskPathToUse = realDiskCachePath + ".cache";
-                bool isKtx = asObject != null && asObject["type"].Value.ToLower() == "ktx";
-                if (isKtx) diskPathToUse = realDiskCachePath + ".ktx2";
+                bool isCompressed = asObject != null && asObject["type"].Value.ToLower() == "compressed";
+
+                LogUtil.LogTextureTrace("Img.Request.MetaHit:" + diskCachePath, string.Format("Meta hit: {0}, format={1}, size={2}x{3}, type={4}", metaToUse, textureFormat, width, height, (asObject != null ? asObject["type"].Value : "null")));
 
                 if (!File.Exists(diskPathToUse))
                 {
-                    LogUtil.Log("Request cache missing: " + diskPathToUse + " isKtx=" + isKtx + " type=" + (asObject != null ? asObject["type"].Value : "null") + " meta=" + metaToUse);
-                    if (!isKtx && File.Exists(realDiskCachePath + ".ktx2"))
-                    {
-                        LogUtil.Log("BUT .ktx2 exists! Meta content: " + jsonString);
-                    }
+                    LogUtil.Log(string.Format("Request cache missing: {0} (type={1}, meta={2})", diskPathToUse, (asObject != null ? asObject["type"].Value : "null"), metaToUse));
 
-                    if (isKtx)
+                    // Backward-compat for caches previously written without extension.
+                    if (File.Exists(realDiskCachePath))
                     {
-                        // Fallback to .cache if ktx missing? 
-                        if (File.Exists(realDiskCachePath + ".cache"))
-                        {
-                            diskPathToUse = realDiskCachePath + ".cache";
-                            isKtx = false;
-                        }
-                    }
-                    else
-                    {
-                        // Backward-compat for caches previously written without extension.
                         diskPathToUse = realDiskCachePath;
                     }
                 }
@@ -760,43 +783,43 @@ namespace VPB
 
                     try
                     {
-                        if (isKtx)
+                        using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
                         {
-                            _nativeKtx.Initialize();
-                            var chain = _nativeKtx.ReadDxtFromKtx(diskPathToUse);
-                            if (chain != null)
+                            int len = (int)fs.Length;
+                            byte[] fileBytes = new byte[len];
+                            int offset = 0;
+                            int remaining = len;
+                            while (remaining > 0)
                             {
-                                textureFormat = TextureFormat.DXT1;
-                                if (chain.format == KtxTestFormat.Dxt1) textureFormat = TextureFormat.DXT1;
-                                else if (chain.format == KtxTestFormat.Dxt5) textureFormat = TextureFormat.DXT5;
-                                else if (chain.format == KtxTestFormat.Rgb24) textureFormat = TextureFormat.RGB24;
-                                else if (chain.format == KtxTestFormat.Rgba32) textureFormat = TextureFormat.RGBA32;
-
-                                width = chain.width;
-                                height = chain.height;
-                                bytes = chain.data;
-                                bytesLen = bytes.Length;
-                                success = true;
+                                int read = fs.Read(fileBytes, offset, remaining);
+                                if (read <= 0) break;
+                                offset += read;
+                                remaining -= read;
                             }
-                        }
-                        else
-                        {
-                            using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
+
+                            if (isCompressed)
                             {
-                                int len = (int)fs.Length;
-                                bytes = ByteArrayPool.Rent(len);
-                                bytesLen = len;
-                                int offset = 0;
-                                int remaining = len;
-                                while (remaining > 0)
+                                try
                                 {
-                                    int read = fs.Read(bytes, offset, remaining);
-                                    if (read <= 0) break;
-                                    offset += read;
-                                    remaining -= read;
+                                    byte[] decompressed = ZstdCompressor.Decompress(fileBytes);
+                                    bytes = ByteArrayPool.Rent(decompressed.Length);
+                                    Array.Copy(decompressed, bytes, decompressed.Length);
+                                    bytesLen = decompressed.Length;
+                                    success = true;
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogUtil.LogError("Zstd decompression failed for " + diskPathToUse + ": " + ex.Message);
+                                    success = false;
                                 }
                             }
-                            success = true;
+                            else
+                            {
+                                bytes = ByteArrayPool.Rent(len);
+                                Array.Copy(fileBytes, bytes, len);
+                                bytesLen = len;
+                                success = true;
+                            }
                         }
                     }
                     catch (System.Exception ex)
@@ -817,7 +840,7 @@ namespace VPB
 
                         RegisterTexture(diskCachePath, tex);
 
-                        if (!isKtx && bytes != null) ByteArrayPool.Return(bytes);
+                        if (bytes != null) ByteArrayPool.Return(bytes);
 
                         Messager.singleton.StartCoroutine(DelayDoCallback(qi));
                         LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
@@ -825,8 +848,13 @@ namespace VPB
                     }
                     else
                     {
-                        if (!isKtx && bytes != null) ByteArrayPool.Return(bytes);
+                        LogUtil.Log("Request cache load failed (success=false): " + diskPathToUse);
+                        if (bytes != null) ByteArrayPool.Return(bytes);
                     }
+                }
+                else
+                {
+                    LogUtil.Log("Request cache file missing (meta exists): " + diskPathToUse);
                 }
             }
 
@@ -842,106 +870,76 @@ namespace VPB
             return false;
         }
 
-        public void StartBulkKtxConversion()
+        public void StartBulkZstdCompression()
         {
-            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value || !Settings.Instance.EnableKtxCompression.Value)
+            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value || !Settings.Instance.EnableZstdCompression.Value)
                 return;
 
             string cacheDir = VamHookPlugin.GetCacheDir();
             if (!Directory.Exists(cacheDir)) return;
 
-            LogUtil.Log("Starting bulk KTX conversion...");
+            LogUtil.Log("Starting bulk Zstd compression...");
             ThreadPool.QueueUserWorkItem((state) =>
             {
                 try
                 {
-                    BulkKtxWorker(cacheDir);
+                    BulkZstdWorker(cacheDir);
                 }
                 catch (Exception ex)
                 {
-                    LogUtil.LogError("Bulk KTX conversion failed: " + ex.ToString());
+                    LogUtil.LogError("Bulk Zstd compression failed: " + ex.ToString());
                 }
             });
         }
 
-        private void BulkKtxWorker(string cacheDir)
+        private void BulkZstdWorker(string cacheDir)
         {
-            var native = new NativeKtx();
-            native.Initialize();
-
             string[] files = Directory.GetFiles(cacheDir, "*.cache", SearchOption.TopDirectoryOnly);
-            LogUtil.Log(string.Format("Bulk KTX: Found {0} .cache files", files.Length));
+            LogUtil.Log(string.Format("Bulk compression: Found {0} .cache files", files.Length));
 
-            int converted = 0;
+            int compressed = 0;
             int skipped = 0;
             int failed = 0;
+            int compressionLevel = Settings.Instance.ZstdCompressionLevel.Value;
 
             foreach (var file in files)
             {
                 try
                 {
-                    string ktxPath = file.Substring(0, file.Length - 6) + ".ktx2";
-                    if (File.Exists(ktxPath))
-                    {
-                        skipped++;
-                        continue;
-                    }
-
                     string metaPath = file.Substring(0, file.Length - 6) + ".meta";
                     if (!File.Exists(metaPath))
                     {
-                        // Fallback to old meta path if needed
                         if (File.Exists(file + ".meta")) metaPath = file + ".meta";
                         else { skipped++; continue; }
                     }
 
                     var metaJson = JSON.Parse(File.ReadAllText(metaPath));
                     var type = metaJson["type"].Value;
-                    if (type == "ktx") { skipped++; continue; }
+                    if (type == "compressed") { skipped++; continue; }
 
-                    int w = metaJson["resizedWidth"].AsInt;
-                    int h = metaJson["resizedHeight"].AsInt;
-                    if (w == 0 || h == 0)
-                    {
-                        w = metaJson["width"].AsInt;
-                        h = metaJson["height"].AsInt;
-                    }
-                    if (w == 0 || h == 0) { skipped++; continue; }
-
-                    string fmtStr = metaJson["format"].Value;
-                    KtxTestFormat format = KtxTestFormat.Dxt5;
-                    if (fmtStr == "DXT1") format = KtxTestFormat.Dxt1;
-                    else if (fmtStr == "DXT5") format = KtxTestFormat.Dxt5;
-                    else if (fmtStr == "RGB24") format = KtxTestFormat.Rgb24;
-                    else if (fmtStr == "RGBA32") format = KtxTestFormat.Rgba32;
-                    else { skipped++; continue; }
+                    if (compressionLevel <= 0) { skipped++; continue; }
 
                     byte[] dxtData = File.ReadAllBytes(file);
-                    var input = new DxtMipChain();
-                    input.width = w;
-                    input.height = h;
-                    input.format = format;
-                    input.mipCount = 1;
-                    input.data = dxtData;
-                    input.mipOffsets = new int[] { 0 };
-                    input.mipSizes = new int[] { dxtData.Length };
+                    byte[] compressedData = ZstdCompressor.Compress(dxtData, compressionLevel);
 
-                    native.WriteKtxFromDxt(ktxPath, input);
+                    string tempPath = file + ".tmp";
+                    File.WriteAllBytes(tempPath, compressedData);
+                    File.Delete(file);
+                    File.Move(tempPath, file);
 
-                    // Update meta to reflect KTX type
-                    metaJson["type"] = "ktx";
+                    metaJson["type"] = "compressed";
                     File.WriteAllText(metaPath, metaJson.ToString(string.Empty));
 
-                    converted++;
+                    compressed++;
                 }
                 catch (Exception ex)
                 {
                     failed++;
-                    LogUtil.LogError("Bulk KTX: Failed to convert " + file + ": " + ex.Message);
+                    LogUtil.LogError("Bulk compression: Failed to convert " + file + ": " + ex.Message);
                 }
             }
 
-            LogUtil.Log(string.Format("Bulk KTX completed: {0} converted, {1} skipped, {2} failed", converted, skipped, failed));
+            LogUtil.Log(string.Format("Bulk compression completed: {0} compressed, {1} skipped, {2} failed", compressed, skipped, failed));
         }
 
         static bool IsLikelyUrlFieldName(string name)
@@ -1023,7 +1021,6 @@ namespace VPB
             var diskCachePath = GetDiskCachePath(qi,false,0,0);
             var realDiskCachePath = GetDiskCachePath(qi,true,width,height);
             var realDiskCachePathCache = realDiskCachePath + ".cache";
-            var realDiskCachePathKtx = realDiskCachePath + ".ktx2";
 
             LogUtil.BeginImageWork();
             try
@@ -1042,10 +1039,9 @@ namespace VPB
             }
 
             //var thumbnailPath = diskCachePath + ext
-            string diskPathToUse = File.Exists(realDiskCachePathKtx) ? realDiskCachePathKtx : (File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath);
+            string diskPathToUse = File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath;
             if (File.Exists(diskPathToUse))
             {
-                bool isKtx = diskPathToUse.EndsWith(".ktx2");
                 LogUtil.PerfAdd("Img.Resize.FromDisk", 0, 0);
                 LogUtil.LogTextureTrace("Img.Resize.DiskHit:" + diskPathToUse, "resize use disk cache:" + diskPathToUse);
                 var swRead = System.Diagnostics.Stopwatch.StartNew();
@@ -1054,42 +1050,45 @@ namespace VPB
 
                 try
                 {
-                    if (isKtx)
-                    {
-                        _nativeKtx.Initialize();
-                        var chain = _nativeKtx.ReadDxtFromKtx(diskPathToUse);
-                        if (chain != null)
-                        {
-                            var textureFormat = TextureFormat.DXT1;
-                            if (chain.format == KtxTestFormat.Dxt1) textureFormat = TextureFormat.DXT1;
-                            else if (chain.format == KtxTestFormat.Dxt5) textureFormat = TextureFormat.DXT5;
-                            else if (chain.format == KtxTestFormat.Rgb24) textureFormat = TextureFormat.RGB24;
-                            else if (chain.format == KtxTestFormat.Rgba32) textureFormat = TextureFormat.RGBA32;
-
-                            resultTexture = new Texture2D(width, height, textureFormat, false, qi.linear);
-                            resultTexture.LoadRawTextureData(chain.data);
-                            resultTexture.Apply();
-                            RegisterTexture(diskCachePath, resultTexture);
-                            ResolveInflightWaiters(diskCachePath, resultTexture);
-                            UnityEngine.Object.Destroy(qi.tex);
-                            qi.tex = resultTexture;
-                            return resultTexture;
-                        }
-                    }
-
                     using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
                     {
                         int len = (int)fs.Length;
-                        bytes = ByteArrayPool.Rent(len);
-                        bytesLen = len;
+                        byte[] fileBytes = new byte[len];
                         int offset = 0;
                         int remaining = len;
                         while (remaining > 0)
                         {
-                            int read = fs.Read(bytes, offset, remaining);
+                            int read = fs.Read(fileBytes, offset, remaining);
                             if (read <= 0) break;
                             offset += read;
                             remaining -= read;
+                        }
+
+                        // Check meta for compression
+                        bool isCompressed = false;
+                        string metaPath = diskCachePath + ".meta";
+                        if (File.Exists(metaPath))
+                        {
+                            try
+                            {
+                                var metaJson = JSON.Parse(File.ReadAllText(metaPath));
+                                if (metaJson["type"].Value == "compressed") isCompressed = true;
+                            }
+                            catch { }
+                        }
+
+                        if (isCompressed)
+                        {
+                            byte[] decompressed = ZstdCompressor.Decompress(fileBytes);
+                            bytes = ByteArrayPool.Rent(decompressed.Length);
+                            Array.Copy(decompressed, bytes, decompressed.Length);
+                            bytesLen = decompressed.Length;
+                        }
+                        else
+                        {
+                            bytes = ByteArrayPool.Rent(len);
+                            Array.Copy(fileBytes, bytes, len);
+                            bytesLen = len;
                         }
                     }
 
@@ -1124,18 +1123,18 @@ namespace VPB
                         byte[] pooledBytes = ByteArrayPool.Rent(bytes.Length);
                         Array.Copy(bytes, pooledBytes, bytes.Length);
 
-                        bool ktx = Settings.Instance.EnableKtxCompression.Value;
-                        string targetPath = realDiskCachePath + (ktx ? ".ktx2" : ".cache");
+                        bool zstd = Settings.Instance.EnableZstdCompression.Value;
+                        string targetPath = realDiskCachePath + ".cache";
 
                         JSONClass jSON = new JSONClass();
-                        jSON["type"] = ktx ? "ktx" : "image";
+                        jSON["type"] = zstd ? "compressed" : "dxt";
                         jSON["width"].AsInt = qi.tex.width;
                         jSON["height"].AsInt = qi.tex.height;
                         jSON["resizedWidth"].AsInt = width;
                         jSON["resizedHeight"].AsInt = height;
                         jSON["format"] = qi.tex.format.ToString();
 
-                        WriteDiskCacheAsync(targetPath, pooledBytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), ktx, width, height, qi.tex.format, qi.linear);
+                        WriteDiskCacheAsync(targetPath, pooledBytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), zstd, width, height, qi.tex.format, qi.linear);
                         
                         // We still need to return a result texture or update qi.tex
                         // but since we didn't resize, we can just use qi.tex as is.
@@ -1195,11 +1194,11 @@ namespace VPB
 
             byte[] texBytes = resultTexture.GetRawTextureData();
             
-            bool enableKtx = Settings.Instance.EnableKtxCompression.Value;
-            if (enableKtx) realDiskCachePathCache = realDiskCachePath + ".ktx2";
+            bool enableZstd = Settings.Instance.EnableZstdCompression.Value;
+            string targetCachePath = realDiskCachePath + ".cache";
 
             JSONClass jSONClass = new JSONClass();
-            jSONClass["type"] = enableKtx ? "ktx" : "image";
+            jSONClass["type"] = enableZstd ? "compressed" : "dxt";
             // Record the original texture size here.
             jSONClass["width"].AsInt = qi.tex.width;
             jSONClass["height"].AsInt = qi.tex.height;
@@ -1208,7 +1207,7 @@ namespace VPB
             jSONClass["format"] = resultTexture.format.ToString();
             string contents = jSONClass.ToString(string.Empty);
             
-            WriteDiskCacheAsync(realDiskCachePathCache, texBytes, texBytes.Length, diskCachePath + ".meta", contents, enableKtx, width, height, resultTexture.format, qi.linear);
+            WriteDiskCacheAsync(targetCachePath, texBytes, texBytes.Length, diskCachePath + ".meta", contents, enableZstd, width, height, resultTexture.format, qi.linear);
 
 
             RegisterTexture(diskCachePath, resultTexture);
@@ -1369,6 +1368,10 @@ namespace VPB
             var textureCacheDir = VamHookPlugin.GetCacheDir();
 
             var imgPath = qi.imgPath;
+            if (!string.IsNullOrEmpty(imgPath))
+            {
+                imgPath = imgPath.Replace('\\', '/');
+            }
 
             string result = null;
             var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
@@ -1377,6 +1380,7 @@ namespace VPB
             {
                 string fileName = Path.GetFileName(imgPath);
                 fileName = SanitizeFileName(fileName);
+                if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
                 fileName = fileName.Replace('.', '_');
                 string text = (fileEntry != null) ? fileEntry.Size.ToString() : "0";
                 string token = (fileEntry != null) ? fileEntry.LastWriteTime.ToFileTime().ToString() : "0";
@@ -1408,7 +1412,7 @@ namespace VPB
         protected string GetDiskCacheSignature(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width,int height)
         {
             string text = useSize ? (width + "_" + height) : "";
-            if (qi.compress)
+            if (qi.compress && Settings.Instance != null && Settings.Instance.EnableZstdCompression.Value)
             {
                 text += "_C";
             }

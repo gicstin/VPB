@@ -405,19 +405,19 @@ namespace VPB
                     Settings.Instance.EnableTextureOptimizations.Value = val;
                     if (val)
                     {
-                        Settings.Instance.EnableKtxCompression.Value = true;
+                        Settings.Instance.EnableZstdCompression.Value = true;
                     }
                 }, "Master toggle for all texture optimizations (caching, resizing, compression, prewarm, etc.).");
 
-                CreateHeader("KTX Support");
-                GameObject ktxBtn = UI.CreateUIButton(settingsScrollContent, 400, 50, "Run KTX Roundtrip Test", 22, 0, 0, AnchorPresets.middleCenter, () => {
-                    KtxRoundTripTest.RunFullTest();
+                CreateHeader("Compression Support");
+                GameObject zstdBtn = UI.CreateUIButton(settingsScrollContent, 400, 50, "Run Zstd Roundtrip Test", 22, 0, 0, AnchorPresets.middleCenter, () => {
+                    ZstdRoundTripTest.RunFullTest();
                 });
-                ktxBtn.GetComponent<Image>().color = new Color(1f, 0f, 1f, 0.8f); // Magenta
-                ktxBtn.GetComponentInChildren<Text>().color = Color.white;
-                ktxBtn.AddComponent<UIHoverBorder>();
-                LayoutElement ktxLe = ktxBtn.AddComponent<LayoutElement>();
-                ktxLe.minHeight = 60; ktxLe.preferredHeight = 60; ktxLe.flexibleWidth = 1;
+                zstdBtn.GetComponent<Image>().color = new Color(0.2f, 0.6f, 1f, 0.8f); // Blue-ish
+                zstdBtn.GetComponentInChildren<Text>().color = Color.white;
+                zstdBtn.AddComponent<UIHoverBorder>();
+                LayoutElement zstdLe = zstdBtn.AddComponent<LayoutElement>();
+                zstdLe.minHeight = 60; zstdLe.preferredHeight = 60; zstdLe.flexibleWidth = 1;
             }
         }
 

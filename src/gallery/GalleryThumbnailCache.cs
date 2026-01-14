@@ -2,12 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using UnityEngine;
 
 namespace VPB
 {
     public class GalleryThumbnailCache
     {
+        private const int CACHE_VERSION = 2;
+        private const string CACHE_MAGIC = "VPBCACHE";
+        private const int CACHE_HEADER_SIZE = 20;
+
         private static GalleryThumbnailCache _instance;
         private static readonly object instanceLock = new object();
 
@@ -30,7 +35,8 @@ namespace VPB
         private FileStream fileStream;
         private BinaryWriter writer;
         private BinaryReader reader;
-        private readonly object lockObj = new object();
+        private ReaderWriterLockSlim cacheLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+        private int cacheFormatVersion = 0;
 
         private Dictionary<string, CacheEntry> index = new Dictionary<string, CacheEntry>();
 
@@ -42,6 +48,7 @@ namespace VPB
             public int Width;
             public int Height;
             public int Format;
+            public uint DataCRC32;
         }
 
         public GalleryThumbnailCache()
@@ -56,13 +63,43 @@ namespace VPB
             CleanCache();
         }
 
+        private uint CalculateCRC32(byte[] data, int offset, int length)
+        {
+            if (data == null || offset < 0 || length < 0 || offset + length > data.Length) return 0;
+            
+            uint crc = 0xFFFFFFFF;
+            for (int i = offset; i < offset + length; i++)
+            {
+                crc = (crc >> 8) ^ CRC32_TABLE[(crc ^ data[i]) & 0xFF];
+            }
+            return crc ^ 0xFFFFFFFF;
+        }
+
+        private static readonly uint[] CRC32_TABLE = InitCRC32Table();
+
+        private static uint[] InitCRC32Table()
+        {
+            uint[] table = new uint[256];
+            const uint poly = 0xEDB88320;
+            for (int i = 0; i < 256; i++)
+            {
+                uint crc = (uint)i;
+                for (int j = 0; j < 8; j++)
+                {
+                    crc = (crc & 1) == 1 ? (crc >> 1) ^ poly : (crc >> 1);
+                }
+                table[i] = crc;
+            }
+            return table;
+        }
+
         private void Initialize()
         {
-            lock (lockObj)
+            cacheLock.EnterWriteLock();
+            try
             {
                 try
                 {
-                    // Use larger buffer (64KB) for better performance
                     fileStream = new FileStream(cacheFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, 65536, FileOptions.RandomAccess);
                     writer = new BinaryWriter(fileStream);
                     reader = new BinaryReader(fileStream);
@@ -75,6 +112,10 @@ namespace VPB
                     if (fileStream != null) fileStream.Dispose();
                     fileStream = null;
                 }
+            }
+            finally
+            {
+                cacheLock.ExitWriteLock();
             }
         }
 
@@ -96,30 +137,74 @@ namespace VPB
         private void BuildIndex()
         {
             index.Clear();
+            cacheFormatVersion = 0;
             if (fileStream.Length == 0) return;
 
             fileStream.Position = 0;
-            long lastValidPos = 0;
+            
+            if (fileStream.Length >= CACHE_HEADER_SIZE)
+            {
+                byte[] magicBytes = reader.ReadBytes(8);
+                string magic = Encoding.ASCII.GetString(magicBytes);
+                
+                if (magic == CACHE_MAGIC)
+                {
+                    cacheFormatVersion = reader.ReadInt32();
+                    fileStream.ReadByte();
+                    fileStream.ReadByte();
+                    fileStream.ReadByte();
+                    fileStream.ReadByte();
+                    fileStream.ReadByte();
+                    fileStream.ReadByte();
+                    fileStream.ReadByte();
+                    fileStream.ReadByte();
+                    
+                    if (cacheFormatVersion == CACHE_VERSION)
+                    {
+                        BuildIndexV2();
+                        return;
+                    }
+                    else if (cacheFormatVersion > CACHE_VERSION)
+                    {
+                        Debug.LogError("GalleryThumbnailCache: Cache version " + cacheFormatVersion + " is newer than supported " + CACHE_VERSION);
+                        return;
+                    }
+                }
+            }
+            
+            cacheFormatVersion = 1;
+            BuildIndexV1();
+            
             try
             {
-                // Simple append-only format:
-                // [PathLength(4)][PathBytes(N)][LastWriteTime(8)][Width(4)][Height(4)][Format(4)][DataLen(4)][Data(M)]
+                MigrateV1ToV2();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("GalleryThumbnailCache: Failed to migrate cache to V2: " + ex.Message);
+            }
+        }
+
+        private void BuildIndexV1()
+        {
+            index.Clear();
+            fileStream.Position = 0;
+            long lastValidPos = 0;
+            
+            try
+            {
                 while (fileStream.Position < fileStream.Length)
                 {
-                    long entryStart = fileStream.Position;
-                    
-                    // Check if we have enough bytes for the header (at least 4 bytes for path length)
                     if (fileStream.Position + 4 > fileStream.Length) break;
 
                     int pathLen = reader.ReadInt32();
-                    if (pathLen < 0 || fileStream.Position + pathLen > fileStream.Length) break; // Corrupt
+                    if (pathLen < 0 || fileStream.Position + pathLen > fileStream.Length) break;
 
                     byte[] pathBytes = reader.ReadBytes(pathLen);
-                    if (pathBytes.Length != pathLen) break; // Unexpected EOF
+                    if (pathBytes.Length != pathLen) break;
                     
                     string path = Encoding.UTF8.GetString(pathBytes);
 
-                    // Check remaining header size (8+4+4+4+4 = 24 bytes)
                     if (fileStream.Position + 24 > fileStream.Length) break;
 
                     long lastWriteTime = reader.ReadInt64();
@@ -128,25 +213,15 @@ namespace VPB
                     int format = reader.ReadInt32();
                     int dataLen = reader.ReadInt32();
 
-                    if (dataLen < 0 || fileStream.Position + dataLen > fileStream.Length) break; // Corrupt
+                    if (dataLen < 0 || fileStream.Position + dataLen > fileStream.Length) break;
 
                     long dataOffset = fileStream.Position;
-                    
-                    // Skip data
                     fileStream.Seek(dataLen, SeekOrigin.Current);
-                    
-                    // Mark as valid up to this point
                     lastValidPos = fileStream.Position;
 
-                    // Validate dataLen against expected size for known formats
                     int expected = GetExpectedRawDataSize(width, height, format);
-                    if (expected > 0 && dataLen < expected)
-                    {
-                        // Corrupt entry or format mismatch, ignore it
-                        continue;
-                    }
+                    if (expected > 0 && dataLen < expected) continue;
 
-                    // Add/Update index
                     CacheEntry entry = new CacheEntry
                     {
                         Offset = dataOffset,
@@ -154,7 +229,8 @@ namespace VPB
                         LastWriteTime = lastWriteTime,
                         Width = width,
                         Height = height,
-                        Format = format
+                        Format = format,
+                        DataCRC32 = 0
                     };
                     
                     if (index.ContainsKey(path))
@@ -169,10 +245,9 @@ namespace VPB
             }
             catch (Exception ex)
             {
-                Debug.LogError("GalleryThumbnailCache: Error building index: " + ex.Message);
+                Debug.LogError("GalleryThumbnailCache: Error building V1 index: " + ex.Message);
             }
             
-            // Truncate any corrupt tail
             if (lastValidPos < fileStream.Length)
             {
                 try
@@ -185,6 +260,170 @@ namespace VPB
                     Debug.LogError("GalleryThumbnailCache: Failed to truncate cache file: " + ex.Message);
                 }
             }
+        }
+
+        private void BuildIndexV2()
+        {
+            index.Clear();
+            long lastValidPos = CACHE_HEADER_SIZE;
+            
+            try
+            {
+                while (fileStream.Position < fileStream.Length)
+                {
+                    if (fileStream.Position + 4 > fileStream.Length) break;
+
+                    int pathLen = reader.ReadInt32();
+                    if (pathLen < 0 || fileStream.Position + pathLen > fileStream.Length) break;
+
+                    byte[] pathBytes = reader.ReadBytes(pathLen);
+                    if (pathBytes.Length != pathLen) break;
+                    
+                    string path = Encoding.UTF8.GetString(pathBytes);
+
+                    if (fileStream.Position + 30 > fileStream.Length) break;
+
+                    long lastWriteTime = reader.ReadInt64();
+                    int width = reader.ReadInt32();
+                    int height = reader.ReadInt32();
+                    int format = reader.ReadInt32();
+                    int dataLen = reader.ReadInt32();
+                    uint crc32 = reader.ReadUInt32();
+                    ushort entryVersion = reader.ReadUInt16();
+
+                    if (dataLen < 0 || fileStream.Position + dataLen > fileStream.Length) break;
+
+                    long dataOffset = fileStream.Position;
+                    
+                    byte[] dataBuffer = new byte[dataLen];
+                    int bytesRead = fileStream.Read(dataBuffer, 0, dataLen);
+                    if (bytesRead != dataLen) break;
+
+                    uint calculatedCrc = CalculateCRC32(dataBuffer, 0, dataLen);
+                    if (calculatedCrc != crc32)
+                    {
+                        Debug.LogWarning("GalleryThumbnailCache: CRC mismatch for " + path + " (expected " + crc32 + ", got " + calculatedCrc + "), skipping entry");
+                        continue;
+                    }
+
+                    lastValidPos = fileStream.Position;
+
+                    int expected = GetExpectedRawDataSize(width, height, format);
+                    if (expected > 0 && dataLen < expected) continue;
+
+                    CacheEntry entry = new CacheEntry
+                    {
+                        Offset = dataOffset,
+                        Length = dataLen,
+                        LastWriteTime = lastWriteTime,
+                        Width = width,
+                        Height = height,
+                        Format = format,
+                        DataCRC32 = crc32
+                    };
+                    
+                    if (index.ContainsKey(path))
+                    {
+                        index[path] = entry;
+                    }
+                    else
+                    {
+                        index.Add(path, entry);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("GalleryThumbnailCache: Error building V2 index: " + ex.Message);
+            }
+            
+            if (lastValidPos < fileStream.Length)
+            {
+                try
+                {
+                    Debug.LogWarning("GalleryThumbnailCache: Truncating corrupt cache file from " + fileStream.Length + " to " + lastValidPos);
+                    fileStream.SetLength(lastValidPos);
+                }
+                catch(Exception ex)
+                {
+                    Debug.LogError("GalleryThumbnailCache: Failed to truncate cache file: " + ex.Message);
+                }
+            }
+        }
+
+        private void MigrateV1ToV2()
+        {
+            if (cacheFormatVersion != 1 || index.Count == 0) return;
+
+            Debug.Log("GalleryThumbnailCache: Migrating cache from V1 to V2...");
+
+            string tempPath = cacheFilePath + ".tmp";
+            using (FileStream tempFs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+            using (BinaryWriter tempWriter = new BinaryWriter(tempFs))
+            {
+                byte[] magicBytes = Encoding.ASCII.GetBytes(CACHE_MAGIC);
+                tempWriter.Write(magicBytes);
+                tempWriter.Write(CACHE_VERSION);
+                tempWriter.Write(new byte[8]);
+
+                Dictionary<string, CacheEntry> newIndex = new Dictionary<string, CacheEntry>();
+
+                foreach (var kvp in index)
+                {
+                    string key = kvp.Key;
+                    CacheEntry entry = kvp.Value;
+
+                    try
+                    {
+                        fileStream.Position = entry.Offset;
+                        byte[] data = new byte[entry.Length];
+                        fileStream.Read(data, 0, entry.Length);
+
+                        uint crc32 = CalculateCRC32(data, 0, entry.Length);
+
+                        long entryStart = tempFs.Position;
+                        byte[] pathBytes = Encoding.UTF8.GetBytes(key);
+                        tempWriter.Write(pathBytes.Length);
+                        tempWriter.Write(pathBytes);
+                        tempWriter.Write(entry.LastWriteTime);
+                        tempWriter.Write(entry.Width);
+                        tempWriter.Write(entry.Height);
+                        tempWriter.Write(entry.Format);
+                        tempWriter.Write(entry.Length);
+                        tempWriter.Write(crc32);
+                        tempWriter.Write((ushort)0);
+
+                        long dataOffset = tempFs.Position;
+                        tempWriter.Write(data, 0, entry.Length);
+
+                        newIndex[key] = new CacheEntry
+                        {
+                            Offset = dataOffset,
+                            Length = entry.Length,
+                            LastWriteTime = entry.LastWriteTime,
+                            Width = entry.Width,
+                            Height = entry.Height,
+                            Format = entry.Format,
+                            DataCRC32 = crc32
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning("GalleryThumbnailCache: Failed to migrate entry " + key + ": " + ex.Message);
+                    }
+                }
+
+                tempWriter.Flush();
+                index = newIndex;
+                cacheFormatVersion = CACHE_VERSION;
+            }
+
+            Close();
+            File.Delete(cacheFilePath);
+            File.Move(tempPath, cacheFilePath);
+            Initialize();
+
+            Debug.Log("GalleryThumbnailCache: Migration to V2 complete.");
         }
 
         public string GetCacheKey(string path)
@@ -233,7 +472,8 @@ namespace VPB
 
             if (fileStream == null) return false;
 
-            lock (lockObj)
+            cacheLock.EnterReadLock();
+            try
             {
                 if (index.TryGetValue(key, out CacheEntry entry))
                 {
@@ -241,25 +481,36 @@ namespace VPB
                     {
                         try
                         {
-                            fileStream.Position = entry.Offset;
                             if (entry.Width <= 0 || entry.Height <= 0)
                             {
                                 return false;
                             }
+                            
+                            fileStream.Position = entry.Offset;
                             data = ByteArrayPool.Rent(entry.Length);
                             int bytesRead = fileStream.Read(data, 0, entry.Length);
-                            if (bytesRead == entry.Length)
-                            {
-                                width = entry.Width;
-                                height = entry.Height;
-                                format = (TextureFormat)entry.Format;
-                                return true;
-                            }
-                            else
+                            
+                            if (bytesRead != entry.Length)
                             {
                                 ByteArrayPool.Return(data);
                                 data = null;
+                                Debug.LogError("GalleryThumbnailCache: Incomplete read for " + key);
+                                return false;
                             }
+                            
+                            uint calculatedCrc = CalculateCRC32(data, 0, entry.Length);
+                            if (calculatedCrc != entry.DataCRC32)
+                            {
+                                ByteArrayPool.Return(data);
+                                data = null;
+                                Debug.LogError("GalleryThumbnailCache: CRC mismatch for " + key + " (expected " + entry.DataCRC32 + ", got " + calculatedCrc + ")");
+                                return false;
+                            }
+                            
+                            width = entry.Width;
+                            height = entry.Height;
+                            format = (TextureFormat)entry.Format;
+                            return true;
                         }
                         catch (Exception ex)
                         {
@@ -273,6 +524,10 @@ namespace VPB
                     }
                 }
             }
+            finally
+            {
+                cacheLock.ExitReadLock();
+            }
             return false;
         }
 
@@ -280,7 +535,6 @@ namespace VPB
         {
             if (fileStream == null || width <= 0 || height <= 0) return;
             
-            // Validate dataLength
             int expected = GetExpectedRawDataSize(width, height, (int)format);
             if (expected > 0 && dataLength < expected)
             {
@@ -290,14 +544,27 @@ namespace VPB
 
             string key = GetCacheKey(path);
 
-            lock (lockObj)
+            cacheLock.EnterWriteLock();
+            try
             {
                 try
                 {
-                    fileStream.Seek(0, SeekOrigin.End);
-                    long entryStart = fileStream.Position;
+                    if (cacheFormatVersion == 0)
+                    {
+                        cacheFormatVersion = CACHE_VERSION;
+                        fileStream.Seek(0, SeekOrigin.Begin);
+                        byte[] magicBytes = Encoding.ASCII.GetBytes(CACHE_MAGIC);
+                        writer.Write(magicBytes);
+                        writer.Write(CACHE_VERSION);
+                        writer.Write(new byte[8]);
+                        writer.Flush();
+                    }
 
+                    fileStream.Seek(0, SeekOrigin.End);
+                    
                     byte[] pathBytes = Encoding.UTF8.GetBytes(key);
+                    uint crc32 = CalculateCRC32(data, 0, dataLength);
+                    
                     writer.Write(pathBytes.Length);
                     writer.Write(pathBytes);
                     writer.Write(lastWriteTime);
@@ -305,10 +572,12 @@ namespace VPB
                     writer.Write(height);
                     writer.Write((int)format);
                     writer.Write(dataLength);
+                    writer.Write(crc32);
+                    writer.Write((ushort)0);
                     
                     long dataOffset = fileStream.Position;
                     writer.Write(data, 0, dataLength);
-                    writer.Flush(); // Ensure written
+                    writer.Flush();
 
                     CacheEntry entry = new CacheEntry
                     {
@@ -317,7 +586,8 @@ namespace VPB
                         LastWriteTime = lastWriteTime,
                         Width = width,
                         Height = height,
-                        Format = (int)format
+                        Format = (int)format,
+                        DataCRC32 = crc32
                     };
 
                     if (index.ContainsKey(key))
@@ -334,20 +604,24 @@ namespace VPB
                     Debug.LogError("GalleryThumbnailCache: Error saving thumbnail: " + ex.Message);
                 }
             }
+            finally
+            {
+                cacheLock.ExitWriteLock();
+            }
         }
 
         public void CleanCache()
         {
             if (fileStream == null) return;
 
-            // Wait for FileManager to be ready or skip if no packages found yet to avoid aggressive deletion
             if (FileManager.PackagesByUid == null || FileManager.PackagesByUid.Count == 0)
             {
                 Debug.LogWarning("GalleryThumbnailCache: Skipping CleanCache because FileManager packages are not loaded yet.");
                 return;
             }
 
-            lock (lockObj)
+            cacheLock.EnterWriteLock();
+            try
             {
                 try
                 {
@@ -357,7 +631,6 @@ namespace VPB
                         string key = kvp.Key;
                         bool keep = false;
 
-                        // 1. Handle Package Files (VAR:/...)
                         if (key.StartsWith("VAR:/"))
                         {
                             int secondSlash = key.IndexOf(":/", 5);
@@ -373,17 +646,14 @@ namespace VPB
 
                             if (!string.IsNullOrEmpty(pkgNameWithExt))
                             {
-                                // Strip extension for UID check (e.g. "Author.Name.1.var" -> "Author.Name.1")
                                 string uid = pkgNameWithExt;
                                 if (uid.EndsWith(".var", StringComparison.OrdinalIgnoreCase)) uid = uid.Substring(0, uid.Length - 4);
                                 else if (uid.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) uid = uid.Substring(0, uid.Length - 4);
 
-                                // Check if package is registered
                                 if (FileManager.PackagesByUid.ContainsKey(uid))
                                 {
                                     keep = true;
                                 }
-                                // Fallback: Check if the file exists on disk even if not registered
                                 else if (FileManager.FileExists("AddonPackages/" + pkgNameWithExt) || 
                                          FileManager.FileExists("AllPackages/" + pkgNameWithExt))
                                 {
@@ -391,16 +661,12 @@ namespace VPB
                                 }
                             }
                         }
-                        // 2. Handle SELF references (internal paths within packages)
                         else if (key.IndexOf("SELF:", StringComparison.OrdinalIgnoreCase) >= 0 || 
                                  key.IndexOf("SELF/", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                  key.IndexOf("%SELF%", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            // We preserve these as they are likely valid internal references that might 
-                            // not be easily verifiable without full context.
                             keep = true; 
                         }
-                        // 3. Handle Loose Files and protected folders
                         else
                         {
                             if (FileManager.FileExists(key))
@@ -409,14 +675,11 @@ namespace VPB
                             }
                             else
                             {
-                                // Check if it's in a protected/active folder and verify with physical disk check
                                 if (key.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase) ||
                                     key.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
                                     key.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
                                     key.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    // Robust check: use physical File.Exists to ensure we don't delete thumbs
-                                    // for files that exist but might not be in the VPB index yet.
                                     try {
                                         if (File.Exists(key)) keep = true;
                                     } catch {}
@@ -439,13 +702,15 @@ namespace VPB
                         index.Remove(key);
                     }
 
-                    // Rewrite the file to actually free space
                     string tempPath = cacheFilePath + ".tmp";
-                    using (FileStream tempFs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    using (FileStream tempFs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
                     using (BinaryWriter tempWriter = new BinaryWriter(tempFs))
                     {
-                        // We need to read from the old stream while writing to the new one
-                        // But since entries might be in any order in the file, we'll use the index to write them
+                        byte[] magicBytes = Encoding.ASCII.GetBytes(CACHE_MAGIC);
+                        tempWriter.Write(magicBytes);
+                        tempWriter.Write(CACHE_VERSION);
+                        tempWriter.Write(new byte[8]);
+
                         Dictionary<string, CacheEntry> newIndex = new Dictionary<string, CacheEntry>();
 
                         foreach (var kvp in index)
@@ -453,41 +718,49 @@ namespace VPB
                             string key = kvp.Key;
                             CacheEntry entry = kvp.Value;
 
-                            fileStream.Position = entry.Offset;
-                            byte[] data = new byte[entry.Length];
-                            fileStream.Read(data, 0, entry.Length);
-
-                            long entryStart = tempFs.Position;
-
-                            byte[] pathBytes = Encoding.UTF8.GetBytes(key);
-                            tempWriter.Write(pathBytes.Length);
-                            tempWriter.Write(pathBytes);
-                            tempWriter.Write(entry.LastWriteTime);
-                            tempWriter.Write(entry.Width);
-                            tempWriter.Write(entry.Height);
-                            tempWriter.Write(entry.Format);
-                            tempWriter.Write(entry.Length);
-                            
-                            long dataOffset = tempFs.Position;
-                            tempWriter.Write(data, 0, entry.Length);
-
-                            newIndex[key] = new CacheEntry
+                            try
                             {
-                                Offset = dataOffset,
-                                Length = entry.Length,
-                                LastWriteTime = entry.LastWriteTime,
-                                Width = entry.Width,
-                                Height = entry.Height,
-                                Format = entry.Format
-                            };
+                                fileStream.Position = entry.Offset;
+                                byte[] data = new byte[entry.Length];
+                                int bytesRead = fileStream.Read(data, 0, entry.Length);
+                                if (bytesRead != entry.Length) continue;
+
+                                uint crc32 = CalculateCRC32(data, 0, entry.Length);
+
+                                byte[] pathBytes = Encoding.UTF8.GetBytes(key);
+                                tempWriter.Write(pathBytes.Length);
+                                tempWriter.Write(pathBytes);
+                                tempWriter.Write(entry.LastWriteTime);
+                                tempWriter.Write(entry.Width);
+                                tempWriter.Write(entry.Height);
+                                tempWriter.Write(entry.Format);
+                                tempWriter.Write(entry.Length);
+                                tempWriter.Write(crc32);
+                                tempWriter.Write((ushort)0);
+                                
+                                long dataOffset = tempFs.Position;
+                                tempWriter.Write(data, 0, entry.Length);
+
+                                newIndex[key] = new CacheEntry
+                                {
+                                    Offset = dataOffset,
+                                    Length = entry.Length,
+                                    LastWriteTime = entry.LastWriteTime,
+                                    Width = entry.Width,
+                                    Height = entry.Height,
+                                    Format = entry.Format,
+                                    DataCRC32 = crc32
+                                };
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogWarning("GalleryThumbnailCache: Failed to clean entry " + key + ": " + ex.Message);
+                            }
                         }
                         tempWriter.Flush();
-                        
-                        // Replace index
                         index = newIndex;
                     }
 
-                    // Swap files
                     Close();
                     File.Delete(cacheFilePath);
                     File.Move(tempPath, cacheFilePath);
@@ -500,16 +773,33 @@ namespace VPB
                     Debug.LogError("GalleryThumbnailCache: Error during CleanCache: " + ex.Message);
                 }
             }
+            finally
+            {
+                cacheLock.ExitWriteLock();
+            }
         }
 
         public void Close()
         {
-            lock (lockObj)
+            cacheLock.EnterWriteLock();
+            try
             {
                 if (writer != null) writer.Close();
                 if (reader != null) reader.Close();
                 if (fileStream != null) fileStream.Dispose();
                 fileStream = null;
+            }
+            finally
+            {
+                cacheLock.ExitWriteLock();
+            }
+        }
+
+        ~GalleryThumbnailCache()
+        {
+            if (cacheLock != null)
+            {
+                try { cacheLock.Dispose(); } catch { }
             }
         }
     }
