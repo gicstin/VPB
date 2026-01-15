@@ -6,6 +6,93 @@ namespace VPB
 {
     public class ZstdCompressor
     {
+        private static string _cachedZstdPath = null;
+        private static bool _zstdChecked = false;
+
+        private static string GetNativeZstdPath()
+        {
+            if (_zstdChecked) return _cachedZstdPath;
+            _zstdChecked = true;
+            try
+            {
+                // 1. Check same dir as VPB.dll (standard installation)
+                string assemblyDir = Path.GetDirectoryName(typeof(ZstdCompressor).Assembly.Location);
+                if (!string.IsNullOrEmpty(assemblyDir))
+                {
+                    string path = Path.Combine(assemblyDir, "zstd.exe");
+                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+
+                    path = Path.Combine(assemblyDir, "zstd\\zstd.exe");
+                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+                    
+                    // Also check parent dir (e.g. if DLL is in BepInEx/plugins/VPB/bin)
+                    string parent = Path.GetDirectoryName(assemblyDir);
+                    if (!string.IsNullOrEmpty(parent))
+                    {
+                        path = Path.Combine(parent, "zstd\\zstd.exe");
+                        if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+                    }
+                }
+
+                // 2. Check BepInEx plugins root
+                string pluginDir = BepInEx.Paths.PluginPath;
+                if (!string.IsNullOrEmpty(pluginDir))
+                {
+                    string path = Path.Combine(pluginDir, "zstd\\zstd.exe");
+                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+
+                    path = Path.Combine(pluginDir, "VPB\\zstd\\zstd.exe");
+                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+                }
+            }
+            catch { }
+            // Final fallback: try PATH
+            _cachedZstdPath = "zstd.exe";
+            return _cachedZstdPath;
+        }
+
+        private static bool RunZstd(string arguments, int timeoutMs = 30000)
+        {
+            string exePath = GetNativeZstdPath();
+            if (string.IsNullOrEmpty(exePath)) return false;
+
+            // If we don't have the full path, and it's not "zstd.exe", we can't be sure it exists
+            if (exePath.Contains("\\") && !File.Exists(exePath)) return false;
+
+            try
+            {
+                var startInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = exePath,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+                };
+
+                using (var process = System.Diagnostics.Process.Start(startInfo))
+                {
+                    if (process != null)
+                    {
+                        bool exited = process.WaitForExit(timeoutMs);
+                        if (exited && process.ExitCode == 0)
+                        {
+                            return true;
+                        }
+                        if (!exited)
+                        {
+                            try { process.Kill(); } catch { }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] RunZstd failed: " + ex.Message);
+            }
+            return false;
+        }
+
         /// <summary>
         /// Compresses the given data using Zstd compression.
         /// </summary>
@@ -58,32 +145,11 @@ namespace VPB
                     fs.Write(data, 0, length);
                 }
 
-                string exePath = GetNativeZstdPath();
-
-                if (File.Exists(exePath))
+                if (RunZstd(string.Format("-{0} \"{1}\" -o \"{2}\" -f", level, tempIn, tempOut)))
                 {
-                    var startInfo = new System.Diagnostics.ProcessStartInfo
+                    if (File.Exists(tempOut))
                     {
-                        FileName = exePath,
-                        Arguments = string.Format("-{0} \"{1}\" -o \"{2}\" -f", level, tempIn, tempOut),
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
-                    };
-
-                    using (var process = System.Diagnostics.Process.Start(startInfo))
-                    {
-                        if (process != null)
-                        {
-                            process.WaitForExit(30000); // 30s timeout
-                            if (process.HasExited && process.ExitCode == 0)
-                            {
-                                if (File.Exists(tempOut))
-                                {
-                                    return File.ReadAllBytes(tempOut);
-                                }
-                            }
-                        }
+                        return File.ReadAllBytes(tempOut);
                     }
                 }
 
@@ -150,30 +216,9 @@ namespace VPB
                     fs.Write(data, 0, length);
                 }
 
-                string exePath = GetNativeZstdPath();
-
-                if (File.Exists(exePath))
+                if (RunZstd(string.Format("-{0} \"{1}\" -o \"{2}\" -f", level, tempIn, path)))
                 {
-                    var startInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = exePath,
-                        Arguments = string.Format("-{0} \"{1}\" -o \"{2}\" -f", level, tempIn, path),
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
-                    };
-
-                    using (var process = System.Diagnostics.Process.Start(startInfo))
-                    {
-                        if (process != null)
-                        {
-                            process.WaitForExit(30000);
-                            if (process.HasExited && process.ExitCode == 0)
-                            {
-                                return;
-                            }
-                        }
-                    }
+                    return;
                 }
 
                 // Fallback to internal
@@ -192,31 +237,40 @@ namespace VPB
             }
         }
 
-        private static string GetNativeZstdPath()
+        /// <summary>
+        /// Compresses an existing file on disk and saves it to the specified path.
+        /// This is more memory-efficient than reading the file into a byte array first.
+        /// </summary>
+        public static void SaveCacheFromFile(string outputPath, string inputPath, int level)
         {
+            if (!File.Exists(inputPath)) return;
+
             try
             {
-                // %vam%\BepInEx\plugins\zstd\zstd.exe
-                string pluginDir = BepInEx.Paths.PluginPath;
-                if (!string.IsNullOrEmpty(pluginDir))
+                // If input and output are same, we need a temp file for output
+                bool samePath = string.Equals(Path.GetFullPath(inputPath), Path.GetFullPath(outputPath), StringComparison.OrdinalIgnoreCase);
+                string actualOut = samePath ? outputPath + ".tmp_zstd" : outputPath;
+
+                if (RunZstd(string.Format("-{0} \"{1}\" -o \"{2}\" -f", level, inputPath, actualOut)))
                 {
-                    string path = Path.Combine(pluginDir, "zstd\\zstd.exe");
-                    if (File.Exists(path)) return path;
+                    if (samePath)
+                    {
+                        if (File.Exists(outputPath)) File.Delete(outputPath);
+                        File.Move(actualOut, outputPath);
+                    }
+                    return;
                 }
 
-                // Fallback: check if it's in the same dir as VPB.dll or one level up
-                string assemblyDir = Path.GetDirectoryName(typeof(ZstdCompressor).Assembly.Location);
-                if (!string.IsNullOrEmpty(assemblyDir))
-                {
-                    string path = Path.Combine(assemblyDir, "zstd.exe");
-                    if (File.Exists(path)) return path;
-
-                    path = Path.Combine(assemblyDir, "zstd\\zstd.exe");
-                    if (File.Exists(path)) return path;
-                }
+                // Fallback: if external fails, we have to do it internally (memory intensive)
+                // We use CompressInternal directly here to avoid another RunZstd attempt inside SaveCache
+                byte[] data = File.ReadAllBytes(inputPath);
+                byte[] compressed = CompressInternal(data, level);
+                File.WriteAllBytes(outputPath, compressed);
             }
-            catch { }
-            return "zstd.exe"; // Hope it's in PATH
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] SaveCacheFromFile failed: " + ex.Message);
+            }
         }
 
         /// <summary>

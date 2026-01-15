@@ -36,16 +36,6 @@ namespace VPB
             StartBulkZstdCompression();
         }
 
-        private float _lastDumpTime;
-        private void Update()
-        {
-            if (Time.realtimeSinceStartup - _lastDumpTime > 1.0f)
-            {
-                _lastDumpTime = Time.realtimeSinceStartup;
-                DumpTrackedImagesToCache();
-            }
-        }
-
         Dictionary<string, Texture2D> cache = new Dictionary<string, Texture2D>();
 
         class ResizeJob
@@ -56,7 +46,6 @@ namespace VPB
 
         readonly Queue<ResizeJob> resizeQueue = new Queue<ResizeJob>();
         readonly HashSet<string> resizeQueuedKeys = new HashSet<string>();
-        readonly List<ResizeJob> _trackedImages = new List<ResizeJob>();
         readonly HashSet<ImageLoaderThreaded.QueuedImage> _trackedQiSet = new HashSet<ImageLoaderThreaded.QueuedImage>();
         readonly List<ImageLoaderThreaded.QueuedImage> _candidateImages = new List<ImageLoaderThreaded.QueuedImage>();
         Coroutine resizeCoroutine;
@@ -273,11 +262,12 @@ namespace VPB
                 _trackedQiSet.Add(qi);
             }
 
-            lock (_trackedImages)
+            lock (resizeQueue)
             {
-                _trackedImages.Add(new ResizeJob { qi = qi, key = key });
+                resizeQueue.Enqueue(new ResizeJob { qi = qi, key = key });
             }
-            LogUtil.Log("Tracked image for later cache: " + qi.imgPath + " (format: " + qi.tex.format + " " + qi.tex.width + "x" + qi.tex.height + ")");
+            LogUtil.Log("Enqueued image for live cache: " + qi.imgPath + " (format: " + qi.tex.format + " " + qi.tex.width + "x" + qi.tex.height + ")");
+            EnsureResizeCoroutine();
             return true;
         }
 
@@ -311,7 +301,6 @@ namespace VPB
         {
             lock (_candidateImages) { _candidateImages.Clear(); }
             lock (_trackedQiSet) { _trackedQiSet.Clear(); }
-            lock (_trackedImages) { _trackedImages.Clear(); }
             lock (resizeQueuedKeys) { resizeQueuedKeys.Clear(); }
             lock (resizeQueue) { resizeQueue.Clear(); }
         }
@@ -338,6 +327,9 @@ namespace VPB
                     {
                         LogUtil.Log("TrackCandidate callback texture missing for " + (newQi != null ? newQi.imgPath : "null"));
                     }
+                    
+                    // Periodically check other candidates too when one finishes
+                    ProcessCandidates();
                 }
                 catch (Exception ex)
                 {
@@ -356,22 +348,21 @@ namespace VPB
                     _candidateImages.Add(qi);
                 }
             }
+
+            // Trigger a check immediately in case the texture is already assigned
+            ProcessCandidates();
         }
 
-        public void DumpTrackedImagesToCache()
+        public void ProcessCandidates()
         {
-            int candidateCount = 0;
-            int withTextureCount = 0;
             // First, promote candidates that now have textures
             lock (_candidateImages)
             {
-                candidateCount = _candidateImages.Count;
                 for (int i = _candidateImages.Count - 1; i >= 0; i--)
                 {
                     var qi = _candidateImages[i];
                     if (qi != null && qi.tex != null)
                     {
-                        withTextureCount++;
                         TryEnqueueResizeCache(qi);
                         _candidateImages.RemoveAt(i);
                     }
@@ -381,32 +372,6 @@ namespace VPB
                     }
                 }
             }
-
-
-
-            int count = 0;
-            lock (_trackedImages)
-            {
-                count = _trackedImages.Count;
-                if (count == 0) return;
-
-                foreach (var job in _trackedImages)
-                {
-                    if (job != null && !string.IsNullOrEmpty(job.key))
-                    {
-                        if (!resizeQueuedKeys.Contains(job.key))
-                        {
-                            resizeQueuedKeys.Add(job.key);
-                            resizeQueue.Enqueue(job);
-                        }
-                    }
-                }
-                _trackedImages.Clear();
-            }
-
-            LogUtil.Log("Dumped " + count + " tracked images to cache worker");
-            lock (_trackedQiSet) { _trackedQiSet.Clear(); }
-            EnsureResizeCoroutine();
         }
 
         IEnumerator ResizeWorker()
@@ -596,6 +561,48 @@ namespace VPB
             }
         }
 
+        private readonly Queue<Action> _compressionQueue = new Queue<Action>();
+        private bool _isCompressionWorkerRunning = false;
+
+        void EnqueueCompression(Action action)
+        {
+            lock (_compressionQueue)
+            {
+                _compressionQueue.Enqueue(action);
+                if (!_isCompressionWorkerRunning)
+                {
+                    _isCompressionWorkerRunning = true;
+                    ThreadPool.QueueUserWorkItem(CompressionWorker);
+                }
+            }
+        }
+
+        void CompressionWorker(object state)
+        {
+            while (true)
+            {
+                Action action;
+                lock (_compressionQueue)
+                {
+                    if (_compressionQueue.Count == 0)
+                    {
+                        _isCompressionWorkerRunning = false;
+                        return;
+                    }
+                    action = _compressionQueue.Dequeue();
+                }
+
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("CompressionWorker task failed: " + ex.Message);
+                }
+            }
+        }
+
         void WriteDiskCacheAsync(string pathCache, byte[] bytes, int length, string pathMeta, string metaContent, bool isZstd = false, int w = 0, int h = 0, TextureFormat fmt = TextureFormat.RGBA32, bool linear = false, bool isPooled = true)
         {
             if (!string.IsNullOrEmpty(pathMeta))
@@ -603,6 +610,44 @@ namespace VPB
                 lock(diskWriteInFlight) { diskWriteInFlight.Add(pathMeta); }
             }
 
+            // If it's Zstd, we use our sequential queue to avoid process explosion
+            if (isZstd && Settings.Instance.ZstdCompressionLevel.Value > 0)
+            {
+                EnqueueCompression(() =>
+                {
+                    try
+                    {
+                        object pathLock = GetPathWriteLock(pathCache);
+                        lock (pathLock)
+                        {
+                            try
+                            {
+                                int compressionLevel = Settings.Instance.ZstdCompressionLevel.Value;
+                                ZstdCompressor.SaveCache(pathCache, bytes, compressionLevel, length);
+                                LogUtil.Log("[VPB] SequentialWrite: Wrote Zstd cache for " + Path.GetFileName(pathCache));
+                                
+                                WriteMetaFile(pathMeta, metaContent);
+                            }
+                            finally
+                            {
+                                if (!string.IsNullOrEmpty(pathMeta))
+                                {
+                                    lock(diskWriteInFlight) { diskWriteInFlight.Remove(pathMeta); }
+                                }
+                                if (isPooled && bytes != null) ByteArrayPool.Return(bytes);
+                                else if (bytes != null) { /* Managed array will be GC'd */ }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("Sequential compression failed: " + ex.ToString());
+                    }
+                });
+                return;
+            }
+
+            // Non-Zstd (standard DXT) can still use the regular ThreadPool as it's just a simple file write
             ThreadPool.QueueUserWorkItem((state) =>
             {
                 object pathLock = GetPathWriteLock(pathCache);
@@ -612,50 +657,13 @@ namespace VPB
                     {
                         if (bytes != null && !string.IsNullOrEmpty(pathCache))
                         {
-                            int compressionLevel = Settings.Instance.ZstdCompressionLevel.Value;
-                            
-                            if (isZstd && compressionLevel > 0)
+                            using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
                             {
-                                try
-                                {
-                                    ZstdCompressor.SaveCache(pathCache, bytes, compressionLevel, length);
-                                    LogUtil.Log("[VPB] WriteDiskCacheAsync: Wrote Zstd-compressed cache (level " + compressionLevel + ") for " + pathCache);
-                                }
-                                catch (Exception zstdEx)
-                                {
-                                    LogUtil.LogWarning("[VPB] WriteDiskCacheAsync: Zstd compression failed, writing uncompressed. Error: " + zstdEx.ToString());
-                                    using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
-                                    {
-                                        fs.Write(bytes, 0, length);
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
-                                {
-                                    fs.Write(bytes, 0, length);
-                                }
+                                fs.Write(bytes, 0, length);
                             }
                         }
                         
-                        if (!string.IsNullOrEmpty(metaContent) && !string.IsNullOrEmpty(pathMeta))
-                        {
-                            string tempMetaPath = pathMeta + ".tmp";
-                            try
-                            {
-                                var metaJson = SimpleJSON.JSON.Parse(metaContent);
-                                // The meta content already has correct 'type' set in GenerateResizedDiskCache
-                                File.WriteAllText(tempMetaPath, metaJson.ToString(string.Empty));
-                                if (File.Exists(pathMeta)) File.Delete(pathMeta);
-                                File.Move(tempMetaPath, pathMeta);
-                            }
-                            catch
-                            {
-                                try { if (File.Exists(tempMetaPath)) File.Delete(tempMetaPath); } catch { }
-                                throw;
-                            }
-                        }
+                        WriteMetaFile(pathMeta, metaContent);
                     }
                     catch (Exception ex)
                     {
@@ -671,6 +679,26 @@ namespace VPB
                     }
                 }
             });
+        }
+
+        private void WriteMetaFile(string pathMeta, string metaContent)
+        {
+            if (!string.IsNullOrEmpty(metaContent) && !string.IsNullOrEmpty(pathMeta))
+            {
+                string tempMetaPath = pathMeta + ".tmp";
+                try
+                {
+                    var metaJson = SimpleJSON.JSON.Parse(metaContent);
+                    File.WriteAllText(tempMetaPath, metaJson.ToString(string.Empty));
+                    if (File.Exists(pathMeta)) File.Delete(pathMeta);
+                    File.Move(tempMetaPath, pathMeta);
+                }
+                catch
+                {
+                    try { if (File.Exists(tempMetaPath)) File.Delete(tempMetaPath); } catch { }
+                    throw;
+                }
+            }
         }
 
         public bool Request(ImageLoaderThreaded.QueuedImage qi)
@@ -929,8 +957,7 @@ namespace VPB
 
                     if (compressionLevel <= 0) { skipped++; continue; }
 
-                    byte[] dxtData = File.ReadAllBytes(file);
-                    ZstdCompressor.SaveCache(file, dxtData, compressionLevel);
+                    ZstdCompressor.SaveCacheFromFile(file, file, compressionLevel);
 
                     metaJson["type"] = "compressed";
                     File.WriteAllText(metaPath, metaJson.ToString(string.Empty));
@@ -1051,58 +1078,42 @@ namespace VPB
                 LogUtil.LogTextureTrace("Img.Resize.DiskHit:" + diskPathToUse, "resize use disk cache:" + diskPathToUse);
                 var swRead = System.Diagnostics.Stopwatch.StartNew();
                 byte[] bytes = null;
-                long bytesLen = 0;
+                int bytesLen = 0;
 
                 try
                 {
-                    using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
+                    byte[] fileBytes = File.ReadAllBytes(diskPathToUse);
+                    int len = fileBytes.Length;
+
+                    // Check meta for compression
+                    bool isCompressed = false;
+                    string metaPath = diskCachePath + ".meta";
+                    if (File.Exists(metaPath))
                     {
-                        int len = (int)fs.Length;
-                        byte[] fileBytes = new byte[len];
-                        int offset = 0;
-                        int remaining = len;
-                        while (remaining > 0)
+                        try
                         {
-                            int read = fs.Read(fileBytes, offset, remaining);
-                            if (read <= 0) break;
-                            offset += read;
-                            remaining -= read;
+                            var metaJson = JSON.Parse(File.ReadAllText(metaPath));
+                            if (metaJson["type"].Value == "compressed") isCompressed = true;
                         }
+                        catch { }
+                    }
 
-                        // Check meta for compression
-                        bool isCompressed = false;
-                        string metaPath = diskCachePath + ".meta";
-                        if (File.Exists(metaPath))
-                        {
-                            try
-                            {
-                                var metaJson = JSON.Parse(File.ReadAllText(metaPath));
-                                if (metaJson["type"].Value == "compressed") isCompressed = true;
-                            }
-                            catch { }
-                        }
-
-                        if (isCompressed)
-                        {
-                            byte[] decompressed = ZstdCompressor.Decompress(fileBytes);
-                            bytes = ByteArrayPool.Rent(decompressed.Length);
-                            Array.Copy(decompressed, bytes, decompressed.Length);
-                            bytesLen = decompressed.Length;
-                        }
-                        else
-                        {
-                            bytes = ByteArrayPool.Rent(len);
-                            Array.Copy(fileBytes, bytes, len);
-                            bytesLen = len;
-                        }
+                    if (isCompressed)
+                    {
+                        bytes = ZstdCompressor.Decompress(fileBytes);
+                        bytesLen = bytes.Length;
+                    }
+                    else
+                    {
+                        bytes = fileBytes;
+                        bytesLen = len;
                     }
 
                     LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytesLen);
                     LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytesLen);
 
                     resultTexture = new Texture2D(width, height, localFormat, false, qi.linear);
-                    //resultTexture.name = qi.cacheSignature;
-                    resultTexture.LoadRawTextureData(bytes);
+                    TextureUtil.SafeLoadRawTextureData(resultTexture, bytes, bytesLen, width, height, localFormat);
                     resultTexture.Apply();
                     RegisterTexture(diskCachePath, resultTexture);
                     ResolveInflightWaiters(diskCachePath, resultTexture);
@@ -1110,7 +1121,7 @@ namespace VPB
                 }
                 finally
                 {
-                    if (bytes != null) ByteArrayPool.Return(bytes);
+                    // Bytes were either ReadAllBytes or Decompress result (both new arrays)
                 }
             }
 
@@ -1125,9 +1136,6 @@ namespace VPB
                     var bytes = qi.tex.GetRawTextureData();
                     if (bytes != null && bytes.Length > 0)
                     {
-                        byte[] pooledBytes = ByteArrayPool.Rent(bytes.Length);
-                        Array.Copy(bytes, pooledBytes, bytes.Length);
-
                         bool zstd = Settings.Instance.EnableZstdCompression.Value;
                         string targetPath = realDiskCachePath + ".cache";
 
@@ -1139,7 +1147,7 @@ namespace VPB
                         jSON["resizedHeight"].AsInt = height;
                         jSON["format"] = qi.tex.format.ToString();
 
-                        WriteDiskCacheAsync(targetPath, pooledBytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), zstd, width, height, qi.tex.format, qi.linear);
+                        WriteDiskCacheAsync(targetPath, bytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), zstd, width, height, qi.tex.format, qi.linear, false);
                         
                         // We still need to return a result texture or update qi.tex
                         // but since we didn't resize, we can just use qi.tex as is.
@@ -1212,7 +1220,7 @@ namespace VPB
             jSONClass["format"] = resultTexture.format.ToString();
             string contents = jSONClass.ToString(string.Empty);
             
-            WriteDiskCacheAsync(targetCachePath, texBytes, texBytes.Length, diskCachePath + ".meta", contents, enableZstd, width, height, resultTexture.format, qi.linear);
+            WriteDiskCacheAsync(targetCachePath, texBytes, texBytes.Length, diskCachePath + ".meta", contents, enableZstd, width, height, resultTexture.format, qi.linear, false);
 
 
             RegisterTexture(diskCachePath, resultTexture);

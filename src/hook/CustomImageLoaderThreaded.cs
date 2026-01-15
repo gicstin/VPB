@@ -659,48 +659,6 @@ namespace VPB
 				return x != 0 && (x & (x - 1)) == 0;
 			}
 
-            private int GetExpectedRawDataSize(int w, int h, TextureFormat fmt)
-            {
-                switch (fmt)
-                {
-                    case TextureFormat.Alpha8: return w * h;
-                    case TextureFormat.RGB24: return w * h * 3;
-                    case TextureFormat.RGBA32: return w * h * 4;
-                    case TextureFormat.ARGB32: return w * h * 4;
-                    case TextureFormat.DXT1: return (Mathf.Max(1, (w + 3) / 4) * Mathf.Max(1, (h + 3) / 4)) * 8;
-                    case TextureFormat.DXT5: return (Mathf.Max(1, (w + 3) / 4) * Mathf.Max(1, (h + 3) / 4)) * 16;
-                    default: return 0; 
-                }
-            }
-
-            private void SafeLoadRawTextureData(Texture2D t, byte[] data, int w, int h, TextureFormat fmt)
-            {
-                if (t == null || data == null) return;
-                int expected = GetExpectedRawDataSize(w, h, fmt);
-                if (expected > 0)
-                {
-                    if (data.Length < expected)
-                    {
-                        throw new Exception($"Data buffer too small for {w}x{h} {fmt}. Expected {expected}, got {data.Length}");
-                    }
-                    
-                    if (data.Length > expected)
-                    {
-                        byte[] exact = new byte[expected];
-                        Buffer.BlockCopy(data, 0, exact, 0, expected);
-                        t.LoadRawTextureData(exact);
-                    }
-                    else
-                    {
-                        t.LoadRawTextureData(data);
-                    }
-                }
-                else
-                {
-                    t.LoadRawTextureData(data);
-                }
-            }
-
 			public void Finish()
 			{
 				if (webRequest != null)
@@ -727,7 +685,7 @@ namespace VPB
 				{
 					try
 					{
-                        SafeLoadRawTextureData(tex, raw, width, height, textureFormat);
+                        TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat);
 					}
 					catch (Exception ex)
 					{
@@ -738,7 +696,7 @@ namespace VPB
 						CreateTexture();
                         if (tex != null)
                         {
-                            try { SafeLoadRawTextureData(tex, raw, width, height, textureFormat); }
+                            try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); }
                             catch (Exception ex2) { LogUtil.LogError($"[VPB] LoadRawTextureData retry failed for {imgPath}: {ex2.Message}"); }
                         }
 					}
@@ -753,7 +711,7 @@ namespace VPB
                     try
                     {
 					    Texture2D texture2D = new Texture2D(width, height, textureFormat, createMipMaps, linear);
-					    SafeLoadRawTextureData(texture2D, raw, width, height, textureFormat);
+					    TextureUtil.SafeLoadRawTextureData(texture2D, raw, width, height, textureFormat);
 					    texture2D.Apply();
 					    if (canCompress)
 					    {
@@ -773,7 +731,7 @@ namespace VPB
 				{
                     try
                     {
-					    SafeLoadRawTextureData(tex, raw, width, height, textureFormat);
+					    TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat);
 					    tex.Apply();
 					    if (canCompress)
 					    {

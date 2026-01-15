@@ -443,37 +443,6 @@ namespace VPB
                 processed = true;
             }
 
-            private int GetExpectedRawDataSize(int w, int h, TextureFormat fmt)
-            {
-                switch (fmt)
-                {
-                    case TextureFormat.Alpha8: return w * h;
-                    case TextureFormat.RGB24: return w * h * 3;
-                    case TextureFormat.RGBA32: return w * h * 4;
-                    case TextureFormat.ARGB32: return w * h * 4;
-                    case TextureFormat.DXT1: return (Mathf.Max(1, (w + 3) / 4) * Mathf.Max(1, (h + 3) / 4)) * 8;
-                    case TextureFormat.DXT5: return (Mathf.Max(1, (w + 3) / 4) * Mathf.Max(1, (h + 3) / 4)) * 16;
-                    default: return 0; 
-                }
-            }
-
-            private void SafeLoadRawTextureData(Texture2D t, byte[] data, int w, int h, TextureFormat fmt)
-            {
-                if (t == null || data == null) return;
-                int expected = GetExpectedRawDataSize(w, h, fmt);
-                if (expected > 0 && data.Length >= expected)
-                {
-                    if (data.Length > expected)
-                    {
-                        byte[] exact = new byte[expected];
-                        Buffer.BlockCopy(data, 0, exact, 0, expected);
-                        t.LoadRawTextureData(exact);
-                    }
-                    else t.LoadRawTextureData(data);
-                }
-                else t.LoadRawTextureData(data);
-            }
-
             public void Finish()
             {
                 if (webRequest != null) { webRequest.Dispose(); webRequestData = null; webRequest = null; }
@@ -485,14 +454,14 @@ namespace VPB
 
                 if (preprocessed)
                 {
-                    try { SafeLoadRawTextureData(tex, raw, width, height, textureFormat); }
+                    try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); }
                     catch (Exception ex)
                     {
                         LogUtil.LogError($"[VPB] Hub LoadRawTextureData failed (preprocessed) for {imgPath}: {ex.Message}");
                         UnityEngine.Object.Destroy(tex);
                         tex = null;
                         CreateTexture();
-                        if (tex != null) try { SafeLoadRawTextureData(tex, raw, width, height, textureFormat); } catch { }
+                        if (tex != null) try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); } catch { }
                     }
                     tex.Apply(false);
                     if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
@@ -502,7 +471,7 @@ namespace VPB
                 }
                 else
                 {
-                    try { SafeLoadRawTextureData(tex, raw, width, height, textureFormat); tex.Apply(); if (canCompress) tex.Compress(true); }
+                    try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); tex.Apply(); if (canCompress) tex.Compress(true); }
                     catch (Exception ex) { LogUtil.LogError($"[VPB] Hub LoadRawTextureData failed for {imgPath}: {ex.Message}"); }
 
                     if (MVR.FileManagement.CacheManager.CachingEnabled && !loadedFromCache)

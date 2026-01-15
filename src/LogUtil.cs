@@ -867,7 +867,7 @@ namespace VPB
 
             if (ImageLoadingMgr.singleton != null)
             {
-                ImageLoadingMgr.singleton.DumpTrackedImagesToCache();
+                ImageLoadingMgr.singleton.ProcessCandidates();
             }
         }
 

@@ -273,6 +273,7 @@
     <Compile Include="src\hook\HubImageLoaderThreaded.cs" />
     <Compile Include="src\hook\CustomAssetLoader.cs" />
     <Compile Include="src\hook\GenericTextureHook.cs" />
+    <Compile Include="src\hook\TextureUtil.cs" />
     <Compile Include="src\hook\ZstdCompressor.cs" />
     <Compile Include="src\hook\ZstdRoundTripTest.cs" />
     <Compile Include="src\ZstdNet\Compressor.cs" />
