@@ -75,5 +75,73 @@ namespace VPB
         {
             SafeLoadRawTextureData(t, data, data != null ? data.Length : 0, w, h, fmt);
         }
+
+        private static readonly char[] s_InvalidFileNameChars = System.IO.Path.GetInvalidFileNameChars();
+
+        public static string SanitizeFileName(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "img";
+            var sb = new System.Text.StringBuilder(value.Length);
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                sb.Append(Array.IndexOf(s_InvalidFileNameChars, c) >= 0 ? '_' : c);
+            }
+            return sb.ToString();
+        }
+
+        public static string GetZstdCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth = 0, int targetHeight = 0, float bumpStrength = 1f)
+        {
+            string cacheDir = VamHookPlugin.GetCacheDir();
+            var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
+            if (fileEntry == null)
+            {
+                if (Settings.Instance.TextureLogLevel.Value >= 2) LogUtil.LogWarning("[VPB] GetZstdCachePath: No FileEntry for " + imgPath);
+                return null;
+            }
+
+            string fileName = System.IO.Path.GetFileName(imgPath);
+            fileName = SanitizeFileName(fileName).Replace('.', '_');
+            if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
+
+            string sizeStr = fileEntry.Size.ToString();
+            string timeStr = fileEntry.LastWriteTime.ToFileTime().ToString();
+
+            string sig = "";
+            if (targetWidth > 0 && targetHeight > 0) sig += $"{targetWidth}_{targetHeight}";
+            if (compress) sig += "_C";
+            if (linear) sig += "_L";
+            if (isNormalMap) sig += "_N";
+            if (createAlphaFromGrayscale) sig += "_A";
+            if (createNormalFromBump) sig += "_BN" + bumpStrength;
+            if (invert) sig += "_I";
+            
+            string finalPath = System.IO.Path.Combine(cacheDir, $"{fileName}_{sizeStr}_{timeStr}_{sig}.zvamcache");
+            
+            if (Settings.Instance.TextureLogLevel.Value >= 2)
+            {
+                // Only log if it doesn't exist to avoid spamming successful hits (which are logged by the caller)
+                if (!System.IO.File.Exists(finalPath))
+                    LogUtil.Log("[VPB] Cache MISS lookup: " + System.IO.Path.GetFileName(finalPath) + " for " + System.IO.Path.GetFileName(imgPath));
+            }
+
+            return finalPath;
+        }
+
+        public static string GetNativeCachePath(string imgPath)
+        {
+            var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
+            string textureCacheDir = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+            if (fileEntry != null && textureCacheDir != null)
+            {
+                string text = fileEntry.Size.ToString();
+                string text2 = fileEntry.LastWriteTime.ToFileTime().ToString();
+                string fileName = System.IO.Path.GetFileName(imgPath);
+                fileName = fileName.Replace('.', '_');
+                // Signature "1" is hardcoded in the loaders
+                return System.IO.Path.Combine(textureCacheDir, fileName + "_" + text + "_" + text2 + "_1.vamcache");
+            }
+            return null;
+        }
     }
 }

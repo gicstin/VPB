@@ -63,8 +63,6 @@ namespace VPB
 
         private static BufferPathMap _dataToPath = new BufferPathMap();
         
-        static readonly char[] s_InvalidFileNameChars = Path.GetInvalidFileNameChars();
-
         public static void PatchAll(Harmony harmony)
         {
             try
@@ -508,13 +506,12 @@ namespace VPB
                 qi.compress = true;
                 qi.linear = false; 
 
-                string cacheBase = GetDiskCachePath(qi, false, 0, 0);
-                if (string.IsNullOrEmpty(cacheBase)) return false;
+                string baseZstdPath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength);
+                if (string.IsNullOrEmpty(baseZstdPath)) return false;
 
-                string metaPath = cacheBase + ".meta";
+                string metaPath = baseZstdPath + "meta";
                 if (!File.Exists(metaPath))
                 {
-                    // LogUtil.Log("No meta file for: " + path);
                     return false;
                 }
 
@@ -532,31 +529,39 @@ namespace VPB
                     }
                     
                     string type = json["type"];
-                    string realCachePath = GetDiskCachePath(qi, true, targetW, targetH);
-                    string realCacheFile = realCachePath + ".cache";
+                    // If target size is different from original, GetZstdCachePath will include it in signature
+                    bool isResized = targetW != w || targetH != h;
+                    string realCacheFile = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, isResized ? targetW : 0, isResized ? targetH : 0, qi.bumpStrength);
                     
-                    if (!File.Exists(realCacheFile))
+                    if (!File.Exists(realCacheFile) && isResized)
                     {
-                        if (File.Exists(realCachePath)) realCacheFile = realCachePath;
+                        // Fallback to full size if resized Zstd cache doesn't exist yet
+                        realCacheFile = baseZstdPath;
+                        targetW = w;
+                        targetH = h;
                     }
 
                     if (File.Exists(realCacheFile))
                     {
-                        LogUtil.Log("Cache HIT: " + realCacheFile + " for " + path);
+                        if (Settings.Instance.TextureLogLevel.Value >= 2) LogUtil.Log("Cache HIT: " + realCacheFile + " for " + path);
                         byte[] fileBytes = File.ReadAllBytes(realCacheFile);
                         byte[] bytes = null;
-                        if (type == "compressed")
-                            {
-                                try { 
-                                    bytes = ZstdCompressor.Decompress(fileBytes); 
-                                    if (bytes == null) {
-                                        LogUtil.LogError("Zstd decompression returned null for: " + realCacheFile);
-                                        return false;
-                                    }
+                        
+                        // Zstd files should always be decompressed regardless of 'type' in meta, 
+                        // but we check for .zvamcache extension or 'compressed' type
+                        if (realCacheFile.EndsWith(".zvamcache") || type == "compressed")
+                        {
+                            try 
+                            { 
+                                bytes = ZstdCompressor.Decompress(fileBytes); 
+                                if (bytes == null) {
+                                    LogUtil.LogError("Zstd decompression returned null for: " + realCacheFile);
+                                    return false;
                                 }
-                                catch (Exception ex) { LogUtil.LogError("Zstd decompress fail in hook: " + ex.Message); return false; }
                             }
-                            else bytes = fileBytes;
+                            catch (Exception ex) { LogUtil.LogError("Zstd decompress fail in hook: " + ex.Message); return false; }
+                        }
+                        else bytes = fileBytes;
 
                             if (bytes != null)
                             {
@@ -720,45 +725,6 @@ namespace VPB
             return power;
         }
 
-        private static string GetDiskCachePath(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width, int height)
-        {
-            string textureCacheDir = VamHookPlugin.GetCacheDir();
-            if (string.IsNullOrEmpty(textureCacheDir)) return null;
-
-            string imgPath = qi.imgPath;
-            var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
-
-            string fileName = Path.GetFileName(imgPath);
-            fileName = SanitizeFileName(fileName).Replace('.', '_');
-            
-            string text = (fileEntry != null) ? fileEntry.Size.ToString() : "0";
-            string token = (fileEntry != null) ? fileEntry.LastWriteTime.ToFileTime().ToString() : "0";
-
-            string signature = GetDiskCacheSignature(qi, useSize, width, height);
-           
-            return Path.Combine(textureCacheDir, fileName + "_" + text + "_" + token + "_" + signature);
-        }
-
-        private static string GetDiskCacheSignature(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width, int height)
-        {
-            string text = useSize ? (width + "_" + height) : "";
-            if (qi.compress) text += "_C";
-            if (qi.linear) text += "_L";
-            // Normal maps and other flags are usually handled by qi properties
-            return text;
-        }
-        
-        static string SanitizeFileName(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return "img";
-            var sb = new System.Text.StringBuilder(value.Length);
-            for (int i = 0; i < value.Length; i++)
-            {
-                char c = value[i];
-                sb.Append(Array.IndexOf(s_InvalidFileNameChars, c) >= 0 ? '_' : c);
-            }
-            return sb.ToString();
-        }
         public static void UnityWebRequest_Get_Postfix(object __result, string uri)
         {
              LogUtil.Log("UnityWebRequest.Get: " + uri);

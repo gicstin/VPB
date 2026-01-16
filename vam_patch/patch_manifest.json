@@ -96,6 +96,22 @@
     "IsDirectory": false
   },
   {
+    "RelativePath": "BepInEx/plugins/zstd",
+    "IsDirectory": true
+  },
+  {
+    "RelativePath": "BepInEx/plugins/zstd/dll",
+    "IsDirectory": true
+  },
+  {
+    "RelativePath": "BepInEx/plugins/zstd/zstd.exe",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/zstd/dll/libzstd.dll",
+    "IsDirectory": false
+  },
+  {
     "RelativePath": "VaM (Log Mode).bat",
     "IsDirectory": false
   }

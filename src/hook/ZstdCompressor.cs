@@ -15,8 +15,20 @@ namespace VPB
             _zstdChecked = true;
             try
             {
-                // 1. Check same dir as VPB.dll (standard installation)
+                string pluginDir = BepInEx.Paths.PluginPath;
                 string assemblyDir = Path.GetDirectoryName(typeof(ZstdCompressor).Assembly.Location);
+
+                // 1. Check BepInEx plugins root (preferred location for shared zstd)
+                if (!string.IsNullOrEmpty(pluginDir))
+                {
+                    string path = Path.Combine(pluginDir, "zstd\\zstd.exe");
+                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+
+                    path = Path.Combine(pluginDir, "VPB\\zstd\\zstd.exe");
+                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+                }
+
+                // 2. Check same dir as VPB.dll
                 if (!string.IsNullOrEmpty(assemblyDir))
                 {
                     string path = Path.Combine(assemblyDir, "zstd.exe");
@@ -25,24 +37,13 @@ namespace VPB
                     path = Path.Combine(assemblyDir, "zstd\\zstd.exe");
                     if (File.Exists(path)) { _cachedZstdPath = path; return path; }
                     
-                    // Also check parent dir (e.g. if DLL is in BepInEx/plugins/VPB/bin)
+                    // Also check parent dir
                     string parent = Path.GetDirectoryName(assemblyDir);
                     if (!string.IsNullOrEmpty(parent))
                     {
                         path = Path.Combine(parent, "zstd\\zstd.exe");
                         if (File.Exists(path)) { _cachedZstdPath = path; return path; }
                     }
-                }
-
-                // 2. Check BepInEx plugins root
-                string pluginDir = BepInEx.Paths.PluginPath;
-                if (!string.IsNullOrEmpty(pluginDir))
-                {
-                    string path = Path.Combine(pluginDir, "zstd\\zstd.exe");
-                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
-
-                    path = Path.Combine(pluginDir, "VPB\\zstd\\zstd.exe");
-                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
                 }
             }
             catch { }

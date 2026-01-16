@@ -32,16 +32,13 @@ namespace VPB
         public ConfigEntry<bool> QuickMenuShowHideEnabled;
         public ConfigEntry<bool> PluginsAlwaysEnabled;
         public ConfigEntry<bool> EnableTextureOptimizations;
+        public ConfigEntry<bool> ReduceTextureSize;
         public ConfigEntry<bool> EnableZstdCompression;
         public ConfigEntry<int> ZstdCompressionLevel;
-        public ConfigEntry<bool> ReduceTextureSize;
-        public ConfigEntry<int> MinTextureSize;
-        public ConfigEntry<bool> ForceTextureToMinSize;
         public ConfigEntry<bool> CacheAssetBundle;
-        public ConfigEntry<int> MaxTextureSize;
         public ConfigEntry<bool> InflightDedupEnabled;
-        public ConfigEntry<bool> PrioritizeFaceTextures;
-        public ConfigEntry<bool> PrioritizeHairTextures;
+        public ConfigEntry<bool> DeleteOriginalCacheAfterCompression;
+        public ConfigEntry<int> ThumbnailThreshold;
 
         public ConfigEntry<string> LastGalleryPage;
         public ConfigEntry<int> TextureLogLevel;
@@ -52,6 +49,12 @@ namespace VPB
         public ConfigEntry<float> UiTransparencyValue;
         public ConfigEntry<bool> AutoPageEnabled;
         
+        public ConfigEntry<bool> PrioritizeFaceTextures;
+        public ConfigEntry<bool> PrioritizeHairTextures;
+        public ConfigEntry<int> MinTextureSize;
+        public ConfigEntry<int> MaxTextureSize;
+        public ConfigEntry<bool> ForceTextureToMinSize;
+
         internal static void Init(ConfigFile config)
         {
             Instance.Load(config);
@@ -74,18 +77,15 @@ namespace VPB
             QuickMenuCreateGalleryEnabled = config.Bind<bool>("UI", "QuickMenuCreateGalleryEnabled", true, "Show the Quick Menu Create Gallery button.");
             QuickMenuShowHideEnabled = config.Bind<bool>("UI", "QuickMenuShowHideEnabled", true, "Show the Quick Menu Show/Hide button.");
             PluginsAlwaysEnabled = config.Bind<bool>("Settings", "PluginsAlwaysEnabled", false, "Plugins will always enabled.");
+            EnableTextureOptimizations = config.Bind<bool>("Optimze", "EnableTextureOptimizations", true, "Enable texture optimizations (loading from VPB_Cache).");
+            ReduceTextureSize = config.Bind<bool>("Optimze", "ReduceTextureSize", true, "Allow loading resized textures from cache.");
+            EnableZstdCompression = config.Bind<bool>("Optimze", "EnableZstdCompression", true, "Enable Zstd compression for texture cache.");
             
-            EnableTextureOptimizations = config.Bind<bool>("Optimze", "EnableTextureOptimizations", false, "Master toggle for all texture optimizations (caching, resizing, compression, prewarm, etc.).");
-            EnableZstdCompression = config.Bind<bool>("Optimze", "EnableZstdCompression", false, "Compress cached textures using Zstd.");
             ZstdCompressionLevel = config.Bind<int>("Optimze", "ZstdCompressionLevel", 5, "Zstd compression level (1-22, higher = better compression but slower).");
-            ReduceTextureSize = config.Bind<bool>("Optimze", "ReduceTextureSize", false, "reduce texture size.");
-            MinTextureSize = config.Bind<int>("Optimze", "MinTextureSize", 2048, "maximum resolution for resized textures.");
-            ForceTextureToMinSize = config.Bind<bool>("Optimze", "ForceTextureToMinSize", true, "force resized textures to the target resolution.");
-            MaxTextureSize = config.Bind<int>("Optimze", "MaxTextureSize", 4096, "max size for texture.");
             CacheAssetBundle = config.Bind<bool>("Optimze", "CacheAssetBundle", true, "cache assetbundle.");
             InflightDedupEnabled = config.Bind<bool>("Optimze", "InflightDedupEnabled", false, "coalesce duplicate image requests while the first is still loading.");
-            PrioritizeFaceTextures = config.Bind<bool>("Optimze", "PrioritizeFaceTextures", true, "prioritize face/makeup/overlay textures in VaM image load queue.");
-            PrioritizeHairTextures = config.Bind<bool>("Optimze", "PrioritizeHairTextures", true, "prioritize hair in VaM image load queue.");
+            DeleteOriginalCacheAfterCompression = config.Bind<bool>("Optimze", "DeleteOriginalCacheAfterCompression", true, "Delete original .vamcache files after successful Zstd compression.");
+            ThumbnailThreshold = config.Bind<int>("Optimze", "ThumbnailThreshold", 600, "Resolution threshold (width & height) below which a texture is considered a thumbnail and skipped by VPB optimizations.");
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
@@ -97,6 +97,12 @@ namespace VPB
 
 
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "CategoryHair", "Last opened Gallery page.");
+
+            PrioritizeFaceTextures = config.Bind<bool>("Optimze", "PrioritizeFaceTextures", true, "Prioritize face texture loading.");
+            PrioritizeHairTextures = config.Bind<bool>("Optimze", "PrioritizeHairTextures", true, "Prioritize hair texture loading.");
+            MinTextureSize = config.Bind<int>("Optimze", "MinTextureSize", 2048, "Minimum texture size to downscale to.");
+            MaxTextureSize = config.Bind<int>("Optimze", "MaxTextureSize", 8192, "Maximum texture size to allow.");
+            ForceTextureToMinSize = config.Bind<bool>("Optimze", "ForceTextureToMinSize", false, "Force all textures to min size.");
         }
     }
 }

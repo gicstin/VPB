@@ -66,6 +66,8 @@ namespace VPB
         private bool pendingIsDevMode;
         private bool backupIsDevMode;
 
+        private bool pendingEnableZstdCompression;
+
         private GameObject tooltipGO;
         private Text tooltipText;
 
@@ -147,6 +149,8 @@ namespace VPB
 
             pendingIsDevMode = VPBConfig.Instance.IsDevMode;
             backupIsDevMode = VPBConfig.Instance.IsDevMode;
+
+            pendingEnableZstdCompression = Settings.Instance.EnableZstdCompression.Value;
 
             RectTransform rt = settingsPaneRT;
             if (onRight)
@@ -399,26 +403,18 @@ namespace VPB
                 CreateToggleSetting("Developer Mode", pendingIsDevMode, (val) => {
                     pendingIsDevMode = val;
                 }, "Enables developer-only features and debug tools. Requires restart to fully hide/show some elements.");
-
-                CreateToggleSetting("Texture Optimizations", pendingEnableTextureOptimizations, (val) => {
-                    pendingEnableTextureOptimizations = val;
-                    Settings.Instance.EnableTextureOptimizations.Value = val;
-                    if (val)
-                    {
-                        Settings.Instance.EnableZstdCompression.Value = true;
-                    }
-                }, "Master toggle for all texture optimizations (caching, resizing, compression, prewarm, etc.).");
-
-                CreateHeader("Compression Support");
-                GameObject zstdBtn = UI.CreateUIButton(settingsScrollContent, 400, 50, "Run Zstd Roundtrip Test", 22, 0, 0, AnchorPresets.middleCenter, () => {
-                    ZstdRoundTripTest.RunFullTest();
-                });
-                zstdBtn.GetComponent<Image>().color = new Color(0.2f, 0.6f, 1f, 0.8f); // Blue-ish
-                zstdBtn.GetComponentInChildren<Text>().color = Color.white;
-                zstdBtn.AddComponent<UIHoverBorder>();
-                LayoutElement zstdLe = zstdBtn.AddComponent<LayoutElement>();
-                zstdLe.minHeight = 60; zstdLe.preferredHeight = 60; zstdLe.flexibleWidth = 1;
             }
+
+            CreateHeader("Texture Optimization");
+            CreateToggleSetting("Enable Optimizations", pendingEnableTextureOptimizations, (val) => {
+                pendingEnableTextureOptimizations = val;
+                Settings.Instance.EnableTextureOptimizations.Value = val;
+            }, "Master toggle for all texture optimizations (caching, resizing, compression).");
+
+            CreateToggleSetting("Use Zstd Cache", pendingEnableZstdCompression, (val) => {
+                pendingEnableZstdCompression = val;
+                Settings.Instance.EnableZstdCompression.Value = val;
+            }, "Enable loading from and saving to Zstd-compressed texture cache (.zvamcache).");
         }
 
         private void CreateHeader(string title)

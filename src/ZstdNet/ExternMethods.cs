@@ -39,21 +39,27 @@ namespace ZstdNet
                 
                 System.Collections.Generic.List<string> searchDirs = new System.Collections.Generic.List<string>();
                 
-                // 1. Same directory as VPB.dll
+                // 1. Target specific directory: BepInEx/plugins/zstd/dll/ (High Priority)
+                if (!string.IsNullOrEmpty(pluginDir))
+                {
+                    searchDirs.Add(Path.Combine(pluginDir, "zstd\\dll"));
+                }
+
+                // 2. Same directory as VPB.dll
                 if (!string.IsNullOrEmpty(assemblyDir))
                 {
                     searchDirs.Add(assemblyDir);
                     searchDirs.Add(Path.Combine(assemblyDir, "x64"));
                 }
                 
-                // 2. BepInEx plugins directory
+                // 3. BepInEx plugins directory (legacy/fallback)
                 if (!string.IsNullOrEmpty(pluginDir) && pluginDir != assemblyDir)
                 {
                     searchDirs.Add(pluginDir);
                     searchDirs.Add(Path.Combine(pluginDir, "x64"));
                 }
 
-                // 3. One level up from plugins (BepInEx folder)
+                // 4. One level up from plugins (BepInEx folder)
                 if (!string.IsNullOrEmpty(pluginDir))
                 {
                     string parent = Path.GetDirectoryName(pluginDir);

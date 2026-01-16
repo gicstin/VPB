@@ -126,9 +126,13 @@ namespace VPB
                     if (createAlphaFromGrayscale) text += "_A";
                     if (createNormalFromBump) text = text + "_BN" + bumpStrength;
                     if (invert) text += "_I";
-                    text += "_CS2";
                     return text;
                 }
+            }
+
+            protected string GetVPBCachePath()
+            {
+                return TextureUtil.GetZstdCachePath(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, setSize ? width : 0, setSize ? height : 0, bumpStrength);
             }
 
             protected string GetDiskCachePath()
@@ -390,8 +394,31 @@ namespace VPB
                     }
                     else if (FileManager.FileExists(imgPath))
                     {
+                        string vpbCachePath = GetVPBCachePath();
                         string diskCachePath = GetDiskCachePath();
-                        if (MVR.FileManagement.CacheManager.CachingEnabled && diskCachePath != null && FileManager.FileExists(diskCachePath))
+
+                        if (vpbCachePath != null && File.Exists(vpbCachePath))
+                        {
+                            try
+                            {
+                                string metaPath = vpbCachePath + "meta";
+                                if (File.Exists(metaPath))
+                                {
+                                    string jsonString = File.ReadAllText(metaPath);
+                                    ReadMetaJson(jsonString);
+                                    byte[] compressed = File.ReadAllBytes(vpbCachePath);
+                                    raw = ZstdCompressor.Decompress(compressed);
+                                    preprocessed = true;
+                                    loadedFromCache = true;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError("Exception during VPB cache file read " + ex);
+                            }
+                        }
+
+                        if (!preprocessed && MVR.FileManagement.CacheManager.CachingEnabled && diskCachePath != null && FileManager.FileExists(diskCachePath))
                         {
                             try
                             {
@@ -483,8 +510,8 @@ namespace VPB
                             {
                                 JSONClass jSONClass = new JSONClass();
                                 jSONClass["type"] = "image";
-                                jSONClass["width"].AsInt = tex.width;
-                                jSONClass["height"].AsInt = tex.height;
+                                jSONClass["width"] = tex.width.ToString();
+                                jSONClass["height"] = tex.height.ToString();
                                 jSONClass["format"] = tex.format.ToString();
                                 byte[] rawTextureData2 = tex.GetRawTextureData();
                                 File.WriteAllText(text + "meta", jSONClass.ToString(string.Empty));

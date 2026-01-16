@@ -62,11 +62,20 @@ namespace VPB
         private bool m_ShowRemoveOldDamagedInfo;
         private bool m_ShowUninstallAllInfo;
         private bool m_ShowGcRefreshInfo;
+        private bool m_ShowSpaceSaverWindow;
+        private Rect m_SpaceSaverWindowRect = new Rect(100, 100, 650, 200);
+        private bool m_DecompressConfirmRequested;
+        private bool m_CompressConfirmRequested;
+        private long m_CachedTexturesSize;
+        private long m_CachedVpbSize;
+        private int m_PendingVamCacheCount;
+        private float m_CacheCountUpdateTimer;
         private bool m_ShowSettings;
         private string m_SettingsUiKeyDraft;
         private string m_SettingsGalleryKeyDraft;
         private string m_SettingsCreateGalleryKeyDraft;
         private string m_SettingsHubKeyDraft;
+        private int m_SettingsThumbnailThresholdDraft;
         private bool m_SettingsReduceTextureSizeDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
@@ -165,6 +174,7 @@ namespace VPB
             m_SettingsGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.GalleryKey != null) ? Settings.Instance.GalleryKey.Value : "";
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
+            m_SettingsThumbnailThresholdDraft = (Settings.Instance != null && Settings.Instance.ThumbnailThreshold != null) ? Settings.Instance.ThumbnailThreshold.Value : 600;
             m_SettingsReduceTextureSizeDraft = (Settings.Instance != null && Settings.Instance.ReduceTextureSize != null) ? Settings.Instance.ReduceTextureSize.Value : false;
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
@@ -208,6 +218,10 @@ namespace VPB
                 if (Settings.Instance != null && Settings.Instance.HubKey != null)
                 {
                     Settings.Instance.HubKey.Value = parsedHubKey.keyPattern;
+                }
+                if (Settings.Instance != null && Settings.Instance.ThumbnailThreshold != null)
+                {
+                    Settings.Instance.ThumbnailThreshold.Value = m_SettingsThumbnailThresholdDraft;
                 }
                 if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
                 {
@@ -370,14 +384,6 @@ namespace VPB
                 }
                 GUILayout.Label("Developer Mode");
                 GUILayout.EndHorizontal();
-
-                var prevColor = GUI.backgroundColor;
-                GUI.backgroundColor = new Color(0.2f, 0.6f, 1f, 1f); // Blue
-                if (GUILayout.Button("Run Zstd Roundtrip Test", m_StyleButton, GUILayout.Height(buttonHeight * 1.5f)))
-                {
-                    ZstdRoundTripTest.RunFullTest();
-                }
-                GUI.backgroundColor = prevColor;
             }
 
             GUILayout.Space(6);
@@ -419,6 +425,16 @@ namespace VPB
 
             if (Settings.Instance.EnableTextureOptimizations.Value)
             {
+                GUILayout.Space(6);
+                
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Thumbnail Threshold:", GUILayout.Width(140));
+                string thresholdStr = GUILayout.TextField(m_SettingsThumbnailThresholdDraft.ToString(), GUILayout.Width(60));
+                int.TryParse(thresholdStr, out m_SettingsThumbnailThresholdDraft);
+                GUILayout.Label("px");
+                GUILayout.EndHorizontal();
+                GUILayout.Label("Resolution below which textures are skipped.");
+
                 GUILayout.Space(6);
 
                 GUILayout.BeginHorizontal();
@@ -1123,8 +1139,13 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(cacheDir))
             {
-                // Use absolute path for native plugin compatibility
-                cacheDir = Path.GetFullPath("Cache/VPB_cache");
+                // Move Zstd texture cache to a subfolder of native Textures cache
+                string baseCache = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+                if (string.IsNullOrEmpty(baseCache))
+                {
+                    baseCache = Path.GetFullPath(Path.Combine(Application.dataPath, "../Cache/Textures"));
+                }
+                cacheDir = Path.Combine(baseCache, "Zstd");
                 if (!Directory.Exists(cacheDir))
                 {
                     Directory.CreateDirectory(cacheDir);
@@ -1137,8 +1158,8 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(abCacheDir))
             {
-                // Use absolute path for native plugin compatibility
-                abCacheDir = Path.GetFullPath("Cache/VPB_cache/ab");
+                // Keep assetbundle cache in its own isolated folder
+                abCacheDir = Path.GetFullPath(Path.Combine(Application.dataPath, "../Cache/VPB_cache/ab"));
                 if (!Directory.Exists(abCacheDir))
                 {
                     Directory.CreateDirectory(abCacheDir);
@@ -1283,7 +1304,7 @@ namespace VPB
             }
             MVR.FileManagement.FileManager.RegisterInternalSecureWritePath("AllPackages");
 
-
+            m_PendingVamCacheCount = GetVamCacheFileCount();
         }
         void OnDestroy()
         {
@@ -1382,6 +1403,13 @@ namespace VPB
                         float fps = 1f / Mathf.Max(0.00001f, m_FpsSmoothedDelta);
                         m_FpsText = string.Format("{0:0} FPS", fps);
                     }
+                }
+
+                m_CacheCountUpdateTimer += unscaledDt;
+                if (m_CacheCountUpdateTimer >= 5.0f)
+                {
+                    m_CacheCountUpdateTimer = 0f;
+                    m_PendingVamCacheCount = GetVamCacheFileCount();
                 }
             }
 
@@ -1897,7 +1925,6 @@ namespace VPB
             if (m_FileManagerInited && m_UIInited)
             {
                 const float infoBtnWidth = 28f;
-                const float optionIndent = 12f;
 
                 if (m_FileBrowser != null && m_FileBrowser.window.activeSelf)
                     GUI.enabled = false;
@@ -1905,81 +1932,34 @@ namespace VPB
                 // Removed original Developer Tools section
                 
                 {
-                    // ========== TEXTURE OPTIMIZATION SETTINGS ==========
+                    // ========== ZSTD CACHE SETTINGS ==========
                     GUILayout.BeginVertical(m_StyleSection);
-                    GUILayout.Label("Texture Optimizations", m_StyleHeader);
                     
-                    GUILayout.BeginHorizontal();
-                    bool textureOptimizationsEnabled = Settings.Instance.EnableTextureOptimizations.Value;
-                    if (GUILayout.Button(textureOptimizationsEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                    var stats = ImageLoadingMgr.singleton.CurrentZstdStats;
+                    var btnLabel = m_PendingVamCacheCount > 0 ? string.Format("Optimize Cache ({0})", m_PendingVamCacheCount) : "Optimize Cache";
+                    var btnRect = GUILayoutUtility.GetRect(new GUIContent(btnLabel), m_StyleButtonPrimary, GUILayout.Height(buttonHeight));
+                    
+                    if (GUI.Button(btnRect, btnLabel, m_StyleButtonPrimary))
                     {
-                        bool newValue = !textureOptimizationsEnabled;
-                        Settings.Instance.EnableTextureOptimizations.Value = newValue;
-                        if (newValue)
-                        {
-                            Settings.Instance.EnableZstdCompression.Value = true;
-                        }
+                        m_ShowSpaceSaverWindow = !m_ShowSpaceSaverWindow;
                     }
-                    GUILayout.Label("Enable Texture Optimizations");
-                    GUILayout.EndHorizontal();
 
-                    if (Settings.Instance.EnableTextureOptimizations.Value)
+                    // Show progress bar on button if running and minimized
+                    if (stats.IsRunning && !m_ShowSpaceSaverWindow)
                     {
-                        GUILayout.Space(6);
+                        float progress = stats.TotalFiles > 0 ? (float)stats.ProcessedFiles / stats.TotalFiles : 0f;
+                        var progressRect = new Rect(btnRect.x, btnRect.y + btnRect.height - 4f, btnRect.width * progress, 4f);
                         
-                        // Downscale
-                        GUILayout.BeginHorizontal();
-                        GUILayout.Space(optionIndent);
-                        if (GUILayout.Button(Settings.Instance.ReduceTextureSize.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                        {
-                            Settings.Instance.ReduceTextureSize.Value = !Settings.Instance.ReduceTextureSize.Value;
-                        }
-                        GUILayout.Label("Downscale Textures");
-                        GUILayout.FlexibleSpace();
-                        if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
-                        {
-                            ToggleInfoCard(ref m_ShowDownscaleTexturesInfo);
-                        }
-                        GUILayout.EndHorizontal();
-                        
-                        DrawInfoCard(ref m_ShowDownscaleTexturesInfo, "Downscale Textures", () =>
-                        {
-                            GUILayout.Space(4);
-                            GUILayout.Label("When enabled, VPB captures high-resolution textures and optimizes them for better performance and lower VRAM usage.", m_StyleInfoCardText);
-                            GUILayout.Space(4);
-                            GUILayout.Label("<b>Optimization Methods:</b>", m_StyleInfoCardText);
-                            GUILayout.Label("• <b>Resize:</b> Textures larger than the 'Max Rez' setting are downscaled to that resolution. This significantly reduces VRAM footprint with minimal visual impact.", m_StyleInfoCardText);
-                            GUILayout.Label("• <b>Zstd Compression:</b> Textures are compressed using Zstd, which reduces disk cache size and improves loading speeds from disk.", m_StyleInfoCardText);
-                            GUILayout.Space(4);
-                            GUILayout.Label("<b>Notes:</b>", m_StyleInfoCardText);
-                            GUILayout.Label("• Smaller textures are never upscaled.", m_StyleInfoCardText);
-                            GUILayout.Label("• Initial processing may take a moment while the cache is built.", m_StyleInfoCardText);
-                        });
+                        // Use solid color for progress bar to ensure visibility
+                        var prevColor = GUI.color;
+                        GUI.color = new Color(0.2f, 1f, 0.2f, 0.8f); // Bright green
+                        GUI.DrawTexture(progressRect, Texture2D.whiteTexture);
+                        GUI.color = prevColor;
+                    }
 
-                        if (Settings.Instance.ReduceTextureSize.Value)
-                        {
-                            GUILayout.BeginHorizontal();
-                            GUILayout.Space(optionIndent * 2);
-                            GUILayout.Label("Max Rez", GUILayout.Width(60));
-                            int minTextureSize = Settings.Instance.MinTextureSize.Value;
-                            var style2k = (minTextureSize == 2048) ? m_StyleButtonPrimary : m_StyleButton;
-                            var style4k = (minTextureSize == 4096) ? m_StyleButtonPrimary : m_StyleButton;
-                            
-                            if (GUILayout.Button("2K", style2k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
-                            {
-                                Settings.Instance.MinTextureSize.Value = 2048;
-                            }
-                            if (GUILayout.Button("4K", style4k, GUILayout.Width(44), GUILayout.Height(buttonHeight)))
-                            {
-                                Settings.Instance.MinTextureSize.Value = 4096;
-                            }
-                            // 8K option removed as redundant
-                            if (Settings.Instance.MaxTextureSize != null)
-                            {
-                                Settings.Instance.MaxTextureSize.Value = Settings.Instance.MinTextureSize.Value;
-                            }
-                            GUILayout.EndHorizontal();
-                        }
+                    if (m_ShowSpaceSaverWindow)
+                    {
+                        // Window is drawn in OnGUI
                     }
                     GUILayout.EndVertical();
                     GUILayout.Space(4);
@@ -2163,6 +2143,22 @@ namespace VPB
 
                     m_Rect = GUILayout.Window(0, windowRect, DragWnd, "", m_StyleWindow);
 
+                    if (m_ShowSpaceSaverWindow)
+                    {
+                        // Block world interaction when mouse is over the Optimize Cache window
+                        var screenSpaceRect = new Rect(m_SpaceSaverWindowRect.x * m_UIScale, m_SpaceSaverWindowRect.y * m_UIScale, m_SpaceSaverWindowRect.width * m_UIScale, m_SpaceSaverWindowRect.height * m_UIScale);
+                        if (screenSpaceRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)))
+                        {
+                            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp || Event.current.type == EventType.ScrollWheel)
+                            {
+                                Input.ResetInputAxes();
+                            }
+                        }
+                        
+                        m_SpaceSaverWindowRect = GUI.Window(999, m_SpaceSaverWindowRect, DrawSpaceSaverWindow, "", m_StyleWindow);
+                    }
+
+
                     // Draw our custom border ON TOP or AROUND the window rect
                     var borderRect = new Rect(m_Rect.x, m_Rect.y, m_Rect.width, m_Rect.height);
 
@@ -2226,15 +2222,15 @@ namespace VPB
                         if (sceneLoadSeconds.HasValue)
                         {
                             // Prefer showing load time; keep text compact to avoid truncation in small headers.
-                            tagText = string.Format("vpb {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneLoadSeconds.Value);
+                            tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneLoadSeconds.Value);
                         }
                         else if (sceneClickSeconds.HasValue)
                         {
-                            tagText = string.Format("vpb {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneClickSeconds.Value);
+                            tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneClickSeconds.Value);
                         }
                         else
                         {
-                            tagText = string.Format("vpb {0} | {1:0.0}s", PluginVersionInfo.Version, startupSeconds);
+                            tagText = string.Format("VPB {0} | {1:0.0}s", PluginVersionInfo.Version, startupSeconds);
                         }
                         var tagContent = new GUIContent(tagText);
                         float desiredTagWidth = m_TitleTagStyle != null ? m_TitleTagStyle.CalcSize(tagContent).x : 100f;
@@ -2624,6 +2620,379 @@ namespace VPB
                 }
             }
             Refresh();
+        }
+
+        void DrawSpaceSaverWindow(int windowID)
+        {
+            var prevPaddingTop = m_StyleWindow.padding.top;
+            m_StyleWindow.padding.top = 40;
+
+            GUI.DragWindow(new Rect(0, 0, 10000, 45));
+
+            // Draw header background
+            var headerBgRect = new Rect(5, 5, m_SpaceSaverWindowRect.width - 10, 35);
+            GUI.Box(headerBgRect, "", m_StyleSection);
+
+            // Draw title and close button in the header area (the padding gap)
+            GUI.Label(new Rect(15, 12, m_SpaceSaverWindowRect.width - 60, 25), "Optimize Cache (Zstd)", m_StyleHeader);
+            if (GUI.Button(new Rect(m_SpaceSaverWindowRect.width - 35, 12, 28, 22), "X", m_StyleButtonSmall))
+            {
+                m_ShowSpaceSaverWindow = false;
+            }
+
+            // Block game input when interacting with the window
+            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp || Event.current.type == EventType.ScrollWheel || Event.current.type == EventType.MouseMove)
+            {
+                Input.ResetInputAxes();
+            }
+
+            // Force fully opaque content inside the window so it doesn't look "behind glass"
+            var prevColor = GUI.color;
+            var prevContent = GUI.contentColor;
+            GUI.color = new Color(1, 1, 1, 1);
+            GUI.contentColor = new Color(1, 1, 1, 1);
+
+            GUILayout.BeginVertical(m_StylePanel);
+
+            GUILayout.Space(2);
+
+            // Explanation Area
+            GUILayout.BeginVertical(m_StyleSection);
+            GUILayout.Label("About Cache Optimization", m_StyleHeader);
+            GUILayout.Space(5);
+            GUILayout.Label("This tool migrates VaM's native texture cache (.vamcache) to a highly optimized Zstandard (Zstd) format.", m_StyleInfoCardText);
+            GUILayout.Label("• Reduces disk usage by up to 80% (Lossless, no quality lost).", m_StyleInfoCardText);
+            GUILayout.Label("• Scenes load faster by reducing disk I/O.", m_StyleInfoCardText);
+            GUILayout.Label("• VPB plugin is required for compressed cache to work.", m_StyleInfoCardText);
+            GUILayout.Label("• Safely archives textures; can be reverted back at any time.", m_StyleInfoCardText);
+            GUILayout.EndVertical();
+
+            GUILayout.Space(10);
+
+            var stats = ImageLoadingMgr.singleton.CurrentZstdStats;
+
+            if (stats.IsRunning)
+            {
+                GUILayout.BeginVertical(m_StyleSection);
+                GUILayout.Label("Operation in Progress...", m_StyleHeader);
+                GUILayout.Space(5);
+                
+                float progress = stats.TotalFiles > 0 ? (float)stats.ProcessedFiles / stats.TotalFiles : 0f;
+                GUILayout.Label(string.Format("Progress: {0}/{1} files ({2:P1})", stats.ProcessedFiles, stats.TotalFiles, progress), m_StyleInfoCardText);
+                
+                // Progress bar
+                var rect = GUILayoutUtility.GetRect(0f, 20f, GUILayout.ExpandWidth(true));
+                GUI.Box(rect, "", m_StyleButton); // Background
+                var progressRect = new Rect(rect.x, rect.y, rect.width * progress, rect.height);
+                
+                // Use solid color for internal progress bar too
+                var barPrevColor = GUI.color;
+                GUI.color = new Color(0.2f, 0.6f, 1f, 0.8f); // Blue
+                GUI.DrawTexture(progressRect, Texture2D.whiteTexture);
+                GUI.color = barPrevColor;
+
+                GUILayout.Space(5);
+                GUILayout.Label("Current: " + stats.CurrentFile, m_StyleInfoCardText);
+                
+                if (stats.TotalOriginalSize > stats.TotalCompressedSize) {
+                    long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
+                    string label = stats.IsDecompression ? "Space Lost: " : "Space Saved: ";
+                    GUILayout.Label(label + FormatBytes(diff), m_StyleInfoCardText);
+                }
+
+                GUILayout.EndVertical();
+
+                // Buttons outside the section
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("Minimize", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
+                {
+                    m_ShowSpaceSaverWindow = false;
+                }
+                if (GUILayout.Button("Stop Operation", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
+                {
+                    ImageLoadingMgr.singleton.CancelBulkOperation();
+                }
+                GUILayout.EndHorizontal();
+            }
+            else if (stats.Completed)
+            {
+                GUILayout.BeginVertical(m_StyleSection);
+                GUILayout.Label("Operation Report", m_StyleHeader);
+                GUILayout.Space(5);
+                GUILayout.Label("Status: " + stats.CurrentFile + "!", m_StyleInfoCardText);
+                GUILayout.Label("Total Files Processed: " + stats.ProcessedFiles, m_StyleInfoCardText);
+                if (stats.SkippedCount > 0)
+                {
+                    GUILayout.Label("Thumbnails Skipped: " + stats.SkippedCount, m_StyleInfoCardText);
+                }
+                GUILayout.Label("Total Uncompressed Size: " + FormatBytes(stats.TotalOriginalSize), m_StyleInfoCardText);
+                GUILayout.Label("Total Compressed Size: " + FormatBytes(stats.TotalCompressedSize), m_StyleInfoCardText);
+                GUILayout.Label(string.Format("Time Taken: {0:0.##} seconds", stats.Duration), m_StyleInfoCardText);
+                
+                if (stats.TotalOriginalSize > stats.TotalCompressedSize) {
+                    long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
+                    double percent = stats.TotalOriginalSize > 0 ? (double)diff / stats.TotalOriginalSize : 0;
+                    
+                    var reportPrevContentColor = GUI.contentColor;
+                    if (stats.IsDecompression)
+                    {
+                        GUI.contentColor = new Color(1f, 0.2f, 0.2f); // Red for space lost
+                        GUILayout.Label(string.Format("Total Space Lost: {0} ({1:P1})", FormatBytes(diff), percent), m_StyleHeader);
+                    }
+                    else
+                    {
+                        GUI.contentColor = new Color(0.2f, 1f, 0.2f); // Green for savings
+                        GUILayout.Label(string.Format("Total Space Saved: {0} ({1:P1})", FormatBytes(diff), percent), m_StyleHeader);
+                    }
+                    GUI.contentColor = reportPrevContentColor;
+                }
+
+                if (stats.FailedCount > 0)
+                {
+                    GUILayout.Label("Failed Files: " + stats.FailedCount, m_StyleInfoCardText);
+                }
+                
+                if (GUILayout.Button("Close Report", m_StyleButton, GUILayout.Height(30)))
+                {
+                    stats.Completed = false; // Reset to show start screen next time
+                }
+                GUILayout.EndVertical();
+            }
+            else if (m_CompressConfirmRequested)
+            {
+                GUILayout.BeginVertical(m_StyleSection);
+                GUILayout.Label("Confirm Compression", m_StyleHeader);
+                GUILayout.Space(5);
+                GUILayout.Label("This will migrate VaM's native texture cache to optimized Zstd format.", m_StyleInfoCardText);
+                GUILayout.Space(5);
+                GUILayout.Label("• Current Cache Size: " + FormatBytes(m_CachedTexturesSize), m_StyleInfoCardText);
+                long estimatedSavings = (long)(m_CachedTexturesSize * 0.7f);
+                long estimatedCompressed = m_CachedTexturesSize - estimatedSavings;
+                GUILayout.Label("• Estimated compressed cache = " + FormatBytes(estimatedCompressed) + " (space saved: ~" + FormatBytes(estimatedSavings) + ")", m_StyleInfoCardText);
+                GUILayout.Label("• Compression is lossless; no texture quality will be lost.", m_StyleInfoCardText);
+                GUILayout.Label("• The operation may take several minutes depending on cache size.", m_StyleInfoCardText);
+                
+                GUILayout.Space(20);
+
+                GUILayout.BeginHorizontal();
+
+                var prevBg = GUI.backgroundColor;
+                GUI.backgroundColor = new Color(0.4f, 0.8f, 0.4f, 1f); // More vibrant green
+                if (GUILayout.Button("Confirm Compress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
+                {
+                    m_CompressConfirmRequested = false;
+                    ImageLoadingMgr.singleton.StartBulkZstdCompression();
+                }
+                GUI.backgroundColor = prevBg;
+
+                GUILayout.Space(10);
+
+                var prevBgCancel = GUI.backgroundColor;
+                GUI.backgroundColor = new Color(0.8f, 0.4f, 0.4f, 1f); // More vibrant red
+                if (GUILayout.Button("Cancel", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
+                {
+                    m_CompressConfirmRequested = false;
+                }
+                GUI.backgroundColor = prevBgCancel;
+
+                GUILayout.EndHorizontal();
+                GUILayout.EndVertical();
+            }
+            else if (m_DecompressConfirmRequested)
+            {
+                GUILayout.BeginVertical(m_StyleSection);
+                GUILayout.Label("Confirm Decompression", m_StyleHeader);
+                GUILayout.Space(5);
+                GUILayout.Label("This will decompress all .zvamcache files back to VaM's native format.", m_StyleInfoCardText);
+                GUILayout.Space(5);
+                GUILayout.Label("• Current Compressed Size: " + FormatBytes(m_CachedVpbSize), m_StyleInfoCardText);
+                long estimatedDecompressed = (long)(m_CachedVpbSize * 4.6f);
+                long extraSpaceNeeded = estimatedDecompressed - m_CachedVpbSize;
+                GUILayout.Label("• Estimated native cache = " + FormatBytes(estimatedDecompressed) + " (extra space needed: ~" + FormatBytes(extraSpaceNeeded) + ")", m_StyleInfoCardText);
+                GUILayout.Label("• This should only be used if you plan to stop using the VPB plugin.", m_StyleInfoCardText);
+                GUILayout.Label("• The operation may take several minutes.", m_StyleInfoCardText);
+                
+                GUILayout.Space(20);
+
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("Cancel", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
+                {
+                    m_DecompressConfirmRequested = false;
+                }
+
+                GUILayout.Space(10);
+
+                var prevBg = GUI.backgroundColor;
+                GUI.backgroundColor = new Color(0.8f, 0.4f, 0.4f, 1f); // More vibrant red
+                if (GUILayout.Button("Confirm Decompress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
+                {
+                    m_DecompressConfirmRequested = false;
+                    ImageLoadingMgr.singleton.StartBulkZstdDecompression();
+                }
+                GUI.backgroundColor = prevBg;
+
+                GUILayout.EndHorizontal();
+                GUILayout.EndVertical();
+            }
+            else
+            {
+                GUILayout.BeginVertical(m_StyleSection);
+                
+                // Buttons layout: Compress, Decompress, Close
+                GUILayout.BeginHorizontal();
+                
+                var prevBg = GUI.backgroundColor;
+                GUI.backgroundColor = new Color(0.4f, 0.8f, 0.4f, 1f); // More vibrant green
+                if (GUILayout.Button("Compress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
+                {
+                    m_CachedTexturesSize = GetTexturesFolderSize();
+                    m_CompressConfirmRequested = true;
+                }
+
+                GUILayout.Space(10);
+
+                GUI.backgroundColor = new Color(0.8f, 0.4f, 0.4f, 1f); // More vibrant red
+                if (GUILayout.Button("Decompress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
+                {
+                    m_CachedVpbSize = GetVpbCacheFolderSize();
+                    m_DecompressConfirmRequested = true;
+                }
+                
+                GUILayout.Space(10);
+                
+                GUI.backgroundColor = prevBg;
+                if (GUILayout.Button("Close", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
+                {
+                    m_ShowSpaceSaverWindow = false;
+                }
+
+                GUILayout.EndHorizontal();
+                
+                GUILayout.EndVertical();
+            }
+
+            GUILayout.EndVertical();
+
+            if (Event.current.type == EventType.Repaint)
+            {
+                var contentHeight = GUILayoutUtility.GetLastRect().yMax;
+                m_SpaceSaverWindowRect.height = contentHeight + m_StyleWindow.padding.bottom;
+            }
+
+            GUI.color = prevColor;
+            GUI.contentColor = prevContent;
+            m_StyleWindow.padding.top = prevPaddingTop;
+
+            // Allow dragging from the header area (top 60 pixels)
+            // Calling it at the end allows it to catch clicks not consumed by buttons
+            GUI.DragWindow(new Rect(0, 0, 10000, 60));
+        }
+
+        private long GetVpbCacheFolderSize()
+        {
+            try
+            {
+                string path = GetCacheDir();
+                if (!Directory.Exists(path)) return 0;
+                
+                long size = 0;
+                string[] files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
+                foreach (string file in files)
+                {
+                    size += new FileInfo(file).Length;
+                }
+                return size;
+            }
+            catch { return 0; }
+        }
+
+        private int GetVamCacheFileCount()
+        {
+            try
+            {
+                string path = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+                if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
+                
+                string[] files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
+                int count = 0;
+                int threshold = Settings.Instance.ThumbnailThreshold.Value;
+                foreach (var file in files)
+                {
+                    // Check native .vamcachemeta resolution (<= threshold)
+                    string metaPath = file + "meta";
+                    if (File.Exists(metaPath))
+                    {
+                        try
+                        {
+                            var meta = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
+                            if (meta != null)
+                            {
+                                int w = meta["width"].AsInt;
+                                int h = meta["height"].AsInt;
+                                if (meta["isThumbnail"].AsBool || (w > 0 && w <= threshold && h > 0 && h <= threshold)) continue;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    count++;
+                }
+                return count;
+            }
+            catch { return 0; }
+        }
+
+        private long GetTexturesFolderSize()
+        {
+            try
+            {
+                string path = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+                if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
+                
+                long size = 0;
+                string[] files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
+                int threshold = Settings.Instance.ThumbnailThreshold.Value;
+                foreach (var file in files)
+                {
+                    string metaPath = file + "meta";
+                    bool isThumb = false;
+                    if (File.Exists(metaPath))
+                    {
+                        try
+                        {
+                            var meta = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
+                            if (meta != null)
+                            {
+                                int w = meta["width"].AsInt;
+                                int h = meta["height"].AsInt;
+                                if (meta["isThumbnail"].AsBool || (w > 0 && w <= threshold && h > 0 && h <= threshold)) isThumb = true;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (!isThumb)
+                    {
+                        size += new FileInfo(file).Length;
+                        if (File.Exists(metaPath))
+                            size += new FileInfo(metaPath).Length;
+                    }
+                }
+                return size;
+            }
+            catch { return 0; }
+        }
+
+        private string FormatBytes(long bytes)
+        {
+            string[] Suffix = { "B", "KB", "MB", "GB", "TB" };
+            int i;
+            double dblSByte = bytes;
+            for (i = 0; i < Suffix.Length && bytes >= 1024; i++, bytes /= 1024)
+            {
+                dblSByte = bytes / 1024.0;
+            }
+            return String.Format("{0:0.##} {1}", dblSByte, Suffix[i]);
         }
 
         void DrawRemoveWindow(int windowID)

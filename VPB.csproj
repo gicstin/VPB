@@ -275,7 +275,6 @@
     <Compile Include="src\hook\GenericTextureHook.cs" />
     <Compile Include="src\hook\TextureUtil.cs" />
     <Compile Include="src\hook\ZstdCompressor.cs" />
-    <Compile Include="src\hook\ZstdRoundTripTest.cs" />
     <Compile Include="src\ZstdNet\Compressor.cs" />
     <Compile Include="src\ZstdNet\Decompressor.cs" />
     <Compile Include="src\ZstdNet\CompressionOptions.cs" />

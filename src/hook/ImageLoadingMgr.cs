@@ -6,127 +6,47 @@ using System.Text;
 using System.Threading;
 using SimpleJSON;
 using UnityEngine;
-using Valve.Newtonsoft.Json.Linq;
 
 namespace VPB
 {
     /// <summary>
-    /// Textures may need to be read later, so we cannot discard the CPU-side memory.
+    /// Manages Zstd compression and loading from VPB_Cache.
     /// </summary>
     public class ImageLoadingMgr : MonoBehaviour
     {
-        static readonly char[] s_InvalidFileNameChars = Path.GetInvalidFileNameChars();
-
-        [System.Serializable]
-        public class ImageRequest
-        {
-            public string path;
-            public Texture2D texture;
-        }
         public static ImageLoadingMgr singleton;
-        private readonly object _diskCacheWriteLock = new object();
-        private readonly Dictionary<string, object> _perPathWriteLocks = new Dictionary<string, object>();
+        public static string currentProcessingPath;
         
         private void Awake()
         {
             singleton = this;
         }
-        private void Start()
-        {
-            StartBulkZstdCompression();
-        }
 
         Dictionary<string, Texture2D> cache = new Dictionary<string, Texture2D>();
-
-        class ResizeJob
-        {
-            public ImageLoaderThreaded.QueuedImage qi;
-            public string key;
-        }
-
-        readonly Queue<ResizeJob> resizeQueue = new Queue<ResizeJob>();
-        readonly HashSet<string> resizeQueuedKeys = new HashSet<string>();
-        readonly HashSet<ImageLoaderThreaded.QueuedImage> _trackedQiSet = new HashSet<ImageLoaderThreaded.QueuedImage>();
-        readonly List<ImageLoaderThreaded.QueuedImage> _candidateImages = new List<ImageLoaderThreaded.QueuedImage>();
-        Coroutine resizeCoroutine;
-
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
-        HashSet<string> diskWriteInFlight = new HashSet<string>();
 
-        void EnqueueInflightWaiter(string key, ImageLoaderThreaded.QueuedImage qi)
-        {
-            if (string.IsNullOrEmpty(key) || qi == null) return;
-            List<ImageLoaderThreaded.QueuedImage> list;
-            if (!inflightWaiters.TryGetValue(key, out list) || list == null)
-            {
-                list = new List<ImageLoaderThreaded.QueuedImage>(4);
-                inflightWaiters[key] = list;
-            }
-            list.Add(qi);
-        }
-
-        void ResolveInflightWaiters(string key, Texture2D tex)
-        {
-            if (string.IsNullOrEmpty(key)) return;
-            inflightKeys.Remove(key);
-
-            List<ImageLoaderThreaded.QueuedImage> list;
-            if (!inflightWaiters.TryGetValue(key, out list) || list == null || list.Count == 0)
-            {
-                inflightWaiters.Remove(key);
-                return;
-            }
-
-            inflightWaiters.Remove(key);
-            if (tex == null) return;
-
-            for (int i = 0; i < list.Count; i++)
-            {
-                var w = list[i];
-                if (w == null) continue;
-                try
-                {
-                    w.tex = tex;
-                    Messager.singleton.StartCoroutine(DelayDoCallback(w));
-                }
-                catch { }
-            }
-        }
-
-        public void ResolveInflightForQueuedImage(ImageLoaderThreaded.QueuedImage qi)
-        {
-            if (qi == null) return;
-            string key = GetDiskCachePath(qi, false, 0, 0);
-            if (string.IsNullOrEmpty(key)) return;
-            ResolveInflightWaiters(key, qi.tex);
-        }
         public void ClearCache()
         {
             cache.Clear();
         }
+
         public Texture2D GetTextureFromCache(string path)
         {
-            if (cache.ContainsKey(path))
+            if (cache.TryGetValue(path, out var tex))
             {
-                if (cache[path] != null)
-                    return cache[path];
+                if (tex != null) return tex;
                 cache.Remove(path);
             }
             return null;
         }
+
         void RegisterTexture(string path, Texture2D tex)
         {
-            if (string.IsNullOrEmpty(path)) return;
-            if (cache.ContainsKey(path) && cache[path] != null)
-                return;
-            if (tex == null)
-                return;
-            //LogUtil.Log("RegisterTexture:" + path);
-            cache.Remove(path);
-            cache.Add(path, tex);
+            if (string.IsNullOrEmpty(path) || tex == null) return;
+            cache[path] = tex;
         }
-        public List<ImageRequest> requests = new List<ImageRequest>();
+
         public void DoCallback(ImageLoaderThreaded.QueuedImage qi)
         {
             try
@@ -147,1309 +67,469 @@ namespace VPB
                 LogUtil.LogError("DoCallback "+qi.imgPath+" "+ex.ToString());
             }
         }
-        // Cannot call immediately; delay one frame.
-        // e.g. MacGruber.PostMagic can finish immediately while initialization isn't complete yet.
-        WaitForEndOfFrame waitForEndOfFrame= new WaitForEndOfFrame();
+
+        WaitForEndOfFrame waitForEndOfFrame = new WaitForEndOfFrame();
         IEnumerator DelayDoCallback(ImageLoaderThreaded.QueuedImage qi)
         {
             yield return waitForEndOfFrame;
-            // Delay 2 frames; delaying only 1 frame can break decalmaker timing.
             yield return waitForEndOfFrame;
             DoCallback(qi);
         }
 
-        private object GetPathWriteLock(string path)
+        public bool Request(ImageLoaderThreaded.QueuedImage qi)
         {
-            lock (_diskCacheWriteLock)
-            {
-                if (!_perPathWriteLocks.ContainsKey(path))
-                {
-                    _perPathWriteLocks[path] = new object();
-                }
-                return _perPathWriteLocks[path];
-            }
-        }
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return false;
+            
+            LogUtil.MarkImageActivity();
 
-        void EnsureResizeCoroutine()
-        {
-            if (resizeCoroutine != null) return;
-            try
+            // Skip textures that are considered thumbnails (<= threshold)
+            int threshold = Settings.Instance.ThumbnailThreshold.Value;
+            if (qi.setSize && qi.width > 0 && qi.width <= threshold && qi.height > 0 && qi.height <= threshold)
             {
-                resizeCoroutine = StartCoroutine(ResizeWorker());
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("Resize start coroutine failed: " + ex.ToString());
-            }
-        }
-
-        public bool TryEnqueueResizeCache(ImageLoaderThreaded.QueuedImage qi)
-        {
-            if (qi == null) 
-            {
-                 LogUtil.Log("TryEnqueueResizeCache: qi is null");
-                 return false;
-            }
-
-            lock (_trackedQiSet)
-            {
-                if (_trackedQiSet.Contains(qi)) 
-                {
-                    // LogUtil.Log("TryEnqueueResizeCache: already tracked (set) " + qi.imgPath);
-                    return false;
-                }
-            }
-
-            if (qi.tex == null)
-            {
-                LogUtil.Log("TryEnqueueResizeCache skipped: tex is null for " + qi.imgPath);
                 return false;
             }
 
+            // Check native cache meta if resolution is not already known to skip thumbnails
             try
             {
-                if (Settings.Instance == null) { LogUtil.Log("TryEnqueueResizeCache: Settings null"); return false; }
-                if (!Settings.Instance.EnableTextureOptimizations.Value) { LogUtil.Log("TryEnqueueResizeCache: Opts disabled"); return false; }
-                if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) { LogUtil.Log("TryEnqueueResizeCache: Resize/Zstd disabled"); return false; }
-            }
-            catch (Exception ex) { LogUtil.LogError("TryEnqueueResizeCache Settings Error: " + ex); return false; }
-
-            string key = GetDiskCachePath(qi, false, 0, 0);
-            if (string.IsNullOrEmpty(key)) 
-            {
-                 LogUtil.Log("TryEnqueueResizeCache skipped: key is null for " + qi.imgPath);
-                 return false;
-            }
-
-            // If no resize would occur (and resize is enabled), don't generate cache unless Zstd is on.
-            int w = qi.tex.width;
-            int h = qi.tex.height;
-            if (Settings.Instance.ReduceTextureSize.Value)
-            {
-                GetResizedSize(ref w, ref h, qi.imgPath);
-            }
-
-            // If disk cache already exists, skip.
-            try
-            {
-                var real = GetDiskCachePath(qi, true, w, h);
-                if (!string.IsNullOrEmpty(real))
+                string nativePath = TextureUtil.GetNativeCachePath(qi.imgPath);
+                if (nativePath != null)
                 {
-                    bool inFlight = false;
-                    lock(diskWriteInFlight) { inFlight = diskWriteInFlight.Contains(key + ".meta"); }
-
-                    if (inFlight || ((File.Exists(real + ".cache") || File.Exists(real)) && File.Exists(key + ".meta")))
+                    string nativeMetaPath = nativePath + "meta";
+                    if (File.Exists(nativeMetaPath))
                     {
-                        LogUtil.Log("TryEnqueueResizeCache skipped: exists or in-flight " + real);
-                        return false;
+                        var meta = JSON.Parse(File.ReadAllText(nativeMetaPath));
+                        if (meta != null)
+                        {
+                            int w = meta["width"].AsInt;
+                            int h = meta["height"].AsInt;
+                            bool isThumb = meta["isThumbnail"].AsBool;
+                            if (isThumb || (w > 0 && w <= threshold && h > 0 && h <= threshold))
+                            {
+                                return false;
+                            }
+                        }
                     }
                 }
             }
             catch { }
 
-            lock (resizeQueuedKeys)
+            // Check memory cache first
+            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "");
+            var cacheTexture = GetTextureFromCache(cacheKey);
+            if (cacheTexture != null)
             {
-                if (resizeQueuedKeys.Contains(key)) 
-                {
-                    LogUtil.Log("TryEnqueueResizeCache: key in resizeQueuedKeys " + key);
-                    return false;
-                }
-            }
-            
-            lock (_trackedQiSet)
-            {
-                if (_trackedQiSet.Contains(qi)) return false;
-                _trackedQiSet.Add(qi);
-            }
-
-            lock (resizeQueue)
-            {
-                resizeQueue.Enqueue(new ResizeJob { qi = qi, key = key });
-            }
-            LogUtil.Log("Enqueued image for live cache: " + qi.imgPath + " (format: " + qi.tex.format + " " + qi.tex.width + "x" + qi.tex.height + ")");
-            EnsureResizeCoroutine();
-            return true;
-        }
-
-        public ImageLoaderThreaded.QueuedImage FindCandidateByTexture(Texture2D tex)
-        {
-            if (tex == null) return null;
-            lock (_candidateImages)
-            {
-                foreach (var qi in _candidateImages)
-                {
-                    if (qi != null && qi.tex == tex) return qi;
-                }
-            }
-            return null;
-        }
-
-        public ImageLoaderThreaded.QueuedImage FindCandidateByPath(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return null;
-            lock (_candidateImages)
-            {
-                foreach (var qi in _candidateImages)
-                {
-                    if (qi != null && string.Equals(qi.imgPath, path, StringComparison.OrdinalIgnoreCase)) return qi;
-                }
-            }
-            return null;
-        }
-
-        public void ClearCandidates()
-        {
-            lock (_candidateImages) { _candidateImages.Clear(); }
-            lock (_trackedQiSet) { _trackedQiSet.Clear(); }
-            lock (resizeQueuedKeys) { resizeQueuedKeys.Clear(); }
-            lock (resizeQueue) { resizeQueue.Clear(); }
-        }
-
-        [ThreadStatic]
-        public static string currentProcessingPath;
-        public void TrackCandidate(ImageLoaderThreaded.QueuedImage qi)
-        {
-            if (qi == null) return;
-
-            // Wrap callback to capture texture immediately upon completion.
-            // This is more reliable than waiting for scene end, as textures may be cleared from memory.
-            var originalCallback = qi.callback;
-            qi.callback = (newQi) =>
-            {
-                try
-                {
-                    LogUtil.Log("TrackCandidate callback for " + (newQi != null ? newQi.imgPath : "null") + " tex=" + (newQi != null && newQi.tex != null ? newQi.tex.name : "null"));
-                    if (newQi != null && newQi.tex != null)
-                    {
-                        TryEnqueueResizeCache(newQi);
-                    }
-                    else
-                    {
-                        LogUtil.Log("TrackCandidate callback texture missing for " + (newQi != null ? newQi.imgPath : "null"));
-                    }
-                    
-                    // Periodically check other candidates too when one finishes
-                    ProcessCandidates();
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("Error in wrapped image callback: " + ex.Message);
-                }
-                finally
-                {
-                    if (originalCallback != null) originalCallback(newQi);
-                }
-            };
-
-            lock (_candidateImages)
-            {
-                if (!_candidateImages.Contains(qi))
-                {
-                    _candidateImages.Add(qi);
-                }
-            }
-
-            // Trigger a check immediately in case the texture is already assigned
-            ProcessCandidates();
-        }
-
-        public void ProcessCandidates()
-        {
-            // First, promote candidates that now have textures
-            lock (_candidateImages)
-            {
-                for (int i = _candidateImages.Count - 1; i >= 0; i--)
-                {
-                    var qi = _candidateImages[i];
-                    if (qi != null && qi.tex != null)
-                    {
-                        TryEnqueueResizeCache(qi);
-                        _candidateImages.RemoveAt(i);
-                    }
-                    else if (qi == null)
-                    {
-                        _candidateImages.RemoveAt(i);
-                    }
-                }
-            }
-        }
-
-        IEnumerator ResizeWorker()
-        {
-            WaitForEndOfFrame wait = new WaitForEndOfFrame();
-            WaitForSeconds waitASecond = new WaitForSeconds(1f);
-            System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
-            while (true)
-            {
-                if (resizeQueue.Count == 0)
-                {
-                    resizeCoroutine = null;
-                    yield break;
-                }
-
-                if (LogUtil.IsSceneLoading())
-                {
-                    yield return waitASecond;
-                    continue;
-                }
-
-                sw.Reset();
-                sw.Start();
-
-                while (resizeQueue.Count > 0)
-                {
-                    var job = resizeQueue.Dequeue();
-                    if (job != null && job.qi != null)
-                    {
-                        try
-                        {
-                            GenerateResizedDiskCache(job.qi);
-                        }
-                        catch (Exception ex)
-                        {
-                            try
-                            {
-                                LogUtil.LogError("ResizeWorker error path=" + (job.qi != null ? job.qi.imgPath : "?") + " " + ex.ToString());
-                            }
-                            catch { }
-                        }
-                        finally
-                        {
-                            try
-                            {
-                                if (!string.IsNullOrEmpty(job.key))
-                                {
-                                    lock (resizeQueuedKeys) { resizeQueuedKeys.Remove(job.key); }
-                                }
-                            }
-                            catch { }
-                            // Clear reference to help GC
-                            job.qi = null;
-                        }
-                    }
-
-                    // Process more per frame if we are not loading a scene.
-                    float msLimit = LogUtil.IsSceneLoading() ? 5.0f : 30.0f;
-                    if (sw.Elapsed.TotalMilliseconds > msLimit)
-                    {
-                        break;
-                    }
-                }
-
-                // In Unity 2018, manual GC help can be necessary when dealing with many large textures
-                if (sw.Elapsed.TotalMilliseconds > 10.0f)
-                {
-                    Resources.UnloadUnusedAssets();
-                    System.GC.Collect();
-                }
-
-                yield return wait;
-            }
-        }
-
-        void GenerateResizedDiskCache(ImageLoaderThreaded.QueuedImage qi)
-        {
-            if (qi == null) return;
-            if (qi.tex == null) return;
-
-            var diskCachePath = GetDiskCachePath(qi, false, 0, 0);
-            if (string.IsNullOrEmpty(diskCachePath)) return;
-
-            int width = qi.tex.width;
-            int height = qi.tex.height;
-            if (Settings.Instance.ReduceTextureSize.Value)
-            {
-                GetResizedSize(ref width, ref height, qi.imgPath);
-            }
-
-            bool enableZstd = Settings.Instance.EnableZstdCompression.Value;
-            var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
-            if (string.IsNullOrEmpty(realDiskCachePath)) return;
-            var realDiskCachePathCache = realDiskCachePath + ".cache";
-
-            if ((File.Exists(realDiskCachePathCache) || File.Exists(realDiskCachePath)) && File.Exists(diskCachePath + ".meta")) return;
-
-            LogUtil.Log("Generating cache for " + qi.imgPath + " -> " + realDiskCachePathCache);
-
-            // OPTIMIZATION: If no resize needed and already DXT, just grab the bytes.
-            if (width == qi.tex.width && height == qi.tex.height && (qi.tex.format == TextureFormat.DXT1 || qi.tex.format == TextureFormat.DXT5))
-            {
-                try
-                {
-                    // GetRawTextureData() returns a NEW byte array. 
-                    // Instead of renting another one and copying, we use this one directly and return it to pool if needed,
-                    // but wait - this array isn't from our pool, so we shouldn't return it to ByteArrayPool.
-                    // Actually, to keep WriteDiskCacheAsync simple, we'll continue using the pool but eliminate the extra allocation.
-                    var bytes = qi.tex.GetRawTextureData();
-                    if (bytes != null && bytes.Length > 0)
-                    {
-                        JSONClass jSON = new JSONClass();
-                        jSON["type"] = enableZstd ? "compressed" : "dxt";
-                        jSON["width"].AsInt = qi.tex.width;
-                        jSON["height"].AsInt = qi.tex.height;
-                        jSON["resizedWidth"].AsInt = width;
-                        jSON["resizedHeight"].AsInt = height;
-                        jSON["format"] = qi.tex.format.ToString();
-
-                        // We pass isPooled=false so WriteDiskCacheAsync doesn't try to return it to our pool.
-                        WriteDiskCacheAsync(realDiskCachePathCache, bytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), enableZstd, width, height, qi.tex.format, qi.linear, false);
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogWarning("Fast-path GetRawTextureData failed, falling back to blit: " + ex.Message);
-                }
-            }
-
-            // Generate the resized/compressed texture and write to disk cache.
-            Texture2D tmp = null;
-            RenderTexture tempTexture = null;
-            try
-            {
-                tempTexture = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32,
-                    qi.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB);
-
-                Graphics.SetRenderTarget(tempTexture);
-                GL.PushMatrix();
-                GL.LoadPixelMatrix(0, width, height, 0);
-                GL.Clear(true, true, Color.clear);
-                Graphics.Blit(qi.tex, tempTexture);
-                GL.PopMatrix();
-                Graphics.SetRenderTarget(null);
-
-                var format = qi.tex.format == TextureFormat.DXT1 ? TextureFormat.RGB24 : TextureFormat.RGBA32;
-                tmp = new Texture2D(width, height, format, false, qi.linear);
-                var previous = RenderTexture.active;
-                RenderTexture.active = tempTexture;
-                tmp.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-                tmp.Apply();
-                RenderTexture.active = previous;
-
-                if (width > 0 && height > 0 && (width & (width - 1)) == 0 && (height & (height - 1)) == 0)
-                {
-                    try { tmp.Compress(true); } catch (Exception ex) { LogUtil.LogError("Img cache compress failed " + ex + " path=" + qi.imgPath); }
-                }
-
-                var bytes = tmp.GetRawTextureData();
-                int realLength = bytes.Length;
-                
-                JSONClass jSONClass = new JSONClass();
-                jSONClass["type"] = enableZstd ? "compressed" : "dxt";
-                jSONClass["width"].AsInt = qi.tex.width;
-                jSONClass["height"].AsInt = qi.tex.height;
-                jSONClass["resizedWidth"].AsInt = width;
-                jSONClass["resizedHeight"].AsInt = height;
-                jSONClass["format"] = tmp.format.ToString();
-                
-                WriteDiskCacheAsync(realDiskCachePathCache, bytes, realLength, diskCachePath + ".meta", jSONClass.ToString(string.Empty), enableZstd, width, height, tmp.format, qi.linear, false);
-
-                // Note: we intentionally do NOT RegisterTexture or swap qi.tex in this async cache path.
-                // This prevents unexpected texture replacement mid-frame; future loads will hit disk/mem cache.
-            }
-            finally
-            {
-                if (tmp != null)
-                {
-                    UnityEngine.Object.Destroy(tmp);
-                }
-
-                if (tempTexture != null)
-                {
-            RenderTexture.ReleaseTemporary(tempTexture);
-                }
-            }
-        }
-
-        private readonly Queue<Action> _compressionQueue = new Queue<Action>();
-        private bool _isCompressionWorkerRunning = false;
-
-        void EnqueueCompression(Action action)
-        {
-            lock (_compressionQueue)
-            {
-                _compressionQueue.Enqueue(action);
-                if (!_isCompressionWorkerRunning)
-                {
-                    _isCompressionWorkerRunning = true;
-                    ThreadPool.QueueUserWorkItem(CompressionWorker);
-                }
-            }
-        }
-
-        void CompressionWorker(object state)
-        {
-            while (true)
-            {
-                Action action;
-                lock (_compressionQueue)
-                {
-                    if (_compressionQueue.Count == 0)
-                    {
-                        _isCompressionWorkerRunning = false;
-                        return;
-                    }
-                    action = _compressionQueue.Dequeue();
-                }
-
-                try
-                {
-                    action();
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("CompressionWorker task failed: " + ex.Message);
-                }
-            }
-        }
-
-        void WriteDiskCacheAsync(string pathCache, byte[] bytes, int length, string pathMeta, string metaContent, bool isZstd = false, int w = 0, int h = 0, TextureFormat fmt = TextureFormat.RGBA32, bool linear = false, bool isPooled = true)
-        {
-            if (!string.IsNullOrEmpty(pathMeta))
-            {
-                lock(diskWriteInFlight) { diskWriteInFlight.Add(pathMeta); }
-            }
-
-            // If it's Zstd, we use our sequential queue to avoid process explosion
-            if (isZstd && Settings.Instance.ZstdCompressionLevel.Value > 0)
-            {
-                EnqueueCompression(() =>
-                {
-                    try
-                    {
-                        object pathLock = GetPathWriteLock(pathCache);
-                        lock (pathLock)
-                        {
-                            try
-                            {
-                                int compressionLevel = Settings.Instance.ZstdCompressionLevel.Value;
-                                ZstdCompressor.SaveCache(pathCache, bytes, compressionLevel, length);
-                                LogUtil.Log("[VPB] SequentialWrite: Wrote Zstd cache for " + Path.GetFileName(pathCache));
-                                
-                                WriteMetaFile(pathMeta, metaContent);
-                            }
-                            finally
-                            {
-                                if (!string.IsNullOrEmpty(pathMeta))
-                                {
-                                    lock(diskWriteInFlight) { diskWriteInFlight.Remove(pathMeta); }
-                                }
-                                if (isPooled && bytes != null) ByteArrayPool.Return(bytes);
-                                else if (bytes != null) { /* Managed array will be GC'd */ }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogError("Sequential compression failed: " + ex.ToString());
-                    }
-                });
-                return;
-            }
-
-            // Non-Zstd (standard DXT) can still use the regular ThreadPool as it's just a simple file write
-            ThreadPool.QueueUserWorkItem((state) =>
-            {
-                object pathLock = GetPathWriteLock(pathCache);
-                lock (pathLock)
-                {
-                    try
-                    {
-                        if (bytes != null && !string.IsNullOrEmpty(pathCache))
-                        {
-                            using (FileStream fs = new FileStream(pathCache, FileMode.Create, FileAccess.Write))
-                            {
-                                fs.Write(bytes, 0, length);
-                            }
-                        }
-                        
-                        WriteMetaFile(pathMeta, metaContent);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogError("WriteDiskCacheAsync failed: " + pathCache + " " + ex.ToString());
-                    }
-                    finally
-                    {
-                        if (!string.IsNullOrEmpty(pathMeta))
-                        {
-                            lock(diskWriteInFlight) { diskWriteInFlight.Remove(pathMeta); }
-                        }
-                        if (isPooled && bytes != null) ByteArrayPool.Return(bytes);
-                    }
-                }
-            });
-        }
-
-        private void WriteMetaFile(string pathMeta, string metaContent)
-        {
-            if (!string.IsNullOrEmpty(metaContent) && !string.IsNullOrEmpty(pathMeta))
-            {
-                string tempMetaPath = pathMeta + ".tmp";
-                try
-                {
-                    var metaJson = SimpleJSON.JSON.Parse(metaContent);
-                    File.WriteAllText(tempMetaPath, metaJson.ToString(string.Empty));
-                    if (File.Exists(pathMeta)) File.Delete(pathMeta);
-                    File.Move(tempMetaPath, pathMeta);
-                }
-                catch
-                {
-                    try { if (File.Exists(tempMetaPath)) File.Delete(tempMetaPath); } catch { }
-                    throw;
-                }
-            }
-        }
-
-        public bool Request(ImageLoaderThreaded.QueuedImage qi)
-        {
-            if (qi == null) return false;
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return false;
-            if (string.IsNullOrEmpty(qi.imgPath)) return false;
-
-            bool originalLinear = qi.linear;
-            if (RequestImpl(qi)) return true;
-
-            qi.linear = !originalLinear;
-            if (RequestImpl(qi)) return true;
-
-            qi.linear = originalLinear;
-            return false;
-        }
-
-        private bool RequestImpl(ImageLoaderThreaded.QueuedImage qi)
-        {
-            LogUtil.MarkImageActivity();
-            var swRequest = System.Diagnostics.Stopwatch.StartNew();
-            var diskCachePath = GetDiskCachePath(qi,false,0,0);
-            if (string.IsNullOrEmpty(diskCachePath)) return false;
-
-            LogUtil.Log("Request checking: " + diskCachePath + " linear=" + qi.linear);
-
-            var cacheTexture = GetTextureFromCache(diskCachePath);
-            if (cacheTexture!=null)
-            {
-                LogUtil.PerfAdd("Img.Cache.MemHit", 0, 0);
-                LogUtil.LogTextureTrace("Img.Request.MemHit:" + diskCachePath, "request use mem cache:" + diskCachePath);
                 qi.tex = cacheTexture;
                 Messager.singleton.StartCoroutine(DelayDoCallback(qi));
-                LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
                 return true;
             }
 
-            bool inflightEnabled = Settings.Instance != null && Settings.Instance.InflightDedupEnabled != null && Settings.Instance.InflightDedupEnabled.Value;
-
-            if (inflightEnabled && inflightKeys.Contains(diskCachePath))
+            // Check if already inflight
+            if (inflightKeys.Contains(cacheKey))
             {
-                EnqueueInflightWaiter(diskCachePath, qi);
-                qi.skipCache = true;
-                qi.processed = true;
-                qi.finished = true;
-                LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
+                if (!inflightWaiters.TryGetValue(cacheKey, out var waiters))
+                {
+                    waiters = new List<ImageLoaderThreaded.QueuedImage>();
+                    inflightWaiters[cacheKey] = waiters;
+                }
+                waiters.Add(qi);
                 return true;
             }
 
-            var metaPath = diskCachePath + ".meta";
-            var legacyDiskCachePath = diskCachePath + ".cache";
-            var legacyMetaPath = legacyDiskCachePath + ".meta";
-            int width = 0;
-            int height = 0;
-            TextureFormat textureFormat=TextureFormat.DXT1;
-            string metaToUse = null;
-            if (File.Exists(metaPath))
+            // Check for .zvamcache in VPB_Cache
+            string vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength);
+            if (vpbCachePath != null && !File.Exists(vpbCachePath) && qi.setSize)
             {
-                metaToUse = metaPath;
+                // Fallback to full size Zstd cache
+                vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength);
             }
-            else if (File.Exists(legacyMetaPath))
+
+            if (vpbCachePath != null && File.Exists(vpbCachePath))
             {
-                metaToUse = legacyMetaPath;
-            }
-            else
-            {
-                 LogUtil.LogTextureTrace("Img.Request.MetaMissing:" + diskCachePath, "Request meta missing: " + metaPath + " (legacy: " + legacyMetaPath + ")");
-            }
-            
-            if (metaToUse != null)
-            {
-                var jsonString = File.ReadAllText(metaToUse);
-                JSONNode jSONNode = JSON.Parse(jsonString);
-                JSONClass asObject = (jSONNode != null) ? jSONNode.AsObject : null;
-                if (asObject == null)
+                inflightKeys.Add(cacheKey);
+                try
                 {
-                    LogUtil.LogError("Invalid meta JSON in " + metaToUse + ": " + jsonString);
-                    return false;
-                }
-
-                if (asObject != null)
-                {
-                    if (asObject["width"] != null) width = asObject["width"].AsInt;
-                    if (asObject["height"] != null) height = asObject["height"].AsInt;
-                    if (asObject["format"] != null) textureFormat = (TextureFormat)System.Enum.Parse(typeof(TextureFormat), asObject["format"]);
-                }
-
-                if (Settings.Instance.ReduceTextureSize.Value)
-                {
-                    GetResizedSize(ref width, ref height, qi.imgPath);
-                }
-
-                var realDiskCachePath = GetDiskCachePath(qi, true, width, height);
-                var diskPathToUse = realDiskCachePath + ".cache";
-                bool isCompressed = asObject != null && asObject["type"].Value.ToLower() == "compressed";
-
-                LogUtil.LogTextureTrace("Img.Request.MetaHit:" + diskCachePath, string.Format("Meta hit: {0}, format={1}, size={2}x{3}, type={4}", metaToUse, textureFormat, width, height, (asObject != null ? asObject["type"].Value : "null")));
-
-                if (!File.Exists(diskPathToUse))
-                {
-                    LogUtil.Log(string.Format("Request cache missing: {0} (type={1}, meta={2})", diskPathToUse, (asObject != null ? asObject["type"].Value : "null"), metaToUse));
-
-                    // Backward-compat for caches previously written without extension.
-                    if (File.Exists(realDiskCachePath))
+                    string metaPath = vpbCachePath + "meta";
+                    if (File.Exists(metaPath))
                     {
-                        diskPathToUse = realDiskCachePath;
-                    }
-                }
+                        var metaJson = JSON.Parse(File.ReadAllText(metaPath));
+                        int width = metaJson["width"].AsInt;
+                        int height = metaJson["height"].AsInt;
+                        TextureFormat format = (TextureFormat)Enum.Parse(typeof(TextureFormat), metaJson["format"].Value);
 
-                if (File.Exists(diskPathToUse))
-                {
-                    LogUtil.PerfAdd("Img.Cache.DiskHit", 0, 0);
-                    LogUtil.LogTextureTrace("Img.Request.DiskHit:" + diskPathToUse, "request use disk cache:" + diskPathToUse);
-                    var swRead = System.Diagnostics.Stopwatch.StartNew();
-                    byte[] bytes = null;
-                    long bytesLen = 0;
-                    bool success = false;
-                    Texture2D tex = null;
+                        byte[] compressed = File.ReadAllBytes(vpbCachePath);
+                        byte[] decompressed = ZstdCompressor.Decompress(compressed);
 
-                    try
-                    {
-                        using (var fs = new FileStream(diskPathToUse, FileMode.Open, FileAccess.Read))
-                        {
-                            int len = (int)fs.Length;
-                            byte[] fileBytes = new byte[len];
-                            int offset = 0;
-                            int remaining = len;
-                            while (remaining > 0)
-                            {
-                                int read = fs.Read(fileBytes, offset, remaining);
-                                if (read <= 0) break;
-                                offset += read;
-                                remaining -= read;
-                            }
-
-                            if (isCompressed)
-                            {
-                                try
-                                {
-                                    byte[] decompressed = ZstdCompressor.Decompress(fileBytes);
-                                    bytes = ByteArrayPool.Rent(decompressed.Length);
-                                    Array.Copy(decompressed, bytes, decompressed.Length);
-                                    bytesLen = decompressed.Length;
-                                    success = true;
-                                }
-                                catch (Exception ex)
-                                {
-                                    LogUtil.LogError("Zstd decompression failed for " + diskPathToUse + ": " + ex.Message);
-                                    success = false;
-                                }
-                            }
-                            else
-                            {
-                                bytes = ByteArrayPool.Rent(len);
-                                Array.Copy(fileBytes, bytes, len);
-                                bytesLen = len;
-                                success = true;
-                            }
-                        }
-                    }
-                    catch (System.Exception ex)
-                    {
-                        LogUtil.LogError("request load disk cache fail:" + diskPathToUse + " " + ex.ToString());
-                        try { File.Delete(diskPathToUse); } catch { }
-                    }
-
-                    if (success)
-                    {
-                        LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytesLen);
-                        LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytesLen);
-
-                        tex = new Texture2D(width, height, textureFormat, false, qi.linear);
-                        tex.LoadRawTextureData(bytes);
+                        Texture2D tex = new Texture2D(width, height, format, false, qi.linear);
+                        tex.LoadRawTextureData(decompressed);
                         tex.Apply();
                         qi.tex = tex;
 
-                        RegisterTexture(diskCachePath, tex);
-
-                        if (bytes != null) ByteArrayPool.Return(bytes);
-
+                        RegisterTexture(cacheKey, tex);
+                        
+                        // Resolve others waiting for this same key
+                        ResolveInflight(cacheKey, tex);
+                        
                         Messager.singleton.StartCoroutine(DelayDoCallback(qi));
-                        LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
+                        
+                        LogUtil.Log("[VPB] Loaded from Zstd cache: " + Path.GetFileName(vpbCachePath));
                         return true;
                     }
-                    else
-                    {
-                        LogUtil.Log("Request cache load failed (success=false): " + diskPathToUse);
-                        if (bytes != null) ByteArrayPool.Return(bytes);
-                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    LogUtil.Log("Request cache file missing (meta exists): " + diskPathToUse);
+                    LogUtil.LogError("Failed to load from Zstd cache " + vpbCachePath + ": " + ex.Message);
+                }
+                finally
+                {
+                    inflightKeys.Remove(cacheKey);
                 }
             }
 
-            LogUtil.PerfAdd("Img.Cache.Miss", 0, 0);
-            LogUtil.LogTextureTrace("Img.Request.Miss:" + diskCachePath, "request not use cache:" + diskCachePath);
+            // Not in Zstd cache, let VaM handle it but track it so we can suppress duplicates
+            inflightKeys.Add(cacheKey);
+            return false;
+        }
 
-            if (inflightEnabled && !inflightKeys.Contains(diskCachePath))
+        public void ResolveInflightForQueuedImage(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
+            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "");
+            
+            if (qi.tex != null)
             {
-                inflightKeys.Add(diskCachePath);
+                RegisterTexture(cacheKey, qi.tex);
             }
 
-            LogUtil.PerfAdd("Mgr.Request", swRequest.Elapsed.TotalMilliseconds, 0);
-            return false;
+            ResolveInflight(cacheKey, qi.tex);
+            inflightKeys.Remove(cacheKey);
+        }
+
+        private void ResolveInflight(string cacheKey, Texture2D tex)
+        {
+            if (inflightWaiters.TryGetValue(cacheKey, out var waiters))
+            {
+                foreach (var w in waiters)
+                {
+                    w.tex = tex;
+                    Messager.singleton.StartCoroutine(DelayDoCallback(w));
+                }
+                inflightWaiters.Remove(cacheKey);
+            }
+        }
+
+        // --- Bulk Compression Logic ---
+
+        public class ZstdStats
+        {
+            public long TotalFiles;
+            public long ProcessedFiles;
+            public long SkippedCount;
+            public long TotalOriginalSize;
+            public long TotalCompressedSize;
+            public bool IsRunning;
+            public string CurrentFile;
+            public int FailedCount;
+            public bool Completed;
+            public bool CancelRequested;
+            public bool IsDecompression;
+            public float Duration;
+            public DateTime StartTime;
+        }
+        public ZstdStats CurrentZstdStats = new ZstdStats();
+
+        public void CancelBulkOperation()
+        {
+            if (CurrentZstdStats.IsRunning)
+            {
+                CurrentZstdStats.CancelRequested = true;
+                LogUtil.Log("[VPB] Bulk operation cancellation requested.");
+            }
         }
 
         public void StartBulkZstdCompression()
         {
-            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value || !Settings.Instance.EnableZstdCompression.Value)
+            if (CurrentZstdStats.IsRunning) return;
+
+            string nativeCacheDir = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+            if (string.IsNullOrEmpty(nativeCacheDir))
+            {
+                nativeCacheDir = Path.GetFullPath(Path.Combine(Application.dataPath, "../Cache/Textures"));
+            }
+            string vpbCacheDir = VamHookPlugin.GetCacheDir();
+
+            if (!Directory.Exists(nativeCacheDir))
+            {
+                LogUtil.LogError("[VPB] Native cache directory not found: " + nativeCacheDir);
                 return;
+            }
 
-            string cacheDir = VamHookPlugin.GetCacheDir();
-            if (!Directory.Exists(cacheDir)) return;
+            LogUtil.Log("Starting bulk Zstd compression from " + nativeCacheDir + " to " + vpbCacheDir);
+            CurrentZstdStats = new ZstdStats { IsRunning = true, IsDecompression = false, StartTime = DateTime.Now };
 
-            LogUtil.Log("Starting bulk Zstd compression...");
             ThreadPool.QueueUserWorkItem((state) =>
             {
                 try
                 {
-                    BulkZstdWorker(cacheDir);
+                    BulkZstdWorker(nativeCacheDir, vpbCacheDir);
                 }
                 catch (Exception ex)
                 {
                     LogUtil.LogError("Bulk Zstd compression failed: " + ex.ToString());
+                    CurrentZstdStats.IsRunning = false;
                 }
             });
         }
 
-        private void BulkZstdWorker(string cacheDir)
+        private void BulkZstdWorker(string nativeCacheDir, string vpbCacheDir)
         {
-            string[] files = Directory.GetFiles(cacheDir, "*.cache", SearchOption.TopDirectoryOnly);
-            LogUtil.Log(string.Format("Bulk compression: Found {0} .cache files", files.Length));
+            string[] files = Directory.GetFiles(nativeCacheDir, "*.vamcache", SearchOption.TopDirectoryOnly);
+            CurrentZstdStats.TotalFiles = files.Length;
 
-            int compressed = 0;
-            int skipped = 0;
-            int failed = 0;
             int compressionLevel = Settings.Instance.ZstdCompressionLevel.Value;
+            bool deleteOriginal = Settings.Instance.DeleteOriginalCacheAfterCompression.Value;
+            int threshold = Settings.Instance.ThumbnailThreshold.Value;
 
             foreach (var file in files)
             {
+                if (CurrentZstdStats.CancelRequested)
+                {
+                    CurrentZstdStats.CurrentFile = "Cancelled";
+                    break;
+                }
                 try
                 {
-                    string metaPath = file.Substring(0, file.Length - 6) + ".meta";
+                    string fileName = Path.GetFileName(file);
+                    CurrentZstdStats.CurrentFile = fileName;
+
+                    string metaPath = file + "meta";
                     if (!File.Exists(metaPath))
                     {
-                        if (File.Exists(file + ".meta")) metaPath = file + ".meta";
-                        else { skipped++; continue; }
+                        CurrentZstdStats.SkippedCount++;
+                        continue;
                     }
 
-                    var metaJson = JSON.Parse(File.ReadAllText(metaPath));
-                    var type = metaJson["type"].Value;
-                    if (type == "compressed") { skipped++; continue; }
+                    // Check metadata for resolution and isThumbnail flag
+                    JSONNode metaJson = null;
+                    try
+                    {
+                        metaJson = JSON.Parse(File.ReadAllText(metaPath));
+                        if (metaJson != null)
+                        {
+                            // Skip if marked as thumbnail or if resolution is <= threshold
+                            bool isThumb = metaJson["isThumbnail"].AsBool;
+                            int width = metaJson["width"].AsInt;
+                            int height = metaJson["height"].AsInt;
 
-                    if (compressionLevel <= 0) { skipped++; continue; }
+                            if (isThumb || (width > 0 && width <= threshold && height > 0 && height <= threshold))
+                            {
+                                CurrentZstdStats.SkippedCount++;
+                                continue;
+                            }
+                        }
+                    }
+                    catch { }
 
-                    ZstdCompressor.SaveCacheFromFile(file, file, compressionLevel);
+                    string targetName = Path.GetFileNameWithoutExtension(fileName);
+                    targetName += ".zvamcache";
+                    string targetPath = Path.Combine(vpbCacheDir, targetName);
 
-                    metaJson["type"] = "compressed";
-                    File.WriteAllText(metaPath, metaJson.ToString(string.Empty));
+                    long originalSize = new FileInfo(file).Length;
+                    CurrentZstdStats.TotalOriginalSize += originalSize;
 
-                    compressed++;
-                }
-                catch (Exception ex)
-                {
-                    failed++;
-                    LogUtil.LogError("Bulk compression: Failed to convert " + file + ": " + ex.Message);
-                }
-            }
-
-            LogUtil.Log(string.Format("Bulk compression completed: {0} compressed, {1} skipped, {2} failed", compressed, skipped, failed));
-        }
-
-        static bool IsLikelyUrlFieldName(string name)
-        {
-            if (string.IsNullOrEmpty(name)) return false;
-            try
-            {
-                return name.EndsWith("Url", StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        static bool IsLikelyDataTextureSlot(string slotName)
-        {
-            if (string.IsNullOrEmpty(slotName)) return false;
-            string n;
-            try { n = slotName.ToLowerInvariant(); } catch { n = slotName; }
-            if (n.Contains("normal")) return true;
-            if (n.Contains("specular")) return true;
-            if (n.Contains("gloss")) return true;
-            if (n.Contains("roughness")) return true;
-            if (n.Contains("metallic")) return true;
-            if (n.Contains("ao")) return true;
-            if (n.Contains("mask")) return true;
-            if (n.Contains("alpha")) return true;
-            if (n.Contains("opacity")) return true;
-            return false;
-        }
-
-        static int ClosestPowerOfTwo(int value)
-        {
-            int power = 1;
-            while (power < value)
-            {
-                power <<= 1;
-            }
-            return power;
-        }
-        /// <summary>
-        /// Resize and compress the loaded texture, then store it locally.
-        /// </summary>
-        /// <param name="qi"></param>
-        /// <returns></returns>
-        public Texture2D GetResizedTextureFromBytes(ImageLoaderThreaded.QueuedImage qi)
-        {
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return null;
-            var path = qi.imgPath;
-
-            if (LogUtil.IsSceneLoadActive() && qi.isThumbnail)
-            {
-                return null;
-            }
-
-            // Must be a power of two, otherwise mipmaps cannot be generated.
-            // Start by dividing the size by 2.
-            var localFormat = qi.tex.format;
-            if (qi.tex.format == TextureFormat.RGBA32 || qi.tex.format == TextureFormat.ARGB32 || qi.tex.format == TextureFormat.BGRA32 || qi.tex.format == TextureFormat.DXT5)
-            {
-                localFormat = TextureFormat.DXT5;
-            }
-            else if (qi.tex.format == TextureFormat.RGB24 || qi.tex.format == TextureFormat.DXT1)
-            {
-                localFormat = TextureFormat.DXT1;
-            }
-            else
-            {
-                localFormat = TextureFormat.DXT5;
-            }
-            //string ext = localFormat == TextureFormat.DXT1 ? ".DXT1" : ".DXT5";
-
-            int width = qi.tex.width;
-            int height = qi.tex.height;
-
-            GetResizedSize(ref width, ref height, qi.imgPath);
-
-            var diskCachePath = GetDiskCachePath(qi,false,0,0);
-            var realDiskCachePath = GetDiskCachePath(qi,true,width,height);
-            var realDiskCachePathCache = realDiskCachePath + ".cache";
-
-            LogUtil.BeginImageWork();
-            try
-            {
-
-            Texture2D resultTexture = GetTextureFromCache(diskCachePath);
-            // Not only the path is needed
-            if (resultTexture!=null)
-            {
-                LogUtil.PerfAdd("Img.Cache.MemHit", 0, 0);
-                LogUtil.LogTextureTrace("Img.Resize.MemHit:" + diskCachePath, "resize use mem cache:" + diskCachePath);
-                UnityEngine.Object.Destroy(qi.tex);
-                qi.tex = resultTexture;
-                ResolveInflightWaiters(diskCachePath, resultTexture);
-                return resultTexture;
-            }
-
-            //var thumbnailPath = diskCachePath + ext
-            string diskPathToUse = File.Exists(realDiskCachePathCache) ? realDiskCachePathCache : realDiskCachePath;
-            if (File.Exists(diskPathToUse))
-            {
-                LogUtil.PerfAdd("Img.Resize.FromDisk", 0, 0);
-                LogUtil.LogTextureTrace("Img.Resize.DiskHit:" + diskPathToUse, "resize use disk cache:" + diskPathToUse);
-                var swRead = System.Diagnostics.Stopwatch.StartNew();
-                byte[] bytes = null;
-                int bytesLen = 0;
-
-                try
-                {
-                    byte[] fileBytes = File.ReadAllBytes(diskPathToUse);
-                    int len = fileBytes.Length;
-
-                    // Check meta for compression
-                    bool isCompressed = false;
-                    string metaPath = diskCachePath + ".meta";
-                    if (File.Exists(metaPath))
+                    bool needsCompression = !File.Exists(targetPath) || File.GetLastWriteTime(file) > File.GetLastWriteTime(targetPath);
+                    
+                    // If file exists and timestamps match, check if compression level changed
+                    if (!needsCompression && File.Exists(targetPath + "meta"))
                     {
                         try
                         {
-                            var metaJson = JSON.Parse(File.ReadAllText(metaPath));
-                            if (metaJson["type"].Value == "compressed") isCompressed = true;
+                            var existingMeta = JSON.Parse(File.ReadAllText(targetPath + "meta"));
+                            if (existingMeta["zstdLevel"] == null || existingMeta["zstdLevel"].AsInt != compressionLevel)
+                            {
+                                needsCompression = true;
+                            }
                         }
-                        catch { }
+                        catch { needsCompression = true; }
                     }
 
-                    if (isCompressed)
+                    if (needsCompression)
                     {
-                        bytes = ZstdCompressor.Decompress(fileBytes);
-                        bytesLen = bytes.Length;
-                    }
-                    else
-                    {
-                        bytes = fileBytes;
-                        bytesLen = len;
-                    }
-
-                    LogUtil.PerfAdd("Img.Disk.Read", swRead.Elapsed.TotalMilliseconds, bytesLen);
-                    LogUtil.LogTextureSlowDisk("read", diskPathToUse, swRead.Elapsed.TotalMilliseconds, bytesLen);
-
-                    resultTexture = new Texture2D(width, height, localFormat, false, qi.linear);
-                    TextureUtil.SafeLoadRawTextureData(resultTexture, bytes, bytesLen, width, height, localFormat);
-                    resultTexture.Apply();
-                    RegisterTexture(diskCachePath, resultTexture);
-                    ResolveInflightWaiters(diskCachePath, resultTexture);
-                    return resultTexture;
-                }
-                finally
-                {
-                    // Bytes were either ReadAllBytes or Decompress result (both new arrays)
-                }
-            }
-
-
-            LogUtil.LogTextureTrace("Img.Resize.Generate:" + realDiskCachePath, "resize generate cache:" + realDiskCachePath);
-
-            // OPTIMIZATION: If no resize needed and already DXT, just grab the bytes.
-            if (width == qi.tex.width && height == qi.tex.height && (qi.tex.format == TextureFormat.DXT1 || qi.tex.format == TextureFormat.DXT5))
-            {
-                try
-                {
-                    var bytes = qi.tex.GetRawTextureData();
-                    if (bytes != null && bytes.Length > 0)
-                    {
-                        bool zstd = Settings.Instance.EnableZstdCompression.Value;
-                        string targetPath = realDiskCachePath + ".cache";
-
-                        JSONClass jSON = new JSONClass();
-                        jSON["type"] = zstd ? "compressed" : "dxt";
-                        jSON["width"].AsInt = qi.tex.width;
-                        jSON["height"].AsInt = qi.tex.height;
-                        jSON["resizedWidth"].AsInt = width;
-                        jSON["resizedHeight"].AsInt = height;
-                        jSON["format"] = qi.tex.format.ToString();
-
-                        WriteDiskCacheAsync(targetPath, bytes, bytes.Length, diskCachePath + ".meta", jSON.ToString(string.Empty), zstd, width, height, qi.tex.format, qi.linear, false);
+                        ZstdCompressor.SaveCacheFromFile(targetPath, file, compressionLevel);
                         
-                        // We still need to return a result texture or update qi.tex
-                        // but since we didn't resize, we can just use qi.tex as is.
-                        RegisterTexture(diskCachePath, qi.tex);
-                        ResolveInflightWaiters(diskCachePath, qi.tex);
-                        return qi.tex;
+                        // Update meta and update type to "compressed" and store level
+                        if (metaJson != null)
+                        {
+                            try
+                            {
+                                metaJson["type"] = "compressed";
+                                metaJson["width"] = metaJson["width"].Value; // Ensure it's a string
+                                metaJson["height"] = metaJson["height"].Value; // Ensure it's a string
+                                metaJson["zstdLevel"].AsInt = compressionLevel;
+                                File.WriteAllText(targetPath + "meta", metaJson.ToString());
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError("Failed to update meta for " + targetPath + ": " + ex.Message);
+                                File.Copy(metaPath, targetPath + "meta", true);
+                            }
+                        }
                     }
+
+                    long compressedSize = new FileInfo(targetPath).Length;
+                    CurrentZstdStats.TotalCompressedSize += compressedSize;
+
+                    if (deleteOriginal)
+                    {
+                        File.Delete(file);
+                        File.Delete(metaPath);
+                    }
+
+                    CurrentZstdStats.ProcessedFiles++;
                 }
                 catch (Exception ex)
                 {
-                    LogUtil.LogWarning("Fast-path GetRawTextureData failed (sync), falling back to blit: " + ex.Message);
+                    CurrentZstdStats.FailedCount++;
+                    LogUtil.LogError("Bulk compression: Failed to convert " + file + ": " + ex.Message);
+                    CurrentZstdStats.ProcessedFiles++;
                 }
             }
 
-            // Whether an image is linear affects how qi.tex is displayed.
-            var tempTexture = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32,
-                qi.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB);
-
-            Graphics.SetRenderTarget(tempTexture);
-            GL.PushMatrix();
-            GL.LoadPixelMatrix(0, width, height, 0);
-            // RenderTextures are reused, so it must be cleared first.
-            GL.Clear(true, true, Color.clear);
-            Graphics.Blit(qi.tex, tempTexture);
-            //Graphics.DrawTexture(new Rect(0, 0, width, height), qi.tex);
-            GL.PopMatrix();
-            Graphics.SetRenderTarget(null);
-
-            TextureFormat format= qi.tex.format;
-            if (format == TextureFormat.DXT1)
-                format = TextureFormat.RGB24;
-            else
-                format = TextureFormat.RGBA32;
-
-            resultTexture = new Texture2D(width, height, format, false, qi.linear);
-            //resultTexture.name = qi.cacheSignature;
-            var previous = RenderTexture.active;
-            RenderTexture.active = tempTexture;
-            resultTexture.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-            resultTexture.Apply();
-            RenderTexture.active = previous;
-
-
-            if (width > 0 && height > 0 && (width & (width - 1)) == 0 && (height & (height - 1)) == 0)
-            {
-                try { resultTexture.Compress(true); } catch (Exception ex) { LogUtil.LogError("Img convert compress failed " + ex + " path=" + qi.imgPath); }
-            }
-            RenderTexture.ReleaseTemporary(tempTexture);
-
-            LogUtil.LogTextureTrace(
-                "Img.Convert:" + qi.imgPath,
-                string.Format("convert {0}:{1}({2},{3})mip:{4} isLinear:{5} -> {6}({7},{8})mip:{9}",
-                    qi.imgPath,
-                    qi.tex.format, qi.tex.width, qi.tex.height, qi.tex.mipmapCount, qi.linear,
-                    resultTexture.format, width, height, resultTexture.mipmapCount)
-            );
-
-            byte[] texBytes = resultTexture.GetRawTextureData();
-            
-            bool enableZstd = Settings.Instance.EnableZstdCompression.Value;
-            string targetCachePath = realDiskCachePath + ".cache";
-
-            JSONClass jSONClass = new JSONClass();
-            jSONClass["type"] = enableZstd ? "compressed" : "dxt";
-            // Record the original texture size here.
-            jSONClass["width"].AsInt = qi.tex.width;
-            jSONClass["height"].AsInt = qi.tex.height;
-            jSONClass["resizedWidth"].AsInt = width;
-            jSONClass["resizedHeight"].AsInt = height;
-            jSONClass["format"] = resultTexture.format.ToString();
-            string contents = jSONClass.ToString(string.Empty);
-            
-            WriteDiskCacheAsync(targetCachePath, texBytes, texBytes.Length, diskCachePath + ".meta", contents, enableZstd, width, height, resultTexture.format, qi.linear, false);
-
-
-            RegisterTexture(diskCachePath, resultTexture);
-
-            ResolveInflightWaiters(diskCachePath, resultTexture);
-
-            UnityEngine.Object.Destroy(qi.tex);
-            qi.tex = resultTexture;
-            return resultTexture;
-            }
-            catch
-            {
-                ResolveInflightWaiters(diskCachePath, null);
-                throw;
-            }
-            finally
-            {
-                LogUtil.EndImageWork();
-            }
+            CurrentZstdStats.Duration = (float)(DateTime.Now - CurrentZstdStats.StartTime).TotalSeconds;
+            CurrentZstdStats.IsRunning = false;
+            CurrentZstdStats.Completed = true;
+            CurrentZstdStats.CurrentFile = "Completed";
+            LogUtil.Log(string.Format("Bulk compression completed: {0} processed, {1} failed", CurrentZstdStats.ProcessedFiles, CurrentZstdStats.FailedCount));
         }
 
-        static bool Has(string source, string value)
+        public void StartBulkZstdDecompression()
         {
-            if (source == null || value == null) return false;
-            return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
+            if (CurrentZstdStats.IsRunning) return;
 
-        static bool IsLikelyTorsoPath(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            string p = path;
-            if (Has(p, "torso") || Has(p, "body")) return true;
-            return false;
-        }
-
-        void GetResizedSize(ref int width, ref int height, string path = null)
-        {
-            int originalWidth = width;
-            int originalHeight = height;
-
-            int minSize = Settings.Instance.MinTextureSize != null ? Settings.Instance.MinTextureSize.Value : 2048;
-            minSize = Mathf.Clamp(minSize, 2048, 8192);
-
-            bool forceToMin = Settings.Instance.ForceTextureToMinSize != null && Settings.Instance.ForceTextureToMinSize.Value;
-
-            int maxSize = Settings.Instance.MaxTextureSize.Value;
-            if (maxSize < minSize) maxSize = minSize;
-
-            // Exception for Torso textures to support Genital blending
-            if (originalWidth >= 4096 && IsLikelyTorsoPath(path))
+            string nativeCacheDir = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+            if (string.IsNullOrEmpty(nativeCacheDir))
             {
-                if (maxSize < 4096) maxSize = 4096;
-                if (minSize < 4096) minSize = 4096;
+                nativeCacheDir = Path.GetFullPath(Path.Combine(Application.dataPath, "../Cache/Textures"));
             }
+            string vpbCacheDir = VamHookPlugin.GetCacheDir();
 
-            if (originalWidth != originalHeight)
+            if (!Directory.Exists(vpbCacheDir))
             {
-                int minDim = Mathf.Min(originalWidth, originalHeight);
-                int maxDim = Mathf.Max(originalWidth, originalHeight);
-
-                if (minDim <= minSize)
-                {
-                    width = originalWidth;
-                    height = originalHeight;
-                    return;
-                }
-
-                float scale = forceToMin ? ((float)minSize / maxDim) : 0.5f;
-
-                if (!forceToMin)
-                {
-                    float minScale = (float)minSize / minDim;
-                    if (scale < minScale) scale = minScale;
-                }
-
-                float maxScale = (float)maxSize / maxDim;
-                if (scale > maxScale) scale = maxScale;
-
-                if (scale >= 0.9999f)
-                {
-                    width = originalWidth;
-                    height = originalHeight;
-                    return;
-                }
-
-                int newWidth = Mathf.RoundToInt(originalWidth * scale);
-                int newHeight = Mathf.RoundToInt(originalHeight * scale);
-
-                newWidth = Mathf.Max(4, ((newWidth + 3) / 4) * 4);
-                newHeight = Mathf.Max(4, ((newHeight + 3) / 4) * 4);
-
-                if (newWidth > maxSize || newHeight > maxSize)
-                {
-                    float scale2 = Mathf.Min((float)maxSize / newWidth, (float)maxSize / newHeight);
-                    newWidth = Mathf.FloorToInt(newWidth * scale2);
-                    newHeight = Mathf.FloorToInt(newHeight * scale2);
-                    newWidth = Mathf.Max(4, ((newWidth + 3) / 4) * 4);
-                    newHeight = Mathf.Max(4, ((newHeight + 3) / 4) * 4);
-                }
-
-                width = newWidth;
-                height = newHeight;
-            }
-            else
-            {
-
-            // If the source texture is already smaller than the minimum threshold,
-            // do not downscale it further.
-            if (originalWidth <= minSize && originalHeight <= minSize)
-            {
-                width = originalWidth;
-                height = originalHeight;
+                LogUtil.LogError("[VPB] VPB cache directory not found: " + vpbCacheDir);
                 return;
             }
 
-            if (forceToMin)
+            LogUtil.Log("Starting bulk Zstd decompression from " + vpbCacheDir + " to " + nativeCacheDir);
+            CurrentZstdStats = new ZstdStats { IsRunning = true, IsDecompression = true, StartTime = DateTime.Now };
+
+            ThreadPool.QueueUserWorkItem((state) =>
             {
-                width = originalWidth;
-                height = originalHeight;
-
-                if (originalWidth > minSize)
-                    width = minSize;
-                if (originalHeight > minSize)
-                    height = minSize;
-
-                width = ClosestPowerOfTwo(width);
-                height = ClosestPowerOfTwo(height);
-            }
-            else
-            {
-                width = ClosestPowerOfTwo(width / 2);
-                height = ClosestPowerOfTwo(height / 2);
-
-                if (originalWidth >= minSize)
-                    width = Mathf.Max(width, minSize);
-                if (originalHeight >= minSize)
-                    height = Mathf.Max(height, minSize);
-            }
-            while (width > maxSize || height > maxSize)
-            {
-                width /= 2;
-                height /= 2;
-            }
-
-            }
-
-            if (originalWidth != width || originalHeight != height)
-            {
-                LogUtil.LogTextureTrace(
-                    "Img.GetResizedSize:" + originalWidth + "x" + originalHeight + ":" + minSize + ":" + maxSize + ":" + width + "x" + height,
-                    string.Format("GetResizedSize {0}x{1} min:{2} max:{3} -> {4}x{5}", originalWidth, originalHeight, minSize, maxSize, width, height)
-                );
-            }
+                try
+                {
+                    BulkZstdDecompressWorker(nativeCacheDir, vpbCacheDir);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("Bulk Zstd decompression failed: " + ex.ToString());
+                    CurrentZstdStats.IsRunning = false;
+                }
+            });
         }
 
-        protected string GetDiskCachePath(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width, int height)
+        private void BulkZstdDecompressWorker(string nativeCacheDir, string vpbCacheDir)
         {
-            var textureCacheDir = VamHookPlugin.GetCacheDir();
+            string[] files = Directory.GetFiles(vpbCacheDir, "*.zvamcache", SearchOption.TopDirectoryOnly);
+            CurrentZstdStats.TotalFiles = files.Length;
 
-            var imgPath = qi.imgPath;
-            if (!string.IsNullOrEmpty(imgPath))
+            if (!Directory.Exists(nativeCacheDir)) Directory.CreateDirectory(nativeCacheDir);
+
+            foreach (var file in files)
             {
-                imgPath = imgPath.Replace('\\', '/');
+                if (CurrentZstdStats.CancelRequested)
+                {
+                    CurrentZstdStats.CurrentFile = "Cancelled";
+                    break;
+                }
+                try
+                {
+                    CurrentZstdStats.CurrentFile = Path.GetFileName(file);
+                    string metaPath = file + "meta";
+                    if (!File.Exists(metaPath))
+                    {
+                        CurrentZstdStats.SkippedCount++;
+                        continue;
+                    }
+
+                    string fileName = Path.GetFileName(file);
+                    string targetName = Path.GetFileNameWithoutExtension(fileName);
+                    targetName += ".vamcache";
+                    
+                    string targetPath = Path.Combine(nativeCacheDir, targetName);
+
+                    long compressedSize = new FileInfo(file).Length;
+                    CurrentZstdStats.TotalCompressedSize += compressedSize;
+
+                    if (!File.Exists(targetPath))
+                    {
+                        byte[] compressed = File.ReadAllBytes(file);
+                        byte[] decompressed = ZstdCompressor.Decompress(compressed);
+                        File.WriteAllBytes(targetPath, decompressed);
+                        
+                        // Restore native meta format
+                        try
+                        {
+                            var metaJson = JSON.Parse(File.ReadAllText(metaPath));
+                            metaJson["type"] = "image";
+                            metaJson["width"] = metaJson["width"].Value; // Ensure it's a string
+                            metaJson["height"] = metaJson["height"].Value; // Ensure it's a string
+                            metaJson.Remove("zstdLevel");
+                            File.WriteAllText(targetPath + "meta", metaJson.ToString());
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("Failed to restore native meta for " + targetPath + ": " + ex.Message);
+                            File.Copy(metaPath, targetPath + "meta", true);
+                        }
+                    }
+
+                    long originalSize = new FileInfo(targetPath).Length;
+                    CurrentZstdStats.TotalOriginalSize += originalSize;
+
+                    // Decompressed successfully, remove the compressed versions
+                    try
+                    {
+                        File.Delete(file);
+                        File.Delete(metaPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("Failed to delete source file during decompression: " + ex.Message);
+                    }
+
+                    CurrentZstdStats.ProcessedFiles++;
+                }
+                catch (Exception ex)
+                {
+                    CurrentZstdStats.FailedCount++;
+                    LogUtil.LogError("Bulk decompression: Failed to revert " + file + ": " + ex.Message);
+                    CurrentZstdStats.ProcessedFiles++;
+                }
             }
 
-            string result = null;
-            var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
-
-            if (textureCacheDir != null)
-            {
-                string fileName = Path.GetFileName(imgPath);
-                fileName = SanitizeFileName(fileName);
-                if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
-                fileName = fileName.Replace('.', '_');
-                string text = (fileEntry != null) ? fileEntry.Size.ToString() : "0";
-                string token = (fileEntry != null) ? fileEntry.LastWriteTime.ToFileTime().ToString() : "0";
-                var diskCacheSignature = GetDiskCacheSignature(qi, useSize, width, height);
-                string finalName = fileName + "_" + text + "_" + token + "_" + diskCacheSignature;
-                result = Path.Combine(textureCacheDir, finalName);
-            }
-            if (result == null) LogUtil.Log("GetDiskCachePath null. CacheDir=" + (textureCacheDir??"null") + " ImgPath=" + (imgPath??"null"));
-            return result;
+            CurrentZstdStats.Duration = (float)(DateTime.Now - CurrentZstdStats.StartTime).TotalSeconds;
+            CurrentZstdStats.IsRunning = false;
+            CurrentZstdStats.Completed = true;
+            CurrentZstdStats.CurrentFile = "Restored";
+            LogUtil.Log(string.Format("Bulk decompression completed: {0} processed, {1} failed", CurrentZstdStats.ProcessedFiles, CurrentZstdStats.FailedCount));
         }
 
-        static string SanitizeFileName(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return "img";
-            var sb = new StringBuilder(value.Length);
-            for (int i = 0; i < value.Length; i++)
-            {
-                char c = value[i];
-                sb.Append(Array.IndexOf(s_InvalidFileNameChars, c) >= 0 ? '_' : c);
-            }
-            return sb.ToString();
-        }
+        // --- Compatibility Stubs (Removed from Settings but kept here as no-ops to avoid immediate breaking of other hooks) ---
 
-        static string BuildNonVarCacheToken(MVR.FileManagement.FileEntry fileEntry)
-        {
-            return fileEntry.LastWriteTime.ToFileTime().ToString();
-        }
-
-        protected string GetDiskCacheSignature(ImageLoaderThreaded.QueuedImage qi, bool useSize, int width,int height)
-        {
-            string text = useSize ? (width + "_" + height) : "";
-            if (qi.compress && Settings.Instance != null && Settings.Instance.EnableZstdCompression.Value)
-            {
-                text += "_C";
-            }
-            if (qi.linear)
-            {
-                text += "_L";
-            }
-            if (qi.isNormalMap)
-            {
-                text += "_N";
-            }
-            if (qi.createAlphaFromGrayscale)
-            {
-                text += "_A";
-            }
-            if (qi.createNormalFromBump)
-            {
-                text += "_B";
-            }
-            if (qi.invert)
-            {
-                text += "_I";
-            }
-            return text;
-        }
+        public void ClearCandidates() { }
+        public void ProcessCandidates() { }
+        public void TrackCandidate(ImageLoaderThreaded.QueuedImage qi) { }
+        public bool TryEnqueueResizeCache(ImageLoaderThreaded.QueuedImage qi) { return false; }
+        public ImageLoaderThreaded.QueuedImage FindCandidateByTexture(Texture2D tex) { return null; }
+        public ImageLoaderThreaded.QueuedImage FindCandidateByPath(string path) { return null; }
     }
 }
