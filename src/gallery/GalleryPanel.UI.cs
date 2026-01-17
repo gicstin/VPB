@@ -198,24 +198,46 @@ namespace VPB
         private void UpdateDesktopModeButton()
         {
             if (VPBConfig.Instance == null) return;
+
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+
             bool fixedMode = isFixedLocally;
             string text = fixedMode ? "Floating" : "Fixed";
             Color color = fixedMode ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.15f, 0.15f, 0.15f, 1f);
 
-            if (rightDesktopModeBtnText != null) rightDesktopModeBtnText.text = text;
+            if (rightDesktopModeBtnText != null) 
+            {
+                rightDesktopModeBtnText.text = text;
+                rightDesktopModeBtnText.transform.parent.gameObject.SetActive(!isVR);
+            }
             if (rightDesktopModeBtnImage != null) rightDesktopModeBtnImage.color = color;
 
-            if (leftDesktopModeBtnText != null) leftDesktopModeBtnText.text = text;
+            if (leftDesktopModeBtnText != null) 
+            {
+                leftDesktopModeBtnText.text = text;
+                leftDesktopModeBtnText.transform.parent.gameObject.SetActive(!isVR);
+            }
             if (leftDesktopModeBtnImage != null) leftDesktopModeBtnImage.color = color;
 
             if (footerFollowAngleBtn != null) footerFollowAngleBtn.SetActive(!fixedMode);
             if (footerFollowDistanceBtn != null) footerFollowDistanceBtn.SetActive(!fixedMode);
             if (footerFollowHeightBtn != null) footerFollowHeightBtn.SetActive(!fixedMode);
+
+            UpdateSideButtonPositions();
         }
 
         private void ToggleDesktopMode()
         {
             if (VPBConfig.Instance == null) return;
+
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            if (isVR)
+            {
+                if (isFixedLocally) SetFixedLocally(false);
+                return;
+            }
             
             bool targetFixed = !isFixedLocally;
             
@@ -245,6 +267,13 @@ namespace VPB
 
         public void SetFixedLocally(bool fixedMode)
         {
+            if (fixedMode)
+            {
+                bool isVR = false;
+                try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+                if (isVR) fixedMode = false;
+            }
+
             if (isFixedLocally == fixedMode) return;
             isFixedLocally = fixedMode;
             if (!fixedMode) SetCollapsed(false);
@@ -794,11 +823,15 @@ namespace VPB
 
             SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
             float y = startY;
+            bool firstVisible = true;
             for (int i = 0; i < layout.Length; i++)
             {
-                if (i > 0) y -= (spacing + gap * layout[i].gapTier);
                 RectTransform rt = (layout[i].buttonIndex >= 0 && layout[i].buttonIndex < buttons.Count) ? buttons[layout[i].buttonIndex] : null;
-                if (rt != null) rt.anchoredPosition = new Vector2(0, y);
+                if (rt == null || !rt.gameObject.activeSelf) continue;
+
+                if (!firstVisible) y -= (spacing + gap * layout[i].gapTier);
+                rt.anchoredPosition = new Vector2(0, y);
+                firstVisible = false;
             }
 
 #if false

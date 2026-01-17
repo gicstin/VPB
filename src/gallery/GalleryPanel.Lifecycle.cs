@@ -96,9 +96,15 @@ namespace VPB
             Renderer r = targetMarkerGO.GetComponent<Renderer>();
             if (r != null)
             {
-                Material m = new Material(Shader.Find("Unlit/Color"));
-                m.color = Color.magenta;
-                r.material = m;
+                Shader unlit = Shader.Find("Unlit/Color");
+                if (unlit == null) unlit = Shader.Find("Transparent/Diffuse");
+                
+                if (unlit != null)
+                {
+                    Material m = new Material(unlit);
+                    m.color = Color.magenta;
+                    r.material = m;
+                }
             }
 
             targetMarkerGO.SetActive(false);
@@ -137,7 +143,10 @@ namespace VPB
             // Subscribe to config changes
             if (VPBConfig.Instance != null)
             {
-                isFixedLocally = VPBConfig.Instance.DesktopFixedMode && (Gallery.singleton == null || Gallery.singleton.PanelCount == 0);
+                bool isVR = false;
+                try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+
+                isFixedLocally = !isVR && VPBConfig.Instance.DesktopFixedMode && (Gallery.singleton == null || Gallery.singleton.PanelCount == 0);
                 
                 // Fixed panes should start with side tab lists collapsed
                 if (isFixedLocally)

@@ -63,6 +63,8 @@ namespace VPB
         private bool m_ShowUninstallAllInfo;
         private bool m_ShowGcRefreshInfo;
         private bool m_ShowSpaceSaverWindow;
+        private string m_AutoOptimizeReport;
+        private float m_AutoOptimizeReportTimer;
         private Rect m_SpaceSaverWindowRect = new Rect(100, 100, 650, 200);
         private bool m_DecompressConfirmRequested;
         private bool m_CompressConfirmRequested;
@@ -76,6 +78,7 @@ namespace VPB
         private string m_SettingsCreateGalleryKeyDraft;
         private string m_SettingsHubKeyDraft;
         private int m_SettingsThumbnailThresholdDraft;
+        private bool m_SettingsAutoOptimizeCacheDraft;
         private bool m_SettingsReduceTextureSizeDraft;
         private bool m_SettingsPrioritizeFaceTexturesDraft;
         private bool m_SettingsPrioritizeHairTexturesDraft;
@@ -175,6 +178,7 @@ namespace VPB
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
             m_SettingsThumbnailThresholdDraft = (Settings.Instance != null && Settings.Instance.ThumbnailThreshold != null) ? Settings.Instance.ThumbnailThreshold.Value : 600;
+            m_SettingsAutoOptimizeCacheDraft = (Settings.Instance != null && Settings.Instance.AutoOptimizeCache != null) ? Settings.Instance.AutoOptimizeCache.Value : false;
             m_SettingsReduceTextureSizeDraft = (Settings.Instance != null && Settings.Instance.ReduceTextureSize != null) ? Settings.Instance.ReduceTextureSize.Value : false;
             m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
             m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
@@ -222,6 +226,13 @@ namespace VPB
                 if (Settings.Instance != null && Settings.Instance.ThumbnailThreshold != null)
                 {
                     Settings.Instance.ThumbnailThreshold.Value = m_SettingsThumbnailThresholdDraft;
+                }
+                if (Settings.Instance != null && Settings.Instance.AutoOptimizeCache != null)
+                {
+                    if (Settings.Instance.AutoOptimizeCache.Value != m_SettingsAutoOptimizeCacheDraft)
+                    {
+                        Settings.Instance.AutoOptimizeCache.Value = m_SettingsAutoOptimizeCacheDraft;
+                    }
                 }
                 if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
                 {
@@ -434,6 +445,17 @@ namespace VPB
                 GUILayout.Label("px");
                 GUILayout.EndHorizontal();
                 GUILayout.Label("Resolution below which textures are skipped.");
+
+                GUILayout.Space(6);
+
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button(m_SettingsAutoOptimizeCacheDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                {
+                    m_SettingsAutoOptimizeCacheDraft = !m_SettingsAutoOptimizeCacheDraft;
+                }
+                GUILayout.Label("Optimize: No Confirmation");
+                GUILayout.EndHorizontal();
+                GUILayout.Label("Run cache compression without opening the window.");
 
                 GUILayout.Space(6);
 
@@ -1411,6 +1433,15 @@ namespace VPB
                     m_CacheCountUpdateTimer = 0f;
                     m_PendingVamCacheCount = GetVamCacheFileCount();
                 }
+
+                if (m_AutoOptimizeReportTimer > 0)
+                {
+                    m_AutoOptimizeReportTimer -= unscaledDt;
+                    if (m_AutoOptimizeReportTimer <= 0)
+                    {
+                        m_AutoOptimizeReport = null;
+                    }
+                }
             }
 
             if (UIKey.TestKeyDown())
@@ -1941,21 +1972,65 @@ namespace VPB
                     
                     if (GUI.Button(btnRect, btnLabel, m_StyleButtonPrimary))
                     {
-                        m_ShowSpaceSaverWindow = !m_ShowSpaceSaverWindow;
+                        if (Settings.Instance.AutoOptimizeCache.Value)
+                        {
+                            if (!stats.IsRunning)
+                            {
+                                ImageLoadingMgr.singleton.StartBulkZstdCompression();
+                            }
+                        }
+                        else
+                        {
+                            m_ShowSpaceSaverWindow = !m_ShowSpaceSaverWindow;
+                        }
                     }
 
-                    // Show progress bar on button if running and minimized
-                    if (stats.IsRunning && !m_ShowSpaceSaverWindow)
+                    // Show progress bar under button if running and (minimized or in auto mode)
+                    if (stats.IsRunning && (!m_ShowSpaceSaverWindow || Settings.Instance.AutoOptimizeCache.Value))
                     {
+                        GUILayout.Space(2);
                         float progress = stats.TotalFiles > 0 ? (float)stats.ProcessedFiles / stats.TotalFiles : 0f;
-                        var progressRect = new Rect(btnRect.x, btnRect.y + btnRect.height - 4f, btnRect.width * progress, 4f);
+                        var progressRect = GUILayoutUtility.GetRect(0f, 4f, GUILayout.ExpandWidth(true));
                         
                         // Use solid color for progress bar to ensure visibility
-                        var prevColor = GUI.color;
+                        var prevColorProgressBar = GUI.color;
                         GUI.color = new Color(0.2f, 1f, 0.2f, 0.8f); // Bright green
-                        GUI.DrawTexture(progressRect, Texture2D.whiteTexture);
-                        GUI.color = prevColor;
+                        GUI.DrawTexture(new Rect(progressRect.x, progressRect.y, progressRect.width * progress, progressRect.height), Texture2D.whiteTexture);
+                        GUI.color = prevColorProgressBar;
+                        GUILayout.Space(2);
                     }
+
+                    // Handle completion report for Auto Mode
+                    if (stats.Completed && Settings.Instance.AutoOptimizeCache.Value)
+                    {
+                        stats.Completed = false;
+                        if (stats.TotalOriginalSize > stats.TotalCompressedSize)
+                        {
+                            long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
+                            m_AutoOptimizeReport = "Saved " + FormatBytes(diff);
+                        }
+                        else
+                        {
+                            m_AutoOptimizeReport = "Done!";
+                        }
+                        m_AutoOptimizeReportTimer = 5.0f;
+                    }
+
+                    if (!string.IsNullOrEmpty(m_AutoOptimizeReport))
+                    {
+                        var prevContentColor = GUI.contentColor;
+                        GUI.contentColor = new Color(0.2f, 1f, 0.2f); // Green
+                        GUILayout.Label(m_AutoOptimizeReport, m_StyleInfoCardText);
+                        GUI.contentColor = prevContentColor;
+                    }
+
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button(Settings.Instance.AutoOptimizeCache.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                    {
+                        Settings.Instance.AutoOptimizeCache.Value = !Settings.Instance.AutoOptimizeCache.Value;
+                    }
+                    GUILayout.Label("Optimize: No Confirmation", m_StyleInfoCardText);
+                    GUILayout.EndHorizontal();
 
                     if (m_ShowSpaceSaverWindow)
                     {

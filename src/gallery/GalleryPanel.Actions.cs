@@ -201,8 +201,9 @@ namespace VPB
             if (shouldApply)
             {
                 string pathLower = file.Path.ToLowerInvariant();
-                // Exclude Scenes from auto-apply
-                bool isScene = pathLower.EndsWith(".json") && (pathLower.Contains("/scenes/") || pathLower.Contains("\\scenes\\"));
+                // Exclude Scenes from auto-apply, but allow SubScenes
+                bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\");
+                bool isScene = !isSubScene && pathLower.EndsWith(".json") && (pathLower.Contains("/scenes/") || pathLower.Contains("\\scenes\\"));
                 
                 if (!isScene && actionsPanel != null)
                 {

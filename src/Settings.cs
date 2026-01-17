@@ -40,6 +40,7 @@ namespace VPB
         public ConfigEntry<bool> DeleteOriginalCacheAfterCompression;
         public ConfigEntry<int> ThumbnailThreshold;
 
+        public ConfigEntry<bool> AutoOptimizeCache;
         public ConfigEntry<string> LastGalleryPage;
         public ConfigEntry<int> TextureLogLevel;
 
@@ -96,6 +97,7 @@ namespace VPB
             LogVerboseUi = config.Bind<bool>("Logging", "LogVerboseUi", false, "Log verbose UI lifecycle messages (can be noisy).");
 
 
+            AutoOptimizeCache = config.Bind<bool>("Optimze", "AutoOptimizeCache", false, "When checked, clicking Optimize Cache button will start compression without opening the confirmation window.");
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "CategoryHair", "Last opened Gallery page.");
 
             PrioritizeFaceTextures = config.Bind<bool>("Optimze", "PrioritizeFaceTextures", true, "Prioritize face texture loading.");

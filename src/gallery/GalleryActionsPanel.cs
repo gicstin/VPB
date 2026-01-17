@@ -132,6 +132,10 @@ namespace VPB
                     CreateButton(++buttonCount, "Wear Selected*", (dragger) => {});
                     CreateButton(++buttonCount, "Remove All Clothing*", (dragger) => {});
                 }
+                else if (pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || category.Contains("SubScene"))
+                {
+                    CreateButton(++buttonCount, "Load SubScene", (dragger) => dragger.LoadSubScene(selectedFile.Uid));
+                }
                 else if ((pathLower.EndsWith(".json") && (pathLower.Contains("/scenes/") || pathLower.Contains("\\scenes\\"))) || category.Contains("Scene"))
                 {
                     CreateButton(++buttonCount, "Load Scene", (dragger) => dragger.LoadSceneFile(selectedFile.Uid));
@@ -148,6 +152,30 @@ namespace VPB
                     CreateButton(++buttonCount, "Wear Selected*", (dragger) => {});
                     CreateButton(++buttonCount, "Remove All Hair*", (dragger) => {});
                 }
+                else if (pathLower.Contains("/skin/") || pathLower.Contains("\\skin\\") || category.Contains("Skin"))
+                {
+                    CreateButton(++buttonCount, "Load Skin", (dragger) => {
+                        Atom target = GetBestTargetAtom();
+                        if (target != null) dragger.LoadSkin(target);
+                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
+                    });
+                }
+                else if (pathLower.Contains("/morphs/") || pathLower.Contains("\\morphs\\") || category.Contains("Morphs"))
+                {
+                    CreateButton(++buttonCount, "Load Morphs", (dragger) => {
+                        Atom target = GetBestTargetAtom();
+                        if (target != null) dragger.LoadMorphs(target);
+                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
+                    });
+                }
+                else if (pathLower.Contains("/appearance/") || pathLower.Contains("\\appearance\\") || category.Contains("Appearance"))
+                {
+                    CreateButton(++buttonCount, "Load Appearance", (dragger) => {
+                        Atom target = GetBestTargetAtom();
+                        if (target != null) dragger.LoadAppearance(target);
+                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
+                    });
+                }
                 else if (pathLower.Contains("/pose/") || pathLower.Contains("\\pose\\") || pathLower.Contains("/person/") || pathLower.Contains("\\person\\") || category.Contains("Pose"))
                 {
                     CreateButton(++buttonCount, "Load Pose", (dragger) => {
@@ -159,9 +187,13 @@ namespace VPB
                     CreateButton(++buttonCount, "Mirror Pose*", (dragger) => {});
                     CreateButton(++buttonCount, "Transition to Pose*", (dragger) => {});
                 }
-                else if (pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || category.Contains("SubScene"))
+                else if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || pathLower.EndsWith(".assetbundle") || pathLower.EndsWith(".unity3d"))
                 {
-                    CreateButton(++buttonCount, "Load SubScene", (dragger) => dragger.MergeSceneFile(selectedFile.Uid, false));
+                    CreateButton(++buttonCount, "Load Asset", (dragger) => {
+                        Atom selected = SuperController.singleton.GetSelectedAtom();
+                        if (selected != null && selected.type == "CustomUnityAsset") dragger.LoadCUAIntoAtom(selected, selectedFile.Uid);
+                        else dragger.LoadCUA(selectedFile.Uid);
+                    });
                 }
                 else
                 {

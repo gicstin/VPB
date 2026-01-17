@@ -596,6 +596,26 @@ namespace VPB
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
         private static string _lastAppearanceClothingMode = "keep";
 
+        private JSONClass ExtractAtomFromScene(JSONClass sceneJSON, string atomType)
+        {
+            if (sceneJSON == null || sceneJSON["atoms"] == null) return null;
+            
+            JSONArray atoms = sceneJSON["atoms"].AsArray;
+            for (int i = 0; i < atoms.Count; i++)
+            {
+                if (atoms[i]["type"].Value == atomType)
+                {
+                    JSONClass personAtom = atoms[i].AsObject;
+                    JSONClass extracted = new JSONClass();
+                    extracted["storables"] = personAtom["storables"];
+                    if (personAtom["setUnlistedParamsToDefault"] != null)
+                        extracted["setUnlistedParamsToDefault"] = personAtom["setUnlistedParamsToDefault"];
+                    return extracted;
+                }
+            }
+            return null;
+        }
+
         private bool CheckDualPose()
         {
             if (_isDualPose.HasValue) return _isDualPose.Value;
@@ -1470,6 +1490,27 @@ namespace VPB
                 // Handle subscenes differently - load directly without requiring atom
                 if (itemType == ItemType.SubScene && FileEntry != null)
                 {
+                    if (Panel != null && Panel.DragDropReplaceMode)
+                    {
+                        List<Atom> toRemove = new List<Atom>();
+                        foreach (var a in SuperController.singleton.GetAtoms())
+                        {
+                            if (a.type == "SubScene")
+                            {
+                                toRemove.Add(a);
+                            }
+                        }
+                        
+                        if (toRemove.Count > 0)
+                        {
+                            LogUtil.Log($"[VPB] Replace mode: Removing {toRemove.Count} existing SubScenes");
+                            foreach (var a in toRemove)
+                            {
+                                SuperController.singleton.RemoveAtom(a);
+                            }
+                        }
+                    }
+                    
                     LoadSubScene(FileEntry.Uid);
                 }
                 else if (itemType == ItemType.Scene && FileEntry != null)
@@ -1629,11 +1670,12 @@ namespace VPB
             return DetectAtom(eventData, out statusMsg, out dummy);
         }
 
-        private void LoadCUA(string path)
+        public void LoadCUA(string path)
         {
             string normalizedPath = UI.NormalizePath(path);
             LogUtil.Log($"[DragDropDebug] Loading CUA: {normalizedPath}");
-            StartCoroutine(LoadCUACoroutine(normalizedPath));
+            if (Panel != null) Panel.StartCoroutine(LoadCUACoroutine(normalizedPath));
+            else StartCoroutine(LoadCUACoroutine(normalizedPath));
         }
 
         private System.Collections.IEnumerator LoadCUACoroutine(string path)
@@ -1647,9 +1689,10 @@ namespace VPB
             }
         }
 
-        private void LoadCUAIntoAtom(Atom atom, string path)
+        public void LoadCUAIntoAtom(Atom atom, string path)
         {
-            StartCoroutine(LoadCUAIntoAtomCoroutine(atom, path));
+            if (Panel != null) Panel.StartCoroutine(LoadCUAIntoAtomCoroutine(atom, path));
+            else StartCoroutine(LoadCUAIntoAtomCoroutine(atom, path));
         }
 
         private System.Collections.IEnumerator LoadCUAIntoAtomCoroutine(Atom atom, string path)
@@ -1742,7 +1785,7 @@ namespace VPB
             }
         }
 
-        private void LoadSubScene(string path)
+        public void LoadSubScene(string path)
         {
             bool installed = EnsureInstalled();
 
@@ -1754,15 +1797,38 @@ namespace VPB
 
             string normalizedPath = UI.NormalizePath(path);
 
-            LogUtil.Log($"[DragDropDebug] Loading SubScene: {normalizedPath}");
+            LogUtil.Log($"[VPB] LoadSubScene: {normalizedPath}");
             
+            // Handle Replace mode for clicks too
+            if (Panel != null && Panel.DragDropReplaceMode)
+            {
+                List<Atom> toRemove = new List<Atom>();
+                foreach (var a in SuperController.singleton.GetAtoms())
+                {
+                    if (a.type == "SubScene")
+                    {
+                        toRemove.Add(a);
+                    }
+                }
+                
+                if (toRemove.Count > 0)
+                {
+                    LogUtil.Log($"[VPB] Replace mode (click): Removing {toRemove.Count} existing SubScenes");
+                    foreach (var a in toRemove)
+                    {
+                        SuperController.singleton.RemoveAtom(a);
+                    }
+                }
+            }
+
             try
             {
-                StartCoroutine(LoadSubSceneCoroutine(normalizedPath));
+                if (Panel != null) Panel.StartCoroutine(LoadSubSceneCoroutine(normalizedPath));
+                else StartCoroutine(LoadSubSceneCoroutine(normalizedPath));
             }
             catch (Exception ex)
             {
-                LogUtil.LogError($"[DragDropDebug] Failed to load subscene: {ex.Message}");
+                LogUtil.LogError($"[VPB] Failed to load subscene: {ex.Message}");
             }
         }
 
@@ -1831,6 +1897,39 @@ namespace VPB
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
 
+        public void LoadSkin(Atom target)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadSkin: No target atom provided.");
+                return;
+            }
+            LogUtil.Log($"[VPB] LoadSkin: Applying {FileEntry.Name} to {target.uid}");
+            ApplyClothingToAtom(target, FileEntry.Uid);
+        }
+
+        public void LoadMorphs(Atom target)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadMorphs: No target atom provided.");
+                return;
+            }
+            LogUtil.Log($"[VPB] LoadMorphs: Applying {FileEntry.Name} to {target.uid}");
+            ApplyClothingToAtom(target, FileEntry.Uid);
+        }
+
+        public void LoadAppearance(Atom target, string mode = null)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadAppearance: No target atom provided.");
+                return;
+            }
+            LogUtil.Log($"[VPB] LoadAppearance: Applying {FileEntry.Name} to {target.uid} (Mode: {mode ?? "default"})");
+            ApplyClothingToAtom(target, FileEntry.Uid, mode);
+        }
+
         public void LoadPose(Atom target, bool suppressRoot = true)
         {
             if (target == null)
@@ -1846,6 +1945,21 @@ namespace VPB
             if (node == null) return;
             JSONClass presetJSON = node.AsObject;
             
+            // Detect if this is a scene file and extract the first Person atom's pose
+            if (presetJSON["atoms"] != null)
+            {
+                JSONClass extracted = ExtractAtomFromScene(presetJSON, "Person");
+                if (extracted != null)
+                {
+                    presetJSON = extracted;
+                }
+                else
+                {
+                    LogUtil.LogWarning("[VPB] LoadPose: Scene file does not contain a Person atom.");
+                    return;
+                }
+            }
+            
             if (suppressRoot)
             {
                 if (presetJSON["storables"] != null)
@@ -1853,8 +1967,18 @@ namespace VPB
                     JSONArray storables = presetJSON["storables"] as JSONArray;
                     if (storables != null)
                     {
-                        foreach(JSONNode s in storables)
+                        for (int i = 0; i < storables.Count; i++)
                         {
+                            JSONClass s = storables[i] as JSONClass;
+                            if (s == null) continue;
+
+                            if (s["id"].Value == "control")
+                            {
+                                // Clean top-level control storable if it exists
+                                if (s.HasKey("position")) s.Remove("position");
+                                if (s.HasKey("rotation")) s.Remove("rotation");
+                            }
+
                             if (s["id"].Value == "PosePresets" || s["id"].Value == "control")
                             {
                                 if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
@@ -1943,7 +2067,8 @@ namespace VPB
 
                     if (atPlayer)
                     {
-                        StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
+                        if (Panel != null) Panel.StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
+                        else StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
                     }
                 }
             }
@@ -2122,7 +2247,8 @@ namespace VPB
 
         public void ReplaceSceneKeepPersons(string path)
         {
-            StartCoroutine(ReplaceSceneKeepPersonsCoroutine(path));
+            if (Panel != null) Panel.StartCoroutine(ReplaceSceneKeepPersonsCoroutine(path));
+            else StartCoroutine(ReplaceSceneKeepPersonsCoroutine(path));
         }
 
         private void MergeSceneFiltered(string path, Func<JSONNode, bool> atomFilter, string label, bool ensureUniqueIds = false, bool atPlayer = false)
@@ -2168,7 +2294,8 @@ namespace VPB
                     
                     if (atPlayer && atomsBefore != null)
                     {
-                        StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
+                        if (Panel != null) Panel.StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
+                        else StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
                     }
 
                     // Keep temp file for a bit to ensure VaM finishes loading it? 
@@ -2380,6 +2507,10 @@ namespace VPB
 
         private System.Collections.IEnumerator LoadSubSceneCoroutine(string path)
         {
+            // Track existing atoms to find the new one
+            HashSet<string> existingAtoms = new HashSet<string>();
+            foreach (var a in SuperController.singleton.GetAtoms()) existingAtoms.Add(a.uid);
+
             yield return SuperController.singleton.AddAtomByType("SubScene", "", true, true, true);
             yield return new WaitForEndOfFrame();
             
@@ -2387,7 +2518,7 @@ namespace VPB
             Atom subSceneAtom = null;
             foreach (var atom in SuperController.singleton.GetAtoms())
             {
-                if (atom.type == "SubScene")
+                if (atom.type == "SubScene" && !existingAtoms.Contains(atom.uid))
                 {
                     subSceneAtom = atom;
                     break;
@@ -2399,15 +2530,29 @@ namespace VPB
                 SubScene subScene = subSceneAtom.GetComponentInChildren<SubScene>();
                 if (subScene != null)
                 {
-                    LogUtil.Log($"[DragDropDebug] Calling LoadSubSceneWithPath on SubScene atom with path: {path}");
+                    LogUtil.Log($"[VPB] Calling LoadSubSceneWithPath on SubScene atom {subSceneAtom.uid} with path: {path}");
                     MethodInfo loadMethod = typeof(SubScene).GetMethod("LoadSubSceneWithPath", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     if (loadMethod != null)
                     {
                         loadMethod.Invoke(subScene, new object[] { path });
                     }
+                    else
+                    {
+                        LogUtil.LogError("[VPB] Method LoadSubSceneWithPath not found on SubScene component");
+                    }
+                }
+                else
+                {
+                    LogUtil.LogError("[VPB] SubScene component not found on newly created atom");
                 }
             }
-            VPBConfig.Instance.EndSceneLoad();
+            else
+            {
+                LogUtil.LogError("[VPB] Could not find newly created SubScene atom");
+            }
+
+            if (VPBConfig.Instance != null)
+                VPBConfig.Instance.EndSceneLoad();
         }
 
         private bool EnsureInstalled()
@@ -2738,6 +2883,22 @@ namespace VPB
                                 JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
                                 if (presetJSON != null)
                                 {
+                                    // Detect if this is a scene file and extract the appropriate atom data
+                                    if (presetJSON["atoms"] != null)
+                                    {
+                                        JSONClass extracted = ExtractAtomFromScene(presetJSON, atom.type);
+                                        if (extracted != null)
+                                        {
+                                            presetJSON = extracted;
+                                        }
+                                        else
+                                        {
+                                            LogUtil.LogWarning($"[VPB] ApplyClothingToAtom: Scene file does not contain a {atom.type} atom.");
+                                            // Fallback: don't return, maybe it works anyway? No, if it has atoms it's a scene.
+                                            // But let's stay safe and just continue with extracted if possible.
+                                        }
+                                    }
+
                                     string presetPackageName = "";
                                     string folderFullPath = "";
                                     
