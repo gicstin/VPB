@@ -399,10 +399,12 @@ namespace VPB
         public float maxSize = 260f;
         public float spacing = 10f;
         public bool isVerticalCard = false;
+        public int forcedColumnCount = 0;
         
         private RectTransform rt;
         private float lastWidth = -1f;
         private bool lastIsVerticalCard = false;
+        private int lastForcedColumnCount = -1;
 
         void Awake()
         {
@@ -425,27 +427,39 @@ namespace VPB
             if (rt == null || grid == null) return;
             float width = rt.rect.width;
             if (width <= 0) return;
-            if (Mathf.Abs(width - lastWidth) < 0.1f && isVerticalCard == lastIsVerticalCard && grid.cellSize.x > 0) return;
+            if (Mathf.Abs(width - lastWidth) < 0.1f && isVerticalCard == lastIsVerticalCard && forcedColumnCount == lastForcedColumnCount && grid.cellSize.x > 0) return;
             
             lastWidth = width;
             lastIsVerticalCard = isVerticalCard;
+            lastForcedColumnCount = forcedColumnCount;
 
             float usableWidth = width - grid.padding.left - grid.padding.right;
             if (usableWidth <= 0) return;
             
+            int forcedCols = forcedColumnCount;
+            if (forcedCols < 0) forcedCols = 0;
+
             if (isVerticalCard)
             {
-                // In vertical card mode, we want a fixed-ish width and let it fit as many as possible
-                float cardWidth = 260f; 
-                int n = Mathf.FloorToInt((usableWidth + spacing) / (cardWidth + spacing));
+                int n = forcedCols > 0 ? forcedCols : 0;
+                if (n <= 0)
+                {
+                    float cardWidth = minSize > 0 ? minSize : 260f;
+                    n = Mathf.FloorToInt((usableWidth + spacing) / (cardWidth + spacing));
+                    if (n < 1) n = 1;
+                }
                 if (n < 1) n = 1;
                 float actualCardWidth = (usableWidth - (n - 1) * spacing) / n;
-                grid.cellSize = new Vector2(actualCardWidth, actualCardWidth * 1.45f); 
+                grid.cellSize = new Vector2(actualCardWidth, actualCardWidth * 1.618f);
                 return;
             }
 
-            float targetSize = (minSize + maxSize) * 0.5f;
-            int colCount = Mathf.FloorToInt((usableWidth + spacing) / (minSize + spacing));
+            int colCount = forcedCols > 0 ? forcedCols : 0;
+            if (colCount <= 0)
+            {
+                float baseMinSize = minSize > 0 ? minSize : 200f;
+                colCount = Mathf.FloorToInt((usableWidth + spacing) / (baseMinSize + spacing));
+            }
             if (colCount < 1) colCount = 1;
             
             float cellSize = (usableWidth - (colCount - 1) * spacing) / colCount;
@@ -453,7 +467,94 @@ namespace VPB
         }
     }
 
-    /// <summary>
+    public class VerticalCardInfoSizer : MonoBehaviour
+    {
+        public LayoutElement infoLE;
+        public LayoutElement nameLE;
+        public Text nameText;
+        public LayoutElement dateLE;
+        public GameObject dateGO;
+        public float ratingHeight = 45f;
+        public float maxInfoHeight = 85f;
+        public float minInfoHeight = 30f;
+        public float hideDateBelowInfoHeight = 55f;
+        public float dateHeight = 22f;
+
+        private RectTransform rt;
+        private float lastWidth = -1f;
+        private CanvasGroup dateCG;
+
+        void Awake()
+        {
+            rt = GetComponent<RectTransform>();
+            if (dateGO != null)
+            {
+                dateCG = dateGO.GetComponent<CanvasGroup>();
+                if (dateCG == null) dateCG = dateGO.AddComponent<CanvasGroup>();
+            }
+        }
+
+        void OnEnable()
+        {
+            UpdateLayout();
+        }
+
+        void OnRectTransformDimensionsChange()
+        {
+            UpdateLayout();
+        }
+
+        private void UpdateLayout()
+        {
+            if (rt == null || infoLE == null || nameLE == null) return;
+            float w = rt.rect.width;
+            if (w <= 0) return;
+            if (Mathf.Abs(w - lastWidth) < 0.1f) return;
+            lastWidth = w;
+
+            float remaining = w * 0.618f;
+            float desiredInfo = remaining - ratingHeight;
+            desiredInfo = Mathf.Clamp(desiredInfo, minInfoHeight, maxInfoHeight);
+
+            infoLE.minHeight = 0;
+            infoLE.preferredHeight = desiredInfo;
+            infoLE.flexibleHeight = 0;
+
+            bool showDate = desiredInfo >= hideDateBelowInfoHeight;
+            if (dateLE != null)
+            {
+                dateLE.minHeight = showDate ? dateHeight : 0f;
+                dateLE.preferredHeight = showDate ? dateHeight : 0f;
+                dateLE.flexibleHeight = 0f;
+            }
+            if (dateCG != null)
+            {
+                dateCG.alpha = showDate ? 1f : 0f;
+                dateCG.interactable = false;
+                dateCG.blocksRaycasts = false;
+            }
+
+            if (showDate)
+            {
+                nameLE.minHeight = 42;
+                nameLE.preferredHeight = 42;
+                if (dateLE != null)
+                {
+                    dateLE.minHeight = dateHeight;
+                    dateLE.preferredHeight = dateHeight;
+                    dateLE.flexibleHeight = 0;
+                }
+                if (nameText != null) nameText.fontSize = 20;
+            }
+            else
+            {
+                nameLE.minHeight = 24;
+                nameLE.preferredHeight = desiredInfo;
+                if (nameText != null) nameText.fontSize = 18;
+            }
+        }
+    }
+
     /// <summary>
     /// Smoothly bends UI vertices along a cylinder.
     /// </summary>

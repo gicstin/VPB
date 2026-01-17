@@ -136,6 +136,7 @@ namespace VPB
                 if (adaptive != null)
                 {
                     adaptive.isVerticalCard = (layoutMode == GalleryLayoutMode.VerticalCard);
+                    adaptive.forcedColumnCount = gridColumnCount;
                     adaptive.UpdateGrid();
                 }
             }
@@ -226,6 +227,10 @@ namespace VPB
             var sortState = GetSortState("Files");
             GallerySortManager.Instance.SortFiles(files, sortState);
 
+            // Cache the filtered list for selection operations (Select All, counts, etc)
+            lastFilteredFiles.Clear();
+            lastFilteredFiles.AddRange(files);
+
             // NOW clear the old buttons, just before we are ready to show new ones.
             foreach (var btn in activeButtons)
             {
@@ -245,12 +250,13 @@ namespace VPB
             int totalFiles = files.Count;
             int totalPages = Mathf.CeilToInt((float)totalFiles / itemsPerPage);
             if (totalPages == 0) totalPages = 1;
+            lastTotalItems = totalFiles;
+            lastTotalPages = totalPages;
             
             if (currentPage >= totalPages) currentPage = totalPages - 1;
             if (currentPage < 0) currentPage = 0;
             
-            if (paginationText != null) 
-                paginationText.text = (currentPage + 1) + " / " + totalPages + " (" + totalFiles + ")";
+            UpdatePaginationText();
 
             if (paginationPrevBtn != null) 
                 paginationPrevBtn.GetComponent<Button>().interactable = (currentPage > 0);
@@ -258,8 +264,19 @@ namespace VPB
             if (paginationNextBtn != null) 
                 paginationNextBtn.GetComponent<Button>().interactable = (currentPage < totalPages - 1);
 
+            if (paginationFirstBtn != null)
+                paginationFirstBtn.GetComponent<Button>().interactable = (currentPage > 0);
+            
+            if (paginationLastBtn != null)
+                paginationLastBtn.GetComponent<Button>().interactable = (currentPage < totalPages - 1);
+
             int startIndex = currentPage * itemsPerPage;
             int endIndex = Mathf.Min(startIndex + itemsPerPage, totalFiles);
+            lastShownCount = Mathf.Max(0, endIndex - startIndex);
+
+            lastPageFiles.Clear();
+            for (int i = startIndex; i < endIndex; i++) lastPageFiles.Add(files[i]);
+            UpdatePaginationText();
 
             if (currentPage > 0)
             {

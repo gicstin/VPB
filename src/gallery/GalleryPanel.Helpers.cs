@@ -33,6 +33,7 @@ namespace VPB
         private FileEntry entry;
         private Text starIconText;
         private GameObject selectorGO;
+        private CanvasGroup selectorCG;
         private int currentRating = 0;
 
         public static readonly Color[] RatingColors = new Color[]
@@ -50,24 +51,38 @@ namespace VPB
             entry = e;
             starIconText = s;
             selectorGO = selector;
-            if (selectorGO != null) selectorGO.SetActive(false);
+            if (selectorGO != null)
+            {
+                selectorCG = selectorGO.GetComponent<CanvasGroup>();
+                if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
+                SetSelectorVisible(false);
+            }
             
             currentRating = RatingsManager.Instance.GetRating(entry);
             UpdateDisplay();
         }
 
+        private void SetSelectorVisible(bool visible)
+        {
+            if (selectorGO == null) return;
+            if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
+            if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
+            selectorCG.alpha = visible ? 1f : 0f;
+            selectorCG.interactable = visible;
+            selectorCG.blocksRaycasts = visible;
+        }
+
         public void ToggleSelector()
         {
-            if (selectorGO != null)
-            {
-                bool nextState = !selectorGO.activeSelf;
-                selectorGO.SetActive(nextState);
-            }
+            if (selectorGO == null) return;
+            if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
+            bool nextState = selectorCG == null || selectorCG.alpha <= 0.01f;
+            SetSelectorVisible(nextState);
         }
 
         public void CloseSelector()
         {
-            if (selectorGO != null) selectorGO.SetActive(false);
+            SetSelectorVisible(false);
         }
 
         public void SetRating(int rating)
@@ -75,7 +90,7 @@ namespace VPB
             currentRating = rating;
             RatingsManager.Instance.SetRating(entry, rating);
             UpdateDisplay();
-            if (selectorGO != null) selectorGO.SetActive(false);
+            SetSelectorVisible(false);
         }
 
         private void UpdateDisplay()

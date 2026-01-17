@@ -225,6 +225,16 @@ namespace VPB
         private RectTransform hoverPathRT;
         private GameObject paginationPrevBtn;
         private GameObject paginationNextBtn;
+        private GameObject paginationFirstBtn;
+        private GameObject paginationLastBtn;
+        private GameObject selectAllBtn;
+        private GameObject clearSelectionBtn;
+        private GameObject gridSizeMinusBtn;
+        private GameObject gridSizePlusBtn;
+        private int lastTotalItems = 0;
+        private int lastTotalPages = 1;
+        private int lastShownCount = 0;
+        private int gridColumnCount = 4;
 
         // Apply Mode
         public ApplyMode ItemApplyMode = ApplyMode.DoubleClick;
@@ -240,13 +250,20 @@ namespace VPB
 
         // private FileEntry selectedFile; // Replaced by Multi-Selection
         public List<FileEntry> selectedFiles = new List<FileEntry>();
+        private HashSet<string> selectedFilePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private string selectionAnchorPath = null;
+        private List<FileEntry> lastPageFiles = new List<FileEntry>();
+        private List<FileEntry> lastFilteredFiles = new List<FileEntry>();
         public FileEntry selectedFile
         {
             get { return selectedFiles.Count > 0 ? selectedFiles[0] : null; }
             set
             {
                 selectedFiles.Clear();
+                selectedFilePaths.Clear();
+                selectionAnchorPath = null;
                 if (value != null) selectedFiles.Add(value);
+                if (value != null && !string.IsNullOrEmpty(value.Path)) selectedFilePaths.Add(value.Path);
             }
         }
 

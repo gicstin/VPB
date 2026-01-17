@@ -137,6 +137,7 @@ namespace VPB
             if (file == null) return;
 
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
             
             if (ctrl && alt)
@@ -157,38 +158,91 @@ namespace VPB
             bool isDoubleClick = (time - lastClickTime < 0.3f && selectedPath == file.Path);
             lastClickTime = time;
 
-            if (selectedPath != file.Path)
-            {
-                selectedPath = file.Path;
-                selectedFile = file;
-                selectedHubItem = null;
+            bool selectionChanged = false;
 
-                SetHoverPath(selectedFile.Path);
-                
-                // Refresh all visible buttons to update selection state (border, etc)
-                // We use BindFileButton to ensure consistent styling
-                foreach (var btn in activeButtons)
+            // Update selection set (Ctrl toggle / Shift range / single)
+            if (shift && lastPageFiles != null && lastPageFiles.Count > 0)
+            {
+                string anchorPath = selectionAnchorPath;
+                if (string.IsNullOrEmpty(anchorPath)) anchorPath = selectedPath;
+                if (string.IsNullOrEmpty(anchorPath)) anchorPath = file.Path;
+
+                int anchorIndex = -1;
+                int clickIndex = -1;
+                for (int i = 0; i < lastPageFiles.Count; i++)
                 {
-                    if (btn == null) continue;
-                    
-                    // Update File Buttons
-                    if (btn.name.StartsWith("FileButton_"))
-                    {
-                        // We need to find the FileEntry for this button. 
-                        // UIDraggableItem usually has it.
-                        var diag = btn.GetComponent<UIDraggableItem>();
-                        if (diag != null && diag.FileEntry != null)
-                        {
-                            BindFileButton(btn, diag.FileEntry);
-                        }
-                    }
-                    
-                    // Auto-close Rating Selector if it's open on any button
-                    var ratingHandler = btn.GetComponent<RatingHandler>();
-                    if (ratingHandler != null) ratingHandler.CloseSelector();
+                    var f = lastPageFiles[i];
+                    if (f == null || string.IsNullOrEmpty(f.Path)) continue;
+                    if (anchorIndex < 0 && string.Equals(f.Path, anchorPath, StringComparison.OrdinalIgnoreCase)) anchorIndex = i;
+                    if (clickIndex < 0 && string.Equals(f.Path, file.Path, StringComparison.OrdinalIgnoreCase)) clickIndex = i;
+                    if (anchorIndex >= 0 && clickIndex >= 0) break;
                 }
 
-                actionsPanel?.HandleSelectionChanged(selectedFile, selectedHubItem);
+                if (anchorIndex < 0) anchorIndex = clickIndex;
+                if (clickIndex < 0) clickIndex = anchorIndex;
+
+                if (anchorIndex >= 0 && clickIndex >= 0)
+                {
+                    int lo = Mathf.Min(anchorIndex, clickIndex);
+                    int hi = Mathf.Max(anchorIndex, clickIndex);
+
+                    if (!ctrl)
+                    {
+                        selectedFiles.Clear();
+                        selectedFilePaths.Clear();
+                        selectionChanged = true;
+                    }
+
+                    for (int i = lo; i <= hi; i++)
+                    {
+                        var f = lastPageFiles[i];
+                        if (f == null || string.IsNullOrEmpty(f.Path)) continue;
+                        if (selectedFilePaths.Add(f.Path))
+                        {
+                            selectedFiles.Add(f);
+                            selectionChanged = true;
+                        }
+                    }
+                }
+            }
+            else if (ctrl)
+            {
+                if (selectedFilePaths.Contains(file.Path))
+                {
+                    selectedFilePaths.Remove(file.Path);
+                    selectedFiles.RemoveAll(f => f != null && string.Equals(f.Path, file.Path, StringComparison.OrdinalIgnoreCase));
+                    selectionChanged = true;
+                }
+                else
+                {
+                    selectedFilePaths.Add(file.Path);
+                    selectedFiles.Add(file);
+                    selectionChanged = true;
+                }
+                selectionAnchorPath = file.Path;
+            }
+            else
+            {
+                if (!(selectedFiles.Count == 1 && selectedFilePaths.Contains(file.Path)))
+                {
+                    selectedFiles.Clear();
+                    selectedFilePaths.Clear();
+                    selectedFiles.Add(file);
+                    selectedFilePaths.Add(file.Path);
+                    selectionChanged = true;
+                }
+                selectionAnchorPath = file.Path;
+            }
+
+            // Keep primary selection path for double-click detection / hover path
+            if (selectionChanged || selectedPath != file.Path)
+            {
+                selectedPath = file.Path;
+                selectedHubItem = null;
+                SetHoverPath(file.Path);
+                RefreshSelectionVisuals();
+                UpdatePaginationText();
+                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
             }
             else if (ItemApplyMode == ApplyMode.DoubleClick && !isDoubleClick)
             {
@@ -217,6 +271,26 @@ namespace VPB
                 {
                     // actionsPanel?.Open();
                 }
+            }
+        }
+
+        private void RefreshSelectionVisuals()
+        {
+            foreach (var btn in activeButtons)
+            {
+                if (btn == null) continue;
+                
+                if (btn.name.StartsWith("FileButton_"))
+                {
+                    var diag = btn.GetComponent<UIDraggableItem>();
+                    if (diag != null && diag.FileEntry != null)
+                    {
+                        BindFileButton(btn, diag.FileEntry);
+                    }
+                }
+                
+                var ratingHandler = btn.GetComponent<RatingHandler>();
+                if (ratingHandler != null) ratingHandler.CloseSelector();
             }
         }
 

@@ -1021,6 +1021,7 @@ namespace VPB
             adaptive.minSize = 180f;
             adaptive.maxSize = 250f;
             adaptive.spacing = 10f;
+            adaptive.forcedColumnCount = gridColumnCount;
 
             ContentSizeFitter csf = contentGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;

@@ -13,7 +13,8 @@ namespace VPB
         private GameObject backgroundBoxGO; // The gallery's background box
         private RectTransform actionsPaneRT;
         private GameObject contentGO;
-        private FileEntry selectedFile;
+        private List<FileEntry> selectedFiles = new List<FileEntry>();
+        private FileEntry SelectedFile => (selectedFiles != null && selectedFiles.Count > 0) ? selectedFiles[0] : null;
         private Hub.GalleryHubItem selectedHubItem;
         private GalleryPanel parentPanel;
         private bool isOpen = false;
@@ -79,12 +80,13 @@ namespace VPB
             var inputHandler = actionsPaneGO.AddComponent<GalleryActionsInputHandler>();
             inputHandler.panel = this;
         }
-        public void HandleSelectionChanged(FileEntry file, Hub.GalleryHubItem hubItem)
+        public void HandleSelectionChanged(List<FileEntry> files, Hub.GalleryHubItem hubItem)
         {
-            selectedFile = file;
+            selectedFiles.Clear();
+            if (files != null) selectedFiles.AddRange(files);
             selectedHubItem = hubItem;
 
-            if (selectedFile == null && selectedHubItem == null)
+            if (SelectedFile == null && selectedHubItem == null)
             {
                 return;
             }
@@ -115,9 +117,9 @@ namespace VPB
                 CreateButton(++buttonCount, "Install Dependencies*", (dragger) => {});
                 CreateButton(++buttonCount, "Quick Look*", (dragger) => {});
             }
-            else if (selectedFile != null)
+            else if (SelectedFile != null)
             {
-                string pathLower = selectedFile.Path.ToLowerInvariant();
+                string pathLower = SelectedFile.Path.ToLowerInvariant();
                 string category = parentPanel.CurrentCategoryTitle ?? "";
                 
                 if (pathLower.Contains("/clothing/") || pathLower.Contains("\\clothing\\") || category.Contains("Clothing"))
@@ -134,12 +136,12 @@ namespace VPB
                 }
                 else if (pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || category.Contains("SubScene"))
                 {
-                    CreateButton(++buttonCount, "Load SubScene", (dragger) => dragger.LoadSubScene(selectedFile.Uid));
+                    CreateButton(++buttonCount, "Load SubScene", (dragger) => dragger.LoadSubScene(SelectedFile.Uid));
                 }
                 else if ((pathLower.EndsWith(".json") && (pathLower.Contains("/scenes/") || pathLower.Contains("\\scenes\\"))) || category.Contains("Scene"))
                 {
-                    CreateButton(++buttonCount, "Load Scene", (dragger) => dragger.LoadSceneFile(selectedFile.Uid));
-                    CreateButton(++buttonCount, "Merge Scene", (dragger) => dragger.MergeSceneFile(selectedFile.Uid, false));
+                    CreateButton(++buttonCount, "Load Scene", (dragger) => dragger.LoadSceneFile(SelectedFile.Uid));
+                    CreateButton(++buttonCount, "Merge Scene", (dragger) => dragger.MergeSceneFile(SelectedFile.Uid, false));
                 }
                 else if (pathLower.Contains("/hair/") || pathLower.Contains("\\hair\\") || category.Contains("Hair"))
                 {
@@ -191,13 +193,13 @@ namespace VPB
                 {
                     CreateButton(++buttonCount, "Load Asset", (dragger) => {
                         Atom selected = SuperController.singleton.GetSelectedAtom();
-                        if (selected != null && selected.type == "CustomUnityAsset") dragger.LoadCUAIntoAtom(selected, selectedFile.Uid);
-                        else dragger.LoadCUA(selectedFile.Uid);
+                        if (selected != null && selected.type == "CustomUnityAsset") dragger.LoadCUAIntoAtom(selected, SelectedFile.Uid);
+                        else dragger.LoadCUA(SelectedFile.Uid);
                     });
                 }
                 else
                 {
-                    CreateButton(++buttonCount, "Add to Scene", (dragger) => LogUtil.Log("Adding to scene: " + selectedFile.Name));
+                    CreateButton(++buttonCount, "Add to Scene", (dragger) => LogUtil.Log("Adding to scene: " + SelectedFile.Name));
                 }
             }
         }
@@ -223,7 +225,7 @@ namespace VPB
             
             // Interaction support
             UIDraggableItem draggable = btn.AddComponent<UIDraggableItem>();
-            draggable.FileEntry = selectedFile;
+            draggable.FileEntry = SelectedFile;
             draggable.HubItem = selectedHubItem;
             draggable.Panel = parentPanel;
 
@@ -289,24 +291,30 @@ namespace VPB
 
             GameObject btn = UI.CreateUIButton(headerGO, 10, 80, fullLabel, 20, 0, 0, AnchorPresets.middleCenter, () => {});
             RectTransform btnRT = btn.GetComponent<RectTransform>();
-            // No need for manual anchor stretching when childControlWidth is true
             btnRT.sizeDelta = new Vector2(0, 80);
-
             LayoutElement btnLE = btn.AddComponent<LayoutElement>();
             btnLE.preferredHeight = 80;
             btnLE.flexibleWidth = 1;
 
             UIDraggableItem draggable = btn.AddComponent<UIDraggableItem>();
-            draggable.FileEntry = selectedFile;
+            draggable.FileEntry = SelectedFile;
             draggable.HubItem = selectedHubItem;
             draggable.Panel = parentPanel;
-            btn.GetComponent<Button>().onClick.AddListener(() => mainAction(draggable));
+
+            Button b = btn.GetComponent<Button>();
+            if (b != null)
+            {
+                b.onClick.RemoveAllListeners();
+                b.onClick.AddListener(() => mainAction?.Invoke(draggable));
+            }
 
             if (number <= 9)
             {
                 activeActions.Add(mainAction);
                 activeDraggables.Add(draggable);
             }
+
+            populateOptions?.Invoke(rowGO.transform, draggable);
         }
 
         private Toggle CreateInlineToggle(Transform parent, string label, bool defaultOn, UnityAction<bool> onValueChanged)

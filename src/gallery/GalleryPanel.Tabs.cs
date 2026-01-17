@@ -923,7 +923,7 @@ namespace VPB
             
             // Image - Cached lookup or fast fetch
             Image img = btnGO.GetComponent<Image>();
-            bool isSelected = (selectedPath == file.Path);
+            bool isSelected = (!string.IsNullOrEmpty(file.Path) && selectedFilePaths.Contains(file.Path));
             
             if (layoutMode == GalleryLayoutMode.VerticalCard)
                 img.color = new Color(0.1f, 0.1f, 0.1f, 0.9f);
@@ -1187,6 +1187,8 @@ namespace VPB
 
             LayoutElement infoLE = infoGO.AddComponent<LayoutElement>();
             infoLE.minHeight = 85; 
+            infoLE.preferredHeight = 85;
+            infoLE.flexibleHeight = 0;
 
             // Name
             Text nameText = CreateCardText(infoGO, "Name", 20, FontStyle.Bold);
@@ -1201,53 +1203,83 @@ namespace VPB
             Text dateSizeText = CreateCardText(infoGO, "DateSize", 16, FontStyle.Normal);
             dateSizeText.alignment = TextAnchor.UpperLeft;
             dateSizeText.color = new Color(0.8f, 0.8f, 0.8f, 1f);
+            LayoutElement dateLE = dateSizeText.GetComponent<LayoutElement>();
+            if (dateLE != null)
+            {
+                dateLE.preferredHeight = 22;
+                dateLE.minHeight = 22;
+                dateLE.flexibleHeight = 0;
+            }
 
-            // Rating System (Bottom Left)
+            VerticalCardInfoSizer infoSizer = btnGO.AddComponent<VerticalCardInfoSizer>();
+            infoSizer.infoLE = infoLE;
+            infoSizer.nameLE = nameText.GetComponent<LayoutElement>();
+            infoSizer.nameText = nameText;
+            infoSizer.dateLE = dateLE;
+            infoSizer.dateGO = dateSizeText.gameObject;
+            infoSizer.ratingHeight = 45f;
+            infoSizer.maxInfoHeight = 85f;
+
+            // Spacer (push rating to the bottom of the fixed-height card)
+            GameObject spacerGO = new GameObject("Spacer");
+            spacerGO.transform.SetParent(btnGO.transform, false);
+            LayoutElement spacerLE = spacerGO.AddComponent<LayoutElement>();
+            spacerLE.flexibleHeight = 1;
+            spacerLE.flexibleWidth = 1;
+
+            // Rating System (Bottom)
             GameObject ratingGO = new GameObject("Rating");
             ratingGO.transform.SetParent(btnGO.transform, false);
-            RectTransform ratingRT = ratingGO.AddComponent<RectTransform>();
-            ratingRT.anchorMin = new Vector2(0, 0);
-            ratingRT.anchorMax = new Vector2(1, 0); // Stretch horizontally
-            ratingRT.pivot = new Vector2(0, 0);
-            ratingRT.anchoredPosition = Vector2.zero;
-            ratingRT.sizeDelta = new Vector2(0, 45); // Height 45
+            LayoutElement ratingLE = ratingGO.AddComponent<LayoutElement>();
+            ratingLE.minHeight = 45;
+            ratingLE.preferredHeight = 45;
+            ratingLE.flexibleHeight = 0;
 
             HorizontalLayoutGroup ratingHLG = ratingGO.AddComponent<HorizontalLayoutGroup>();
             ratingHLG.childAlignment = TextAnchor.MiddleLeft;
             ratingHLG.childControlWidth = true;
             ratingHLG.childControlHeight = true;
-            ratingHLG.childForceExpandWidth = false; // Stay square when alone
-            ratingHLG.padding = new RectOffset(0, 0, 0, 0);
+            ratingHLG.childForceExpandWidth = true;
+            ratingHLG.childForceExpandHeight = false;
+            ratingHLG.padding = new RectOffset(5, 5, 0, 0);
             ratingHLG.spacing = 0;
-            
-            GameObject starBtnGO = UI.CreateUIButton(ratingGO, 45, 45, "★", 26, 0, 0, AnchorPresets.centre, null);
+
+            GameObject starBtnGO = UI.CreateUIButton(ratingGO, 32, 45, "★", 24, 0, 0, AnchorPresets.centre, null);
             starBtnGO.name = "Star";
             starBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
             LayoutElement starLE = starBtnGO.AddComponent<LayoutElement>();
-            starLE.preferredWidth = 45;
-            starLE.flexibleWidth = 0;
+            starLE.minWidth = 0;
+            starLE.flexibleWidth = 1;
+            starLE.preferredHeight = 45;
+            starLE.minHeight = 45;
+            starLE.flexibleHeight = 0;
             Text starIconText = starBtnGO.GetComponentInChildren<Text>();
-            
-            // Selector Popup
+
             GameObject selectorGO = new GameObject("RatingSelector");
             selectorGO.transform.SetParent(ratingGO.transform, false);
-            selectorGO.SetActive(false);
             LayoutElement selectorLE = selectorGO.AddComponent<LayoutElement>();
-            selectorLE.flexibleWidth = 1; // Take remaining space
-            
+            selectorLE.minWidth = 0;
+            selectorLE.flexibleWidth = 6;
+            selectorLE.flexibleHeight = 0;
+            CanvasGroup selectorCG = selectorGO.AddComponent<CanvasGroup>();
+            selectorCG.alpha = 0f;
+            selectorCG.interactable = false;
+            selectorCG.blocksRaycasts = false;
+
             Image selectorBg = selectorGO.AddComponent<Image>();
             selectorBg.color = new Color(0.05f, 0.05f, 0.05f, 0.95f);
-            
+            selectorBg.raycastTarget = false;
+
             HorizontalLayoutGroup selectorHLG = selectorGO.AddComponent<HorizontalLayoutGroup>();
             selectorHLG.childAlignment = TextAnchor.MiddleLeft;
             selectorHLG.childControlHeight = true;
             selectorHLG.childControlWidth = true;
             selectorHLG.childForceExpandWidth = true;
+            selectorHLG.childForceExpandHeight = false;
             selectorHLG.spacing = 1;
 
             RatingHandler ratingHandler = btnGO.AddComponent<RatingHandler>();
-
-            for (int i = 0; i <= 5; i++) // 0 (clear) to 5
+            for (int i = 0; i <= 5; i++)
             {
                 int ratingValue = i;
                 string label = i == 0 ? "X" : i.ToString();
@@ -1257,9 +1289,13 @@ namespace VPB
                 if (i == 0) optBtnGO.GetComponentInChildren<Text>().color = Color.red;
                 else optBtnGO.GetComponentInChildren<Text>().color = Color.black;
                 AddHoverDelegate(optBtnGO);
-                
-                LayoutElement le = optBtnGO.AddComponent<LayoutElement>();
-                le.flexibleWidth = 1;
+
+                LayoutElement optLE = optBtnGO.AddComponent<LayoutElement>();
+                optLE.minWidth = 0;
+                optLE.flexibleWidth = 1;
+                optLE.preferredHeight = 45;
+                optLE.minHeight = 45;
+                optLE.flexibleHeight = 0;
             }
 
             Button starBtn = starBtnGO.GetComponent<Button>();

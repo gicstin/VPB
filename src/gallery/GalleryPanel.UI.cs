@@ -35,8 +35,12 @@ namespace VPB
             paginationRT.anchoredPosition = new Vector2(50, 30); // Centered in 60px footer area, moved right from corner
             paginationRT.sizeDelta = new Vector2(300, 40);
 
+            // First Page Button
+            paginationFirstBtn = UI.CreateUIButton(pageContainer, 40, 40, "|<", 18, 0, 0, AnchorPresets.middleLeft, FirstPage);
+            AddTooltip(paginationFirstBtn, "First Page");
+
             // Prev Button
-            paginationPrevBtn = UI.CreateUIButton(pageContainer, 40, 40, "<", 20, 0, 0, AnchorPresets.middleLeft, PrevPage);
+            paginationPrevBtn = UI.CreateUIButton(pageContainer, 40, 40, "<", 20, 50, 0, AnchorPresets.middleLeft, PrevPage);
             
             // Text
             GameObject textGO = new GameObject("PageText");
@@ -51,36 +55,56 @@ namespace VPB
             textRT.anchorMin = new Vector2(0, 0.5f);
             textRT.anchorMax = new Vector2(0, 0.5f);
             textRT.pivot = new Vector2(0, 0.5f);
-            textRT.anchoredPosition = new Vector2(50, 0);
+            textRT.anchoredPosition = new Vector2(100, 0);
             textRT.sizeDelta = new Vector2(100, 40);
 
             // Next Button
-            paginationNextBtn = UI.CreateUIButton(pageContainer, 40, 40, ">", 20, 160, 0, AnchorPresets.middleLeft, NextPage);
+            paginationNextBtn = UI.CreateUIButton(pageContainer, 40, 40, ">", 20, 210, 0, AnchorPresets.middleLeft, NextPage);
             AddTooltip(paginationNextBtn, "Next Page");
 
+            // Last Page Button
+            paginationLastBtn = UI.CreateUIButton(pageContainer, 40, 40, ">|", 18, 260, 0, AnchorPresets.middleLeft, LastPage);
+            AddTooltip(paginationLastBtn, "Last Page");
+
+            // Selection / Grid Controls
+            selectAllBtn = UI.CreateUIButton(pageContainer, 40, 40, "A", 20, 310, 0, AnchorPresets.middleLeft, SelectAll);
+            AddTooltip(selectAllBtn, "Select All");
+            clearSelectionBtn = UI.CreateUIButton(pageContainer, 40, 40, "C", 20, 360, 0, AnchorPresets.middleLeft, ClearSelection);
+            AddTooltip(clearSelectionBtn, "Clear Selection");
+            gridSizeMinusBtn = UI.CreateUIButton(pageContainer, 40, 40, "-", 24, 410, 0, AnchorPresets.middleLeft, () => AdjustGridColumns(1));
+            AddTooltip(gridSizeMinusBtn, "More Columns (Smaller)");
+            gridSizePlusBtn = UI.CreateUIButton(pageContainer, 40, 40, "+", 24, 460, 0, AnchorPresets.middleLeft, () => AdjustGridColumns(-1));
+            AddTooltip(gridSizePlusBtn, "Fewer Columns (Larger)");
+
             // Follow Quick Toggles
-            footerFollowAngleBtn = UI.CreateUIButton(pageContainer, 40, 40, "∡", 20, 260, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Angle"));
+            footerFollowAngleBtn = UI.CreateUIButton(pageContainer, 40, 40, "∡", 20, 520, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
             AddTooltip(footerFollowAngleBtn, "Follow Angle");
             
-            footerFollowDistanceBtn = UI.CreateUIButton(pageContainer, 40, 40, "↕", 20, 310, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Distance"));
+            footerFollowDistanceBtn = UI.CreateUIButton(pageContainer, 40, 40, "↕", 20, 570, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Distance"));
             footerFollowDistanceImage = footerFollowDistanceBtn.GetComponent<Image>();
             AddTooltip(footerFollowDistanceBtn, "Follow Distance");
             
-            footerFollowHeightBtn = UI.CreateUIButton(pageContainer, 40, 40, "⊙", 20, 360, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Height"));
+            footerFollowHeightBtn = UI.CreateUIButton(pageContainer, 40, 40, "⊙", 20, 620, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Height"));
             footerFollowHeightImage = footerFollowHeightBtn.GetComponent<Image>();
             AddTooltip(footerFollowHeightBtn, "Follow Eye Height");
 
             // Layout Mode Toggle
-            footerLayoutBtn = UI.CreateUIButton(pageContainer, 40, 40, "▤", 20, 410, 0, AnchorPresets.middleLeft, ToggleLayoutMode);
+            footerLayoutBtn = UI.CreateUIButton(pageContainer, 40, 40, "▤", 20, 670, 0, AnchorPresets.middleLeft, ToggleLayoutMode);
             footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
             footerLayoutBtnText = footerLayoutBtn.GetComponentInChildren<Text>();
             AddTooltip(footerLayoutBtn, "Toggle Layout Mode (Grid/Card)");
 
             // Hover support
+            AddHoverDelegate(paginationFirstBtn);
             AddHoverDelegate(paginationPrevBtn);
             AddTooltip(paginationPrevBtn, "Previous Page");
             AddHoverDelegate(paginationNextBtn);
+            AddHoverDelegate(paginationLastBtn);
+            AddHoverDelegate(selectAllBtn);
+            AddHoverDelegate(clearSelectionBtn);
+            AddHoverDelegate(gridSizeMinusBtn);
+            AddHoverDelegate(gridSizePlusBtn);
             AddHoverDelegate(footerFollowAngleBtn);
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
@@ -103,12 +127,13 @@ namespace VPB
             hoverPathRT.anchorMax = new Vector2(1, 0); // To right
             hoverPathRT.pivot = new Vector2(1, 0);
             hoverPathRT.anchoredPosition = new Vector2(-60, 10); // Offset from right scrollbar
-            hoverPathRT.offsetMin = new Vector2(510, 10); // Start after pagination + new buttons
+            hoverPathRT.offsetMin = new Vector2(780, 10); // Start after pagination + new buttons
             hoverPathRT.offsetMax = new Vector2(-60, 75); // End before scrollbar, taller to show full file name
 
             UpdateSideButtonsVisibility();
             UpdateFooterFollowStates();
             UpdateFooterLayoutState();
+            UpdatePaginationText();
         }
 
         private void ToggleLayoutMode()
@@ -122,6 +147,7 @@ namespace VPB
                 if (adaptive != null)
                 {
                     adaptive.isVerticalCard = (layoutMode == GalleryLayoutMode.VerticalCard);
+                    adaptive.forcedColumnCount = gridColumnCount;
                     adaptive.UpdateGrid();
                 }
             }
@@ -318,6 +344,18 @@ namespace VPB
             RefreshFiles();
         }
 
+        private void FirstPage()
+        {
+            currentPage = 0;
+            RefreshFiles(false, true);
+        }
+
+        private void LastPage()
+        {
+            currentPage = Mathf.Max(0, lastTotalPages - 1);
+            RefreshFiles();
+        }
+
         private void PrevPage()
         {
             if (currentPage > 0)
@@ -327,45 +365,75 @@ namespace VPB
             }
         }
 
-        private GameObject CreateCancelButtonsGroup(GameObject parent, float btnWidth, float btnHeight, float yOffset)
+        private void SelectAll()
         {
-            float tallHeight = btnHeight * 3f + 8f;
-            GameObject container = UI.AddChildGOImage(parent, new Color(0, 0, 0, 0.02f), AnchorPresets.centre, btnWidth, tallHeight, new Vector2(0, yOffset));
-            container.name = "CancelButtons";
-            VerticalLayoutGroup vlg = container.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 0f;
-            vlg.childControlHeight = true;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childAlignment = TextAnchor.MiddleCenter;
+            selectedFiles.Clear();
+            selectedFilePaths.Clear();
+            selectionAnchorPath = null;
 
-            GameObject btn = UI.CreateUIButton(container, btnWidth, tallHeight, "Release\nHere To\nCancel", 18, 0, 0, AnchorPresets.centre, null);
-            RectTransform rt = btn.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(btnWidth, tallHeight);
-            LayoutElement le = btn.AddComponent<LayoutElement>();
-            le.preferredHeight = tallHeight;
-            le.preferredWidth = btnWidth;
-
-            Image img = btn.GetComponent<Image>();
-            if (img != null) img.color = cancelZoneNormalColor;
-            Text t = btn.GetComponentInChildren<Text>();
-            if (t != null)
+            for (int i = 0; i < lastFilteredFiles.Count; i++)
             {
-                t.color = new Color(1f, 1f, 1f, 0.9f);
-                t.alignment = TextAnchor.MiddleCenter;
-                t.supportRichText = false;
+                var f = lastFilteredFiles[i];
+                if (f == null || string.IsNullOrEmpty(f.Path)) continue;
+                if (selectedFilePaths.Add(f.Path)) selectedFiles.Add(f);
             }
 
-            cancelDropZoneRTs.Add(rt);
-            cancelDropZoneImages.Add(img);
-            cancelDropZoneTexts.Add(t);
-            AddHoverDelegate(btn);
+            if (selectedFiles.Count > 0)
+            {
+                selectedPath = selectedFiles[0].Path;
+                selectionAnchorPath = selectedPath;
+                SetHoverPath(selectedPath);
+            }
+            else
+            {
+                selectedPath = null;
+                SetHoverPath("");
+            }
 
-            AddHoverDelegate(container);
-            container.SetActive(false);
-            cancelDropGroups.Add(container);
-            return container;
+            RefreshFiles(true);
+            UpdatePaginationText();
+            actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
+        }
+
+        private void ClearSelection()
+        {
+            selectedFiles.Clear();
+            selectedFilePaths.Clear();
+            selectionAnchorPath = null;
+            selectedPath = null;
+            selectedHubItem = null;
+            SetHoverPath("");
+            RefreshFiles(true);
+            UpdatePaginationText();
+            actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
+        }
+
+        private void AdjustGridColumns(int delta)
+        {
+            gridColumnCount = Mathf.Clamp(gridColumnCount + delta, 1, 12);
+            if (contentGO != null)
+            {
+                UIGridAdaptive adaptive = contentGO.GetComponent<UIGridAdaptive>();
+                if (adaptive != null)
+                {
+                    adaptive.forcedColumnCount = gridColumnCount;
+                    adaptive.UpdateGrid();
+                }
+            }
+            RefreshFiles(true);
+        }
+
+        private void UpdatePaginationText()
+        {
+            if (paginationText != null)
+            {
+                int page = currentPage + 1;
+                int totalPages = Mathf.Max(1, lastTotalPages);
+                int total = Mathf.Max(0, lastTotalItems);
+                int showing = Mathf.Max(0, lastShownCount);
+                int selectedCount = selectedFilePaths != null ? selectedFilePaths.Count : 0;
+                paginationText.text = $"{page} / {totalPages} (Showing {showing} of {total}{(selectedCount > 0 ? $" ({selectedCount} selected)" : "")})";
+            }
         }
 
         private void ToggleRight(ContentType type)
@@ -782,10 +850,63 @@ namespace VPB
             UpdateListPositions(rightSideButtons, topY, spacing, groupGap);
             UpdateListPositions(leftSideButtons, topY, spacing, groupGap);
 
+            // Cancel zones (created lazily)
+            if (rightCancelGroups.Count == 0 && rightSideContainer != null)
+            {
+                var g = CreateCancelDropGroup(rightSideContainer, 120f, 50f);
+                rightCancelGroups.Add(g);
+            }
+            if (leftCancelGroups.Count == 0 && leftSideContainer != null)
+            {
+                var g = CreateCancelDropGroup(leftSideContainer, 120f, 50f);
+                leftCancelGroups.Add(g);
+            }
+
             // Cancel zones
             float cancelY = -topY - 80f;
             foreach (var go in rightCancelGroups) if (go != null) go.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, cancelY);
             foreach (var go in leftCancelGroups) if (go != null) go.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, cancelY);
+        }
+
+        private GameObject CreateCancelDropGroup(GameObject parent, float btnWidth, float btnHeight)
+        {
+            float tallHeight = btnHeight * 3f + 8f;
+            GameObject container = UI.AddChildGOImage(parent, new Color(0, 0, 0, 0.02f), AnchorPresets.centre, btnWidth, tallHeight, Vector2.zero);
+            container.name = "CancelButtons";
+            VerticalLayoutGroup vlg = container.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = 0f;
+            vlg.childControlHeight = true;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childAlignment = TextAnchor.MiddleCenter;
+
+            GameObject btn = UI.CreateUIButton(container, btnWidth, tallHeight, "Release\nHere To\nCancel", 18, 0, 0, AnchorPresets.centre, null);
+            RectTransform rt = btn.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(btnWidth, tallHeight);
+            LayoutElement le = btn.AddComponent<LayoutElement>();
+            le.preferredHeight = tallHeight;
+            le.preferredWidth = btnWidth;
+
+            Image img = btn.GetComponent<Image>();
+            if (img != null) img.color = cancelZoneNormalColor;
+            Text t = btn.GetComponentInChildren<Text>();
+            if (t != null)
+            {
+                t.color = new Color(1f, 1f, 1f, 0.9f);
+                t.alignment = TextAnchor.MiddleCenter;
+                t.supportRichText = false;
+            }
+
+            cancelDropZoneRTs.Add(rt);
+            cancelDropZoneImages.Add(img);
+            cancelDropZoneTexts.Add(t);
+            AddHoverDelegate(btn);
+
+            AddHoverDelegate(container);
+            container.SetActive(false);
+            cancelDropGroups.Add(container);
+            return container;
         }
 
         private SideButtonLayoutEntry[] GetSideButtonsLayout()
