@@ -8,338 +8,359 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Linq;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using UnityEngine;
 using Prime31.MessageKit;
+
 namespace VPB
 {
-	public class FileManager : MonoBehaviour
-	{
-		public delegate void OnRefresh();
+    public class FileManager : MonoBehaviour
+    {
+        public delegate void OnRefresh();
 
-		public static bool debug;
+        public static bool debug;
 
-		public static FileManager singleton;
+        public static FileManager singleton;
 
-		protected static Dictionary<string, VarPackage> packagesByUid;
-		public static Dictionary<string, VarPackage> PackagesByUid
+        protected static Dictionary<string, VarPackage> packagesByUid;
+        public static Dictionary<string, VarPackage> PackagesByUid
         {
             get
             {
-				return packagesByUid;
+                return packagesByUid;
 
-			}
+            }
         }
 
-		protected static Dictionary<string, VarPackage> packagesByPath;
+        protected static Dictionary<string, VarPackage> packagesByPath;
 
-		protected static Dictionary<string, VarPackageGroup> packageGroups;
-		protected static HashSet<VarFileEntry> allVarFileEntries;
-		protected static Dictionary<string, VarFileEntry> uidToVarFileEntry;
-		protected static Dictionary<string, VarFileEntry> pathToVarFileEntry;
-		protected static OnRefresh onRefreshHandlers;
-		protected static HashSet<string> restrictedReadPaths;
+        protected static Dictionary<string, VarPackageGroup> packageGroups;
+        protected static HashSet<VarFileEntry> allVarFileEntries;
+        protected static Dictionary<string, VarFileEntry> uidToVarFileEntry;
+        protected static Dictionary<string, VarFileEntry> pathToVarFileEntry;
+        protected static OnRefresh onRefreshHandlers;
+        protected static HashSet<string> restrictedReadPaths;
 
-		protected static HashSet<string> secureReadPaths;
+        protected static HashSet<string> secureReadPaths;
 
-		protected static HashSet<string> secureInternalWritePaths;
+        protected static HashSet<string> secureInternalWritePaths;
 
-		protected static HashSet<string> securePluginWritePaths;
+        protected static HashSet<string> securePluginWritePaths;
 
-		protected static HashSet<string> pluginWritePathsThatDoNotNeedConfirm;
+        protected static HashSet<string> pluginWritePathsThatDoNotNeedConfirm;
 
-		public Transform userConfirmContainer;
+        public Transform userConfirmContainer;
 
-		public Transform userConfirmPrefab;
+        public Transform userConfirmPrefab;
 
-		public Transform userConfirmPluginActionPrefab;
+        public Transform userConfirmPluginActionPrefab;
 
-		protected static Dictionary<string, string> pluginHashToPluginPath;
+        protected static Dictionary<string, string> pluginHashToPluginPath;
 
-		//protected AsyncFlag userConfirmFlag;
+        //protected AsyncFlag userConfirmFlag;
 
-		//protected static HashSet<string> userConfirmedPlugins;
+        //protected static HashSet<string> userConfirmedPlugins;
 
-		//protected static HashSet<string> userDeniedPlugins;
+        //protected static HashSet<string> userDeniedPlugins;
 
-		protected static LinkedList<string> loadDirStack;
+        protected static LinkedList<string> loadDirStack;
 
-	public static int s_InstalledCount = 0;
-		public static DateTime lastPackageRefreshTime
-		{
-			get;
-			protected set;
-		}
+        public static int s_InstalledCount = 0;
+        public static DateTime lastPackageRefreshTime
+        {
+            get;
+            protected set;
+        }
 
-		public static string CurrentLoadDir
-		{
-			get
-			{
-				if (loadDirStack != null && loadDirStack.Count > 0)
-				{
-					return loadDirStack.Last.Value;
-				}
-				return null;
-			}
-		}
+        public static string CurrentLoadDir
+        {
+            get
+            {
+                if (loadDirStack != null && loadDirStack.Count > 0)
+                {
+                    return loadDirStack.Last.Value;
+                }
+                return null;
+            }
+        }
 
-		public static string CurrentPackageUid
-		{
-			get
-			{
-				string currentLoadDir = CurrentLoadDir;
-				if (currentLoadDir != null)
-				{
-					VarDirectoryEntry varDirectoryEntry = GetVarDirectoryEntry(currentLoadDir);
-					if (varDirectoryEntry != null)
-					{
-						return varDirectoryEntry.Package.Uid;
-					}
-				}
-				return null;
-			}
-		}
+        public static string CurrentPackageUid
+        {
+            get
+            {
+                string currentLoadDir = CurrentLoadDir;
+                if (currentLoadDir != null)
+                {
+                    VarDirectoryEntry varDirectoryEntry = GetVarDirectoryEntry(currentLoadDir);
+                    if (varDirectoryEntry != null)
+                    {
+                        return varDirectoryEntry.Package.Uid;
+                    }
+                }
+                return null;
+            }
+        }
 
-		public static string TopLoadDir
-		{
-			get
-			{
-				if (loadDirStack != null && loadDirStack.Count > 0)
-				{
-					return loadDirStack.First.Value;
-				}
-				return null;
-			}
-		}
+        public static string TopLoadDir
+        {
+            get
+            {
+                if (loadDirStack != null && loadDirStack.Count > 0)
+                {
+                    return loadDirStack.First.Value;
+                }
+                return null;
+            }
+        }
 
-		public static string TopPackageUid
-		{
-			get
-			{
-				string topLoadDir = TopLoadDir;
-				if (topLoadDir != null)
-				{
-					VarDirectoryEntry varDirectoryEntry = GetVarDirectoryEntry(topLoadDir);
-					if (varDirectoryEntry != null)
-					{
-						return varDirectoryEntry.Package.Uid;
-					}
-				}
-				return null;
-			}
-		}
+        public static string TopPackageUid
+        {
+            get
+            {
+                string topLoadDir = TopLoadDir;
+                if (topLoadDir != null)
+                {
+                    VarDirectoryEntry varDirectoryEntry = GetVarDirectoryEntry(topLoadDir);
+                    if (varDirectoryEntry != null)
+                    {
+                        return varDirectoryEntry.Package.Uid;
+                    }
+                }
+                return null;
+            }
+        }
 
-		public static string CurrentSaveDir
-		{
-			get;
-			protected set;
-		}
+        public static string CurrentSaveDir
+        {
+            get;
+            protected set;
+        }
 
-		protected static string packagePathToUid(string vpath)
-		{
-			string input = vpath.Replace('\\', '/');
-			input = Regex.Replace(input, "\\.(var|zip)$", string.Empty);
-			return Regex.Replace(input, ".*/", string.Empty);
-		}
+        protected static string packagePathToUid(string vpath)
+        {
+            string input = vpath.Replace('\\', '/');
+            input = Regex.Replace(input, "\\.(var|zip)$", string.Empty);
+            return Regex.Replace(input, ".*/", string.Empty);
+        }
 
-		protected static VarPackage RegisterPackage(string vpath,bool clean=false)
-		{
+        protected static VarPackage RegisterPackage(string vpath, bool clean = false)
+        {
             if (debug)
             {
-				LogUtil.Log("RegisterPackage " + vpath);
-			}
-			string text = packagePathToUid(vpath).Trim();
-			string[] array = text.Split('.');
+                LogUtil.Log("RegisterPackage " + vpath);
+            }
+            string text = packagePathToUid(vpath).Trim();
+            string[] array = text.Split('.');
 
-			bool isDuplicated = false;
-			if (array.Length == 3)
-			{
-				string text2 = array[0];
-				string text3 = array[1];
-				string shortName = text2 + "." + text3;
-				string s = array[2];
-				try
-				{
-					int version;
+            bool isDuplicated = false;
+            if (array.Length == 3)
+            {
+                string text2 = array[0];
+                string text3 = array[1];
+                string shortName = text2 + "." + text3;
+                string s = array[2];
+                try
+                {
+                    int version;
                     if (!int.TryParse(s, out version))
                     {
-                         // Relaxed parsing for malformed versions like "1_1" -> 11, "1 (1)" -> 11
-                         string cleanS = Regex.Replace(s, "[^0-9]", "");
-                         if (!int.TryParse(cleanS, out version))
-                         {
-                             throw new FormatException($"Cannot parse version from '{s}'");
-                         }
-                         LogUtil.LogWarning($"[VPB] Parsed malformed version '{s}' as '{version}' for package {text}");
+                        // Relaxed parsing for malformed versions like "1_1" -> 11, "1 (1)" -> 11
+                        string cleanS = Regex.Replace(s, "[^0-9]", "");
+                        if (!int.TryParse(cleanS, out version))
+                        {
+                            throw new FormatException($"Cannot parse version from '{s}'");
+                        }
+                        LogUtil.LogWarning($"[VPB] Parsed malformed version '{s}' as '{version}' for package {text}");
                     }
 
-					if (!packagesByUid.ContainsKey(text))
-					{
-						VarPackageGroup value;
-						if (!packageGroups.TryGetValue(shortName, out value))
-						{
-							value = new VarPackageGroup(shortName);
-							packageGroups.Add(shortName, value);
-						}
-						VarPackage varPackage = new VarPackage(text, vpath, value, text2, text3, version);
-						packagesByUid.Add(text, varPackage);
+                    if (!packagesByUid.ContainsKey(text))
+                    {
+                        VarPackageGroup value;
+                        if (!packageGroups.TryGetValue(shortName, out value))
+                        {
+                            value = new VarPackageGroup(shortName);
+                            packageGroups.Add(shortName, value);
+                        }
+                        VarPackage varPackage = new VarPackage(text, vpath, value, text2, text3, version);
+                        packagesByUid.Add(text, varPackage);
 
-						packagesByPath.Add(varPackage.Path, varPackage);
-						value.AddPackage(varPackage);
+                        packagesByPath.Add(varPackage.Path, varPackage);
+                        value.AddPackage(varPackage);
 
-						// Disabling a var package means creating a "disable" file in the same path
-						if (varPackage.Enabled)
-						{
-							if (varPackage.FileEntries != null)
-							{
-								foreach (VarFileEntry fileEntry in varPackage.FileEntries)
-								{
-									allVarFileEntries.Add(fileEntry);
-									uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
-									pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
-								}
-							}
-						}
-						return varPackage;
-					}
-					isDuplicated = true;
-					LogUtil.LogError("Duplicate package uid " + text + ". Cannot register");
-				}
-				catch (Exception)
-				{
-					LogUtil.LogError("VAR file " + vpath + " does not use integer version field in name <creator>.<name>.<version>");
-				}
-			}
-			else
-			{
-				LogUtil.LogError("VAR file " + vpath + " is not named with convention <creator>.<name>.<version>");
-			}
+                        // Disabling a var package means creating a "disable" file in the same path
+                        if (varPackage.Enabled)
+                        {
+                            if (varPackage.FileEntries != null)
+                            {
+                                foreach (VarFileEntry fileEntry in varPackage.FileEntries)
+                                {
+                                    allVarFileEntries.Add(fileEntry);
+                                    uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
+                                    pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
+                                }
+                            }
+                        }
+                        return varPackage;
+                    }
+                    isDuplicated = true;
+                    VarPackage existing;
+                    if (packagesByUid.TryGetValue(text, out existing))
+                    {
+                        LogUtil.LogError("Duplicate package uid " + text + ". Existing: " + existing.Path + " New: " + vpath + ". Cannot register");
+                    }
+                    else
+                    {
+                        LogUtil.LogError("Duplicate package uid " + text + ". Cannot register");
+                    }
+                }
+                catch (Exception)
+                {
+                    LogUtil.LogError("VAR file " + vpath + " does not use integer version field in name <creator>.<name>.<version>");
+                }
+            }
+            else
+            {
+                LogUtil.LogError("VAR file " + vpath + " is not named with convention <creator>.<name>.<version>");
+            }
 
-			// Reaching here means it is invalid
-			if (clean)
-			{
-				if (isDuplicated)
-				{
-					RemoveToInvalid(vpath, "Duplicated");
-				}
-				else
-					RemoveToInvalid(vpath,"InvalidName");
-			}
-			return null;
-		}
-		public struct CleanupItem
-		{
-			public string Path;
-			public string Uid;
-			public string Type; // "Duplicated", "InvalidName", "OldVersion", "InvalidZip"
-		}
+            // Reaching here means it is invalid
+            if (clean)
+            {
+                if (isDuplicated)
+                {
+                    RemoveToInvalid(vpath, "Duplicated");
+                }
+                else
+                    RemoveToInvalid(vpath, "InvalidName");
+            }
+            return null;
+        }
 
-		public static List<CleanupItem> GetCleanupList(bool checkOldVersions)
-		{
-			List<CleanupItem> items = new List<CleanupItem>();
-			
-			// Get all var files
-			List<string> allFiles = new List<string>();
-			if (Directory.Exists("AddonPackages"))
-				allFiles.AddRange(Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories));
-			if (Directory.Exists("AllPackages"))
-				allFiles.AddRange(Directory.GetFiles("AllPackages", "*.var", SearchOption.AllDirectories));
+        public struct CleanupItem
+        {
+            public string Path;
+            public string Uid;
+            public string Type; // "Duplicated", "InvalidName", "OldVersion", "InvalidZip"
+        }
 
-			// 1. Check for Invalid Names and Duplicates
-			// We build a temporary index to find duplicates
-			Dictionary<string, string> uidToPath = new Dictionary<string, string>();
+        public static List<CleanupItem> GetCleanupList(bool checkOldVersions)
+        {
+            List<CleanupItem> items = new List<CleanupItem>();
 
-			foreach (string file in allFiles)
-			{
-				string vpath = CleanFilePath(file);
-				string uidText = packagePathToUid(vpath).Trim();
-				string[] array = uidText.Split('.');
+            // Get all var files
+            List<string> allFiles = new List<string>();
+            if (Directory.Exists("AddonPackages"))
+                allFiles.AddRange(Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories));
+            if (Directory.Exists("AllPackages"))
+                allFiles.AddRange(Directory.GetFiles("AllPackages", "*.var", SearchOption.AllDirectories));
 
-				if (array.Length == 3)
-				{
-					string s = array[2];
-					int version;
-					if (int.TryParse(s, out version))
-					{
-						// Valid name format
-						if (uidToPath.ContainsKey(uidText))
-						{
-							// Duplicate
-							if (packagesByUid != null && packagesByUid.ContainsKey(uidText))
-							{
-								var registered = packagesByUid[uidText];
-								if (registered.Path != vpath)
-								{
-									items.Add(new CleanupItem { Path = vpath, Uid = uidText, Type = "Duplicated" });
-								}
-							}
-							else
-							{
-								items.Add(new CleanupItem { Path = vpath, Uid = uidText, Type = "Duplicated" });
-							}
-						}
-						else
-						{
-							uidToPath[uidText] = vpath;
-						}
-					}
-					else
-					{
-						items.Add(new CleanupItem { Path = vpath, Uid = uidText, Type = "InvalidName" });
-					}
-				}
-				else
-				{
-					items.Add(new CleanupItem { Path = vpath, Uid = uidText, Type = "InvalidName" });
-				}
-			}
+            // 1. Check for Invalid Names and Duplicates
+            // We build a temporary index to find duplicates
+            Dictionary<string, string> uidToPath = new Dictionary<string, string>();
 
-			// 2. Check for Invalid Zips (must be in PackagesByUid and marked invalid)
-			if (packagesByUid != null)
-			{
-				foreach (var pkg in packagesByUid.Values)
-				{
-					if (pkg.invalid)
-					{
-						items.Add(new CleanupItem { Path = pkg.Path, Uid = pkg.Uid, Type = "InvalidZip" });
-					}
-				}
-			}
+            HashSet<string> seenFileIds = new HashSet<string>();
+            foreach (string _varPath in allFiles)
+            {
+                string fileId;
+                if (TryGetWindowsFileId(_varPath, out fileId))
+                {
+                    if (!seenFileIds.Add(fileId))
+                    {
+                        continue;
+                    }
+                }
+                string varPath = CleanFilePath(_varPath);
+                string uidText = packagePathToUid(varPath).Trim();
+                string[] array = uidText.Split('.');
 
-			// 3. Check for Old Versions
-			if (checkOldVersions && packageGroups != null)
-			{
-				HashSet<string> referenced = GetReferencedPackage();
-				foreach (var group in packageGroups.Values)
-				{
-					foreach (var pkg in group.Packages)
-					{
-						if (pkg.Version != group.NewestVersion)
-						{
-							if (!referenced.Contains(pkg.Uid))
-							{
-								bool exists = false;
-								foreach(var it in items) { if(it.Path == pkg.Path) { exists=true; break; } }
-								
-								if (!exists)
-								{
-									items.Add(new CleanupItem { Path = pkg.Path, Uid = pkg.Uid, Type = "OldVersion" });
-								}
-							}
-						}
-					}
-				}
-			}
+                if (array.Length == 3)
+                {
+                    string s = array[2];
+                    int version;
+                    if (int.TryParse(s, out version))
+                    {
+                        // Valid name format
+                        if (uidToPath.ContainsKey(uidText))
+                        {
+                            // Duplicate
+                            if (packagesByUid != null && packagesByUid.ContainsKey(uidText))
+                            {
+                                var registered = packagesByUid[uidText];
+                                if (registered.Path != varPath)
+                                {
+                                    items.Add(new CleanupItem { Path = varPath, Uid = uidText, Type = "Duplicated" });
+                                }
+                            }
+                            else
+                            {
+                                items.Add(new CleanupItem { Path = varPath, Uid = uidText, Type = "Duplicated" });
+                            }
+                        }
+                        else
+                        {
+                            uidToPath[uidText] = varPath;
+                        }
+                    }
+                    else
+                    {
+                        items.Add(new CleanupItem { Path = varPath, Uid = uidText, Type = "InvalidName" });
+                    }
+                }
+                else
+                {
+                    items.Add(new CleanupItem { Path = varPath, Uid = uidText, Type = "InvalidName" });
+                }
+            }
 
-			return items;
-		}
+            // 2. Check for Invalid Zips (must be in PackagesByUid and marked invalid)
+            if (packagesByUid != null)
+            {
+                foreach (var pkg in packagesByUid.Values)
+                {
+                    if (pkg.invalid)
+                    {
+                        items.Add(new CleanupItem { Path = pkg.Path, Uid = pkg.Uid, Type = "InvalidZip" });
+                    }
+                }
+            }
 
-		public static void RemoveToInvalid(string vpath,string subPath=null)
+            // 3. Check for Old Versions
+            if (checkOldVersions && packageGroups != null)
+            {
+                HashSet<string> referenced = GetReferencedPackage();
+                foreach (var group in packageGroups.Values)
+                {
+                    foreach (var pkg in group.Packages)
+                    {
+                        if (pkg.Version != group.NewestVersion)
+                        {
+                            if (!referenced.Contains(pkg.Uid))
+                            {
+                                bool exists = false;
+                                foreach (var it in items) { if (it.Path == pkg.Path) { exists = true; break; } }
+
+                                if (!exists)
+                                {
+                                    items.Add(new CleanupItem { Path = pkg.Path, Uid = pkg.Uid, Type = "OldVersion" });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return items;
+        }
+
+        public static void RemoveToInvalid(string vpath, string subPath = null)
         {
             if (!Directory.Exists("InvalidPackages"))
                 Directory.CreateDirectory("InvalidPackages");
 
             if (!string.IsNullOrEmpty(subPath))
             {
-				if (!Directory.Exists("InvalidPackages/"+ subPath))
+                if (!Directory.Exists("InvalidPackages/" + subPath))
                     Directory.CreateDirectory("InvalidPackages/" + subPath);
             }
 
@@ -349,7 +370,7 @@ namespace VPB
                 moveToPath = "InvalidPackages" + vpath.Substring("AllPackages".Length);
                 if (!string.IsNullOrEmpty(subPath))
                 {
-					moveToPath = "InvalidPackages/"+subPath+"/" + vpath.Substring("AllPackages".Length);
+                    moveToPath = "InvalidPackages/" + subPath + "/" + vpath.Substring("AllPackages".Length);
                 }
             }
             else if (vpath.StartsWith("AddonPackages"))
@@ -361,7 +382,7 @@ namespace VPB
                 }
             }
             string dir = Path.GetDirectoryName(moveToPath);
-			if(!Directory.Exists(dir))
+            if (!Directory.Exists(dir))
             {
                 Directory.CreateDirectory(dir);
             }
@@ -405,10 +426,7 @@ namespace VPB
         {
             onRefreshHandlers = (OnRefresh)Delegate.Remove(onRefreshHandlers, refreshHandler);
         }
-		//public static void DoFixVarNameLog(string log)
-		//{
-		//	File.AppendAllText(GlobalInfo.FixVarNamePath, System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " : " + log + "\n");
-		//}
+
         protected static void ClearAll()
         {
             foreach (VarPackage value in packagesByUid.Values)
@@ -441,7 +459,7 @@ namespace VPB
             }
         }
 
-		public static void Refresh(bool init = false,bool clean=false,bool removeOldVersion=false)
+        public static void Refresh(bool init = false, bool clean = false, bool removeOldVersion = false)
         {
 #if DEBUG
             string stackTrace = new System.Diagnostics.StackTrace().ToString();
@@ -449,7 +467,7 @@ namespace VPB
 #endif
             //if (debug)
             {
-                LogUtil.LogWarning(string.Format("FileManager Refresh({0},{1},{2})",init,clean,removeOldVersion));
+                LogUtil.LogWarning(string.Format("FileManager Refresh({0},{1},{2})", init, clean, removeOldVersion));
             }
             if (packagesByUid == null)
             {
@@ -509,8 +527,17 @@ namespace VPB
                     if (varPaths != null)
                     {
                         string[] _varPaths = varPaths;
+                        HashSet<string> seenFileIds = new HashSet<string>();
                         foreach (string _varPath in _varPaths)
                         {
+                            string fileId;
+                            if (TryGetWindowsFileId(_varPath, out fileId))
+                            {
+                                if (!seenFileIds.Add(fileId))
+                                {
+                                    continue;
+                                }
+                            }
                             string varPath = CleanFilePath(_varPath);
                             hashSet.Add(varPath);
 
@@ -1533,6 +1560,49 @@ namespace VPB
 			return path?.Replace('\\', '/');
 		}
 
+		[StructLayout(LayoutKind.Sequential)]
+		private struct BY_HANDLE_FILE_INFORMATION
+		{
+			public uint FileAttributes;
+			public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+			public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+			public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+			public uint VolumeSerialNumber;
+			public uint FileSizeHigh;
+			public uint FileSizeLow;
+			public uint NumberOfLinks;
+			public uint FileIndexHigh;
+			public uint FileIndexLow;
+		}
+
+		[DllImport("kernel32.dll", SetLastError = true)]
+		private static extern bool GetFileInformationByHandle(IntPtr hFile, out BY_HANDLE_FILE_INFORMATION lpFileInformation);
+
+		private static bool TryGetWindowsFileId(string path, out string fileId)
+		{
+			fileId = null;
+			try
+			{
+				if (string.IsNullOrEmpty(path) || !File.Exists(path))
+					return false;
+
+				using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+				{
+					BY_HANDLE_FILE_INFORMATION info;
+					if (!GetFileInformationByHandle(fs.SafeFileHandle.DangerousGetHandle(), out info))
+						return false;
+
+					ulong index = ((ulong)info.FileIndexHigh << 32) | info.FileIndexLow;
+					fileId = info.VolumeSerialNumber.ToString("X8") + ":" + index.ToString("X16");
+					return true;
+				}
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
 		public static void SafeGetFiles(string path, string pattern, List<string> results)
 		{
 			try
@@ -1548,6 +1618,18 @@ namespace VPB
 					{
 						// Skip InvalidPackages to avoid re-scanning rejected files
 						if (Path.GetFileName(dir).Equals("InvalidPackages", StringComparison.OrdinalIgnoreCase)) continue;
+						try
+						{
+							var di = new DirectoryInfo(dir);
+							if ((di.Attributes & FileAttributes.ReparsePoint) != 0)
+							{
+								continue;
+							}
+						}
+						catch
+						{
+							continue;
+						}
 						SafeGetFiles(dir, pattern, results);
 					}
 				}
