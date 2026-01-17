@@ -482,5 +482,23 @@ namespace VPB
 
             return true;
         }
+
+        private void ClearCurrentFilter(bool isRight)
+        {
+            ContentType? type = isRight ? rightActiveContent : leftActiveContent;
+            
+            if (!type.HasValue) return;
+
+            // Simply close the panel (toggle off)
+            if (isRight) ToggleRight(type.Value);
+            else ToggleLeft(type.Value);
+            
+            // Optionally clear filters if desired, but "X" on a side tab usually implies "Close this tab"
+            // If the user meant "Clear Filter" specifically for search text, that's inside the panel.
+            // "the X button should be on the outside of the side buttons... side buttons that are being hidden"
+            // This strongly suggests a close button for the side panel overlay.
+            
+            UpdateTabs();
+        }
     }
 }

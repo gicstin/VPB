@@ -879,6 +879,13 @@ namespace VPB
             }
         }
 
+        public void DisplayColorPicker(string title, Color initialColor, UnityAction<Color> onConfirm)
+        {
+             // Use the singleton
+             if (UIColorPicker.Instance != null)
+                UIColorPicker.Instance.Show(initialColor, (c) => onConfirm?.Invoke(c));
+        }
+
         public void DisplayTextInput(string title, string initialValue, UnityAction<string> onConfirm)
         {
             GameObject overlayGO = new GameObject("TextInputOverlay");

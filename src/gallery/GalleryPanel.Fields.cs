@@ -197,6 +197,10 @@ namespace VPB
         private List<RectTransform> leftSideButtons = new List<RectTransform>();
         private List<GameObject> rightCancelGroups = new List<GameObject>();
         private List<GameObject> leftCancelGroups = new List<GameObject>();
+        private GameObject leftClearCreatorBtn;
+        private GameObject leftClearStatusBtn;
+        private GameObject rightClearCreatorBtn;
+        private GameObject rightClearStatusBtn;
 
         // Settings Pane
         private SettingsPanel settingsPanel;

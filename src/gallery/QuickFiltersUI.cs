@@ -297,9 +297,8 @@ namespace VPB
             }));
 
             options.Add(new ContextMenuPanel.Option("Change Color", () => {
-                string currentHex = QuickFilterEntry.ColorToHex(entry.ButtonColor);
-                panel.DisplayTextInput("Edit Color (Hex)", currentHex, (string val) => {
-                    entry.ButtonColor = QuickFilterEntry.HexToColor(val);
+                panel.DisplayColorPicker("Edit Color", entry.ButtonColor, (Color val) => {
+                    entry.ButtonColor = val;
                     QuickFilterSettings.Instance.Save();
                     Refresh();
                 });

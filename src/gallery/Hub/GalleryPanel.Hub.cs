@@ -58,7 +58,13 @@ namespace VPB
                         if (titleText != null) titleText.text = "HUB: " + cat;
                         RefreshHubItems();
                         UpdateTabs(); 
-                    }, trackedButtons);
+                    }, trackedButtons, () => {
+                        currentHubCategory = "All";
+                        currentPage = 0;
+                        if (titleText != null) titleText.text = "HUB: All";
+                        RefreshHubItems();
+                        UpdateTabs(); 
+                    });
                  }
             }, (err) => {
                  if (!IsHubMode) return;
@@ -95,7 +101,12 @@ namespace VPB
                         currentPage = 0;
                         RefreshHubItems();
                         UpdateTabs(); 
-                    }, trackedButtons);
+                    }, trackedButtons, () => {
+                        currentHubPayType = "All";
+                        currentPage = 0;
+                        RefreshHubItems();
+                        UpdateTabs(); 
+                    });
                  }
             }, null);
         }
@@ -154,7 +165,12 @@ namespace VPB
                         currentPage = 0;
                         RefreshHubItems();
                         UpdateTabs(); 
-                    }, trackedButtons);
+                    }, trackedButtons, () => {
+                        currentHubCreator = "All";
+                        currentPage = 0;
+                        RefreshHubItems();
+                        UpdateTabs(); 
+                    });
                  }
 
                  if (hubCreatorPage < totalCreatorPages - 1)

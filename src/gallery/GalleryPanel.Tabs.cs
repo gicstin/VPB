@@ -36,6 +36,7 @@ namespace VPB
             if (IsHubMode)
             {
                 UpdateHubLayout();
+                UpdateSideButtonsVisibility();
                 return;
             }
 
@@ -219,6 +220,8 @@ namespace VPB
                     UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                 }
             }
+
+            UpdateSideButtonsVisibility();
         }
 
         private void UpdateHubLayout()
@@ -347,7 +350,15 @@ namespace VPB
                             Settings.Instance.LastGalleryPage.Value = c.name;
                         }
                         UpdateTabs();
-                    }, trackedButtons);
+                    }, trackedButtons, () => {
+                        currentPath = "";
+                        currentPaths = null;
+                        currentExtension = "";
+                        if (titleText != null) titleText.text = "All Categories";
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    });
                 }
             }
             else if (contentType == ContentType.Creator)
@@ -377,7 +388,14 @@ namespace VPB
                         currentPage = 0;
                         RefreshFiles();
                         UpdateTabs(); 
-                    }, trackedButtons);
+                    }, trackedButtons, () => {
+                        currentCreator = "";
+                        categoriesCached = false;
+                        tagsCached = false;
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    });
                 }
             }
             else if (contentType == ContentType.Status)
@@ -406,7 +424,12 @@ namespace VPB
                         currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
-                    }, trackedButtons);
+                    }, trackedButtons, () => {
+                        currentStatus = "";
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    });
                 }
             }
             else if (contentType == ContentType.Ratings)
@@ -555,50 +578,54 @@ namespace VPB
             SetLayerRecursive(container, 5);
         }
 
-        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList)
+        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null)
         {
-            GameObject groupGO = GetTabButton(parent);
-            if (groupGO == null)
+            GameObject btnGO = GetTabButton(parent);
+            if (btnGO == null)
             {
-                // Container
-                groupGO = new GameObject("TabGroup");
-                groupGO.transform.SetParent(parent, false);
-                LayoutElement groupLE = groupGO.AddComponent<LayoutElement>();
-                groupLE.minWidth = 140; 
-                groupLE.preferredWidth = 170;
-                groupLE.minHeight = 35;
-                groupLE.preferredHeight = 35;
-                
-                HorizontalLayoutGroup groupHLG = groupGO.AddComponent<HorizontalLayoutGroup>();
-                groupHLG.childControlWidth = true; // Changed to true since we only have one button now
-                groupHLG.childControlHeight = true;
-                groupHLG.childForceExpandWidth = true; // Changed to true
-                groupHLG.spacing = 0;
-
-                // Tab Button
-                GameObject btnGO = UI.CreateUIButton(groupGO, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
-                btnGO.name = "Button";
+                btnGO = UI.CreateUIButton(parent.gameObject, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
                 AddHoverDelegate(btnGO);
             }
             
-            groupGO.name = "TabGroup_" + label;
-            
-            // Reconfigure
-            Transform btnTr = groupGO.transform.GetChild(0);
-            GameObject btnGO_Reuse = btnTr.gameObject;
-            Button btnComp = btnGO_Reuse.GetComponent<Button>();
+            // Check if it was a group previously (cleanup from previous implementation if pooling mixed types)
+            if (btnGO.name.StartsWith("TabGroup"))
+            {
+                // This shouldn't happen if we clean up properly, but for robustness:
+                // Destroy(btnGO);
+                // btnGO = UI.CreateUIButton(parent, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
+                // AddHoverDelegate(btnGO);
+                
+                // Better: Reuse the Button inside the group if possible, or just re-create.
+                // Since we are reverting, we assume simple button structure.
+            }
+
+            // Standard Button Configuration
+            Button btnComp = btnGO.GetComponent<Button>();
             btnComp.onClick.RemoveAllListeners();
             if (onClick != null) btnComp.onClick.AddListener(onClick);
+
+            UIRightClickDelegate rightClickDelegate = btnGO.GetComponent<UIRightClickDelegate>();
+            if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();
+            rightClickDelegate.OnRightClick = (onRightClick != null) ? (Action)(() => onRightClick.Invoke()) : null;
             
-            Image img = btnGO_Reuse.GetComponent<Image>();
+            Image img = btnGO.GetComponent<Image>();
             img.color = color;
             
-            Text txt = btnGO_Reuse.GetComponentInChildren<Text>();
+            Text txt = btnGO.GetComponentInChildren<Text>();
             txt.text = label;
             txt.fontSize = 18;
             txt.color = Color.white;
             
-            if (targetList != null) targetList.Add(groupGO);
+            // Ensure LayoutElement
+            LayoutElement le = btnGO.GetComponent<LayoutElement>();
+            if (le == null) le = btnGO.AddComponent<LayoutElement>();
+            le.minWidth = 140;
+            le.preferredWidth = 170;
+            le.minHeight = 35;
+            le.preferredHeight = 35;
+            le.flexibleWidth = 1;
+
+            if (targetList != null) targetList.Add(btnGO);
         }
 
         private InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged, Action onClear = null)
