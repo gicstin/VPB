@@ -323,6 +323,7 @@
     <Compile Include="src\gallery\GalleryPanel.IO.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
+    <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.Sorting.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />
     <Compile Include="src\gallery\GalleryPanel.Thumbnails.cs" />
@@ -331,6 +332,8 @@
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.cs" />
+    <Compile Include="src\gallery\QuickFilterSettings.cs" />
+    <Compile Include="src\gallery\QuickFiltersUI.cs" />
     <Compile Include="src\gallery\Hub\GalleryHubController.cs" />
     <Compile Include="src\gallery\Hub\GalleryHubItem.cs" />
     <Compile Include="src\gallery\Hub\GalleryPanel.Hub.cs" />

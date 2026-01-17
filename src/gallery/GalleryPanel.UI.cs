@@ -533,9 +533,10 @@ namespace VPB
             }
             
             float bottomOffset = 60;
+            float topOffset = -65f;
 
             contentScrollRT.offsetMin = new Vector2(leftOffset, bottomOffset);
-            contentScrollRT.offsetMax = new Vector2(rightOffset, -55);
+            contentScrollRT.offsetMax = new Vector2(rightOffset, topOffset);
 
             if (leftTabScrollGO != null)
             {
@@ -876,6 +877,154 @@ namespace VPB
             {
                 SetLayerRecursive(child.gameObject, layer);
             }
+        }
+
+        public void DisplayTextInput(string title, string initialValue, UnityAction<string> onConfirm)
+        {
+            GameObject overlayGO = new GameObject("TextInputOverlay");
+            overlayGO.transform.SetParent(backgroundBoxGO.transform, false);
+            RectTransform overlayRT = overlayGO.AddComponent<RectTransform>();
+            overlayRT.anchorMin = Vector2.zero;
+            overlayRT.anchorMax = Vector2.one;
+            overlayRT.sizeDelta = Vector2.zero;
+            
+            Image overlayImg = overlayGO.AddComponent<Image>();
+            overlayImg.color = new Color(0, 0, 0, 0.5f);
+            
+            // Panel
+            GameObject panelGO = new GameObject("Panel");
+            panelGO.transform.SetParent(overlayGO.transform, false);
+            RectTransform panelRT = panelGO.AddComponent<RectTransform>();
+            panelRT.sizeDelta = new Vector2(400, 200);
+            
+            Image panelImg = panelGO.AddComponent<Image>();
+            panelImg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+            
+            // Title
+            GameObject titleGO = new GameObject("Title");
+            titleGO.transform.SetParent(panelGO.transform, false);
+            Text titleText = titleGO.AddComponent<Text>();
+            titleText.text = title;
+            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            titleText.fontSize = 24;
+            titleText.color = Color.white;
+            titleText.alignment = TextAnchor.MiddleCenter;
+            RectTransform titleRT = titleGO.GetComponent<RectTransform>();
+            titleRT.anchorMin = new Vector2(0, 1);
+            titleRT.anchorMax = new Vector2(1, 1);
+            titleRT.pivot = new Vector2(0.5f, 1);
+            titleRT.anchoredPosition = new Vector2(0, -10);
+            titleRT.sizeDelta = new Vector2(0, 40);
+
+            // Input - Using CreateSearchInput logic from Tabs.cs but since it's private there, we re-implement or call if possible.
+            // Actually, CreateSearchInput is private in GalleryPanel.Tabs.cs.
+            // Let's create a simple InputField here.
+            GameObject inputGO = new GameObject("InputField");
+            inputGO.transform.SetParent(panelGO.transform, false);
+            Image inputBg = inputGO.AddComponent<Image>();
+            inputBg.color = new Color(0.2f, 0.2f, 0.2f, 1f);
+            InputField input = inputGO.AddComponent<InputField>();
+            RectTransform inputRT = inputGO.GetComponent<RectTransform>();
+            inputRT.sizeDelta = new Vector2(350, 40);
+            inputRT.anchoredPosition = new Vector2(0, 10);
+
+            GameObject textArea = new GameObject("TextArea");
+            textArea.transform.SetParent(inputGO.transform, false);
+            RectTransform textAreaRT = textArea.AddComponent<RectTransform>();
+            textAreaRT.anchorMin = Vector2.zero;
+            textAreaRT.anchorMax = Vector2.one;
+            textAreaRT.sizeDelta = new Vector2(-20, -10);
+
+            GameObject textGO = new GameObject("Text");
+            textGO.transform.SetParent(textArea.transform, false);
+            Text t = textGO.AddComponent<Text>();
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = 20;
+            t.color = Color.white;
+            t.alignment = TextAnchor.MiddleLeft;
+            RectTransform tRT = textGO.GetComponent<RectTransform>();
+            tRT.anchorMin = Vector2.zero;
+            tRT.anchorMax = Vector2.one;
+            tRT.sizeDelta = Vector2.zero;
+
+            input.textComponent = t;
+            input.text = initialValue;
+
+            // Buttons
+            GameObject confirmBtn = UI.CreateUIButton(panelGO, 140, 45, "Confirm", 18, 80, -60, AnchorPresets.middleCenter, () => {
+                onConfirm?.Invoke(input.text);
+                Destroy(overlayGO);
+            });
+            
+            GameObject cancelBtn = UI.CreateUIButton(panelGO, 140, 45, "Cancel", 18, -80, -60, AnchorPresets.middleCenter, () => {
+                Destroy(overlayGO);
+            });
+
+            SetLayerRecursive(overlayGO, backgroundBoxGO.layer);
+            input.ActivateInputField();
+        }
+
+        public void DisplayConfirm(string title, string message, UnityAction onConfirm)
+        {
+            GameObject overlayGO = new GameObject("ConfirmOverlay");
+            overlayGO.transform.SetParent(backgroundBoxGO.transform, false);
+            RectTransform overlayRT = overlayGO.AddComponent<RectTransform>();
+            overlayRT.anchorMin = Vector2.zero;
+            overlayRT.anchorMax = Vector2.one;
+            overlayRT.sizeDelta = Vector2.zero;
+            
+            Image overlayImg = overlayGO.AddComponent<Image>();
+            overlayImg.color = new Color(0, 0, 0, 0.5f);
+            
+            // Panel
+            GameObject panelGO = new GameObject("Panel");
+            panelGO.transform.SetParent(overlayGO.transform, false);
+            RectTransform panelRT = panelGO.AddComponent<RectTransform>();
+            panelRT.sizeDelta = new Vector2(450, 250);
+            
+            Image panelImg = panelGO.AddComponent<Image>();
+            panelImg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+            
+            // Title
+            GameObject titleGO = new GameObject("Title");
+            titleGO.transform.SetParent(panelGO.transform, false);
+            Text titleText = titleGO.AddComponent<Text>();
+            titleText.text = title;
+            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            titleText.fontSize = 24;
+            titleText.color = Color.white;
+            titleText.alignment = TextAnchor.MiddleCenter;
+            RectTransform titleRT = titleGO.GetComponent<RectTransform>();
+            titleRT.anchorMin = new Vector2(0, 1);
+            titleRT.anchorMax = new Vector2(1, 1);
+            titleRT.pivot = new Vector2(0.5f, 1);
+            titleRT.anchoredPosition = new Vector2(0, -15);
+            titleRT.sizeDelta = new Vector2(0, 40);
+
+            // Message
+            GameObject msgGO = new GameObject("Message");
+            msgGO.transform.SetParent(panelGO.transform, false);
+            Text msgText = msgGO.AddComponent<Text>();
+            msgText.text = message;
+            msgText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            msgText.fontSize = 18;
+            msgText.color = new Color(0.8f, 0.8f, 0.8f, 1f);
+            msgText.alignment = TextAnchor.MiddleCenter;
+            RectTransform msgRT = msgGO.GetComponent<RectTransform>();
+            msgRT.anchorMin = Vector2.zero;
+            msgRT.anchorMax = Vector2.one;
+            msgRT.offsetMin = new Vector2(20, 80);
+            msgRT.offsetMax = new Vector2(-20, -60);
+
+            // Buttons
+            GameObject cancelBtn = UI.CreateUIButton(panelGO, 160, 45, "Cancel", 18, -100, -80, AnchorPresets.middleCenter, () => Destroy(overlayGO));
+            GameObject confirmBtn = UI.CreateUIButton(panelGO, 160, 45, "Confirm", 18, 100, -80, AnchorPresets.middleCenter, () => {
+                onConfirm?.Invoke();
+                Destroy(overlayGO);
+            });
+            confirmBtn.GetComponent<Image>().color = new Color(0.4f, 0.2f, 0.2f, 1f);
+
+            SetLayerRecursive(overlayGO, backgroundBoxGO.layer);
         }
     }
 }

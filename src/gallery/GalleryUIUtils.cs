@@ -12,6 +12,94 @@ using SimpleJSON;
 
 namespace VPB
 {
+    public class UIListReorderable : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+    {
+        public RectTransform target;
+        public UnityAction OnReorder;
+        public int minIndex = 0; // Minimum sibling index this item can move to
+        
+        private Transform parent;
+        private int startIndex;
+        private Camera dragCam;
+        private Button btn;
+        private bool wasBtnEnabled;
+
+        void Awake()
+        {
+            if (target == null) target = transform as RectTransform;
+            parent = target.parent;
+            btn = GetComponent<Button>();
+        }
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+            startIndex = target.GetSiblingIndex();
+            dragCam = eventData.pressEventCamera;
+            if (dragCam == null) dragCam = Camera.main;
+            
+            // Disable button during drag to prevent accidental click on release
+            if (btn != null)
+            {
+                wasBtnEnabled = btn.enabled;
+                btn.enabled = false;
+            }
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (parent == null || dragCam == null) return;
+
+            // Find which index we should be at based on vertical position
+            int currentIndex = target.GetSiblingIndex();
+            Vector2 localMouse;
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parent as RectTransform, eventData.position, dragCam, out localMouse))
+            {
+                // Iterate through siblings to see if we should swap
+                for (int i = minIndex; i < parent.childCount; i++)
+                {
+                    if (i == currentIndex) continue;
+                    
+                    Transform child = parent.GetChild(i);
+                    RectTransform childRT = child as RectTransform;
+                    if (childRT == null) continue;
+
+                    // Use midpoint + buffer to prevent flickering
+                    float childMidY = childRT.anchoredPosition.y - (childRT.rect.height * 0.5f);
+                    float buffer = 5f;
+
+                    if (currentIndex < i) // Dragging down
+                    {
+                        if (localMouse.y < childMidY - buffer)
+                        {
+                            target.SetSiblingIndex(i);
+                            break;
+                        }
+                    }
+                    else // Dragging up
+                    {
+                        if (localMouse.y > childMidY + buffer)
+                        {
+                            target.SetSiblingIndex(i);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            // Restore button state
+            if (btn != null) btn.enabled = wasBtnEnabled;
+
+            if (target.GetSiblingIndex() != startIndex)
+            {
+                if (OnReorder != null) OnReorder();
+            }
+        }
+    }
+
     public class UIDraggable : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         public Transform target;

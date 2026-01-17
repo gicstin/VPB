@@ -269,6 +269,7 @@ namespace VPB
 
             settingsPanel = new SettingsPanel(this, backgroundBoxGO);
             actionsPanel = new GalleryActionsPanel(this, backgroundBoxGO);
+            quickFiltersUI = new QuickFiltersUI(this, backgroundBoxGO);
 
             // Register Panel
             if (Gallery.singleton != null)
@@ -334,16 +335,28 @@ namespace VPB
             fileSortRT.pivot = new Vector2(0.5f, 0.5f);
             fileSortRT.anchoredPosition = new Vector2(175, 0); // To the right of search
             
-            Text fileSortText = fileSortBtn.GetComponentInChildren<Text>();
+            fileSortBtnText = fileSortBtn.GetComponentInChildren<Text>();
             
             Button fileSortButton = fileSortBtn.GetComponent<Button>();
             fileSortButton.onClick.RemoveAllListeners();
-            fileSortButton.onClick.AddListener(() => CycleSort("Files", fileSortText));
+            fileSortButton.onClick.AddListener(() => CycleSort("Files", fileSortBtnText));
             
-            AddRightClickDelegate(fileSortBtn, () => ToggleSortDirection("Files", fileSortText));
+            AddRightClickDelegate(fileSortBtn, () => ToggleSortDirection("Files", fileSortBtnText));
             
             // Init File Sort State
-            UpdateSortButtonText(fileSortText, GetSortState("Files"));
+            UpdateSortButtonText(fileSortBtnText, GetSortState("Files"));
+
+            // Filter Presets Button
+            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 160, 45, "Filter Presets", 20, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
+            qfToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            quickFiltersToggleBtnText = qfToggleBtn.GetComponentInChildren<Text>();
+            quickFiltersToggleBtnText.color = Color.white;
+            RectTransform qfToggleRT = qfToggleBtn.GetComponent<RectTransform>();
+            qfToggleRT.anchorMin = new Vector2(0.5f, 0.5f);
+            qfToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
+            qfToggleRT.pivot = new Vector2(0.5f, 0.5f);
+            qfToggleRT.anchoredPosition = new Vector2(-240, 0); // Adjusted for wider button
+            AddTooltip(qfToggleBtn, "Filter Presets");
 
             // Tab Area - Create for all panels so undocked can clone/filter
             if (true)
@@ -356,7 +369,7 @@ namespace VPB
                 rightTabRT.anchorMin = new Vector2(1, 0);
                 rightTabRT.anchorMax = new Vector2(1, 1);
                 rightTabRT.offsetMin = new Vector2(-tabAreaWidth - 10, 68); 
-                rightTabRT.offsetMax = new Vector2(-10, -90); 
+                rightTabRT.offsetMax = new Vector2(-10, -95); 
                 
                 rightTabContainerGO = rightTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
                 rightTabContainerGO.GetComponent<VerticalLayoutGroup>().spacing = 2;
@@ -477,7 +490,7 @@ namespace VPB
                 leftTabRT.anchorMin = new Vector2(0, 0);
                 leftTabRT.anchorMax = new Vector2(0, 1);
                 leftTabRT.offsetMin = new Vector2(10, 70);
-                leftTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -90);
+                leftTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -95);
                 
                 leftTabContainerGO = leftTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
                 leftTabContainerGO.GetComponent<VerticalLayoutGroup>().spacing = 2;
@@ -828,7 +841,7 @@ namespace VPB
             scrollRect = scrollGO.GetComponent<ScrollRect>();
             contentScrollRT = scrollGO.GetComponent<RectTransform>();
             contentScrollRT.offsetMin = new Vector2(20, 70);
-            contentScrollRT.offsetMax = new Vector2(-230, -90);
+            contentScrollRT.offsetMax = new Vector2(-230, -65); // Default top margin (Quick Filters hidden)
             
             contentGO = scrollRect.content.gameObject;
             // Remove VerticalLayoutGroup added by CreateVScrollableContent since we want GridLayoutGroup

@@ -201,6 +201,7 @@ namespace VPB
         // Settings Pane
         private SettingsPanel settingsPanel;
         private GalleryActionsPanel actionsPanel;
+        private QuickFiltersUI quickFiltersUI; // NEW
         
         private List<CreatorCacheEntry> cachedCreators = new List<CreatorCacheEntry>();
         private bool creatorsCached = false;
@@ -233,7 +234,18 @@ namespace VPB
         private Text leftDesktopModeBtnText;
         private Image leftDesktopModeBtnImage;
 
-        private FileEntry selectedFile;
+        // private FileEntry selectedFile; // Replaced by Multi-Selection
+        public List<FileEntry> selectedFiles = new List<FileEntry>();
+        public FileEntry selectedFile
+        {
+            get { return selectedFiles.Count > 0 ? selectedFiles[0] : null; }
+            set
+            {
+                selectedFiles.Clear();
+                if (value != null) selectedFiles.Add(value);
+            }
+        }
+
         private Hub.GalleryHubItem selectedHubItem;
         
         // Define colors for different content types
@@ -261,5 +273,8 @@ namespace VPB
         private GameObject footerLayoutBtn;
         private Text footerLayoutBtnText;
         private Image footerLayoutBtnImage;
+        
+        private Text fileSortBtnText; // NEW
+        private Text quickFiltersToggleBtnText; // NEW
     }
 }
