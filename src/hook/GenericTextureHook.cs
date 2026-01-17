@@ -221,9 +221,52 @@ namespace VPB
             }
         }
 
+        private static long ExpectedRawDataSize(int width, int height, TextureFormat format)
+        {
+            try
+            {
+                if (width <= 0 || height <= 0) return -1;
+
+                long w = width;
+                long h = height;
+
+                switch (format)
+                {
+                    case TextureFormat.Alpha8: return w * h;
+                    case TextureFormat.RGB24: return w * h * 3;
+                    case TextureFormat.RGBA32: return w * h * 4;
+                    case TextureFormat.ARGB32: return w * h * 4;
+
+                    case TextureFormat.RGB565: return w * h * 2;
+                    case TextureFormat.RGBA4444: return w * h * 2;
+
+                    case TextureFormat.DXT1:
+                        {
+                            long bw = (w + 3) / 4;
+                            long bh = (h + 3) / 4;
+                            return bw * bh * 8;
+                        }
+                    case TextureFormat.DXT5:
+                        {
+                            long bw = (w + 3) / 4;
+                            long bh = (h + 3) / 4;
+                            return bw * bh * 16;
+                        }
+
+                    default:
+                        return -1;
+                }
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
         public static void Texture2D_LoadRawTextureData_Prefix(Texture2D __instance, byte[] data)
         {
-            LogUtil.Log("Texture2D_LoadRawTextureData_Prefix");
+            if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                LogUtil.Log("Texture2D_LoadRawTextureData_Prefix");
             if (ImageLoadingMgr.singleton == null) return;
 
             string path = null;
@@ -275,14 +318,16 @@ namespace VPB
 
         public static void WWW_Ctor_Postfix(WWW __instance, string url)
         {
-            LogUtil.Log("WWW Ctor: " + url);
+            if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                LogUtil.Log("WWW Ctor: " + url);
         }
 
         public static void WWW_texture_Postfix(WWW __instance, Texture2D __result)
         {
             if (__instance == null || __result == null) return;
             string url = __instance.url;
-            LogUtil.Log("WWW.texture accessed: " + url);
+            if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                LogUtil.Log("WWW.texture accessed: " + url);
             
             if (string.IsNullOrEmpty(url)) return;
             
@@ -305,7 +350,8 @@ namespace VPB
                  qi.compress = true;
                  if (ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi))
                  {
-                     LogUtil.Log("Captured WWW texture: " + path);
+                     if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                         LogUtil.Log("Captured WWW texture: " + path);
                  }
             }
         }
@@ -316,7 +362,8 @@ namespace VPB
             {
                 if (string.IsNullOrEmpty(__0)) return;
                 
-                LogUtil.Log("File_ReadAllBytes: " + __0);
+                if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                    LogUtil.Log("File_ReadAllBytes: " + __0);
 
                 if (__0.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || 
                     __0.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
@@ -379,7 +426,8 @@ namespace VPB
 
         public static bool Texture2D_LoadImage_Prefix(Texture2D __instance, byte[] data, bool markNonReadable, ref bool __result, out string __state)
         {
-            LogUtil.Log("Texture2D_LoadImage_Prefix " + (__instance != null ? __instance.name : "null"));
+            if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                LogUtil.Log("Texture2D_LoadImage_Prefix " + (__instance != null ? __instance.name : "null"));
             
             string path = _lastReadImagePath;
             _lastReadImagePath = null; // Consume context
@@ -439,7 +487,8 @@ namespace VPB
 
         public static void Texture2D_LoadImage_Postfix(Texture2D __instance, string __state)
         {
-            if (!string.IsNullOrEmpty(__state)) LogUtil.Log("Texture2D_LoadImage_Postfix " + __state);
+            if (!string.IsNullOrEmpty(__state) && Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                LogUtil.Log("Texture2D_LoadImage_Postfix " + __state);
             // Unity 2018 LoadImage can return void in some versions/overloads, or bool. 
             // Harmony handles void by not providing __result, or we check if it succeeded.
             // But if the signature returns bool, we should respect it.
@@ -457,7 +506,8 @@ namespace VPB
                 // Directly tracking it as a new candidate if it wasn't one already
                 if (ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi))
                 {
-                     LogUtil.Log("Texture2D_LoadImage_Postfix Enqueued: " + __state);
+                     if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                         LogUtil.Log("Texture2D_LoadImage_Postfix Enqueued: " + __state);
                 }
                 else
                 {
@@ -468,7 +518,8 @@ namespace VPB
 
         public static bool Texture2D_LoadImage_Prefix_Simple(Texture2D __instance, byte[] data, out string __state)
         {
-            LogUtil.Log("Texture2D_LoadImage_Prefix_Simple");
+            if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                LogUtil.Log("Texture2D_LoadImage_Prefix_Simple");
             // In simple version (no bool return ref), we just pass dummy ref
             bool dummy = false;
             return Texture2D_LoadImage_Prefix(__instance, data, false, ref dummy, out __state);
@@ -481,13 +532,15 @@ namespace VPB
 
         public static bool ImageConversion_LoadImage_Prefix(Texture2D tex, byte[] data, bool markNonReadable, ref bool __result, out string __state)
         {
-            LogUtil.Log("ImageConversion_LoadImage_Prefix");
+            if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                LogUtil.Log("ImageConversion_LoadImage_Prefix");
             return Texture2D_LoadImage_Prefix(tex, data, markNonReadable, ref __result, out __state);
         }
 
         public static void ImageConversion_LoadImage_Postfix(Texture2D tex, bool __result, string __state)
         {
-            LogUtil.Log("ImageConversion_LoadImage_Postfix success=" + __result);
+            if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                LogUtil.Log("ImageConversion_LoadImage_Postfix success=" + __result);
             Texture2D_LoadImage_Postfix(tex, __state);
         }
 
@@ -563,22 +616,42 @@ namespace VPB
                         }
                         else bytes = fileBytes;
 
-                            if (bytes != null)
+                        if (bytes != null)
+                        {
+                            try
                             {
+                                TextureFormat tf = TextureFormat.DXT5;
+                                if (json["format"] != null)
+                                {
+                                    try { tf = (TextureFormat)Enum.Parse(typeof(TextureFormat), json["format"]); } catch { }
+                                }
+
+                                long expected = ExpectedRawDataSize(targetW, targetH, tf);
+                                if (expected > 0 && bytes.Length != (int)expected)
+                                {
+                                    LogUtil.LogWarning("Cache raw data size mismatch for ", path);
+                                    return false;
+                                }
+
                                 if (tex.width != targetW || tex.height != targetH)
                                 {
-                                    TextureFormat tf = TextureFormat.DXT5;
-                                    if (json["format"] != null)
-                                    {
-                                        try { tf = (TextureFormat)Enum.Parse(typeof(TextureFormat), json["format"]); } catch {}
-                                    }
                                     tex.Resize(targetW, targetH, tf, false);
                                 }
+
                                 tex.LoadRawTextureData(bytes);
                                 tex.Apply(false, !markNonReadable);
-                                LogUtil.Log("Successfully loaded from cache: " + path);
+
+                                if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                                    LogUtil.Log("Successfully loaded from cache: " + path);
+
                                 return true;
                             }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError("TryLoadFromCache failed to apply cached texture: " + ex.Message);
+                                return false;
+                            }
+                        }
                         }
                     else
                     {
