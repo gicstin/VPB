@@ -71,6 +71,7 @@ namespace VPB
         private long m_CachedTexturesSize;
         private long m_CachedVpbSize;
         private int m_PendingVamCacheCount;
+        private bool m_IsCountingCache;
         private float m_CacheCountUpdateTimer;
         private bool m_ShowSettings;
         private string m_SettingsUiKeyDraft;
@@ -1427,12 +1428,6 @@ namespace VPB
                     }
                 }
 
-                m_CacheCountUpdateTimer += unscaledDt;
-                if (m_CacheCountUpdateTimer >= 5.0f)
-                {
-                    m_CacheCountUpdateTimer = 0f;
-                    m_PendingVamCacheCount = GetVamCacheFileCount();
-                }
 
                 if (m_AutoOptimizeReportTimer > 0)
                 {
@@ -1970,6 +1965,22 @@ namespace VPB
                     var btnLabel = m_PendingVamCacheCount > 0 ? string.Format("Optimize Cache ({0})", m_PendingVamCacheCount) : "Optimize Cache";
                     var btnRect = GUILayoutUtility.GetRect(new GUIContent(btnLabel), m_StyleButtonPrimary, GUILayout.Height(buttonHeight));
                     
+                    if (Event.current.type == EventType.Repaint && btnRect.Contains(Event.current.mousePosition))
+                    {
+                        if (!m_IsCountingCache && Time.unscaledTime - m_CacheCountUpdateTimer > 2.0f)
+                        {
+                            m_CacheCountUpdateTimer = Time.unscaledTime;
+                            m_IsCountingCache = true;
+                            string path = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+                            int threshold = Settings.Instance.ThumbnailThreshold.Value;
+                            LogUtil.Log("Checking VAM cache count...");
+                            System.Threading.ThreadPool.QueueUserWorkItem((s) => {
+                                m_PendingVamCacheCount = GetVamCacheFileCount(path, threshold);
+                                m_IsCountingCache = false;
+                            });
+                        }
+                    }
+
                     if (GUI.Button(btnRect, btnLabel, m_StyleButtonPrimary))
                     {
                         if (Settings.Instance.AutoOptimizeCache.Value)
@@ -2981,16 +2992,14 @@ namespace VPB
             catch { return 0; }
         }
 
-        private int GetVamCacheFileCount()
+        private int GetVamCacheFileCount(string path, int threshold)
         {
             try
             {
-                string path = MVR.FileManagement.CacheManager.GetTextureCacheDir();
                 if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
                 
                 string[] files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
                 int count = 0;
-                int threshold = Settings.Instance.ThumbnailThreshold.Value;
                 foreach (var file in files)
                 {
                     // Check native .vamcachemeta resolution (<= threshold)
@@ -3016,6 +3025,12 @@ namespace VPB
             }
             catch { return 0; }
         }
+
+        private int GetVamCacheFileCount()
+        {
+             return GetVamCacheFileCount(MVR.FileManagement.CacheManager.GetTextureCacheDir(), Settings.Instance.ThumbnailThreshold.Value);
+        }
+
 
         private long GetTexturesFolderSize()
         {
