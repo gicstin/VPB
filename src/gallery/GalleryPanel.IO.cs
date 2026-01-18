@@ -96,7 +96,15 @@ namespace VPB
                 string pathLower = entry.Path.ToLowerInvariant();
                 foreach (var tag in activeTags)
                 {
+                    // Check path-based tags (original logic)
                     if (pathLower.Contains(tag.ToLowerInvariant()))
+                    {
+                        tagMatch = true;
+                        break;
+                    }
+
+                    // Check user-defined tags
+                    if (TagsManager.Instance.HasTag(entry.Uid, tag))
                     {
                         tagMatch = true;
                         break;

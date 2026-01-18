@@ -132,6 +132,41 @@ namespace VPB
             RefreshFiles();
         }
 
+        private void OnFileRightClick(FileEntry file)
+        {
+            if (file == null) return;
+
+            // Right click selects if not selected, and opens actions panel
+            if (!selectedFilePaths.Contains(file.Path))
+            {
+                selectedFiles.Clear();
+                selectedFilePaths.Clear();
+                selectedFiles.Add(file);
+                selectedFilePaths.Add(file.Path);
+                selectedPath = file.Path;
+                selectedHubItem = null;
+                selectionAnchorPath = file.Path;
+                
+                SetHoverPath(file.Path);
+                RefreshSelectionVisuals();
+                UpdatePaginationText();
+                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
+            }
+
+            if (isFixedLocally && VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode == 0)
+            {
+                VPBConfig.Instance.DesktopFixedHeightMode = 2; // Reduced height (1/2 or 1/3 depending on interpretation)
+                UpdateFooterHeightState();
+                UpdateLayout();
+            }
+
+            if (actionsPanel != null)
+            {
+                actionsPanel.Open();
+                actionsPanel.Show();
+            }
+        }
+
         private void OnFileClick(FileEntry file)
         {
             if (file == null) return;

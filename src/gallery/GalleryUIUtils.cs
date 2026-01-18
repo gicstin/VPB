@@ -4,6 +4,7 @@ using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using MVR.FileManagement;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
@@ -2218,6 +2219,100 @@ namespace VPB
                     if (p.HasKey("rotation")) p.Remove("rotation");
                 }
             }
+        }
+
+        public void MirrorPose(Atom target)
+        {
+            if (target == null) return;
+            JSONStorable storable = target.GetStorableByID("PosePresets");
+            if (storable == null) return;
+            var pm = storable.GetComponentInChildren<MeshVR.PresetManager>();
+            if (pm != null)
+            {
+                var method = pm.GetType().GetMethod("Mirror", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                if (method != null) method.Invoke(pm, null);
+                else LogUtil.LogWarning("[VPB] Mirror method not found on PresetManager");
+            }
+        }
+
+        public void RemoveAllClothing(Atom target)
+        {
+            if (target == null) return;
+            JSONStorable clothing = target.GetStorableByID("Clothing");
+            if (clothing != null)
+            {
+                var method = clothing.GetType().GetMethod("Clear", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                if (method != null) method.Invoke(clothing, null);
+                else LogUtil.LogWarning("[VPB] Clear method not found on Clothing storable");
+            }
+        }
+
+        public void RemoveAllHair(Atom target)
+        {
+            if (target == null) return;
+            JSONStorable hair = target.GetStorableByID("Hair");
+            if (hair != null)
+            {
+                var method = hair.GetType().GetMethod("Clear", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                if (method != null) method.Invoke(hair, null);
+                else LogUtil.LogWarning("[VPB] Clear method not found on Hair storable");
+            }
+        }
+
+        public void PlayAudioPreview(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            string normalizedPath = UI.NormalizePath(path);
+            
+            Atom audioAtom = null;
+            foreach (Atom a in SuperController.singleton.GetAtoms())
+            {
+                if (a.type == "InvisibleAudioSource" || a.type == "AudioSource")
+                {
+                    audioAtom = a;
+                    break;
+                }
+            }
+            
+            if (audioAtom == null)
+            {
+                Atom selected = SuperController.singleton.GetSelectedAtom();
+                if (selected != null && selected.GetStorableByID("AudioSource") != null)
+                {
+                    audioAtom = selected;
+                }
+            }
+            
+            if (audioAtom != null)
+            {
+                JSONStorable urlStorable = audioAtom.GetStorableByID("AudioSource");
+                if (urlStorable != null)
+                {
+                    JSONStorableUrl urlParam = urlStorable.GetUrlJSONParam("url");
+                    if (urlParam != null)
+                    {
+                        urlParam.val = normalizedPath;
+                        var playAction = urlStorable.GetAction("Play");
+                        if (playAction != null) playAction.actionCallback();
+                        return;
+                    }
+                }
+            }
+            
+            LogUtil.LogWarning("[VPB] No suitable AudioSource atom found to play preview. Please add an InvisibleAudioSource to the scene.");
+        }
+
+        public void StopAudioPreview()
+        {
+             foreach (Atom a in SuperController.singleton.GetAtoms())
+             {
+                 JSONStorable urlStorable = a.GetStorableByID("AudioSource");
+                 if (urlStorable != null)
+                 {
+                     var stopAction = urlStorable.GetAction("Stop");
+                     if (stopAction != null) stopAction.actionCallback();
+                 }
+             }
         }
 
         public void MergeSceneFile(string path, bool atPlayer = false)
@@ -5031,6 +5126,53 @@ namespace VPB
             });
             
             return container;
+        }
+
+        public static GameObject CreateTextInput(GameObject parentGO, float width, float height, string defaultText, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction<string> onEndEdit)
+        {
+            GameObject inputGO = AddChildGOImage(parentGO, new Color(0.1f, 0.1f, 0.1f, 1f), anchorPreset, width, height, new Vector2(xOffset, yOffset));
+            inputGO.name = "TextInput";
+            
+            InputField inputField = inputGO.AddComponent<InputField>();
+            
+            GameObject textGO = new GameObject("Text");
+            textGO.transform.SetParent(inputGO.transform, false);
+            Text t = textGO.AddComponent<Text>();
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = fontSize;
+            t.color = Color.white;
+            t.alignment = TextAnchor.MiddleLeft;
+            t.supportRichText = false;
+            
+            RectTransform textRT = textGO.GetComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.sizeDelta = new Vector2(-10, -10);
+            textRT.anchoredPosition = new Vector2(5, 0);
+            
+            inputField.textComponent = t;
+            
+            GameObject placeholderGO = new GameObject("Placeholder");
+            placeholderGO.transform.SetParent(inputGO.transform, false);
+            Text p = placeholderGO.AddComponent<Text>();
+            p.text = defaultText;
+            p.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            p.fontSize = fontSize;
+            p.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            p.alignment = TextAnchor.MiddleLeft;
+            p.fontStyle = FontStyle.Italic;
+            
+            RectTransform placeholderRT = placeholderGO.GetComponent<RectTransform>();
+            placeholderRT.anchorMin = Vector2.zero;
+            placeholderRT.anchorMax = Vector2.one;
+            placeholderRT.sizeDelta = new Vector2(-10, -10);
+            placeholderRT.anchoredPosition = new Vector2(5, 0);
+            
+            inputField.placeholder = p;
+            
+            if (onEndEdit != null) inputField.onEndEdit.AddListener(onEndEdit);
+            
+            return inputGO;
         }
     }
 

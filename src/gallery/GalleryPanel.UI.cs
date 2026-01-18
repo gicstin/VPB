@@ -703,6 +703,7 @@ namespace VPB
             }
 
             UpdateButtonStates();
+            if (actionsPanel != null) actionsPanel.UpdateUI();
         }
 
         private void UpdateButtonStates()

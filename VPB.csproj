@@ -316,6 +316,14 @@
     <Compile Include="src\ContextMenuPanel.cs" />
     <Compile Include="src\gallery\Gallery.cs" />
     <Compile Include="src\gallery\GalleryActionsPanel.cs" />
+    <Compile Include="src\gallery\GalleryActionTabBase.cs" />
+    <Compile Include="src\gallery\TagsManager.cs" />
+    <Compile Include="src\gallery\tabs\GalleryPrimaryActionTab.cs" />
+    <Compile Include="src\gallery\tabs\GalleryAudioActionTab.cs" />
+    <Compile Include="src\gallery\tabs\GalleryDependenciesActionTab.cs" />
+    <Compile Include="src\gallery\tabs\GalleryInfoActionTab.cs" />
+    <Compile Include="src\gallery\tabs\GalleryPositionActionTab.cs" />
+    <Compile Include="src\gallery\tabs\GalleryTagsActionTab.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
     <Compile Include="src\GalleryPanel.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />

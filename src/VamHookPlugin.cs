@@ -54,8 +54,7 @@ namespace VPB
         private bool m_ExcludeOld = false;
         private Vector2 m_RemoveScroll = Vector2.zero;
         private Rect m_RemoveWindowRect = new Rect(250, 250, 600, 500);
-
-        private bool m_ShowDownscaleTexturesInfo;
+        
         private bool m_ShowPluginsAlwaysEnabledInfo;
         private bool m_ShowRemoveOldDamagedInfo;
         private bool m_ShowUninstallAllInfo;
@@ -150,7 +149,6 @@ namespace VPB
 
         private void CloseAllInfoCards()
         {
-            m_ShowDownscaleTexturesInfo = false;
             m_ShowPluginsAlwaysEnabledInfo = false;
             m_ShowRemoveOldDamagedInfo = false;
             m_ShowUninstallAllInfo = false;

@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
 using SimpleJSON;
+using MVR.FileManagementSecure;
 
 namespace VPB
 {
@@ -19,14 +20,29 @@ namespace VPB
         private GalleryPanel parentPanel;
         private bool isOpen = false;
 
-        private List<UnityAction<UIDraggableItem>> activeActions = new List<UnityAction<UIDraggableItem>>();
-        private List<UIDraggableItem> activeDraggables = new List<UIDraggableItem>();
+        private Dictionary<ActionUITabType, GalleryActionTabBase> tabs = new Dictionary<ActionUITabType, GalleryActionTabBase>();
+        private ActionUITabType currentTabType = ActionUITabType.Primary;
+        private GameObject tabsContainerGO;
+        private List<GameObject> tabButtons = new List<GameObject>();
 
-        public GalleryActionsPanel(GalleryPanel parent, GameObject galleryBackgroundBox)
+        public GalleryPanel ParentPanel => parentPanel;
+
+        public GalleryActionsPanel(GalleryPanel parent, GameObject parentGO, GameObject galleryBackgroundBox)
         {
             this.parentPanel = parent;
             this.backgroundBoxGO = galleryBackgroundBox;
-            CreatePane();
+            CreatePane(parentGO);
+            InitializeTabs();
+        }
+
+        private void InitializeTabs()
+        {
+            tabs[ActionUITabType.Primary] = new GalleryPrimaryActionTab(this, contentGO);
+            tabs[ActionUITabType.Tags] = new GalleryTagsActionTab(this, contentGO);
+            tabs[ActionUITabType.Info] = new GalleryInfoActionTab(this, contentGO);
+            tabs[ActionUITabType.Dependencies] = new GalleryDependenciesActionTab(this, contentGO);
+            tabs[ActionUITabType.Audio] = new GalleryAudioActionTab(this, contentGO);
+            tabs[ActionUITabType.Position] = new GalleryPositionActionTab(this, contentGO);
         }
 
         public void UpdateInput()
@@ -41,55 +57,100 @@ namespace VPB
             {
                 if (Input.GetKeyDown(KeyCode.Alpha1 + i))
                 {
-                    ExecuteAction(i);
+                    if (tabs.ContainsKey(currentTabType))
+                    {
+                        tabs[currentTabType].ExecuteShortcut(i);
+                    }
                 }
             }
         }
 
-        private void ExecuteAction(int index)
-        {
-            if (index >= 0 && index < activeActions.Count)
-            {
-                try
-                {
-                    activeActions[index]?.Invoke(activeDraggables[index]);
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("Error executing action shortcut: " + ex);
-                }
-            }
-        }
-
-        private void CreatePane()
+        private void CreatePane(GameObject parentGO)
         {
             // Create a hidden container for logic/state
-            actionsPaneGO = new GameObject("ActionsPane_Hidden");
-            actionsPaneGO.transform.SetParent(backgroundBoxGO.transform, false);
+            actionsPaneGO = new GameObject("ActionsPane_Visible"); // Renamed for clarity
+            actionsPaneGO.transform.SetParent(parentGO.transform, false);
             actionsPaneGO.SetActive(false);
             
             actionsPaneRT = actionsPaneGO.AddComponent<RectTransform>();
-            actionsPaneRT.sizeDelta = Vector2.zero;
+            actionsPaneRT.anchorMin = Vector2.zero;
+            actionsPaneRT.anchorMax = Vector2.one;
+            actionsPaneRT.offsetMin = Vector2.zero;
+            actionsPaneRT.offsetMax = Vector2.zero;
 
-            // Content container (for potential children components/logic)
+            // Add background to block view of gallery behind it
+            Image bg = actionsPaneGO.AddComponent<Image>();
+            bg.color = new Color(0.05f, 0.05f, 0.05f, 0.95f); // Very dark, nearly opaque
+
+            // Tabs container at the top
+            tabsContainerGO = new GameObject("TabsContainer");
+            tabsContainerGO.transform.SetParent(actionsPaneGO.transform, false);
+            RectTransform tabsRT = tabsContainerGO.AddComponent<RectTransform>();
+            tabsRT.anchorMin = new Vector2(0, 1);
+            tabsRT.anchorMax = new Vector2(1, 1);
+            tabsRT.pivot = new Vector2(0.5f, 1);
+            tabsRT.anchoredPosition = new Vector2(0, 0);
+            tabsRT.sizeDelta = new Vector2(0, 40);
+
+            HorizontalLayoutGroup hlg = tabsContainerGO.AddComponent<HorizontalLayoutGroup>();
+            hlg.childControlWidth = true;
+            hlg.childForceExpandWidth = true;
+            hlg.spacing = 2;
+
+            // Content container below tabs
             contentGO = new GameObject("ActionsContent_Hidden");
             contentGO.transform.SetParent(actionsPaneGO.transform, false);
-            contentGO.AddComponent<RectTransform>();
+            RectTransform contentRT = contentGO.AddComponent<RectTransform>();
+            contentRT.anchorMin = new Vector2(0, 0);
+            contentRT.anchorMax = new Vector2(1, 1);
+            contentRT.pivot = new Vector2(0.5f, 1);
+            contentRT.offsetMin = new Vector2(0, 0);
+            contentRT.offsetMax = new Vector2(0, -42); // Leave room for tabs
+
+            VerticalLayoutGroup vlg = contentGO.AddComponent<VerticalLayoutGroup>();
+            vlg.childControlHeight = true;
+            vlg.childForceExpandHeight = false;
+            vlg.spacing = 5;
 
             // Add Input Handler
             var inputHandler = actionsPaneGO.AddComponent<GalleryActionsInputHandler>();
             inputHandler.panel = this;
+
+            CreateTabButtons();
         }
+
+        private void CreateTabButtons()
+        {
+            foreach (ActionUITabType tabType in Enum.GetValues(typeof(ActionUITabType)))
+            {
+                ActionUITabType t = tabType;
+                string label = tabType.ToString();
+                GameObject btn = UI.CreateUIButton(tabsContainerGO, 0, 40, label, 16, 0, 0, AnchorPresets.middleCenter, () => SwitchTab(t));
+                tabButtons.Add(btn);
+            }
+        }
+
+        public void SwitchTab(ActionUITabType tabType)
+        {
+            if (currentTabType == tabType)
+            {
+                 // Still refresh even if same tab, as it might be a new selection
+            }
+            else
+            {
+                if (tabs.ContainsKey(currentTabType)) tabs[currentTabType].OnClose();
+                currentTabType = tabType;
+                if (tabs.ContainsKey(currentTabType)) tabs[currentTabType].OnOpen();
+            }
+            
+            UpdateUI();
+        }
+
         public void HandleSelectionChanged(List<FileEntry> files, Hub.GalleryHubItem hubItem)
         {
             selectedFiles.Clear();
             if (files != null) selectedFiles.AddRange(files);
             selectedHubItem = hubItem;
-
-            if (SelectedFile == null && selectedHubItem == null)
-            {
-                return;
-            }
 
             UpdateUI();
         }
@@ -97,339 +158,52 @@ namespace VPB
         public void Open()
         {
             isOpen = true;
+            if (actionsPaneGO != null) actionsPaneGO.transform.SetAsLastSibling();
+            if (tabs.ContainsKey(currentTabType)) tabs[currentTabType].OnOpen();
+            UpdateUI();
         }
 
         public void Close()
         {
             isOpen = false;
+            if (tabs.ContainsKey(currentTabType)) tabs[currentTabType].OnClose();
         }
 
-        private void UpdateUI()
+        public void UpdateUI()
         {
-            activeActions.Clear();
-            activeDraggables.Clear();
-            int buttonCount = 0;
+            if (!isOpen) return;
 
-            if (selectedHubItem != null)
+            // If fixed and reduced height, move pane to bottom
+            if (parentPanel.isFixedLocally && VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode > 0)
             {
-                CreateButton(++buttonCount, "Download", (dragger) => LogUtil.Log("Downloading: " + selectedHubItem.Title));
-                CreateButton(++buttonCount, "View on HUB", (dragger) => Application.OpenURL("https://hub.virtamate.com/resources/" + selectedHubItem.ResourceId));
-                CreateButton(++buttonCount, "Install Dependencies*", (dragger) => {});
-                CreateButton(++buttonCount, "Quick Look*", (dragger) => {});
-            }
-            else if (SelectedFile != null)
-            {
-                string pathLower = SelectedFile.Path.ToLowerInvariant();
-                string category = parentPanel.CurrentCategoryTitle ?? "";
-                
-                if (pathLower.Contains("/clothing/") || pathLower.Contains("\\clothing\\") || category.Contains("Clothing"))
-                {
-                    CreateButton(++buttonCount, "Load Clothing\nto Person", (dragger) => {
-                        Atom target = GetBestTargetAtom();
-                        if (target != null) dragger.LoadClothing(target);
-                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
-                    });
-                    CreateButton(++buttonCount, "Set as Default*", (dragger) => {});
-                    CreateButton(++buttonCount, "Quick load*", (dragger) => {});
-                    CreateButton(++buttonCount, "Wear Selected*", (dragger) => {});
-                    CreateButton(++buttonCount, "Remove All Clothing*", (dragger) => {});
-                }
-                else if (pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || category.Contains("SubScene"))
-                {
-                    CreateButton(++buttonCount, "Load SubScene", (dragger) => dragger.LoadSubScene(SelectedFile.Uid));
-                }
-                else if ((pathLower.EndsWith(".json") && (pathLower.Contains("/scenes/") || pathLower.Contains("\\scenes\\"))) || category.Contains("Scene"))
-                {
-                    CreateButton(++buttonCount, "Load Scene", (dragger) => dragger.LoadSceneFile(SelectedFile.Uid));
-                    CreateButton(++buttonCount, "Merge Scene", (dragger) => dragger.MergeSceneFile(SelectedFile.Uid, false));
-                }
-                else if (pathLower.Contains("/hair/") || pathLower.Contains("\\hair\\") || category.Contains("Hair"))
-                {
-                    CreateButton(++buttonCount, "Load Hair", (dragger) => {
-                        Atom target = GetBestTargetAtom();
-                        if (target != null) dragger.LoadHair(target);
-                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
-                    });
-                    CreateButton(++buttonCount, "Quick Hair*", (dragger) => {});
-                    CreateButton(++buttonCount, "Wear Selected*", (dragger) => {});
-                    CreateButton(++buttonCount, "Remove All Hair*", (dragger) => {});
-                }
-                else if (pathLower.Contains("/skin/") || pathLower.Contains("\\skin\\") || category.Contains("Skin"))
-                {
-                    CreateButton(++buttonCount, "Load Skin", (dragger) => {
-                        Atom target = GetBestTargetAtom();
-                        if (target != null) dragger.LoadSkin(target);
-                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
-                    });
-                }
-                else if (pathLower.Contains("/morphs/") || pathLower.Contains("\\morphs\\") || category.Contains("Morphs"))
-                {
-                    CreateButton(++buttonCount, "Load Morphs", (dragger) => {
-                        Atom target = GetBestTargetAtom();
-                        if (target != null) dragger.LoadMorphs(target);
-                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
-                    });
-                }
-                else if (pathLower.Contains("/appearance/") || pathLower.Contains("\\appearance\\") || category.Contains("Appearance"))
-                {
-                    CreateButton(++buttonCount, "Load Appearance", (dragger) => {
-                        Atom target = GetBestTargetAtom();
-                        if (target != null) dragger.LoadAppearance(target);
-                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
-                    });
-                }
-                else if (pathLower.Contains("/pose/") || pathLower.Contains("\\pose\\") || pathLower.Contains("/person/") || pathLower.Contains("\\person\\") || category.Contains("Pose"))
-                {
-                    CreateButton(++buttonCount, "Load Pose", (dragger) => {
-                        Atom target = GetBestTargetAtom();
-                        if (target != null) dragger.LoadPose(target);
-                        else { LogUtil.LogWarning("[VPB] Please select a Person atom."); }
-                    });
-                    CreateButton(++buttonCount, "Load Pose (Silent)*", (dragger) => {});
-                    CreateButton(++buttonCount, "Mirror Pose*", (dragger) => {});
-                    CreateButton(++buttonCount, "Transition to Pose*", (dragger) => {});
-                }
-                else if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || pathLower.EndsWith(".assetbundle") || pathLower.EndsWith(".unity3d"))
-                {
-                    CreateButton(++buttonCount, "Load Asset", (dragger) => {
-                        Atom selected = SuperController.singleton.GetSelectedAtom();
-                        if (selected != null && selected.type == "CustomUnityAsset") dragger.LoadCUAIntoAtom(selected, SelectedFile.Uid);
-                        else dragger.LoadCUA(SelectedFile.Uid);
-                    });
-                }
-                else
-                {
-                    CreateButton(++buttonCount, "Add to Scene", (dragger) => LogUtil.Log("Adding to scene: " + SelectedFile.Name));
-                }
-            }
-        }
+                float bottomAnchor = 0;
+                if (VPBConfig.Instance.DesktopFixedHeightMode == 1) bottomAnchor = 1f / 3f;
+                else if (VPBConfig.Instance.DesktopFixedHeightMode == 2) bottomAnchor = 0.5f;
 
-        private GameObject CreateButton(int number, string label, UnityAction<UIDraggableItem> action, GameObject parent = null)
-        {
-            string prefix = number <= 9 ? number + ". " : "";
-            string fullLabel = prefix + label;
-            
-            GameObject targetParent = parent != null ? parent : contentGO;
-            GameObject btn = UI.CreateUIButton(targetParent, 340, 80, fullLabel, 20, 0, 0, AnchorPresets.middleCenter, () => {});
+                // Match the horizontal ratio used in GalleryPanel.Lifecycle.cs (Golden Ratio)
+                float leftRatio = 1.618f / 2.618f;
 
-            RectTransform btnRT = btn.GetComponent<RectTransform>();
-            btnRT.anchorMin = new Vector2(0, 1);
-            btnRT.anchorMax = new Vector2(1, 1);
-            btnRT.pivot = new Vector2(0.5f, 1);
-            btnRT.sizeDelta = new Vector2(0, 80);
-
-            LayoutElement btnLE = btn.GetComponent<LayoutElement>();
-            if (btnLE == null) btnLE = btn.AddComponent<LayoutElement>();
-            btnLE.preferredHeight = 80;
-            btnLE.flexibleWidth = 1;
-            
-            // Interaction support
-            UIDraggableItem draggable = btn.AddComponent<UIDraggableItem>();
-            draggable.FileEntry = SelectedFile;
-            draggable.HubItem = selectedHubItem;
-            draggable.Panel = parentPanel;
-
-            // Set the button action to call our delegate with the dragger
-            btn.GetComponent<Button>().onClick.AddListener(() => action(draggable));
-            
-            // Store for keyboard shortcuts
-            if (number <= 9)
-            {
-                activeActions.Add(action);
-                activeDraggables.Add(draggable);
-            }
-            return btn;
-        }
-
-        private void CreateExpandableButton(int number, string label, UnityAction<UIDraggableItem> mainAction, Action<Transform, UIDraggableItem> populateOptions)
-        {
-            string prefix = number <= 9 ? number + ". " : "";
-            string fullLabel = prefix + label;
-
-            GameObject rowGO = new GameObject("Row_" + number);
-            rowGO.transform.SetParent(contentGO.transform, false);
-            RectTransform rowRT = rowGO.AddComponent<RectTransform>();
-            rowRT.anchorMin = new Vector2(0, 1);
-            rowRT.anchorMax = new Vector2(1, 1);
-            rowRT.pivot = new Vector2(0.5f, 1);
-            rowRT.sizeDelta = new Vector2(0, 0);
-
-            LayoutElement rowLE = rowGO.AddComponent<LayoutElement>();
-            rowLE.flexibleWidth = 1;
-
-            VerticalLayoutGroup rowVLG = rowGO.AddComponent<VerticalLayoutGroup>();
-            rowVLG.spacing = 6;
-            rowVLG.childAlignment = TextAnchor.UpperLeft;
-            rowVLG.childControlHeight = true;
-            rowVLG.childControlWidth = true;
-            rowVLG.childForceExpandHeight = false;
-            rowVLG.childForceExpandWidth = true;
-
-            ContentSizeFitter rowCSF = rowGO.AddComponent<ContentSizeFitter>();
-            rowCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            rowCSF.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-
-            GameObject headerGO = new GameObject("Header");
-            headerGO.transform.SetParent(rowGO.transform, false);
-            RectTransform headerRT = headerGO.AddComponent<RectTransform>();
-            headerRT.anchorMin = new Vector2(0, 1);
-            headerRT.anchorMax = new Vector2(1, 1);
-            headerRT.pivot = new Vector2(0.5f, 1);
-            headerRT.sizeDelta = new Vector2(0, 80);
-
-            LayoutElement headerLE = headerGO.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 80;
-            headerLE.flexibleWidth = 1;
-
-            HorizontalLayoutGroup headerHLG = headerGO.AddComponent<HorizontalLayoutGroup>();
-            headerHLG.spacing = 6;
-            headerHLG.childAlignment = TextAnchor.MiddleLeft;
-            headerHLG.childControlHeight = true;
-            headerHLG.childControlWidth = true;
-            headerHLG.childForceExpandHeight = false;
-            headerHLG.childForceExpandWidth = false;
-
-            GameObject btn = UI.CreateUIButton(headerGO, 10, 80, fullLabel, 20, 0, 0, AnchorPresets.middleCenter, () => {});
-            RectTransform btnRT = btn.GetComponent<RectTransform>();
-            btnRT.sizeDelta = new Vector2(0, 80);
-            LayoutElement btnLE = btn.AddComponent<LayoutElement>();
-            btnLE.preferredHeight = 80;
-            btnLE.flexibleWidth = 1;
-
-            UIDraggableItem draggable = btn.AddComponent<UIDraggableItem>();
-            draggable.FileEntry = SelectedFile;
-            draggable.HubItem = selectedHubItem;
-            draggable.Panel = parentPanel;
-
-            Button b = btn.GetComponent<Button>();
-            if (b != null)
-            {
-                b.onClick.RemoveAllListeners();
-                b.onClick.AddListener(() => mainAction?.Invoke(draggable));
-            }
-
-            if (number <= 9)
-            {
-                activeActions.Add(mainAction);
-                activeDraggables.Add(draggable);
-            }
-
-            populateOptions?.Invoke(rowGO.transform, draggable);
-        }
-
-        private Toggle CreateInlineToggle(Transform parent, string label, bool defaultOn, UnityAction<bool> onValueChanged)
-        {
-            GameObject toggleGO = UI.CreateToggle(parent.gameObject, label, 300, 50, 0, 0, AnchorPresets.middleCenter, onValueChanged);
-            RectTransform rt = toggleGO.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0, 1);
-            rt.anchorMax = new Vector2(1, 1);
-            rt.pivot = new Vector2(0.5f, 1);
-            rt.sizeDelta = new Vector2(0, 50);
-            LayoutElement le = toggleGO.AddComponent<LayoutElement>();
-            le.preferredHeight = 50;
-
-            Toggle t = toggleGO.GetComponent<Toggle>();
-            if (t != null) t.isOn = defaultOn;
-            return t;
-        }
-
-        private Dropdown CreateInlineDropdown(Transform parent, string label, List<string> options, int currentIdx, UnityAction<int> onValueChanged)
-        {
-            GameObject ddGO = UI.CreateDropdown(parent.gameObject, label, 300, 60, options, currentIdx, onValueChanged);
-            RectTransform rt = ddGO.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0, 1);
-            rt.anchorMax = new Vector2(1, 1);
-            rt.pivot = new Vector2(0.5f, 1);
-            rt.sizeDelta = new Vector2(0, 60);
-            LayoutElement le = ddGO.AddComponent<LayoutElement>();
-            le.preferredHeight = 60;
-            return ddGO.GetComponent<Dropdown>();
-        }
-
-        private Button CreateInlineButton(Transform parent, string label, UnityAction onClick)
-        {
-            GameObject btn = UI.CreateUIButton(parent.gameObject, 300, 60, label, 16, 0, 0, AnchorPresets.middleCenter, () => {});
-            RectTransform rt = btn.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0, 1);
-            rt.anchorMax = new Vector2(1, 1);
-            rt.pivot = new Vector2(0.5f, 1);
-            rt.sizeDelta = new Vector2(0, 60);
-            LayoutElement le = btn.AddComponent<LayoutElement>();
-            le.preferredHeight = 60;
-
-            Button b = btn.GetComponent<Button>();
-            b.onClick.AddListener(onClick);
-            return b;
-        }
-
-        public void Hide() => actionsPaneGO?.SetActive(false);
-        public void Show() { actionsPaneGO?.SetActive(false); }
-
-        private void LoadThumbnail(FileEntry file, RawImage target)
-        {
-            if (file == null || target == null) return;
-            target.texture = null;
-            target.color = new Color(0, 0, 0, 0.5f);
-
-            string imgPath = "";
-            string lowerPath = file.Path.ToLowerInvariant();
-            if (lowerPath.EndsWith(".jpg") || lowerPath.EndsWith(".png"))
-            {
-                imgPath = file.Path;
+                actionsPaneRT.anchorMin = new Vector2(leftRatio, 0);
+                actionsPaneRT.anchorMax = new Vector2(1, bottomAnchor);
+                actionsPaneRT.offsetMin = Vector2.zero;
+                actionsPaneRT.offsetMax = Vector2.zero;
             }
             else
             {
-                string testJpg = System.IO.Path.ChangeExtension(file.Path, ".jpg");
-                if (FileManager.FileExists(testJpg)) imgPath = testJpg;
-                else
-                {
-                    string testPng = System.IO.Path.ChangeExtension(file.Path, ".png");
-                    if (FileManager.FileExists(testPng)) imgPath = testPng;
-                }
+                actionsPaneRT.anchorMin = Vector2.zero;
+                actionsPaneRT.anchorMax = Vector2.one;
+                actionsPaneRT.offsetMin = Vector2.zero;
+                actionsPaneRT.offsetMax = Vector2.zero;
             }
 
-            if (string.IsNullOrEmpty(imgPath)) return;
-            if (CustomImageLoaderThreaded.singleton == null) return;
-
-            Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath);
-            if (tex != null)
+            if (tabs.ContainsKey(currentTabType))
             {
-                target.texture = tex;
-                target.color = Color.white;
-                return;
+                tabs[currentTabType].RefreshUI(selectedFiles, selectedHubItem);
             }
-
-            CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
-            qi.imgPath = imgPath;
-            qi.isThumbnail = true;
-            qi.priority = 20; 
-            qi.callback = (res) => {
-                if (res != null && res.tex != null && target != null) {
-                    target.texture = res.tex;
-                    target.color = Color.white;
-                }
-            };
-            CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
         }
 
-        private void LoadHubThumbnail(string url, RawImage target)
-        {
-            if (string.IsNullOrEmpty(url) || target == null) return;
-            target.texture = null;
-            target.color = new Color(0, 0, 0, 0.5f);
 
-            CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
-            qi.imgPath = url;
-            qi.priority = 20;
-            qi.callback = (res) => {
-                if (res != null && res.tex != null && target != null) {
-                    target.texture = res.tex;
-                    target.color = Color.white;
-                }
-            };
-            CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
-        }
-        private Atom GetBestTargetAtom()
+        public Atom GetBestTargetAtom()
         {
             if (SuperController.singleton == null) return null;
             
@@ -453,23 +227,22 @@ namespace VPB
             return null;
         }
 
+        public void Hide() => actionsPaneGO?.SetActive(false);
+        public void Show() 
+        { 
+            if (actionsPaneGO != null) 
+            {
+                actionsPaneGO.transform.SetAsLastSibling();
+                actionsPaneGO.SetActive(true); 
+            }
+        }
+
         public bool ExecuteAutoAction()
         {
-            if (activeActions.Count > 0 && activeDraggables.Count > 0)
+            if (currentTabType == ActionUITabType.Primary && tabs.ContainsKey(ActionUITabType.Primary))
             {
-                 try
-                 {
-                     if (activeActions.Count >= 1)
-                     {
-                         parentPanel?.ShowTemporaryStatus("Auto-applying...", 1.0f);
-                         activeActions[0]?.Invoke(activeDraggables[0]);
-                         return true;
-                     }
-                 }
-                 catch (Exception ex)
-                 {
-                     LogUtil.LogError("[VPB] Auto-Execute failed: " + ex);
-                 }
+                 // Primary tab might have shortcuts we can auto-execute
+                 // For now, let's keep it simple and not auto-execute from tabs unless needed
             }
             return false;
         }

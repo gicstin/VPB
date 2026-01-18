@@ -377,7 +377,7 @@ namespace VPB
             };
 
             settingsPanel = new SettingsPanel(this, backgroundBoxGO);
-            actionsPanel = new GalleryActionsPanel(this, backgroundBoxGO);
+            actionsPanel = new GalleryActionsPanel(this, canvasGO, backgroundBoxGO);
             quickFiltersUI = new QuickFiltersUI(this, backgroundBoxGO);
 
             // Register Panel
@@ -1250,16 +1250,6 @@ namespace VPB
                         }
 
                         UpdateSideButtonsVisibility();
-                        
-                        if (actionsPanel != null && actionsPanel.actionsPaneGO != null)
-                        {
-                            RectTransform apRT = actionsPanel.actionsPaneGO.GetComponent<RectTransform>();
-                            apRT.anchorMin = new Vector2(0, 0);
-                            apRT.anchorMax = new Vector2(1, 0);
-                            apRT.pivot = new Vector2(0.5f, 0);
-                            apRT.anchoredPosition = new Vector2(0, 0); // At bottom in Fixed mode
-                            apRT.sizeDelta = new Vector2(0, 350);
-                        }
                     }
                 }
                 else
@@ -1280,16 +1270,6 @@ namespace VPB
                         bgRT.anchoredPosition = Vector2.zero;
                         
                         UpdateSideButtonsVisibility();
-                        
-                        if (actionsPanel != null && actionsPanel.actionsPaneGO != null)
-                        {
-                            RectTransform apRT = actionsPanel.actionsPaneGO.GetComponent<RectTransform>();
-                            apRT.anchorMin = new Vector2(0.5f, 0);
-                            apRT.anchorMax = new Vector2(0.5f, 0);
-                            apRT.pivot = new Vector2(0.5f, 1);
-                            apRT.anchoredPosition = new Vector2(0, -10);
-                            apRT.sizeDelta = new Vector2(1200, 400);
-                        }
 
                         if (dragger != null) dragger.enabled = true;
                         foreach (Transform child in backgroundBoxGO.transform)

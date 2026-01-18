@@ -971,6 +971,11 @@ namespace VPB
                 btn.onClick.AddListener(() => OnFileClick(file));
             }
 
+            // Right Click
+            var rightClick = btnGO.GetComponent<UIRightClickDelegate>();
+            if (rightClick == null) rightClick = btnGO.AddComponent<UIRightClickDelegate>();
+            rightClick.OnRightClick = () => OnFileRightClick(file);
+
             // Thumbnail
             Transform thumbTr = btnGO.transform.Find("Thumbnail");
             if (thumbTr == null) thumbTr = btnGO.transform.Find("ThumbContainer/Thumbnail");

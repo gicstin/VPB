@@ -171,6 +171,11 @@ namespace VPB
             creatorsCached = true;
         }
 
+        public void InvalidateTags()
+        {
+            tagsCached = false;
+        }
+
         private void CacheTagCounts()
         {
             tagCounts.Clear();
@@ -195,6 +200,9 @@ namespace VPB
                 tagsToCount.UnionWith(TagFilter.HairUnknownTags);
             }
             
+            // Include user-defined tags
+            tagsToCount.UnionWith(TagsManager.Instance.GetAllUserTags());
+
             if (tagsToCount.Count == 0) return;
 
             // Split tags into single-word and multi-word
@@ -274,6 +282,14 @@ namespace VPB
                         {
                             foundTags.Add(multiWordTags[k]);
                         }
+                    }
+
+                    // Check user-defined tags specifically for this entry
+                    var uTags = TagsManager.Instance.GetTags(entry.Uid);
+                    foreach (var ut in uTags)
+                    {
+                        // Ensure we only count it if it's in our tagsToCount (which it should be now)
+                        if (tagsToCount.Contains(ut)) foundTags.Add(ut);
                     }
 
                     // Increment counts
