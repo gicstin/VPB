@@ -1032,18 +1032,8 @@ namespace VPB
 
             VdsLauncher.ParseOnce();
 
-            try
-            {
-                Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
-                Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);
-                Application.SetStackTraceLogType(LogType.Error, StackTraceLogType.None);
-                Application.SetStackTraceLogType(LogType.Exception, StackTraceLogType.None);
-                Application.SetStackTraceLogType(LogType.Assert, StackTraceLogType.None);
-            }
-            catch
-            {
-            }
-
+            // Suppress stack trace logging for better performance and cleaner logs.
+            // Using reflection to avoid MissingMethodException on older Unity versions.
             try
             {
                 var appType = typeof(Application);
@@ -1102,6 +1092,7 @@ namespace VPB
 
             GenericTextureHook.PatchAll(harmony);
             DAZClothingHook.PatchAll(harmony);
+            PerfMonSilencer.Patch(harmony);
 
             // Zstd support is now handled by ZstdNet (auto-initialized)
         }

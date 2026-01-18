@@ -2872,24 +2872,7 @@ namespace VPB
 
         private bool EnsureInstalled()
         {
-            try
-            {
-                bool installed = false;
-                if (FileEntry is VarFileEntry varEntry && varEntry.Package != null)
-                {
-                    installed = varEntry.Package.InstallRecursive();
-                }
-                else if (FileEntry is SystemFileEntry sysEntry && sysEntry.package != null)
-                {
-                    installed = sysEntry.package.InstallRecursive();
-                }
-                return installed;
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError($"[VPB] EnsureInstalled error: {ex.Message}\n{ex.StackTrace}");
-                return false;
-            }
+            return SceneLoadingUtils.EnsureInstalled(FileEntry);
         }
 
         private void ApplyClothingToAtom(Atom atom, string path, string appearanceClothingMode = null)

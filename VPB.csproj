@@ -262,11 +262,13 @@
     <Compile Include="src\ByteArrayPool.cs" />
     <Compile Include="src\GlobalInfo.cs" />
     <Compile Include="src\VdsLauncher.cs" />
+    <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\JSONOptimization.cs" />
     <Compile Include="src\hook\ImageProcessingOptimization.cs" />
     <Compile Include="src\hook\DAZMorphMgr.cs" />
     <Compile Include="src\hook\DAZClothingHook.cs" />
+    <Compile Include="src\hook\PerfMonSilencer.cs" />
     <Compile Include="src\hook\FileManagement\VarPackageMgr.cs" />
     <Compile Include="src\hook\HubResourcePackageHook.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />

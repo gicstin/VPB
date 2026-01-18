@@ -617,11 +617,20 @@ namespace VPB
 
             return null;
         }
-
         static bool InvokeLoad(SuperController sc, string saveName)
         {
             try
             {
+                // Ensure the scene package and its internal dependencies are installed before loading.
+                if (SceneLoadingUtils.EnsureInstalled(saveName))
+                {
+                    LogUtil.Log("VDS refreshing FileManagers after dependency install");
+                    if (MVR.FileManagement.FileManager.singleton != null)
+                        MVR.FileManagement.FileManager.Refresh();
+                    
+                    FileManager.Refresh();
+                }
+
                 try
                 {
                     try

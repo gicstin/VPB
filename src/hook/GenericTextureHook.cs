@@ -9,6 +9,7 @@ using System.Text;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Reflection;
 
 namespace VPB
 {
@@ -610,7 +611,24 @@ namespace VPB
 
                                 if (tex.width != targetW || tex.height != targetH)
                                 {
-                                    tex.Resize(targetW, targetH, tf, false);
+                                    // tex.Resize(targetW, targetH, tf, false);
+                                    // Using reflection to handle different Unity versions (5.6 vs 2018+)
+                                    try
+                                    {
+                                        var mResize = typeof(Texture2D).GetMethod("Resize", new Type[] { typeof(int), typeof(int), typeof(TextureFormat), typeof(bool) });
+                                        if (mResize != null)
+                                        {
+                                            mResize.Invoke(tex, new object[] { targetW, targetH, tf, false });
+                                        }
+                                        else
+                                        {
+                                            tex.Resize(targetW, targetH);
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        tex.Resize(targetW, targetH);
+                                    }
                                 }
 
                                 tex.LoadRawTextureData(bytes);

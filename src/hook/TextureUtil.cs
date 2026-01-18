@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using UnityEngine;
 using System.Runtime.InteropServices;
 
@@ -50,10 +51,22 @@ namespace VPB
             else
             {
                 // Use IntPtr overload to avoid copying if the array is too large (pooled buffer)
+                // Using reflection because LoadRawTextureData(IntPtr, int) was added in Unity 2018.2
                 GCHandle pin = GCHandle.Alloc(data, GCHandleType.Pinned);
                 try
                 {
-                    t.LoadRawTextureData(pin.AddrOfPinnedObject(), expected);
+                    var mLoadRaw = typeof(Texture2D).GetMethod("LoadRawTextureData", new Type[] { typeof(IntPtr), typeof(int) });
+                    if (mLoadRaw != null)
+                    {
+                        mLoadRaw.Invoke(t, new object[] { pin.AddrOfPinnedObject(), expected });
+                    }
+                    else
+                    {
+                        // Fallback: create a new array of exact size
+                        byte[] exactData = new byte[expected];
+                        Buffer.BlockCopy(data, 0, exactData, 0, expected);
+                        t.LoadRawTextureData(exactData);
+                    }
                 }
                 catch (Exception ex)
                 {

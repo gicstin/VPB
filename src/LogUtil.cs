@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.IO;
+using System.Reflection;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
@@ -903,18 +904,76 @@ namespace VPB
 
         static void CaptureMemoryStart()
         {
-            memAllocStart = SafeGet(() => Profiler.GetTotalAllocatedMemoryLong());
-            memReservedStart = SafeGet(() => Profiler.GetTotalReservedMemoryLong());
-            memMonoStart = SafeGet(() => Profiler.GetMonoUsedSizeLong());
-            memManagedStart = SafeGet(() => GC.GetTotalMemory(false));
+            memAllocStart = GetTotalAllocatedMemoryLong();
+            memReservedStart = GetTotalReservedMemoryLong();
+            memMonoStart = GetMonoUsedSizeLong();
+            memManagedStart = GetTotalManagedMemory();
         }
 
         static void CaptureMemoryEnd()
         {
-            memAllocEnd = SafeGet(() => Profiler.GetTotalAllocatedMemoryLong());
-            memReservedEnd = SafeGet(() => Profiler.GetTotalReservedMemoryLong());
-            memMonoEnd = SafeGet(() => Profiler.GetMonoUsedSizeLong());
-            memManagedEnd = SafeGet(() => GC.GetTotalMemory(false));
+            memAllocEnd = GetTotalAllocatedMemoryLong();
+            memReservedEnd = GetTotalReservedMemoryLong();
+            memMonoEnd = GetMonoUsedSizeLong();
+            memManagedEnd = GetTotalManagedMemory();
+        }
+
+        private static bool _profilerMethodsInited;
+        private static MethodInfo _mGetTotalAllocatedMemoryLong;
+        private static MethodInfo _mGetTotalReservedMemoryLong;
+        private static MethodInfo _mGetMonoUsedSizeLong;
+
+        private static void InitProfilerMethods()
+        {
+            if (_profilerMethodsInited) return;
+            _profilerMethodsInited = true;
+            try
+            {
+                var profilerType = typeof(Profiler);
+                _mGetTotalAllocatedMemoryLong = profilerType.GetMethod("GetTotalAllocatedMemoryLong");
+                _mGetTotalReservedMemoryLong = profilerType.GetMethod("GetTotalReservedMemoryLong");
+                _mGetMonoUsedSizeLong = profilerType.GetMethod("GetMonoUsedSizeLong");
+            }
+            catch { }
+        }
+
+        private static long GetTotalAllocatedMemoryLong()
+        {
+            InitProfilerMethods();
+            try
+            {
+                if (_mGetTotalAllocatedMemoryLong != null) return (long)_mGetTotalAllocatedMemoryLong.Invoke(null, null);
+            }
+            catch { }
+            return 0;
+        }
+
+        private static long GetTotalReservedMemoryLong()
+        {
+            InitProfilerMethods();
+            try
+            {
+                if (_mGetTotalReservedMemoryLong != null) return (long)_mGetTotalReservedMemoryLong.Invoke(null, null);
+            }
+            catch { }
+            return 0;
+        }
+
+        private static long GetMonoUsedSizeLong()
+        {
+            InitProfilerMethods();
+            try
+            {
+                if (_mGetMonoUsedSizeLong != null) return (long)_mGetMonoUsedSizeLong.Invoke(null, null);
+            }
+            catch { }
+            return 0;
+        }
+
+        private static long GetTotalManagedMemory()
+        {
+            try { return GC.GetTotalMemory(false); }
+            catch { return 0; }
         }
 
         static T SafeGet<T>(Func<T> getter)
