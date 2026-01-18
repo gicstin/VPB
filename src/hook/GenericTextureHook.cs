@@ -301,7 +301,7 @@ namespace VPB
 
         private static void CaptureCandidateTexture(Texture2D tex, string reason)
         {
-            if (ImageLoadingMgr.singleton == null || Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value) return;
+            if (ImageLoadingMgr.singleton == null || Settings.Instance == null || !Settings.Instance.EnableZstdCompression.Value) return;
 
             var qi = ImageLoadingMgr.singleton.FindCandidateByTexture(tex);
             if (qi == null && !string.IsNullOrEmpty(tex.name))
@@ -462,13 +462,7 @@ namespace VPB
             
             __state = path;
 
-            if (ImageLoadingMgr.singleton == null || Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value)
-            {
-                return true;
-            }
-
-            // Only proceed if either Resize or Zstd is enabled
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value)
+            if (ImageLoadingMgr.singleton == null || Settings.Instance == null || !Settings.Instance.EnableZstdCompression.Value)
             {
                 return true;
             }
@@ -546,10 +540,7 @@ namespace VPB
 
         private static bool TryLoadFromCache(Texture2D tex, string path, bool markNonReadable)
         {
-            if (Settings.Instance == null || !Settings.Instance.EnableTextureOptimizations.Value) return false;
-            
-            bool enableZstd = Settings.Instance.EnableZstdCompression.Value;
-            bool enableResize = Settings.Instance.ReduceTextureSize.Value;
+            if (Settings.Instance == null || !Settings.Instance.EnableZstdCompression.Value) return false;
 
             try
             {
@@ -575,24 +566,8 @@ namespace VPB
                     int h = json["height"].AsInt;
                     int targetW = w;
                     int targetH = h;
-                    
-                    if (enableResize)
-                    {
-                        GetResizedSize(ref targetW, ref targetH, path);
-                    }
-                    
                     string type = json["type"];
-                    // If target size is different from original, GetZstdCachePath will include it in signature
-                    bool isResized = targetW != w || targetH != h;
-                    string realCacheFile = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, isResized ? targetW : 0, isResized ? targetH : 0, qi.bumpStrength);
-                    
-                    if (!File.Exists(realCacheFile) && isResized)
-                    {
-                        // Fallback to full size if resized Zstd cache doesn't exist yet
-                        realCacheFile = baseZstdPath;
-                        targetW = w;
-                        targetH = h;
-                    }
+                    string realCacheFile = baseZstdPath;
 
                     if (File.Exists(realCacheFile))
                     {
@@ -667,136 +642,6 @@ namespace VPB
             return false;
         }
 
-        // --- Shared Logic from ImageLoadingMgr ---
-
-        static bool Has(string source, string value)
-        {
-            if (source == null || value == null) return false;
-            return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        static bool IsLikelyTorsoPath(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            string p = path;
-            if (Has(p, "torso") || Has(p, "body")) return true;
-            return false;
-        }
-
-        static void GetResizedSize(ref int width, ref int height, string path = null)
-        {
-            if (Settings.Instance == null) return;
-
-            int originalWidth = width;
-            int originalHeight = height;
-
-            int minSize = Settings.Instance.MinTextureSize != null ? Settings.Instance.MinTextureSize.Value : 2048;
-            minSize = Mathf.Clamp(minSize, 2048, 8192);
-
-            bool forceToMin = Settings.Instance.ForceTextureToMinSize != null && Settings.Instance.ForceTextureToMinSize.Value;
-            int maxSize = Settings.Instance.MaxTextureSize.Value;
-            if (maxSize < minSize) maxSize = minSize;
-
-            // Exception for Torso textures to support Genital blending
-            if (originalWidth >= 4096 && IsLikelyTorsoPath(path))
-            {
-                if (maxSize < 4096) maxSize = 4096;
-                if (minSize < 4096) minSize = 4096;
-            }
-
-            if (originalWidth != originalHeight)
-            {
-                int minDim = Mathf.Min(originalWidth, originalHeight);
-                int maxDim = Mathf.Max(originalWidth, originalHeight);
-
-                if (minDim <= minSize)
-                {
-                    width = originalWidth;
-                    height = originalHeight;
-                    return;
-                }
-
-                float scale = forceToMin ? ((float)minSize / maxDim) : 0.5f;
-
-                if (!forceToMin)
-                {
-                    float minScale = (float)minSize / minDim;
-                    if (scale < minScale) scale = minScale;
-                }
-
-                float maxScale = (float)maxSize / maxDim;
-                if (scale > maxScale) scale = maxScale;
-
-                if (scale >= 0.9999f)
-                {
-                    width = originalWidth;
-                    height = originalHeight;
-                    return;
-                }
-
-                int newWidth = Mathf.RoundToInt(originalWidth * scale);
-                int newHeight = Mathf.RoundToInt(originalHeight * scale);
-
-                newWidth = Mathf.Max(4, ((newWidth + 3) / 4) * 4);
-                newHeight = Mathf.Max(4, ((newHeight + 3) / 4) * 4);
-
-                if (newWidth > maxSize || newHeight > maxSize)
-                {
-                    float scale2 = Mathf.Min((float)maxSize / newWidth, (float)maxSize / newHeight);
-                    newWidth = Mathf.FloorToInt(newWidth * scale2);
-                    newHeight = Mathf.FloorToInt(newHeight * scale2);
-                    newWidth = Mathf.Max(4, ((newWidth + 3) / 4) * 4);
-                    newHeight = Mathf.Max(4, ((newHeight + 3) / 4) * 4);
-                }
-
-                width = newWidth;
-                height = newHeight;
-            }
-            else
-            {
-                if (originalWidth <= minSize && originalHeight <= minSize)
-                {
-                    width = originalWidth;
-                    height = originalHeight;
-                    return;
-                }
-
-                if (forceToMin)
-                {
-                    width = originalWidth;
-                    height = originalHeight;
-
-                    if (originalWidth > minSize)
-                        width = minSize;
-                    if (originalHeight > minSize)
-                        height = minSize;
-
-                    width = ClosestPowerOfTwo(width);
-                    height = ClosestPowerOfTwo(height);
-                }
-                else
-                {
-                    width = ClosestPowerOfTwo(width / 2);
-                    height = ClosestPowerOfTwo(height / 2);
-
-                    if (originalWidth >= minSize) width = Mathf.Max(width, minSize);
-                    if (originalHeight >= minSize) height = Mathf.Max(height, minSize);
-                }
-                
-                while (width > maxSize || height > maxSize)
-                {
-                    width /= 2;
-                    height /= 2;
-                }
-            }
-        }
-
-        static int ClosestPowerOfTwo(int value)
-        {
-            int power = 1;
-            while (power < value) power <<= 1;
-            return power;
-        }
 
         public static void UnityWebRequest_Get_Postfix(object __result, string uri)
         {

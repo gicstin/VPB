@@ -60,9 +60,6 @@ namespace VPB
         private bool pendingDesktopFixedAutoCollapse;
         private bool backupDesktopFixedAutoCollapse;
 
-        private bool pendingEnableTextureOptimizations;
-        private bool backupEnableTextureOptimizations;
-
         private bool pendingIsDevMode;
         private bool backupIsDevMode;
 
@@ -144,9 +141,6 @@ namespace VPB
             pendingDesktopFixedAutoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
             backupDesktopFixedAutoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
 
-            pendingEnableTextureOptimizations = Settings.Instance.EnableTextureOptimizations.Value;
-            backupEnableTextureOptimizations = Settings.Instance.EnableTextureOptimizations.Value;
-
             pendingIsDevMode = VPBConfig.Instance.IsDevMode;
             backupIsDevMode = VPBConfig.Instance.IsDevMode;
 
@@ -192,7 +186,6 @@ namespace VPB
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
             VPBConfig.Instance.DesktopFixedAutoCollapse = backupDesktopFixedAutoCollapse;
-            Settings.Instance.EnableTextureOptimizations.Value = backupEnableTextureOptimizations;
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.TriggerChange();
         }
@@ -258,7 +251,6 @@ namespace VPB
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
                 VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
                 VPBConfig.Instance.DesktopFixedAutoCollapse = pendingDesktopFixedAutoCollapse;
-                Settings.Instance.EnableTextureOptimizations.Value = pendingEnableTextureOptimizations;
                 VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                 VPBConfig.Instance.Save();
                 
@@ -405,12 +397,7 @@ namespace VPB
                 }, "Enables developer-only features and debug tools. Requires restart to fully hide/show some elements.");
             }
 
-            CreateHeader("Texture Optimization");
-            CreateToggleSetting("Enable Optimizations", pendingEnableTextureOptimizations, (val) => {
-                pendingEnableTextureOptimizations = val;
-                Settings.Instance.EnableTextureOptimizations.Value = val;
-            }, "Master toggle for all texture optimizations (caching, resizing, compression).");
-
+            CreateHeader("Texture Cache");
             CreateToggleSetting("Use Zstd Cache", pendingEnableZstdCompression, (val) => {
                 pendingEnableZstdCompression = val;
                 Settings.Instance.EnableZstdCompression.Value = val;

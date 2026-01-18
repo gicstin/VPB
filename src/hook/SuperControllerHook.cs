@@ -120,10 +120,7 @@ namespace VPB
         public static void PatchOptional(Harmony harmony)
         {
             PatchFileExists(harmony);
-            if (Settings.Instance.EnableTextureOptimizations.Value)
-            {
-                PatchProcessImage(harmony);
-            }
+            PatchProcessImage(harmony);
         }
 
         static void PatchFileExists(Harmony harmony)
@@ -164,79 +161,6 @@ namespace VPB
                 harmony.Patch(m, prefix: new HarmonyMethod(prefix), postfix: new HarmonyMethod(postfix));
                 return;
             }
-        }
-
-        static bool TryPromoteQueuedImage(LinkedList<ImageLoaderThreaded.QueuedImage> queuedImages, ImageLoaderThreaded.QueuedImage qi)
-        {
-            if (queuedImages == null || qi == null) return false;
-
-            if (Settings.Instance == null) return false;
-            bool face = (Settings.Instance.PrioritizeFaceTextures != null) && Settings.Instance.PrioritizeFaceTextures.Value;
-            bool hair = (Settings.Instance.PrioritizeHairTextures != null) && Settings.Instance.PrioritizeHairTextures.Value;
-            if (!face && !hair)
-            {
-                try
-                {
-                    if (Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
-                    {
-                        int pri0 = GetImagePriority(qi.imgPath);
-                        LogUtil.Log(string.Format("IMGQ promote.skip flags face={0} hair={1} pri={2} path={3}", face ? "1" : "0", hair ? "1" : "0", pri0, qi.imgPath));
-                    }
-                }
-                catch { }
-                return false;
-            }
-
-            if (qi.isThumbnail) return false;
-
-            int pri = GetImagePriority(qi.imgPath);
-            if (pri == 0)
-            {
-                if (!hair) return false;
-            }
-            else if (pri >= 1 && pri <= 4)
-            {
-                if (!face) return false;
-            }
-            else
-            {
-                return false;
-            }
-
-            LinkedListNode<ImageLoaderThreaded.QueuedImage> node = null;
-            var it = queuedImages.Last;
-            while (it != null)
-            {
-                if (object.ReferenceEquals(it.Value, qi)) { node = it; break; }
-                it = it.Previous;
-            }
-            if (node == null) return false;
-
-            var target = queuedImages.First;
-            while (target != null)
-            {
-                var v = target.Value;
-                if (v == null) { target = target.Next; continue; }
-                if (object.ReferenceEquals(v, qi)) break;
-                int p2 = GetImagePriority(v.imgPath);
-                if (p2 > pri) break;
-                target = target.Next;
-            }
-            if (target == null) return false;
-            if (object.ReferenceEquals(target.Value, qi)) return false;
-
-            try
-            {
-                if (Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
-                {
-                    LogUtil.Log(string.Format("IMGQ promote.do flags face={0} hair={1} pri={2} path={3}", face ? "1" : "0", hair ? "1" : "0", pri, qi.imgPath));
-                }
-            }
-            catch { }
-
-            queuedImages.Remove(node);
-            queuedImages.AddBefore(target, qi);
-            return true;
         }
 
         static void LogImageQueueEvent(string evt, ImageLoaderThreaded.QueuedImage qi, int queueCount, int numRealQueuedImages, bool moved)
@@ -402,8 +326,7 @@ namespace VPB
 
             ImageLoadingMgr.currentProcessingPath = qi.imgPath;
 
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return;
+            if (!Settings.Instance.EnableZstdCompression.Value) return;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -421,12 +344,7 @@ namespace VPB
             ImageLoadingMgr.currentProcessingPath = null;
 
             if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-
-            if (qi.tex != null)
-            {
-                ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi);
-            }
+            if (!Settings.Instance.EnableZstdCompression.Value) return;
         }
 
         public static void PreProcessImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage __0)
@@ -452,8 +370,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return true;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return true;
+            if (!Settings.Instance.EnableZstdCompression.Value) return true;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
@@ -476,9 +393,6 @@ namespace VPB
                 return false;
             }
 
-            // Cache miss - wrap callback to capture once loaded
-            ImageLoadingMgr.singleton.TrackCandidate(qi);
-
             try
             {
                 var tr = Traverse.Create(__instance);
@@ -486,7 +400,7 @@ namespace VPB
                 int qCount = q != null ? q.Count : 0;
                 int realQ = 0;
                 try { realQ = (int)tr.Field("numRealQueuedImages").GetValue(); } catch { }
-                bool moved = TryPromoteQueuedImage(q, qi);
+                bool moved = false;
                 LogImageQueueEvent("enqueue.thumb", qi, qCount, realQ, moved);
             }
             catch { }
@@ -502,8 +416,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return true;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return true;
+            if (!Settings.Instance.EnableZstdCompression.Value) return true;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -522,9 +435,6 @@ namespace VPB
                 return false;
             }
 
-            // Cache miss - wrap callback to capture once loaded
-            ImageLoadingMgr.singleton.TrackCandidate(qi);
-
             try
             {
                 var tr = Traverse.Create(__instance);
@@ -532,7 +442,7 @@ namespace VPB
                 int qCount = q != null ? q.Count : 0;
                 int realQ = 0;
                 try { realQ = (int)tr.Field("numRealQueuedImages").GetValue(); } catch { }
-                bool moved = TryPromoteQueuedImage(q, qi);
+                bool moved = false;
                 LogImageQueueEvent("enqueue.thumb.immediate", qi, qCount, realQ, moved);
             }
             catch { }
@@ -548,8 +458,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return true;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return true;
+            if (!Settings.Instance.EnableZstdCompression.Value) return true;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
@@ -560,9 +469,6 @@ namespace VPB
                 return false;
             }
 
-            // Cache miss - wrap callback to capture once loaded
-            ImageLoadingMgr.singleton.TrackCandidate(qi);
-
             try
             {
                 var tr = Traverse.Create(__instance);
@@ -570,7 +476,7 @@ namespace VPB
                 int qCount = q != null ? q.Count : 0;
                 int realQ = 0;
                 try { realQ = (int)tr.Field("numRealQueuedImages").GetValue(); } catch { }
-                bool moved = TryPromoteQueuedImage(q, qi);
+                bool moved = false;
                 LogImageQueueEvent("enqueue.img", qi, qCount, realQ, moved);
             }
             catch { }
@@ -587,8 +493,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
-            if (!Settings.Instance.EnableTextureOptimizations.Value) return;
-            if (!Settings.Instance.ReduceTextureSize.Value && !Settings.Instance.EnableZstdCompression.Value) return;
+            if (!Settings.Instance.EnableZstdCompression.Value) return;
 
 
 
@@ -598,13 +503,6 @@ namespace VPB
                 ImageLoadingMgr.singleton.ResolveInflightForQueuedImage(__instance);
             }
 
-            if (__instance.tex != null)
-            {
-                // Defer expensive resize/compress work to ImageLoadingMgr's background queue.
-                // We intentionally keep the currently loaded texture and only generate the disk cache
-                // so future loads can hit it.
-                ImageLoadingMgr.singleton.TryEnqueueResizeCache(__instance);
-            }
         }
 
         [HarmonyPrefix]
@@ -683,11 +581,6 @@ namespace VPB
         [HarmonyPatch(typeof(MeshVR.AssetLoader), "QueueLoadAssetBundleFromFile")]
         static bool QueueLoadAssetBundleFromFile(MeshVR.AssetLoader.AssetBundleFromFileRequest abffr)
         {
-            if (Settings.Instance.CacheAssetBundle.Value)
-            {
-                VPB.CustomAssetLoader.QueueLoadAssetBundleFromFile(abffr);
-                return false; // Prevent the original method from running
-            }
             return true;
         }
 
@@ -695,11 +588,6 @@ namespace VPB
         [HarmonyPatch(typeof(MeshVR.AssetLoader), "QueueLoadSceneIntoTransform")]
         static bool QueueLoadSceneIntoTransform(MeshVR.AssetLoader.SceneLoadIntoTransformRequest slr)
         {
-            if (Settings.Instance.CacheAssetBundle.Value)
-            {
-                VPB.CustomAssetLoader.QueueLoadSceneIntoTransform(slr);
-                return false; // Prevent the original method from running
-            }
             return true;
         }
 
@@ -707,11 +595,6 @@ namespace VPB
         [HarmonyPatch(typeof(MeshVR.AssetLoader), "DoneWithAssetBundleFromFile")]
         static bool DoneWithAssetBundleFromFile(string path)
         {
-            if (Settings.Instance.CacheAssetBundle.Value)
-            {
-                VPB.CustomAssetLoader.DoneWithAssetBundleFromFile(path);
-                return false; // Prevent the original method from running
-            }
             return true;
         }
     }

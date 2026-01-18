@@ -657,7 +657,7 @@ namespace VPB
                         if (vp == null)
                         {
 							string text = File.ReadAllText(cacheJson);
-							vp = JsonUtility.FromJson<SerializableVarPackage>(text);
+							vp = JsonConvert.DeserializeObject<SerializableVarPackage>(text);
 						}
 
 						if (vp.FileEntryNames != null)
@@ -861,10 +861,13 @@ namespace VPB
 							string t = splits[i].Trim();
 							if(!string.IsNullOrEmpty(t))
                             {
-								if (!TagFilter.AllClothingTags.Contains(t)&& !TagFilter.ClothingUnknownTags.Contains(t))
+								lock (TagFilter.ClothingUnknownTagsLock)
 								{
-									TagFilter.ClothingUnknownTags.Add(t);
-									//LogUtil.Log("clothing tag " + t);
+									if (!TagFilter.AllClothingTags.Contains(t) && !TagFilter.ClothingUnknownTags.Contains(t))
+									{
+										TagFilter.ClothingUnknownTags.Add(t);
+										//LogUtil.Log("clothing tag " + t);
+									}
 								}
 								item.ClothingTags.Add(t);
 							}
@@ -897,10 +900,16 @@ namespace VPB
 							string t = splits[i].Trim();
 							if (!string.IsNullOrEmpty(t))
 							{
-								if (!TagFilter.AllHairTags.Contains(t)&& !TagFilter.HairUnknownTags.Contains(t))
+								if (!TagFilter.AllHairTags.Contains(t))
 								{
-									TagFilter.HairUnknownTags.Add(t);
-								//LogUtil.Log("hair tag " + t);
+									lock (TagFilter.HairUnknownTagsLock)
+									{
+										if (!TagFilter.HairUnknownTags.Contains(t))
+										{
+											TagFilter.HairUnknownTags.Add(t);
+											//LogUtil.Log("hair tag " + t);
+										}
+									}
 								}
 								item.HairTags.Add(t);
 							}
@@ -1048,7 +1057,7 @@ namespace VPB
 			this.HairFileEntryNames = svp.HairFileEntryNames;
 			this.HairTags = svp.HairTags;
 
-			string json = JsonUtility.ToJson(svp);
+			string json = JsonConvert.SerializeObject(svp);
 
 			string folder = "Cache/AllPackagesJSON";
 			if (!Directory.Exists(folder))
@@ -1064,7 +1073,7 @@ namespace VPB
 			{
 				foreach (string key in asObject.Keys)
 				{
-					VarPackage package = FileManager.GetPackage(key);
+					VarPackage package = FileManager.GetPackage(key, false);
 					if (package == null)
 					{
 						HasMissingDependencies = true;
@@ -1113,7 +1122,7 @@ namespace VPB
             {
 				foreach (var key in this.RecursivePackageDependencies)
 				{
-					VarPackage package = FileManager.GetPackage(key);
+					VarPackage package = FileManager.GetPackage(key, false);
 					if (package != null)
 					{
 						bool dirty2= package.InstallRecursive(visited);

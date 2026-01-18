@@ -65,6 +65,7 @@ namespace VPB
         public bool DragDropReplaceMode = false;
         public bool DesktopFixedMode = false;
         public bool DesktopFixedAutoCollapse = true;
+        public int DesktopFixedHeightMode = 0; // 0: Full, 1: 2/3, 2: 1/2
         public bool IsLoadingScene { get; private set; }
 
         private bool? _isDevMode;
@@ -91,18 +92,16 @@ namespace VPB
                     {
                     }
 
-                    // Fallback to config-based dev mode
-                    _isDevMode = _isDevModeFromConfig;
+                    // Only .DevMode file enables dev mode
+                    _isDevMode = false;
                 }
                 return _isDevMode.Value;
             }
             set
             {
                 _isDevMode = value;
-                _isDevModeFromConfig = value;
             }
         }
-        private bool _isDevModeFromConfig = false;
 
         public void StartSceneLoad()
         {
@@ -137,6 +136,7 @@ namespace VPB
             DragDropReplaceMode = false;
             DesktopFixedMode = false;
             DesktopFixedAutoCollapse = true;
+            DesktopFixedHeightMode = 0;
 
             try
             {
@@ -191,7 +191,7 @@ namespace VPB
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
-                        if (node["IsDevMode"] != null) _isDevModeFromConfig = node["IsDevMode"].AsBool;
+                        if (node["DesktopFixedHeightMode"] != null) DesktopFixedHeightMode = node["DesktopFixedHeightMode"].AsInt;
                     }
                 }
             }
@@ -221,7 +221,7 @@ namespace VPB
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
-                node["IsDevMode"].AsBool = IsDevMode;
+                node["DesktopFixedHeightMode"].AsInt = DesktopFixedHeightMode;
                 File.WriteAllText(ConfigPath, node.ToString());
                 // No need to Invoke ConfigChanged here if we want to control it from the UI or if Save is the final action.
                 // Actually, Invoke is good if other components listen to file saves.

@@ -7,6 +7,9 @@ namespace VPB
 {
     class TagFilter
     {
+        public static readonly object ClothingUnknownTagsLock = new object();
+        public static readonly object HairUnknownTagsLock = new object();
+
         public static List<string> HairRegionTags = new List<string>()
         {
             "head","face","genital","torso","arms","legs","full body",

@@ -150,7 +150,8 @@ namespace VPB
             {
                 LogUtil.Log("RegisterPackage " + vpath);
             }
-            string text = packagePathToUid(vpath).Trim();
+            string cleanPath = CleanFilePath(vpath);
+            string text = packagePathToUid(cleanPath).Trim();
             string[] array = text.Split('.');
 
             bool isDuplicated = false;
@@ -182,7 +183,7 @@ namespace VPB
                             value = new VarPackageGroup(shortName);
                             packageGroups.Add(shortName, value);
                         }
-                        VarPackage varPackage = new VarPackage(text, vpath, value, text2, text3, version);
+                        VarPackage varPackage = new VarPackage(text, cleanPath, value, text2, text3, version);
                         packagesByUid.Add(text, varPackage);
 
                         packagesByPath.Add(varPackage.Path, varPackage);
@@ -207,7 +208,31 @@ namespace VPB
                     VarPackage existing;
                     if (packagesByUid.TryGetValue(text, out existing))
                     {
-                        LogUtil.LogError("Duplicate package uid " + text + ". Existing: " + existing.Path + " New: " + vpath + ". Cannot register");
+                        string existingPath = CleanFilePath(existing.Path);
+                        if (string.Equals(existingPath, cleanPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (!packagesByPath.ContainsKey(cleanPath))
+                            {
+                                packagesByPath.Add(cleanPath, existing);
+                            }
+                            return existing;
+                        }
+
+                        string existingFileId;
+                        string newFileId;
+                        if (TryGetWindowsFileId(existingPath, out existingFileId)
+                            && TryGetWindowsFileId(cleanPath, out newFileId)
+                            && existingFileId == newFileId)
+                        {
+                            LogUtil.LogWarning("Duplicate package uid " + text + " points to same file via different path. Existing: " + existing.Path + " New: " + cleanPath + ". Skipping duplicate registration");
+                            if (!packagesByPath.ContainsKey(cleanPath))
+                            {
+                                packagesByPath.Add(cleanPath, existing);
+                            }
+                            return existing;
+                        }
+
+                        LogUtil.LogError("Duplicate package uid " + text + ". Existing: " + existing.Path + " New: " + cleanPath + ". Cannot register");
                     }
                     else
                     {
@@ -1485,7 +1510,7 @@ namespace VPB
 			return false;
 		}
 
-		public static VarPackage GetPackage(string packageUidOrPath)
+		public static VarPackage GetPackage(string packageUidOrPath, bool ensureInstalled = true)
 		{
 			VarPackage value = null;
 			Match match;
@@ -1516,7 +1541,7 @@ namespace VPB
 			{
 				packagesByPath.TryGetValue(packageUidOrPath, out value);
 			}
-			if (value != null) EnsurePackageInstalled(value);
+			if (value != null && ensureInstalled) EnsurePackageInstalled(value);
 			return value;
 		}
 
@@ -1524,15 +1549,14 @@ namespace VPB
 		{
 			if (package == null) return;
 
-			if (package.Path != null && package.Path.StartsWith("AllPackages/"))
+			// Recursively install this package and its dependencies if needed.
+			// InstallRecursive will return true if ANYTHING was moved (self or dependency).
+			bool moved = package.InstallRecursive();
+			if (moved)
 			{
-				LogUtil.Log($"Installing package from AllPackages: {package.Uid}");
-				bool moved = package.InstallSelf();
-				if (moved)
-				{
-					MVR.FileManagement.FileManager.Refresh();
-					FileManager.Refresh();
-				}
+				LogUtil.Log($"[VPB] Dependencies installed/verified for: {package.Uid}");
+				MVR.FileManagement.FileManager.Refresh();
+				FileManager.Refresh();
 			}
 		}
 

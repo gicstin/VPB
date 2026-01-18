@@ -95,6 +95,12 @@ namespace VPB
             footerLayoutBtnText = footerLayoutBtn.GetComponentInChildren<Text>();
             AddTooltip(footerLayoutBtn, "Toggle Layout Mode (Grid/Card)");
 
+            // Fixed Height Mode Toggle
+            footerHeightBtn = UI.CreateUIButton(pageContainer, 40, 40, "↕", 20, 720, 0, AnchorPresets.middleLeft, ToggleFixedHeightMode);
+            footerHeightBtnImage = footerHeightBtn.GetComponent<Image>();
+            footerHeightBtnText = footerHeightBtn.GetComponentInChildren<Text>();
+            AddTooltip(footerHeightBtn, "Toggle Fixed Height (Full/2-3rds/Half)");
+
             // Hover support
             AddHoverDelegate(paginationFirstBtn);
             AddHoverDelegate(paginationPrevBtn);
@@ -109,6 +115,7 @@ namespace VPB
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
             AddHoverDelegate(footerLayoutBtn);
+            AddHoverDelegate(footerHeightBtn);
 
             // Hover Path Text (Bottom Right - now much wider)
             GameObject pathGO = new GameObject("HoverPathText");
@@ -133,6 +140,7 @@ namespace VPB
             UpdateSideButtonsVisibility();
             UpdateFooterFollowStates();
             UpdateFooterLayoutState();
+            UpdateFooterHeightState();
             UpdatePaginationText();
         }
 
@@ -173,6 +181,36 @@ namespace VPB
             
             if (footerLayoutBtnText != null)
                 footerLayoutBtnText.text = (layoutMode == GalleryLayoutMode.VerticalCard) ? "≣" : "▤";
+        }
+
+        private void ToggleFixedHeightMode()
+        {
+            if (VPBConfig.Instance == null) return;
+            VPBConfig.Instance.DesktopFixedHeightMode = (VPBConfig.Instance.DesktopFixedHeightMode + 1) % 3;
+            VPBConfig.Instance.Save();
+            UpdateFooterHeightState();
+            UpdateLayout();
+        }
+
+        private void UpdateFooterHeightState()
+        {
+            if (VPBConfig.Instance == null) return;
+            
+            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
+            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            
+            if (footerHeightBtnImage != null)
+                footerHeightBtnImage.color = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? activeColor : inactiveColor;
+                
+            if (footerHeightBtnText != null)
+            {
+                switch(VPBConfig.Instance.DesktopFixedHeightMode)
+                {
+                    case 0: footerHeightBtnText.text = "H1"; break;
+                    case 1: footerHeightBtnText.text = "H⅔"; break;
+                    case 2: footerHeightBtnText.text = "H½"; break;
+                }
+            }
         }
 
         private void ToggleFollowQuick(string type)
@@ -249,6 +287,7 @@ namespace VPB
             if (footerFollowAngleBtn != null) footerFollowAngleBtn.SetActive(!fixedMode);
             if (footerFollowDistanceBtn != null) footerFollowDistanceBtn.SetActive(!fixedMode);
             if (footerFollowHeightBtn != null) footerFollowHeightBtn.SetActive(!fixedMode);
+            if (footerHeightBtn != null) footerHeightBtn.SetActive(fixedMode);
 
             UpdateSideButtonPositions();
         }

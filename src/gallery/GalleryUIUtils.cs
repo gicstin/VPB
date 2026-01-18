@@ -2134,6 +2134,12 @@ namespace VPB
             if (node == null) return;
             JSONClass presetJSON = node.AsObject;
             
+            if (FileButton.EnsureInstalledByText(presetJSON.ToString()))
+            {
+                MVR.FileManagement.FileManager.Refresh();
+                FileManager.Refresh();
+            }
+            
             // Detect if this is a scene file and extract the first Person atom's pose
             if (presetJSON["atoms"] != null)
             {
@@ -2185,7 +2191,18 @@ namespace VPB
             if (presetStorable != null)
             {
                  var pm = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
-                 if (pm != null) pm.LoadPresetFromJSON(presetJSON, false);
+                 if (pm != null)
+                 {
+                    try
+                    {
+                        MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath);
+                        pm.LoadPresetFromJSON(presetJSON, false);
+                    }
+                    finally
+                    {
+                        MVR.FileManagement.FileManager.PopLoadDir();
+                    }
+                 }
             }
         }
         
@@ -2371,6 +2388,12 @@ namespace VPB
                 JSONNode root = UI.LoadJSONWithFallback(path, this.FileEntry);
                 if (root == null || root["atoms"] == null) return;
 
+                if (FileButton.EnsureInstalledByText(root.ToString()))
+                {
+                    MVR.FileManagement.FileManager.Refresh();
+                    FileManager.Refresh();
+                }
+
                 JSONNode sourceAtom = null;
                 foreach (JSONNode atom in root["atoms"].AsArray)
                 {
@@ -2411,7 +2434,15 @@ namespace VPB
                             var pm = targetStorable.GetComponentInChildren<MeshVR.PresetManager>();
                             if (pm != null)
                             {
-                                pm.LoadPresetFromJSON(storable.AsObject, false);
+                                try
+                                {
+                                    MVR.FileManagement.FileManager.PushLoadDirFromFilePath(path);
+                                    pm.LoadPresetFromJSON(storable.AsObject, false);
+                                }
+                                finally
+                                {
+                                    MVR.FileManagement.FileManager.PopLoadDir();
+                                }
                                 appliedCount++;
                             }
                             else
@@ -2790,7 +2821,11 @@ namespace VPB
             JSONStorable geometry = atom.GetStorableByID("geometry");
             ItemType itemType = GetItemType(FileEntry);
             string ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
-            string appearanceMode = string.IsNullOrEmpty(appearanceClothingMode) ? "merge" : appearanceClothingMode;
+            string appearanceMode = appearanceClothingMode;
+            if (string.IsNullOrEmpty(appearanceMode))
+            {
+                appearanceMode = (itemType == ItemType.Appearance) ? "replace" : "merge";
+            }
 
             bool isPoseCategory = false;
             if (Panel != null)
@@ -3029,31 +3064,39 @@ namespace VPB
                 if (storableId != null && atom.type == "Person")
                 {
                     bool isPose = itemType == ItemType.Pose;
-                    Dictionary<string, bool> originalLocks = new Dictionary<string, bool>();
+                    PresetLockStore lockStore = new PresetLockStore();
 
-                    // If it's a pose, we want to lock Clothing and Hair to prevent them being changed if the pose preset contains them
-                    // NEW: Also lock Morphs and Skin for cleaner pose application
-                    if (isPose && atom.presetManagerControls != null)
+                    if (atom.presetManagerControls != null)
                     {
-                        foreach (var pmc in atom.presetManagerControls)
+                        bool isAppearance = itemType == ItemType.Appearance;
+                        bool lockClothing = isPose;
+                        bool lockMorphs = isPose;
+
+                        // Use same methods as BrowserAssist (ref)
+                        // Clear all locks, and specifically lock what we don't want changed
+                        if (isPose || (isAppearance && appearanceMode == "replace"))
                         {
-                            if (pmc != null && (pmc.name == "ClothingPresets" || pmc.name == "HairPresets" || pmc.name == "MorphPresets" || pmc.name == "SkinPresets" || pmc.name == "AppearancePresets"))
-                            {
-                                originalLocks[pmc.name] = pmc.lockParams;
-                                pmc.lockParams = true;
-                            }
+                            lockStore.StorePresetLocks(atom, true, lockClothing, lockMorphs);
                         }
                     }
 
                     bool presetLoaded = false;
                     bool suppressRoot = isPose && !Input.GetKey(KeyCode.LeftShift); // Default to suppress root (In Place), hold Shift to move
                     
+                    // Capture state for restoration
+                    JSONStorable presetStorable = atom.GetStorableByID(storableId);
+                    JSONStorableBool loadOnSelectJSB = presetStorable != null ? presetStorable.GetBoolJSONParam("loadPresetOnSelect") : null;
+                    bool loadOnSelectPreState = loadOnSelectJSB != null ? loadOnSelectJSB.val : false;
+                    JSONStorableString presetNameJSS = presetStorable != null ? presetStorable.GetStringJSONParam("presetName") : null;
+                    string initialPresetName = presetNameJSS != null ? presetNameJSS.val : "";
+
                     try
                     {
+                        if (loadOnSelectJSB != null) loadOnSelectJSB.val = false;
+
                         LogUtil.Log($"[DragDropDebug] Loading preset type={itemType}, storableId={storableId}, path={normalizedPath}, SuppressRoot={suppressRoot}");
                         
                         // Get the storable for this preset type
-                        JSONStorable presetStorable = atom.GetStorableByID(storableId);
                         if (presetStorable != null)
                         {
                             MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
@@ -3067,11 +3110,22 @@ namespace VPB
                                     isPosePath = normalizedPath.IndexOf("Saves/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0;
                                 }
 
+                                if (presetNameJSS != null)
+                                {
+                                    presetNameJSS.val = presetManager.GetPresetNameFromFilePath(SuperController.singleton.NormalizePath(normalizedPath));
+                                }
+
                                 // Standardizing on JSON loading for all presets to avoid "not compatible with store folder path" errors
                                 // This also ensures that VAR paths and loose files work identically.
                                 JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
                                 if (presetJSON != null)
                                 {
+                                    if (FileButton.EnsureInstalledByText(presetJSON.ToString()))
+                                    {
+                                        MVR.FileManagement.FileManager.Refresh();
+                                        FileManager.Refresh();
+                                    }
+
                                     // Detect if this is a scene file and extract the appropriate atom data
                                     if (presetJSON["atoms"] != null)
                                     {
@@ -3133,6 +3187,11 @@ namespace VPB
                                                 filteredStorables.Add(node);
                                             }
                                             presetJSON["storables"] = filteredStorables;
+                                        }
+
+                                        if (itemType == ItemType.Appearance)
+                                        {
+                                            presetJSON["setUnlistedParamsToDefault"].AsBool = true;
                                         }
 
                                         // Function to clean presets array (Shared logic)
@@ -3321,9 +3380,21 @@ namespace VPB
                                             // Ensure we are setting the last restored data so 'Undo' might work (or just system consistency)
                                             atom.SetLastRestoredData(presetJSON, true, true);
                                             
-                                            LogUtil.Log($"[DragDropDebug] Calling LoadPresetFromJSON...");
-                                            presetManager.LoadPresetFromJSON(presetJSON, true); 
-                                            presetLoaded = true;
+                                            bool merge = true;
+                                            if (itemType == ItemType.Appearance) merge = (appearanceMode == "merge");
+                                            else if (itemType == ItemType.Pose) merge = false;
+
+                                            LogUtil.Log($"[DragDropDebug] Calling LoadPresetFromJSON (merge={merge})...");
+                                            try
+                                            {
+                                                MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath);
+                                                presetManager.LoadPresetFromJSON(presetJSON, merge); 
+                                                presetLoaded = true;
+                                            }
+                                            finally
+                                            {
+                                                MVR.FileManagement.FileManager.PopLoadDir();
+                                            }
                                             LogUtil.Log($"[DragDropDebug] Successfully loaded preset via PresetManager.LoadPresetFromJSON");
                                         }
                                         catch (Exception ex)
@@ -3353,16 +3424,13 @@ namespace VPB
                         }
                         finally
                         {
+                            if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
+                            if (presetNameJSS != null) presetNameJSS.val = initialPresetName;
+
                             // Restore locks
-                            if (isPose && atom.presetManagerControls != null)
+                            if (atom.type == "Person")
                             {
-                                foreach (var pmc in atom.presetManagerControls)
-                                {
-                                    if (pmc != null && originalLocks.ContainsKey(pmc.name))
-                                    {
-                                        pmc.lockParams = originalLocks[pmc.name];
-                                    }
-                                }
+                                lockStore.RestorePresetLocks(atom);
                             }
                         }
                         
@@ -4091,19 +4159,19 @@ namespace VPB
 
             options.Add(new ContextMenuPanel.Option(lastLabel, () => {
                 ApplyAppearanceMode(mode, handler);
-            }, false, true));
+            }));
 
             options.Add(new ContextMenuPanel.Option("Keep Existing Clothing", () => {
                 ApplyAppearanceMode("keep", handler);
-            }, false, true));
+            }));
 
             options.Add(new ContextMenuPanel.Option("Replace Clothing", () => {
                 ApplyAppearanceMode("replace", handler);
-            }, false, true));
+            }));
 
             options.Add(new ContextMenuPanel.Option("Merge Clothing", () => {
                 ApplyAppearanceMode("merge", handler);
-            }, false, true));
+            }));
         }
 
         private void ShowAppearanceClothingModes(FileEntry entry, Atom targetAtom)
@@ -4152,7 +4220,7 @@ namespace VPB
                         }
                         else
                         {
-                            ApplyImport(node.AsObject, targetAtom, category, clothingMode);
+                            ApplyImport(node.AsObject, targetAtom, category, clothingMode, entry.Path);
                         }
                     }));
                 }
@@ -4160,14 +4228,14 @@ namespace VPB
 
             if (personNodes.Count == 1 && targetAtom != null)
             {
-                ApplyImport(personNodes[0], targetAtom, category, clothingMode);
+                ApplyImport(personNodes[0], targetAtom, category, clothingMode, entry.Path);
                 yield break;
             }
 
             ContextMenuPanel.Instance.PushPage("Select Source Person", atomOptions);
         }
 
-        private void ApplyImport(JSONClass sourceAtomNode, Atom targetAtom, string category, string clothingMode)
+        private void ApplyImport(JSONClass sourceAtomNode, Atom targetAtom, string category, string clothingMode, string path = null)
         {
             JSONClass preset = new JSONClass();
             JSONArray storables = new JSONArray();
@@ -4247,7 +4315,17 @@ namespace VPB
 
                         targetAtom.SetLastRestoredData(preset, true, true);
                         LogUtil.Log($"[Import] Applying Appearance preset via PresetManager.LoadPresetFromJSON ({storables.Count} storables)");
-                        presetManager.LoadPresetFromJSON(preset, false);
+                        
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(path)) MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(path));
+                            presetManager.LoadPresetFromJSON(preset, false);
+                        }
+                        finally
+                        {
+                            if (!string.IsNullOrEmpty(path)) MVR.FileManagement.FileManager.PopLoadDir();
+                        }
+
                         appliedViaPresetManager = true;
                         LogUtil.Log("[Import] Appearance preset application successful.");
                     }

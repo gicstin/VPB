@@ -56,8 +56,6 @@ namespace VPB
         private Rect m_RemoveWindowRect = new Rect(250, 250, 600, 500);
 
         private bool m_ShowDownscaleTexturesInfo;
-        private bool m_ShowPrioritizeFaceTexturesInfo;
-        private bool m_ShowPrioritizeHairTexturesInfo;
         private bool m_ShowPluginsAlwaysEnabledInfo;
         private bool m_ShowRemoveOldDamagedInfo;
         private bool m_ShowUninstallAllInfo;
@@ -78,16 +76,10 @@ namespace VPB
         private string m_SettingsGalleryKeyDraft;
         private string m_SettingsCreateGalleryKeyDraft;
         private string m_SettingsHubKeyDraft;
-        private int m_SettingsThumbnailThresholdDraft;
-        private bool m_SettingsAutoOptimizeCacheDraft;
-        private bool m_SettingsReduceTextureSizeDraft;
-        private bool m_SettingsPrioritizeFaceTexturesDraft;
-        private bool m_SettingsPrioritizeHairTexturesDraft;
         private bool m_SettingsPluginsAlwaysEnabledDraft;
         private bool m_SettingsIsDevModeDraft;
         private bool m_SettingsEnableUiTransparencyDraft;
         private float m_SettingsUiTransparencyValueDraft;
-        private bool m_SettingsEnableGalleryFadeDraft;
         private string m_SettingsError;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -159,8 +151,6 @@ namespace VPB
         private void CloseAllInfoCards()
         {
             m_ShowDownscaleTexturesInfo = false;
-            m_ShowPrioritizeFaceTexturesInfo = false;
-            m_ShowPrioritizeHairTexturesInfo = false;
             m_ShowPluginsAlwaysEnabledInfo = false;
             m_ShowRemoveOldDamagedInfo = false;
             m_ShowUninstallAllInfo = false;
@@ -178,15 +168,9 @@ namespace VPB
             m_SettingsGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.GalleryKey != null) ? Settings.Instance.GalleryKey.Value : "";
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
-            m_SettingsThumbnailThresholdDraft = (Settings.Instance != null && Settings.Instance.ThumbnailThreshold != null) ? Settings.Instance.ThumbnailThreshold.Value : 600;
-            m_SettingsAutoOptimizeCacheDraft = (Settings.Instance != null && Settings.Instance.AutoOptimizeCache != null) ? Settings.Instance.AutoOptimizeCache.Value : false;
-            m_SettingsReduceTextureSizeDraft = (Settings.Instance != null && Settings.Instance.ReduceTextureSize != null) ? Settings.Instance.ReduceTextureSize.Value : false;
-            m_SettingsPrioritizeFaceTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null) ? Settings.Instance.PrioritizeFaceTextures.Value : true;
-            m_SettingsPrioritizeHairTexturesDraft = (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null) ? Settings.Instance.PrioritizeHairTextures.Value : true;
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
             m_SettingsUiTransparencyValueDraft = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
-            m_SettingsEnableGalleryFadeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.EnableGalleryFade : true;
             m_SettingsIsDevModeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.IsDevMode : false;
             m_SettingsError = null;
         }
@@ -224,29 +208,11 @@ namespace VPB
                 {
                     Settings.Instance.HubKey.Value = parsedHubKey.keyPattern;
                 }
-                if (Settings.Instance != null && Settings.Instance.ThumbnailThreshold != null)
-                {
-                    Settings.Instance.ThumbnailThreshold.Value = m_SettingsThumbnailThresholdDraft;
-                }
-                if (Settings.Instance != null && Settings.Instance.AutoOptimizeCache != null)
-                {
-                    if (Settings.Instance.AutoOptimizeCache.Value != m_SettingsAutoOptimizeCacheDraft)
-                    {
-                        Settings.Instance.AutoOptimizeCache.Value = m_SettingsAutoOptimizeCacheDraft;
-                    }
-                }
                 if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
                 {
                     if (Settings.Instance.PluginsAlwaysEnabled.Value != m_SettingsPluginsAlwaysEnabledDraft)
                     {
                         Settings.Instance.PluginsAlwaysEnabled.Value = m_SettingsPluginsAlwaysEnabledDraft;
-                    }
-                }
-                if (Settings.Instance != null && Settings.Instance.ReduceTextureSize != null)
-                {
-                    if (Settings.Instance.ReduceTextureSize.Value != m_SettingsReduceTextureSizeDraft)
-                    {
-                        Settings.Instance.ReduceTextureSize.Value = m_SettingsReduceTextureSizeDraft;
                     }
                 }
                 if (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null)
@@ -266,11 +232,6 @@ namespace VPB
                 if (VPBConfig.Instance != null)
                 {
                     bool changed = false;
-                    if (VPBConfig.Instance.EnableGalleryFade != m_SettingsEnableGalleryFadeDraft)
-                    {
-                        VPBConfig.Instance.EnableGalleryFade = m_SettingsEnableGalleryFadeDraft;
-                        changed = true;
-                    }
                     if (VPBConfig.Instance.IsDevMode != m_SettingsIsDevModeDraft)
                     {
                         VPBConfig.Instance.IsDevMode = m_SettingsIsDevModeDraft;
@@ -281,20 +242,6 @@ namespace VPB
                     {
                         VPBConfig.Instance.Save();
                         VPBConfig.Instance.TriggerChange();
-                    }
-                }
-                if (Settings.Instance != null && Settings.Instance.PrioritizeFaceTextures != null)
-                {
-                    if (Settings.Instance.PrioritizeFaceTextures.Value != m_SettingsPrioritizeFaceTexturesDraft)
-                    {
-                        Settings.Instance.PrioritizeFaceTextures.Value = m_SettingsPrioritizeFaceTexturesDraft;
-                    }
-                }
-                if (Settings.Instance != null && Settings.Instance.PrioritizeHairTextures != null)
-                {
-                    if (Settings.Instance.PrioritizeHairTextures.Value != m_SettingsPrioritizeHairTexturesDraft)
-                    {
-                        Settings.Instance.PrioritizeHairTextures.Value = m_SettingsPrioritizeHairTexturesDraft;
                     }
                 }
                 UIKey = parsed;
@@ -386,18 +333,6 @@ namespace VPB
             m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide VPB", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
             m_SettingsHubKeyDraft = DrawHotkeyField("Open Hub Browser", "HubKeyField", m_SettingsHubKeyDraft ?? "", buttonHeight);
 
-            if (VPBConfig.Instance.IsDevMode)
-            {
-                GUILayout.Space(6);
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(m_SettingsIsDevModeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                {
-                    m_SettingsIsDevModeDraft = !m_SettingsIsDevModeDraft;
-                }
-                GUILayout.Label("Developer Mode");
-                GUILayout.EndHorizontal();
-            }
-
             GUILayout.Space(6);
 
             GUILayout.BeginHorizontal();
@@ -435,103 +370,6 @@ namespace VPB
             GUILayout.Space(6);
 
 
-            if (Settings.Instance.EnableTextureOptimizations.Value)
-            {
-                GUILayout.Space(6);
-                
-                GUILayout.BeginHorizontal();
-                GUILayout.Label("Thumbnail Threshold:", GUILayout.Width(140));
-                string thresholdStr = GUILayout.TextField(m_SettingsThumbnailThresholdDraft.ToString(), GUILayout.Width(60));
-                int.TryParse(thresholdStr, out m_SettingsThumbnailThresholdDraft);
-                GUILayout.Label("px");
-                GUILayout.EndHorizontal();
-                GUILayout.Label("Resolution below which textures are skipped.");
-
-                GUILayout.Space(6);
-
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(m_SettingsAutoOptimizeCacheDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                {
-                    m_SettingsAutoOptimizeCacheDraft = !m_SettingsAutoOptimizeCacheDraft;
-                }
-                GUILayout.Label("Optimize: No Confirmation");
-                GUILayout.EndHorizontal();
-                GUILayout.Label("Run cache compression without opening the window.");
-
-                GUILayout.Space(6);
-
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(m_SettingsReduceTextureSizeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                {
-                    m_SettingsReduceTextureSizeDraft = !m_SettingsReduceTextureSizeDraft;
-                }
-                GUILayout.Label("Textures: Downscale");
-                GUILayout.FlexibleSpace();
-                if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
-                {
-                    ToggleInfoCard(ref m_ShowDownscaleTexturesInfo);
-                }
-                GUILayout.EndHorizontal();
-
-                DrawInfoCard(ref m_ShowDownscaleTexturesInfo, "Downscale Textures", () =>
-                {
-                    GUILayout.Space(4);
-                    GUILayout.Label("When this is ON, VPB makes big textures smaller and saves them so VaM can reuse them.", m_StyleInfoCardText);
-                    GUILayout.Space(2);
-                    GUILayout.Label("This can lower memory use and help performance. The tradeoff is textures may look a bit less sharp.", m_StyleInfoCardText);
-                    GUILayout.Space(6);
-                    GUILayout.Label("Notes: Smaller textures won't be made bigger. The first time can take longer while VPB builds the cache.", m_StyleInfoCardText);
-                });
-
-                GUILayout.Space(6);
-
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(m_SettingsPrioritizeFaceTexturesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                {
-                    m_SettingsPrioritizeFaceTexturesDraft = !m_SettingsPrioritizeFaceTexturesDraft;
-                }
-                GUILayout.Label("Textures: Prioritize face/makeup");
-                GUILayout.FlexibleSpace();
-                if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
-                {
-                    ToggleInfoCard(ref m_ShowPrioritizeFaceTexturesInfo);
-                }
-                GUILayout.EndHorizontal();
-
-                DrawInfoCard(ref m_ShowPrioritizeFaceTexturesInfo, "Prioritize face/makeup textures", () =>
-                {
-                    GUILayout.Space(4);
-                    GUILayout.Label("When this is ON, VPB tries to process face textures and face overlays (makeup/freckles/etc.) earlier during scene load.", m_StyleInfoCardText);
-                    GUILayout.Space(2);
-                    GUILayout.Label("It does this by reordering VaM's image load queue (it does not download anything extra).", m_StyleInfoCardText);
-                    GUILayout.Space(2);
-                    GUILayout.Label("Tip: Leave this ON if you want faces to resolve sooner while clothing/hair textures continue loading.", m_StyleInfoCardText);
-                });
-
-                GUILayout.Space(6);
-
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button(m_SettingsPrioritizeHairTexturesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-                {
-                    m_SettingsPrioritizeHairTexturesDraft = !m_SettingsPrioritizeHairTexturesDraft;
-                }
-                GUILayout.Label("Textures: Prioritize hair");
-                GUILayout.FlexibleSpace();
-                if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
-                {
-                    ToggleInfoCard(ref m_ShowPrioritizeHairTexturesInfo);
-                }
-                GUILayout.EndHorizontal();
-
-                DrawInfoCard(ref m_ShowPrioritizeHairTexturesInfo, "Prioritize hair textures", () =>
-                {
-                    GUILayout.Space(4);
-                    GUILayout.Label("When this is ON, VPB tries to process hair earlier during scene load.", m_StyleInfoCardText);
-                    GUILayout.Space(2);
-                    GUILayout.Label("It does this by reordering VaM's image load queue (it does not download anything extra).", m_StyleInfoCardText);
-                });
-            }
-
             GUILayout.Space(10);
 
             GUILayout.Label("Gallery Pane Settings", m_StyleHeader);
@@ -546,16 +384,6 @@ namespace VPB
             {
                 OpenQuickMenuPositionWindow();
             }
-
-            GUILayout.Space(6);
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsEnableGalleryFadeDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsEnableGalleryFadeDraft = !m_SettingsEnableGalleryFadeDraft;
-            }
-            GUILayout.Label("Enable Gallery Button Fade");
-            GUILayout.EndHorizontal();
 
             GUILayout.Space(10);
             
@@ -1274,11 +1102,8 @@ namespace VPB
                 Debug.Log("[VPB] Developer Mode is ENABLED");
             }
 
-            if (Settings.Instance.EnableTextureOptimizations.Value)
-            {
-                GenericTextureHook.PatchAll(harmony);
-                DAZClothingHook.PatchAll(harmony);
-            }
+            GenericTextureHook.PatchAll(harmony);
+            DAZClothingHook.PatchAll(harmony);
 
             // Zstd support is now handled by ZstdNet (auto-initialized)
         }
@@ -2719,12 +2544,8 @@ namespace VPB
             var headerBgRect = new Rect(5, 5, m_SpaceSaverWindowRect.width - 10, 35);
             GUI.Box(headerBgRect, "", m_StyleSection);
 
-            // Draw title and close button in the header area (the padding gap)
+            // Draw title in the header area (the padding gap)
             GUI.Label(new Rect(15, 12, m_SpaceSaverWindowRect.width - 60, 25), "Optimize Cache (Zstd)", m_StyleHeader);
-            if (GUI.Button(new Rect(m_SpaceSaverWindowRect.width - 35, 12, 28, 22), "X", m_StyleButtonSmall))
-            {
-                m_ShowSpaceSaverWindow = false;
-            }
 
             // Block game input when interacting with the window
             if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp || Event.current.type == EventType.ScrollWheel || Event.current.type == EventType.MouseMove)
@@ -2751,6 +2572,8 @@ namespace VPB
             GUILayout.Label("• Scenes load faster by reducing disk I/O.", m_StyleInfoCardText);
             GUILayout.Label("• VPB plugin is required for compressed cache to work.", m_StyleInfoCardText);
             GUILayout.Label("• Safely archives textures; can be reverted back at any time.", m_StyleInfoCardText);
+            GUILayout.Label("• Optimization speeds up over time as the cache warms.", m_StyleInfoCardText);
+            GUILayout.Label("• You can minimize this window and continue using VaM while it runs in the background.", m_StyleInfoCardText);
             GUILayout.EndVertical();
 
             GUILayout.Space(10);

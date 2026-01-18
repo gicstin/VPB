@@ -294,6 +294,10 @@ namespace VPB
         private GameObject footerLayoutBtn;
         private Text footerLayoutBtnText;
         private Image footerLayoutBtnImage;
+
+        private GameObject footerHeightBtn;
+        private Text footerHeightBtnText;
+        private Image footerHeightBtnImage;
         
         private Text fileSortBtnText; // NEW
         private Text quickFiltersToggleBtnText; // NEW

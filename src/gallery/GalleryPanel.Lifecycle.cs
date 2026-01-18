@@ -1212,10 +1212,24 @@ namespace VPB
                         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
                         canvas.transform.localScale = Vector3.one;
                         
-                        RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
-                        float leftRatio = 1.618f / 2.618f;
-                        
-                        bgRT.anchorMin = new Vector2(leftRatio, 0);
+                        if (dragger != null) dragger.enabled = false;
+                        foreach (Transform child in backgroundBoxGO.transform)
+                        {
+                            if (child.name.StartsWith("ResizeHandle_")) child.gameObject.SetActive(false);
+                        }
+                    }
+
+                    // Always update anchors in Fixed mode to support height toggles and screen resizing
+                    RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                    float leftRatio = 1.618f / 2.618f;
+                    
+                    float bottomAnchor = 0f;
+                    if (VPBConfig.Instance.DesktopFixedHeightMode == 1) bottomAnchor = 1f / 3f;
+                    else if (VPBConfig.Instance.DesktopFixedHeightMode == 2) bottomAnchor = 0.5f;
+
+                    if (bgRT.anchorMin.y != bottomAnchor || bgRT.anchorMin.x != leftRatio)
+                    {
+                        bgRT.anchorMin = new Vector2(leftRatio, bottomAnchor);
                         bgRT.anchorMax = new Vector2(1, 1);
                         bgRT.offsetMin = Vector2.zero;
                         bgRT.offsetMax = Vector2.zero;
@@ -1245,12 +1259,6 @@ namespace VPB
                             apRT.pivot = new Vector2(0.5f, 0);
                             apRT.anchoredPosition = new Vector2(0, 0); // At bottom in Fixed mode
                             apRT.sizeDelta = new Vector2(0, 350);
-                        }
-
-                        if (dragger != null) dragger.enabled = false;
-                        foreach (Transform child in backgroundBoxGO.transform)
-                        {
-                            if (child.name.StartsWith("ResizeHandle_")) child.gameObject.SetActive(false);
                         }
                     }
                 }
