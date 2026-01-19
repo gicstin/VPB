@@ -3,14 +3,17 @@ name: Auto-Archive DLL
 on:
   push:
     paths:
-      - "VPB.dll"   # Only run when the DLL changes
+      - "vam_patch/BepInEx/plugins/VPB.dll"
 
 jobs:
   archive:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0   # IMPORTANT: allows accessing previous commit
 
       - name: Create archive folder if missing
         run: mkdir -p archive
@@ -19,11 +22,15 @@ jobs:
         id: ts
         run: echo "stamp=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_OUTPUT
 
-      - name: Archive DLL if it exists
+      - name: Restore previous version of DLL
         run: |
-          if [ -f VPB.dll ]; then
+          # Check if the file existed in the previous commit
+          if git show HEAD~1:vam_patch/BepInEx/plugins/VPB.dll > /dev/null 2>&1; then
             mkdir -p archive/${{ steps.ts.outputs.stamp }}
-            cp VPB.dll archive/${{ steps.ts.outputs.stamp }}/VPB.dll
+            git show HEAD~1:vam_patch/BepInEx/plugins/VPB.dll > archive/${{ steps.ts.outputs.stamp }}/VPB.dll
+            echo "Archived previous DLL version."
+          else
+            echo "No previous DLL found to archive."
           fi
 
       - name: Commit archive changes
