@@ -357,7 +357,7 @@ namespace VPB
         public void OnPointerEnter(PointerEventData eventData)
         {
             if (card) card.SetActive(true);
-            if (panel != null && file != null) panel.SetHoverPath(file.Path);
+            if (panel != null && file != null) panel.SetHoverPath(file);
         }
 
         public void OnPointerExit(PointerEventData eventData)

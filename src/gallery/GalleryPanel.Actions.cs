@@ -91,18 +91,35 @@ namespace VPB
             actionsPanel?.Hide();
         }
 
+        public void SetHoverPath(FileEntry file)
+        {
+            if (file == null)
+            {
+                SetHoverPath("");
+                return;
+            }
+            SetHoverPath(file.Path);
+        }
+
         public void SetHoverPath(string path)
         {
+            bool hasPath = !string.IsNullOrEmpty(path);
+            if (hoverPathRT != null) hoverPathRT.gameObject.SetActive(hasPath);
+
             if (hoverPathText != null)
             {
                 // Intelligent wrapping for paths: add zero-width space after separators
-                if (string.IsNullOrEmpty(path))
+                if (!hasPath)
                 {
                     hoverPathText.text = "";
                 }
                 else
                 {
                     string displayPath = path;
+
+                    // Ensure we show internal paths for .var files
+                    // Sometimes .Path might be truncated by external logic, but FileEntry.Uid is usually full
+                    
                     // Always split when entering inside a .var package
                     if (displayPath.Contains(".var:/"))
                     {
@@ -119,7 +136,7 @@ namespace VPB
 
         public void RestoreSelectedHoverPath()
         {
-            if (selectedFile != null) SetHoverPath(selectedFile.Path);
+            if (selectedFile != null) SetHoverPath(selectedFile);
             else SetHoverPath("");
         }
 
@@ -148,7 +165,7 @@ namespace VPB
                 selectedHubItem = null;
                 selectionAnchorPath = file.Path;
                 
-                SetHoverPath(file.Path);
+                SetHoverPath(file);
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
                 actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
@@ -275,7 +292,7 @@ namespace VPB
             {
                 selectedPath = file.Path;
                 selectedHubItem = null;
-                SetHoverPath(file.Path);
+                SetHoverPath(file);
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
                 actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);

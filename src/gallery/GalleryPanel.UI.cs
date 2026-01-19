@@ -117,25 +117,32 @@ namespace VPB
             AddHoverDelegate(footerLayoutBtn);
             AddHoverDelegate(footerHeightBtn);
 
-            // Hover Path Text (Bottom Right - now much wider)
-            GameObject pathGO = new GameObject("HoverPathText");
-            pathGO.transform.SetParent(backgroundBoxGO.transform, false);
-            hoverPathText = pathGO.AddComponent<Text>();
+            // Hover Path Text (Bottom Center - now with background and dynamic width)
+            GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.85f), AnchorPresets.hStretchBottom, 0, 60, new Vector2(0, 60));
+            pathGO.name = "HoverPathContainer";
+            pathGO.GetComponent<Image>().raycastTarget = false;
+            hoverPathRT = pathGO.GetComponent<RectTransform>();
+            
+            GameObject hoverPathTextGO = new GameObject("HoverPathText");
+            hoverPathTextGO.transform.SetParent(pathGO.transform, false);
+            hoverPathText = hoverPathTextGO.AddComponent<Text>();
             hoverPathText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            hoverPathText.fontSize = 14;
-            hoverPathText.color = new Color(1f, 1f, 1f, 0.7f);
-            hoverPathText.alignment = TextAnchor.LowerRight;
+            hoverPathText.fontSize = 22;
+            hoverPathText.color = Color.white;
+            var shadow = hoverPathTextGO.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0, 0, 0, 0.8f);
+            shadow.effectDistance = new Vector2(1, -1);
+            hoverPathText.alignment = TextAnchor.MiddleCenter;
             hoverPathText.horizontalOverflow = HorizontalWrapMode.Wrap;
             hoverPathText.verticalOverflow = VerticalWrapMode.Truncate;
             hoverPathText.text = "";
             hoverPathText.raycastTarget = false;
-            hoverPathRT = pathGO.GetComponent<RectTransform>();
-            hoverPathRT.anchorMin = new Vector2(0, 0); // Stretch from left
-            hoverPathRT.anchorMax = new Vector2(1, 0); // To right
-            hoverPathRT.pivot = new Vector2(1, 0);
-            hoverPathRT.anchoredPosition = new Vector2(-60, 10); // Offset from right scrollbar
-            hoverPathRT.offsetMin = new Vector2(780, 10); // Start after pagination + new buttons
-            hoverPathRT.offsetMax = new Vector2(-60, 75); // End before scrollbar, taller to show full file name
+            
+            RectTransform hoverPathTextRT = hoverPathTextGO.GetComponent<RectTransform>();
+            hoverPathTextRT.anchorMin = Vector2.zero;
+            hoverPathTextRT.anchorMax = Vector2.one;
+            hoverPathTextRT.sizeDelta = Vector2.zero;
+            hoverPathTextRT.anchoredPosition = Vector2.zero;
 
             UpdateSideButtonsVisibility();
             UpdateFooterFollowStates();
@@ -421,7 +428,7 @@ namespace VPB
             {
                 selectedPath = selectedFiles[0].Path;
                 selectionAnchorPath = selectedPath;
-                SetHoverPath(selectedPath);
+                SetHoverPath(selectedFiles[0]);
             }
             else
             {
@@ -684,8 +691,8 @@ namespace VPB
                 
                 if (hoverPathRT != null)
                 {
-                    hoverPathRT.offsetMin = new Vector2(510, footerY + 10);
-                    hoverPathRT.offsetMax = new Vector2(-60, footerY + 55);
+                    hoverPathRT.offsetMin = new Vector2(leftOffset, footerY + 60);
+                    hoverPathRT.offsetMax = new Vector2(rightOffset, footerY + 120);
                 }
             }
             

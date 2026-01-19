@@ -1078,8 +1078,25 @@ namespace VPB
             {
                 Text t = nameTr.GetComponent<Text>();
                 string name = file.Name;
+                
+                // For .var files, include a hint of the package if it's a content file
                 if (file is VarFileEntry vfe && vfe.Package != null)
-                    name = vfe.Package.Uid;
+                {
+                    // If the name is generic (like default.json), use the package UID
+                    string ext = System.IO.Path.GetExtension(name).ToLowerInvariant();
+                    string nameNoExt = System.IO.Path.GetFileNameWithoutExtension(name);
+                    
+                    if (nameNoExt.Equals("default", StringComparison.OrdinalIgnoreCase) || 
+                        nameNoExt.Equals("preset", StringComparison.OrdinalIgnoreCase))
+                    {
+                        name = vfe.Package.Uid + " (" + name + ")";
+                    }
+                    else
+                    {
+                        // Use filename but ensure it's indicative
+                        name = nameNoExt;
+                    }
+                }
                 
                 // Rough estimate for 2 rows (around 55-60 chars for 20pt bold)
                 if (name.Length > 60)
