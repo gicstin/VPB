@@ -71,7 +71,11 @@ namespace VPB
                     if (File.Exists(cacheJson))
                     {
                         string text = File.ReadAllText(cacheJson);
-                        SerializableVarPackage vp = Valve.Newtonsoft.Json.JsonConvert.DeserializeObject<SerializableVarPackage>(text);
+                        SerializableVarPackage vp;
+                        lock (LogUtil.JsonLock)
+                        {
+                            vp = Valve.Newtonsoft.Json.JsonConvert.DeserializeObject<SerializableVarPackage>(text);
+                        }
                         lookup.Add(uid, vp);
                         dirty = true;
                     }

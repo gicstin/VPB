@@ -156,7 +156,11 @@ namespace VPB
 
                 if (string.IsNullOrEmpty(json) || json.Trim().Length < 2) return false;
 
-                var data = JsonConvert.DeserializeObject<SerializableRatings>(json);
+                SerializableRatings data;
+                lock (LogUtil.JsonLock)
+                {
+                    data = JsonConvert.DeserializeObject<SerializableRatings>(json);
+                }
                 if (data != null && data.ratings != null)
                 {
                     foreach (var item in data.ratings)
@@ -222,7 +226,11 @@ namespace VPB
                         data.ratings.Add(new SerializableRating { uid = kvp.Key, rating = kvp.Value });
                     }
 
-                    string json = JsonConvert.SerializeObject(data, Formatting.Indented);
+                    string json;
+                    lock (LogUtil.JsonLock)
+                    {
+                        json = JsonConvert.SerializeObject(data, Formatting.Indented);
+                    }
                     if (string.IsNullOrEmpty(json))
                     {
                         Debug.LogError("[VPB] Serialization returned empty string, aborting save.");

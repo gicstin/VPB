@@ -657,7 +657,10 @@ namespace VPB
                         if (vp == null)
                         {
 							string text = File.ReadAllText(cacheJson);
-							vp = JsonConvert.DeserializeObject<SerializableVarPackage>(text);
+							lock (LogUtil.JsonLock)
+							{
+								vp = JsonConvert.DeserializeObject<SerializableVarPackage>(text);
+							}
 						}
 
 						if (vp.FileEntryNames != null)
@@ -1057,7 +1060,11 @@ namespace VPB
 			this.HairFileEntryNames = svp.HairFileEntryNames;
 			this.HairTags = svp.HairTags;
 
-			string json = JsonConvert.SerializeObject(svp);
+			string json = "";
+			lock (LogUtil.JsonLock)
+			{
+				json = JsonConvert.SerializeObject(svp);
+			}
 
 			string folder = "Cache/AllPackagesJSON";
 			if (!Directory.Exists(folder))

@@ -14,6 +14,7 @@ namespace VPB
 {
     class LogUtil
     {
+        public static readonly object JsonLock = new object();
         static ManualLogSource logSource;
 
         static readonly DateTime processStartTime;
