@@ -18,3 +18,5 @@
 /TECH_SPEC.md
 /TODO.md
 /.zencoder/rules
+/vam_patch/doorstop_config.ini
+/vam_patch/BepInEx/plugins/VPB.pdb

@@ -653,42 +653,53 @@ namespace VPB
 					string cacheJson = "Cache/AllPackagesJSON/" + this.Uid + ".json";
 					if (File.Exists(cacheJson))
 					{
-						SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCache(this.Uid);
-                        if (vp == null)
-                        {
-							string text = File.ReadAllText(cacheJson);
-							lock (LogUtil.JsonLock)
+						try
+						{
+							SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCache(this.Uid);
+							if (vp == null)
 							{
-								vp = JsonConvert.DeserializeObject<SerializableVarPackage>(text);
-							}
-						}
-
-						if (vp.FileEntryNames != null)
-                        {
-							this.ClothingFileEntryNames = vp.ClothingFileEntryNames;
-							this.ClothingTags = vp.ClothingTags;
-							this.HairFileEntryNames = vp.HairFileEntryNames;
-							this.HairTags = vp.HairTags;
-
-							for (int i=0;i<vp.FileEntryNames.Count;i++)
-							{
-								string item = vp.FileEntryNames[i];
-								VarFileEntry varFileEntry = new VarFileEntry(this, item, DateTime.Parse(vp.FileEntryLastWriteTimes[i]), vp.FileEntrySizes[i]);
-								FileEntries.Add(varFileEntry);
-								if (item == "meta.json")
+								string text = File.ReadAllText(cacheJson);
+								lock (LogUtil.JsonLock)
 								{
-									metaEntry = varFileEntry;
+									vp = JsonConvert.DeserializeObject<SerializableVarPackage>(text);
 								}
 							}
-							this.RecursivePackageDependencies = vp.RecursivePackageDependencies;
-						}
 
-						if (metaEntry != null)
+							if (vp != null && vp.FileEntryNames != null)
+							{
+								this.ClothingFileEntryNames = vp.ClothingFileEntryNames;
+								this.ClothingTags = vp.ClothingTags;
+								this.HairFileEntryNames = vp.HairFileEntryNames;
+								this.HairTags = vp.HairTags;
+
+								for (int i = 0; i < vp.FileEntryNames.Count; i++)
+								{
+									string item = vp.FileEntryNames[i];
+									VarFileEntry varFileEntry = new VarFileEntry(this, item, DateTime.Parse(vp.FileEntryLastWriteTimes[i]), vp.FileEntrySizes[i]);
+									FileEntries.Add(varFileEntry);
+									if (item == "meta.json")
+									{
+										metaEntry = varFileEntry;
+									}
+								}
+								this.RecursivePackageDependencies = vp.RecursivePackageDependencies;
+							}
+
+							if (metaEntry != null)
+							{
+								flag = true;
+							}
+						}
+						catch (Exception ex)
 						{
-							flag = true;
+							LogUtil.LogError("Failed to load cache for " + this.Uid + ": " + ex.Message);
+							try { File.Delete(cacheJson); } catch { }
+							FileEntries.Clear();
+							metaEntry = null;
 						}
 					}
-					else
+
+					if (!flag)
 					{
 						FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
 						zipFile = new ZipFile(file);

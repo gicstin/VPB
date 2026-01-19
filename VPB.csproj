@@ -18,7 +18,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
+    <DebugType>embedded</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
@@ -28,7 +28,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>embedded</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
@@ -418,7 +419,7 @@
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\plugins\VPB.dll"
+    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\scripts\VPB.dll"
 copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB.dll"</PostBuildEvent>
   </PropertyGroup>
 </Project>

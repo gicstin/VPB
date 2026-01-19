@@ -72,12 +72,20 @@ namespace VPB
                     {
                         string text = File.ReadAllText(cacheJson);
                         SerializableVarPackage vp;
-                        lock (LogUtil.JsonLock)
+                        try
                         {
-                            vp = Valve.Newtonsoft.Json.JsonConvert.DeserializeObject<SerializableVarPackage>(text);
+                            lock (LogUtil.JsonLock)
+                            {
+                                vp = Valve.Newtonsoft.Json.JsonConvert.DeserializeObject<SerializableVarPackage>(text);
+                            }
+                            lookup.Add(uid, vp);
+                            dirty = true;
                         }
-                        lookup.Add(uid, vp);
-                        dirty = true;
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("Failed to deserialize cache for " + uid + ": " + ex.Message);
+                            try { File.Delete(cacheJson); } catch { }
+                        }
                     }
                 }
             }
