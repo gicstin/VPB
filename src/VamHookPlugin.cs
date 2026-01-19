@@ -1297,12 +1297,23 @@ namespace VPB
             }
             if (!m_UIInited)
             {
-                if (MVR.Hub.HubBrowse.singleton != null && m_FileManagerInited)
+                if (m_FileManagerInited)
                 {
-                    CreateHubBrowse();
-                    CreateFileBrowser();
-                    m_UIInited = true;
-                    LogUtil.LogReadyOnce("UI initialized");
+                    if (MVR.Hub.HubBrowse.singleton != null)
+                    {
+                        CreateHubBrowse();
+                        CreateFileBrowser();
+                        m_UIInited = true;
+                        LogUtil.LogReadyOnce("UI initialized");
+                    }
+                    else if (VdsLauncher.IsVdsEnabled())
+                    {
+                        // In VDS mode, HubBrowse might not be available, but we still want to mark UI as inited
+                        // to enable FPS display and other UI features.
+                        CreateFileBrowser();
+                        m_UIInited = true;
+                        LogUtil.LogReadyOnce("UI initialized (VDS)");
+                    }
                 }
             }
 

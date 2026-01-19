@@ -239,10 +239,9 @@ namespace VPB
 
         public bool ExecuteAutoAction()
         {
-            if (currentTabType == ActionUITabType.Primary && tabs.ContainsKey(ActionUITabType.Primary))
+            if (tabs.ContainsKey(currentTabType))
             {
-                 // Primary tab might have shortcuts we can auto-execute
-                 // For now, let's keep it simple and not auto-execute from tabs unless needed
+                return tabs[currentTabType].ExecuteAutoAction();
             }
             return false;
         }

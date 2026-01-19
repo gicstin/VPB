@@ -34,26 +34,50 @@ namespace ZstdNet
             {
                 string dllName = "libzstd.dll";
                 // Try to find where the DLL is
-                string assemblyDir = Path.GetDirectoryName(typeof(ExternMethods).Assembly.Location);
-                string pluginDir = BepInEx.Paths.PluginPath;
+                string location = "";
+                try { location = typeof(ExternMethods).Assembly.Location; } catch {}
+                
+                string assemblyDir = !string.IsNullOrEmpty(location) ? Path.GetDirectoryName(location) : null;
+                
+                string pluginDir = null;
+                try { pluginDir = BepInEx.Paths.PluginPath; } catch {}
+                
+                string bepRoot = null;
+                try { bepRoot = BepInEx.Paths.BepInExRootPath; } catch {}
+                
+                string scriptDir = !string.IsNullOrEmpty(bepRoot) ? Path.Combine(bepRoot, "scripts") : null;
+                
+                SafeLog(string.Format("[ZstdNet] Paths - Assembly: {0}, Plugins: {1}, Scripts: {2}", 
+                    assemblyDir ?? "null", pluginDir ?? "null", scriptDir ?? "null"));
                 
                 System.Collections.Generic.List<string> searchDirs = new System.Collections.Generic.List<string>();
                 
-                // 1. Target specific directory: BepInEx/plugins/zstd/dll/ (High Priority)
+                // 1. Target specific directory: BepInEx/plugins/VPB/zstd/dll/ (Standard Installation)
                 if (!string.IsNullOrEmpty(pluginDir))
                 {
+                    searchDirs.Add(Path.Combine(pluginDir, "VPB\\zstd\\dll"));
                     searchDirs.Add(Path.Combine(pluginDir, "zstd\\dll"));
                 }
 
-                // 2. Same directory as VPB.dll
+                // 2. Same directory as VPB.dll (Handles scripts folder or custom location)
                 if (!string.IsNullOrEmpty(assemblyDir))
                 {
                     searchDirs.Add(assemblyDir);
+                    searchDirs.Add(Path.Combine(assemblyDir, "zstd\\dll"));
                     searchDirs.Add(Path.Combine(assemblyDir, "x64"));
                 }
                 
-                // 3. BepInEx plugins directory (legacy/fallback)
-                if (!string.IsNullOrEmpty(pluginDir) && pluginDir != assemblyDir)
+                // 3. Scripts directory specific (if VPB.dll is in scripts, libzstd.dll might be in a subfolder there)
+                if (!string.IsNullOrEmpty(scriptDir))
+                {
+                    searchDirs.Add(scriptDir);
+                    searchDirs.Add(Path.Combine(scriptDir, "x64"));
+                    searchDirs.Add(Path.Combine(scriptDir, "zstd\\dll"));
+                    searchDirs.Add(Path.Combine(scriptDir, "VPB\\zstd\\dll"));
+                }
+
+                // 4. BepInEx plugins directory (fallback)
+                if (!string.IsNullOrEmpty(pluginDir))
                 {
                     searchDirs.Add(pluginDir);
                     searchDirs.Add(Path.Combine(pluginDir, "x64"));
@@ -74,7 +98,7 @@ namespace ZstdNet
 
                 foreach (string dir in searchDirs)
                 {
-                    if (!Directory.Exists(dir)) continue;
+                    if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
                     
                     string fullPath = Path.Combine(dir, dllName);
                     if (File.Exists(fullPath))

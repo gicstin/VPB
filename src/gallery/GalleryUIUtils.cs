@@ -2024,45 +2024,7 @@ namespace VPB
 
         public void LoadSceneFile(string path)
         {
-            try
-            {
-                LogUtil.Log($"[VPB] LoadSceneFile started for: {path}");
-                if (string.IsNullOrEmpty(path))
-                {
-                    LogUtil.LogError("[VPB] LoadSceneFile: path is null or empty");
-                    return;
-                }
-
-                bool installed = EnsureInstalled();
-                LogUtil.Log($"[VPB] EnsureInstalled result: {installed}");
-
-                if (installed)
-                {
-                    LogUtil.Log("[VPB] Refreshing FileManagers...");
-                    if (MVR.FileManagement.FileManager.singleton != null)
-                        MVR.FileManagement.FileManager.Refresh();
-                    
-                    FileManager.Refresh();
-                }
-
-                string normalizedPath = UI.NormalizePath(path);
-                LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
-                
-                SuperController sc = SuperController.singleton;
-                if (sc != null)
-                {
-                    LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
-                    sc.Load(normalizedPath);
-                }
-                else
-                {
-                    LogUtil.LogError("[VPB] SuperController.singleton is null!");
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError($"[VPB] LoadSceneFile crash: {ex.Message}\n{ex.StackTrace}");
-            }
+            UI.LoadSceneFile(FileEntry);
         }
 
         public void LoadClothing(Atom target)
@@ -2872,24 +2834,7 @@ namespace VPB
 
         private bool EnsureInstalled()
         {
-            try
-            {
-                bool installed = false;
-                if (FileEntry is VarFileEntry varEntry && varEntry.Package != null)
-                {
-                    installed = varEntry.Package.InstallRecursive();
-                }
-                else if (FileEntry is SystemFileEntry sysEntry && sysEntry.package != null)
-                {
-                    installed = sysEntry.package.InstallRecursive();
-                }
-                return installed;
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError($"[VPB] EnsureInstalled error: {ex.Message}\n{ex.StackTrace}");
-                return false;
-            }
+            return UI.EnsureInstalled(FileEntry);
         }
 
         private void ApplyClothingToAtom(Atom atom, string path, string appearanceClothingMode = null)
@@ -4605,6 +4550,69 @@ namespace VPB
 
     public static class UI
     {
+        public static bool EnsureInstalled(FileEntry entry)
+        {
+            if (entry == null) return false;
+            try
+            {
+                bool installed = false;
+                if (entry is VarFileEntry varEntry && varEntry.Package != null)
+                {
+                    installed = varEntry.Package.InstallRecursive();
+                }
+                else if (entry is SystemFileEntry sysEntry && sysEntry.package != null)
+                {
+                    installed = sysEntry.package.InstallRecursive();
+                }
+                return installed;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] EnsureInstalled error: {ex.Message}\n{ex.StackTrace}");
+                return false;
+            }
+        }
+
+        public static void LoadSceneFile(FileEntry entry)
+        {
+            if (entry == null) return;
+            try
+            {
+                string path = entry.Uid;
+                LogUtil.Log($"[VPB] UI.LoadSceneFile started for: {path}");
+                
+                bool installed = EnsureInstalled(entry);
+                LogUtil.Log($"[VPB] UI.EnsureInstalled result: {installed}");
+
+                if (installed)
+                {
+                    LogUtil.Log("[VPB] Refreshing FileManagers...");
+                    if (MVR.FileManagement.FileManager.singleton != null)
+                        MVR.FileManagement.FileManager.Refresh();
+                    
+                    FileManager.Refresh();
+                }
+
+                string normalizedPath = UI.NormalizePath(path);
+                LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
+                
+                SuperController sc = SuperController.singleton;
+                if (sc != null)
+                {
+                    LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
+                    sc.Load(normalizedPath);
+                }
+                else
+                {
+                    LogUtil.LogError("[VPB] SuperController.singleton is null!");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] UI.LoadSceneFile crash: {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
         public static string NormalizePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return path;

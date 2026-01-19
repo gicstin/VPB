@@ -15,35 +15,50 @@ namespace VPB
             _zstdChecked = true;
             try
             {
-                string pluginDir = BepInEx.Paths.PluginPath;
-                string assemblyDir = Path.GetDirectoryName(typeof(ZstdCompressor).Assembly.Location);
+                string pluginDir = null;
+                try { pluginDir = BepInEx.Paths.PluginPath; } catch {}
+                
+                string assemblyDir = null;
+                try { 
+                    string loc = typeof(ZstdCompressor).Assembly.Location;
+                    if (!string.IsNullOrEmpty(loc)) assemblyDir = Path.GetDirectoryName(loc);
+                } catch {}
 
-                // 1. Check BepInEx plugins root (preferred location for shared zstd)
-                if (!string.IsNullOrEmpty(pluginDir))
-                {
-                    string path = Path.Combine(pluginDir, "zstd\\zstd.exe");
-                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+                string bepRoot = null;
+                try { bepRoot = BepInEx.Paths.BepInExRootPath; } catch {}
+                string scriptDir = !string.IsNullOrEmpty(bepRoot) ? Path.Combine(bepRoot, "scripts") : null;
 
-                    path = Path.Combine(pluginDir, "VPB\\zstd\\zstd.exe");
-                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
-                }
-
-                // 2. Check same dir as VPB.dll
+                System.Collections.Generic.List<string> searchDirs = new System.Collections.Generic.List<string>();
+                
+                // 1. Same directory as VPB.dll (Handles scripts folder or custom location)
                 if (!string.IsNullOrEmpty(assemblyDir))
                 {
-                    string path = Path.Combine(assemblyDir, "zstd.exe");
-                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+                    searchDirs.Add(assemblyDir);
+                    searchDirs.Add(Path.Combine(assemblyDir, "zstd"));
+                }
 
-                    path = Path.Combine(assemblyDir, "zstd\\zstd.exe");
-                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
+                // 2. BepInEx scripts directory specific
+                if (!string.IsNullOrEmpty(scriptDir))
+                {
+                    searchDirs.Add(scriptDir);
+                    searchDirs.Add(Path.Combine(scriptDir, "zstd"));
+                    searchDirs.Add(Path.Combine(scriptDir, "VPB\\zstd"));
+                }
+
+                // 3. BepInEx plugins root (preferred location for shared zstd)
+                if (!string.IsNullOrEmpty(pluginDir))
+                {
+                    searchDirs.Add(pluginDir);
+                    searchDirs.Add(Path.Combine(pluginDir, "zstd"));
+                    searchDirs.Add(Path.Combine(pluginDir, "VPB\\zstd"));
+                }
+
+                foreach (string dir in searchDirs)
+                {
+                    if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
                     
-                    // Also check parent dir
-                    string parent = Path.GetDirectoryName(assemblyDir);
-                    if (!string.IsNullOrEmpty(parent))
-                    {
-                        path = Path.Combine(parent, "zstd\\zstd.exe");
-                        if (File.Exists(path)) { _cachedZstdPath = path; return path; }
-                    }
+                    string path = Path.Combine(dir, "zstd.exe");
+                    if (File.Exists(path)) { _cachedZstdPath = path; return path; }
                 }
             }
             catch { }

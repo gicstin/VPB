@@ -49,7 +49,7 @@ namespace VPB
                 {
                     CreateActionButton(++buttonCount, "Load SubScene", (dragger) => dragger.LoadSubScene(SelectedFile.Uid), SelectedFile, selectedHubItem);
                 }
-                else if ((pathLower.EndsWith(".json") && (pathLower.Contains("/scenes/") || pathLower.Contains("\\scenes\\"))) || category.Contains("Scene"))
+                else if ((pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene"))) || category.Contains("Scene"))
                 {
                     CreateActionButton(++buttonCount, "Load Scene", (dragger) => dragger.LoadSceneFile(SelectedFile.Uid), SelectedFile, selectedHubItem);
                     CreateActionButton(++buttonCount, "Merge Scene", (dragger) => dragger.MergeSceneFile(SelectedFile.Uid, false), SelectedFile, selectedHubItem);

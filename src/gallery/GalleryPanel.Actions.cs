@@ -291,8 +291,8 @@ namespace VPB
             {
                 string pathLower = file.Path.ToLowerInvariant();
                 // Exclude Scenes from auto-apply, but allow SubScenes
-                bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\");
-                bool isScene = !isSubScene && pathLower.EndsWith(".json") && (pathLower.Contains("/scenes/") || pathLower.Contains("\\scenes\\"));
+                bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || currentCategoryTitle.Contains("SubScene");
+                bool isScene = !isSubScene && pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || currentCategoryTitle.Contains("Scene"));
                 
                 if (!isScene && actionsPanel != null)
                 {
@@ -304,7 +304,7 @@ namespace VPB
                 }
                 else if (isScene)
                 {
-                    // actionsPanel?.Open();
+                    UI.LoadSceneFile(file);
                 }
             }
         }

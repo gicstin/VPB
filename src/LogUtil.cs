@@ -1111,10 +1111,10 @@ namespace VPB
 
             readyLogged = true;
 
+            readyProcessSeconds = (double)Time.realtimeSinceStartup;
             var sinceProcessStart = DateTime.Now - processStartTime;
-            readyProcessSeconds = sinceProcessStart.TotalSeconds;
             var sincePluginStart = sincePluginAwake.IsRunning ? sincePluginAwake.Elapsed : TimeSpan.Zero;
-            LogWarning(string.Format("READY {0} | since process start: {1:0.000}s | since plugin awake: {2:0.000}s", context, sinceProcessStart.TotalSeconds, sincePluginStart.TotalSeconds));
+            LogWarning(string.Format("READY {0} | since engine start: {1:0.000}s | since process start: {2:0.000}s | since plugin awake: {3:0.000}s", context, readyProcessSeconds.Value, sinceProcessStart.TotalSeconds, sincePluginStart.TotalSeconds));
         }
 
         public static double GetSecondsSinceProcessStart()
@@ -1129,7 +1129,7 @@ namespace VPB
                 return readyProcessSeconds.Value;
             }
 
-            return GetSecondsSinceProcessStart();
+            return (double)Time.realtimeSinceStartup;
         }
 
         static class StringBuilderPool

@@ -67,6 +67,16 @@ namespace VPB
             }
         }
 
+        public virtual bool ExecuteAutoAction()
+        {
+            if (activeActions.Count > 0)
+            {
+                ExecuteShortcut(0);
+                return true;
+            }
+            return false;
+        }
+
         protected GameObject CreateActionButton(int number, string label, UnityAction<UIDraggableItem> action, FileEntry selectedFile, Hub.GalleryHubItem selectedHubItem)
         {
             string prefix = number <= 9 ? number + ". " : "";
