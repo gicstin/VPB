@@ -23,6 +23,7 @@ namespace VPB
                 categoriesCached = false;
                 // currentCreator = ""; // Keep creator filter across categories
                 activeTags.Clear();
+                currentSceneSourceFilter = "";
                 currentPage = 0;
             }
             currentExtension = extension;

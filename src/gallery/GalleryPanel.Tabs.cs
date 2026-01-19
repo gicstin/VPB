@@ -50,7 +50,8 @@ namespace VPB
                 {
                     string title = titleText != null ? titleText.text : "";
                     if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
-                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         splitView = true;
                     }
@@ -97,13 +98,21 @@ namespace VPB
                     // Populate Top (Category / Hub Category / Status)
                     UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                     
-                    // Populate Bottom (Tags / Hub Tags / Ratings / Size)
+                    // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     ContentType subType = ContentType.Tags;
                     if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
                     else if (leftActiveContent == ContentType.Status)
                     {
                          if (currentStatus == "Size") subType = ContentType.Size;
                          else subType = ContentType.Ratings;
+                    }
+                    else if (leftActiveContent == ContentType.Category)
+                    {
+                        string title = titleText != null ? titleText.text : "";
+                        if (title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            subType = ContentType.SceneSource;
+                        }
                     }
                     
                     UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
@@ -134,7 +143,8 @@ namespace VPB
                 {
                     string title = titleText != null ? titleText.text : "";
                     if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
-                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         splitView = true;
                     }
@@ -193,13 +203,21 @@ namespace VPB
                     // Populate Top (Category / Hub Category / Status)
                     UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                     
-                    // Populate Bottom (Tags / Hub Tags / Ratings / Size)
+                    // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     ContentType subType = ContentType.Tags;
                     if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
                     else if (rightActiveContent == ContentType.Status)
                     {
                          if (currentStatus == "Size") subType = ContentType.Size;
                          else subType = ContentType.Ratings;
+                    }
+                    else if (rightActiveContent == ContentType.Category)
+                    {
+                        string title = titleText != null ? titleText.text : "";
+                        if (title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            subType = ContentType.SceneSource;
+                        }
                     }
 
                     UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
@@ -467,6 +485,26 @@ namespace VPB
                     CreateTabButton(container.transform, size, btnColor, isActive, () => {
                         if (currentSizeFilter == size) currentSizeFilter = "";
                         else currentSizeFilter = size;
+                        
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    }, trackedButtons);
+                }
+            }
+            else if (contentType == ContentType.SceneSource)
+            {
+                var sceneFilters = new List<string> { "All Scenes", "Addon Scenes", "Custom Scenes" };
+                Color sceneColor = new Color(0.2f, 0.4f, 0.7f, 1f); // Blue-ish
+
+                foreach (var filter in sceneFilters)
+                {
+                    bool isActive = (currentSceneSourceFilter == filter) || (string.IsNullOrEmpty(currentSceneSourceFilter) && filter == "All Scenes");
+                    Color btnColor = isActive ? sceneColor : new Color(0.25f, 0.25f, 0.25f, 1f);
+
+                    CreateTabButton(container.transform, filter, btnColor, isActive, () => {
+                        if (filter == "All Scenes") currentSceneSourceFilter = "";
+                        else currentSceneSourceFilter = filter;
                         
                         currentPage = 0;
                         RefreshFiles();

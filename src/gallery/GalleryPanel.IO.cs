@@ -82,6 +82,21 @@ namespace VPB
                 else if (currentSizeFilter == "Very Large (> 1GB)") { if (size < 1024 * mb) return false; }
             }
 
+            // Scene Source Filter
+            if (!string.IsNullOrEmpty(currentSceneSourceFilter))
+            {
+                if (currentSceneSourceFilter == "Addon Scenes")
+                {
+                    if (!(entry is VarFileEntry)) return false;
+                }
+                else if (currentSceneSourceFilter == "Custom Scenes")
+                {
+                    if (entry is VarFileEntry) return false;
+                    // Custom scenes are from Saves folder
+                    if (!entry.Path.StartsWith("Saves", StringComparison.OrdinalIgnoreCase)) return false;
+                }
+            }
+
             // Name Filter
             if (!string.IsNullOrEmpty(nameFilterLower))
             {

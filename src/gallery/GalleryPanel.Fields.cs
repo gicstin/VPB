@@ -122,6 +122,7 @@ namespace VPB
         private string categoryFilter = "";
         private string creatorFilter = "";
         private string tagFilter = ""; // NEW
+        private string currentSceneSourceFilter = ""; // NEW
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
         

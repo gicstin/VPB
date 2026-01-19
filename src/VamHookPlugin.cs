@@ -139,6 +139,8 @@ namespace VPB
 
         public static string CurrentScenePackageUid;
 
+        private Harmony m_Harmony;
+
         private static Texture2D MakeTex(Color color)
         {
             var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
@@ -1087,21 +1089,22 @@ namespace VPB
 
             this.Config.SaveOnConfigSet = true;
             Debug.Log("var browser hook start");
-            var harmony = new Harmony("VPB_hook");
+            m_Harmony = new Harmony("VPB_hook");
             // Patch VaM/Harmony hook points.
-            SuperControllerHook.PatchOptional(harmony);
-            harmony.PatchAll(typeof(AtomHook));
-            harmony.PatchAll(typeof(HubResourcePackageHook));
-            harmony.PatchAll(typeof(SuperControllerHook));
-            harmony.PatchAll(typeof(PatchAssetLoader));
+            SuperControllerHook.PatchOptional(m_Harmony);
+            m_Harmony.PatchAll(typeof(AtomHook));
+            m_Harmony.PatchAll(typeof(HubResourcePackageHook));
+            m_Harmony.PatchAll(typeof(SuperControllerHook));
+            m_Harmony.PatchAll(typeof(PatchAssetLoader));
 
             if (VPBConfig.Instance.IsDevMode)
             {
                 Debug.Log("[VPB] Developer Mode is ENABLED");
             }
 
-            GenericTextureHook.PatchAll(harmony);
-            DAZClothingHook.PatchAll(harmony);
+            GenericTextureHook.PatchAll(m_Harmony);
+            DAZClothingHook.PatchAll(m_Harmony);
+            ThirdPartyFixHook.PatchAll(m_Harmony);
 
             // Zstd support is now handled by ZstdNet (auto-initialized)
         }
@@ -1174,6 +1177,10 @@ namespace VPB
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             LogUtil.LogWarning("OnSceneLoaded " + scene.name + " " + mode.ToString());
+            if (m_Harmony != null)
+            {
+                ThirdPartyFixHook.PatchAll(m_Harmony);
+            }
             if (mode == LoadSceneMode.Single)
             {
                 m_Inited = false;

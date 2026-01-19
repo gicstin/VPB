@@ -286,6 +286,7 @@
     <Compile Include="src\ZstdNet\ZstdException.cs" />
     <Compile Include="src\hook\ImageLoadingMgr.cs" />
     <Compile Include="src\hook\SuperControllerHook.cs" />
+    <Compile Include="src\hook\ThirdPartyFixHook.cs" />
     <Compile Include="src\hook\TagFilter.cs" />
     <Compile Include="src\hook\Tools.cs" />
     <Compile Include="src\hook\Native\Kernel32.cs" />
