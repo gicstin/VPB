@@ -655,6 +655,13 @@ namespace VPB
 					{
 						try
 						{
+							FileInfo fi = new FileInfo(cacheJson);
+							if (fi.Length == 0)
+							{
+								File.Delete(cacheJson);
+								throw new Exception("Cache file is empty");
+							}
+
 							SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCache(this.Uid);
 							if (vp == null)
 							{
@@ -692,7 +699,13 @@ namespace VPB
 						}
 						catch (Exception ex)
 						{
-							LogUtil.LogError("Failed to load cache for " + this.Uid + ": " + ex.Message);
+							string start = "";
+							try {
+								string text = File.ReadAllText(cacheJson);
+								if (text.Length > 20) start = text.Substring(0, 20);
+								else start = text;
+							} catch { }
+							LogUtil.LogError("Failed to load cache for " + this.Uid + " (starts with: '" + start + "'): " + ex.Message);
 							try { File.Delete(cacheJson); } catch { }
 							FileEntries.Clear();
 							metaEntry = null;
@@ -1071,17 +1084,28 @@ namespace VPB
 			this.HairFileEntryNames = svp.HairFileEntryNames;
 			this.HairTags = svp.HairTags;
 
-			string json = "";
-			lock (LogUtil.JsonLock)
-			{
-				json = JsonConvert.SerializeObject(svp);
-			}
-
 			string folder = "Cache/AllPackagesJSON";
 			if (!Directory.Exists(folder))
 				Directory.CreateDirectory(folder);
 
-			File.WriteAllText(folder + "/" + this.Uid + ".json", json);
+			lock (LogUtil.JsonLock)
+			{
+				string json = JsonConvert.SerializeObject(svp);
+				string targetPath = folder + "/" + this.Uid + ".json";
+				string tempPath = targetPath + ".tmp";
+				try
+				{
+					// Atomic write: write to temp then move
+					File.WriteAllText(tempPath, json, new System.Text.UTF8Encoding(false));
+					if (File.Exists(targetPath)) File.Delete(targetPath);
+					File.Move(tempPath, targetPath);
+				}
+				catch (Exception ex)
+				{
+					LogUtil.LogError("Failed to write cache for " + this.Uid + ": " + ex.Message);
+					try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+				}
+			}
 		}
 
 		protected void FindMissingDependenciesRecursive(JSONClass jc)

@@ -91,17 +91,28 @@ namespace VPB
             }
             if (dirty)
             {
-                using (FileStream stream = new FileStream(CachePath, FileMode.Create))
+                string tempPath = CachePath + ".tmp";
+                try
                 {
-                    BinaryWriter writer = new BinaryWriter(stream);
-                    writer.Write(lookup.Count);
-                    foreach (var item in lookup)
+                    using (FileStream stream = new FileStream(tempPath, FileMode.Create))
                     {
-                        writer.Write(item.Key);
-                        item.Value.Write(writer);
+                        BinaryWriter writer = new BinaryWriter(stream);
+                        writer.Write(lookup.Count);
+                        foreach (var item in lookup)
+                        {
+                            writer.Write(item.Key);
+                            item.Value.Write(writer);
+                        }
+                        writer.Flush();
+                        writer.Close();
                     }
-                    writer.Flush();
-                    writer.Close();
+                    if (File.Exists(CachePath)) File.Delete(CachePath);
+                    File.Move(tempPath, CachePath);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("Failed to write main cache: " + ex.Message);
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
                 }
             }
         }
