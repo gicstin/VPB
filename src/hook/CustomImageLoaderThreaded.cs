@@ -4,8 +4,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
-using System.Drawing;
-using System.Drawing.Imaging;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -48,6 +46,8 @@ namespace VPB
                     ByteArrayPool.Return(raw);
                 }
                 raw = null;
+                rawLength = 0;
+                needsDecoding = false;
                 hadError = false;
                 errorText = null;
                 textureFormat = TextureFormat.RGBA32;
@@ -110,6 +110,10 @@ namespace VPB
 			public int height;
 
 			public byte[] raw;
+
+			public int rawLength;
+
+			public bool needsDecoding;
 
 			public bool hadError;
 
@@ -291,197 +295,32 @@ namespace VPB
 				}
 			}
 
-		protected void ProcessFromStream(Stream st)
-		{
-			Bitmap bitmap = new Bitmap(st);
-			SolidBrush solidBrush = new SolidBrush(System.Drawing.Color.White);
-			bitmap.RotateFlip(RotateFlipType.Rotate180FlipX);
-			if (!setSize)
+			protected void ProcessFromStream(Stream st)
 			{
-				width = bitmap.Width;
-				height = bitmap.Height;
-				if (compress)
+				try
 				{
-					int num = width / 4;
-					if (num == 0)
+					byte[] buffer = new byte[16384];
+					using (MemoryStream ms = new MemoryStream())
 					{
-						num = 1;
-					}
-					width = num * 4;
-					int num2 = height / 4;
-					if (num2 == 0)
-					{
-						num2 = 1;
-					}
-					height = num2 * 4;
-				}
-			}
-			int num3 = 3;
-			textureFormat = TextureFormat.RGB24;
-			PixelFormat format = PixelFormat.Format24bppRgb;
-			if (createAlphaFromGrayscale || isNormalMap || createNormalFromBump || bitmap.PixelFormat == PixelFormat.Format32bppArgb)
-			{
-				textureFormat = TextureFormat.RGBA32;
-				format = PixelFormat.Format32bppArgb;
-				num3 = 4;
-			}
-			Bitmap bitmap2 = new Bitmap(width, height, format);
-			System.Drawing.Graphics graphics = System.Drawing.Graphics.FromImage(bitmap2);
-			Rectangle rect = new Rectangle(0, 0, width, height);
-			if (setSize)
-			{
-				if (fillBackground)
-				{
-					graphics.FillRectangle(solidBrush, rect);
-				}
-				float num4 = Mathf.Min((float)width / (float)bitmap.Width, (float)height / (float)bitmap.Height);
-				int num5 = (int)((float)bitmap.Width * num4);
-				int num6 = (int)((float)bitmap.Height * num4);
-				graphics.DrawImage(bitmap, (width - num5) / 2, (height - num6) / 2, num5, num6);
-			}
-			else
-			{
-				graphics.DrawImage(bitmap, 0, 0, width, height);
-			}
-			BitmapData bitmapData = bitmap2.LockBits(rect, ImageLockMode.ReadOnly, bitmap2.PixelFormat);
-			int num7 = width * height;
-			int num8 = num7 * num3;
-			int num9 = Mathf.CeilToInt((float)num8 * 1.5f);
-			raw = ByteArrayPool.Rent(num9);
-			Marshal.Copy(bitmapData.Scan0, raw, 0, num8);
-			bitmap2.UnlockBits(bitmapData);
-			bool flag = isNormalMap && num3 == 4;
-			for (int i = 0; i < num8; i += num3)
-			{
-				byte b = raw[i];
-				raw[i] = raw[i + 2];
-				raw[i + 2] = b;
-				if (flag)
-				{
-					raw[i + 3] = byte.MaxValue;
-				}
-			}
-
-			if (invert)
-			{
-				for (int j = 0; j < num8; j++)
-				{
-					int num10 = 255 - raw[j];
-					raw[j] = (byte)num10;
-				}
-			}
-			if (createAlphaFromGrayscale)
-			{
-				for (int k = 0; k < num8; k += 4)
-				{
-					int num11 = raw[k];
-					int num12 = raw[k + 1];
-					int num13 = raw[k + 2];
-					int num14 = (num11 + num12 + num13) / 3;
-					raw[k + 3] = (byte)num14;
-				}
-			}
-			if (createNormalFromBump)
-			{
-				byte[] array = new byte[num8 * 2];
-				float[][] array2 = new float[height][];
-				for (int l = 0; l < height; l++)
-				{
-					array2[l] = new float[width];
-					for (int m = 0; m < width; m++)
-					{
-						int num15 = (l * width + m) * 4;
-						int num16 = raw[num15];
-						int num17 = raw[num15 + 1];
-						int num18 = raw[num15 + 2];
-						float num19 = (float)(num16 + num17 + num18) / 768f;
-						array2[l][m] = num19;
+						int read;
+						while ((read = st.Read(buffer, 0, buffer.Length)) > 0)
+						{
+							ms.Write(buffer, 0, read);
+						}
+						byte[] bytes = ms.ToArray();
+						rawLength = bytes.Length;
+						raw = ByteArrayPool.Rent(rawLength);
+						Buffer.BlockCopy(bytes, 0, raw, 0, rawLength);
+						needsDecoding = true;
 					}
 				}
-				Vector3 vector = default(Vector3);
-				for (int n = 0; n < height; n++)
+				catch (Exception ex)
 				{
-					for (int num20 = 0; num20 < width; num20++)
-					{
-						float num21 = 0.5f;
-						float num22 = 0.5f;
-						float num23 = 0.5f;
-						float num24 = 0.5f;
-						float num25 = 0.5f;
-						float num26 = 0.5f;
-						float num27 = 0.5f;
-						float num28 = 0.5f;
-						int num29 = num20 - 1;
-						int num30 = num20 + 1;
-						int num31 = n + 1;
-						int num32 = n - 1;
-						int num33 = num31;
-						int num34 = num29;
-						int num35 = num32;
-						int num36 = num29;
-						int num37 = num31;
-						int num38 = num30;
-						int num39 = num32;
-						int num40 = num30;
-						if (num33 >= 0 && num33 < height && num34 >= 0 && num34 < width)
-						{
-							num21 = array2[num33][num34];
-						}
-						if (num29 >= 0 && num29 < width)
-						{
-							num22 = array2[n][num29];
-						}
-						if (num35 >= 0 && num35 < height && num36 >= 0 && num36 < width)
-						{
-							num23 = array2[num35][num36];
-						}
-						if (num31 >= 0 && num31 < height)
-						{
-							num24 = array2[num31][num20];
-						}
-						if (num32 >= 0 && num32 < height)
-						{
-							num25 = array2[num32][num20];
-						}
-						if (num37 >= 0 && num37 < height && num38 >= 0 && num38 < width)
-						{
-							num26 = array2[num37][num38];
-						}
-						if (num30 >= 0 && num30 < width)
-						{
-							num27 = array2[n][num30];
-						}
-						if (num39 >= 0 && num39 < height && num40 >= 0 && num40 < width)
-						{
-							num28 = array2[num39][num40];
-						}
-						float num41 = num26 + 2f * num27 + num28 - num21 - 2f * num22 - num23;
-						float num42 = num23 + 2f * num25 + num28 - num21 - 2f * num24 - num26;
-						vector.x = num41 * bumpStrength;
-						vector.y = num42 * bumpStrength;
-						vector.z = 1f;
-						vector.Normalize();
-						vector.x = vector.x * 0.5f + 0.5f;
-						vector.y = vector.y * 0.5f + 0.5f;
-						vector.z = vector.z * 0.5f + 0.5f;
-						int num43 = (int)(vector.x * 255f);
-						int num44 = (int)(vector.y * 255f);
-						int num45 = (int)(vector.z * 255f);
-						int num46 = (n * width + num20) * 4;
-						array[num46] = (byte)num45;
-						array[num46 + 1] = (byte)num44;
-						array[num46 + 2] = (byte)num43;
-						array[num46 + 3] = byte.MaxValue;
-					}
+					LogUtil.LogError("Error reading image stream: " + ex);
+					hadError = true;
+					errorText = ex.Message;
 				}
-				ByteArrayPool.Return(raw);
-				raw = array;
 			}
-			solidBrush.Dispose();
-			graphics.Dispose();
-			bitmap.Dispose();
-			bitmap2.Dispose();
-		}
 
 			public void Process()
 			{
@@ -686,8 +525,197 @@ namespace VPB
 				return x != 0 && (x & (x - 1)) == 0;
 			}
 
+			public void Decode()
+			{
+				if (!needsDecoding || raw == null || rawLength == 0) return;
+
+				try
+				{
+					Texture2D tempTex = new Texture2D(2, 2);
+					byte[] dataToLoad = raw;
+					if (raw.Length != rawLength)
+					{
+						dataToLoad = new byte[rawLength];
+						Buffer.BlockCopy(raw, 0, dataToLoad, 0, rawLength);
+					}
+					
+					if (tempTex.LoadImage(dataToLoad))
+					{
+						int origWidth = tempTex.width;
+						int origHeight = tempTex.height;
+                        int targetWidth = origWidth;
+                        int targetHeight = origHeight;
+
+						if (setSize)
+						{
+                            targetWidth = width;
+                            targetHeight = height;
+						}
+                        else
+                        {
+                            if (compress)
+                            {
+                                targetWidth = (origWidth / 4) * 4;
+                                if (targetWidth == 0) targetWidth = 4;
+                                targetHeight = (origHeight / 4) * 4;
+                                if (targetHeight == 0) targetHeight = 4;
+                            }
+                            width = targetWidth;
+                            height = targetHeight;
+                        }
+
+                        Texture2D outputTex = tempTex;
+                        bool destroyedTemp = false;
+
+                        if (targetWidth != origWidth || targetHeight != origHeight)
+                        {
+                            RenderTexture rt = RenderTexture.GetTemporary(targetWidth, targetHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+                            RenderTexture previous = RenderTexture.active;
+                            RenderTexture.active = rt;
+                            GL.Clear(false, true, fillBackground ? UnityEngine.Color.white : UnityEngine.Color.clear);
+                            Graphics.Blit(tempTex, rt);
+                            outputTex = new Texture2D(targetWidth, targetHeight, TextureFormat.RGBA32, false);
+                            outputTex.ReadPixels(new Rect(0, 0, targetWidth, targetHeight), 0, 0);
+                            outputTex.Apply();
+                            RenderTexture.active = previous;
+                            RenderTexture.ReleaseTemporary(rt);
+                            destroyedTemp = true;
+                        }
+
+                        Color32[] pix = outputTex.GetPixels32();
+                        int num3 = 4;
+                        int num8 = targetWidth * targetHeight * num3;
+                        
+                        ByteArrayPool.Return(raw);
+                        raw = ByteArrayPool.Rent(num8);
+                        textureFormat = TextureFormat.RGBA32;
+
+                        // Copy Color32 to raw bytes (Unity's Color32 is RGBA)
+                        // We need to match the original loader's expected format if it was doing something special.
+                        // The original loader was doing some swaps:
+                        /*
+                        for (int i = 0; i < num8; i += num3)
+                        {
+                            byte b = raw[i];
+                            raw[i] = raw[i + 2];
+                            raw[i + 2] = b;
+                            ...
+                        }
+                        */
+                        // Unity Color32 is: r, g, b, a.
+                        // The original loader was copying from System.Drawing (BGRA usually) and swapping R and B.
+                        // So it ended up as RGBA.
+                        
+                        for (int i = 0; i < pix.Length; i++)
+                        {
+                            int idx = i * 4;
+                            raw[idx] = pix[i].r;
+                            raw[idx + 1] = pix[i].g;
+                            raw[idx + 2] = pix[i].b;
+                            raw[idx + 3] = pix[i].a;
+                        }
+
+                        // Apply transformations (Invert, Alpha, Normal)
+                        ApplyTransformations(num8);
+
+                        if (destroyedTemp) UnityEngine.Object.Destroy(tempTex);
+                        UnityEngine.Object.Destroy(outputTex);
+					}
+                    else
+                    {
+                        hadError = true;
+                        errorText = "LoadImage failed";
+                    }
+				}
+				catch (Exception ex)
+				{
+					LogUtil.LogError("Error in Decode: " + ex);
+					hadError = true;
+					errorText = ex.Message;
+				}
+				needsDecoding = false;
+			}
+
+            protected void ApplyTransformations(int num8)
+            {
+                if (isNormalMap)
+                {
+                    for (int i = 0; i < num8; i += 4)
+                    {
+                        raw[i + 3] = byte.MaxValue;
+                    }
+                }
+
+                if (invert)
+                {
+                    for (int j = 0; j < num8; j++)
+                    {
+                        raw[j] = (byte)(255 - raw[j]);
+                    }
+                }
+
+                if (createAlphaFromGrayscale)
+                {
+                    for (int k = 0; k < num8; k += 4)
+                    {
+                        int avg = (raw[k] + raw[k + 1] + raw[k + 2]) / 3;
+                        raw[k + 3] = (byte)avg;
+                    }
+                }
+
+                if (createNormalFromBump)
+                {
+                    // This is the most complex one. 
+                    // I'll copy the logic from the original loader but adapted to RGBA
+                    byte[] array = new byte[num8]; // Not pooled because it's temporary here
+                    float[][] hMap = new float[height][];
+                    for (int l = 0; l < height; l++)
+                    {
+                        hMap[l] = new float[width];
+                        for (int m = 0; m < width; m++)
+                        {
+                            int idx = (l * width + m) * 4;
+                            hMap[l][m] = (raw[idx] + raw[idx + 1] + raw[idx + 2]) / 768f;
+                        }
+                    }
+
+                    Vector3 v = default(Vector3);
+                    for (int n = 0; n < height; n++)
+                    {
+                        for (int x = 0; x < width; x++)
+                        {
+                            float h21 = 0.5f, h22 = 0.5f, h23 = 0.5f, h24 = 0.5f, h25 = 0.5f, h26 = 0.5f, h27 = 0.5f, h28 = 0.5f;
+                            int xm1 = x - 1, xp1 = x + 1, yp1 = n + 1, ym1 = n - 1;
+
+                            if (yp1 < height && xm1 >= 0) h21 = hMap[yp1][xm1];
+                            if (xm1 >= 0) h22 = hMap[n][xm1];
+                            if (ym1 >= 0 && xm1 >= 0) h23 = hMap[ym1][xm1];
+                            if (yp1 < height) h24 = hMap[yp1][x];
+                            if (ym1 >= 0) h25 = hMap[ym1][x];
+                            if (yp1 < height && xp1 < width) h26 = hMap[yp1][xp1];
+                            if (xp1 < width) h27 = hMap[n][xp1];
+                            if (ym1 >= 0 && xp1 < width) h28 = hMap[ym1][xp1];
+
+                            float nx = h26 + 2f * h27 + h28 - h21 - 2f * h22 - h23;
+                            float ny = h23 + 2f * h25 + h28 - h21 - 2f * h24 - h26;
+                            v.x = nx * bumpStrength;
+                            v.y = ny * bumpStrength;
+                            v.z = 1f;
+                            v.Normalize();
+                            
+                            int idx = (n * width + x) * 4;
+                            raw[idx] = (byte)((v.x * 0.5f + 0.5f) * 255f);
+                            raw[idx + 1] = (byte)((v.y * 0.5f + 0.5f) * 255f);
+                            raw[idx + 2] = (byte)((v.z * 0.5f + 0.5f) * 255f);
+                            raw[idx + 3] = byte.MaxValue;
+                        }
+                    }
+                }
+            }
+
 			public void Finish()
 			{
+				if (needsDecoding) Decode();
 				if (webRequest != null)
 				{
 					webRequest.Dispose();

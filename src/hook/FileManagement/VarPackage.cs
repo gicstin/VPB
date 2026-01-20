@@ -759,17 +759,22 @@ namespace VPB
 									}
 									else if (entryName.EndsWith(".vap"))
 									{
-										string entry = entryName.Substring(0, entryName.Length - 4) + ".jpg";
-										if (!set.Contains(entry))
+										VarFileEntry varFileEntry = new VarFileEntry(this, entryName, zipEntry.DateTime, zipEntry.Size);
+										FileEntries.Add(varFileEntry);
+
+										string baseName = entryName.Substring(0, entryName.Length - 4);
+										string[] sisterExts = { ".jpg", ".png" };
+										foreach (var sExt in sisterExts)
 										{
-											ZipEntry jpgEntry = zipFile.GetEntry(entry);
-											if (jpgEntry != null)
+											string sisterPath = baseName + sExt;
+											if (!set.Contains(sisterPath))
 											{
-												VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
-												FileEntries.Add(varFileEntry);
-												VarFileEntry varFileEntry2 = new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size);
-												FileEntries.Add(varFileEntry2);
-												set.Add(entry);
+												ZipEntry sisterZipEntry = zipFile.GetEntry(sisterPath);
+												if (sisterZipEntry != null)
+												{
+													FileEntries.Add(new VarFileEntry(this, sisterZipEntry.Name, sisterZipEntry.DateTime, sisterZipEntry.Size));
+													set.Add(sisterPath);
+												}
 											}
 										}
 									}

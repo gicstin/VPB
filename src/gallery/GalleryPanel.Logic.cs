@@ -486,14 +486,33 @@ namespace VPB
             {
                 foreach (var p in paths)
                 {
-                    if (checkPath.StartsWith(p, StringComparison.OrdinalIgnoreCase)) return true;
+                    if (checkPath.StartsWith(p, StringComparison.OrdinalIgnoreCase)) 
+                    {
+                        // Special Case: "Saves/Person" is often used for Poses, but "Saves/Person/appearance" are Appearances.
+                        // If we are looking for Poses (Saves/Person) and found an appearance, skip it unless specifically requested.
+                        if (string.Equals(p, "Saves/Person", StringComparison.OrdinalIgnoreCase) || string.Equals(p, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (checkPath.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                                continue;
+                        }
+                        return true;
+                    }
                 }
                 return false;
             }
             
             if (!string.IsNullOrEmpty(singlePath))
             {
-                return checkPath.StartsWith(singlePath, StringComparison.OrdinalIgnoreCase);
+                if (checkPath.StartsWith(singlePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(singlePath, "Saves/Person", StringComparison.OrdinalIgnoreCase) || string.Equals(singlePath, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (checkPath.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                            return false;
+                    }
+                    return true;
+                }
+                return false;
             }
 
             return true;
