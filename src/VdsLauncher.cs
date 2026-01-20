@@ -172,6 +172,10 @@ namespace VPB
             if (!parsed || executed) return;
             if (request == null) return;
 
+            // Wait for FileManager to be fully indexed before executing VDS scene load.
+            // This ensures all package dependencies are known and can be installed if needed.
+            if (!VamHookPlugin.IsFileManagerInited) return;
+
             // Apply log-mode overrides even when VDS scene load isn't used.
             if (request.LogMode && !request.Enabled)
             {

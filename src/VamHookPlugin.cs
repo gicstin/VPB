@@ -1021,6 +1021,7 @@ namespace VPB
         void Awake()
         {
             singleton = this;
+            IsFileManagerInited = false;
             
             // Explicitly initialize ZstdNet native library early
             try { ExternMethods.Initialize(); } catch { }
@@ -1184,7 +1185,7 @@ namespace VPB
             if (mode == LoadSceneMode.Single)
             {
                 m_Inited = false;
-                m_FileManagerInited = false;
+                IsFileManagerInited = false;
                 m_UIInited = false;
             }
         }
@@ -1234,7 +1235,7 @@ namespace VPB
                 LogUtil.SceneClickUpdate();
             }
 
-            if (!m_UIInited || !m_FileManagerInited)
+            if (!m_UIInited || !IsFileManagerInited)
             {
                 m_FpsSmoothedDelta = 0f;
                 m_FpsUpdateTimer = 0f;
@@ -1289,7 +1290,7 @@ namespace VPB
                 }
             }
 
-            if (m_Inited && m_FileManagerInited)
+            if (m_Inited && IsFileManagerInited)
             {
                 if (HubKey.TestKeyDown())
                 {
@@ -1304,7 +1305,7 @@ namespace VPB
             }
             if (!m_UIInited)
             {
-                if (m_FileManagerInited)
+                if (IsFileManagerInited)
                 {
                     if (MVR.Hub.HubBrowse.singleton != null)
                     {
@@ -1393,7 +1394,7 @@ namespace VPB
                 LogUtil.Log("Base components initialized on " + child.name);
                 FileManager.RegisterRefreshHandler(() =>
                 {
-                    m_FileManagerInited = true;
+                    IsFileManagerInited = true;
                     TryAutoInstall();
                     VarPackageMgr.singleton.Refresh();
                 });
@@ -1421,7 +1422,7 @@ namespace VPB
             }
         }
 
-        bool m_FileManagerInited = false;
+        public static bool IsFileManagerInited = false;
         HubBrowse m_HubBrowse;
         FileManager m_FileManager;
         FileBrowser m_FileBrowser;
@@ -1789,7 +1790,7 @@ namespace VPB
                 return;
             }
 
-            if (m_FileManagerInited && m_UIInited)
+            if (IsFileManagerInited && m_UIInited)
             {
                 const float infoBtnWidth = 28f;
 
