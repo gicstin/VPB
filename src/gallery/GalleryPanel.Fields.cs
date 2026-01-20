@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -18,6 +19,14 @@ namespace VPB
         private ScrollRect scrollRect;
         private Text titleText;
         private Text fpsText;
+        
+        // Reflection Cache
+        private static readonly Dictionary<Type, FieldInfo> _pathToScriptFieldCache = new Dictionary<Type, FieldInfo>();
+        private static readonly Dictionary<Type, PropertyInfo> _pathToScriptPropCache = new Dictionary<Type, PropertyInfo>();
+        private static readonly Dictionary<Type, FieldInfo> _internalIdFieldCache = new Dictionary<Type, FieldInfo>();
+        private static readonly Dictionary<Type, FieldInfo> _vamDirFieldCache = new Dictionary<Type, FieldInfo>();
+        private static readonly Dictionary<Type, FieldInfo> _itemPathFieldCache = new Dictionary<Type, FieldInfo>();
+        private static readonly Dictionary<Type, FieldInfo[]> _storableFieldsCache = new Dictionary<Type, FieldInfo[]>();
 
         public List<Gallery.Category> categories = new List<Gallery.Category>();
         // private List<FileEntry> currentFiles = new List<FileEntry>(); // Unused
@@ -78,6 +87,8 @@ namespace VPB
         // Buttons
         private Text rightCategoryBtnText;
         private Image rightCategoryBtnImage;
+        private Text rightActiveItemsBtnText;
+        private Image rightActiveItemsBtnImage;
         private Text rightCreatorBtnText;
         private Image rightCreatorBtnImage;
         
@@ -86,6 +97,8 @@ namespace VPB
 
         private Text leftCategoryBtnText;
         private Image leftCategoryBtnImage;
+        private Text leftActiveItemsBtnText;
+        private Image leftActiveItemsBtnImage;
         private Text leftCreatorBtnText;
         private Image leftCreatorBtnImage;
 
@@ -117,6 +130,7 @@ namespace VPB
         private Text leftSubClearBtnText; // NEW
         private string currentCreator = "";
         private string currentStatus = "";
+        private string currentActiveItemCategory = "";
         private string currentRatingFilter = "";
         private string currentSizeFilter = "";
         private string categoryFilter = "";
@@ -266,6 +280,7 @@ namespace VPB
         
         // Define colors for different content types
         public static readonly Color ColorCategory = new Color(0.5f, 0.15f, 0.15f, 1f); // Darker Red
+        public static readonly Color ColorActiveItems = new Color(0.4f, 0.2f, 0.6f, 1f); // Purple
         public static readonly Color ColorCreator = new Color(0.15f, 0.45f, 0.15f, 1f); // Darker Green
         public static readonly Color ColorHub = new Color(0.8f, 0.4f, 0f, 1f); // Darker Orange
         public static readonly Color ColorLicense = new Color(0.6f, 0f, 0.6f, 1f); // Darker Magenta

@@ -174,7 +174,31 @@ namespace VPB
             
             yieldWatch.Start();
 
-            if (FileManager.PackagesByUid != null)
+            if (leftActiveContent == ContentType.ActiveItems || rightActiveContent == ContentType.ActiveItems)
+            {
+                List<FileEntry> activeEntries = GetActiveSceneEntries();
+                foreach (var entry in activeEntries)
+                {
+                    if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
+                    {
+                        yield return null;
+                        yieldWatch.Reset();
+                        yieldWatch.Start();
+                    }
+
+                    if (PassesFilters(entry))
+                    {
+                        // Check name filter if set
+                        if (hasNameFilter)
+                        {
+                            if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
+                                continue;
+                        }
+                        files.Add(entry);
+                    }
+                }
+            }
+            else if (FileManager.PackagesByUid != null)
             {
                 foreach (var pkg in FileManager.PackagesByUid.Values)
                 {

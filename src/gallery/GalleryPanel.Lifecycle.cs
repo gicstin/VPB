@@ -792,9 +792,19 @@ namespace VPB
                 rightCategoryBtnText = rightCatBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightCatBtn.GetComponent<RectTransform>());
                 AddRightClickDelegate(rightCatBtn, () => ToggleRight(ContentType.Category));
+
+                // Active Items (Purple)
+                GameObject rightActiveItemsBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Active", btnFontSize, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => {
+                    if (isFixedLocally) ToggleLeft(ContentType.ActiveItems); else ToggleRight(ContentType.ActiveItems);
+                });
+                rightActiveItemsBtnImage = rightActiveItemsBtn.GetComponent<Image>();
+                rightActiveItemsBtnImage.color = ColorActiveItems;
+                rightActiveItemsBtnText = rightActiveItemsBtn.GetComponentInChildren<Text>();
+                rightSideButtons.Add(rightActiveItemsBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(rightActiveItemsBtn, () => ToggleRight(ContentType.ActiveItems));
                 
                 // Creator (Green)
-                GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => {
+                GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
                     if (isFixedLocally) ToggleLeft(ContentType.Creator); else ToggleRight(ContentType.Creator);
                 });
                 rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
@@ -804,7 +814,7 @@ namespace VPB
                 AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
 
                 // Status (Blue)
-                GameObject rightStatusBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
+                GameObject rightStatusBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => {
                     if (isFixedLocally) ToggleLeft(ContentType.Status); else ToggleRight(ContentType.Status);
                 });
                 rightStatusBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.5f, 1f); // Darker Blue
@@ -812,7 +822,7 @@ namespace VPB
                 AddRightClickDelegate(rightStatusBtn, () => ToggleRight(ContentType.Status));
 
                 // Target (Dropdown-like)
-                GameObject rightTargetBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Target: None", 14, 0, startY - spacing * 7 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
+                GameObject rightTargetBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Target: None", 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
                 rightTargetBtnImage = rightTargetBtn.GetComponent<Image>();
                 rightTargetBtnImage.color = new Color(0.15f, 0.15f, 0.15f, 1f);
                 rightTargetBtnText = rightTargetBtn.GetComponentInChildren<Text>();
@@ -820,19 +830,19 @@ namespace VPB
                 AddRightClickDelegate(rightTargetBtn, () => CycleTarget(false));
 
                 // Apply Mode (Right)
-                GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "2-Click", btnFontSize, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "2-Click", btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
                 rightApplyModeBtnImage = rightApplyModeBtn.GetComponent<Image>();
                 rightApplyModeBtnText = rightApplyModeBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightApplyModeBtn.GetComponent<RectTransform>());
 
                 // Replace Toggle (Right)
-                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                 rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
 
                 // Hub (Orange)
-                GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => {
+                GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
                     if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
                     {
                         if (isFixedLocally) ToggleLeft(ContentType.Hub); else ToggleRight(ContentType.Hub);
@@ -860,7 +870,7 @@ namespace VPB
                 });
 
                 // Undo (Right)
-                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 11 - groupGap * 3, AnchorPresets.centre, Undo);
+                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
                 rightUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 rightSideButtons.Add(rightUndoBtn.GetComponent<RectTransform>());
 
@@ -929,9 +939,17 @@ namespace VPB
                 leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftCatBtn.GetComponent<RectTransform>());
                 AddRightClickDelegate(leftCatBtn, () => ToggleRight(ContentType.Category));
+
+                // Active Items (Purple)
+                GameObject leftActiveItemsBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Active", btnFontSize, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.ActiveItems));
+                leftActiveItemsBtnImage = leftActiveItemsBtn.GetComponent<Image>();
+                leftActiveItemsBtnImage.color = ColorActiveItems;
+                leftActiveItemsBtnText = leftActiveItemsBtn.GetComponentInChildren<Text>();
+                leftSideButtons.Add(leftActiveItemsBtn.GetComponent<RectTransform>());
+                AddRightClickDelegate(leftActiveItemsBtn, () => ToggleRight(ContentType.ActiveItems));
                 
                 // Creator (Green)
-                GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
+                GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
                 leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
                 leftCreatorBtnImage.color = ColorCreator;
                 leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>();
@@ -939,13 +957,13 @@ namespace VPB
                 AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
 
                 // Status (Blue)
-                GameObject leftStatusBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Status));
+                GameObject leftStatusBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Status));
                 leftStatusBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.5f, 1f); // Darker Blue
                 leftSideButtons.Add(leftStatusBtn.GetComponent<RectTransform>());
                 AddRightClickDelegate(leftStatusBtn, () => ToggleRight(ContentType.Status));
 
                 // Target (Dropdown-like)
-                GameObject leftTargetBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Target: None", 14, 0, startY - spacing * 7 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
+                GameObject leftTargetBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Target: None", 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
                 leftTargetBtnImage = leftTargetBtn.GetComponent<Image>();
                 leftTargetBtnImage.color = new Color(0.15f, 0.15f, 0.15f, 1f);
                 leftTargetBtnText = leftTargetBtn.GetComponentInChildren<Text>();
@@ -953,19 +971,19 @@ namespace VPB
                 AddRightClickDelegate(leftTargetBtn, () => CycleTarget(false));
 
                 // Apply Mode (Left)
-                GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "2-Click", btnFontSize, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "2-Click", btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
                 leftApplyModeBtnImage = leftApplyModeBtn.GetComponent<Image>();
                 leftApplyModeBtnText = leftApplyModeBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftApplyModeBtn.GetComponent<RectTransform>());
 
                 // Replace Toggle (Left)
-                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                 leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
 
                 // Hub (Orange)
-                GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => {
+                GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
                     if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
                     {
                         ToggleLeft(ContentType.Hub);
@@ -993,7 +1011,7 @@ namespace VPB
                 });
 
                 // Undo (Left)
-                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 11 - groupGap * 3, AnchorPresets.centre, Undo);
+                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
 

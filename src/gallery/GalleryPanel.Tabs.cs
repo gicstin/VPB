@@ -528,6 +528,25 @@ namespace VPB
             {
                  UpdateHubCreators(container, trackedButtons, isLeft);
             }
+            else if (contentType == ContentType.ActiveItems)
+            {
+                var categories = new List<string> { "All", "Atoms", "Clothing", "Hair", "Plugins", "Pose", "Appearance", "Audio" };
+                
+                foreach (var cat in categories)
+                {
+                    bool isActive = (currentActiveItemCategory == cat) || (string.IsNullOrEmpty(currentActiveItemCategory) && cat == "All");
+                    Color btnColor = isActive ? ColorActiveItems : new Color(0.25f, 0.25f, 0.25f, 1f);
+
+                    CreateTabButton(container.transform, cat, btnColor, isActive, () => {
+                        if (cat == "All") currentActiveItemCategory = "";
+                        else currentActiveItemCategory = cat;
+                        
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    }, trackedButtons);
+                }
+            }
             else if (contentType == ContentType.Tags)
             {
                 if (!tagsCached) CacheTagCounts();

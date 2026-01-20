@@ -327,6 +327,7 @@
     <Compile Include="src\gallery\tabs\GalleryPositionActionTab.cs" />
     <Compile Include="src\gallery\tabs\GalleryTagsActionTab.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.Helpers.cs" />

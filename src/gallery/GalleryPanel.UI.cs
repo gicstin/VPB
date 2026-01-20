@@ -502,6 +502,11 @@ namespace VPB
             
             UpdateLayout();
             UpdateTabs();
+
+            if (leftActiveContent == ContentType.ActiveItems || rightActiveContent == ContentType.ActiveItems)
+            {
+                RefreshFiles();
+            }
         }
 
         private void ToggleLeft(ContentType type)
@@ -519,6 +524,11 @@ namespace VPB
             
             UpdateLayout();
             UpdateTabs();
+
+            if (leftActiveContent == ContentType.ActiveItems || rightActiveContent == ContentType.ActiveItems)
+            {
+                RefreshFiles();
+            }
         }
 
         private void UpdateReplaceButtonState()
@@ -916,13 +926,14 @@ namespace VPB
                 new SideButtonLayoutEntry(2, 0, 1),
                 new SideButtonLayoutEntry(3, 0, 0),
                 new SideButtonLayoutEntry(4, 0, 1),
-                new SideButtonLayoutEntry(5, 0, 0),
-                new SideButtonLayoutEntry(6, 0, 0),
-                new SideButtonLayoutEntry(10, 0, 0),
-                new SideButtonLayoutEntry(7, 0, 1),
-                new SideButtonLayoutEntry(8, 0, 0),
-                new SideButtonLayoutEntry(9, 0, 0),
-                new SideButtonLayoutEntry(11, 0, 1),
+                new SideButtonLayoutEntry(5, 0, 0), // ActiveItems
+                new SideButtonLayoutEntry(6, 0, 0), // Creator
+                new SideButtonLayoutEntry(7, 0, 0), // Status
+                new SideButtonLayoutEntry(11, 0, 0), // Hub
+                new SideButtonLayoutEntry(8, 0, 1), // Target
+                new SideButtonLayoutEntry(9, 0, 0), // Apply Mode
+                new SideButtonLayoutEntry(10, 0, 0), // Replace
+                new SideButtonLayoutEntry(12, 0, 1), // Undo
             };
         }
 
