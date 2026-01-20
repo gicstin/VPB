@@ -216,6 +216,8 @@ namespace VPB
         private RectTransform paginationRT;
         private Text hoverPathText;
         private RectTransform hoverPathRT;
+        private CanvasGroup hoverPathCanvasGroup;
+        private Coroutine hoverFadeCoroutine;
         private GameObject paginationPrevBtn;
         private GameObject paginationNextBtn;
         private GameObject paginationFirstBtn;

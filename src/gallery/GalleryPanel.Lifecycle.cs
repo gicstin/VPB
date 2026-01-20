@@ -1004,7 +1004,7 @@ namespace VPB
             GameObject scrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
             scrollRect = scrollGO.GetComponent<ScrollRect>();
             contentScrollRT = scrollGO.GetComponent<RectTransform>();
-            contentScrollRT.offsetMin = new Vector2(20, 70);
+            contentScrollRT.offsetMin = new Vector2(20, 110);
             contentScrollRT.offsetMax = new Vector2(-230, -65); // Default top margin (Quick Filters hidden)
             
             contentGO = scrollRect.content.gameObject;
@@ -1032,14 +1032,13 @@ namespace VPB
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();
 
-            // Status Bar (Now shares the hoverPathText container)
-            // Note: hoverPathRT is initialized inside CreatePaginationControls()
+            // Status Bar (Now shares the hoverPathRT container)
             GameObject statusBarGO = new GameObject("StatusBar");
             statusBarGO.transform.SetParent(hoverPathRT.transform, false);
             statusBarText = statusBarGO.AddComponent<Text>();
             statusBarText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            statusBarText.fontSize = 22; // Match hoverPathText size
-            statusBarText.color = Color.white; // Match hoverPathText color
+            statusBarText.fontSize = 22;
+            statusBarText.color = Color.white;
             var statusShadow = statusBarGO.AddComponent<Shadow>();
             statusShadow.effectColor = new Color(0, 0, 0, 0.8f);
             statusShadow.effectDistance = new Vector2(1, -1);
@@ -1275,10 +1274,6 @@ namespace VPB
             else if (temporaryStatusMsg != null)
             {
                 finalStatus = temporaryStatusMsg;
-            }
-            else
-            {
-                // Hover detection for items in scene removed as per request
             }
 
             if (statusBarText != null)

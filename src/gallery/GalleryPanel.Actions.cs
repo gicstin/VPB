@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -106,34 +107,39 @@ namespace VPB
         public void SetHoverPath(string path)
         {
             bool hasPath = !string.IsNullOrEmpty(path);
-            if (hoverPathRT != null) hoverPathRT.gameObject.SetActive(hasPath);
+            float targetAlpha = hasPath ? 1f : 0f;
 
-            if (hoverPathText != null)
+            if (hoverFadeCoroutine != null) StopCoroutine(hoverFadeCoroutine);
+            hoverFadeCoroutine = StartCoroutine(FadeHoverPath(targetAlpha));
+
+            if (hoverPathText != null && hasPath)
             {
-                // Intelligent wrapping for paths: add zero-width space after separators
-                if (!hasPath)
-                {
-                    hoverPathText.text = "";
-                }
-                else
-                {
-                    string displayPath = path;
+                string displayPath = path;
 
-                    // Ensure we show internal paths for .var files
-                    // Sometimes .Path might be truncated by external logic, but FileEntry.Uid is usually full
-                    
-                    // Always split when entering inside a .var package
-                    if (displayPath.Contains(".var:/"))
-                    {
-                        displayPath = displayPath.Replace(".var:/", ".var\n\\");
-                    }
-                    else if (displayPath.Contains(".var:"))
-                    {
-                        displayPath = displayPath.Replace(".var:", ".var\n\\");
-                    }
-                    hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B");
-                }
+                // Ensure we show full internal paths for .var files without manual line breaks
+                // Text wrapping is now handled by the UI Text component
+                
+                hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B");
             }
+        }
+
+        private IEnumerator FadeHoverPath(float targetAlpha)
+        {
+            if (hoverPathCanvasGroup == null) yield break;
+            
+            float duration = 0.15f; // Fast but smooth
+            float startAlpha = hoverPathCanvasGroup.alpha;
+            float elapsed = 0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                hoverPathCanvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, elapsed / duration);
+                yield return null;
+            }
+
+            hoverPathCanvasGroup.alpha = targetAlpha;
+            hoverFadeCoroutine = null;
         }
 
         public void RestoreSelectedHoverPath()

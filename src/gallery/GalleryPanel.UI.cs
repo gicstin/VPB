@@ -30,17 +30,17 @@ namespace VPB
             pageContainer.transform.SetParent(backgroundBoxGO.transform, false);
             paginationRT = pageContainer.AddComponent<RectTransform>();
             paginationRT.anchorMin = new Vector2(0, 0);
-            paginationRT.anchorMax = new Vector2(0, 0);
-            paginationRT.pivot = new Vector2(0, 0.5f);
-            paginationRT.anchoredPosition = new Vector2(50, 30); // Centered in 60px footer area, moved right from corner
-            paginationRT.sizeDelta = new Vector2(300, 40);
+            paginationRT.anchorMax = new Vector2(1, 0); // Stretch horizontally
+            paginationRT.pivot = new Vector2(0.5f, 0);
+            paginationRT.anchoredPosition = new Vector2(0, 0);
+            paginationRT.sizeDelta = new Vector2(0, 60); // Footer bar height for buttons
 
             // First Page Button
-            paginationFirstBtn = UI.CreateUIButton(pageContainer, 40, 40, "|<", 18, 0, 0, AnchorPresets.middleLeft, FirstPage);
+            paginationFirstBtn = UI.CreateUIButton(pageContainer, 40, 40, "|<", 18, 10, 10, AnchorPresets.bottomLeft, FirstPage);
             AddTooltip(paginationFirstBtn, "First Page");
 
             // Prev Button
-            paginationPrevBtn = UI.CreateUIButton(pageContainer, 40, 40, "<", 20, 50, 0, AnchorPresets.middleLeft, PrevPage);
+            paginationPrevBtn = UI.CreateUIButton(pageContainer, 40, 40, "<", 20, 60, 10, AnchorPresets.bottomLeft, PrevPage);
             
             // Text
             GameObject textGO = new GameObject("PageText");
@@ -52,51 +52,51 @@ namespace VPB
             paginationText.alignment = TextAnchor.MiddleCenter;
             paginationText.text = "1 / 1";
             RectTransform textRT = textGO.GetComponent<RectTransform>();
-            textRT.anchorMin = new Vector2(0, 0.5f);
-            textRT.anchorMax = new Vector2(0, 0.5f);
-            textRT.pivot = new Vector2(0, 0.5f);
-            textRT.anchoredPosition = new Vector2(100, 0);
-            textRT.sizeDelta = new Vector2(100, 40);
+            textRT.anchorMin = new Vector2(0, 0);
+            textRT.anchorMax = new Vector2(0, 0);
+            textRT.pivot = new Vector2(0, 0);
+            textRT.anchoredPosition = new Vector2(110, 10);
+            textRT.sizeDelta = new Vector2(80, 40);
 
             // Next Button
-            paginationNextBtn = UI.CreateUIButton(pageContainer, 40, 40, ">", 20, 210, 0, AnchorPresets.middleLeft, NextPage);
+            paginationNextBtn = UI.CreateUIButton(pageContainer, 40, 40, ">", 20, 200, 10, AnchorPresets.bottomLeft, NextPage);
             AddTooltip(paginationNextBtn, "Next Page");
 
             // Last Page Button
-            paginationLastBtn = UI.CreateUIButton(pageContainer, 40, 40, ">|", 18, 260, 0, AnchorPresets.middleLeft, LastPage);
+            paginationLastBtn = UI.CreateUIButton(pageContainer, 40, 40, ">|", 18, 250, 10, AnchorPresets.bottomLeft, LastPage);
             AddTooltip(paginationLastBtn, "Last Page");
 
             // Selection / Grid Controls
-            selectAllBtn = UI.CreateUIButton(pageContainer, 40, 40, "A", 20, 310, 0, AnchorPresets.middleLeft, SelectAll);
+            selectAllBtn = UI.CreateUIButton(pageContainer, 40, 40, "A", 20, 320, 10, AnchorPresets.bottomLeft, SelectAll);
             AddTooltip(selectAllBtn, "Select All");
-            clearSelectionBtn = UI.CreateUIButton(pageContainer, 40, 40, "C", 20, 360, 0, AnchorPresets.middleLeft, ClearSelection);
+            clearSelectionBtn = UI.CreateUIButton(pageContainer, 40, 40, "C", 20, 370, 10, AnchorPresets.bottomLeft, ClearSelection);
             AddTooltip(clearSelectionBtn, "Clear Selection");
-            gridSizeMinusBtn = UI.CreateUIButton(pageContainer, 40, 40, "-", 24, 410, 0, AnchorPresets.middleLeft, () => AdjustGridColumns(1));
+            gridSizeMinusBtn = UI.CreateUIButton(pageContainer, 40, 40, "-", 24, 420, 10, AnchorPresets.bottomLeft, () => AdjustGridColumns(1));
             AddTooltip(gridSizeMinusBtn, "More Columns (Smaller)");
-            gridSizePlusBtn = UI.CreateUIButton(pageContainer, 40, 40, "+", 24, 460, 0, AnchorPresets.middleLeft, () => AdjustGridColumns(-1));
+            gridSizePlusBtn = UI.CreateUIButton(pageContainer, 40, 40, "+", 24, 470, 10, AnchorPresets.bottomLeft, () => AdjustGridColumns(-1));
             AddTooltip(gridSizePlusBtn, "Fewer Columns (Larger)");
 
             // Follow Quick Toggles
-            footerFollowAngleBtn = UI.CreateUIButton(pageContainer, 40, 40, "∡", 20, 520, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Angle"));
+            footerFollowAngleBtn = UI.CreateUIButton(pageContainer, 40, 40, "∡", 20, 540, 10, AnchorPresets.bottomLeft, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
             AddTooltip(footerFollowAngleBtn, "Follow Angle");
             
-            footerFollowDistanceBtn = UI.CreateUIButton(pageContainer, 40, 40, "↕", 20, 570, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Distance"));
+            footerFollowDistanceBtn = UI.CreateUIButton(pageContainer, 40, 40, "↕", 20, 590, 10, AnchorPresets.bottomLeft, () => ToggleFollowQuick("Distance"));
             footerFollowDistanceImage = footerFollowDistanceBtn.GetComponent<Image>();
             AddTooltip(footerFollowDistanceBtn, "Follow Distance");
             
-            footerFollowHeightBtn = UI.CreateUIButton(pageContainer, 40, 40, "⊙", 20, 620, 0, AnchorPresets.middleLeft, () => ToggleFollowQuick("Height"));
+            footerFollowHeightBtn = UI.CreateUIButton(pageContainer, 40, 40, "⊙", 20, 640, 10, AnchorPresets.bottomLeft, () => ToggleFollowQuick("Height"));
             footerFollowHeightImage = footerFollowHeightBtn.GetComponent<Image>();
             AddTooltip(footerFollowHeightBtn, "Follow Eye Height");
 
             // Layout Mode Toggle
-            footerLayoutBtn = UI.CreateUIButton(pageContainer, 40, 40, "▤", 20, 670, 0, AnchorPresets.middleLeft, ToggleLayoutMode);
+            footerLayoutBtn = UI.CreateUIButton(pageContainer, 40, 40, "≡", 20, -110, 10, AnchorPresets.bottomRight, ToggleLayoutMode);
             footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
             footerLayoutBtnText = footerLayoutBtn.GetComponentInChildren<Text>();
             AddTooltip(footerLayoutBtn, "Toggle Layout Mode (Grid/Card)");
 
             // Fixed Height Mode Toggle
-            footerHeightBtn = UI.CreateUIButton(pageContainer, 40, 40, "↕", 20, 720, 0, AnchorPresets.middleLeft, ToggleFixedHeightMode);
+            footerHeightBtn = UI.CreateUIButton(pageContainer, 40, 40, "↕", 20, -60, 10, AnchorPresets.bottomRight, ToggleFixedHeightMode);
             footerHeightBtnImage = footerHeightBtn.GetComponent<Image>();
             footerHeightBtnText = footerHeightBtn.GetComponentInChildren<Text>();
             AddTooltip(footerHeightBtn, "Toggle Fixed Height (Full/2-3rds/Half)");
@@ -117,17 +117,21 @@ namespace VPB
             AddHoverDelegate(footerLayoutBtn);
             AddHoverDelegate(footerHeightBtn);
 
-            // Hover Path Text (Bottom Center - now with background and dynamic width)
-            GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.85f), AnchorPresets.hStretchBottom, 0, 60, new Vector2(0, 60));
+            // Hover Path Text (Now placed above the buttons with background)
+            GameObject pathGO = UI.AddChildGOImage(pageContainer, new Color(0, 0, 0, 0.85f), AnchorPresets.hStretchBottom, 0, 60, new Vector2(0, 60));
             pathGO.name = "HoverPathContainer";
             pathGO.GetComponent<Image>().raycastTarget = false;
             hoverPathRT = pathGO.GetComponent<RectTransform>();
+            hoverPathCanvasGroup = pathGO.AddComponent<CanvasGroup>();
+            hoverPathCanvasGroup.alpha = 0;
+            hoverPathCanvasGroup.blocksRaycasts = false;
+            hoverPathCanvasGroup.interactable = false;
             
             GameObject hoverPathTextGO = new GameObject("HoverPathText");
             hoverPathTextGO.transform.SetParent(pathGO.transform, false);
             hoverPathText = hoverPathTextGO.AddComponent<Text>();
             hoverPathText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            hoverPathText.fontSize = 22;
+            hoverPathText.fontSize = 20; // Slightly smaller to ensure 2 rows fit comfortably in 60px
             hoverPathText.color = Color.white;
             var shadow = hoverPathTextGO.AddComponent<Shadow>();
             shadow.effectColor = new Color(0, 0, 0, 0.8f);
@@ -135,6 +139,7 @@ namespace VPB
             hoverPathText.alignment = TextAnchor.MiddleCenter;
             hoverPathText.horizontalOverflow = HorizontalWrapMode.Wrap;
             hoverPathText.verticalOverflow = VerticalWrapMode.Truncate;
+            hoverPathText.lineSpacing = 0.9f;
             hoverPathText.text = "";
             hoverPathText.raycastTarget = false;
             
@@ -187,7 +192,7 @@ namespace VPB
                 footerLayoutBtnImage.color = (layoutMode == GalleryLayoutMode.VerticalCard) ? activeColor : inactiveColor;
             
             if (footerLayoutBtnText != null)
-                footerLayoutBtnText.text = (layoutMode == GalleryLayoutMode.VerticalCard) ? "≣" : "▤";
+                footerLayoutBtnText.text = (layoutMode == GalleryLayoutMode.VerticalCard) ? "≡" : "▤";
         }
 
         private void ToggleFixedHeightMode()
@@ -646,7 +651,7 @@ namespace VPB
                 if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
             }
             
-            float bottomOffset = 60;
+            float bottomOffset = 60; // Only account for buttons; hover bar will overlay the grid
             float topOffset = -65f;
 
             contentScrollRT.offsetMin = new Vector2(leftOffset, bottomOffset);
@@ -686,13 +691,16 @@ namespace VPB
             // Move Footer (Pagination and Hover Path)
             if (paginationRT != null)
             {
-                float footerY = 0;
-                paginationRT.anchoredPosition = new Vector2(50, footerY + 30);
+                // Buttons container: respect side panels
+                paginationRT.offsetMin = new Vector2(leftOffset, 0);
+                paginationRT.offsetMax = new Vector2(rightOffset, 60);
                 
                 if (hoverPathRT != null)
                 {
-                    hoverPathRT.offsetMin = new Vector2(leftOffset, footerY + 60);
-                    hoverPathRT.offsetMax = new Vector2(rightOffset, footerY + 120);
+                    // Hover bar: stretch to full width of backgroundBoxGO
+                    // Since it's a child of paginationRT, we negate the parent's offsets
+                    hoverPathRT.offsetMin = new Vector2(-leftOffset, 60);
+                    hoverPathRT.offsetMax = new Vector2(-rightOffset, 120);
                 }
             }
             
