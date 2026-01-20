@@ -88,6 +88,8 @@ namespace VPB
         {
             if (canvas != null)
                 canvas.gameObject.SetActive(false);
+            
+            hoverCount = 0;
             actionsPanel?.Hide();
         }
 

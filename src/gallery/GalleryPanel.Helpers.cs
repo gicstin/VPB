@@ -10,12 +10,31 @@ namespace VPB
     {
         public Action<bool> OnHoverChange;
         public Action<PointerEventData> OnPointerEnterEvent;
+        private bool isHovered = false;
+
         public void OnPointerEnter(PointerEventData d) 
         {
+            if (isHovered) return;
+            isHovered = true;
             OnHoverChange?.Invoke(true);
             OnPointerEnterEvent?.Invoke(d);
         }
-        public void OnPointerExit(PointerEventData d) => OnHoverChange?.Invoke(false);
+
+        public void OnPointerExit(PointerEventData d) 
+        {
+            if (!isHovered) return;
+            isHovered = false;
+            OnHoverChange?.Invoke(false);
+        }
+
+        private void OnDisable()
+        {
+            if (isHovered)
+            {
+                isHovered = false;
+                OnHoverChange?.Invoke(false);
+            }
+        }
     }
 
     public class UIRightClickDelegate : MonoBehaviour, IPointerClickHandler

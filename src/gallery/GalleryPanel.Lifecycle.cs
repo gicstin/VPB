@@ -144,6 +144,7 @@ namespace VPB
             del.OnHoverChange += (enter) => {
                 if (enter) hoverCount++;
                 else hoverCount--;
+                if (hoverCount < 0) hoverCount = 0;
             };
             del.OnPointerEnterEvent += (d) => {
                 currentPointerData = d;
@@ -221,7 +222,7 @@ namespace VPB
 
         private void UpdateTargetMarker()
         {
-            bool shouldShow = hoverCount > 0;
+            bool shouldShow = hoverCount > 0 && (canvas != null && canvas.gameObject.activeInHierarchy);
             Atom target = SelectedTargetAtom;
             if (!shouldShow || target == null || target.type != "Person")
             {
@@ -1028,27 +1029,30 @@ namespace VPB
             ContentSizeFitter csf = contentGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            // Status Bar (Bottom Right, similar to hoverPathText)
-            GameObject statusBarGO = new GameObject("StatusBar");
-            statusBarGO.transform.SetParent(backgroundBoxGO.transform, false);
-            statusBarText = statusBarGO.AddComponent<Text>();
-            statusBarText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            statusBarText.fontSize = 16; // Match hoverPathText size
-            statusBarText.color = new Color(1f, 1f, 1f, 0.7f); // Match hoverPathText color
-            statusBarText.alignment = TextAnchor.LowerRight;
-            statusBarText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            statusBarText.verticalOverflow = VerticalWrapMode.Overflow;
-            statusBarText.raycastTarget = false;
-            RectTransform statusRT = statusBarGO.GetComponent<RectTransform>();
-            statusRT.anchorMin = new Vector2(0, 0); 
-            statusRT.anchorMax = new Vector2(1, 0); 
-            statusRT.pivot = new Vector2(1, 0);
-            statusRT.anchoredPosition = new Vector2(-60, 10); // Match hoverPathText offset
-            statusRT.offsetMin = new Vector2(360, 10); // Match hoverPathText offset
-            statusRT.offsetMax = new Vector2(-60, 70); // Match hoverPathText offset
-
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();
+
+            // Status Bar (Now shares the hoverPathText container)
+            // Note: hoverPathRT is initialized inside CreatePaginationControls()
+            GameObject statusBarGO = new GameObject("StatusBar");
+            statusBarGO.transform.SetParent(hoverPathRT.transform, false);
+            statusBarText = statusBarGO.AddComponent<Text>();
+            statusBarText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            statusBarText.fontSize = 22; // Match hoverPathText size
+            statusBarText.color = Color.white; // Match hoverPathText color
+            var statusShadow = statusBarGO.AddComponent<Shadow>();
+            statusShadow.effectColor = new Color(0, 0, 0, 0.8f);
+            statusShadow.effectDistance = new Vector2(1, -1);
+            statusBarText.alignment = TextAnchor.MiddleCenter;
+            statusBarText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            statusBarText.verticalOverflow = VerticalWrapMode.Truncate;
+            statusBarText.raycastTarget = false;
+            
+            RectTransform statusRT = statusBarGO.GetComponent<RectTransform>();
+            statusRT.anchorMin = Vector2.zero;
+            statusRT.anchorMax = Vector2.one;
+            statusRT.sizeDelta = Vector2.zero;
+            statusRT.anchoredPosition = Vector2.zero;
 
             // Pointer Dot
             pointerDotGO = new GameObject("PointerDot");
@@ -1113,48 +1117,6 @@ namespace VPB
             yield return new WaitForSeconds(duration);
             temporaryStatusMsg = null;
             temporaryStatusCoroutine = null;
-        }
-
-        public void ShowCancelDropZone(bool show)
-        {
-            foreach (var g in cancelDropGroups)
-            {
-                if (g != null) g.SetActive(show);
-            }
-            if (show) UpdateCancelDropZoneVisual(-1);
-        }
-
-        public bool IsPointerOverCancelDropZone(PointerEventData eventData)
-        {
-            if (eventData == null || cancelDropZoneRTs.Count == 0) return false;
-            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : Camera.main;
-            int hoveredIndex = -1;
-            for (int i = 0; i < cancelDropZoneRTs.Count; i++)
-            {
-                RectTransform rt = cancelDropZoneRTs[i];
-                if (rt == null) continue;
-                if (RectTransformUtility.RectangleContainsScreenPoint(rt, eventData.position, cam))
-                {
-                    hoveredIndex = i;
-                    break;
-                }
-            }
-            UpdateCancelDropZoneVisual(hoveredIndex);
-            return hoveredIndex >= 0;
-        }
-
-        private void UpdateCancelDropZoneVisual(int hoveredIndex)
-        {
-            for (int i = 0; i < cancelDropZoneImages.Count; i++)
-            {
-                Image img = cancelDropZoneImages[i];
-                if (img != null) img.color = (i == hoveredIndex) ? cancelZoneHoverColor : cancelZoneNormalColor;
-            }
-            for (int i = 0; i < cancelDropZoneTexts.Count; i++)
-            {
-                Text t = cancelDropZoneTexts[i];
-                if (t != null) t.color = (i == hoveredIndex) ? Color.white : new Color(1f, 1f, 1f, 0.9f);
-            }
         }
 
         void Update()
@@ -1330,6 +1292,12 @@ namespace VPB
                 // Path label and status/hit label should never be on at once. Status has priority.
                 bool showPath = string.IsNullOrEmpty(finalStatus) && !string.IsNullOrEmpty(hoverPathText.text);
                 hoverPathText.gameObject.SetActive(showPath);
+            }
+
+            if (hoverPathRT != null)
+            {
+                bool anyVisible = (statusBarText != null && statusBarText.gameObject.activeSelf) || (hoverPathText != null && hoverPathText.gameObject.activeSelf);
+                hoverPathRT.gameObject.SetActive(anyVisible);
             }
 
             // FPS (lightweight, ~2Hz)

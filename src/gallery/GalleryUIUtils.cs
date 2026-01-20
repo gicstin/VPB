@@ -1616,16 +1616,11 @@ namespace VPB
 
             isDraggingItem = true;
             CreateGhost(eventData);
-            if (Panel != null)
-            {
-                Panel.ShowCancelDropZone(true);
-            }
 
             string msg;
             float dist;
             Atom atom = DetectAtom(eventData, out msg, out dist);
-            bool overCancel = Panel != null && Panel.IsPointerOverCancelDropZone(eventData);
-            if (Panel != null) Panel.SetStatus(overCancel ? "Drop to cancel" : msg);
+            if (Panel != null) Panel.SetStatus(msg);
             
             UpdateGhost(eventData, atom, dist);
         }
@@ -1641,8 +1636,7 @@ namespace VPB
                 UpdateGhost(eventData, atom, dist);
                 if (Panel != null)
                 {
-                     bool overCancel = Panel.IsPointerOverCancelDropZone(eventData);
-                     Panel.SetStatus(overCancel ? "Drop to cancel" : msg);
+                     Panel.SetStatus(msg);
                 }
             }
         }
@@ -1651,20 +1645,12 @@ namespace VPB
         {
             if (isDraggingItem)
             {
-                bool cancelDrop = Panel != null && Panel.IsPointerOverCancelDropZone(eventData);
                 DestroyGhost();
                 isDraggingItem = false;
                 
                 if (Panel != null)
                 {
-                    Panel.ShowCancelDropZone(false);
                     Panel.SetStatus("");
-                }
-
-                if (cancelDrop)
-                {
-                    dragCam = null;
-                    return;
                 }
 
                 if (HubItem != null)
@@ -1784,7 +1770,6 @@ namespace VPB
                 if (Panel != null) Panel.SetStatus("");
                 dragCam = null;
             }
-            if (Panel != null) Panel.ShowCancelDropZone(false);
         }
 
         public void OnApplicationFocus(bool hasFocus)
@@ -1796,7 +1781,6 @@ namespace VPB
                 if (Panel != null) Panel.SetStatus("");
                 dragCam = null;
             }
-            if (!hasFocus && Panel != null) Panel.ShowCancelDropZone(false);
         }
 
         private Atom DetectAtom(PointerEventData eventData, out string statusMsg, out float distance)
@@ -3610,19 +3594,6 @@ namespace VPB
              Camera cam = dragCam != null ? dragCam : eventData.pressEventCamera;
              if (cam == null) cam = Camera.main;
              if (ghostObject == null || cam == null) return;
-             
-             bool isCancelZone = Panel != null && Panel.IsPointerOverCancelDropZone(eventData);
-             if (isCancelZone)
-             {
-                 UpdateGhostPosition(eventData, false, distance);
-                 if (ghostBorder != null) ghostBorder.color = new Color(0.8f, 0.2f, 0.2f, 0.6f);
-                 if (ghostText != null)
-                 {
-                     ghostText.text = "Release to cancel";
-                     ghostText.color = new Color(1f, 0.7f, 0.7f);
-                 }
-                 return;
-             }
              
              bool isValidTarget = (atom != null && atom.type == "Person");
 

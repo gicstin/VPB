@@ -171,6 +171,13 @@ namespace VPB
 
         public void UpdateUI()
         {
+            // ALWAYS Refresh the active tab logic so that ExecuteAutoAction (double click)
+            // has the latest actions even if the panel is hidden.
+            if (tabs.ContainsKey(currentTabType))
+            {
+                tabs[currentTabType].RefreshUI(selectedFiles, selectedHubItem);
+            }
+
             if (!isOpen) return;
 
             // If fixed and reduced height, move pane to bottom
@@ -194,11 +201,6 @@ namespace VPB
                 actionsPaneRT.anchorMax = Vector2.one;
                 actionsPaneRT.offsetMin = Vector2.zero;
                 actionsPaneRT.offsetMax = Vector2.zero;
-            }
-
-            if (tabs.ContainsKey(currentTabType))
-            {
-                tabs[currentTabType].RefreshUI(selectedFiles, selectedHubItem);
             }
         }
 

@@ -896,64 +896,6 @@ namespace VPB
             // Settings
             UpdateListPositions(rightSideButtons, topY, spacing, groupGap);
             UpdateListPositions(leftSideButtons, topY, spacing, groupGap);
-
-            // Cancel zones (created lazily)
-            if (rightCancelGroups.Count == 0 && rightSideContainer != null)
-            {
-                var g = CreateCancelDropGroup(rightSideContainer, 120f, 50f);
-                rightCancelGroups.Add(g);
-            }
-            if (leftCancelGroups.Count == 0 && leftSideContainer != null)
-            {
-                var g = CreateCancelDropGroup(leftSideContainer, 120f, 50f);
-                leftCancelGroups.Add(g);
-            }
-
-            // Cancel zones
-            float cancelY = -topY - 80f;
-            foreach (var go in rightCancelGroups) if (go != null) go.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, cancelY);
-            foreach (var go in leftCancelGroups) if (go != null) go.GetComponent<RectTransform>().anchoredPosition = new Vector2(0, cancelY);
-        }
-
-        private GameObject CreateCancelDropGroup(GameObject parent, float btnWidth, float btnHeight)
-        {
-            float tallHeight = btnHeight * 3f + 8f;
-            GameObject container = UI.AddChildGOImage(parent, new Color(0, 0, 0, 0.02f), AnchorPresets.centre, btnWidth, tallHeight, Vector2.zero);
-            container.name = "CancelButtons";
-            VerticalLayoutGroup vlg = container.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 0f;
-            vlg.childControlHeight = true;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childAlignment = TextAnchor.MiddleCenter;
-
-            GameObject btn = UI.CreateUIButton(container, btnWidth, tallHeight, "Release\nHere To\nCancel", 18, 0, 0, AnchorPresets.centre, null);
-            RectTransform rt = btn.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(btnWidth, tallHeight);
-            LayoutElement le = btn.AddComponent<LayoutElement>();
-            le.preferredHeight = tallHeight;
-            le.preferredWidth = btnWidth;
-
-            Image img = btn.GetComponent<Image>();
-            if (img != null) img.color = cancelZoneNormalColor;
-            Text t = btn.GetComponentInChildren<Text>();
-            if (t != null)
-            {
-                t.color = new Color(1f, 1f, 1f, 0.9f);
-                t.alignment = TextAnchor.MiddleCenter;
-                t.supportRichText = false;
-            }
-
-            cancelDropZoneRTs.Add(rt);
-            cancelDropZoneImages.Add(img);
-            cancelDropZoneTexts.Add(t);
-            AddHoverDelegate(btn);
-
-            AddHoverDelegate(container);
-            container.SetActive(false);
-            cancelDropGroups.Add(container);
-            return container;
         }
 
         private SideButtonLayoutEntry[] GetSideButtonsLayout()

@@ -156,12 +156,6 @@ namespace VPB
         private PointerEventData currentPointerData;
         private GameObject targetMarkerGO;
         private string targetMarkerAtomUid;
-        private List<RectTransform> cancelDropZoneRTs = new List<RectTransform>();
-        private List<Image> cancelDropZoneImages = new List<Image>();
-        private List<Text> cancelDropZoneTexts = new List<Text>();
-        private List<GameObject> cancelDropGroups = new List<GameObject>();
-        private Color cancelZoneNormalColor = new Color(0.25f, 0.05f, 0.05f, 0.8f);
-        private Color cancelZoneHoverColor = new Color(0.6f, 0.1f, 0.1f, 0.9f);
 
         private float fpsTimer = 0f;
         private int fpsFrames = 0;
@@ -196,8 +190,6 @@ namespace VPB
         // Side buttons for dynamic positioning
         private List<RectTransform> rightSideButtons = new List<RectTransform>();
         private List<RectTransform> leftSideButtons = new List<RectTransform>();
-        private List<GameObject> rightCancelGroups = new List<GameObject>();
-        private List<GameObject> leftCancelGroups = new List<GameObject>();
         private GameObject leftClearCreatorBtn;
         private GameObject leftClearStatusBtn;
         private GameObject rightClearCreatorBtn;
