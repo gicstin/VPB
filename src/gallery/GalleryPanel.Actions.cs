@@ -181,7 +181,7 @@ namespace VPB
 
             if (isFixedLocally && VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode == 0)
             {
-                VPBConfig.Instance.DesktopFixedHeightMode = 2; // Reduced height (1/2 or 1/3 depending on interpretation)
+                VPBConfig.Instance.DesktopFixedHeightMode = 1; // Custom height
                 UpdateFooterHeightState();
                 UpdateLayout();
             }

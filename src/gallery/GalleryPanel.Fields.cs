@@ -171,6 +171,7 @@ namespace VPB
         private GameObject targetMarkerGO;
         private string targetMarkerAtomUid;
 
+        private RectTransform previewBorderRT;
         private float fpsTimer = 0f;
         private int fpsFrames = 0;
         private const float FpsInterval = 0.5f;
@@ -308,6 +309,10 @@ namespace VPB
         private GameObject footerHeightBtn;
         private Text footerHeightBtnText;
         private Image footerHeightBtnImage;
+
+        private GameObject footerAutoHideBtn;
+        private Text footerAutoHideBtnText;
+        private Image footerAutoHideBtnImage;
         
         private Text fileSortBtnText; // NEW
         private Text quickFiltersToggleBtnText; // NEW

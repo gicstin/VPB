@@ -65,7 +65,9 @@ namespace VPB
         public bool DragDropReplaceMode = false;
         public bool DesktopFixedMode = false;
         public bool DesktopFixedAutoCollapse = true;
-        public int DesktopFixedHeightMode = 0; // 0: Full, 1: 2/3, 2: 1/2
+        public int DesktopFixedHeightMode = 0; // 0: Full, 1: Custom
+        public float DesktopCustomHeight = 0.5f;
+        public float DesktopCustomWidth = 1.618f / 2.618f;
         public bool IsLoadingScene { get; private set; }
 
         private bool? _isDevMode;
@@ -137,6 +139,8 @@ namespace VPB
             DesktopFixedMode = false;
             DesktopFixedAutoCollapse = true;
             DesktopFixedHeightMode = 0;
+            DesktopCustomHeight = 0.5f;
+            DesktopCustomWidth = 1.618f / 2.618f;
 
             try
             {
@@ -192,6 +196,8 @@ namespace VPB
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                         if (node["DesktopFixedHeightMode"] != null) DesktopFixedHeightMode = node["DesktopFixedHeightMode"].AsInt;
+                        if (node["DesktopCustomHeight"] != null) DesktopCustomHeight = node["DesktopCustomHeight"].AsFloat;
+                        if (node["DesktopCustomWidth"] != null) DesktopCustomWidth = node["DesktopCustomWidth"].AsFloat;
                     }
                 }
             }
@@ -222,6 +228,8 @@ namespace VPB
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
                 node["DesktopFixedHeightMode"].AsInt = DesktopFixedHeightMode;
+                node["DesktopCustomHeight"].AsFloat = DesktopCustomHeight;
+                node["DesktopCustomWidth"].AsFloat = DesktopCustomWidth;
                 File.WriteAllText(ConfigPath, node.ToString());
                 // No need to Invoke ConfigChanged here if we want to control it from the UI or if Save is the final action.
                 // Actually, Invoke is good if other components listen to file saves.

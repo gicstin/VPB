@@ -46,6 +46,103 @@ namespace VPB
             CreateResizeHandle(AnchorPresets.bottomRight, 0);
             CreateResizeHandle(AnchorPresets.bottomLeft, -90);
             CreateResizeHandle(AnchorPresets.topLeft, 180);
+            CreateFixedModeResizeHandle();
+        }
+
+        private void CreateFixedModeResizeHandle()
+        {
+            // Create Preview Border
+            GameObject previewGO = new GameObject("ResizePreviewBorder");
+            previewGO.transform.SetParent(canvas.transform, false);
+            Image previewImg = previewGO.AddComponent<Image>();
+            previewImg.color = new Color(0.1f, 0.3f, 0.1f, 0.4f); // 40% visibility fill
+            previewImg.raycastTarget = false;
+            Outline previewOutline = previewGO.AddComponent<Outline>();
+            previewOutline.effectColor = new Color(0.1f, 0.3f, 0.1f, 0.4f); // 40% visibility border
+            previewOutline.effectDistance = new Vector2(2, -2);
+            previewBorderRT = previewGO.GetComponent<RectTransform>();
+            previewGO.SetActive(false);
+            previewGO.transform.SetAsLastSibling();
+
+            GameObject handleGO = new GameObject("ResizeHandle_FixedBottom");
+            handleGO.transform.SetParent(backgroundBoxGO.transform, false);
+
+            Image img = handleGO.AddComponent<Image>();
+            img.color = new Color(0, 0, 0, 0.01f); // Invisible hit area
+
+            RectTransform handleRT = handleGO.GetComponent<RectTransform>();
+            handleRT.anchorMin = new Vector2(0, 0);
+            handleRT.anchorMax = new Vector2(0, 0);
+            handleRT.pivot = new Vector2(0.5f, 0.5f); 
+            handleRT.anchoredPosition = new Vector2(25, 25);
+            handleRT.sizeDelta = new Vector2(50, 50); // Slightly larger hit area too
+
+            // Ensure Raycast Target is enabled
+            img.raycastTarget = true;
+
+            // Block parent drag interference
+            handleGO.AddComponent<UIDragBlocker>();
+            handleGO.AddComponent<UIHoverBorder>();
+
+            // Visual indicator (Triangle)
+            GameObject textGO = new GameObject("Text");
+            textGO.transform.SetParent(handleGO.transform, false);
+            Text t = textGO.AddComponent<Text>();
+            t.raycastTarget = false;
+            t.text = "◢";
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = 24;
+            t.color = new Color(0.6f, 0.6f, 0.6f, 0.5f);
+            t.alignment = TextAnchor.MiddleCenter;
+
+            RectTransform textRT = textGO.GetComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.sizeDelta = Vector2.zero;
+            textRT.localRotation = Quaternion.Euler(0, 0, -90); // Point towards bottom-left
+
+            // UIAnchorResizer
+            UIAnchorResizer resizer = handleGO.AddComponent<UIAnchorResizer>();
+            resizer.target = backgroundBoxGO.GetComponent<RectTransform>();
+            resizer.previewTarget = previewBorderRT;
+            resizer.deferred = true;
+            resizer.resizeX = true;
+            resizer.resizeY = true;
+            resizer.minAnchorX = 0.05f; // Max width (95% of screen)
+            resizer.maxAnchorX = 0.85f; // Min width (15% of screen)
+            resizer.minAnchorY = 0.05f; // Max height (95% of screen)
+            resizer.maxAnchorY = 0.85f; // Min height (15% of screen)
+
+            resizer.onResizedVec2 = (val) => {
+                if (VPBConfig.Instance != null) {
+                    VPBConfig.Instance.DesktopCustomWidth = val.x;
+                    VPBConfig.Instance.DesktopCustomHeight = val.y;
+                    
+                    // If we were in Full height mode (0) and drag upwards, switch to Custom height mode (1)
+                    if (VPBConfig.Instance.DesktopFixedHeightMode == 0 && val.y > 0.05f) {
+                        VPBConfig.Instance.DesktopFixedHeightMode = 1;
+                        UpdateFooterHeightState();
+                    }
+
+                    UpdateLayout();
+                    if (actionsPanel != null) actionsPanel.UpdateUI(true);
+                }
+            };
+            resizer.onResizeStatusChange = (isResizing) => {
+                 this.isResizing = isResizing;
+                 if (!isResizing && VPBConfig.Instance != null) {
+                     VPBConfig.Instance.Save();
+                 }
+            };
+
+            // Hover Effect
+            UIHoverColor hover = handleGO.AddComponent<UIHoverColor>();
+            hover.targetText = t;
+            hover.normalColor = t.color;
+            hover.hoverColor = Color.green;
+            
+            AddHoverDelegate(handleGO);
+            handleGO.SetActive(false); // Default hidden
         }
 
         private void CreateResizeHandle(int anchor, float rotationZ)

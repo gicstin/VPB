@@ -1202,11 +1202,19 @@ namespace VPB
 
                     // Always update anchors in Fixed mode to support height toggles and screen resizing
                     RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
-                    float leftRatio = 1.618f / 2.618f;
+                    float leftRatio = VPBConfig.Instance.DesktopCustomWidth;
                     
                     float bottomAnchor = 0f;
-                    if (VPBConfig.Instance.DesktopFixedHeightMode == 1) bottomAnchor = 1f / 3f;
-                    else if (VPBConfig.Instance.DesktopFixedHeightMode == 2) bottomAnchor = 0.5f;
+                    if (VPBConfig.Instance.DesktopFixedHeightMode == 1) bottomAnchor = VPBConfig.Instance.DesktopCustomHeight;
+
+                    // Show/Hide bottom resize handle based on mode
+                    Transform customHandle = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottom");
+                    if (customHandle != null)
+                    {
+                        bool shouldShow = isFixedLocally;
+                        if (customHandle.gameObject.activeSelf != shouldShow)
+                            customHandle.gameObject.SetActive(shouldShow);
+                    }
 
                     if (bgRT.anchorMin.y != bottomAnchor || bgRT.anchorMin.x != leftRatio)
                     {

@@ -303,70 +303,7 @@ namespace VPB
 
         public void UninstallAll()
         {
-            HashSet<string> protectedPackages = new HashSet<string>();
-            if (FileEntry.AutoInstallLookup != null)
-            {
-                foreach (var item in FileEntry.AutoInstallLookup)
-                {
-                    ProtectPackage(item, protectedPackages);
-                    VarPackage p = FileManager.ResolveDependency(item);
-                    if (p != null) ProtectPackage(p.Uid, protectedPackages);
-                }
-            }
-
-            // Protect currently loaded scene and its dependencies
-            string currentPackageUid = CurrentScenePackageUid;
-            if (string.IsNullOrEmpty(currentPackageUid))
-            {
-                currentPackageUid = FileManager.CurrentPackageUid;
-            }
-            ProtectPackage(currentPackageUid, protectedPackages);
-
-            // Protect active plugins
-            try
-            {
-                var plugins = UnityEngine.Object.FindObjectsOfType<MVRScript>();
-                foreach (var p in plugins)
-                {
-                     var fields = p.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                     foreach(var f in fields)
-                     {
-                         if (f.FieldType == typeof(JSONStorableUrl))
-                         {
-                             var jUrl = f.GetValue(p) as JSONStorableUrl;
-                             if (jUrl != null && !string.IsNullOrEmpty(jUrl.val))
-                             {
-                                 string pkg = GetPackageFromPath(jUrl.val);
-                                 if (pkg != null) ProtectPackage(pkg, protectedPackages);
-                             }
-                         }
-                     }
-                }
-            }
-            catch (Exception ex)
-            {
-                 LogUtil.LogError("Error scanning plugins: " + ex.Message);
-            }
-
-            string[] addonVarPaths = Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories);
-            m_UnloadList.Clear();
-            foreach (var item in addonVarPaths)
-            {
-                string name = Path.GetFileNameWithoutExtension(item);
-                
-                bool isProtected = protectedPackages.Contains(name);
-
-                if (item.StartsWith("AddonPackages"))
-                {
-                    m_UnloadList.Add(new UnloadItem {
-                        Uid = name,
-                        Path = item,
-                        Type = DeterminePackageType(name),
-                        Checked = !isProtected,
-                        IsActive = isProtected
-                    });
-                }
-            }
+            ScanUnloadPackages();
             m_ShowUnloadWindow = true;
         }
         public void OpenHubBrowse()

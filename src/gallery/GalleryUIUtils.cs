@@ -254,6 +254,15 @@ namespace VPB
                     newSize = new Vector2(w, h);
                     newPos = new Vector2(stationaryX - w * 0.5f, stationaryY - h * 0.5f);
                 }
+                else if (anchor == AnchorPresets.hStretchBottom || anchor == AnchorPresets.bottomMiddle)
+                {
+                    // Resize height only (for fixed mode or general use)
+                    float stationaryY = pos.y + size.y * 0.5f;
+                    float h = stationaryY - localMouse.y;
+                    h = Mathf.Clamp(h, minSize.y, maxSize.y);
+                    newSize = new Vector2(size.x, h);
+                    newPos = new Vector2(pos.x, stationaryY - h * 0.5f);
+                }
 
                 if (target.sizeDelta != newSize || target.anchoredPosition != newPos)
                 {
@@ -262,6 +271,120 @@ namespace VPB
                 }
             }
         }
+    }
+
+    public class UIAnchorResizer : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHandler
+    {
+        public RectTransform target;
+        public RectTransform previewTarget;
+        public bool deferred = false;
+        public bool resizeX = false;
+        public bool resizeY = true;
+        public float minAnchorX = 0.05f;
+        public float maxAnchorX = 0.95f;
+        public float minAnchorY = 0.05f;
+        public float maxAnchorY = 0.95f;
+        public UnityAction<float> onResized;
+        public UnityAction<Vector2> onResizedVec2;
+        public UnityAction<bool> onResizeStatusChange;
+        private Camera dragCam;
+        private Vector2 currentAnchors;
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+
+            // For ScreenSpaceOverlay, camera MUST be null for RectTransformUtility to work
+            Canvas canvas = target != null ? target.GetComponentInParent<Canvas>() : null;
+            if (canvas != null && canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+                dragCam = null;
+            else
+                dragCam = eventData.pressEventCamera ?? Camera.main;
+
+            if (target != null) currentAnchors = target.anchorMin;
+            if (previewTarget != null) 
+            {
+                previewTarget.gameObject.SetActive(true);
+                previewTarget.anchorMin = target.anchorMin;
+                previewTarget.anchorMax = target.anchorMax;
+                previewTarget.offsetMin = target.offsetMin;
+                previewTarget.offsetMax = target.offsetMax;
+            }
+
+            if (onResizeStatusChange != null) onResizeStatusChange(true);
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            if (deferred && target != null)
+            {
+                target.anchorMin = currentAnchors;
+                if (onResized != null && resizeY) onResized(currentAnchors.y);
+                if (onResizedVec2 != null) onResizedVec2(currentAnchors);
+            }
+
+            if (previewTarget != null) previewTarget.gameObject.SetActive(false);
+            if (onResizeStatusChange != null) onResizeStatusChange(false);
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (target == null || target.parent == null) return;
+            RectTransform parentRect = target.parent as RectTransform;
+            if (parentRect == null) return;
+
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, dragCam, out Vector2 localMouse))
+            {
+                Vector2 newAnchors = currentAnchors;
+                bool changed = false;
+
+                if (resizeX && parentRect.rect.width > 0)
+                {
+                    float ratioX = (localMouse.x - parentRect.rect.xMin) / parentRect.rect.width;
+                    ratioX = Mathf.Clamp(ratioX, minAnchorX, maxAnchorX);
+                    if (newAnchors.x != ratioX)
+                    {
+                        newAnchors.x = ratioX;
+                        changed = true;
+                    }
+                }
+
+                if (resizeY && parentRect.rect.height > 0)
+                {
+                    float ratioY = (localMouse.y - parentRect.rect.yMin) / parentRect.rect.height;
+                    ratioY = Mathf.Clamp(ratioY, minAnchorY, maxAnchorY);
+                    if (newAnchors.y != ratioY)
+                    {
+                        newAnchors.y = ratioY;
+                        changed = true;
+                    }
+                }
+                
+                if (changed)
+                {
+                    currentAnchors = newAnchors;
+                    
+                    if (previewTarget != null)
+                    {
+                        previewTarget.anchorMin = newAnchors;
+                    }
+
+                    if (!deferred)
+                    {
+                        target.anchorMin = newAnchors;
+                        if (onResized != null && resizeY) onResized(newAnchors.y);
+                        if (onResizedVec2 != null) onResizedVec2(newAnchors);
+                    }
+                }
+            }
+        }
+    }
+
+    public class UIDragBlocker : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+    {
+        public void OnBeginDrag(PointerEventData eventData) { eventData.useDragThreshold = false; }
+        public void OnDrag(PointerEventData eventData) { }
+        public void OnEndDrag(PointerEventData eventData) { }
     }
 
     public class UIHoverBorder : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler

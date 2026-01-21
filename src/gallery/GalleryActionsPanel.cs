@@ -169,11 +169,11 @@ namespace VPB
             if (tabs.ContainsKey(currentTabType)) tabs[currentTabType].OnClose();
         }
 
-        public void UpdateUI()
+        public void UpdateUI(bool rebuildContent = true)
         {
             // ALWAYS Refresh the active tab logic so that ExecuteAutoAction (double click)
             // has the latest actions even if the panel is hidden.
-            if (tabs.ContainsKey(currentTabType))
+            if (rebuildContent && tabs.ContainsKey(currentTabType))
             {
                 tabs[currentTabType].RefreshUI(selectedFiles, selectedHubItem);
             }
@@ -183,12 +183,10 @@ namespace VPB
             // If fixed and reduced height, move pane to bottom
             if (parentPanel.isFixedLocally && VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode > 0)
             {
-                float bottomAnchor = 0;
-                if (VPBConfig.Instance.DesktopFixedHeightMode == 1) bottomAnchor = 1f / 3f;
-                else if (VPBConfig.Instance.DesktopFixedHeightMode == 2) bottomAnchor = 0.5f;
+                float bottomAnchor = VPBConfig.Instance.DesktopCustomHeight;
 
-                // Match the horizontal ratio used in GalleryPanel.Lifecycle.cs (Golden Ratio)
-                float leftRatio = 1.618f / 2.618f;
+                // Match the horizontal ratio used in GalleryPanel.Lifecycle.cs
+                float leftRatio = VPBConfig.Instance.DesktopCustomWidth;
 
                 actionsPaneRT.anchorMin = new Vector2(leftRatio, 0);
                 actionsPaneRT.anchorMax = new Vector2(1, bottomAnchor);

@@ -57,9 +57,6 @@ namespace VPB
         private bool pendingDragDropReplaceMode;
         private bool backupDragDropReplaceMode;
 
-        private bool pendingDesktopFixedAutoCollapse;
-        private bool backupDesktopFixedAutoCollapse;
-
         private bool pendingIsDevMode;
         private bool backupIsDevMode;
 
@@ -138,9 +135,6 @@ namespace VPB
             pendingDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
             backupDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
 
-            pendingDesktopFixedAutoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
-            backupDesktopFixedAutoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
-
             pendingIsDevMode = VPBConfig.Instance.IsDevMode;
             backupIsDevMode = VPBConfig.Instance.IsDevMode;
 
@@ -185,7 +179,6 @@ namespace VPB
             VPBConfig.Instance.EnableGalleryTranslucency = backupEnableGalleryTranslucency;
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
-            VPBConfig.Instance.DesktopFixedAutoCollapse = backupDesktopFixedAutoCollapse;
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.TriggerChange();
         }
@@ -250,7 +243,6 @@ namespace VPB
                 VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
                 VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
-                VPBConfig.Instance.DesktopFixedAutoCollapse = pendingDesktopFixedAutoCollapse;
                 VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                 VPBConfig.Instance.Save();
                 
@@ -309,13 +301,6 @@ namespace VPB
                 VPBConfig.Instance.GalleryOpacity = val;
                 VPBConfig.Instance.TriggerChange();
             }, "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque.");
-
-            // Auto-Hide in Fixed Mode
-            CreateToggleSetting("Auto-Hide (Fixed)", pendingDesktopFixedAutoCollapse, (val) => {
-                pendingDesktopFixedAutoCollapse = val;
-                VPBConfig.Instance.DesktopFixedAutoCollapse = val;
-                VPBConfig.Instance.TriggerChange();
-            }, "In Desktop Fixed Mode, automatically collapses the gallery to the right edge when not in use. Hover over the right edge to expand.");
 
             // Curvature settings are currently disabled.
 

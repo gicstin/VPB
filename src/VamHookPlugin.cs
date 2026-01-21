@@ -25,20 +25,50 @@ namespace VPB
         private bool MiniMode;
         
         // Unload All Window
+        private enum UnloadWindowMode
+        {
+            Unload,
+            Load
+        }
+        private UnloadWindowMode m_UnloadWindowMode = UnloadWindowMode.Unload;
+
         private class UnloadItem
         {
             public string Uid;
             public string Path;
             public string Type;
+            public long Size;
+            public DateTime LastWriteTime;
+            public string AgeString;
+            public int DependencyCount;
+            public int LoadedDependencyCount;
             public bool Checked;
             public bool IsActive;
+            public bool Locked;
+            public bool IsLatest;
         }
         private bool m_ShowUnloadWindow = false;
-        private System.Collections.Generic.List<UnloadItem> m_UnloadList = new System.Collections.Generic.List<UnloadItem>();
+        private System.Collections.Generic.List<UnloadItem> m_AddonList = new System.Collections.Generic.List<UnloadItem>();
+        private System.Collections.Generic.List<UnloadItem> m_AllList = new System.Collections.Generic.List<UnloadItem>();
         private string m_UnloadFilter = "";
+        private string m_UnloadFilterLower = "";
+        private string m_UnloadCategoryFilter = "All";
+        private System.Collections.Generic.List<string> m_UnloadCategories = new System.Collections.Generic.List<string>();
+        private System.Collections.Generic.Dictionary<string, int> m_UnloadCategoryCounts = new System.Collections.Generic.Dictionary<string, int>();
         private bool m_ExcludeActivePackages = true;
-        private Vector2 m_UnloadScroll = Vector2.zero;
-        private Rect m_UnloadWindowRect = new Rect(200, 200, 600, 500);
+        private System.Collections.Generic.HashSet<string> m_LockedPackages = new System.Collections.Generic.HashSet<string>();
+        private Vector2 m_AddonScroll = Vector2.zero;
+        private Vector2 m_AllScroll = Vector2.zero;
+        private Vector2 m_UnloadCategoryScroll = Vector2.zero;
+        private Rect m_UnloadWindowRect = new Rect(100, 100, 1000, 600);
+        private string m_UnloadSortField = "Name";
+        private bool m_UnloadSortAscending = true;
+        private int m_AddonLastSelectedIndex = -1;
+        private int m_AllLastSelectedIndex = -1;
+        private bool m_UnloadIsDragging = false;
+        private bool m_UnloadDragChecked = false;
+        private int m_UnloadAddonCount = 0;
+        private int m_UnloadAllCount = 0;
 
         // Remove Old/Damaged Window
         private class RemoveItem
@@ -113,6 +143,9 @@ namespace VPB
         private Texture2D m_TexFpsBadgeOuterBg;
         private GUIStyle m_StylePanel;
         private GUIStyle m_StyleSection;
+        private GUIStyle m_StyleRow;
+        private GUIStyle m_StyleRowAlternate;
+        private GUIStyle m_StyleRowHover;
         private GUIStyle m_StyleHeader;
         private GUIStyle m_StyleSubHeader;
         private GUIStyle m_StyleButton;
@@ -817,6 +850,17 @@ namespace VPB
             m_StyleSection.normal.textColor = Color.white;
             m_StyleSection.padding = new RectOffset(8, 8, 6, 6);
             m_StyleSection.margin = new RectOffset(0, 0, 4, 4);
+
+            m_StyleRow = new GUIStyle(GUI.skin.label);
+            m_StyleRow.padding = new RectOffset(2, 2, 2, 2);
+            m_StyleRow.margin = new RectOffset(0, 0, 0, 0);
+
+            m_StyleRowAlternate = new GUIStyle(m_StyleRow);
+            m_StyleRowAlternate.normal.background = MakeTex(new Color(1, 1, 1, 0.05f));
+
+            m_StyleRowHover = new GUIStyle(m_StyleRow);
+            // Flat semi-transparent yellow for selection to ensure readability
+            m_StyleRowHover.normal.background = MakeTex(new Color(1f, 0.85f, 0f, 0.35f));
 
             m_StyleHeader = new GUIStyle(GUI.skin.label);
             m_StyleHeader.fontStyle = FontStyle.Bold;
@@ -1954,9 +1998,9 @@ namespace VPB
 						GUILayout.Label("Opens a window to review and confirm removal.", m_StyleInfoCardText);
 					});
 
-                    // ========== UNLOAD ALL PACKAGES ==========
+                    // ========== LOAD / UNLOAD PACKAGES ==========
                     GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Unload All", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
+                    if (GUILayout.Button("Load / Unload", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                     {
                         UninstallAll();
                     }
@@ -1965,12 +2009,14 @@ namespace VPB
 						ToggleInfoCard(ref m_ShowUninstallAllInfo);
                     }
                     GUILayout.EndHorizontal();
-					DrawInfoCard(ref m_ShowUninstallAllInfo, "Unload All", () =>
+					DrawInfoCard(ref m_ShowUninstallAllInfo, "Load / Unload", () =>
 					{
 						GUILayout.Space(2);
-						GUILayout.Label("Moves almost all add-on packages out of the active folder so VaM stops loading them.", m_StyleInfoCardText);
+						GUILayout.Label("In Unload mode: Moves packages out of the active folder to stop VaM from loading them.", m_StyleInfoCardText);
 						GUILayout.Space(1);
-						GUILayout.Label("Nothing is deleted. Files are just moved (AutoInstall items stay).", m_StyleInfoCardText);
+						GUILayout.Label("In Load mode: Moves packages back into the active folder.", m_StyleInfoCardText);
+						GUILayout.Space(1);
+						GUILayout.Label("Nothing is deleted. (AutoInstall items stay protected).", m_StyleInfoCardText);
 					});
 
                     // ========== HUB BROWSE ==========
@@ -2249,7 +2295,8 @@ namespace VPB
 
                     if (m_ShowUnloadWindow)
                     {
-                        m_UnloadWindowRect = GUILayout.Window(1, m_UnloadWindowRect, DrawUnloadWindow, "Unload Packages", m_StyleWindow);
+                        string windowTitle = m_UnloadWindowMode == UnloadWindowMode.Unload ? "Unload Packages" : "Load Packages";
+                        m_UnloadWindowRect = GUILayout.Window(1, m_UnloadWindowRect, DrawUnloadWindow, windowTitle, m_StyleWindow);
                         GUI.BringWindowToFront(1);
                     }
                     if (m_ShowRemoveWindow)
@@ -2316,7 +2363,7 @@ namespace VPB
 
         string DeterminePackageType(string uid)
         {
-             VarPackage pkg = FileManager.GetPackage(uid);
+             VarPackage pkg = FileManager.GetPackage(uid, false);
              if (pkg == null) return "Unknown";
              
              // Check content
@@ -2339,186 +2386,605 @@ namespace VPB
         }
 
 
+        bool IsUnloadItemVisible(UnloadItem item)
+        {
+            if (m_ExcludeActivePackages && item.IsActive) return false;
+
+            if (m_UnloadCategoryFilter == "Locked (L)")
+            {
+                if (!item.Locked) return false;
+            }
+            else if (m_UnloadCategoryFilter == "Latest")
+            {
+                if (!item.IsLatest) return false;
+            }
+            else if (m_UnloadCategoryFilter == "Old Version")
+            {
+                if (item.IsLatest) return false;
+            }
+            else if (m_UnloadCategoryFilter != "All" && item.Type != m_UnloadCategoryFilter) return false;
+
+            if (!string.IsNullOrEmpty(m_UnloadFilter))
+            {
+                if (item.Uid.IndexOf(m_UnloadFilter, StringComparison.OrdinalIgnoreCase) < 0 && 
+                    item.Type.IndexOf(m_UnloadFilter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                    item.Path.IndexOf(m_UnloadFilter, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        void DrawUnloadHeader(string label, string field, float width = -1)
+        {
+            string sortIndicator = "";
+            if (m_UnloadSortField == field)
+            {
+                sortIndicator = m_UnloadSortAscending ? " ▲" : " ▼";
+            }
+
+            bool clicked;
+            if (width > 0) clicked = GUILayout.Button(label + sortIndicator, m_StyleInfoCardTitle, GUILayout.Width(width));
+            else clicked = GUILayout.Button(label + sortIndicator, m_StyleInfoCardTitle);
+
+            if (clicked)
+            {
+                if (m_UnloadSortField == field) m_UnloadSortAscending = !m_UnloadSortAscending;
+                else
+                {
+                    m_UnloadSortField = field;
+                    m_UnloadSortAscending = true;
+                }
+                SortUnloadList();
+            }
+        }
+
         void DrawUnloadWindow(int windowID)
         {
-            // Block game input from scroll wheel immediately, before UI elements consume the event
-            if (Event.current.type == EventType.ScrollWheel)
+            if (Event.current.type == EventType.ScrollWheel || Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseDrag) 
             {
                 Input.ResetInputAxes();
             }
 
-            // Focus check for text field
-            if (Event.current.type == EventType.KeyDown)
+            if (Event.current.type == EventType.KeyDown && Event.current.control && Event.current.keyCode == KeyCode.A)
             {
-                if (GUI.GetNameOfFocusedControl() == "UnloadFilter")
-                {
-                    // Consume input to prevent hotkeys/world interaction
-                    // But allow normal typing
-                }
+                if (Event.current.mousePosition.x < m_UnloadWindowRect.width / 2) SelectAllUnload(m_AddonList, true);
+                else SelectAllUnload(m_AllList, true);
+                Event.current.Use();
             }
 
             GUILayout.BeginVertical(m_StylePanel);
             
-            // Header
+            // Header & Filter
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Unload Packages", m_StyleHeader);
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
-            {
-                m_ShowUnloadWindow = false;
-            }
-            GUILayout.EndHorizontal();
-
-            // Filter
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Filter:", GUILayout.Width(50));
+            GUILayout.Label("Package Manager", m_StyleHeader, GUILayout.ExpandWidth(false));
+            GUILayout.Space(20);
+            GUILayout.Label("Filter:", GUILayout.Width(40));
             GUI.SetNextControlName("UnloadFilter");
-            m_UnloadFilter = GUILayout.TextField(m_UnloadFilter);
+            string newUnloadFilter = GUILayout.TextField(m_UnloadFilter, GUILayout.ExpandWidth(true), GUILayout.MinWidth(100));
+            if (newUnloadFilter != m_UnloadFilter)
+            {
+                m_UnloadFilter = newUnloadFilter;
+                m_UnloadFilterLower = m_UnloadFilter.ToLower();
+            }
             if (GUILayout.Button("Clear", m_StyleButtonSmall, GUILayout.Width(50)))
             {
                 m_UnloadFilter = "";
+                m_UnloadFilterLower = "";
                 GUI.FocusControl("");
             }
-            GUILayout.EndHorizontal();
-            
-            m_ExcludeActivePackages = GUILayout.Toggle(m_ExcludeActivePackages, "Exclude Active Packages");
-            
-            GUILayout.Space(5);
-
-            // List
-            GUILayout.BeginVertical(m_StyleSection);
-            
-            // Table Headers
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("", GUILayout.Width(25)); // Checkbox spacer
-            GUILayout.Label("Category", m_StyleInfoCardTitle, GUILayout.Width(80));
-            GUILayout.Label("Package Name", m_StyleInfoCardTitle, GUILayout.Width(200));
-            GUILayout.Label("Folder Path", m_StyleInfoCardTitle);
-            GUILayout.EndHorizontal();
-
-            m_UnloadScroll = GUILayout.BeginScrollView(m_UnloadScroll);
-            
-
-            for (int i = 0; i < m_UnloadList.Count; i++)
+            if (GUILayout.Button("Refresh", m_StyleButtonSmall, GUILayout.Width(60)))
             {
-                var item = m_UnloadList[i];
-                if (m_ExcludeActivePackages && item.IsActive) continue;
+                Refresh();
+                ScanUnloadPackages();
+            }
+            GUILayout.Space(10);
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30))) m_ShowUnloadWindow = false;
+            GUILayout.EndHorizontal();
 
-                if (!string.IsNullOrEmpty(m_UnloadFilter) && 
-                    !item.Uid.ToLower().Contains(m_UnloadFilter.ToLower()) && 
-                    !item.Type.ToLower().Contains(m_UnloadFilter.ToLower()))
-                {
-                    continue;
-                }
-
+            // Category Filter
+            if (m_UnloadCategories.Count > 0)
+            {
                 GUILayout.BeginHorizontal();
-                item.Checked = GUILayout.Toggle(item.Checked, "", GUILayout.Width(25));
-                GUILayout.Label(item.Type, GUILayout.Width(80));
-                GUILayout.Label(item.Uid, GUILayout.Width(200));
-                
-                // Show directory only, excluding filename
-                string dirDisplay = Path.GetDirectoryName(item.Path);
-                GUILayout.Label(dirDisplay);
-                
+                GUILayout.Label("Category:", GUILayout.Width(60));
+                m_UnloadCategoryScroll = GUILayout.BeginScrollView(m_UnloadCategoryScroll, GUILayout.Height(55));
+                GUILayout.BeginHorizontal();
+                foreach (var cat in m_UnloadCategories)
+                {
+                    bool isSelected = (cat == m_UnloadCategoryFilter);
+                    int count = 0;
+                    m_UnloadCategoryCounts.TryGetValue(cat, out count);
+                    string label = string.Format("{0} ({1})", cat, count);
+                    if (GUILayout.Toggle(isSelected, label, m_StyleButtonSmall, GUILayout.ExpandWidth(false))) m_UnloadCategoryFilter = cat;
+                }
+                GUILayout.EndHorizontal();
+                GUILayout.EndScrollView();
                 GUILayout.EndHorizontal();
             }
+            
+            m_ExcludeActivePackages = GUILayout.Toggle(m_ExcludeActivePackages, "Exclude Active Packages");
+            GUILayout.Space(5);
 
-            GUILayout.EndScrollView();
+            // Tables Side-by-Side
+            GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
+            
+            int addonSelectedCount = 0;
+            long addonSelectedSize = 0;
+            foreach (var item in m_AddonList) if (item.Checked) { addonSelectedCount++; addonSelectedSize += item.Size; }
+            int allSelectedCount = 0;
+            long allSelectedSize = 0;
+            foreach (var item in m_AllList) if (item.Checked) { allSelectedCount++; allSelectedSize += item.Size; }
+
+            // LEFT: Loaded
+            GUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(string.Format("Loaded (AddonPackages | {0} | {1} selected | {2})", m_UnloadAddonCount, addonSelectedCount, FormatSize(addonSelectedSize)), m_StyleSubHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("All", m_StyleButtonSmall, GUILayout.Width(40))) SelectAllUnload(m_AddonList, true);
+            if (GUILayout.Button("None", m_StyleButtonSmall, GUILayout.Width(45))) SelectAllUnload(m_AddonList, false);
+            GUILayout.EndHorizontal();
+            DrawUnloadPane(m_AddonList, ref m_AddonScroll, ref m_AddonLastSelectedIndex);
             GUILayout.EndVertical();
 
-            GUILayout.Space(5);
-            
-            // Buttons
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Select All", m_StyleButton))
-            {
-                foreach(var item in m_UnloadList)
-                {
-                    if (m_ExcludeActivePackages && item.IsActive) continue;
-                    item.Checked = true;
-                }
-            }
-            if (GUILayout.Button("Select None", m_StyleButton))
-            {
-                foreach(var item in m_UnloadList) item.Checked = false;
-            }
+            // MIDDLE: Buttons
+            GUILayout.BeginVertical(GUILayout.Width(50), GUILayout.ExpandHeight(true));
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Confirm Unload Selected", m_StyleButtonPrimary))
-            {
-                PerformUnload();
-                m_ShowUnloadWindow = false;
-            }
+            if (GUILayout.Button("<b>></b>", m_StyleButton, GUILayout.Height(60))) PerformMove(m_AddonList, true);
+            GUILayout.Space(15);
+            if (GUILayout.Button(new GUIContent("[ L ]", "Lock/Unlock selected packages"), m_StyleButton, GUILayout.Height(40))) ToggleLockSelection();
+            GUILayout.Space(15);
+            if (GUILayout.Button("<b><</b>", m_StyleButton, GUILayout.Height(60))) PerformMove(m_AllList, false);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndVertical();
+
+            // RIGHT: Unloaded
+            GUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(string.Format("Unloaded (AllPackages | {0} | {1} selected | {2})", m_UnloadAllCount, allSelectedCount, FormatSize(allSelectedSize)), m_StyleSubHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("All", m_StyleButtonSmall, GUILayout.Width(40))) SelectAllUnload(m_AllList, true);
+            if (GUILayout.Button("None", m_StyleButtonSmall, GUILayout.Width(45))) SelectAllUnload(m_AllList, false);
             GUILayout.EndHorizontal();
-            
+            DrawUnloadPane(m_AllList, ref m_AllScroll, ref m_AllLastSelectedIndex);
+            GUILayout.EndVertical();
+
+            GUILayout.EndHorizontal();
+
+            // Footer / Stats
+            GUILayout.BeginHorizontal(m_StyleSection);
+            GUILayout.Label("Path: " + (string.IsNullOrEmpty(GUI.tooltip) ? "" : GUI.tooltip), m_StyleInfoCardText, GUILayout.Height(20));
+            GUILayout.EndHorizontal();
+
             // Resize handle
             var resizeRect = new Rect(m_UnloadWindowRect.width - 30, m_UnloadWindowRect.height - 30, 30, 30);
             GUI.Box(new Rect(m_UnloadWindowRect.width - 20, m_UnloadWindowRect.height - 20, 20, 20), "◢", m_StyleInfoIcon);
-
             int resizeControlID = GUIUtility.GetControlID(FocusType.Passive);
             switch (Event.current.GetTypeForControl(resizeControlID))
             {
                 case EventType.MouseDown:
-                    if (resizeRect.Contains(Event.current.mousePosition))
-                    {
-                        GUIUtility.hotControl = resizeControlID;
-                        Event.current.Use();
-                    }
+                    if (resizeRect.Contains(Event.current.mousePosition)) { GUIUtility.hotControl = resizeControlID; Event.current.Use(); }
                     break;
                 case EventType.MouseUp:
-                    if (GUIUtility.hotControl == resizeControlID)
-                    {
-                        GUIUtility.hotControl = 0;
-                        Event.current.Use();
-                    }
+                    if (GUIUtility.hotControl == resizeControlID) { GUIUtility.hotControl = 0; Event.current.Use(); }
                     break;
                 case EventType.MouseDrag:
                     if (GUIUtility.hotControl == resizeControlID)
                     {
-                        m_UnloadWindowRect.width += Event.current.delta.x;
-                        m_UnloadWindowRect.height += Event.current.delta.y;
-                        m_UnloadWindowRect.width = Mathf.Max(m_UnloadWindowRect.width, 300);
-                        m_UnloadWindowRect.height = Mathf.Max(m_UnloadWindowRect.height, 200);
+                        m_UnloadWindowRect.width = Mathf.Max(m_UnloadWindowRect.width + Event.current.delta.x, 600);
+                        m_UnloadWindowRect.height = Mathf.Max(m_UnloadWindowRect.height + Event.current.delta.y, 400);
                         Event.current.Use();
                     }
                     break;
             }
 
-            // Consume ScrollWheel event if inside window to prevent game scrolling
-            if (Event.current.type == EventType.ScrollWheel)
-            {
-                Event.current.Use();
-            }
-
             GUILayout.EndVertical();
-            
-            // Drag window (excluding resize handle area to avoid conflict)
-            if (Event.current.type != EventType.MouseDrag || !resizeRect.Contains(Event.current.mousePosition))
+            if (Event.current.type != EventType.MouseDrag || !resizeRect.Contains(Event.current.mousePosition)) GUI.DragWindow();
+        }
+
+        void ToggleLockSelection()
+        {
+            foreach (var item in m_AddonList) 
             {
-                 GUI.DragWindow();
+                if (item.Checked) 
+                {
+                    item.Locked = !item.Locked;
+                    if (item.Locked) 
+                    {
+                        if (m_LockedPackages.Add(item.Uid)) m_UnloadCategoryCounts["Locked (L)"]++;
+                    }
+                    else 
+                    {
+                        if (m_LockedPackages.Remove(item.Uid)) m_UnloadCategoryCounts["Locked (L)"]--;
+                    }
+                }
+            }
+            foreach (var item in m_AllList) 
+            {
+                if (item.Checked) 
+                {
+                    item.Locked = !item.Locked;
+                    if (item.Locked) 
+                    {
+                        if (m_LockedPackages.Add(item.Uid)) m_UnloadCategoryCounts["Locked (L)"]++;
+                    }
+                    else 
+                    {
+                        if (m_LockedPackages.Remove(item.Uid)) m_UnloadCategoryCounts["Locked (L)"]--;
+                    }
+                }
             }
         }
 
-        void PerformUnload()
+        void SelectAllUnload(System.Collections.Generic.List<UnloadItem> list, bool state)
         {
-             foreach (var item in m_UnloadList)
-             {
-                 if (m_ExcludeActivePackages && item.IsActive) continue;
+            foreach (var item in list)
+            {
+                if (IsUnloadItemVisible(item))
+                {
+                    if (item.Locked && state && m_UnloadCategoryFilter != "Locked (L)") continue;
+                    item.Checked = state;
+                }
+            }
+        }
 
-                 if (item.Checked)
-                 {
-                    string targetPath = "AllPackages" + item.Path.Substring("AddonPackages".Length);
-                    string dir = Path.GetDirectoryName(targetPath);
-                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                    if (File.Exists(targetPath)) continue;
-                    try {
-                        File.Move(item.Path, targetPath);
-                    } catch (Exception ex) {
-                        LogUtil.LogError("Failed to move " + item.Path + ": " + ex.Message);
+        void DrawUnloadPane(System.Collections.Generic.List<UnloadItem> list, ref Vector2 scroll, ref int lastIdx)
+        {
+            GUILayout.BeginVertical(m_StyleSection, GUILayout.ExpandHeight(true));
+            
+            // Local Headers
+            GUILayout.BeginHorizontal();
+            DrawUnloadHeader("Category", "Category", 60);
+            DrawUnloadHeader("Name", "Name");
+            //DrawUnloadHeader("Deps (Loaded)", "Deps", 80);
+            //DrawUnloadHeader("Age", "Age", 60);
+            DrawUnloadHeader("Size", "Size", 65);
+            GUILayout.EndHorizontal();
+
+            scroll = GUILayout.BeginScrollView(scroll);
+            
+            System.Collections.Generic.List<int> visibleIndices = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < list.Count; i++) if (IsUnloadItemVisible(list[i])) visibleIndices.Add(i);
+
+            if (Event.current.type == EventType.MouseUp) m_UnloadIsDragging = false;
+
+            float rowHeight = 24;
+            int firstVisible = Mathf.Max(0, (int)(scroll.y / rowHeight));
+            int lastVisible = Mathf.Min(visibleIndices.Count - 1, (int)((scroll.y + 800) / rowHeight));
+
+            GUILayout.Space(firstVisible * rowHeight);
+
+            for (int j = firstVisible; j <= lastVisible; j++)
+            {
+                int i = visibleIndices[j];
+                var item = list[i];
+                
+                Rect rowRect = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, GUILayout.ExpandWidth(true), GUILayout.Height(rowHeight));
+                
+                // Selection Logic
+                if (Event.current.type == EventType.MouseDown && rowRect.Contains(Event.current.mousePosition))
+                {
+                    if (Event.current.shift && lastIdx != -1)
+                    {
+                        int startVisible = -1;
+                        for (int k = 0; k < visibleIndices.Count; k++) { if (visibleIndices[k] == lastIdx) { startVisible = k; break; } }
+                        if (startVisible != -1)
+                        {
+                            int min = Math.Min(startVisible, j);
+                            int max = Math.Max(startVisible, j);
+                            bool newState = list[lastIdx].Checked;
+                            for (int k = min; k <= max; k++) list[visibleIndices[k]].Checked = newState;
+                        }
+                        else item.Checked = !item.Checked;
+                        lastIdx = i;
                     }
-                 }
-             }
-             Refresh();
-             RemoveEmptyFolder("AddonPackages");
+                    else if (Event.current.control) { item.Checked = !item.Checked; lastIdx = i; }
+                    else
+                    {
+                        // Single selection mode: clear others in this list
+                        bool wasChecked = item.Checked;
+                        foreach (var it in list) it.Checked = false;
+                        item.Checked = !wasChecked;
+                        lastIdx = i;
+                        m_UnloadIsDragging = true;
+                        m_UnloadDragChecked = item.Checked;
+                    }
+                    Event.current.Use();
+                }
+                else if (Event.current.type == EventType.MouseDrag && m_UnloadIsDragging && rowRect.Contains(Event.current.mousePosition))
+                {
+                    if (item.Checked != m_UnloadDragChecked) { item.Checked = m_UnloadDragChecked; lastIdx = i; }
+                    Event.current.Use();
+                }
+
+                if (Event.current.type == EventType.Repaint)
+                {
+                    if (item.Locked)
+                    {
+                        // Dark grey background for locked items
+                        GUI.Box(rowRect, "", m_StyleButton); 
+                        var prevCol = GUI.color;
+                        GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.4f);
+                        GUI.DrawTexture(rowRect, Texture2D.whiteTexture);
+                        GUI.color = prevCol;
+                    }
+                    else if (item.Checked) 
+                    {
+                        m_StyleRowHover.Draw(rowRect, false, false, false, false);
+                    }
+                    else
+                    {
+                        GUIStyle style = (j % 2 == 0) ? m_StyleRowAlternate : m_StyleRow;
+                        style.Draw(rowRect, false, false, false, false);
+                    }
+                }
+
+                // Content
+                var prevContentColor = GUI.contentColor;
+                if (item.Locked) GUI.contentColor = new Color(0.7f, 0.7f, 0.7f, 0.8f);
+
+                float x = rowRect.x + 5;
+                string lockPrefix = item.Locked ? "L " : "";
+                GUI.Label(new Rect(x, rowRect.y, 60, rowRect.height), new GUIContent(item.Type, item.Path));
+                x += 65;
+                GUI.Label(new Rect(x, rowRect.y, rowRect.width - 155, rowRect.height), new GUIContent(lockPrefix + item.Uid, item.Path));
+
+                //x = rowRect.xMax - 215;
+                //GUI.Label(new Rect(x, rowRect.y, 80, rowRect.height), string.Format("{0} ({1})", item.DependencyCount, item.LoadedDependencyCount), m_StyleInfoCardText);
+                
+                //x = rowRect.xMax - 135;
+                //GUI.Label(new Rect(x, rowRect.y, 60, rowRect.height), item.AgeString, m_StyleInfoCardText);
+
+                x = rowRect.xMax - 70;
+                GUI.Label(new Rect(x, rowRect.y, 65, rowRect.height), FormatSize(item.Size), m_StyleInfoCardText);
+
+                GUI.contentColor = prevContentColor;
+            }
+
+            GUILayout.Space(Mathf.Max(0, (visibleIndices.Count - 1 - lastVisible) * rowHeight));
+
+            GUILayout.EndScrollView();
+            GUILayout.EndVertical();
+        }
+
+        void PerformMove(System.Collections.Generic.List<UnloadItem> sourceList, bool isUnload)
+        {
+            foreach (var item in sourceList)
+            {
+                if (item.Locked) continue; // Skip locked items
+                if (isUnload && m_ExcludeActivePackages && item.IsActive) continue;
+                if (!item.Checked) continue;
+
+                string targetPath;
+                if (isUnload) targetPath = "AllPackages" + item.Path.Substring("AddonPackages".Length);
+                else targetPath = "AddonPackages" + item.Path.Substring("AllPackages".Length);
+
+                string dir = Path.GetDirectoryName(targetPath);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                if (File.Exists(targetPath)) continue;
+
+                try { File.Move(item.Path, targetPath); }
+                catch (Exception ex) { LogUtil.LogError("Failed to move " + item.Path + ": " + ex.Message); }
+            }
+            Refresh();
+            RemoveEmptyFolder("AddonPackages");
+            RemoveEmptyFolder("AllPackages");
+            ScanUnloadPackages();
+        }
+
+        public void ScanUnloadPackages()
+        {
+            System.Collections.Generic.HashSet<string> protectedPackages = new System.Collections.Generic.HashSet<string>();
+            
+            // Protect currently loaded scene and its dependencies
+            if (FileEntry.AutoInstallLookup != null)
+            {
+                foreach (var item in FileEntry.AutoInstallLookup)
+                {
+                    ProtectPackage(item, protectedPackages);
+                    VarPackage p = FileManager.ResolveDependency(item);
+                    if (p != null) ProtectPackage(p.Uid, protectedPackages);
+                }
+            }
+
+            string currentPackageUid = CurrentScenePackageUid;
+            if (string.IsNullOrEmpty(currentPackageUid))
+            {
+                currentPackageUid = FileManager.CurrentPackageUid;
+            }
+            ProtectPackage(currentPackageUid, protectedPackages);
+
+            // Protect active plugins
+            try
+            {
+                var plugins = UnityEngine.Object.FindObjectsOfType<MVRScript>();
+                foreach (var p in plugins)
+                {
+                        var fields = p.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                        foreach(var f in fields)
+                        {
+                            if (f.FieldType == typeof(JSONStorableUrl))
+                            {
+                                var jUrl = f.GetValue(p) as JSONStorableUrl;
+                                if (jUrl != null && !string.IsNullOrEmpty(jUrl.val))
+                                {
+                                    string pkg = GetPackageFromPath(jUrl.val);
+                                    if (pkg != null) ProtectPackage(pkg, protectedPackages);
+                                }
+                            }
+                        }
+                }
+            }
+            catch (Exception) { }
+
+            m_UnloadCategories.Clear();
+            m_UnloadCategories.Add("All");
+            m_UnloadCategories.Add("Locked (L)");
+            m_UnloadCategories.Add("Latest");
+            m_UnloadCategories.Add("Old Version");
+
+            m_UnloadCategoryCounts.Clear();
+            m_UnloadCategoryCounts["All"] = 0;
+            m_UnloadCategoryCounts["Locked (L)"] = 0;
+            m_UnloadCategoryCounts["Latest"] = 0;
+            m_UnloadCategoryCounts["Old Version"] = 0;
+
+            System.Collections.Generic.HashSet<string> latestUids = new System.Collections.Generic.HashSet<string>();
+            var groups = FileManager.GetPackageGroups();
+            if (groups != null)
+            {
+                foreach (var g in groups)
+                {
+                    if (g.NewestPackage != null) latestUids.Add(g.NewestPackage.Uid);
+                }
+            }
+
+            System.Collections.Generic.HashSet<string> types = new System.Collections.Generic.HashSet<string>();
+
+            // Pre-collect loaded package UIDs for dependency count
+            System.Collections.Generic.HashSet<string> loadedUids = new System.Collections.Generic.HashSet<string>();
+            if (Directory.Exists("AddonPackages"))
+            {
+                foreach (string f in Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories))
+                {
+                    loadedUids.Add(Path.GetFileNameWithoutExtension(f));
+                }
+            }
+
+            m_AddonList.Clear();
+            ScanDirectory("AddonPackages", m_AddonList, protectedPackages, types, latestUids, loadedUids);
+            m_UnloadAddonCount = m_AddonList.Count;
+
+            m_AllList.Clear();
+            ScanDirectory("AllPackages", m_AllList, protectedPackages, types, latestUids, loadedUids);
+            m_UnloadAllCount = m_AllList.Count;
+            
+            var sortedTypes = new System.Collections.Generic.List<string>(types);
+            sortedTypes.Sort();
+            m_UnloadCategories.AddRange(sortedTypes);
+            
+            SortUnloadList();
+        }
+
+        private string FormatSize(long bytes)
+        {
+            if (bytes < 1024) return bytes + " B";
+            if (bytes < 1048576) return (bytes / 1024f).ToString("F1") + " KB";
+            if (bytes < 1073741824) return (bytes / 1048576f).ToString("F1") + " MB";
+            return (bytes / 1073741824f).ToString("F2") + " GB";
+        }
+
+        private string FormatAge(DateTime dt, DateTime now)
+        {
+            TimeSpan span = now - dt;
+            if (span.TotalDays < 0) return "Future";
+            if (span.TotalDays < 1) return "Today";
+            if (span.TotalDays < 7) return (int)span.TotalDays + "d";
+            if (span.TotalDays < 30) return (int)(span.TotalDays / 7) + "w";
+            if (span.TotalDays < 365) return (int)(span.TotalDays / 30) + "m";
+            return (int)(span.TotalDays / 365) + "y";
+        }
+
+        private void ScanDirectory(string path, System.Collections.Generic.List<UnloadItem> list, System.Collections.Generic.HashSet<string> protectedPackages, System.Collections.Generic.HashSet<string> types, System.Collections.Generic.HashSet<string> latestUids, System.Collections.Generic.HashSet<string> loadedUids)
+        {
+            if (!Directory.Exists(path)) Directory.CreateDirectory(path);
+            DirectoryInfo di = new DirectoryInfo(path);
+            FileInfo[] files = di.GetFiles("*.var", SearchOption.AllDirectories);
+            DateTime now = DateTime.Now;
+            foreach (var file in files)
+            {
+                string itemPath = file.FullName.Replace('\\', '/');
+                // Make relative to current dir if needed, but FileManager paths are usually relative or absolute
+                // Here we need to match the logic of previous implementation which was relative to VaM root
+                string relativePath = itemPath;
+                int idx = itemPath.IndexOf(path, StringComparison.OrdinalIgnoreCase);
+                if (idx != -1) relativePath = itemPath.Substring(idx);
+
+                string name = Path.GetFileNameWithoutExtension(itemPath);
+                bool isProtected = protectedPackages.Contains(name);
+                string type = DeterminePackageType(name);
+                bool isLocked = m_LockedPackages.Contains(name);
+                bool isLatest = latestUids.Contains(name);
+                DateTime lwt = file.CreationTime;
+
+                int depCount = 0;
+                int loadedDepCount = 0;
+                if (FileManager.PackagesByUid != null)
+                {
+                    VarPackage vp;
+                    if (FileManager.PackagesByUid.TryGetValue(name, out vp))
+                    {
+                        if (vp.RecursivePackageDependencies != null)
+                        {
+                            depCount = vp.RecursivePackageDependencies.Count;
+                            foreach (var dep in vp.RecursivePackageDependencies)
+                            {
+                                if (loadedUids.Contains(dep)) loadedDepCount++;
+                            }
+                        }
+                        else
+                        {
+                            // Try to get from cache if VarPackage hasn't been scanned/loaded yet
+                            var cachedPkg = VarPackageMgr.singleton.TryGetCache(name);
+                            if (cachedPkg != null && cachedPkg.RecursivePackageDependencies != null)
+                            {
+                                depCount = cachedPkg.RecursivePackageDependencies.Count;
+                                foreach (var dep in cachedPkg.RecursivePackageDependencies)
+                                {
+                                    if (loadedUids.Contains(dep)) loadedDepCount++;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                list.Add(new UnloadItem {
+                    Uid = name,
+                    Path = relativePath,
+                    Type = type,
+                    Size = file.Length,
+                    LastWriteTime = lwt,
+                    AgeString = FormatAge(lwt, now),
+                    DependencyCount = depCount,
+                    LoadedDependencyCount = loadedDepCount,
+                    Checked = false,
+                    IsActive = isProtected,
+                    Locked = isLocked,
+                    IsLatest = isLatest
+                });
+
+                if (!string.IsNullOrEmpty(type)) 
+                {
+                    types.Add(type);
+                    if (!m_UnloadCategoryCounts.ContainsKey(type)) m_UnloadCategoryCounts[type] = 0;
+                    m_UnloadCategoryCounts[type]++;
+                }
+                
+                m_UnloadCategoryCounts["All"]++;
+                if (isLocked) m_UnloadCategoryCounts["Locked (L)"]++;
+                if (isLatest) m_UnloadCategoryCounts["Latest"]++;
+                else m_UnloadCategoryCounts["Old Version"]++;
+            }
+        }
+
+        void SortUnloadList()
+        {
+            System.Comparison<UnloadItem> comp = (a, b) => {
+                int result = 0;
+                switch (m_UnloadSortField)
+                {
+                    case "Category": result = string.Compare(a.Type, b.Type, StringComparison.OrdinalIgnoreCase); break;
+                    case "Name": result = string.Compare(a.Uid, b.Uid, StringComparison.OrdinalIgnoreCase); break;
+                    case "Path": result = string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase); break;
+                    case "Size": result = a.Size.CompareTo(b.Size); break;
+                    case "Age": result = a.LastWriteTime.CompareTo(b.LastWriteTime); break;
+                    case "Deps": result = a.DependencyCount.CompareTo(b.DependencyCount); break;
+                }
+                return m_UnloadSortAscending ? result : -result;
+            };
+            m_AddonList.Sort(comp);
+            m_AllList.Sort(comp);
         }
 
         void OpenRemoveWindow()
