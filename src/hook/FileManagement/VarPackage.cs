@@ -462,6 +462,12 @@ namespace VPB
 		public bool MissingDependenciesChecked = false;
 		public bool Scaned = false;
 		public List<string> RecursivePackageDependencies;
+
+		public HashSet<string> GetDependenciesDeep(int maxDepth = 2)
+		{
+			return FileManager.GetDependenciesDeep(this.Uid, maxDepth);
+		}
+
 		public List<string> ClothingFileEntryNames;
 		public List<string> ClothingTags;
 		public List<string> HairFileEntryNames;
@@ -1152,6 +1158,10 @@ namespace VPB
 		}
 		public bool InstallRecursive()
         {
+			if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null && !Settings.Instance.LoadDependenciesWithPackage.Value)
+			{
+				return InstallSelf();
+			}
             return InstallRecursive(new HashSet<string>());
         }
 

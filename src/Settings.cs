@@ -45,6 +45,10 @@ namespace VPB
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<float> UiTransparencyValue;
         public ConfigEntry<bool> AutoPageEnabled;
+        public ConfigEntry<bool> LoadDependenciesWithPackage;
+        public ConfigEntry<Rect> PackageManagerWindowRect;
+        public ConfigEntry<string> PackageManagerSortField;
+        public ConfigEntry<bool> PackageManagerSortAscending;
 
         internal static void Init(ConfigFile config)
         {
@@ -77,6 +81,11 @@ namespace VPB
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
+            LoadDependenciesWithPackage = config.Bind<bool>("Settings", "LoadDependenciesWithPackage", true, "When loading a package, also load all its dependencies.");
+
+            PackageManagerWindowRect = config.Bind<Rect>("PackageManager", "WindowRect", new Rect(100, 100, 1000, 600), "Package Manager window position and size.");
+            PackageManagerSortField = config.Bind<string>("PackageManager", "SortField", "Name", "Package Manager sort field.");
+            PackageManagerSortAscending = config.Bind<bool>("PackageManager", "SortAscending", true, "Package Manager sort ascending.");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 1, "0=off, 1=summary only, 2=verbose per-texture trace.");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");

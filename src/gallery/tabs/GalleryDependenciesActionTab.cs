@@ -22,6 +22,12 @@ namespace VPB
             else if (selectedFiles != null && selectedFiles.Count > 0)
             {
                 CreateLabel("LOCAL DEPENDENCIES", 14, Color.green);
+                
+                // Add global setting toggle for convenience
+                CreateToggle("Auto-load dependencies", Settings.Instance.LoadDependenciesWithPackage.Value, (val) => {
+                    Settings.Instance.LoadDependenciesWithPackage.Value = val;
+                });
+
                 if (selectedFiles.Count == 1)
                 {
                     FileEntry file = selectedFiles[0];
@@ -34,14 +40,78 @@ namespace VPB
                         
                         if (pkg.RecursivePackageDependencies != null && pkg.RecursivePackageDependencies.Count > 0)
                         {
-                            CreateLabel($"\nDependencies ({pkg.RecursivePackageDependencies.Count}):", 14, Color.yellow);
-                            foreach (var dep in pkg.RecursivePackageDependencies.Take(15))
+                            CreateButton("Install All Dependencies", () => {
+                                pkg.InstallRecursive(new HashSet<string>());
+                                RefreshUI(selectedFiles, selectedHubItem);
+                            });
+
+                            CreateLabel($"\nDirect Dependencies ({pkg.RecursivePackageDependencies.Count}):", 14, Color.yellow);
+                            foreach (var dep in pkg.RecursivePackageDependencies.Take(10))
                             {
-                                CreateLabel("- " + dep, 12, Color.gray);
+                                VarPackage depPkg = FileManager.GetPackage(dep, false);
+                                string status = "";
+                                Color statusColor = Color.gray;
+                                if (depPkg != null)
+                                {
+                                    if (depPkg.IsInstalled())
+                                    {
+                                        status = " (Installed)";
+                                        statusColor = Color.green;
+                                    }
+                                    else
+                                    {
+                                        status = " (Not Installed)";
+                                        statusColor = Color.yellow;
+                                    }
+                                }
+                                else
+                                {
+                                    status = " (Missing)";
+                                    statusColor = Color.red;
+                                }
+                                CreateLabel("- " + dep + status, 12, statusColor);
                             }
-                            if (pkg.RecursivePackageDependencies.Count > 15)
+                            if (pkg.RecursivePackageDependencies.Count > 10)
                             {
-                                CreateLabel($"+ {pkg.RecursivePackageDependencies.Count - 15} more...", 12, Color.gray);
+                                CreateLabel($"+ {pkg.RecursivePackageDependencies.Count - 10} more...", 12, Color.gray);
+                            }
+
+                            // Sub-dependencies (Level 2)
+                            var allDeps = pkg.GetDependenciesDeep(2);
+                            var subDeps = allDeps.Where(d => !pkg.RecursivePackageDependencies.Contains(d)).ToList();
+                            
+                            if (subDeps.Count > 0)
+                            {
+                                CreateLabel($"\nSub-dependencies (Level 2) ({subDeps.Count}):", 14, Color.cyan);
+                                foreach (var dep in subDeps.Take(10))
+                                {
+                                    VarPackage depPkg = FileManager.GetPackage(dep, false);
+                                    string status = "";
+                                    Color statusColor = new Color(0.7f, 0.7f, 0.7f);
+                                    if (depPkg != null)
+                                    {
+                                        if (depPkg.IsInstalled())
+                                        {
+                                            status = " (Installed)";
+                                            statusColor = new Color(0.5f, 0.8f, 0.5f);
+                                        }
+                                        else
+                                        {
+                                            status = " (Not Installed)";
+                                            statusColor = new Color(0.8f, 0.8f, 0.5f);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        status = " (Missing)";
+                                        statusColor = new Color(0.8f, 0.5f, 0.5f);
+                                    }
+                                    CreateLabel("- " + dep + status, 11, statusColor);
+                                }
+                                if (subDeps.Count > 10)
+                                {
+                                    CreateLabel($"+ {subDeps.Count - 10} more...", 11, new Color(0.7f, 0.7f, 0.7f));
+                                }
                             }
                         }
                         else

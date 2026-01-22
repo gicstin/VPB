@@ -303,8 +303,8 @@ namespace VPB
 
         public void UninstallAll()
         {
-            ScanUnloadPackages();
-            m_ShowUnloadWindow = true;
+            ScanPackageManagerPackages();
+            m_ShowPackageManagerWindow = true;
         }
         public void OpenHubBrowse()
         {

@@ -113,5 +113,26 @@ namespace VPB
             }
             return btn;
         }
+
+        protected GameObject CreateToggle(string label, bool initialValue, UnityAction<bool> onValueChanged)
+        {
+            GameObject toggleGO = UI.CreateUIToggle(containerGO, 340, 40, label, 16, 0, 0, AnchorPresets.middleCenter, onValueChanged);
+            uiElements.Add(toggleGO);
+
+            Toggle toggle = toggleGO.GetComponent<Toggle>();
+            toggle.isOn = initialValue;
+
+            RectTransform rt = toggleGO.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, 1);
+            rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(0.5f, 1);
+            rt.sizeDelta = new Vector2(0, 40);
+
+            LayoutElement le = toggleGO.AddComponent<LayoutElement>();
+            le.preferredHeight = 40;
+            le.flexibleWidth = 1;
+
+            return toggleGO;
+        }
     }
 }

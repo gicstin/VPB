@@ -496,15 +496,15 @@ namespace VPB
             }
             if (packagesByUid == null)
             {
-                packagesByUid = new Dictionary<string, VarPackage>();
+                packagesByUid = new Dictionary<string, VarPackage>(StringComparer.OrdinalIgnoreCase);
             }
             if (packagesByPath == null)
             {
-                packagesByPath = new Dictionary<string, VarPackage>();
+                packagesByPath = new Dictionary<string, VarPackage>(StringComparer.OrdinalIgnoreCase);
             }
             if (packageGroups == null)
             {
-                packageGroups = new Dictionary<string, VarPackageGroup>();
+                packageGroups = new Dictionary<string, VarPackageGroup>(StringComparer.OrdinalIgnoreCase);
             }
             if (allVarFileEntries == null)
             {
@@ -512,11 +512,11 @@ namespace VPB
             }
             if (uidToVarFileEntry == null)
             {
-                uidToVarFileEntry = new Dictionary<string, VarFileEntry>();
+                uidToVarFileEntry = new Dictionary<string, VarFileEntry>(StringComparer.OrdinalIgnoreCase);
             }
             if (pathToVarFileEntry == null)
             {
-                pathToVarFileEntry = new Dictionary<string, VarFileEntry>();
+                pathToVarFileEntry = new Dictionary<string, VarFileEntry>(StringComparer.OrdinalIgnoreCase);
             }
 
             bool flag = false;
@@ -537,7 +537,7 @@ namespace VPB
                 if (Directory.Exists("AllPackages"))
                 {
                     List<string> allVarFiles = new List<string>();
-                    string[] scanRoots = new string[] { "AddonPackages", "AllPackages", "Custom", "Saves" };
+                    string[] scanRoots = new string[] { "AddonPackages", "AllPackages", "Custom", "Saves", "BuiltinPackages", "VaM_Data/StreamingAssets/BuiltinPackages" };
                     foreach (string root in scanRoots)
                     {
                         if (Directory.Exists(root))
@@ -890,6 +890,44 @@ namespace VPB
 			}
 			LogUtil.Log("GetMissingDependenciesNames " + hashSet.Count);
 			return hashSet.ToList();
+		}
+
+		public static HashSet<string> GetDependenciesDeep(string packageUid, int maxDepth = 2)
+		{
+			HashSet<string> allDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			GetDependenciesDeepInternal(packageUid, allDeps, 0, maxDepth);
+			return allDeps;
+		}
+
+		private static void GetDependenciesDeepInternal(string packageUid, HashSet<string> allDeps, int currentDepth, int maxDepth)
+		{
+			if (currentDepth >= maxDepth) return;
+
+			System.Collections.Generic.List<string> deps = null;
+			VarPackage pkg = GetPackage(packageUid, false);
+			if (pkg != null)
+			{
+				deps = pkg.RecursivePackageDependencies;
+			}
+			else
+			{
+				var cached = VarPackageMgr.singleton.TryGetCache(packageUid);
+				if (cached != null)
+				{
+					deps = cached.RecursivePackageDependencies;
+				}
+			}
+
+			if (deps == null) return;
+
+			foreach (var dep in deps)
+			{
+				// Add to set. If it was already there, we don't need to recurse again from here
+				if (allDeps.Add(dep))
+				{
+					GetDependenciesDeepInternal(dep, allDeps, currentDepth + 1, maxDepth);
+				}
+			}
 		}
 
 
