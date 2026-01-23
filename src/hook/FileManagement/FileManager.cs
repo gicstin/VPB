@@ -276,9 +276,9 @@ namespace VPB
             // Get all var files
             List<string> allFiles = new List<string>();
             if (Directory.Exists("AddonPackages"))
-                allFiles.AddRange(Directory.GetFiles("AddonPackages", "*.var", SearchOption.AllDirectories));
+                SafeGetFiles("AddonPackages", "*.var", allFiles);
             if (Directory.Exists("AllPackages"))
-                allFiles.AddRange(Directory.GetFiles("AllPackages", "*.var", SearchOption.AllDirectories));
+                SafeGetFiles("AllPackages", "*.var", allFiles);
 
             // 1. Check for Invalid Names and Duplicates
             // We build a temporary index to find duplicates
@@ -1640,18 +1640,41 @@ namespace VPB
 		[DllImport("kernel32.dll", SetLastError = true)]
 		private static extern bool GetFileInformationByHandle(IntPtr hFile, out BY_HANDLE_FILE_INFORMATION lpFileInformation);
 
+		[DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+		private static extern SafeFileHandle CreateFile(
+			string lpFileName,
+			uint dwDesiredAccess,
+			uint dwShareMode,
+			IntPtr lpSecurityAttributes,
+			uint dwCreationDisposition,
+			uint dwFlagsAndAttributes,
+			IntPtr hTemplateFile);
+
+		private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+		private const uint OPEN_EXISTING = 3;
+
 		private static bool TryGetWindowsFileId(string path, out string fileId)
 		{
 			fileId = null;
 			try
 			{
-				if (string.IsNullOrEmpty(path) || !File.Exists(path))
+				if (string.IsNullOrEmpty(path))
 					return false;
 
-				using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+				using (SafeFileHandle handle = CreateFile(
+					path,
+					0x80, // FILE_READ_ATTRIBUTES
+					(uint)(FileShare.ReadWrite | FileShare.Delete),
+					IntPtr.Zero,
+					OPEN_EXISTING,
+					FILE_FLAG_BACKUP_SEMANTICS,
+					IntPtr.Zero))
 				{
+					if (handle.IsInvalid)
+						return false;
+
 					BY_HANDLE_FILE_INFORMATION info;
-					if (!GetFileInformationByHandle(fs.SafeFileHandle.DangerousGetHandle(), out info))
+					if (!GetFileInformationByHandle(handle.DangerousGetHandle(), out info))
 						return false;
 
 					ulong index = ((ulong)info.FileIndexHigh << 32) | info.FileIndexLow;
@@ -1667,8 +1690,22 @@ namespace VPB
 
 		public static void SafeGetFiles(string path, string pattern, List<string> results)
 		{
+			SafeGetFiles(path, pattern, results, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+		}
+
+		private static void SafeGetFiles(string path, string pattern, List<string> results, HashSet<string> visited)
+		{
 			try
 			{
+				string dirId;
+				if (TryGetWindowsFileId(path, out dirId))
+				{
+					if (!visited.Add(dirId))
+					{
+						return;
+					}
+				}
+
 				string[] files = Directory.GetFiles(path, pattern);
 				if (files != null)
 					results.AddRange(files);
@@ -1680,19 +1717,8 @@ namespace VPB
 					{
 						// Skip InvalidPackages to avoid re-scanning rejected files
 						if (Path.GetFileName(dir).Equals("InvalidPackages", StringComparison.OrdinalIgnoreCase)) continue;
-						try
-						{
-							var di = new DirectoryInfo(dir);
-							if ((di.Attributes & FileAttributes.ReparsePoint) != 0)
-							{
-								continue;
-							}
-						}
-						catch
-						{
-							continue;
-						}
-						SafeGetFiles(dir, pattern, results);
+
+						SafeGetFiles(dir, pattern, results, visited);
 					}
 				}
 			}
@@ -1729,8 +1755,22 @@ namespace VPB
 
 		public static bool CheckIfDirectoryChanged(string dir, DateTime previousCheckTime, bool recurse = true)
 		{
+			return CheckIfDirectoryChanged(dir, previousCheckTime, recurse, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+		}
+
+		private static bool CheckIfDirectoryChanged(string dir, DateTime previousCheckTime, bool recurse, HashSet<string> visited)
+		{
 			if (Directory.Exists(dir))
 			{
+				string dirId;
+				if (TryGetWindowsFileId(dir, out dirId))
+				{
+					if (!visited.Add(dirId))
+					{
+						return false;
+					}
+				}
+
 				DateTime lastWriteTime = Directory.GetLastWriteTime(dir);
 				if (lastWriteTime > previousCheckTime)
 				{
@@ -1741,7 +1781,7 @@ namespace VPB
 					string[] directories = Directory.GetDirectories(dir);
 					foreach (string dir2 in directories)
 					{
-						if (CheckIfDirectoryChanged(dir2, previousCheckTime, recurse))
+						if (CheckIfDirectoryChanged(dir2, previousCheckTime, recurse, visited))
 						{
 							return true;
 						}
