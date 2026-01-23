@@ -3858,8 +3858,9 @@ namespace VPB
                 if (!Directory.Exists(path)) return 0;
                 
                 long size = 0;
-                string[] files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories);
-                foreach (string file in files)
+                List<string> fileList = new List<string>();
+                FileManager.SafeGetFiles(path, "*.*", fileList);
+                foreach (string file in fileList)
                 {
                     size += new FileInfo(file).Length;
                 }

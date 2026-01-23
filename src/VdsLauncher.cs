@@ -600,7 +600,9 @@ namespace VPB
             {
                 if (!Directory.Exists("Saves/scene")) return null;
 
-                string[] matches = Directory.GetFiles("Saves/scene", fileName, SearchOption.AllDirectories);
+                List<string> fileList = new List<string>();
+                FileManager.SafeGetFiles("Saves/scene", fileName, fileList);
+                string[] matches = fileList.ToArray();
                 if (matches != null && matches.Length == 1)
                 {
                     return matches[0];

@@ -246,7 +246,9 @@ namespace VPB
                             string[] sysFiles = new string[0];
                             try 
                             {
-                                sysFiles = Directory.GetFiles(searchPath, "*." + ext, SearchOption.AllDirectories);
+                                List<string> sysFileList = new List<string>();
+                                FileManager.SafeGetFiles(searchPath, "*." + ext, sysFileList);
+                                sysFiles = sysFileList.ToArray();
                             }
                             catch { }
 
