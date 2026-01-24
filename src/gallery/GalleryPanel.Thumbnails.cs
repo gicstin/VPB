@@ -77,58 +77,11 @@ namespace VPB
                     
                     if (!res.loadedFromGalleryCache)
                     {
-                        StartCoroutine(GenerateAndCacheThumbnail(imgPath, res.tex, imgTime));
+                        StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(imgPath, res.tex, imgTime));
                     }
                 }
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
-        }
-
-        private IEnumerator GenerateAndCacheThumbnail(string path, Texture2D sourceTex, long lastWriteTime)
-        {
-            yield return null;
-
-            if (sourceTex == null) yield break;
-
-            int maxDim = 256;
-            byte[] bytes = null;
-            int w = sourceTex.width;
-            int h = sourceTex.height;
-
-            TextureFormat format = sourceTex.format;
-
-            if (w <= maxDim && h <= maxDim)
-            {
-                bytes = sourceTex.GetRawTextureData();
-            }
-            else
-            {
-                float aspect = (float)w / h;
-                if (w > h) { w = maxDim; h = Mathf.RoundToInt(maxDim / aspect); }
-                else { h = maxDim; w = Mathf.RoundToInt(maxDim * aspect); }
-
-                RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.Default);
-                Graphics.Blit(sourceTex, rt);
-                
-                RenderTexture prev = RenderTexture.active;
-                RenderTexture.active = rt;
-                
-                format = TextureFormat.RGB24;
-                Texture2D newTex = new Texture2D(w, h, format, false);
-                newTex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
-                newTex.Apply();
-                
-                RenderTexture.active = prev;
-                RenderTexture.ReleaseTemporary(rt);
-                
-                bytes = newTex.GetRawTextureData();
-                Destroy(newTex);
-            }
-
-            if (bytes != null)
-            {
-                GalleryThumbnailCache.Instance.SaveThumbnail(path, bytes, bytes.Length, w, h, format, lastWriteTime);
-            }
         }
 
         private void UpdateAspectRatio(RawImage target, Texture tex)

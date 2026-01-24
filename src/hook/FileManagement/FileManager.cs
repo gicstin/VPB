@@ -1851,28 +1851,15 @@ namespace VPB
 
 		public static bool FileExists(string path, bool onlySystemFiles = false, bool restrictPath = false)
 		{
-			if (path != null && path != string.Empty)
+			if (string.IsNullOrEmpty(path)) return false;
+			if (!onlySystemFiles && GetVarFileEntry(path) != null) return true;
+			if (File.Exists(path))
 			{
-				if (!onlySystemFiles)
+				if (restrictPath && !IsSecureReadPath(path))
 				{
-					string key = CleanFilePath(path);
-					if (uidToVarFileEntry != null && uidToVarFileEntry.ContainsKey(key))
-					{
-						return true;
-					}
-					if (pathToVarFileEntry != null && pathToVarFileEntry.ContainsKey(key))
-					{
-						return true;
-					}
+					throw new Exception("Attempted to check file existence for non-secure path " + path);
 				}
-				if (File.Exists(path))
-				{
-					if (restrictPath && !IsSecureReadPath(path))
-					{
-						throw new Exception("Attempted to check file existence for non-secure path " + path);
-					}
-					return true;
-				}
+				return true;
 			}
 			return false;
 		}
@@ -1940,10 +1927,44 @@ namespace VPB
 			VarFileEntry value = null;
 			string key = CleanFilePath(path);
 			if ((uidToVarFileEntry != null && uidToVarFileEntry.TryGetValue(key, out value))
-				|| pathToVarFileEntry == null || pathToVarFileEntry.TryGetValue(key, out value))
+				|| (pathToVarFileEntry != null && pathToVarFileEntry.TryGetValue(key, out value)))
 			{
+                return value;
 			}
-			return value;
+
+            if (key != null && key.EndsWith(":/preview.jpg", StringComparison.OrdinalIgnoreCase))
+            {
+                int colonIdx = key.IndexOf(":/");
+                if (colonIdx > 0)
+                {
+                    string pkgPath = key.Substring(0, colonIdx);
+                    VarPackage pkg = GetPackage(pkgPath, false);
+                    if (pkg != null)
+                    {
+                        if (pkg.ZipFile != null)
+                        {
+                            if (pkg.ZipFile.GetEntry("preview.jpg") != null)
+                            {
+                                return new VarFileEntry(pkg, "preview.jpg", pkg.LastWriteTime, 0);
+                            }
+                            else
+                            {
+                                // LogUtil.Log("[VPB] [FileManager] Internal preview not found in zip for " + pkgPath);
+                            }
+                        }
+                        else
+                        {
+                            LogUtil.Log("[VPB] [FileManager] ZipFile is NULL for " + pkgPath);
+                        }
+                    }
+                    else
+                    {
+                        LogUtil.Log("[VPB] [FileManager] Package not found for " + pkgPath);
+                    }
+                }
+            }
+
+			return null;
 		}
 
 		public static void SortFileEntriesByLastWriteTime(List<FileEntry> fileEntries)

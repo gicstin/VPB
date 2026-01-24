@@ -49,6 +49,8 @@ namespace VPB
         public ConfigEntry<Rect> PackageManagerWindowRect;
         public ConfigEntry<string> PackageManagerSortField;
         public ConfigEntry<bool> PackageManagerSortAscending;
+        public ConfigEntry<float> PackageManagerSplitRatio;
+        public ConfigEntry<bool> PackageManagerShowPreview;
 
         internal static void Init(ConfigFile config)
         {
@@ -86,6 +88,8 @@ namespace VPB
             PackageManagerWindowRect = config.Bind<Rect>("PackageManager", "WindowRect", new Rect(100, 100, 1000, 600), "Package Manager window position and size.");
             PackageManagerSortField = config.Bind<string>("PackageManager", "SortField", "Name", "Package Manager sort field.");
             PackageManagerSortAscending = config.Bind<bool>("PackageManager", "SortAscending", true, "Package Manager sort ascending.");
+            PackageManagerSplitRatio = config.Bind<float>("PackageManager", "SplitRatio", 0.66f, "Package Manager table split ratio (0.1 to 0.9).");
+            PackageManagerShowPreview = config.Bind<bool>("PackageManager", "ShowPreview", true, "Show the Package Manager details/preview pane.");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 1, "0=off, 1=summary only, 2=verbose per-texture trace.");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");

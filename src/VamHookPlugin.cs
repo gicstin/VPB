@@ -30,6 +30,7 @@ namespace VPB
         private class PackageManagerItem
         {
             public string Uid;
+            public string Creator;
             public string Path;
             public string Type;
             public long Size;
@@ -37,25 +38,40 @@ namespace VPB
             public string AgeString;
             public int DependencyCount;
             public int LoadedDependencyCount;
+            public List<string> MissingDependencies;
+            public string HighlightedUid;
+            public string StatusPrefix;
+            public GUIContent TypeContent;
+            public GUIContent NameContent;
+            public GUIContent DepContent;
+            public GUIContent SizeContent;
             public bool Checked;
             public bool IsActive;
             public bool Locked;
+            public bool AutoLoad;
             public bool IsLatest;
+            public string GroupId;
+            public float LastWidth;
+            public float LastTypeWidth;
+            public GUIContent TruncatedNameContent;
+            public GUIContent TruncatedTypeContent;
         }
         private bool m_ShowPackageManagerWindow = false;
         private System.Collections.Generic.List<PackageManagerItem> m_AddonList = new System.Collections.Generic.List<PackageManagerItem>();
         private System.Collections.Generic.List<PackageManagerItem> m_AllList = new System.Collections.Generic.List<PackageManagerItem>();
         private string m_PkgMgrFilter = "";
         private string m_PkgMgrFilterLower = "";
+        private string m_PkgMgrCreatorFilter = "";
         private System.Collections.Generic.HashSet<string> m_PkgMgrCategoryInclusive = new System.Collections.Generic.HashSet<string>();
         private System.Collections.Generic.HashSet<string> m_PkgMgrCategoryExclusive = new System.Collections.Generic.HashSet<string>();
         private System.Collections.Generic.List<string> m_PkgMgrCategories = new System.Collections.Generic.List<string>();
         private System.Collections.Generic.Dictionary<string, int> m_PkgMgrCategoryCounts = new System.Collections.Generic.Dictionary<string, int>();
         private System.Collections.Generic.HashSet<string> m_LockedPackages = new System.Collections.Generic.HashSet<string>();
+        private System.Collections.Generic.HashSet<string> m_AutoLoadPackages = new System.Collections.Generic.HashSet<string>();
         private Vector2 m_AddonScroll = Vector2.zero;
         private Vector2 m_AllScroll = Vector2.zero;
         private Vector2 m_PkgMgrCategoryScroll = Vector2.zero;
-        private Rect m_PackageManagerWindowRect = new Rect(100, 100, 1000, 600);
+        private Rect m_PackageManagerWindowRect = new Rect(100, 100, 1300, 600);
         private string m_PkgMgrSortField = "Name";
         private bool m_PkgMgrSortAscending = true;
         private int m_AddonLastSelectedIndex = -1;
@@ -66,21 +82,66 @@ namespace VPB
         private int m_PkgMgrAllCount = 0;
         private int m_PkgMgrDragLastIdx = -1;
         
-        private System.Collections.Generic.List<int> m_AddonVisibleIndices = new System.Collections.Generic.List<int>();
-        private System.Collections.Generic.List<int> m_AllVisibleIndices = new System.Collections.Generic.List<int>();
+        private struct PackageManagerVisibleRow
+        {
+            public int Index; // -1 for header
+            public string Header;
+        }
+        private System.Collections.Generic.List<PackageManagerVisibleRow> m_AddonVisibleRows = new System.Collections.Generic.List<PackageManagerVisibleRow>();
+        private System.Collections.Generic.List<PackageManagerVisibleRow> m_AllVisibleRows = new System.Collections.Generic.List<PackageManagerVisibleRow>();
         private bool m_PkgMgrIndicesDirty = true;
+        private int m_PkgMgrSelectedCount = 0;
+        private int m_PkgMgrTargetGroupCount = 0;
+        private bool m_PkgMgrIsVR = false;
+        private PackageManagerItem m_PkgMgrSelectedItem = null;
+        private Texture2D m_PkgMgrSelectedThumbnail = null;
+        private string m_PkgMgrSelectedDescription = "";
+        private int m_PkgMgrSelectedTab = 0;
+        private string[] m_PkgMgrTabs = { "Info", "Deps" };
+        private string m_PkgMgrLastThumbnailPath = "";
+        private Vector2 m_PkgMgrInfoScroll = Vector2.zero;
+        private bool m_PkgMgrSelectedInLoaded = true;
+        private int m_AddonFirstVisible, m_AddonLastVisible;
+        private int m_AllFirstVisible, m_AllLastVisible;
+        private float m_PkgMgrTopHeight = 150f;
+        private float m_PkgMgrFooterHeight = 40f;
+        private float m_PkgMgrSplitRatio = 0.66f;
+        private bool m_PkgMgrShowPreview = true;
         
         private void RefreshVisibleIndices()
         {
-            m_AddonVisibleIndices.Clear();
-            for (int i = 0; i < m_AddonList.Count; i++)
-                if (IsPackageManagerItemVisible(m_AddonList[i])) m_AddonVisibleIndices.Add(i);
-
-            m_AllVisibleIndices.Clear();
-            for (int i = 0; i < m_AllList.Count; i++)
-                if (IsPackageManagerItemVisible(m_AllList[i])) m_AllVisibleIndices.Add(i);
-
+            RefreshVisibleRows(m_AddonList, m_AddonVisibleRows);
+            RefreshVisibleRows(m_AllList, m_AllVisibleRows);
             m_PkgMgrIndicesDirty = false;
+        }
+
+        private void RefreshVisibleRows(System.Collections.Generic.List<PackageManagerItem> list, System.Collections.Generic.List<PackageManagerVisibleRow> rows)
+        {
+            rows.Clear();
+            string lastGroup = null;
+            bool useGrouping = (m_PkgMgrSortField == "Creator");
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var item = list[i];
+                if (!IsPackageManagerItemVisible(item)) continue;
+
+                if (useGrouping)
+                {
+                    string currentGroup = "";
+                    if (m_PkgMgrSortField == "Creator") currentGroup = item.Creator;
+                    else if (m_PkgMgrSortField == "Category") currentGroup = item.Type;
+                    else if (m_PkgMgrSortField == "Name") currentGroup = item.GroupId;
+
+                    if (currentGroup != lastGroup && !string.IsNullOrEmpty(currentGroup))
+                    {
+                        rows.Add(new PackageManagerVisibleRow { Index = -1, Header = currentGroup });
+                        lastGroup = currentGroup;
+                    }
+                }
+
+                rows.Add(new PackageManagerVisibleRow { Index = i });
+            }
         }
 
         // Desktop Context Menu
@@ -185,6 +246,7 @@ namespace VPB
         private GUIStyle m_StyleInfoCard;
         private GUIStyle m_StyleInfoCardTitle;
         private GUIStyle m_StyleInfoCardText;
+        private GUIStyle m_StyleInfoCardTextWrapped;
         private GUIStyle m_StyleInfoClose;
         private GUIStyle m_StyleFpsBadge;
         private GUIStyle m_StyleFpsBadgeOuter;
@@ -900,11 +962,14 @@ namespace VPB
             m_StyleRow.margin = new RectOffset(0, 0, 0, 0);
 
             m_StylePkgMgrRow = new GUIStyle(m_StyleRow);
+            m_StylePkgMgrRow.alignment = TextAnchor.MiddleLeft;
             m_StylePkgMgrRow.wordWrap = false;
             m_StylePkgMgrRow.clipping = TextClipping.Clip;
+            m_StylePkgMgrRow.richText = true;
 
             m_StylePkgMgrRowCentered = new GUIStyle(m_StylePkgMgrRow);
             m_StylePkgMgrRowCentered.alignment = TextAnchor.MiddleCenter;
+            m_StylePkgMgrRowCentered.richText = true;
 
             m_StylePkgMgrHeader = new GUIStyle(GUI.skin.button);
             m_StylePkgMgrHeader.fontStyle = FontStyle.Bold;
@@ -913,7 +978,7 @@ namespace VPB
             m_StylePkgMgrHeader.clipping = TextClipping.Clip;
 
             m_StyleRowAlternate = new GUIStyle(m_StyleRow);
-            m_StyleRowAlternate.normal.background = MakeTex(new Color(1, 1, 1, 0.05f));
+            m_StyleRowAlternate.normal.background = MakeTex(new Color(1, 1, 1, 0.1f));
 
             m_StyleRowHover = new GUIStyle(m_StyleRow);
             // Flat semi-transparent yellow for selection to ensure readability
@@ -1019,6 +1084,9 @@ namespace VPB
             m_StyleInfoCardText = new GUIStyle(GUI.skin.label);
             m_StyleInfoCardText.normal.textColor = new Color(0.90f, 0.93f, 0.97f, 1f);
             m_StyleInfoCardText.wordWrap = false;
+
+            m_StyleInfoCardTextWrapped = new GUIStyle(m_StyleInfoCardText);
+            m_StyleInfoCardTextWrapped.wordWrap = true;
 
             m_StyleInfoClose = new GUIStyle(GUI.skin.button);
             m_StyleInfoClose.normal.background = texTransparent;
@@ -1256,6 +1324,59 @@ namespace VPB
             MVR.FileManagement.FileManager.RegisterInternalSecureWritePath("AllPackages");
 
             m_PendingVamCacheCount = GetVamCacheFileCount();
+
+            AutoLoadALPackages();
+        }
+        
+        void AutoLoadALPackages()
+        {
+            try
+            {
+                if (!Directory.Exists("AllPackages")) return;
+                
+                var alPackages = AutoLoadPackagesManager.Instance.GetAutoLoadPackages();
+                if (alPackages.Count == 0) return;
+
+                string[] files = Directory.GetFiles("AllPackages", "*.var", SearchOption.AllDirectories);
+                bool moved = false;
+
+                foreach (string file in files)
+                {
+                    string name = Path.GetFileNameWithoutExtension(file);
+                    if (alPackages.Contains(name))
+                    {
+                        string relativePath = file.Replace('\\', '/');
+                        string targetPath = "AddonPackages" + relativePath.Substring("AllPackages".Length);
+                        
+                        string targetDir = Path.GetDirectoryName(targetPath);
+                        if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+                        
+                        if (!File.Exists(targetPath))
+                        {
+                            try 
+                            { 
+                                File.Move(file, targetPath); 
+                                moved = true;
+                                LogUtil.Log("[VPB] Auto-Loaded package: " + name);
+                            }
+                            catch (Exception ex) 
+                            { 
+                                LogUtil.LogError("[VPB] Failed to auto-load " + name + ": " + ex.Message); 
+                            }
+                        }
+                    }
+                }
+
+                if (moved)
+                {
+                    Refresh();
+                    ScanPackageManagerPackages();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Error during AutoLoadALPackages: " + ex.Message);
+            }
         }
         void OnDestroy()
         {
@@ -1496,6 +1617,8 @@ namespace VPB
             m_PackageManagerWindowRect = Settings.Instance.PackageManagerWindowRect.Value;
             m_PkgMgrSortField = Settings.Instance.PackageManagerSortField.Value;
             m_PkgMgrSortAscending = Settings.Instance.PackageManagerSortAscending.Value;
+            m_PkgMgrSplitRatio = Settings.Instance.PackageManagerSplitRatio.Value;
+            m_PkgMgrShowPreview = Settings.Instance.PackageManagerShowPreview.Value;
 
             if (m_FileManager == null)
             {
@@ -2059,7 +2182,8 @@ namespace VPB
                     // ========== PACKAGE MANAGER ==========
                     if (GUILayout.Button("Package Manager", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                     {
-                        OpenPackageManagerWindow();
+                        if (m_ShowPackageManagerWindow) m_ShowPackageManagerWindow = false;
+                        else OpenPackageManagerWindow();
                     }
 
                     // ========== HUB BROWSE ==========
@@ -2165,7 +2289,7 @@ namespace VPB
                         var screenSpaceRect = new Rect(m_SpaceSaverWindowRect.x * m_UIScale, m_SpaceSaverWindowRect.y * m_UIScale, m_SpaceSaverWindowRect.width * m_UIScale, m_SpaceSaverWindowRect.height * m_UIScale);
                         if (screenSpaceRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)))
                         {
-                            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp || Event.current.type == EventType.ScrollWheel)
+                            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
                             {
                                 Input.ResetInputAxes();
                             }
@@ -2407,6 +2531,14 @@ namespace VPB
 
         }
 
+        string PackageIDToCreator(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return "Unknown";
+            int firstDot = uid.IndexOf('.');
+            if (firstDot > 0) return uid.Substring(0, firstDot);
+            return "Unknown";
+        }
+
         string DeterminePackageType(string uid)
         {
              VarPackage pkg = FileManager.GetPackage(uid, false);
@@ -2450,6 +2582,8 @@ namespace VPB
 
         bool IsPackageManagerItemVisible(PackageManagerItem item)
         {
+            if (!string.IsNullOrEmpty(m_PkgMgrCreatorFilter) && !item.Creator.Equals(m_PkgMgrCreatorFilter, StringComparison.OrdinalIgnoreCase)) return false;
+
             // Exclusive filters (must match NONE)
             if (m_PkgMgrCategoryExclusive.Count > 0)
             {
@@ -2457,6 +2591,7 @@ namespace VPB
                 {
                     bool itemMatches = false;
                     if (filter == "Locked (L)") itemMatches = item.Locked;
+                    else if (filter == "Auto-Load (AL)") itemMatches = item.AutoLoad;
                     else if (filter == "Active") itemMatches = item.IsActive;
                     else if (filter == "Latest") itemMatches = item.IsLatest;
                     else if (filter == "Old Version") itemMatches = !item.IsLatest;
@@ -2473,6 +2608,7 @@ namespace VPB
                 foreach (var filter in m_PkgMgrCategoryInclusive)
                 {
                     if (filter == "Locked (L)") { if (item.Locked) { match = true; break; } }
+                    else if (filter == "Auto-Load (AL)") { if (item.AutoLoad) { match = true; break; } }
                     else if (filter == "Active") { if (item.IsActive) { match = true; break; } }
                     else if (filter == "Latest") { if (item.IsLatest) { match = true; break; } }
                     else if (filter == "Old Version") { if (!item.IsLatest) { match = true; break; } }
@@ -2494,7 +2630,7 @@ namespace VPB
             return true;
         }
 
-        void DrawPackageManagerHeader(string label, string field, float width = -1)
+        void DrawPackageManagerHeader(string label, string field, string tooltip = "", float width = -1)
         {
             string sortIndicator = "";
             if (m_PkgMgrSortField == field)
@@ -2503,8 +2639,9 @@ namespace VPB
             }
 
             bool clicked;
-            if (width > 0) clicked = GUILayout.Button(label + sortIndicator, m_StylePkgMgrHeader, GUILayout.Width(width));
-            else clicked = GUILayout.Button(label + sortIndicator, m_StylePkgMgrHeader);
+            GUIContent content = new GUIContent(label + sortIndicator, tooltip);
+            if (width > 0) clicked = GUILayout.Button(content, m_StylePkgMgrHeader, GUILayout.Width(width));
+            else clicked = GUILayout.Button(content, m_StylePkgMgrHeader);
 
             if (clicked)
             {
@@ -2522,7 +2659,7 @@ namespace VPB
 
         void DrawPackageManagerWindow(int windowID)
         {
-            if (Event.current.type == EventType.ScrollWheel || Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseDrag) 
+            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseDrag) 
             {
                 Input.ResetInputAxes();
             }
@@ -2536,37 +2673,89 @@ namespace VPB
 
             if (m_PkgMgrIndicesDirty) RefreshVisibleIndices();
 
-            GUILayout.BeginVertical(m_StylePanel);
+            // Store current rect to avoid self-referencing expansion during layout
+            float windowWidth = m_PackageManagerWindowRect.width;
+            float windowHeight = m_PackageManagerWindowRect.height;
+
+            // Draw background manually to prevent style padding from expanding the layout box
+            if (Event.current.type == EventType.Repaint)
+            {
+                m_StylePanel.Draw(new Rect(0, 0, windowWidth, windowHeight), false, false, false, false);
+            }
+
+            // Use BeginArea to strictly contain the layout
+            GUILayout.BeginArea(new Rect(8, 8, windowWidth - 16, windowHeight - 16));
+            GUILayout.BeginVertical();
+
+            // Measure top part (Header + Filter + Categories)
+            GUILayout.BeginVertical();
             
             // Header & Filter
             GUILayout.BeginHorizontal();
             GUILayout.Label("Package Manager", m_StyleHeader, GUILayout.ExpandWidth(false));
+            
+            GUILayout.FlexibleSpace();
+
+            if (!string.IsNullOrEmpty(m_PkgMgrCreatorFilter))
+            {
+                GUILayout.Space(20);
+                if (GUILayout.Button(new GUIContent("Creator: " + m_PkgMgrCreatorFilter + " [X]", "Clear creator filter"), m_StyleButtonSmall, GUILayout.ExpandWidth(false)))
+                {
+                    m_PkgMgrCreatorFilter = "";
+                    m_PkgMgrIndicesDirty = true;
+                }
+            }
+
             GUILayout.Space(20);
-            GUILayout.Label("<color=#aaaaaa>Isolate (Left Click + | Right Click -)</color>", m_StyleInfoCardText, GUILayout.ExpandWidth(false));
-            GUILayout.Space(20);
-            GUILayout.Label("Filter:", GUILayout.Width(40));
+            GUILayout.Label(new GUIContent("Filter:", "Search by package name, type or path"), GUILayout.Width(40));
             GUI.SetNextControlName("PkgMgrFilter");
-            string newPkgMgrFilter = GUILayout.TextField(m_PkgMgrFilter, GUILayout.ExpandWidth(true), GUILayout.MinWidth(100));
+            string newPkgMgrFilter = GUILayout.TextField(m_PkgMgrFilter, GUILayout.MinWidth(100), GUILayout.MaxWidth(400));
             if (newPkgMgrFilter != m_PkgMgrFilter)
             {
                 m_PkgMgrFilter = newPkgMgrFilter;
                 m_PkgMgrFilterLower = m_PkgMgrFilter.ToLower();
                 m_PkgMgrIndicesDirty = true;
+                UpdatePkgMgrHighlights();
             }
-            if (GUILayout.Button("Clear", m_StyleButtonSmall, GUILayout.Width(50)))
+
+            // ESC to clear filter
+            if (GUI.GetNameOfFocusedControl() == "PkgMgrFilter" && Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Escape)
             {
                 m_PkgMgrFilter = "";
                 m_PkgMgrFilterLower = "";
                 m_PkgMgrIndicesDirty = true;
+                UpdatePkgMgrHighlights();
                 GUI.FocusControl("");
+                Event.current.Use();
             }
-            if (GUILayout.Button("Refresh", m_StyleButtonSmall, GUILayout.Width(60)))
+
+            if (!string.IsNullOrEmpty(m_PkgMgrFilter))
+            {
+                if (GUILayout.Button(new GUIContent("X", "Clear search filter"), m_StyleButtonSmall, GUILayout.Width(25)))
+                {
+                    m_PkgMgrFilter = "";
+                    m_PkgMgrFilterLower = "";
+                    m_PkgMgrIndicesDirty = true;
+                    UpdatePkgMgrHighlights();
+                    GUI.FocusControl("");
+                }
+            }
+
+            if (GUILayout.Button(new GUIContent("Refresh", "Rescan packages on disk"), m_StyleButtonSmall, GUILayout.Width(60)))
             {
                 Refresh();
                 ScanPackageManagerPackages();
             }
+
+            GUILayout.Space(20);
+            GUILayout.Label(new GUIContent("<color=#aaaaaa>Isolate (Left Click + | Right Click -)</color>", "Filter by category. Left click to include, right click to exclude"), m_StyleInfoCardText, GUILayout.ExpandWidth(false));
+
             GUILayout.Space(10);
-            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30))) m_ShowPackageManagerWindow = false;
+            bool autoDeps = Settings.Instance.LoadDependenciesWithPackage.Value;
+            bool newAutoDeps = GUILayout.Toggle(autoDeps, new GUIContent("Auto-Deps", "Automatically load dependencies when loading a package"), GUILayout.ExpandWidth(false));
+            if (newAutoDeps != autoDeps) Settings.Instance.LoadDependenciesWithPackage.Value = newAutoDeps;
+            GUILayout.Space(10);
+            if (GUILayout.Button(new GUIContent("X", "Close Package Manager"), m_StyleButtonSmall, GUILayout.Width(30))) m_ShowPackageManagerWindow = false;
             GUILayout.EndHorizontal();
 
             // Category Filter
@@ -2575,7 +2764,7 @@ namespace VPB
                 GUILayout.BeginVertical();
                 GUILayout.BeginHorizontal();
                 float currentWidth = 0;
-                float maxWidth = m_PackageManagerWindowRect.width - 40; 
+                float maxWidth = windowWidth - 32; // Area padding + internal padding
                 
                 foreach (var cat in m_PkgMgrCategories)
                 {
@@ -2589,16 +2778,16 @@ namespace VPB
                     
                     string prefix = isInc ? "+ " : (isExc ? "- " : "");
                     string label = string.Format("{0}{1} ({2})", prefix, cat, count);
-                    GUIContent content = new GUIContent(label);
+                    GUIContent content = new GUIContent(label, string.Format("Category: {0}. Left Click to include (+), Right Click to exclude (-)", cat));
                     float btnWidth = m_StyleButtonSmall.CalcSize(content).x + 10;
 
-                    if (currentWidth + btnWidth > maxWidth && currentWidth > 0)
+                    if (currentWidth + btnWidth + 5 > maxWidth && currentWidth > 0)
                     {
                         GUILayout.EndHorizontal();
                         GUILayout.BeginHorizontal();
                         currentWidth = 0;
                     }
-                    currentWidth += btnWidth;
+                    currentWidth += btnWidth + 5;
                     
                     Rect r = GUILayoutUtility.GetRect(content, m_StyleButtonSmall, GUILayout.ExpandWidth(false));
                     if (Event.current.type == EventType.MouseDown && r.Contains(Event.current.mousePosition))
@@ -2629,17 +2818,36 @@ namespace VPB
                             }
                         }
                     }
-                    GUI.Toggle(r, isSelected, label, m_StyleButtonSmall);
+                    GUI.Toggle(r, isSelected, content, m_StyleButtonSmall);
                 }
                 GUILayout.EndHorizontal();
                 GUILayout.EndVertical();
+            }
+            GUILayout.EndVertical();
+            if (Event.current.type == EventType.Repaint) 
+            {
+                float h = GUILayoutUtility.GetLastRect().height;
+                if (h > 0) m_PkgMgrTopHeight = h;
             }
             
             GUILayout.Space(5);
 
             // Tables Side-by-Side
-            float sidePaneWidth = Mathf.Max(250, (m_PackageManagerWindowRect.width - 120) / 2f);
-            GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
+            float previewWidth = m_PkgMgrShowPreview ? 320 : 0;
+            float leftPaneWidth = windowWidth - previewWidth - (m_PkgMgrShowPreview ? 26 : 10); 
+            
+            // Calculate Heights precisely
+            const float verticalOverhead = 35f; // Header, padding, spacing
+            
+            float totalContentHeightAvailable = Mathf.Max(200f, windowHeight - m_PkgMgrTopHeight - verticalOverhead);
+            float tablesContentHeight = totalContentHeightAvailable - m_PkgMgrFooterHeight - 15; // Space for footer
+            
+            float totalTableHeightAvailable = Mathf.Max(100f, tablesContentHeight - 105); // Table headers + middle buttons
+            
+            float hTop = totalTableHeightAvailable * m_PkgMgrSplitRatio;
+            float hBottom = totalTableHeightAvailable * (1f - m_PkgMgrSplitRatio);
+
+            GUILayout.BeginHorizontal(GUILayout.Height(totalContentHeightAvailable));
             
             int addonSelectedCount = 0;
             long addonSelectedSize = 0;
@@ -2648,56 +2856,138 @@ namespace VPB
             long allSelectedSize = 0;
             foreach (var item in m_AllList) if (item.Checked) { allSelectedCount++; allSelectedSize += item.Size; }
 
-            // LEFT: Loaded
-            GUILayout.BeginVertical(GUILayout.Width(sidePaneWidth));
+            // LEFT SIDE: Vertical Tables
+            GUILayout.BeginVertical(GUILayout.Width(leftPaneWidth));
+
+            // TOP: Loaded
+            GUILayout.BeginVertical(GUILayout.Height(hTop + 35));
             GUILayout.BeginHorizontal();
-            GUILayout.Label(string.Format("Loaded ({0} | {1} vis | {2} sel | {3})", m_PkgMgrAddonCount, m_AddonVisibleIndices.Count, addonSelectedCount, FormatSize(addonSelectedSize)), m_StyleSubHeader, GUILayout.Width(sidePaneWidth - 90));
+            GUILayout.Label(string.Format("Loaded ({0} | {1} vis | {2} sel | {3})", m_PkgMgrAddonCount, m_AddonVisibleRows.Count, addonSelectedCount, FormatSize(addonSelectedSize)), m_StyleSubHeader, GUILayout.Width(leftPaneWidth - 120));
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("All", m_StyleButtonSmall, GUILayout.Width(40))) SelectAllPackageManager(m_AddonList, true);
-            if (GUILayout.Button("None", m_StyleButtonSmall, GUILayout.Width(45))) SelectAllPackageManager(m_AddonList, false);
+            if (GUILayout.Button(new GUIContent("All", "Select all currently visible loaded packages"), m_StyleButtonSmall, GUILayout.Width(40))) SelectAllPackageManager(m_AddonList, true, m_AllList);
+            if (GUILayout.Button(new GUIContent("None", "Deselect all packages in this list"), m_StyleButtonSmall, GUILayout.Width(45))) SelectAllPackageManager(m_AddonList, false);
             GUILayout.EndHorizontal();
-            DrawPackageManagerPane(m_AddonList, ref m_AddonScroll, ref m_AddonLastSelectedIndex, sidePaneWidth);
+            DrawPackageManagerPane(m_AddonList, ref m_AddonScroll, ref m_AddonLastSelectedIndex, leftPaneWidth, hTop, ref m_AddonFirstVisible, ref m_AddonLastVisible);
             GUILayout.EndVertical();
 
-            // MIDDLE: Buttons
-            GUILayout.BeginVertical(GUILayout.Width(50), GUILayout.ExpandHeight(true));
+            // MIDDLE: Buttons Row (Draggable Splitter)
+            GUILayout.BeginHorizontal(m_StyleSection, GUILayout.Height(35));
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("<b>></b>", m_StyleButton, GUILayout.Height(60))) PerformMove(m_AddonList, true);
+            if (GUILayout.Button(new GUIContent("<b>▼ Unload ▼</b>", "Move selected packages to 'AllPackages' (Unloaded)"), m_StyleButton, GUILayout.Width(110), GUILayout.Height(25))) PerformMove(m_AddonList, true);
             GUILayout.Space(15);
-            if (GUILayout.Button(new GUIContent("[ L ]", "Lock/Unlock selected packages"), m_StyleButton, GUILayout.Height(40))) ToggleLockSelection();
+            if (GUILayout.Button(new GUIContent("<b>[ Lock ]</b>", "Lock/Unlock selected packages to prevent accidental move/unload"), m_StyleButton, GUILayout.Width(75), GUILayout.Height(25))) ToggleLockSelection();
             GUILayout.Space(15);
-            if (GUILayout.Button("<b><</b>", m_StyleButton, GUILayout.Height(60))) PerformMove(m_AllList, false);
+            if (GUILayout.Button(new GUIContent("<b><color=#add8e6>[ Auto-Load ]</color></b>", "Toggle Auto-Load for selected packages. AL packages load automatically on startup"), m_StyleButton, GUILayout.Width(110), GUILayout.Height(25))) ToggleAutoLoadSelection();
+            GUILayout.Space(15);
+            if (GUILayout.Button(new GUIContent("<b>[ Isolate ]</b>", "Keep only selected/active packages and unload the rest"), m_StyleButton, GUILayout.Width(75), GUILayout.Height(25))) PerformKeepSelectedUnloadRest();
+            GUILayout.Space(15);
+            if (GUILayout.Button(new GUIContent("<b>▲ Load ▲</b>", "Move selected packages to 'AddonPackages' (Loaded)"), m_StyleButton, GUILayout.Width(110), GUILayout.Height(25))) PerformMove(m_AllList, false);
             GUILayout.FlexibleSpace();
-            GUILayout.EndVertical();
+            
+            // Ratio Cycle and Collapse Toggle
+            string ratioLabel = "1:1";
+            if (m_PkgMgrSplitRatio > 0.6f) ratioLabel = "2:1";
+            else if (m_PkgMgrSplitRatio < 0.4f) ratioLabel = "1:2";
 
-            // RIGHT: Unloaded
-            GUILayout.BeginVertical(GUILayout.Width(sidePaneWidth));
+            if (GUILayout.Button(new GUIContent(ratioLabel, "Cycle table height ratio (Loaded vs Unloaded)"), m_StyleButtonSmall, GUILayout.Width(40), GUILayout.Height(25)))
+            {
+                if (ratioLabel == "2:1") m_PkgMgrSplitRatio = 0.5f;
+                else if (ratioLabel == "1:1") m_PkgMgrSplitRatio = 0.33f;
+                else m_PkgMgrSplitRatio = 0.66f;
+                Settings.Instance.PackageManagerSplitRatio.Value = m_PkgMgrSplitRatio;
+            }
+
+            if (GUILayout.Button(new GUIContent(m_PkgMgrShowPreview ? ">" : "<", m_PkgMgrShowPreview ? "Hide preview pane" : "Show preview pane"), m_StyleButtonSmall, GUILayout.Width(25), GUILayout.Height(25)))
+            {
+                m_PkgMgrShowPreview = !m_PkgMgrShowPreview;
+                Settings.Instance.PackageManagerShowPreview.Value = m_PkgMgrShowPreview;
+            }
+            GUILayout.EndHorizontal();
+
+            if (Event.current.type != EventType.Layout)
+            {
+                Rect splitterRect = GUILayoutUtility.GetLastRect();
+                int splitterControlID = GUIUtility.GetControlID(FocusType.Passive);
+                switch (Event.current.GetTypeForControl(splitterControlID))
+                {
+                    case EventType.MouseDown:
+                        if (splitterRect.Contains(Event.current.mousePosition) && Event.current.button == 0)
+                        {
+                            GUIUtility.hotControl = splitterControlID;
+                            Event.current.Use();
+                        }
+                        break;
+                    case EventType.MouseUp:
+                        if (GUIUtility.hotControl == splitterControlID)
+                        {
+                            GUIUtility.hotControl = 0;
+                            Settings.Instance.PackageManagerSplitRatio.Value = m_PkgMgrSplitRatio;
+                            Event.current.Use();
+                        }
+                        break;
+                    case EventType.MouseDrag:
+                        if (GUIUtility.hotControl == splitterControlID)
+                        {
+                            m_PkgMgrSplitRatio = Mathf.Clamp(m_PkgMgrSplitRatio + Event.current.delta.y / totalTableHeightAvailable, 0.1f, 0.9f);
+                            Event.current.Use();
+                        }
+                        break;
+                }
+            }
+
+            // BOTTOM: Unloaded
+            GUILayout.BeginVertical(GUILayout.Height(hBottom + 35));
             GUILayout.BeginHorizontal();
-            GUILayout.Label(string.Format("Unloaded ({0} | {1} vis | {2} sel | {3})", m_PkgMgrAllCount, m_AllVisibleIndices.Count, allSelectedCount, FormatSize(allSelectedSize)), m_StyleSubHeader, GUILayout.Width(sidePaneWidth - 90));
+            GUILayout.Label(string.Format("Unloaded ({0} | {1} vis | {2} sel | {3})", m_PkgMgrAllCount, m_AllVisibleRows.Count, allSelectedCount, FormatSize(allSelectedSize)), m_StyleSubHeader, GUILayout.Width(leftPaneWidth - 120));
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("All", m_StyleButtonSmall, GUILayout.Width(40))) SelectAllPackageManager(m_AllList, true);
-            if (GUILayout.Button("None", m_StyleButtonSmall, GUILayout.Width(45))) SelectAllPackageManager(m_AllList, false);
+            if (GUILayout.Button(new GUIContent("All", "Select all currently visible unloaded packages"), m_StyleButtonSmall, GUILayout.Width(40))) SelectAllPackageManager(m_AllList, true, m_AddonList);
+            if (GUILayout.Button(new GUIContent("None", "Deselect all packages in this list"), m_StyleButtonSmall, GUILayout.Width(45))) SelectAllPackageManager(m_AllList, false);
             GUILayout.EndHorizontal();
-            DrawPackageManagerPane(m_AllList, ref m_AllScroll, ref m_AllLastSelectedIndex, sidePaneWidth);
+            DrawPackageManagerPane(m_AllList, ref m_AllScroll, ref m_AllLastSelectedIndex, leftPaneWidth, hBottom, ref m_AllFirstVisible, ref m_AllLastVisible);
             GUILayout.EndVertical();
 
-            GUILayout.EndHorizontal();
+            GUILayout.Space(10);
 
             // Footer / Stats
-            GUILayout.BeginHorizontal(m_StyleSection);
+            GUILayout.BeginVertical();
+            GUILayout.BeginHorizontal(m_StyleSection, GUILayout.Width(leftPaneWidth));
             if (m_PkgMgrStatusTimer > Time.realtimeSinceStartup)
             {
                 GUILayout.Label("<b>" + m_PkgMgrStatusMessage + "</b>", m_StyleInfoCardText, GUILayout.Height(20));
             }
             else
             {
-                GUILayout.Label("Path: " + (string.IsNullOrEmpty(GUI.tooltip) ? "" : GUI.tooltip), m_StyleInfoCardText, GUILayout.Height(20));
+                GUILayout.Label(GUI.tooltip, m_StyleInfoCardText, GUILayout.Height(20), GUILayout.Width(leftPaneWidth - 20));
             }
             GUILayout.EndHorizontal();
+            GUILayout.EndVertical();
+            if (Event.current.type == EventType.Repaint)
+            {
+                float h = GUILayoutUtility.GetLastRect().height;
+                if (h > 0) m_PkgMgrFooterHeight = h;
+            }
+
+            GUILayout.EndVertical(); // End Left Side
+
+            // PREVIEW
+            if (m_PkgMgrShowPreview)
+            {
+                GUILayout.Space(8);
+                DrawPackageManagerPreview(previewWidth, totalContentHeightAvailable);
+            }
+
+            GUILayout.EndHorizontal();
+
+            GUILayout.EndVertical();
+            GUILayout.EndArea();
+
+            // Ensure the window layout engine registers the intended size to prevent the window from collapsing.
+            // This is necessary because GUILayout.BeginArea creates a separate layout context.
+            GUILayoutUtility.GetRect(windowWidth, windowHeight);
 
             // Resize handle
-            var resizeRect = new Rect(m_PackageManagerWindowRect.width - 30, m_PackageManagerWindowRect.height - 30, 30, 30);
-            GUI.Box(new Rect(m_PackageManagerWindowRect.width - 20, m_PackageManagerWindowRect.height - 20, 20, 20), "◢", m_StyleInfoIcon);
+            var resizeRect = new Rect(windowWidth - 30, windowHeight - 30, 30, 30);
+            GUI.Box(new Rect(windowWidth - 20, windowHeight - 20, 20, 20), "◢", m_StyleInfoIcon);
             int resizeControlID = GUIUtility.GetControlID(FocusType.Passive);
             switch (Event.current.GetTypeForControl(resizeControlID))
             {
@@ -2721,7 +3011,6 @@ namespace VPB
                     break;
             }
 
-            GUILayout.EndVertical();
             if (Event.current.type != EventType.MouseDrag || !resizeRect.Contains(Event.current.mousePosition)) GUI.DragWindow();
 
             if (Event.current.type == EventType.MouseUp)
@@ -2745,6 +3034,7 @@ namespace VPB
                     {
                         if (m_LockedPackages.Remove(item.Uid)) m_PkgMgrCategoryCounts["Locked (L)"]--;
                     }
+                    LockedPackagesManager.Instance.SetLocked(item.Uid, item.Locked, false);
                 }
             }
             foreach (var item in m_AllList) 
@@ -2760,28 +3050,84 @@ namespace VPB
                     {
                         if (m_LockedPackages.Remove(item.Uid)) m_PkgMgrCategoryCounts["Locked (L)"]--;
                     }
+                    LockedPackagesManager.Instance.SetLocked(item.Uid, item.Locked, false);
                 }
             }
+            LockedPackagesManager.Instance.Save();
         }
 
-        void SelectAllPackageManager(System.Collections.Generic.List<PackageManagerItem> list, bool state)
+        void ToggleAutoLoadSelection()
         {
+            foreach (var item in m_AddonList) 
+            {
+                if (item.Checked) 
+                {
+                    item.AutoLoad = !item.AutoLoad;
+                    if (item.AutoLoad) 
+                    {
+                        if (m_AutoLoadPackages.Add(item.Uid)) m_PkgMgrCategoryCounts["Auto-Load (AL)"]++;
+                    }
+                    else 
+                    {
+                        if (m_AutoLoadPackages.Remove(item.Uid)) m_PkgMgrCategoryCounts["Auto-Load (AL)"]--;
+                    }
+                    AutoLoadPackagesManager.Instance.SetAutoLoad(item.Uid, item.AutoLoad, false);
+                }
+            }
+            bool needMove = false;
+            foreach (var item in m_AllList) 
+            {
+                if (item.Checked) 
+                {
+                    item.AutoLoad = !item.AutoLoad;
+                    if (item.AutoLoad) 
+                    {
+                        if (m_AutoLoadPackages.Add(item.Uid)) m_PkgMgrCategoryCounts["Auto-Load (AL)"]++;
+                        needMove = true;
+                    }
+                    else 
+                    {
+                        if (m_AutoLoadPackages.Remove(item.Uid)) m_PkgMgrCategoryCounts["Auto-Load (AL)"]--;
+                    }
+                    AutoLoadPackagesManager.Instance.SetAutoLoad(item.Uid, item.AutoLoad, false);
+                }
+            }
+            AutoLoadPackagesManager.Instance.Save();
+            if (needMove) PerformMove(m_AllList, false);
+        }
+
+        void SelectAllPackageManager(System.Collections.Generic.List<PackageManagerItem> list, bool state, System.Collections.Generic.List<PackageManagerItem> otherList = null)
+        {
+            if (state && otherList != null)
+            {
+                foreach (var item in otherList) item.Checked = false;
+            }
+
             foreach (var item in list)
             {
                 if (IsPackageManagerItemVisible(item))
                 {
                     if (item.Locked && state && !m_PkgMgrCategoryInclusive.Contains("Locked (L)")) continue;
                     item.Checked = state;
+                    if (state) m_PkgMgrSelectedInLoaded = (list == m_AddonList);
                 }
             }
         }
 
+        void HidePackageManagerContextMenu()
+        {
+            m_ShowDesktopContextMenu = false;
+            if (ContextMenuPanel.Instance != null) ContextMenuPanel.Instance.Hide();
+        }
+
         void ShowPackageManagerContextMenu(PackageManagerItem item)
         {
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            m_PkgMgrSelectedCount = CountSelectedItems();
+            m_PkgMgrTargetGroupCount = CountGroupItems(item.GroupId);
+            m_PkgMgrIsVR = false;
+            try { m_PkgMgrIsVR = UnityEngine.XR.XRSettings.enabled; } catch { }
 
-            if (!isVR)
+            if (!m_PkgMgrIsVR)
             {
                 m_ContextMenuTargetItem = item;
                 m_ShowDesktopContextMenu = true;
@@ -2805,8 +3151,8 @@ namespace VPB
             }
 
             System.Collections.Generic.List<ContextMenuPanel.Option> options = new System.Collections.Generic.List<ContextMenuPanel.Option>();
-            int groupCount = CountGroupItems(item.Uid);
-            int selectedCount = CountSelectedItems();
+            int groupCount = m_PkgMgrTargetGroupCount;
+            int selectedCount = m_PkgMgrSelectedCount;
             string title = item.Uid;
 
             if (item.Checked && selectedCount > 1)
@@ -2826,29 +3172,32 @@ namespace VPB
                     SelectAllPackageManager(m_AllList, false);
                 }));
 
+                options.Add(new ContextMenuPanel.Option("", null)); // Spacer
                 options.Add(new ContextMenuPanel.Option("Keep Selected -> Unload Rest", () => {
                     PerformKeepSelectedUnloadRest();
                 }));
             }
-            else if (groupCount > 1)
+            else
             {
-                title = string.Format("Group: {0} ({1} items)", FileManager.PackageIDToPackageGroupID(item.Uid), groupCount);
+                // Single Item or Group actions
+                if (item.Type == "Scene")
+                {
+                    options.Add(new ContextMenuPanel.Option("Launch Scene", () => {
+                        string scenePath = GetFirstScenePath(item.Uid);
+                        if (!string.IsNullOrEmpty(scenePath))
+                        {
+                            LoadFromSceneWorldDialog(scenePath);
+                            m_ShowPackageManagerWindow = false;
+                        }
+                    }));
+                }
 
-                options.Add(new ContextMenuPanel.Option("Select Group", () => {
-                    SetGroupChecked(item.Uid, true);
-                }));
-
-                options.Add(new ContextMenuPanel.Option("Unselect Group", () => {
-                    SetGroupChecked(item.Uid, false);
-                }));
-
-                options.Add(new ContextMenuPanel.Option("Copy Group Names", () => {
-                    CopyGroupNames(item.Uid);
-                }));
-
-                options.Add(new ContextMenuPanel.Option("Copy Group Dependencies (Deep)", () => {
-                    CopyGroupDependenciesDeep(item.Uid);
-                }));
+                if (item.MissingDependencies != null && item.MissingDependencies.Count > 0)
+                {
+                    options.Add(new ContextMenuPanel.Option("Resolve Dependencies (Select " + item.MissingDependencies.Count + ")", () => {
+                        ResolveDependencies(item);
+                    }));
+                }
 
                 if (selectedCount > 0)
                 {
@@ -2856,9 +3205,41 @@ namespace VPB
                         PerformKeepSelectedUnloadRest();
                     }));
                 }
-            }
-            else
-            {
+
+                // Group: Creator
+                options.Add(new ContextMenuPanel.Option("", null)); // Spacer
+                options.Add(new ContextMenuPanel.Option("Filter by Creator (" + item.Creator + ")", () => {
+                    m_PkgMgrCreatorFilter = item.Creator;
+                    m_PkgMgrIndicesDirty = true;
+                }));
+
+                options.Add(new ContextMenuPanel.Option("Select All by Creator (" + item.Creator + ")", () => {
+                    SelectAllByCreator(item.Creator);
+                }));
+
+                // Group: Package Group
+                if (groupCount > 1)
+                {
+                    options.Add(new ContextMenuPanel.Option("", null)); // Spacer
+                    options.Add(new ContextMenuPanel.Option("Select Group", () => {
+                        SetGroupChecked(item.Uid, true);
+                    }));
+
+                    options.Add(new ContextMenuPanel.Option("Unselect Group", () => {
+                        SetGroupChecked(item.Uid, false);
+                    }));
+
+                    options.Add(new ContextMenuPanel.Option("Copy Group Names", () => {
+                        CopyGroupNames(item.Uid);
+                    }));
+                }
+
+                // Group: Utility
+                options.Add(new ContextMenuPanel.Option("", null)); // Spacer
+                options.Add(new ContextMenuPanel.Option("Show in Explorer", () => {
+                    ShowInExplorer(item.Path);
+                }));
+
                 options.Add(new ContextMenuPanel.Option("Copy Package Name", () => {
                     GUIUtility.systemCopyBuffer = item.Uid;
                 }));
@@ -2873,36 +3254,51 @@ namespace VPB
                             GUIUtility.systemCopyBuffer = string.Join("\n", deps.ToArray());
                             LogUtil.Log("Copied " + deps.Count + " dependencies to clipboard.");
                         }
-                        else
-                        {
-                            LogUtil.Log("No dependencies found for " + item.Uid);
-                        }
                     }
                 }));
-
-                if (item.Type == "Scene")
-                {
-                    options.Add(new ContextMenuPanel.Option("Launch Scene", () => {
-                        string scenePath = GetFirstScenePath(item.Uid);
-                        if (!string.IsNullOrEmpty(scenePath))
-                        {
-                            LoadFromSceneWorldDialog(scenePath);
-                            m_ShowPackageManagerWindow = false;
-                        }
-                    }));
-                }
-
-                if (selectedCount > 0)
-                {
-                    options.Add(new ContextMenuPanel.Option("Keep Selected -> Unload Rest", () => {
-                        PerformKeepSelectedUnloadRest();
-                    }));
-                }
             }
 
             // Default position in front of camera
             Vector3 position = Camera.main.transform.position + Camera.main.transform.forward * 1.5f;
             ContextMenuPanel.Instance.Show(position, options, title);
+        }
+
+        private void ShowInExplorer(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            string fullPath = Path.GetFullPath(path).Replace('/', '\\');
+            if (File.Exists(fullPath))
+            {
+                System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + fullPath + "\"");
+            }
+            else if (Directory.Exists(fullPath))
+            {
+                System.Diagnostics.Process.Start("explorer.exe", "\"" + fullPath + "\"");
+            }
+        }
+
+        private void SelectAllByCreator(string creator)
+        {
+            if (string.IsNullOrEmpty(creator)) return;
+            foreach (var item in m_AddonList) if (item.Creator.Equals(creator, StringComparison.OrdinalIgnoreCase)) item.Checked = true;
+            foreach (var item in m_AllList) if (item.Creator.Equals(creator, StringComparison.OrdinalIgnoreCase)) item.Checked = true;
+        }
+
+        private void ResolveDependencies(PackageManagerItem item)
+        {
+            if (item.MissingDependencies == null) return;
+            foreach (var dep in item.MissingDependencies)
+            {
+                // Find in AllList (unloaded) and check it
+                foreach (var other in m_AllList)
+                {
+                    if (other.Uid.Equals(dep, StringComparison.OrdinalIgnoreCase))
+                    {
+                        other.Checked = true;
+                        break;
+                    }
+                }
+            }
         }
 
         private int CountSelectedItems()
@@ -2950,14 +3346,12 @@ namespace VPB
             }
         }
 
-        private int CountGroupItems(string packageId)
+        private int CountGroupItems(string groupId)
         {
-            string groupId = FileManager.PackageIDToPackageGroupID(packageId);
+            if (string.IsNullOrEmpty(groupId)) return 1;
             int count = 0;
-            foreach (var item in m_AddonList)
-                if (FileManager.PackageIDToPackageGroupID(item.Uid).Equals(groupId, StringComparison.OrdinalIgnoreCase)) count++;
-            foreach (var item in m_AllList)
-                if (FileManager.PackageIDToPackageGroupID(item.Uid).Equals(groupId, StringComparison.OrdinalIgnoreCase)) count++;
+            foreach (var item in m_AddonList) if (item.GroupId.Equals(groupId, StringComparison.OrdinalIgnoreCase)) count++;
+            foreach (var item in m_AllList) if (item.GroupId.Equals(groupId, StringComparison.OrdinalIgnoreCase)) count++;
             return count;
         }
 
@@ -2971,8 +3365,8 @@ namespace VPB
 
             GUILayout.BeginVertical(m_StylePanel);
             
-            int groupCount = CountGroupItems(m_ContextMenuTargetItem.Uid);
-            int selectedCount = CountSelectedItems();
+            int groupCount = m_PkgMgrTargetGroupCount;
+            int selectedCount = m_PkgMgrSelectedCount;
             string title = m_ContextMenuTargetItem.Uid;
 
             if (m_ContextMenuTargetItem.Checked && selectedCount > 1)
@@ -2986,6 +3380,46 @@ namespace VPB
 
             GUILayout.Label("<b>" + title + "</b>", m_StyleInfoCardText);
             GUILayout.Space(5);
+
+            if (!(m_ContextMenuTargetItem.Checked && selectedCount > 1) && groupCount <= 1)
+            {
+                if (GUILayout.Button("Show in Explorer", m_StyleButton))
+                {
+                    ShowInExplorer(m_ContextMenuTargetItem.Path);
+                    m_ShowDesktopContextMenu = false;
+                }
+
+                if (GUILayout.Button("Copy Full Path", m_StyleButton))
+                {
+                    GUIUtility.systemCopyBuffer = Path.GetFullPath(m_ContextMenuTargetItem.Path);
+                    m_PkgMgrStatusMessage = "Copied full path to clipboard.";
+                    m_PkgMgrStatusTimer = Time.realtimeSinceStartup + 3f;
+                    m_ShowDesktopContextMenu = false;
+                }
+
+                if (GUILayout.Button("Filter by Creator (" + m_ContextMenuTargetItem.Creator + ")", m_StyleButton))
+                {
+                    m_PkgMgrCreatorFilter = m_ContextMenuTargetItem.Creator;
+                    m_PkgMgrIndicesDirty = true;
+                    m_ShowDesktopContextMenu = false;
+                }
+
+                if (GUILayout.Button("Select All by Creator (" + m_ContextMenuTargetItem.Creator + ")", m_StyleButton))
+                {
+                    SelectAllByCreator(m_ContextMenuTargetItem.Creator);
+                    m_ShowDesktopContextMenu = false;
+                }
+
+                if (m_ContextMenuTargetItem.MissingDependencies != null && m_ContextMenuTargetItem.MissingDependencies.Count > 0)
+                {
+                    if (GUILayout.Button("Resolve Dependencies (Select " + m_ContextMenuTargetItem.MissingDependencies.Count + ")", m_StyleButton))
+                    {
+                        ResolveDependencies(m_ContextMenuTargetItem);
+                        m_ShowDesktopContextMenu = false;
+                    }
+                }
+                GUILayout.Space(5);
+            }
 
             if (m_ContextMenuTargetItem.Checked && selectedCount > 1)
             {
@@ -3118,80 +3552,251 @@ namespace VPB
             }
         }
 
-        void DrawLabelWithEllipsis(Rect rect, string text, GUIStyle style, string tooltip = "")
+        string HighlightSearchText(string text, string search)
         {
-            GUIContent content = new GUIContent(text, tooltip);
-            Vector2 size = style.CalcSize(content);
-            if (size.x > rect.width)
-            {
-                string truncatedText = text;
-                int iterations = 0;
-                while (truncatedText.Length > 0 && style.CalcSize(new GUIContent(truncatedText + "...")).x > rect.width && iterations < 500)
-                {
-                    truncatedText = truncatedText.Substring(0, truncatedText.Length - 1);
-                    iterations++;
-                }
-                content.text = truncatedText + "...";
-            }
-            GUI.Label(rect, content, style);
+            if (string.IsNullOrEmpty(search) || string.IsNullOrEmpty(text)) return text;
+            int idx = text.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+            if (idx == -1) return text;
+            
+            string original = text.Substring(idx, search.Length);
+            return text.Replace(original, "<color=yellow>" + original + "</color>");
         }
 
-        void DrawPackageManagerPane(System.Collections.Generic.List<PackageManagerItem> list, ref Vector2 scroll, ref int lastIdx, float paneWidth)
+        void DrawLabelWithEllipsis(Rect rect, string text, GUIStyle style, string tooltip, ref float lastWidth, ref GUIContent cachedContent)
         {
-            GUILayout.BeginVertical(m_StyleSection, GUILayout.ExpandHeight(true));
+            if (string.IsNullOrEmpty(text)) return;
+
+            if (cachedContent == null || Math.Abs(lastWidth - rect.width) > 0.1f)
+            {
+                lastWidth = rect.width;
+                GUIContent content = new GUIContent(text, tooltip);
+                
+                // Fast path: fits perfectly
+                if (style.CalcSize(content).x <= rect.width)
+                {
+                    cachedContent = content;
+                }
+                else
+                {
+                    // Truncate with rich text awareness
+                    string truncated = TruncateRichText(text, rect.width, style);
+                    cachedContent = new GUIContent(truncated, tooltip);
+                }
+            }
+            
+            GUI.Label(rect, cachedContent, style);
+        }
+
+        string TruncateRichText(string text, float maxWidth, GUIStyle style)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            
+            GUIContent ellipsis = new GUIContent("...");
+            float ellipsisWidth = style.CalcSize(ellipsis).x;
+            float availableWidth = maxWidth - ellipsisWidth;
+            if (availableWidth <= 0) return "...";
+
+            // Binary search for truncation point
+            int low = 0;
+            int high = text.Length;
+            int best = 0;
+            
+            while (low <= high)
+            {
+                int mid = (low + high) / 2;
+                string sub = CloseRichTextTags(text.Substring(0, mid));
+                
+                if (style.CalcSize(new GUIContent(sub)).x <= availableWidth)
+                {
+                    best = mid;
+                    low = mid + 1;
+                }
+                else
+                {
+                    high = mid - 1;
+                }
+            }
+
+            return CloseRichTextTags(text.Substring(0, best)) + "...";
+        }
+
+        string CloseRichTextTags(string text)
+        {
+            // 1. Check if we cut inside a tag <...
+            int lastLT = text.LastIndexOf('<');
+            int lastGT = text.LastIndexOf('>');
+            if (lastLT > lastGT)
+            {
+                text = text.Substring(0, lastLT);
+            }
+
+            // 2. Count unclosed <color> tags (the only ones we use in VPB)
+            int colorOpen = 0;
+            int pos = 0;
+            while (true)
+            {
+                int nextOpen = text.IndexOf("<color", pos, StringComparison.OrdinalIgnoreCase);
+                int nextClose = text.IndexOf("</color>", pos, StringComparison.OrdinalIgnoreCase);
+
+                if (nextOpen != -1 && (nextClose == -1 || nextOpen < nextClose))
+                {
+                    colorOpen++;
+                    pos = nextOpen + 6;
+                }
+                else if (nextClose != -1)
+                {
+                    colorOpen--;
+                    pos = nextClose + 8;
+                }
+                else break;
+            }
+
+            for (int i = 0; i < colorOpen; i++) text += "</color>";
+            return text;
+        }
+
+        void DrawPackageManagerPane(System.Collections.Generic.List<PackageManagerItem> list, ref Vector2 scroll, ref int lastIdx, float paneWidth, float paneHeight, ref int firstVisible, ref int lastVisible)
+        {
+            GUILayout.BeginVertical(m_StyleSection, GUILayout.Height(paneHeight));
             
             // Local Headers
-            float nameWidth = paneWidth - 100 - 80 - 65 - 40; // Subtract other columns + buffer
+            float col1Width = 110;
+            float col3Width = 60;
+            float col4Width = 65;
+            float col2Width = paneWidth - col1Width - col3Width - col4Width - 50; // Total minus other cols and padding/scrollbar
+            
             GUILayout.BeginHorizontal();
-            DrawPackageManagerHeader("Category", "Category", 100);
-            DrawPackageManagerHeader("Name", "Name", nameWidth);
-            DrawPackageManagerHeader("Dep", "Deps", 80);
-            //DrawPackageManagerHeader("Age", "Age", 60);
-            DrawPackageManagerHeader("Size", "Size", 65);
+            DrawPackageManagerHeader("Category", "Category", "Sort by Category/Type", col1Width);
+            DrawPackageManagerHeader("Name", "Name", "Sort by Package Name", col2Width);
+            DrawPackageManagerHeader("Dep", "Deps", "Sort by Dependency Status", col3Width);
+            DrawPackageManagerHeader("Size", "Size", "Sort by File Size", col4Width);
             GUILayout.EndHorizontal();
 
-            scroll = GUILayout.BeginScrollView(scroll);
+            scroll = GUILayout.BeginScrollView(scroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar, GUI.skin.box, GUILayout.Height(Mathf.Max(10f, paneHeight - 35)));
+
+            // Manual Scroll Wheel Handling for Table Scrolling
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                if (new Rect(0, 0, paneWidth, paneHeight).Contains(Event.current.mousePosition))
+                {
+                    scroll.y += Event.current.delta.y * 20;
+                    scroll.y = Mathf.Max(0, scroll.y); 
+                    Event.current.Use();
+                }
+            }
             
-            System.Collections.Generic.List<int> visibleIndices = (list == m_AddonList) ? m_AddonVisibleIndices : m_AllVisibleIndices;
+            System.Collections.Generic.List<PackageManagerVisibleRow> visibleRows = (list == m_AddonList) ? m_AddonVisibleRows : m_AllVisibleRows;
+            float rowHeight = 22;
+
+            // Keyboard Navigation
+            int direction = 0;
+            if (Event.current.type == EventType.KeyDown)
+            {
+                if (Event.current.keyCode == KeyCode.UpArrow) direction = -1;
+                else if (Event.current.keyCode == KeyCode.DownArrow) direction = 1;
+            }
+
+            if (direction != 0)
+            {
+                int currentRowIdx = -1;
+                if (lastIdx != -1)
+                {
+                    for (int k = 0; k < visibleRows.Count; k++) { if (visibleRows[k].Index == lastIdx) { currentRowIdx = k; break; } }
+                }
+
+                int nextRowIdx = currentRowIdx + direction;
+                while (nextRowIdx >= 0 && nextRowIdx < visibleRows.Count)
+                {
+                    if (visibleRows[nextRowIdx].Index != -1)
+                    {
+                        int newIdx = visibleRows[nextRowIdx].Index;
+                        var newItem = list[newIdx];
+                        foreach (var it in list) it.Checked = false;
+                        newItem.Checked = true;
+                        lastIdx = newIdx;
+                        OnPackageManagerItemSelected(newItem, list == m_AddonList);
+                        
+                        // Scroll into view
+                        float targetY = nextRowIdx * rowHeight;
+                        if (targetY < scroll.y) scroll.y = targetY;
+                        else if (targetY + rowHeight > scroll.y + paneHeight - 35) scroll.y = targetY - (paneHeight - 35) + rowHeight;
+                        
+                        Event.current.Use();
+                        break;
+                    }
+                    nextRowIdx += direction;
+                }
+            }
 
             if (Event.current.type == EventType.MouseUp) m_PkgMgrIsDragging = false;
 
-            float rowHeight = 24;
-            int firstVisible = Mathf.Max(0, (int)(scroll.y / rowHeight));
-            int lastVisible = Mathf.Min(visibleIndices.Count - 1, (int)((scroll.y + 800) / rowHeight));
+            if (Event.current.type == EventType.Layout)
+            {
+                firstVisible = Mathf.Max(0, (int)(scroll.y / rowHeight));
+                lastVisible = Mathf.Min(visibleRows.Count - 1, (int)((scroll.y + paneHeight) / rowHeight));
+            }
 
             GUILayout.Space(firstVisible * rowHeight);
 
             for (int j = firstVisible; j <= lastVisible; j++)
             {
-                int i = visibleIndices[j];
+                if (j >= visibleRows.Count) break; // Safety
+                var row = visibleRows[j];
+                Rect rowRect = new Rect(0, j * rowHeight, paneWidth - 25, rowHeight);
+                GUILayoutUtility.GetRect(paneWidth - 25, rowHeight);
+
+                if (row.Index == -1)
+                {
+                    if (Event.current.type == EventType.Repaint)
+                    {
+                        // Subtle header background
+                        var headerCol = new Color(1f, 1f, 1f, 0.1f);
+                        var prevCol = GUI.color;
+                        GUI.color = headerCol;
+                        GUI.DrawTexture(rowRect, Texture2D.whiteTexture);
+                        GUI.color = prevCol;
+                        GUI.Label(new Rect(rowRect.x + 5, rowRect.y, rowRect.width, rowRect.height), row.Header, m_StyleSubHeader);
+                    }
+                    continue;
+                }
+
+                int i = row.Index;
                 var item = list[i];
-                
-                Rect rowRect = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, GUILayout.ExpandWidth(true), GUILayout.Height(rowHeight));
                 
                 // Selection Logic
                 if (Event.current.type == EventType.MouseDown && rowRect.Contains(Event.current.mousePosition))
                 {
                     if (Event.current.button == 1) // Right click
                     {
+                        if (!item.Checked)
+                        {
+                            // If not already checked, select only this one
+                            foreach (var it in list) it.Checked = false;
+                            item.Checked = true;
+                            lastIdx = i;
+                        }
+                        OnPackageManagerItemSelected(item, list == m_AddonList);
                         ShowPackageManagerContextMenu(item);
                         Event.current.Use();
                     }
                     else if (Event.current.shift && lastIdx != -1)
                     {
-                        int startVisible = -1;
-                        for (int k = 0; k < visibleIndices.Count; k++) { if (visibleIndices[k] == lastIdx) { startVisible = k; break; } }
-                        if (startVisible != -1)
+                        int startRowIdx = -1;
+                        for (int k = 0; k < visibleRows.Count; k++) { if (visibleRows[k].Index == lastIdx) { startRowIdx = k; break; } }
+                        if (startRowIdx != -1)
                         {
-                            int min = Math.Min(startVisible, j);
-                            int max = Math.Max(startVisible, j);
+                            int min = Math.Min(startRowIdx, j);
+                            int max = Math.Max(startRowIdx, j);
                             bool newState = list[lastIdx].Checked;
-                            for (int k = min; k <= max; k++) list[visibleIndices[k]].Checked = newState;
+                            for (int k = min; k <= max; k++) {
+                                if (visibleRows[k].Index != -1) list[visibleRows[k].Index].Checked = newState;
+                            }
+                            HidePackageManagerContextMenu();
                         }
-                        else item.Checked = !item.Checked;
+                        else { item.Checked = !item.Checked; HidePackageManagerContextMenu(); }
                         lastIdx = i;
                     }
-                    else if (Event.current.control) { item.Checked = !item.Checked; lastIdx = i; }
+                    else if (Event.current.control) { item.Checked = !item.Checked; lastIdx = i; HidePackageManagerContextMenu(); }
                     else
                     {
                         // Single selection mode: clear others in this list
@@ -3199,9 +3804,11 @@ namespace VPB
                         foreach (var it in list) it.Checked = false;
                         item.Checked = !wasChecked;
                         lastIdx = i;
+                        OnPackageManagerItemSelected(item, list == m_AddonList);
                         m_PkgMgrIsDragging = true;
                         m_PkgMgrDragChecked = item.Checked;
                         m_PkgMgrDragLastIdx = j;
+                        HidePackageManagerContextMenu();
                     }
                     Event.current.Use();
                 }
@@ -3213,11 +3820,12 @@ namespace VPB
                         int max = Math.Max(m_PkgMgrDragLastIdx, j);
                         for (int k = min; k <= max; k++)
                         {
-                            int idx = visibleIndices[k];
-                            list[idx].Checked = m_PkgMgrDragChecked;
+                            int idx = visibleRows[k].Index;
+                            if (idx != -1) list[idx].Checked = m_PkgMgrDragChecked;
                         }
                         lastIdx = i;
                         m_PkgMgrDragLastIdx = j;
+                        HidePackageManagerContextMenu();
                     }
                     Event.current.Use();
                 }
@@ -3248,46 +3856,215 @@ namespace VPB
                 var prevContentColor = GUI.contentColor;
                 if (item.Locked) GUI.contentColor = new Color(0.7f, 0.7f, 0.7f, 0.8f);
 
-                float x = rowRect.x + 5;
-                string statusPrefix = (item.Locked ? "L " : "") + (item.IsActive ? "A " : "") + (!item.IsLatest ? "O " : "");
+                float x = rowRect.x + 2;
                 
                 // Truncate Type/Category and Name with ellipsis if they don't fit
-                DrawLabelWithEllipsis(new Rect(x, rowRect.y, 100, rowRect.height), item.Type, m_StylePkgMgrRow, item.Path);
-                x += 105;
-                DrawLabelWithEllipsis(new Rect(x, rowRect.y, rowRect.width - 275, rowRect.height), statusPrefix + item.Uid, m_StylePkgMgrRow, item.Path);
+                DrawLabelWithEllipsis(new Rect(x, rowRect.y, col1Width, rowRect.height), item.Type, m_StylePkgMgrRow, item.Path, ref item.LastTypeWidth, ref item.TruncatedTypeContent);
+                x += col1Width + 4;
+                DrawLabelWithEllipsis(new Rect(x, rowRect.y, col2Width, rowRect.height), item.NameContent.text, m_StylePkgMgrRow, item.NameContent.tooltip, ref item.LastWidth, ref item.TruncatedNameContent);
 
-                x = rowRect.xMax - 150;
-                GUI.Label(new Rect(x, rowRect.y, 80, rowRect.height), string.Format("{0} ({1})", item.DependencyCount, item.LoadedDependencyCount), m_StylePkgMgrRowCentered);
+                x += col2Width + 4;
+                GUI.Label(new Rect(x, rowRect.y, col3Width, rowRect.height), item.DepContent, m_StylePkgMgrRowCentered);
                 
-                x = rowRect.xMax - 70;
-                GUI.Label(new Rect(x, rowRect.y, 65, rowRect.height), FormatSize(item.Size), m_StylePkgMgrRowCentered);
+                x += col3Width + 4;
+                GUI.Label(new Rect(x, rowRect.y, col4Width, rowRect.height), item.SizeContent, m_StylePkgMgrRowCentered);
 
                 GUI.contentColor = prevContentColor;
             }
 
-            GUILayout.Space(Mathf.Max(0, (visibleIndices.Count - 1 - lastVisible) * rowHeight));
+            // Move the spacer to the end of the scroll view
+            GUILayout.Space(Mathf.Max(0, (visibleRows.Count - 1 - lastVisible) * rowHeight));
 
             GUILayout.EndScrollView();
             GUILayout.EndVertical();
         }
 
+        void DrawPackageManagerPreview(float width, float height)
+        {
+            GUILayout.BeginVertical(m_StyleSection, GUILayout.Width(width), GUILayout.Height(height));
+            
+            if (m_PkgMgrSelectedItem == null)
+            {
+                GUILayout.Label("Select a package to see details", m_StyleInfoCardText);
+                GUILayout.EndVertical();
+                return;
+            }
+
+            // 1x1 Image Preview
+            float imgSize = width - 10;
+            Rect imgRect = GUILayoutUtility.GetRect(imgSize, imgSize);
+
+            // Row Selection Cycling when hovering over Image
+            float rowCycleDelta = 0;
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                if (imgRect.Contains(Event.current.mousePosition)) rowCycleDelta = Event.current.delta.y;
+            }
+            else if (Input.mouseScrollDelta.y != 0)
+            {
+                if (imgRect.Contains(Event.current.mousePosition)) rowCycleDelta = -Input.mouseScrollDelta.y;
+            }
+
+            if (rowCycleDelta != 0)
+            {
+                int direction = (rowCycleDelta > 0) ? 1 : -1;
+                System.Collections.Generic.List<PackageManagerItem> list = m_PkgMgrSelectedInLoaded ? m_AddonList : m_AllList;
+                System.Collections.Generic.List<PackageManagerVisibleRow> visibleRows = m_PkgMgrSelectedInLoaded ? m_AddonVisibleRows : m_AllVisibleRows;
+                ref Vector2 scroll = ref (m_PkgMgrSelectedInLoaded ? ref m_AddonScroll : ref m_AllScroll);
+                ref int lastIdx = ref (m_PkgMgrSelectedInLoaded ? ref m_AddonLastSelectedIndex : ref m_AllLastSelectedIndex);
+                float paneHeight = m_PkgMgrSelectedInLoaded ? (m_PkgMgrTopHeight) : (m_PackageManagerWindowRect.height - m_PkgMgrTopHeight - 150); // rough estimate of pane height for scroll-into-view
+                float rowHeight = 22;
+
+                int currentRowIdx = -1;
+                if (lastIdx != -1)
+                {
+                    for (int k = 0; k < visibleRows.Count; k++) { if (visibleRows[k].Index == lastIdx) { currentRowIdx = k; break; } }
+                }
+
+                int nextRowIdx = currentRowIdx + direction;
+                while (nextRowIdx >= 0 && nextRowIdx < visibleRows.Count)
+                {
+                    if (visibleRows[nextRowIdx].Index != -1)
+                    {
+                        int newIdx = visibleRows[nextRowIdx].Index;
+                        var newItem = list[newIdx];
+                        foreach (var it in list) it.Checked = false;
+                        newItem.Checked = true;
+                        lastIdx = newIdx;
+                        OnPackageManagerItemSelected(newItem, m_PkgMgrSelectedInLoaded);
+                        
+                        // Scroll into view
+                        float targetY = nextRowIdx * rowHeight;
+                        if (targetY < scroll.y) scroll.y = targetY;
+                        else if (targetY + rowHeight > scroll.y + paneHeight - 35) scroll.y = targetY - (paneHeight - 35) + rowHeight;
+                        
+                        Event.current.Use();
+                        break;
+                    }
+                    nextRowIdx += direction;
+                }
+            }
+
+            if (m_PkgMgrSelectedThumbnail != null)
+            {
+                GUI.DrawTexture(imgRect, m_PkgMgrSelectedThumbnail, ScaleMode.ScaleToFit);
+            }
+            else
+            {
+                GUI.Box(imgRect, "No Preview", m_StyleSection);
+            }
+
+            GUILayout.Space(10);
+
+            // Tabs
+            m_PkgMgrSelectedTab = GUILayout.SelectionGrid(m_PkgMgrSelectedTab, m_PkgMgrTabs, 2, m_StyleButtonSmall);
+
+            GUILayout.Space(5);
+            
+            float previewScrollHeight = height - imgSize - 75; // Room for image, space, tabs, space and section padding
+
+            // Manual Scroll Wheel Handling for Info Pane
+            float infoScrollDelta = 0;
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                // check if mouse is over the info area
+                if (new Rect(0, imgSize + 50, width, previewScrollHeight).Contains(Event.current.mousePosition))
+                {
+                    infoScrollDelta = Event.current.delta.y;
+                }
+            }
+            else if (Input.mouseScrollDelta.y != 0)
+            {
+                // Input.mouseScrollDelta is global, so we still need a hover check
+                // We'll use the same rect
+                if (new Rect(0, imgSize + 50, width, previewScrollHeight).Contains(Event.current.mousePosition))
+                {
+                    infoScrollDelta = -Input.mouseScrollDelta.y;
+                }
+            }
+
+            if (infoScrollDelta != 0)
+            {
+                m_PkgMgrInfoScroll.y += infoScrollDelta * 20;
+                m_PkgMgrInfoScroll.y = Mathf.Max(0, m_PkgMgrInfoScroll.y); 
+                Event.current.Use();
+            }
+
+            m_PkgMgrInfoScroll = GUILayout.BeginScrollView(m_PkgMgrInfoScroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar, GUI.skin.box, GUILayout.Width(width - 20), GUILayout.Height(previewScrollHeight));
+            if (m_PkgMgrSelectedTab == 0) // Info
+            {
+                GUILayout.Label("<b>Description:</b>", m_StyleInfoCardTextWrapped);
+                GUILayout.Label(string.IsNullOrEmpty(m_PkgMgrSelectedDescription) ? "No description available." : m_PkgMgrSelectedDescription, m_StyleInfoCardTextWrapped);
+            }
+            else if (m_PkgMgrSelectedTab == 1) // Deps
+            {
+                GUILayout.Label("<b>Dependencies:</b>", m_StyleInfoCardTextWrapped);
+                if (m_PkgMgrSelectedItem.MissingDependencies != null && m_PkgMgrSelectedItem.MissingDependencies.Count > 0)
+                {
+                    GUILayout.Label("<color=red>Missing:</color>", m_StyleInfoCardTextWrapped);
+                    foreach (var dep in m_PkgMgrSelectedItem.MissingDependencies)
+                    {
+                        GUILayout.Label("- " + dep, m_StyleInfoCardTextWrapped);
+                    }
+                }
+                
+                VarPackage pkg = FileManager.GetPackage(m_PkgMgrSelectedItem.Uid, false);
+                if (pkg != null)
+                {
+                    var deps = pkg.RecursivePackageDependencies;
+                    if (deps != null && deps.Count > 0)
+                    {
+                        GUILayout.Label("<color=green>All Dependencies:</color>", m_StyleInfoCardTextWrapped);
+                        foreach (var dep in deps)
+                        {
+                            GUILayout.Label("- " + dep, m_StyleInfoCardTextWrapped);
+                        }
+                    }
+                    else
+                    {
+                        GUILayout.Label("No dependencies.", m_StyleInfoCardTextWrapped);
+                    }
+                }
+            }
+            GUILayout.EndScrollView();
+
+            GUILayout.EndVertical();
+        }
+
         void PerformMove(System.Collections.Generic.List<PackageManagerItem> sourceList, bool isMovingToAll)
         {
+            HashSet<string> toMoveUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in sourceList)
             {
-                if (item.Locked) continue; // Skip locked items
-                if (!item.Checked) continue;
+                if (item.Checked && !item.Locked)
+                {
+                    toMoveUids.Add(item.Uid);
+                    if (!isMovingToAll && Settings.Instance.LoadDependenciesWithPackage.Value)
+                    {
+                        ProtectPackage(item.Uid, toMoveUids);
+                    }
+                }
+            }
 
-                string targetPath;
-                if (isMovingToAll) targetPath = "AllPackages" + item.Path.Substring("AddonPackages".Length);
-                else targetPath = "AddonPackages" + item.Path.Substring("AllPackages".Length);
+            string fromPrefix = isMovingToAll ? "AddonPackages" : "AllPackages";
+            string toPrefix = isMovingToAll ? "AllPackages" : "AddonPackages";
+            var fromList = isMovingToAll ? m_AddonList : m_AllList;
 
-                string dir = Path.GetDirectoryName(targetPath);
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                if (File.Exists(targetPath)) continue;
+            foreach (var item in fromList)
+            {
+                if (toMoveUids.Contains(item.Uid))
+                {
+                    if (item.Locked) continue;
+                    if (!item.Path.StartsWith(fromPrefix, StringComparison.OrdinalIgnoreCase)) continue;
 
-                try { File.Move(item.Path, targetPath); }
-                catch (Exception ex) { LogUtil.LogError("Failed to move " + item.Path + ": " + ex.Message); }
+                    string targetPath = toPrefix + item.Path.Substring(fromPrefix.Length);
+                    string dir = Path.GetDirectoryName(targetPath);
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    if (File.Exists(targetPath)) continue;
+
+                    try { File.Move(item.Path, targetPath); }
+                    catch (Exception ex) { LogUtil.LogError("Failed to move " + item.Path + ": " + ex.Message); }
+                }
             }
             Refresh();
             RemoveEmptyFolder("AddonPackages");
@@ -3299,7 +4076,7 @@ namespace VPB
         {
             HashSet<string> keepUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // 1. Add explicitly selected items and their recursive dependencies
+            // 1. Add explicitly selected items (from both lists) and their recursive dependencies
             foreach (var item in m_AddonList)
             {
                 if (item.Checked)
@@ -3324,8 +4101,10 @@ namespace VPB
                 }
             }
 
+            int movedToAll = 0;
+            int movedToAddon = 0;
+
             // 3. Unload everything in AddonPackages that is NOT in keepUids
-            int moveCount = 0;
             foreach (var item in m_AddonList)
             {
                 if (item.Locked) continue;
@@ -3340,14 +4119,34 @@ namespace VPB
                 try 
                 { 
                     File.Move(item.Path, targetPath); 
-                    moveCount++;
+                    movedToAll++;
                 }
                 catch (Exception ex) { LogUtil.LogError("Failed to move " + item.Path + ": " + ex.Message); }
             }
 
-            if (moveCount > 0)
+            // 4. Load everything in AllPackages that IS in keepUids
+            foreach (var item in m_AllList)
             {
-                m_PkgMgrStatusMessage = string.Format("Unloaded {0} packages (kept selected + active + deps).", moveCount);
+                if (item.Locked) continue;
+                if (!keepUids.Contains(item.Uid)) continue;
+
+                // Move to AddonPackages
+                string targetPath = "AddonPackages" + item.Path.Substring("AllPackages".Length);
+                string dir = Path.GetDirectoryName(targetPath);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                if (File.Exists(targetPath)) continue;
+
+                try 
+                { 
+                    File.Move(item.Path, targetPath); 
+                    movedToAddon++;
+                }
+                catch (Exception ex) { LogUtil.LogError("Failed to move " + item.Path + ": " + ex.Message); }
+            }
+
+            if (movedToAll > 0 || movedToAddon > 0)
+            {
+                m_PkgMgrStatusMessage = string.Format("Isolate complete: Kept {0} (Loaded {1}, Unloaded {2}).", keepUids.Count, movedToAddon, movedToAll);
                 m_PkgMgrStatusTimer = Time.realtimeSinceStartup + 4f;
                 Refresh();
                 RemoveEmptyFolder("AddonPackages");
@@ -3356,7 +4155,7 @@ namespace VPB
             }
             else
             {
-                m_PkgMgrStatusMessage = "No additional packages to unload.";
+                m_PkgMgrStatusMessage = "No changes needed.";
                 m_PkgMgrStatusTimer = Time.realtimeSinceStartup + 3f;
             }
         }
@@ -3410,6 +4209,7 @@ namespace VPB
             m_PkgMgrCategories.Add("All");
             m_PkgMgrCategories.Add("Active");
             m_PkgMgrCategories.Add("Locked (L)");
+            m_PkgMgrCategories.Add("Auto-Load (AL)");
             m_PkgMgrCategories.Add("Latest");
             m_PkgMgrCategories.Add("Old Version");
 
@@ -3417,8 +4217,12 @@ namespace VPB
             m_PkgMgrCategoryCounts["All"] = 0;
             m_PkgMgrCategoryCounts["Active"] = 0;
             m_PkgMgrCategoryCounts["Locked (L)"] = 0;
+            m_PkgMgrCategoryCounts["Auto-Load (AL)"] = 0;
             m_PkgMgrCategoryCounts["Latest"] = 0;
             m_PkgMgrCategoryCounts["Old Version"] = 0;
+
+            m_LockedPackages = LockedPackagesManager.Instance.GetLockedPackages();
+            m_AutoLoadPackages = AutoLoadPackagesManager.Instance.GetAutoLoadPackages();
 
             System.Collections.Generic.HashSet<string> latestUids = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var groups = FileManager.GetPackageGroups();
@@ -3445,7 +4249,30 @@ namespace VPB
             m_PkgMgrCategories.AddRange(sortedTypes);
             
             SortPackageManagerList();
+            UpdatePkgMgrHighlights();
             m_PkgMgrIndicesDirty = true;
+        }
+
+        private void UpdatePkgMgrHighlights()
+        {
+            foreach (var item in m_AddonList) UpdatePkgMgrItemCache(item);
+            foreach (var item in m_AllList) UpdatePkgMgrItemCache(item);
+        }
+
+        private void UpdatePkgMgrItemCache(PackageManagerItem item)
+        {
+            string highlighted = HighlightSearchText(item.Uid, m_PkgMgrFilter);
+            item.HighlightedUid = highlighted;
+            string label = item.StatusPrefix + highlighted;
+            if (item.AutoLoad) label = "<color=#add8e6>" + label + "</color>";
+            item.NameContent = new GUIContent(label, item.Path);
+            
+            string depTooltip = "";
+            if (item.MissingDependencies != null && item.MissingDependencies.Count > 0)
+            {
+                depTooltip = "Missing:\n" + string.Join("\n", item.MissingDependencies.ToArray());
+            }
+            item.DepContent = new GUIContent(string.Format("{0} ({1})", item.DependencyCount, item.LoadedDependencyCount), depTooltip);
         }
 
         private string FormatSize(long bytes)
@@ -3467,6 +4294,118 @@ namespace VPB
             return (int)(span.TotalDays / 365) + "y";
         }
 
+        private void OnPackageManagerItemSelected(PackageManagerItem item, bool isLoaded)
+        {
+            if (item != null && item.Checked)
+            {
+                if (isLoaded)
+                {
+                    foreach (var it in m_AllList) it.Checked = false;
+                }
+                else
+                {
+                    foreach (var it in m_AddonList) it.Checked = false;
+                }
+            }
+
+            m_PkgMgrSelectedInLoaded = isLoaded;
+            if (m_PkgMgrSelectedItem == item) return;
+            m_PkgMgrSelectedItem = item;
+            m_PkgMgrSelectedDescription = "";
+            m_PkgMgrSelectedThumbnail = null;
+            m_PkgMgrLastThumbnailPath = "";
+            m_PkgMgrInfoScroll = Vector2.zero;
+
+            if (item == null) return;
+
+            // Load Metadata
+            VarPackage pkg = FileManager.GetPackage(item.Uid, false);
+            if (pkg != null)
+            {
+                m_PkgMgrSelectedDescription = pkg.Description;
+            }
+
+            // Load Thumbnail
+            string imgPath = "";
+            
+            // 1. Check for scene-specific previews
+            string scenePath = GetFirstScenePath(item.Uid);
+            if (!string.IsNullOrEmpty(scenePath))
+            {
+                string sceneImg = Path.ChangeExtension(scenePath, ".jpg");
+                if (FileManager.FileExists(sceneImg)) imgPath = sceneImg;
+                else
+                {
+                    sceneImg = Path.ChangeExtension(scenePath, ".png");
+                    if (FileManager.FileExists(sceneImg)) imgPath = sceneImg;
+                }
+            }
+
+            // 2. Check for sidecars
+            if (string.IsNullOrEmpty(imgPath))
+            {
+                string testJpg = Path.ChangeExtension(item.Path, ".jpg");
+                if (FileManager.FileExists(testJpg)) imgPath = testJpg;
+                else
+                {
+                    string testPng = Path.ChangeExtension(item.Path, ".png");
+                    if (FileManager.FileExists(testPng)) imgPath = testPng;
+                }
+            }
+
+            // 3. Dynamic detection: find first image in package
+            if (string.IsNullOrEmpty(imgPath))
+            {
+                if (pkg != null && pkg.FileEntries != null)
+                {
+                    foreach (var entry in pkg.FileEntries)
+                    {
+                        string internalPath = entry.InternalPath.ToLowerInvariant();
+                        if (internalPath.EndsWith(".jpg") || internalPath.EndsWith(".png") || internalPath.EndsWith(".jpeg"))
+                        {
+                            imgPath = item.Uid + ":/" + entry.InternalPath;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(imgPath))
+            {
+                m_PkgMgrLastThumbnailPath = imgPath;
+                if (CustomImageLoaderThreaded.singleton != null)
+                {
+                    Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath);
+                    if (tex != null)
+                    {
+                        m_PkgMgrSelectedThumbnail = tex;
+                    }
+                    else
+                    {
+                        CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
+                        qi.imgPath = imgPath;
+                        qi.isThumbnail = true;
+                        qi.priority = 1;
+                        qi.callback = (res) => {
+                            if (res != null && res.tex != null && m_PkgMgrLastThumbnailPath == res.imgPath)
+                            {
+                                m_PkgMgrSelectedThumbnail = res.tex;
+                                
+                                if (!res.loadedFromGalleryCache)
+                                {
+                                    long writeTime = item.LastWriteTime.ToFileTime();
+                                    FileEntry fe = FileManager.GetFileEntry(res.imgPath);
+                                    if (fe != null) writeTime = fe.LastWriteTime.ToFileTime();
+                                    StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(res.imgPath, res.tex, writeTime));
+                                }
+                            }
+                        };
+                        CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
+                    }
+                }
+            }
+        }
+
         private void ScanDirectory(string path, System.Collections.Generic.List<PackageManagerItem> list, System.Collections.Generic.HashSet<string> protectedPackages, System.Collections.Generic.HashSet<string> types, System.Collections.Generic.HashSet<string> latestUids)
         {
             if (!Directory.Exists(path)) Directory.CreateDirectory(path);
@@ -3486,12 +4425,14 @@ namespace VPB
                 bool isProtected = protectedPackages.Contains(name);
                 string type = DeterminePackageType(name);
                 bool isLocked = m_LockedPackages.Contains(name);
+                bool isAutoLoad = m_AutoLoadPackages.Contains(name);
                 bool isLatest = latestUids.Contains(name);
                 DateTime lwt = file.CreationTime;
 
                 var deepDeps = FileManager.GetDependenciesDeep(name, 2);
                 int depCount = deepDeps.Count;
                 int loadedDepCount = 0;
+                List<string> missingDeps = new List<string>();
                 foreach (var dep in deepDeps)
                 {
                     var resolved = FileManager.ResolveDependency(dep);
@@ -3500,10 +4441,15 @@ namespace VPB
                     {
                         loadedDepCount++;
                     }
+                    else
+                    {
+                        missingDeps.Add(dep);
+                    }
                 }
 
                 list.Add(new PackageManagerItem {
                     Uid = name,
+                    Creator = PackageIDToCreator(name),
                     Path = relativePath,
                     Type = type,
                     Size = file.Length,
@@ -3511,10 +4457,16 @@ namespace VPB
                     AgeString = FormatAge(lwt, now),
                     DependencyCount = depCount,
                     LoadedDependencyCount = loadedDepCount,
+                    MissingDependencies = missingDeps,
+                    StatusPrefix = (isLocked ? "(L) " : "") + (isAutoLoad ? "(AL) " : "") + (isProtected ? "(A) " : "") + (!isLatest ? "(O) " : ""),
+                    TypeContent = new GUIContent(type, relativePath),
+                    SizeContent = new GUIContent(FormatSize(file.Length), file.Length.ToString("N0") + " bytes"),
                     Checked = false,
                     IsActive = isProtected,
                     Locked = isLocked,
-                    IsLatest = isLatest
+                    AutoLoad = isAutoLoad,
+                    IsLatest = isLatest,
+                    GroupId = FileManager.PackageIDToPackageGroupID(name)
                 });
 
                 if (!string.IsNullOrEmpty(type)) 
@@ -3527,6 +4479,7 @@ namespace VPB
                 m_PkgMgrCategoryCounts["All"]++;
                 if (isProtected) m_PkgMgrCategoryCounts["Active"]++;
                 if (isLocked) m_PkgMgrCategoryCounts["Locked (L)"]++;
+                if (isAutoLoad) m_PkgMgrCategoryCounts["Auto-Load (AL)"]++;
                 if (isLatest) m_PkgMgrCategoryCounts["Latest"]++;
                 else m_PkgMgrCategoryCounts["Old Version"]++;
             }
@@ -3538,12 +4491,18 @@ namespace VPB
                 int result = 0;
                 switch (m_PkgMgrSortField)
                 {
+                    case "Creator": result = string.Compare(a.Creator, b.Creator, StringComparison.OrdinalIgnoreCase); break;
                     case "Category": result = string.Compare(a.Type, b.Type, StringComparison.OrdinalIgnoreCase); break;
                     case "Name": result = string.Compare(a.Uid, b.Uid, StringComparison.OrdinalIgnoreCase); break;
                     case "Path": result = string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase); break;
                     case "Size": result = a.Size.CompareTo(b.Size); break;
                     case "Age": result = a.LastWriteTime.CompareTo(b.LastWriteTime); break;
                     case "Deps": result = a.DependencyCount.CompareTo(b.DependencyCount); break;
+                }
+                
+                if (result == 0 && m_PkgMgrSortField != "Name")
+                {
+                    result = string.Compare(a.Uid, b.Uid, StringComparison.OrdinalIgnoreCase);
                 }
                 return m_PkgMgrSortAscending ? result : -result;
             };
@@ -3601,7 +4560,7 @@ namespace VPB
             GUI.Label(new Rect(15, 12, m_SpaceSaverWindowRect.width - 60, 25), "Optimize Cache (Zstd)", m_StyleHeader);
 
             // Block game input when interacting with the window
-            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp || Event.current.type == EventType.ScrollWheel || Event.current.type == EventType.MouseMove)
+            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp || Event.current.type == EventType.MouseMove)
             {
                 Input.ResetInputAxes();
             }
@@ -3964,7 +4923,7 @@ namespace VPB
 
         void DrawRemoveWindow(int windowID)
         {
-            if (Event.current.type == EventType.ScrollWheel)
+            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
             {
                 Input.ResetInputAxes();
             }
@@ -4015,7 +4974,33 @@ namespace VPB
             GUILayout.Label("Path/Info", m_StyleInfoCardTitle);
             GUILayout.EndHorizontal();
 
-            m_RemoveScroll = GUILayout.BeginScrollView(m_RemoveScroll);
+            // Manual Scroll Wheel Handling for Remove Window
+            float removeScrollDelta = 0;
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                // Remove window is usually around 800x600, let's just check if it's within its area
+                // Since this is inside DrawRemoveWindow, (0,0) is top left of area
+                if (new Rect(0, 0, 1000, 1000).Contains(Event.current.mousePosition))
+                {
+                    removeScrollDelta = Event.current.delta.y;
+                }
+            }
+            else if (Input.mouseScrollDelta.y != 0)
+            {
+                if (new Rect(0, 0, 1000, 1000).Contains(Event.current.mousePosition))
+                {
+                    removeScrollDelta = -Input.mouseScrollDelta.y;
+                }
+            }
+
+            if (removeScrollDelta != 0)
+            {
+                m_RemoveScroll.y += removeScrollDelta * 20;
+                m_RemoveScroll.y = Mathf.Max(0, m_RemoveScroll.y);
+                Event.current.Use();
+            }
+
+            m_RemoveScroll = GUILayout.BeginScrollView(m_RemoveScroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar, GUI.skin.box);
 
 
             for (int i = 0; i < m_RemoveList.Count; i++)
