@@ -5,6 +5,7 @@ using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using System.Runtime.InteropServices;
@@ -14,14 +15,13 @@ using System.Diagnostics;
 
 namespace VPB
 {
-    
     [System.Serializable]
-	public class SerializableVarPackage
-	{
+    public class SerializableVarPackage
+    {
         public List<string> FileEntryNames;
         public List<string> FileEntryLastWriteTimes;
         public List<long> FileEntrySizes;
-		public List<string> RecursivePackageDependencies;
+        public List<string> RecursivePackageDependencies;
         public long VarFileSize;
         public long VarLastWriteTimeUtcTicks;
 
@@ -247,10 +247,231 @@ namespace VPB
 
 	public class VarPackage
 	{
+		private const int CodePageUtf8 = 65001;
+		private const int CodePageGbk = 936;
+		private const int CodePageSystemDefault = 0;
+
+		private struct ZipNameEncodingCacheItem
+		{
+			public long Size;
+			public long LastWriteTimeUtcTicks;
+			public int CodePage;
+		}
+
+		// ZipConstants.DefaultCodePage is a global static used by SharpZipLib.
+		// VPB scans packages in parallel, so any interaction with DefaultCodePage must be synchronized.
+		private static readonly object ZipDefaultCodePageLock = new object();
+		private static readonly object ZipNameEncodingCacheLock = new object();
+		private static readonly Dictionary<string, ZipNameEncodingCacheItem> ZipNameEncodingCache = new Dictionary<string, ZipNameEncodingCacheItem>(StringComparer.OrdinalIgnoreCase);
+
 		static long scanTotal;
 		static long scanCacheValidatedHit;
 		static long scanCacheHit;
 		static long scanZip;
+
+		private static int GetZipNameCodePageForVar(string varPath)
+		{
+			if (string.IsNullOrEmpty(varPath))
+			{
+				return CodePageSystemDefault;
+			}
+
+			string cleanPath = varPath.Replace('\\', '/');
+			FileInfo fi;
+			try
+			{
+				fi = new FileInfo(cleanPath);
+			}
+			catch
+			{
+				return CodePageSystemDefault;
+			}
+
+			long size = 0;
+			long ticks = 0;
+			try
+			{
+				if (!fi.Exists) return CodePageSystemDefault;
+				size = fi.Length;
+				ticks = fi.LastWriteTimeUtc.Ticks;
+			}
+			catch
+			{
+				return CodePageSystemDefault;
+			}
+
+			ZipNameEncodingCacheItem cached;
+			lock (ZipNameEncodingCacheLock)
+			{
+				if (ZipNameEncodingCache.TryGetValue(cleanPath, out cached)
+					&& cached.Size == size
+					&& cached.LastWriteTimeUtcTicks == ticks)
+				{
+					return cached.CodePage;
+				}
+			}
+
+			int detected = DetectZipNameCodePage(cleanPath);
+			lock (ZipNameEncodingCacheLock)
+			{
+				ZipNameEncodingCache[cleanPath] = new ZipNameEncodingCacheItem
+				{
+					Size = size,
+					LastWriteTimeUtcTicks = ticks,
+					CodePage = detected
+				};
+			}
+			return detected;
+		}
+
+		private static int DetectZipNameCodePage(string cleanPath)
+		{
+			// Fast path:
+			// Most packages are either correctly UTF-8 flagged or pure ASCII. In those cases,
+			// the system-default decode will look clean and we should not try extra candidates.
+			double sysScore = ScoreZipNames(cleanPath, CodePageSystemDefault);
+			if (sysScore <= 0.5)
+			{
+				return CodePageSystemDefault;
+			}
+
+			// Suspicious decode: compare against UTF-8 and GBK.
+			double utf8Score = ScoreZipNames(cleanPath, CodePageUtf8);
+			double gbkScore = ScoreZipNames(cleanPath, CodePageGbk);
+
+			// Pick the lowest score; tie-break: prefer UTF-8.
+			int best = CodePageSystemDefault;
+			double bestScore = sysScore;
+			if (utf8Score < bestScore || (Math.Abs(utf8Score - bestScore) < 0.0001 && best != CodePageUtf8))
+			{
+				best = CodePageUtf8;
+				bestScore = utf8Score;
+			}
+			if (gbkScore < bestScore)
+			{
+				best = CodePageGbk;
+				bestScore = gbkScore;
+			}
+
+			return best;
+		}
+
+		private static double ScoreZipNames(string cleanPath, int codePage)
+		{
+			// Lower is better.
+			// Heuristic: penalize replacement chars, control chars, suspicious mojibake sequences, and excessive '?'.
+			try
+			{
+				lock (ZipDefaultCodePageLock)
+				{
+					int prev = ZipConstants.DefaultCodePage;
+					try
+					{
+						ZipConstants.DefaultCodePage = codePage;
+						using (FileStream file = File.Open(cleanPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete))
+						using (ZipFile zf = new ZipFile(file))
+						{
+							zf.IsStreamOwner = true;
+							int inspected = 0;
+							double total = 0.0;
+							const int maxInspect = 60;
+							const double earlyExitAvgThreshold = 12.0;
+							foreach (ZipEntry ze in zf)
+							{
+								if (ze == null) continue;
+								string name = ze.Name;
+								total += ScoreNameString(name);
+								inspected++;
+								if (inspected >= maxInspect) break;
+								// Early exit if it is clearly bad.
+								if (inspected >= 10)
+								{
+									double avg = total / inspected;
+									if (avg >= earlyExitAvgThreshold) break;
+								}
+							}
+
+							if (inspected == 0)
+							{
+								// Empty archives aren't typical .var; treat as neutral.
+								return 0.0;
+							}
+							return total / inspected;
+						}
+					}
+					catch
+					{
+						return 1e9;
+					}
+					finally
+					{
+						ZipConstants.DefaultCodePage = prev;
+					}
+				}
+			}
+			catch
+			{
+				return 1e9;
+			}
+		}
+
+		private static double ScoreNameString(string s)
+		{
+			if (string.IsNullOrEmpty(s)) return 0.0;
+
+			int len = s.Length;
+			double score = 0.0;
+			int cjk = 0;
+			int latin1 = 0;
+			int question = 0;
+
+			for (int i = 0; i < len; i++)
+			{
+				char ch = s[i];
+				if (ch == '\uFFFD')
+				{
+					score += 20.0;
+					continue;
+				}
+				if (ch < 32)
+				{
+					score += 10.0;
+					continue;
+				}
+				if (ch == '?')
+				{
+					question++;
+					continue;
+				}
+				if (ch >= 0x4E00 && ch <= 0x9FFF)
+				{
+					cjk++;
+					continue;
+				}
+				if (ch >= 0x00C0 && ch <= 0x00FF)
+				{
+					latin1++;
+					continue;
+				}
+			}
+
+			// Penalize many '?' relative to length.
+			if (question > 0)
+			{
+				score += (question * 2.0);
+			}
+
+			// Mojibake often yields a lot of Latin-1 supplement chars (Ã, Â, etc) while not producing any CJK.
+			if (latin1 > 0 && cjk == 0)
+			{
+				score += latin1 * 1.5;
+				if (s.IndexOf('Ã') >= 0) score += 8.0;
+				if (s.IndexOf('Â') >= 0) score += 6.0;
+				if (s.IndexOf('Ð') >= 0) score += 6.0;
+			}
+
+			return score;
+		}
 
 		public static void ResetScanCounters()
 		{
@@ -363,9 +584,31 @@ namespace VPB
 			{
 				if (m_ZipFile == null)
 				{
-					FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
-					m_ZipFile = new ZipFile(file);
-					m_ZipFile.IsStreamOwner = true;
+					int cp = GetZipNameCodePageForVar(Path);
+					if (cp == CodePageSystemDefault)
+					{
+						FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
+						m_ZipFile = new ZipFile(file);
+						m_ZipFile.IsStreamOwner = true;
+					}
+					else
+					{
+						lock (ZipDefaultCodePageLock)
+						{
+							int prev = ZipConstants.DefaultCodePage;
+							try
+							{
+								ZipConstants.DefaultCodePage = cp;
+								FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
+								m_ZipFile = new ZipFile(file);
+								m_ZipFile.IsStreamOwner = true;
+							}
+							finally
+							{
+								ZipConstants.DefaultCodePage = prev;
+							}
+						}
+					}
 				}
 				return m_ZipFile;
 			}

@@ -25,6 +25,14 @@ namespace VPB
 
         public static FileManager singleton;
 
+        Coroutine m_Co = null;
+        Coroutine m_RefreshCo = null;
+        Coroutine m_StartScanCo = null;
+        bool m_RefreshPending = false;
+        bool m_RefreshPendingInit = false;
+        bool m_RefreshPendingClean = false;
+        bool m_RefreshPendingRemoveOldVersion = false;
+
         protected static Dictionary<string, VarPackage> packagesByUid;
         public static Dictionary<string, VarPackage> PackagesByUid
         {
@@ -490,10 +498,17 @@ namespace VPB
         {
             if (singleton != null)
             {
+                // Coalesce refresh requests.
+                // Refresh triggers a full var enumeration which is expensive on large libraries.
+                // Some UI actions can call Refresh multiple times in short succession; stopping/restarting
+                // the coroutine causes repeated enumerations.
                 if (singleton.m_RefreshCo != null)
                 {
-                    singleton.StopCoroutine(singleton.m_RefreshCo);
-                    singleton.m_RefreshCo = null;
+                    singleton.m_RefreshPending = true;
+                    singleton.m_RefreshPendingInit |= init;
+                    singleton.m_RefreshPendingClean |= clean;
+                    singleton.m_RefreshPendingRemoveOldVersion |= removeOldVersion;
+                    return;
                 }
                 singleton.m_RefreshCo = singleton.StartCoroutine(singleton.RefreshCo(init, clean, removeOldVersion));
             }
@@ -696,57 +711,36 @@ namespace VPB
                 }
             }
             m_RefreshCo = null;
+            if (m_RefreshPending)
+            {
+                bool nextInit = m_RefreshPendingInit;
+                bool nextClean = m_RefreshPendingClean;
+                bool nextRemoveOld = m_RefreshPendingRemoveOldVersion;
+                m_RefreshPending = false;
+                m_RefreshPendingInit = false;
+                m_RefreshPendingClean = false;
+                m_RefreshPendingRemoveOldVersion = false;
+                m_RefreshCo = StartCoroutine(RefreshCo(nextInit, nextClean, nextRemoveOld));
+            }
         }
 
-		static void ScanAndRegister(VarPackage varPackage)
+		public void StartScan(bool init, bool flag, bool clean, bool runCo)
 		{
-			varPackage.Scan();
-            
-			if (varPackage.invalid)
-            {
-				// Remove invalid package later
+			if (m_StartScanCo != null)
+			{
+				StopCoroutine(m_StartScanCo);
+				m_StartScanCo = null;
 			}
-			//else if (varPackage.fixUid)
-			//{
-			//	//UnityEngine.Debug.Log("need fix name1:" + varPackage.Path);
-			//	string dir = Path.GetDirectoryName(varPackage.Path);
-			//	string targetPath = dir + "/" + varPackage.Uid + ".var";
-			//	//UnityEngine.Debug.Log("need fix name2:" + targetPath);
-   //             if (!File.Exists(targetPath))
-   //             {
-   //                 //File.Move(varPackage.Path, targetPath);
-   //                 DoFixVarNameLog("move "+varPackage.Path + " -> " + targetPath);
-   //             }
-   //             else
-			//	{
-			//		//RemoveToInvalid(varPackage.Path);
-   //                 DoFixVarNameLog("remove "+varPackage.Path);
-			//	}
-			//}
-			else
-				RegisterFileEntry(varPackage);
+			m_StartScanCo = StartCoroutine(StartScanCo(init, flag, clean, runCo));
 		}
 
-		static void RegisterFileEntry(VarPackage varPackage)
+		IEnumerator StartScanCo(bool init, bool flag, bool clean, bool runCo)
 		{
-			foreach (VarFileEntry fileEntry in varPackage.FileEntries)
-			{
-				if (!allVarFileEntries.Contains(fileEntry))
-					allVarFileEntries.Add(fileEntry);
-				if (!uidToVarFileEntry.ContainsKey(fileEntry.Uid))
-					uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
-				if (!pathToVarFileEntry.ContainsKey(fileEntry.Path))
-					pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
-			}
-		}
-		Coroutine m_StartScanCo = null;
-		Coroutine m_RefreshCo = null;
-		IEnumerator StartScanCo(bool init,bool flag, bool clean, bool runCo)
-        {
 			Stopwatch swScan = Stopwatch.StartNew();
+			int pkgCount = (packagesByUid != null) ? packagesByUid.Count : 0;
+			LogUtil.Log(string.Format("FileManager StartScan begin runCo={0} packages={1}", runCo ? "True" : "False", pkgCount));
+
 			VarPackage.ResetScanCounters();
-			int scanTotalPackages = packagesByUid != null ? packagesByUid.Count : 0;
-			LogUtil.Log("FileManager StartScan begin runCo=" + runCo + " packages=" + scanTotalPackages);
 			List<VarPackage> invalid = new List<VarPackage>();
 			if (runCo)
 			{
@@ -755,174 +749,115 @@ namespace VPB
 					StopCoroutine(m_Co);
 					m_Co = null;
 				}
-				m_Co = StartCoroutine(ScanVarPackage(clean,invalid));
+				m_Co = StartCoroutine(ScanVarPackagesCo(clean, invalid));
 				yield return m_Co;
 			}
-            else
-            {
-
-				foreach (var item in packagesByUid)
+			else
+			{
+				if (packagesByUid != null)
 				{
-					ScanAndRegister(item.Value);
-					if (item.Value.invalid)
+					foreach (var item in packagesByUid)
 					{
-						invalid.Add(item.Value);
+						VarPackage pkg = item.Value;
+						if (pkg == null) continue;
+						pkg.Scan();
+						if (pkg.invalid)
+						{
+							invalid.Add(pkg);
+						}
 					}
 				}
-				
 			}
-			if (clean)
+
+			if (clean && invalid.Count > 0)
 			{
-				foreach (var item in invalid)
+				foreach (var pkg in invalid)
 				{
-					string path = item.Path;
-					UnregisterPackage(item);
+					string path = pkg.Path;
+					UnregisterPackage(pkg);
 					RemoveToInvalid(path, "InvalidZip");
 				}
 			}
-			long scanTotal;
-			long scanCacheValidatedHit;
-			long scanCacheHit;
-			long scanZip;
-			VarPackage.GetScanCounters(out scanTotal, out scanCacheValidatedHit, out scanCacheHit, out scanZip);
-			swScan.Stop();
-			LogUtil.Log("FileManager StartScan complete in " + swScan.ElapsedMilliseconds + "ms total=" + scanTotal + " cacheValidated=" + scanCacheValidatedHit + " cacheFallback=" + scanCacheHit + " zipScan=" + scanZip + " invalid=" + invalid.Count);
-            if (init)
-            {
-				// If initialization, call refresh handlers regardless of flag
-                if (onRefreshHandlers != null)
-                    onRefreshHandlers();
-            }
-            else
-            {
-                if (flag && onRefreshHandlers != null)
-                    onRefreshHandlers();
-            }
-            // Post refresh message to update UI, favorites, and auto-install settings
-            MessageKit.post(MessageDef.FileManagerRefresh);
-		}
-		public void StartScan(bool init,bool flag,bool clean,bool runCo)
-		{
-			if (m_StartScanCo != null)
+
+			if (init)
 			{
-				StopCoroutine(m_StartScanCo);
-				m_StartScanCo = null;
+				if (onRefreshHandlers != null) onRefreshHandlers();
 			}
-			m_StartScanCo = StartCoroutine(StartScanCo(init,flag, clean, runCo));
+			else
+			{
+				if (flag && onRefreshHandlers != null) onRefreshHandlers();
+			}
+			MessageKit.post(MessageDef.FileManagerRefresh);
+
+			VarPackage.GetScanCounters(out long total, out long cacheValidatedHit, out long cacheHit, out long zipScan);
+			swScan.Stop();
+			LogUtil.Log(string.Format("FileManager StartScan complete in {0}ms total={1} cacheValidated={2} cacheFallback={3} zipScan={4} invalid={5}", swScan.ElapsedMilliseconds, total, cacheValidatedHit, cacheHit, zipScan, invalid.Count));
+			m_StartScanCo = null;
 		}
-		Coroutine m_Co = null;
-		IEnumerator ScanVarPackage(bool clean, List<VarPackage> invalid)
+
+		IEnumerator ScanVarPackagesCo(bool clean, List<VarPackage> invalid)
 		{
-			int allCount = packagesByUid.Count;
+			if (packagesByUid == null) yield break;
+			List<string> list = new List<string>(packagesByUid.Keys);
 			int idx = 0;
-			List<VarPackage> list = new List<VarPackage>(packagesByUid.Values);
-
-            // Parallel Scan Settings
-            int batchSize = 200; 
-            List<string> errors = new List<string>();
-            Stopwatch frameSw = Stopwatch.StartNew();
-
-			for (int i = 0; i < list.Count; i += batchSize)
-            {
-                int count = Math.Min(batchSize, list.Count - i);
-                var batch = list.GetRange(i, count);
-                Stopwatch batchSw = Stopwatch.StartNew();
-                errors.Clear();
-                object errorLock = new object();
-                int pending = count;
-                // ManualResetEvent to wait for all items in batch
-                // Note: In .NET 3.5 we don't have CountdownEvent
-                ManualResetEvent doneEvent = new ManualResetEvent(false);
-
-                // Run Scan in parallel using ThreadPool
-                foreach (var pkg in batch)
-                {
-                    ThreadPool.QueueUserWorkItem((state) => {
-                        VarPackage p = (VarPackage)state;
-                        try {
-                            p.Scan();
-                        } catch (Exception ex) {
-                            lock(errorLock) {
-                                errors.Add("Error scanning " + p.Path + ": " + ex.Message);
-                            }
-                        } finally {
-                            // Decrement pending count, if 0 set event
-                            if (Interlocked.Decrement(ref pending) == 0) {
-                                doneEvent.Set();
-                            }
-                        }
-                    }, pkg);
-                }
-
-                // Wait for batch to complete while keeping Unity main thread responsive
-                // WaitOne(0) checks state without blocking
-                while (!doneEvent.WaitOne(0)) 
-                {
-                    yield return null;
-                    frameSw.Reset();
-                    frameSw.Start();
-                }
-                doneEvent.Close();
-                batchSw.Stop();
-                if (batchSw.ElapsedMilliseconds > 500)
-                {
-                    LogUtil.Log("FileManager Scan batch " + count + " took " + batchSw.ElapsedMilliseconds + "ms");
-                }
-                
-                // Log errors on main thread
-                foreach(var err in errors) LogUtil.LogError(err);
-
-                // Register on Main Thread
-                foreach (var pkg in batch)
-                {
-                    if (pkg.invalid)
-                    {
-                        invalid.Add(pkg);
-                    }
-                    else
-                    {
-                        RegisterFileEntry(pkg);
-                    }
-                }
-
-                idx += count;
+			int allCount = list.Count;
+			int step = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 200 : 20;
+			int cnt = 0;
+			for (int i = 0; i < list.Count; i++)
+			{
+				string uid = list[i];
+				if (packagesByUid.ContainsKey(uid))
+				{
+					VarPackage pkg = packagesByUid[uid];
+					if (pkg != null)
+					{
+						pkg.Scan();
+						if (pkg.invalid)
+						{
+							invalid.Add(pkg);
+						}
+					}
+				}
+				idx++;
 				MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
-
-                // If we've spent more than 16ms in this frame, yield to next frame
-                if (frameSw.ElapsedMilliseconds > 16)
-                {
-                    yield return null;
-                    frameSw.Reset();
-                    frameSw.Start();
-                }
-            }
+				cnt++;
+				if (cnt > step)
+				{
+					yield return null;
+					cnt = 0;
+				}
+			}
 		}
 
 		public List<string> GetAllVars()
-        {
-            List<string> ret = new List<string>();
-            foreach (VarPackage value4 in packagesByUid.Values)
-            {
-                ret.Add(value4.Path);
-            }
-            return ret;
-        }
-		// When removing old packages, check all package references.
-		// Packages with explicit version numbers must be specially recorded;
-		// even if they are old versions, they cannot be deleted.
-		public static HashSet<string> GetReferencedPackage()
-        {
-			HashSet<string> hashSet = new HashSet<string>();
-			foreach (var item in packagesByUid)
+		{
+			List<string> ret = new List<string>();
+			if (packagesByUid != null)
 			{
-				var var = item.Value;
-				if (var.RecursivePackageDependencies != null)
+				foreach (VarPackage value4 in packagesByUid.Values)
 				{
-					foreach (var key in var.RecursivePackageDependencies)
+					if (value4 != null) ret.Add(value4.Path);
+				}
+			}
+			return ret;
+		}
+
+		public static HashSet<string> GetReferencedPackage()
+		{
+			HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			if (packagesByUid != null)
+			{
+				foreach (var item in packagesByUid)
+				{
+					VarPackage vp = item.Value;
+					if (vp != null && vp.RecursivePackageDependencies != null)
 					{
-                        if (!key.EndsWith(".latest"))
-                        {
-							hashSet.Add(key);
+						foreach (var key in vp.RecursivePackageDependencies)
+						{
+							if (key != null && !key.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+							{
+								hashSet.Add(key);
+							}
 						}
 					}
 				}
@@ -932,19 +867,21 @@ namespace VPB
 
 		public List<string> GetMissingDependenciesNames()
 		{
-			HashSet<string> hashSet = new HashSet<string>();
-
-			foreach (var item in packagesByUid)
+			HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			if (packagesByUid != null)
 			{
-				var var = item.Value;
-                if (var.RecursivePackageDependencies != null)
-                {
-					foreach (var key in var.RecursivePackageDependencies)
+				foreach (var item in packagesByUid)
+				{
+					VarPackage vp = item.Value;
+					if (vp != null && vp.RecursivePackageDependencies != null)
 					{
-						VarPackage package = FileManager.GetPackage(key);
-						if (package == null)
+						foreach (var key in vp.RecursivePackageDependencies)
 						{
-							hashSet.Add(key);
+							VarPackage pkg = FileManager.GetPackage(key);
+							if (pkg == null)
+							{
+								hashSet.Add(key);
+							}
 						}
 					}
 				}
@@ -953,384 +890,237 @@ namespace VPB
 			return hashSet.ToList();
 		}
 
-		public static HashSet<string> GetDependenciesDeep(string packageUid, int maxDepth = 2)
-		{
-			HashSet<string> allDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			GetDependenciesDeepInternal(packageUid, allDeps, 0, maxDepth);
-			return allDeps;
-		}
-
-		private static void GetDependenciesDeepInternal(string packageUid, HashSet<string> allDeps, int currentDepth, int maxDepth)
-		{
-			if (currentDepth >= maxDepth) return;
-
-			System.Collections.Generic.List<string> deps = null;
-			VarPackage pkg = GetPackage(packageUid, false);
-			if (pkg != null)
-			{
-				deps = pkg.RecursivePackageDependencies;
-			}
-			else
-			{
-				var cached = VarPackageMgr.singleton.TryGetCache(packageUid);
-				if (cached != null)
-				{
-					deps = cached.RecursivePackageDependencies;
-				}
-			}
-
-			if (deps == null) return;
-
-			foreach (var dep in deps)
-			{
-				// Add to set. If it was already there, we don't need to recurse again from here
-				if (allDeps.Add(dep))
-				{
-					GetDependenciesDeepInternal(dep, allDeps, currentDepth + 1, maxDepth);
-				}
-			}
-		}
-
-
-		public static void RegisterRestrictedReadPath(string path)
-		{
-			if (restrictedReadPaths == null)
-			{
-				restrictedReadPaths = new HashSet<string>();
-			}
-			restrictedReadPaths.Add(Path.GetFullPath(path));
-		}
-
-		public static void RegisterSecureReadPath(string path)
-		{
-			if (secureReadPaths == null)
-			{
-				secureReadPaths = new HashSet<string>();
-			}
-			secureReadPaths.Add(Path.GetFullPath(path));
-		}
-
-		public static void ClearSecureReadPaths()
-		{
-			if (secureReadPaths == null)
-			{
-				secureReadPaths = new HashSet<string>();
-			}
-			else
-			{
-				secureReadPaths.Clear();
-			}
-		}
-
 		public static bool IsSecureReadPath(string path)
 		{
 			return true;
 		}
 
-		public static void ClearSecureWritePaths()
-		{
-			if (secureInternalWritePaths == null)
-			{
-				secureInternalWritePaths = new HashSet<string>();
-			}
-			else
-			{
-				secureInternalWritePaths.Clear();
-			}
-			if (securePluginWritePaths == null)
-			{
-				securePluginWritePaths = new HashSet<string>();
-			}
-			else
-			{
-				securePluginWritePaths.Clear();
-			}
-			if (pluginWritePathsThatDoNotNeedConfirm == null)
-			{
-				pluginWritePathsThatDoNotNeedConfirm = new HashSet<string>();
-			}
-			else
-			{
-				pluginWritePathsThatDoNotNeedConfirm.Clear();
-			}
-		}
-
-		public static void RegisterInternalSecureWritePath(string path)
-		{
-			if (secureInternalWritePaths == null)
-			{
-				secureInternalWritePaths = new HashSet<string>();
-			}
-			secureInternalWritePaths.Add(Path.GetFullPath(path));
-		}
-
-		public static void RegisterPluginSecureWritePath(string path, bool doesNotNeedConfirm)
-		{
-			if (securePluginWritePaths == null)
-			{
-				securePluginWritePaths = new HashSet<string>();
-			}
-			if (pluginWritePathsThatDoNotNeedConfirm == null)
-			{
-				pluginWritePathsThatDoNotNeedConfirm = new HashSet<string>();
-			}
-			string fullPath = Path.GetFullPath(path);
-			securePluginWritePaths.Add(fullPath);
-			if (doesNotNeedConfirm)
-			{
-				pluginWritePathsThatDoNotNeedConfirm.Add(fullPath);
-			}
-		}
-
 		public static bool IsSecureWritePath(string path)
 		{
-			//if (secureInternalWritePaths == null)
-			//{
-			//	secureInternalWritePaths = new HashSet<string>();
-			//}
-			//string fullPath = GetFullPath(path);
-			//bool result = false;
-			//foreach (string secureInternalWritePath in secureInternalWritePaths)
-			//{
-			//	if (fullPath.StartsWith(secureInternalWritePath))
-			//	{
-			//		return true;
-			//	}
-			//}
-			//return result;
 			return true;
 		}
 
-		public static bool IsSecurePluginWritePath(string path)
+		public static HashSet<string> GetDependenciesDeep(string uid, int maxDepth = 2)
 		{
-			if (securePluginWritePaths == null)
+			HashSet<string> result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			if (string.IsNullOrEmpty(uid) || maxDepth <= 0) return result;
+			VarPackage root = GetPackage(uid, false);
+			if (root == null) return result;
+			try { if (!root.Scaned) root.Scan(); } catch { }
+
+			if (maxDepth >= 2 && root.RecursivePackageDependencies != null)
 			{
-				securePluginWritePaths = new HashSet<string>();
-			}
-			string fullPath = GetFullPath(path);
-			bool result = false;
-			foreach (string securePluginWritePath in securePluginWritePaths)
-			{
-				if (fullPath.StartsWith(securePluginWritePath))
+				foreach (var dep in root.RecursivePackageDependencies)
 				{
-					return true;
+					if (!string.IsNullOrEmpty(dep)) result.Add(dep);
+				}
+				return result;
+			}
+
+			if (root.PackageDependencies != null)
+			{
+				foreach (var dep in root.PackageDependencies)
+				{
+					if (!string.IsNullOrEmpty(dep)) result.Add(dep);
 				}
 			}
 			return result;
 		}
 
-		public static bool IsPluginWritePathThatNeedsConfirm(string path)
-		{
-			if (pluginWritePathsThatDoNotNeedConfirm == null)
-			{
-				pluginWritePathsThatDoNotNeedConfirm = new HashSet<string>();
-			}
-			string fullPath = GetFullPath(path);
-			bool result = true;
-			foreach (string item in pluginWritePathsThatDoNotNeedConfirm)
-			{
-				if (fullPath.StartsWith(item))
-				{
-					return false;
-				}
-			}
-			return result;
-		}
+        public static void RegisterPluginHashToPluginPath(string hash, string path)
+        {
+            if (pluginHashToPluginPath == null)
+            {
+                pluginHashToPluginPath = new Dictionary<string, string>();
+            }
+            pluginHashToPluginPath.Remove(hash);
+            pluginHashToPluginPath.Add(hash, path);
+        }
 
-		public static void RegisterPluginHashToPluginPath(string hash, string path)
-		{
-			if (pluginHashToPluginPath == null)
-			{
-				pluginHashToPluginPath = new Dictionary<string, string>();
-			}
-			pluginHashToPluginPath.Remove(hash);
-			pluginHashToPluginPath.Add(hash, path);
-		}
+        protected static string GetPluginHash()
+        {
+            StackTrace stackTrace = new StackTrace();
+            string result = null;
+            for (int i = 0; i < stackTrace.FrameCount; i++)
+            {
+                StackFrame frame = stackTrace.GetFrame(i);
+                MethodBase method = frame.GetMethod();
+                AssemblyName name = method.DeclaringType.Assembly.GetName();
+                string name2 = name.Name;
+                if (name2.StartsWith("MVRPlugin_"))
+                {
+                    result = Regex.Replace(name2, "_[0-9]+$", string.Empty);
+                    break;
+                }
+            }
+            return result;
+        }
 
-		protected static string GetPluginHash()
-		{
-			StackTrace stackTrace = new StackTrace();
-			string result = null;
-			for (int i = 0; i < stackTrace.FrameCount; i++)
-			{
-				StackFrame frame = stackTrace.GetFrame(i);
-				MethodBase method = frame.GetMethod();
-				AssemblyName name = method.DeclaringType.Assembly.GetName();
-				string name2 = name.Name;
-				if (name2.StartsWith("MVRPlugin_"))
-				{
-					result = Regex.Replace(name2, "_[0-9]+$", string.Empty);
-					break;
-				}
-			}
-			return result;
-		}
+        public static void AssertNotCalledFromPlugin()
+        {
+            string pluginHash = GetPluginHash();
+            if (pluginHash != null)
+            {
+                throw new Exception("Plugin with signature " + pluginHash + " tried to execute forbidden operation");
+            }
+        }
 
-		public static void AssertNotCalledFromPlugin()
-		{
-			string pluginHash = GetPluginHash();
-			if (pluginHash != null)
-			{
-				throw new Exception("Plugin with signature " + pluginHash + " tried to execute forbidden operation");
-			}
-		}
+        public static string GetFullPath(string path)
+        {
+            string path2 = Regex.Replace(path, "^file:///", string.Empty);
+            return Path.GetFullPath(path2);
+        }
 
-		public static string GetFullPath(string path)
-		{
-			string path2 = Regex.Replace(path, "^file:///", string.Empty);
-			return Path.GetFullPath(path2);
-		}
+        public static bool IsPackagePath(string path)
+        {
+            string input = path.Replace('\\', '/');
+            string packageUidOrPath = Regex.Replace(input, ":/.*", string.Empty);
+            VarPackage package = GetPackage(packageUidOrPath);
+            return package != null;
+        }
 
-		public static bool IsPackagePath(string path)
-		{
-			string input = path.Replace('\\', '/');
-			string packageUidOrPath = Regex.Replace(input, ":/.*", string.Empty);
-			VarPackage package = GetPackage(packageUidOrPath);
-			return package != null;
-		}
+        public static bool IsSimulatedPackagePath(string path)
+        {
+            string input = path.Replace('\\', '/');
+            string packageUidOrPath = Regex.Replace(input, ":/.*", string.Empty);
+            return GetPackage(packageUidOrPath)?.IsSimulated ?? false;
+        }
 
-		public static bool IsSimulatedPackagePath(string path)
-		{
-			string input = path.Replace('\\', '/');
-			string packageUidOrPath = Regex.Replace(input, ":/.*", string.Empty);
-			return GetPackage(packageUidOrPath)?.IsSimulated ?? false;
-		}
+        public static string ConvertSimulatedPackagePathToNormalPath(string path)
+        {
+            string text = path.Replace('\\', '/');
+            if (text.Contains(":/"))
+            {
+                string packageUidOrPath = Regex.Replace(text, ":/.*", string.Empty);
+                VarPackage package = GetPackage(packageUidOrPath);
+                if (package != null && package.IsSimulated)
+                {
+                    string str = Regex.Replace(text, ".*:/", string.Empty);
+                    path = package.Path + "/" + str;
+                }
+            }
+            return path;
+        }
 
-		public static string ConvertSimulatedPackagePathToNormalPath(string path)
-		{
-			string text = path.Replace('\\', '/');
-			if (text.Contains(":/"))
-			{
-				string packageUidOrPath = Regex.Replace(text, ":/.*", string.Empty);
-				VarPackage package = GetPackage(packageUidOrPath);
-				if (package != null && package.IsSimulated)
-				{
-					string str = Regex.Replace(text, ".*:/", string.Empty);
-					path = package.Path + "/" + str;
-				}
-			}
-			return path;
-		}
+        public static string RemovePackageFromPath(string path)
+        {
+            string input = Regex.Replace(path, ".*:/", string.Empty);
+            return Regex.Replace(input, ".*:\\\\", string.Empty);
+        }
 
-		public static string RemovePackageFromPath(string path)
-		{
-			string input = Regex.Replace(path, ".*:/", string.Empty);
-			return Regex.Replace(input, ".*:\\\\", string.Empty);
-		}
+        public static string NormalizePath(string path)
+        {
+            string text = path;
+            VarFileEntry varFileEntry = GetVarFileEntry(path);
+            if (varFileEntry == null)
+            {
+                string fullPath = GetFullPath(path);
+                string oldValue = Path.GetFullPath(".") + "\\";
+                string text2 = fullPath.Replace(oldValue, string.Empty);
+                if (text2 != fullPath)
+                {
+                    text = text2;
+                }
+                return text.Replace('\\', '/');
+            }
+            return varFileEntry.Uid;
+        }
 
-		public static string NormalizePath(string path)
-		{
-			string text = path;
-			VarFileEntry varFileEntry = GetVarFileEntry(path);
-			if (varFileEntry == null)
-			{
-				string fullPath = GetFullPath(path);
-				string oldValue = Path.GetFullPath(".") + "\\";
-				string text2 = fullPath.Replace(oldValue, string.Empty);
-				if (text2 != fullPath)
-				{
-					text = text2;
-				}
-				return text.Replace('\\', '/');
-			}
-			return varFileEntry.Uid;
-		}
+        public static string GetDirectoryName(string path, bool returnSlashPath = false)
+        {
+            VarFileEntry value;
+            string path2 = (uidToVarFileEntry != null && uidToVarFileEntry.TryGetValue(path, out value)) ?
+                //((!returnSlashPath) ? value.Path : value.SlashPath) : 
+                //((!returnSlashPath) ? path.Replace('/', '\\') : path.Replace('\\', '/'));
+                value.Path : path.Replace('\\', '/');
+            return Path.GetDirectoryName(path2);
+        }
 
-		public static string GetDirectoryName(string path, bool returnSlashPath = false)
-		{
-			VarFileEntry value;
-			string path2 = (uidToVarFileEntry != null && uidToVarFileEntry.TryGetValue(path, out value)) ?
-				//((!returnSlashPath) ? value.Path : value.SlashPath) : 
-				//((!returnSlashPath) ? path.Replace('/', '\\') : path.Replace('\\', '/'));
-				value.Path : path.Replace('\\', '/');
-			return Path.GetDirectoryName(path2);
-		}
+        public static string GetSuggestedBrowserDirectoryFromDirectoryPath(string suggestedDir, string currentDir, bool allowPackagePath = true)
+        {
+            if (currentDir == null || currentDir == string.Empty)
+            {
+                return suggestedDir;
+            }
+            string input = suggestedDir.Replace('\\', '/');
+            input = Regex.Replace(input, "/$", string.Empty);
+            string text = currentDir.Replace('\\', '/');
+            VarDirectoryEntry varDirectoryEntry = GetVarDirectoryEntry(text);
+            if (varDirectoryEntry != null)
+            {
+                if (!allowPackagePath)
+                {
+                    return null;
+                }
+                string text2 = varDirectoryEntry.InternalPath.Replace(input, string.Empty);
+                if (varDirectoryEntry.InternalPath != text2)
+                {
+                    //text2 = text2.Replace('/', '\\');
+                    return varDirectoryEntry.Package.Path + ":/" + input + text2;
+                }
+            }
+            else
+            {
+                string text3 = text.Replace(input, string.Empty);
+                if (text != text3)
+                {
+                    //text3 = text3.Replace('/', '\\');
+                    return suggestedDir + text3;
+                }
+            }
+            return null;
+        }
 
-		public static string GetSuggestedBrowserDirectoryFromDirectoryPath(string suggestedDir, string currentDir, bool allowPackagePath = true)
-		{
-			if (currentDir == null || currentDir == string.Empty)
-			{
-				return suggestedDir;
-			}
-			string input = suggestedDir.Replace('\\', '/');
-			input = Regex.Replace(input, "/$", string.Empty);
-			string text = currentDir.Replace('\\', '/');
-			VarDirectoryEntry varDirectoryEntry = GetVarDirectoryEntry(text);
-			if (varDirectoryEntry != null)
-			{
-				if (!allowPackagePath)
-				{
-					return null;
-				}
-				string text2 = varDirectoryEntry.InternalPath.Replace(input, string.Empty);
-				if (varDirectoryEntry.InternalPath != text2)
-				{
-					//text2 = text2.Replace('/', '\\');
-					return varDirectoryEntry.Package.Path + ":/" + input + text2;
-				}
-			}
-			else
-			{
-				string text3 = text.Replace(input, string.Empty);
-				if (text != text3)
-				{
-					//text3 = text3.Replace('/', '\\');
-					return suggestedDir + text3;
-				}
-			}
-			return null;
-		}
+        public static VarPackage ResolveDependency(string uid)
+        {
+            // Try exact match
+            if (packagesByUid.ContainsKey(uid)) return packagesByUid[uid];
 
-		public static VarPackage ResolveDependency(string uid)
-		{
-			// Try exact match
-			if (packagesByUid.ContainsKey(uid)) return packagesByUid[uid];
+            // Try to resolve group
+            string groupId = PackageIDToPackageGroupID(uid);
+            if (packageGroups.ContainsKey(groupId))
+            {
+                VarPackageGroup group = packageGroups[groupId];
+                if (uid.EndsWith(".latest")) return group.NewestPackage;
 
-			// Try to resolve group
-			string groupId = PackageIDToPackageGroupID(uid);
-			if (packageGroups.ContainsKey(groupId))
-			{
-				VarPackageGroup group = packageGroups[groupId];
-				if (uid.EndsWith(".latest")) return group.NewestPackage;
+                string verStr = PackageIDToPackageVersion(uid);
+                if (verStr != null && int.TryParse(verStr, out int ver))
+                {
+                    return group.GetClosestMatchingPackageVersion(ver, false, true);
+                }
 
-				string verStr = PackageIDToPackageVersion(uid);
-				if (verStr != null && int.TryParse(verStr, out int ver))
-				{
-					return group.GetClosestMatchingPackageVersion(ver, false, true);
-				}
+                // Fallback to newest if we can't parse version but found group
+                return group.NewestPackage;
+            }
+            return null;
+        }
 
-				// Fallback to newest if we can't parse version but found group
-				return group.NewestPackage;
-			}
-			return null;
-		}
+        public static void SetLoadDir(string dir, bool restrictPath = false)
+        {
+            if (loadDirStack != null)
+            {
+                loadDirStack.Clear();
+            }
+            PushLoadDir(dir, restrictPath);
+        }
 
-		public static void SetLoadDir(string dir, bool restrictPath = false)
-		{
-			if (loadDirStack != null)
-			{
-				loadDirStack.Clear();
-			}
-			PushLoadDir(dir, restrictPath);
-		}
-
-		public static void PushLoadDir(string dir, bool restrictPath = false)
-		{
-			string text = dir.Replace('\\', '/');
-			if (text != "/")
-			{
-				text = Regex.Replace(text, "/$", string.Empty);
-			}
-			if (restrictPath && !IsSecureReadPath(text))
-			{
-				throw new Exception("Attempted to push load dir for non-secure dir " + text);
-			}
-			if (loadDirStack == null)
-			{
-				loadDirStack = new LinkedList<string>();
-			}
-			loadDirStack.AddLast(text);
-		}
+        public static void PushLoadDir(string dir, bool restrictPath = false)
+        {
+            string text = dir.Replace('\\', '/');
+            if (text != "/")
+            {
+                text = Regex.Replace(text, "/$", string.Empty);
+            }
+            if (restrictPath && !IsSecureReadPath(text))
+            {
+                throw new Exception("Attempted to push load dir for non-secure dir " + text);
+            }
+            if (loadDirStack == null)
+            {
+                loadDirStack = new LinkedList<string>();
+            }
+            loadDirStack.AddLast(text);
+        }
 
 		public static string PopLoadDir()
 		{
@@ -2036,37 +1826,53 @@ namespace VPB
                 return value;
 			}
 
-            if (key != null && key.EndsWith(":/preview.jpg", StringComparison.OrdinalIgnoreCase))
-            {
-                int colonIdx = key.IndexOf(":/");
-                if (colonIdx > 0)
-                {
-                    string pkgPath = key.Substring(0, colonIdx);
-                    VarPackage pkg = GetPackage(pkgPath, false);
-                    if (pkg != null)
-                    {
-                        if (pkg.ZipFile != null)
-                        {
-                            if (pkg.ZipFile.GetEntry("preview.jpg") != null)
-                            {
-                                return new VarFileEntry(pkg, "preview.jpg", pkg.LastWriteTime, 0);
-                            }
-                            else
-                            {
-                                // LogUtil.Log("[VPB] [FileManager] Internal preview not found in zip for " + pkgPath);
-                            }
-                        }
-                        else
-                        {
-                            LogUtil.Log("[VPB] [FileManager] ZipFile is NULL for " + pkgPath);
-                        }
-                    }
-                    else
-                    {
-                        LogUtil.Log("[VPB] [FileManager] Package not found for " + pkgPath);
-                    }
-                }
-            }
+			if (key != null)
+			{
+				int colonIdx = key.IndexOf(":/");
+				if (colonIdx > 0 && colonIdx + 2 < key.Length)
+				{
+					string pkgPath = key.Substring(0, colonIdx);
+					string internalPath = key.Substring(colonIdx + 2);
+					if (internalPath.Length > 0 && internalPath[0] == '/') internalPath = internalPath.Substring(1);
+
+					VarPackage pkg = GetPackage(pkgPath, false);
+					if (pkg == null)
+					{
+						string pkgName = Path.GetFileName(pkgPath);
+						if (!string.IsNullOrEmpty(pkgName))
+						{
+							pkg = GetPackage("AddonPackages/" + pkgName, false);
+							if (pkg == null) pkg = GetPackage("AllPackages/" + pkgName, false);
+						}
+					}
+
+					if (pkg != null && pkg.ZipFile != null)
+					{
+						try
+						{
+							var ze = pkg.ZipFile.GetEntry(internalPath);
+							if (ze != null)
+							{
+								value = new VarFileEntry(pkg, ze.Name, ze.DateTime, ze.Size);
+								try
+								{
+									if (uidToVarFileEntry != null && !uidToVarFileEntry.ContainsKey(value.Uid))
+									{
+										uidToVarFileEntry.Add(value.Uid, value);
+									}
+									if (pathToVarFileEntry != null && !pathToVarFileEntry.ContainsKey(value.Path))
+									{
+										pathToVarFileEntry.Add(value.Path, value);
+									}
+								}
+								catch { }
+								return value;
+							}
+						}
+						catch { }
+					}
+				}
+			}
 
 			return null;
 		}
