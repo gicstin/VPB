@@ -1315,7 +1315,7 @@ namespace VPB
             }
             else
             {
-                LogUtil.LogWarning("[var browser]Cannot perform action. Hub is disabled in User Preferences");
+                LogUtil.LogWarning("[VPB]Cannot perform action. Hub is disabled in User Preferences");
             }
         }
 

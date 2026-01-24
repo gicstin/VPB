@@ -1065,7 +1065,7 @@ namespace VPB
             storableId = null;
             if (atom == null) return null;
 
-            // Preferred ids (match VaM / BrowserAssist patterns)
+            // Preferred ids (match VaM)
             if (!string.IsNullOrEmpty(creator) && !string.IsNullOrEmpty(itemName))
             {
                 storableId = creator + ":" + itemName + "Preset";
@@ -3219,7 +3219,6 @@ namespace VPB
                         bool lockClothing = isPose;
                         bool lockMorphs = isPose;
 
-                        // Use same methods as BrowserAssist (ref)
                         // Clear all locks, and specifically lock what we don't want changed
                         if (isPose || (isAppearance && appearanceMode == "replace"))
                         {

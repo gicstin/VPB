@@ -20,7 +20,7 @@ namespace VPB
         [HarmonyPatch(typeof(Atom), "LoadAppearancePreset", new Type[] { typeof(string) })]
         public static void PreLoadAppearancePreset(Atom __instance, string saveName = "savefile")
         {
-            LogUtil.Log("[var browser hook]PreLoadAppearancePreset " + saveName);
+            LogUtil.Log("[VPB hook]PreLoadAppearancePreset " + saveName);
             if (MVR.FileManagement.FileManager.FileExists(saveName))
             {
                 using (MVR.FileManagement.FileEntryStreamReader fileEntryStreamReader = MVR.FileManagement.FileManager.OpenStreamReader(saveName, true))
@@ -38,7 +38,7 @@ namespace VPB
         [HarmonyPatch(typeof(Atom), "LoadPreset", new Type[] { typeof(string) })]
         public static void PreLoadPreset(Atom __instance, string saveName = "savefile")
         {
-            LogUtil.Log("[var browser hook]PreLoadPreset " + saveName);
+            LogUtil.Log("[VPB hook]PreLoadPreset " + saveName);
             if (MVR.FileManagement.FileManager.FileExists(saveName))
             {
                 using (MVR.FileManagement.FileEntryStreamReader fileEntryStreamReader = MVR.FileManagement.FileManager.OpenStreamReader(saveName, true))
@@ -52,7 +52,7 @@ namespace VPB
         [HarmonyPatch(typeof(MeshVR.PresetManagerControl), "SyncPresetBrowsePath", new Type[] { typeof(string) })]
         protected static void PreSyncPresetBrowsePath(MeshVR.PresetManagerControl __instance, string url)
         {
-            LogUtil.Log("[var browser hook]PreSyncPresetBrowsePath " + url);
+            LogUtil.Log("[VPB hook]PreSyncPresetBrowsePath " + url);
             VarFileEntry varFileEntry = FileManager.GetVarFileEntry(url);
             if (varFileEntry != null)
             {
@@ -76,7 +76,7 @@ namespace VPB
         [HarmonyPatch(typeof(SubScene), "LoadSubSceneWithPath", new Type[] { typeof(string)})]
         public static void PreLoadSubSceneWithPath(SubScene __instance,string p)
         {
-            LogUtil.Log("[var browser hook]PreLoadSubSceneWithPath " + p);
+            LogUtil.Log("[VPB hook]PreLoadSubSceneWithPath " + p);
         }
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SubScene), "LoadSubScene")]
@@ -85,7 +85,7 @@ namespace VPB
             MethodInfo getStorePathMethod = typeof(SubScene).GetMethod("GetStorePath", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             object ret= getStorePathMethod.Invoke(__instance, new object[1] {true });
             string path = (string)ret + ".json";
-            LogUtil.Log("[var browser hook]PreLoadSubScene " + path);
+            LogUtil.Log("[VPB hook]PreLoadSubScene " + path);
             if (path.Contains(":"))
             {
                 string packagename = path.Substring(0,path.IndexOf(":"));
@@ -122,7 +122,7 @@ namespace VPB
             
             if (inputJSON != null && JSONOptimization.HasTimelinePlugin(inputJSON))
             {
-                LogUtil.Log("[var browser hook]Filtering timeline plugin from preset");
+                LogUtil.Log("[VPB hook]Filtering timeline plugin from preset");
                 processJSON = JSONOptimization.FilterTimelinePlugins(inputJSON);
             }
             
@@ -143,7 +143,7 @@ namespace VPB
             }
             catch { }
 
-            LogUtil.Log($"[var browser hook]PresetManager PreLoadPresetPreFromJSON {atomName} {storableId} {__instance.presetName}");
+            LogUtil.Log($"[VPB hook]PresetManager PreLoadPresetPreFromJSON {atomName} {storableId} {__instance.presetName}");
             if (processJSON != null)
             {
                 EnsureInstalledFromJSON(processJSON);
