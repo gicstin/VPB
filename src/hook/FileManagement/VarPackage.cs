@@ -9,6 +9,8 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using System.Runtime.InteropServices;
 using Valve.Newtonsoft.Json;
+using System.Threading;
+using System.Diagnostics;
 
 namespace VPB
 {
@@ -20,7 +22,8 @@ namespace VPB
         public List<string> FileEntryLastWriteTimes;
         public List<long> FileEntrySizes;
 		public List<string> RecursivePackageDependencies;
-
+        public long VarFileSize;
+        public long VarLastWriteTimeUtcTicks;
 
 		public List<string> ClothingFileEntryNames;
         public List<string> ClothingTags;
@@ -29,6 +32,11 @@ namespace VPB
 
 		public void Read(BinaryReader reader)
 		{
+            Read(reader, true);
+        }
+
+        public void Read(BinaryReader reader, bool includeVarMeta)
+        {
             //FileEntryNames
             {
                 var count = reader.ReadInt32();
@@ -125,6 +133,11 @@ namespace VPB
                         HairTags.Add(reader.ReadString());
                     }
                 }
+            }
+            if (includeVarMeta)
+            {
+                VarFileSize = reader.ReadInt64();
+                VarLastWriteTimeUtcTicks = reader.ReadInt64();
             }
         }
 
@@ -227,11 +240,34 @@ namespace VPB
                     }
                 }
             }
+            writer.Write(VarFileSize);
+            writer.Write(VarLastWriteTimeUtcTicks);
         }
     }
 
 	public class VarPackage
 	{
+		static long scanTotal;
+		static long scanCacheValidatedHit;
+		static long scanCacheHit;
+		static long scanZip;
+
+		public static void ResetScanCounters()
+		{
+			Interlocked.Exchange(ref scanTotal, 0);
+			Interlocked.Exchange(ref scanCacheValidatedHit, 0);
+			Interlocked.Exchange(ref scanCacheHit, 0);
+			Interlocked.Exchange(ref scanZip, 0);
+		}
+
+		public static void GetScanCounters(out long total, out long cacheValidatedHit, out long cacheHit, out long zipScan)
+		{
+			total = Interlocked.Read(ref scanTotal);
+			cacheValidatedHit = Interlocked.Read(ref scanCacheValidatedHit);
+			cacheHit = Interlocked.Read(ref scanCacheHit);
+			zipScan = Interlocked.Read(ref scanZip);
+		}
+
 		public enum ReferenceVersionOption
 		{
 			Latest,
@@ -639,114 +675,158 @@ namespace VPB
 		public void Scan()
 		{
 			if (Scaned) return;
-			FileEntries = new List<VarFileEntry>();
-			//ClothingFileEntries = new List<VarFileEntry>();
-			//HairFileEntries = new List<VarFileEntry>();
-			SyncEnabled();
-			bool flag = false;
-			if (File.Exists(Path))
+
 			{
-				ZipFile zipFile = null;
-                try
-                {
-                    FileInfo fileInfo = new FileInfo(Path);
-                    LastWriteTime = fileInfo.LastWriteTime;
-					// Sort "new to old" by file creation time
-					CreationTime = fileInfo.CreationTime;
-					Size = fileInfo.Length;
-
-					metaEntry = null;
-					string cacheJson = "Cache/AllPackagesJSON/" + this.Uid + ".json";
-					if (File.Exists(cacheJson))
+				if (IsCorruptedArchive)
+				{
+					invalid = true;
+					Scaned = true;
+					return;
+				}
+				Interlocked.Increment(ref scanTotal);
+				FileEntries = new List<VarFileEntry>();
+				//ClothingFileEntries = new List<VarFileEntry>();
+				//HairFileEntries = new List<VarFileEntry>();
+				SyncEnabled();
+				bool flag = false;
+				if (File.Exists(Path))
+				{
+					ZipFile zipFile = null;
+					try
 					{
-						try
-						{
-							FileInfo fi = new FileInfo(cacheJson);
-							if (fi.Length == 0)
-							{
-								File.Delete(cacheJson);
-								throw new Exception("Cache file is empty");
-							}
+						FileInfo fileInfo = new FileInfo(Path);
+						LastWriteTime = fileInfo.LastWriteTime;
+						// Sort "new to old" by file creation time
+						CreationTime = fileInfo.CreationTime;
+						Size = fileInfo.Length;
 
-							SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCache(this.Uid);
-							if (vp == null)
+						metaEntry = null;
+						long lastWriteTimeUtcTicks = fileInfo.LastWriteTimeUtc.Ticks;
+						SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCacheValidated(this.Uid, Size, lastWriteTimeUtcTicks);
+						if (vp != null && vp.FileEntryNames != null)
+						{
+							this.ClothingFileEntryNames = vp.ClothingFileEntryNames;
+							this.ClothingTags = vp.ClothingTags;
+							this.HairFileEntryNames = vp.HairFileEntryNames;
+							this.HairTags = vp.HairTags;
+
+							for (int i = 0; i < vp.FileEntryNames.Count; i++)
 							{
-								string text = File.ReadAllText(cacheJson);
-								lock (LogUtil.JsonLock)
+								string item = vp.FileEntryNames[i];
+								VarFileEntry varFileEntry = new VarFileEntry(this, item, DateTime.Parse(vp.FileEntryLastWriteTimes[i]), vp.FileEntrySizes[i]);
+								FileEntries.Add(varFileEntry);
+								if (item == "meta.json")
 								{
-									vp = JsonConvert.DeserializeObject<SerializableVarPackage>(text);
+									metaEntry = varFileEntry;
 								}
 							}
-
-							if (vp != null && vp.FileEntryNames != null)
+							this.RecursivePackageDependencies = vp.RecursivePackageDependencies;
+							if (metaEntry != null)
 							{
-								this.ClothingFileEntryNames = vp.ClothingFileEntryNames;
-								this.ClothingTags = vp.ClothingTags;
-								this.HairFileEntryNames = vp.HairFileEntryNames;
-								this.HairTags = vp.HairTags;
+								flag = true;
+								Interlocked.Increment(ref scanCacheValidatedHit);
+							}
+						}
 
-								for (int i = 0; i < vp.FileEntryNames.Count; i++)
+						if (!flag)
+						{
+							var cached = VarPackageMgr.singleton.TryGetCache(this.Uid);
+							if (cached != null && cached.FileEntryNames != null)
+							{
+								this.ClothingFileEntryNames = cached.ClothingFileEntryNames;
+								this.ClothingTags = cached.ClothingTags;
+								this.HairFileEntryNames = cached.HairFileEntryNames;
+								this.HairTags = cached.HairTags;
+
+								for (int i = 0; i < cached.FileEntryNames.Count; i++)
 								{
-									string item = vp.FileEntryNames[i];
-									VarFileEntry varFileEntry = new VarFileEntry(this, item, DateTime.Parse(vp.FileEntryLastWriteTimes[i]), vp.FileEntrySizes[i]);
+									string item = cached.FileEntryNames[i];
+									VarFileEntry varFileEntry = new VarFileEntry(this, item, DateTime.Parse(cached.FileEntryLastWriteTimes[i]), cached.FileEntrySizes[i]);
 									FileEntries.Add(varFileEntry);
 									if (item == "meta.json")
 									{
 										metaEntry = varFileEntry;
 									}
 								}
-								this.RecursivePackageDependencies = vp.RecursivePackageDependencies;
-							}
-
-							if (metaEntry != null)
-							{
-								flag = true;
-							}
-						}
-						catch (Exception ex)
-						{
-							string start = "";
-							try {
-								string text = File.ReadAllText(cacheJson);
-								if (text.Length > 20) start = text.Substring(0, 20);
-								else start = text;
-							} catch { }
-							LogUtil.LogError("Failed to load cache for " + this.Uid + " (starts with: '" + start + "'): " + ex.Message);
-							try { File.Delete(cacheJson); } catch { }
-							FileEntries.Clear();
-							metaEntry = null;
-						}
-					}
-
-					if (!flag)
-					{
-						FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
-						zipFile = new ZipFile(file);
-						zipFile.IsStreamOwner = true;
-						HashSet<string> set = new HashSet<string>();
-						IEnumerator enumerator = zipFile.GetEnumerator();
-						try
-						{
-							while (enumerator.MoveNext())
-							{
-								ZipEntry zipEntry = (ZipEntry)enumerator.Current;
-								if (zipEntry.IsFile)
+								this.RecursivePackageDependencies = cached.RecursivePackageDependencies;
+								if (metaEntry != null)
 								{
-									string entryName = zipEntry.Name;
-									if (entryName.EndsWith(".json"))
+									flag = true;
+									Interlocked.Increment(ref scanCacheHit);
+								}
+							}
+						}
+
+						if (!flag)
+						{
+							Interlocked.Increment(ref scanZip);
+							FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
+							zipFile = new ZipFile(file);
+							zipFile.IsStreamOwner = true;
+							HashSet<string> set = new HashSet<string>();
+							IEnumerator enumerator = zipFile.GetEnumerator();
+							try
+							{
+								while (enumerator.MoveNext())
+								{
+									ZipEntry zipEntry = (ZipEntry)enumerator.Current;
+									if (zipEntry.IsFile)
 									{
-										if (zipEntry.Name == "meta.json")
+										string entryName = zipEntry.Name;
+										if (entryName.EndsWith(".json"))
 										{
-											VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
-											FileEntries.Add(varFileEntry);
 											if (zipEntry.Name == "meta.json")
 											{
-												metaEntry = varFileEntry;
+												VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
+												FileEntries.Add(varFileEntry);
+												if (zipEntry.Name == "meta.json")
+												{
+													metaEntry = varFileEntry;
+												}
+											}
+											else
+											{
+												string entry = entryName.Substring(0, entryName.Length - 5) + ".jpg";
+												if (!set.Contains(entry))
+												{
+													ZipEntry jpgEntry = zipFile.GetEntry(entry);
+													if (jpgEntry != null)
+													{
+														VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
+														FileEntries.Add(varFileEntry);
+														VarFileEntry varFileEntry2 = new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size);
+														FileEntries.Add(varFileEntry2);
+
+														set.Add(entry);
+
+													}
+												}
 											}
 										}
-										else
+										else if (entryName.EndsWith(".vap"))
 										{
-											string entry = entryName.Substring(0, entryName.Length - 5) + ".jpg";
+											VarFileEntry varFileEntry = new VarFileEntry(this, entryName, zipEntry.DateTime, zipEntry.Size);
+											FileEntries.Add(varFileEntry);
+
+											string baseName = entryName.Substring(0, entryName.Length - 4);
+											string[] sisterExts = { ".jpg", ".png" };
+											foreach (var sExt in sisterExts)
+											{
+												string sisterPath = baseName + sExt;
+												if (!set.Contains(sisterPath))
+												{
+													ZipEntry sisterZipEntry = zipFile.GetEntry(sisterPath);
+													if (sisterZipEntry != null)
+													{
+														FileEntries.Add(new VarFileEntry(this, sisterZipEntry.Name, sisterZipEntry.DateTime, sisterZipEntry.Size));
+														set.Add(sisterPath);
+													}
+												}
+											}
+										}
+										else if (entryName.EndsWith(".vam"))
+										{
+											string entry = entryName.Substring(0, entryName.Length - 4) + ".jpg";
 											if (!set.Contains(entry))
 											{
 												ZipEntry jpgEntry = zipFile.GetEntry(entry);
@@ -756,91 +836,51 @@ namespace VPB
 													FileEntries.Add(varFileEntry);
 													VarFileEntry varFileEntry2 = new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size);
 													FileEntries.Add(varFileEntry2);
-
 													set.Add(entry);
 
-												}
-											}
-										}
-									}
-									else if (entryName.EndsWith(".vap"))
-									{
-										VarFileEntry varFileEntry = new VarFileEntry(this, entryName, zipEntry.DateTime, zipEntry.Size);
-										FileEntries.Add(varFileEntry);
-
-										string baseName = entryName.Substring(0, entryName.Length - 4);
-										string[] sisterExts = { ".jpg", ".png" };
-										foreach (var sExt in sisterExts)
-										{
-											string sisterPath = baseName + sExt;
-											if (!set.Contains(sisterPath))
-											{
-												ZipEntry sisterZipEntry = zipFile.GetEntry(sisterPath);
-												if (sisterZipEntry != null)
-												{
-													FileEntries.Add(new VarFileEntry(this, sisterZipEntry.Name, sisterZipEntry.DateTime, sisterZipEntry.Size));
-													set.Add(sisterPath);
-												}
-											}
-										}
-									}
-									else if (entryName.EndsWith(".vam"))
-									{
-										string entry = entryName.Substring(0, entryName.Length - 4) + ".jpg";
-										if (!set.Contains(entry))
-										{
-											ZipEntry jpgEntry = zipFile.GetEntry(entry);
-											if (jpgEntry != null)
-											{
-												VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
-												FileEntries.Add(varFileEntry);
-												VarFileEntry varFileEntry2 = new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size);
-												FileEntries.Add(varFileEntry2);
-												set.Add(entry);
-
-												if(zipEntry.Name.StartsWith("Custom/Clothing/"))
+													if(zipEntry.Name.StartsWith("Custom/Clothing/"))
                                                 {
                                                     if (ClothingFileEntries == null)
                                                         ClothingFileEntries = new List<VarFileEntry>();
                                                     ClothingFileEntries.Add(varFileEntry);
-												}
-												if (zipEntry.Name.StartsWith("Custom/Hair/"))
-												{
-													if (HairFileEntries == null)
-														HairFileEntries = new List<VarFileEntry>();
-													HairFileEntries.Add(varFileEntry);
+													}
+													if (zipEntry.Name.StartsWith("Custom/Hair/"))
+													{
+														if (HairFileEntries == null)
+															HairFileEntries = new List<VarFileEntry>();
+														HairFileEntries.Add(varFileEntry);
+													}
 												}
 											}
 										}
-									}
-									// There are too many morphs; over 2,000 packages can contain ~80k morphs
-									//else if (entryName.EndsWith(".vmi"))
+										// There are too many morphs; over 2,000 packages can contain ~80k morphs
+										//else if (entryName.EndsWith(".vmi"))
          //                           {
 									//	VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
 									//	FileEntries.Add(varFileEntry);
 									//}
-									else if (entryName.EndsWith(".assetbundle"))
-									{
-										VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
-										FileEntries.Add(varFileEntry);
-										// liu modification: add asset preview image
-										string entry = entryName.Substring(0, entryName.Length - 12) + ".jpg";
-										//SuperController.LogMessage("assetbundle:"+ entry);
-										if (!set.Contains(entry))
+										else if (entryName.EndsWith(".assetbundle"))
 										{
-											ZipEntry jpgEntry = zipFile.GetEntry(entry);
-											if (jpgEntry != null)
+											VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
+											FileEntries.Add(varFileEntry);
+											// liu modification: add asset preview image
+											string entry = entryName.Substring(0, entryName.Length - 12) + ".jpg";
+											//SuperController.LogMessage("assetbundle:"+ entry);
+											if (!set.Contains(entry))
 											{
+												ZipEntry jpgEntry = zipFile.GetEntry(entry);
+												if (jpgEntry != null)
+												{
 
-												VarFileEntry varFileEntry2 = new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size);
-												FileEntries.Add(varFileEntry2);
-												set.Add(entry);
+													VarFileEntry varFileEntry2 = new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size);
+													FileEntries.Add(varFileEntry2);
+													set.Add(entry);
+												}
 											}
 										}
 									}
 								}
 							}
-						}
 						finally
 						{
 							IDisposable disposable;
@@ -849,6 +889,7 @@ namespace VPB
 								disposable.Dispose();
 							}
 						}
+					}
 
 						if (metaEntry != null)
 						{
@@ -856,106 +897,124 @@ namespace VPB
 						}
 						ZipFile = zipFile;
 						DumpVarPackage();
-					}
-				}
-
-                catch (Exception ex)
-                {
-                    zipFile?.Close();
-					LogUtil.LogError("Exception during zip file scan of " + Path + ": " + ex);
-                }
-            }
-			if (!flag)
-			{
-				invalid = true;
-			}
-			else
-			{
-				SyncJSONCache();
-			}
-
-            // Initialize clothing tags
-            if (ClothingFileEntryNames != null && ClothingFileEntryNames.Count > 0)
-            {
-				Dictionary<string, string> tags = new Dictionary<string, string>();
-				for(int i = 0; i < ClothingFileEntryNames.Count; i++)
-                {
-					tags.Add(ClothingFileEntryNames[i], ClothingTags[i]);
-				}
-				foreach (var item in FileEntries)
-				{
-                    if (tags.ContainsKey(item.InternalPath))
-                    {
-						string tag = tags[item.InternalPath];
-						string[] splits = tag.Split(',');
-
-                        if (item.ClothingTags == null)
-							item.ClothingTags = new List<string>();
-                        else
-							item.ClothingTags.Clear();
-
-						for (int i = 0; i < splits.Length; i++)
-                        {
-							string t = splits[i].Trim();
-							if(!string.IsNullOrEmpty(t))
-                            {
-								lock (TagFilter.ClothingUnknownTagsLock)
-								{
-									if (!TagFilter.AllClothingTags.Contains(t) && !TagFilter.ClothingUnknownTags.Contains(t))
-									{
-										TagFilter.ClothingUnknownTags.Add(t);
-										//LogUtil.Log("clothing tag " + t);
-									}
-								}
-								item.ClothingTags.Add(t);
-							}
+						if (invalid)
+						{
+							Scaned = true;
+							return;
 						}
 					}
-				}
-			}
 
-			if (HairFileEntryNames != null && HairFileEntryNames.Count > 0)
-			{
-				Dictionary<string, string> tags = new Dictionary<string, string>();
-				for (int i = 0; i < HairFileEntryNames.Count; i++)
-				{
-					tags.Add(HairFileEntryNames[i], HairTags[i]);
-				}
-				foreach (var item in FileEntries)
-				{
-					if (tags.ContainsKey(item.InternalPath))
+					catch (Exception ex)
 					{
-						string tag = tags[item.InternalPath];
-						string[] splits = tag.Split(',');
-
-						if (item.HairTags == null)
-							item.HairTags = new List<string>();
-						else
-							item.HairTags.Clear();
-
-						for (int i = 0; i < splits.Length; i++)
+						zipFile?.Close();
+						if (ex is ZipException)
 						{
-							string t = splits[i].Trim();
-							if (!string.IsNullOrEmpty(t))
+							IsCorruptedArchive = true;
+							invalid = true;
+							LogUtil.LogError("Exception during zip file scan of " + Path + ": " + ex);
+							Scaned = true;
+							return;
+						}
+						LogUtil.LogError("Exception during zip file scan of " + Path + ": " + ex);
+					}
+				}
+				if (!flag)
+				{
+					invalid = true;
+				}
+				else
+				{
+					SyncJSONCache();
+				}
+				if (invalid)
+				{
+					Scaned = true;
+					return;
+				}
+
+				// Initialize clothing tags
+				if (ClothingFileEntryNames != null && ClothingFileEntryNames.Count > 0)
+				{
+					Dictionary<string, string> tags = new Dictionary<string, string>();
+					for(int i = 0; i < ClothingFileEntryNames.Count; i++)
+					{
+						tags.Add(ClothingFileEntryNames[i], ClothingTags[i]);
+					}
+					foreach (var item in FileEntries)
+					{
+						if (tags.ContainsKey(item.InternalPath))
+						{
+							string tag = tags[item.InternalPath];
+							string[] splits = tag.Split(',');
+
+							if (item.ClothingTags == null)
+								item.ClothingTags = new List<string>();
+							else
+								item.ClothingTags.Clear();
+
+							for (int i = 0; i < splits.Length; i++)
 							{
-								if (!TagFilter.AllHairTags.Contains(t))
+								string t = splits[i].Trim();
+								if(!string.IsNullOrEmpty(t))
 								{
-									lock (TagFilter.HairUnknownTagsLock)
+									lock (TagFilter.ClothingUnknownTagsLock)
 									{
-										if (!TagFilter.HairUnknownTags.Contains(t))
+										if (!TagFilter.AllClothingTags.Contains(t) && !TagFilter.ClothingUnknownTags.Contains(t))
 										{
-											TagFilter.HairUnknownTags.Add(t);
-											//LogUtil.Log("hair tag " + t);
+											TagFilter.ClothingUnknownTags.Add(t);
+											//LogUtil.Log("clothing tag " + t);
 										}
 									}
+									item.ClothingTags.Add(t);
 								}
-								item.HairTags.Add(t);
 							}
 						}
 					}
 				}
+
+				if (HairFileEntryNames != null && HairFileEntryNames.Count > 0)
+				{
+					Dictionary<string, string> tags = new Dictionary<string, string>();
+					for (int i = 0; i < HairFileEntryNames.Count; i++)
+					{
+						tags.Add(HairFileEntryNames[i], HairTags[i]);
+					}
+					foreach (var item in FileEntries)
+					{
+						if (tags.ContainsKey(item.InternalPath))
+						{
+							string tag = tags[item.InternalPath];
+							string[] splits = tag.Split(',');
+
+							if (item.HairTags == null)
+								item.HairTags = new List<string>();
+							else
+								item.HairTags.Clear();
+
+							for (int i = 0; i < splits.Length; i++)
+							{
+								string t = splits[i].Trim();
+								if (!string.IsNullOrEmpty(t))
+								{
+									if (!TagFilter.AllHairTags.Contains(t))
+									{
+										lock (TagFilter.HairUnknownTagsLock)
+										{
+											if (!TagFilter.HairUnknownTags.Contains(t))
+											{
+												TagFilter.HairUnknownTags.Add(t);
+												//LogUtil.Log("hair tag " + t);
+											}
+										}
+									}
+									item.HairTags.Add(t);
+								}
+							}
+						}
+					}
+				}
+				Scaned = true;
 			}
-			Scaned = true;
 		}
         //void FixVarName(string createName, string packageName)
         //{
@@ -969,6 +1028,8 @@ namespace VPB
         //}
         void DumpVarPackage()
 		{
+			if (IsCorruptedArchive)
+				return;
 			SerializableVarPackage svp = new SerializableVarPackage();
 			List<string> clothingFileList = null;
 			List<string> clothingTags = null;
@@ -1001,6 +1062,13 @@ namespace VPB
 					}
 					catch (Exception ex)
 					{
+						if (ex is ZipException)
+						{
+							IsCorruptedArchive = true;
+							invalid = true;
+							LogUtil.LogError("DumpVarPackage ClothingFileEntries " + ex.ToString());
+							return;
+						}
 						LogUtil.LogError("DumpVarPackage ClothingFileEntries " + ex.ToString());
 					}
 				}
@@ -1037,6 +1105,13 @@ namespace VPB
 					}
 					catch (Exception ex)
 					{
+						if (ex is ZipException)
+						{
+							IsCorruptedArchive = true;
+							invalid = true;
+							LogUtil.LogError("DumpVarPackage HairFileEntries " + ex.ToString());
+							return;
+						}
 						LogUtil.LogError("DumpVarPackage HairFileEntries " + ex.ToString());
 					}
 				}
@@ -1064,6 +1139,13 @@ namespace VPB
 				}
 				catch (Exception ex3)
 				{
+					if (ex3 is ZipException)
+					{
+						IsCorruptedArchive = true;
+						invalid = true;
+						LogUtil.LogError("DumpVarPackage " + ex3.ToString());
+						return;
+					}
 					LogUtil.LogError("DumpVarPackage " + ex3.ToString());
 				}
 			}
@@ -1080,6 +1162,8 @@ namespace VPB
 			svp.FileEntryNames = list1;//.ToArray();
 			svp.FileEntryLastWriteTimes = list2;//.ToArray();
 			svp.FileEntrySizes = list3;//.ToArray();
+			svp.VarFileSize = Size;
+			svp.VarLastWriteTimeUtcTicks = LastWriteTime.ToUniversalTime().Ticks;
 			if (clothingFileList != null && clothingFileList.Count > 0)
                 svp.ClothingFileEntryNames = clothingFileList;//.ToArray();
 			if (clothingTags != null && clothingTags.Count > 0)
@@ -1095,27 +1179,9 @@ namespace VPB
 			this.HairFileEntryNames = svp.HairFileEntryNames;
 			this.HairTags = svp.HairTags;
 
-			string folder = "Cache/AllPackagesJSON";
-			if (!Directory.Exists(folder))
-				Directory.CreateDirectory(folder);
-
-			lock (LogUtil.JsonLock)
+			if (VarPackageMgr.singleton != null)
 			{
-				string json = JsonConvert.SerializeObject(svp);
-				string targetPath = folder + "/" + this.Uid + ".json";
-				string tempPath = targetPath + ".tmp";
-				try
-				{
-					// Atomic write: write to temp then move
-					File.WriteAllText(tempPath, json, new System.Text.UTF8Encoding(false));
-					if (File.Exists(targetPath)) File.Delete(targetPath);
-					File.Move(tempPath, targetPath);
-				}
-				catch (Exception ex)
-				{
-					LogUtil.LogError("Failed to write cache for " + this.Uid + ": " + ex.Message);
-					try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-				}
+				VarPackageMgr.singleton.SetCache(this.Uid, svp);
 			}
 		}
 

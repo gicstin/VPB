@@ -2841,7 +2841,9 @@ namespace VPB
 					}
 					else if (inGame)
                     {
-						string[] files = Directory.GetFiles(defaultPath, "*.*", SearchOption.AllDirectories);
+						List<string> fileList = new List<string>();
+						FileManager.SafeGetFiles(defaultPath, "*.*", fileList);
+						string[] files = fileList.ToArray();
 						foreach (var item in files)
 						{
 							// Temporarily hardcoded: appearance presets

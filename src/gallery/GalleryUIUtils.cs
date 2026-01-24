@@ -1645,7 +1645,7 @@ namespace VPB
             return false; 
         }
 
-        private enum ItemType { Clothing, Hair, Pose, Skin, Morphs, Appearance, Animation, BreastPhysics, GlutePhysics, Plugins, General, ClothingItem, HairItem, ClothingPreset, HairPreset, SubScene, Scene, CUA, Other }
+        private enum ItemType { Clothing, Hair, Pose, Skin, Morphs, Appearance, Animation, BreastPhysics, Plugins, General, ClothingItem, HairItem, ClothingPreset, HairPreset, SubScene, Scene, CUA, Other }
 
         private ItemType GetItemType(FileEntry entry)
         {
@@ -1657,7 +1657,6 @@ namespace VPB
             if (p.IndexOf("Custom/Atom/Person/AnimationPresets", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Animation;
             if (p.IndexOf("Custom/Atom/Person/BreastPhysics", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.BreastPhysics;
             if (p.IndexOf("Custom/Atom/Person/Clothing", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Clothing;
-            if (p.IndexOf("Custom/Atom/Person/GlutePhysics", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.GlutePhysics;
             if (p.IndexOf("Custom/Atom/Person/Hair", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Hair;
             if (p.IndexOf("Custom/Atom/Person/Morphs", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Morphs;
             if (p.IndexOf("Custom/Atom/Person/Plugins", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Plugins;
@@ -1715,7 +1714,6 @@ namespace VPB
                 case ItemType.Clothing: return "ClothingPresets";
                 case ItemType.ClothingItem: return "ClothingPresets";
                 case ItemType.General: return "Preset";
-                case ItemType.GlutePhysics: return "FemaleGlutePhysicsPresets";
                 case ItemType.Hair: return "HairPresets";
                 case ItemType.HairItem: return "HairPresets";
                 case ItemType.ClothingPreset: return null; // Targets specific clothing items

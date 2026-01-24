@@ -17,6 +17,8 @@ namespace VPB
 {
     public class FileManager : MonoBehaviour
     {
+        public static bool IsScanning { get { return singleton != null && singleton.m_Co != null; } }
+
         public delegate void OnRefresh();
 
         public static bool debug;
@@ -486,14 +488,27 @@ namespace VPB
 
         public static void Refresh(bool init = false, bool clean = false, bool removeOldVersion = false)
         {
+            if (singleton != null)
+            {
+                if (singleton.m_RefreshCo != null)
+                {
+                    singleton.StopCoroutine(singleton.m_RefreshCo);
+                    singleton.m_RefreshCo = null;
+                }
+                singleton.m_RefreshCo = singleton.StartCoroutine(singleton.RefreshCo(init, clean, removeOldVersion));
+            }
+        }
+
+        private IEnumerator RefreshCo(bool init, bool clean, bool removeOldVersion)
+        {
 #if DEBUG
             string stackTrace = new System.Diagnostics.StackTrace().ToString();
             LogUtil.LogWarning("Refresh " + stackTrace);
 #endif
-            //if (debug)
             {
                 LogUtil.LogWarning(string.Format("FileManager Refresh({0},{1},{2})", init, clean, removeOldVersion));
             }
+            Stopwatch swTotal = Stopwatch.StartNew();
             if (packagesByUid == null)
             {
                 packagesByUid = new Dictionary<string, VarPackage>(StringComparer.OrdinalIgnoreCase);
@@ -534,18 +549,44 @@ namespace VPB
                 {
                     CreateDirectory("AllPackages");
                 }
-                if (Directory.Exists("AllPackages"))
-                {
-                    List<string> allVarFiles = new List<string>();
-                    string[] scanRoots = new string[] { "AddonPackages", "AllPackages", "Custom", "Saves", "BuiltinPackages", "VaM_Data/StreamingAssets/BuiltinPackages" };
-                    foreach (string root in scanRoots)
-                    {
-                        if (Directory.Exists(root))
+            }
+            catch (Exception arg)
+            {
+                LogUtil.LogError("Exception during package refresh initialization " + arg);
+            }
+
+            if (Directory.Exists("AllPackages"))
+            {
+                Stopwatch swEnumerate = Stopwatch.StartNew();
+                List<string> allVarFiles = new List<string>();
+                string[] scanRoots = new string[] { "AddonPackages", "AllPackages", "Custom", "Saves", "BuiltinPackages", "VaM_Data/StreamingAssets/BuiltinPackages" };
+
+                ManualResetEvent doneEvent = new ManualResetEvent(false);
+                ThreadPool.QueueUserWorkItem((state) => {
+                    try {
+                        foreach (string root in scanRoots)
                         {
-                            SafeGetFiles(root, "*.var", allVarFiles);
+                            if (Directory.Exists(root))
+                            {
+                                SafeGetFiles(root, "*.var", allVarFiles);
+                            }
                         }
+                    } finally {
+                        doneEvent.Set();
                     }
+                });
+
+                while (!doneEvent.WaitOne(0)) 
+                {
+                    yield return null;
+                }
+                doneEvent.Close();
+
+                try
+                {
                     string[] varPaths = allVarFiles.ToArray();
+                    swEnumerate.Stop();
+                    LogUtil.Log("FileManager Refresh enumerate vars: " + varPaths.Length + " in " + swEnumerate.ElapsedMilliseconds + "ms");
 
                     HashSet<string> hashSet = new HashSet<string>();
                     HashSet<string> addSet = new HashSet<string>();
@@ -572,12 +613,12 @@ namespace VPB
                             }
                             else
                             {
-                                // Not found, register it
                                 addSet.Add(varPath);
                             }
                         }
                     }
 
+                    Stopwatch swUpdate = Stopwatch.StartNew();
                     HashSet<VarPackage> removeSet = new HashSet<VarPackage>();
                     foreach (VarPackage value3 in packagesByUid.Values)
                     {
@@ -602,12 +643,6 @@ namespace VPB
                                         removeSet.Add(item2);
                                         oldVersion.Add(item2.Path);
                                     }
-                                    else
-                                    {
-#if DEBUG
-										LogUtil.Log("keep old version:" + item2.Uid);
-#endif
-                                    }
                                 }
                             }
                         }
@@ -625,37 +660,30 @@ namespace VPB
                     }
                     if (removeOldVersion)
                     {
-                        // Remove old versions
                         foreach (var item in oldVersion)
                         {
                             RemoveToInvalid(item, "OldVersion");
                         }
                     }
+                    swUpdate.Stop();
+                    LogUtil.Log("FileManager Refresh update: add=" + addSet.Count + " remove=" + removeSet.Count + " oldVersion=" + oldVersion.Count + " in " + swUpdate.ElapsedMilliseconds + "ms");
                 }
-                if (flag)
+                catch (Exception arg)
                 {
-                    //foreach (VarPackage value4 in packagesByUid.Values)
-                    //{
-					//	UnityEngine.Profiling.Profiler.BeginSample("VarPackage LoadMetaData");
-					//	//value4.LoadMetaData();
-					//	UnityEngine.Profiling.Profiler.EndSample();
-                    //}
-                    //foreach (VarPackageGroup value5 in packageGroups.Values)
-                    //{
-					//	UnityEngine.Profiling.Profiler.BeginSample("VarPackageGroup Init");
-					//	value5.Init();
-					//	UnityEngine.Profiling.Profiler.EndSample();
-                    //}
+                    LogUtil.LogError("Exception during package refresh processing " + arg);
                 }
-                if (init)
-                    FileManager.singleton.StartScan(init,flag, clean, true);
-                else
-                    FileManager.singleton.StartScan(init,flag, clean, false);
+            }
+            
+            try
+            {
+                StartScan(init, flag, clean, true);
 
+                swTotal.Stop();
+                LogUtil.Log("FileManager Refresh pre-scan completed in " + swTotal.ElapsedMilliseconds + "ms");
             }
             catch (Exception arg)
             {
-                LogUtil.LogError("Exception during package refresh " + arg);
+                LogUtil.LogError("Exception during package refresh finalization " + arg);
             }
             lastPackageRefreshTime = DateTime.Now;
 
@@ -667,6 +695,7 @@ namespace VPB
                     s_InstalledCount++;
                 }
             }
+            m_RefreshCo = null;
         }
 
 		static void ScanAndRegister(VarPackage varPackage)
@@ -711,8 +740,13 @@ namespace VPB
 			}
 		}
 		Coroutine m_StartScanCo = null;
+		Coroutine m_RefreshCo = null;
 		IEnumerator StartScanCo(bool init,bool flag, bool clean, bool runCo)
         {
+			Stopwatch swScan = Stopwatch.StartNew();
+			VarPackage.ResetScanCounters();
+			int scanTotalPackages = packagesByUid != null ? packagesByUid.Count : 0;
+			LogUtil.Log("FileManager StartScan begin runCo=" + runCo + " packages=" + scanTotalPackages);
 			List<VarPackage> invalid = new List<VarPackage>();
 			if (runCo)
 			{
@@ -746,6 +780,13 @@ namespace VPB
 					RemoveToInvalid(path, "InvalidZip");
 				}
 			}
+			long scanTotal;
+			long scanCacheValidatedHit;
+			long scanCacheHit;
+			long scanZip;
+			VarPackage.GetScanCounters(out scanTotal, out scanCacheValidatedHit, out scanCacheHit, out scanZip);
+			swScan.Stop();
+			LogUtil.Log("FileManager StartScan complete in " + swScan.ElapsedMilliseconds + "ms total=" + scanTotal + " cacheValidated=" + scanCacheValidatedHit + " cacheFallback=" + scanCacheHit + " zipScan=" + scanZip + " invalid=" + invalid.Count);
             if (init)
             {
 				// If initialization, call refresh handlers regardless of flag
@@ -777,13 +818,15 @@ namespace VPB
 			List<VarPackage> list = new List<VarPackage>(packagesByUid.Values);
 
             // Parallel Scan Settings
-            int batchSize = 50; 
+            int batchSize = 200; 
             List<string> errors = new List<string>();
+            Stopwatch frameSw = Stopwatch.StartNew();
 
 			for (int i = 0; i < list.Count; i += batchSize)
             {
                 int count = Math.Min(batchSize, list.Count - i);
                 var batch = list.GetRange(i, count);
+                Stopwatch batchSw = Stopwatch.StartNew();
                 errors.Clear();
                 object errorLock = new object();
                 int pending = count;
@@ -813,8 +856,18 @@ namespace VPB
 
                 // Wait for batch to complete while keeping Unity main thread responsive
                 // WaitOne(0) checks state without blocking
-                while (!doneEvent.WaitOne(0)) yield return null;
+                while (!doneEvent.WaitOne(0)) 
+                {
+                    yield return null;
+                    frameSw.Reset();
+                    frameSw.Start();
+                }
                 doneEvent.Close();
+                batchSw.Stop();
+                if (batchSw.ElapsedMilliseconds > 500)
+                {
+                    LogUtil.Log("FileManager Scan batch " + count + " took " + batchSw.ElapsedMilliseconds + "ms");
+                }
                 
                 // Log errors on main thread
                 foreach(var err in errors) LogUtil.LogError(err);
@@ -834,6 +887,14 @@ namespace VPB
 
                 idx += count;
 				MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+
+                // If we've spent more than 16ms in this frame, yield to next frame
+                if (frameSw.ElapsedMilliseconds > 16)
+                {
+                    yield return null;
+                    frameSw.Reset();
+                    frameSw.Start();
+                }
             }
 		}
 
@@ -1661,6 +1722,15 @@ namespace VPB
 				if (string.IsNullOrEmpty(path))
 					return false;
 
+				// Fast path: Only check file ID if it's a reparse point (junction/symlink)
+				// or if we really need it for deduplication. 
+				// For most files, we can skip the expensive CreateFile call.
+				var attr = File.GetAttributes(path);
+				if ((attr & FileAttributes.ReparsePoint) == 0)
+				{
+					return false;
+				}
+
 				using (SafeFileHandle handle = CreateFile(
 					path,
 					0x80, // FILE_READ_ATTRIBUTES
@@ -1725,6 +1795,40 @@ namespace VPB
 			catch (Exception)
 			{
 				// Ignore access denied or other errors
+			}
+		}
+
+		public static void SafeGetDirectories(string path, string pattern, List<string> results)
+		{
+			SafeGetDirectories(path, pattern, results, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+		}
+
+		private static void SafeGetDirectories(string path, string pattern, List<string> results, HashSet<string> visited)
+		{
+			try
+			{
+				string dirId;
+				if (TryGetWindowsFileId(path, out dirId))
+				{
+					if (!visited.Add(dirId))
+					{
+						return;
+					}
+				}
+
+				string[] dirs = Directory.GetDirectories(path, pattern);
+				if (dirs != null)
+				{
+					foreach (string dir in dirs)
+					{
+						results.Add(dir);
+						SafeGetDirectories(dir, pattern, results, visited);
+					}
+				}
+			}
+			catch (Exception)
+			{
+				// Ignore
 			}
 		}
 

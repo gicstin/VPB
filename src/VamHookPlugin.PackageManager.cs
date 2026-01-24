@@ -50,6 +50,7 @@ namespace VPB
         private System.Collections.Generic.Dictionary<string, int> m_PkgMgrCategoryCounts = new System.Collections.Generic.Dictionary<string, int>();
         private System.Collections.Generic.HashSet<string> m_LockedPackages = new System.Collections.Generic.HashSet<string>();
         private System.Collections.Generic.HashSet<string> m_AutoLoadPackages = new System.Collections.Generic.HashSet<string>();
+        private Coroutine m_ScanPkgMgrCo;
         private Vector2 m_AddonScroll = Vector2.zero;
         private Vector2 m_AllScroll = Vector2.zero;
         private Vector2 m_PkgMgrCategoryScroll = Vector2.zero;
@@ -180,7 +181,25 @@ namespace VPB
                  foreach(var entry in pkg.FileEntries)
                  {
                      string f = entry.InternalPath;
+                     if (f.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase)) return "Appearance";
+                     if (f.StartsWith("Custom/Atom/Person/AnimationPresets", StringComparison.OrdinalIgnoreCase)) return "Animation";
+                     if (f.StartsWith("Custom/Atom/Person/BreastPhysics", StringComparison.OrdinalIgnoreCase)) return "BreastPhysics";
+                     if (f.StartsWith("Custom/Atom/Person/Clothing", StringComparison.OrdinalIgnoreCase)) return "Clothing";
+                     if (f.StartsWith("Custom/Atom/Person/Hair", StringComparison.OrdinalIgnoreCase)) return "Hair";
+                     if (f.StartsWith("Custom/Atom/Person/Morphs", StringComparison.OrdinalIgnoreCase)) return "Morphs";
+                     if (f.StartsWith("Custom/Atom/Person/Plugins", StringComparison.OrdinalIgnoreCase)) return "Plugins";
+                     if (f.StartsWith("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".vac", StringComparison.OrdinalIgnoreCase)) return "Pose";
+                     if (f.StartsWith("Custom/Atom/Person/Skin", StringComparison.OrdinalIgnoreCase)) return "Skin";
+                     if (f.StartsWith("Custom/Atom/Person/General", StringComparison.OrdinalIgnoreCase)) return "General";
+                     if (f.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)) return "Clothing";
+                     if (f.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)) return "Hair";
+                     if (f.IndexOf("Saves/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0) return "Pose";
+                     if (f.StartsWith("Custom/SubScene", StringComparison.OrdinalIgnoreCase)) return "SubScene";
                      if (f.StartsWith("Saves/scene", StringComparison.OrdinalIgnoreCase) && f.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return "Scene";
+                     if (f.IndexOf("/scene/", StringComparison.OrdinalIgnoreCase) >= 0 && f.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return "Scene";
+                     if (f.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && f.IndexOf("scene", StringComparison.OrdinalIgnoreCase) >= 0) return "Scene";
+                     if (f.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && f.IndexOf("pose", StringComparison.OrdinalIgnoreCase) >= 0) return "Pose";
+                     if (f.IndexOf("Custom/Assets", StringComparison.OrdinalIgnoreCase) >= 0 || f.EndsWith(".assetbundle", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".unity3d", StringComparison.OrdinalIgnoreCase)) return "CUA";
                      if (f.StartsWith("Custom/Scripts", StringComparison.OrdinalIgnoreCase)) return "Script";
                      if (f.StartsWith("Custom/Atom/Person", StringComparison.OrdinalIgnoreCase)) return "Person";
                  }
@@ -303,6 +322,11 @@ namespace VPB
             Rect packageManagerRect = new Rect(0, 0, windowWidth, windowHeight);
             bool isEventInsidePackageManager = packageManagerRect.Contains(Event.current.mousePosition);
 
+            if (Event.current.type == EventType.ScrollWheel && isEventInsidePackageManager)
+            {
+                Input.ResetInputAxes();
+            }
+
             if (Event.current.type == EventType.Repaint)
             {
                 m_StylePanel.Draw(new Rect(0, 0, windowWidth, windowHeight), false, false, false, false);
@@ -316,18 +340,6 @@ namespace VPB
             GUILayout.BeginHorizontal();
             GUILayout.Label("Package Manager", m_StyleHeader, GUILayout.ExpandWidth(false));
             
-            GUILayout.FlexibleSpace();
-
-            if (!string.IsNullOrEmpty(m_PkgMgrCreatorFilter))
-            {
-                GUILayout.Space(20);
-                if (GUILayout.Button(new GUIContent("Creator: " + m_PkgMgrCreatorFilter + " [X]", "Clear creator filter"), m_StyleButtonSmall, GUILayout.ExpandWidth(false)))
-                {
-                    m_PkgMgrCreatorFilter = "";
-                    m_PkgMgrIndicesDirty = true;
-                }
-            }
-
             GUILayout.Space(20);
             GUILayout.Label(new GUIContent("Filter:", "Search by package name, type or path"), GUILayout.Width(40));
             GUI.SetNextControlName("PkgMgrFilter");
@@ -362,6 +374,19 @@ namespace VPB
                 }
             }
 
+            GUILayout.FlexibleSpace();
+
+            if (!string.IsNullOrEmpty(m_PkgMgrCreatorFilter))
+            {
+                GUILayout.Space(20);
+                if (GUILayout.Button(new GUIContent("Creator: " + m_PkgMgrCreatorFilter + " [X]", "Clear creator filter"), m_StyleButtonSmall, GUILayout.ExpandWidth(false)))
+                {
+                    m_PkgMgrCreatorFilter = "";
+                    m_PkgMgrIndicesDirty = true;
+                }
+            }
+
+            GUILayout.Space(20);
             if (GUILayout.Button(new GUIContent("Refresh", "Rescan packages on disk"), m_StyleButtonSmall, GUILayout.Width(60)))
             {
                 Refresh();
@@ -451,7 +476,6 @@ namespace VPB
 
             float previewWidth = m_PkgMgrShowPreview ? 320 : 0;
             float leftPaneWidth = windowWidth - previewWidth - (m_PkgMgrShowPreview ? 26 : 10); 
-            m_PkgMgrPreviewHint = "";
             
             const float verticalOverhead = 35f;
             
@@ -591,6 +615,10 @@ namespace VPB
             {
                 GUILayout.Space(8);
                 DrawPackageManagerPreview(previewWidth, totalContentHeightAvailable);
+            }
+            else
+            {
+                m_PkgMgrPreviewHint = "";
             }
 
             GUILayout.EndHorizontal();
@@ -1549,12 +1577,15 @@ namespace VPB
             int selectionCount = GetPackageManagerSelectionCount();
             bool multipleSelection = selectionCount > 1;
             bool isHoveringImage = imgRect.Contains(Event.current.mousePosition);
-            string previewHint = multipleSelection ? "Multiple packages selected; preview disabled." : "";
-            if (isHoveringImage)
+            if (Event.current.type == EventType.Repaint)
             {
-                previewHint = "Hover the preview and use the scroll wheel to cycle the active package.";
+                string previewHint = multipleSelection ? "Multiple packages selected; preview disabled." : "";
+                if (isHoveringImage)
+                {
+                    previewHint = "Use Scroll wheel while hovering over image preview to change pacakge selection in table.";
+                }
+                m_PkgMgrPreviewHint = previewHint;
             }
-            m_PkgMgrPreviewHint = previewHint;
 
             float rowCycleDelta = 0;
             bool rowCycleConsumed = false;
@@ -1791,6 +1822,13 @@ namespace VPB
 
         public void ScanPackageManagerPackages()
         {
+            if (m_ScanPkgMgrCo != null) StopCoroutine(m_ScanPkgMgrCo);
+            m_ScanPkgMgrCo = StartCoroutine(ScanPackageManagerPackagesCo());
+        }
+
+        private System.Collections.IEnumerator ScanPackageManagerPackagesCo()
+        {
+            System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
             System.Collections.Generic.HashSet<string> protectedPackages = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             
             if (FileEntry.AutoInstallLookup != null)
@@ -1800,6 +1838,8 @@ namespace VPB
                     ProtectPackage(item, protectedPackages);
                     VarPackage p = FileManager.ResolveDependency(item);
                     if (p != null) ProtectPackage(p.Uid, protectedPackages);
+
+                    if (sw.ElapsedMilliseconds > 16) { yield return null; sw.Reset(); sw.Start(); }
                 }
             }
 
@@ -1810,27 +1850,28 @@ namespace VPB
             }
             ProtectPackage(currentPackageUid, protectedPackages);
 
-            try
+            var plugins = UnityEngine.Object.FindObjectsOfType<MVRScript>();
+            foreach (var p in plugins)
             {
-                var plugins = UnityEngine.Object.FindObjectsOfType<MVRScript>();
-                foreach (var p in plugins)
+                try
                 {
-                        var fields = p.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                        foreach(var f in fields)
+                    var fields = p.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    foreach(var f in fields)
+                    {
+                        if (f.FieldType == typeof(JSONStorableUrl))
                         {
-                            if (f.FieldType == typeof(JSONStorableUrl))
+                            var jUrl = f.GetValue(p) as JSONStorableUrl;
+                            if (jUrl != null && !string.IsNullOrEmpty(jUrl.val))
                             {
-                                var jUrl = f.GetValue(p) as JSONStorableUrl;
-                                if (jUrl != null && !string.IsNullOrEmpty(jUrl.val))
-                                {
-                                    string pkg = GetPackageFromPath(jUrl.val);
-                                    if (pkg != null) ProtectPackage(pkg, protectedPackages);
-                                }
+                                string pkg = GetPackageFromPath(jUrl.val);
+                                if (pkg != null) ProtectPackage(pkg, protectedPackages);
                             }
                         }
+                    }
                 }
+                catch (Exception) { }
+                if (sw.ElapsedMilliseconds > 16) { yield return null; sw.Reset(); sw.Start(); }
             }
-            catch (Exception) { }
 
             m_PkgMgrCategories.Clear();
             m_PkgMgrCategories.Add("All");
@@ -1858,17 +1899,18 @@ namespace VPB
                 foreach (var g in groups)
                 {
                     if (g.NewestPackage != null) latestUids.Add(g.NewestPackage.Uid);
+                    if (sw.ElapsedMilliseconds > 16) { yield return null; sw.Reset(); sw.Start(); }
                 }
             }
 
             System.Collections.Generic.HashSet<string> types = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             m_AddonList.Clear();
-            ScanDirectory("AddonPackages", m_AddonList, protectedPackages, types, latestUids);
+            yield return ScanDirectoryCo("AddonPackages", m_AddonList, protectedPackages, types, latestUids, sw);
             m_PkgMgrAddonCount = m_AddonList.Count;
 
             m_AllList.Clear();
-            ScanDirectory("AllPackages", m_AllList, protectedPackages, types, latestUids);
+            yield return ScanDirectoryCo("AllPackages", m_AllList, protectedPackages, types, latestUids, sw);
             m_PkgMgrAllCount = m_AllList.Count;
             
             var sortedTypes = new System.Collections.Generic.List<string>(types);
@@ -1878,6 +1920,7 @@ namespace VPB
             SortPackageManagerList();
             UpdatePkgMgrHighlights();
             m_PkgMgrIndicesDirty = true;
+            m_ScanPkgMgrCo = null;
         }
 
         private void UpdatePkgMgrHighlights()
@@ -2028,11 +2071,29 @@ namespace VPB
             }
         }
 
-        private void ScanDirectory(string path, System.Collections.Generic.List<PackageManagerItem> list, System.Collections.Generic.HashSet<string> protectedPackages, System.Collections.Generic.HashSet<string> types, System.Collections.Generic.HashSet<string> latestUids)
+        private System.Collections.IEnumerator ScanDirectoryCo(string path, System.Collections.Generic.List<PackageManagerItem> list, System.Collections.Generic.HashSet<string> protectedPackages, System.Collections.Generic.HashSet<string> types, System.Collections.Generic.HashSet<string> latestUids, System.Diagnostics.Stopwatch sw)
         {
             if (!Directory.Exists(path)) Directory.CreateDirectory(path);
             DirectoryInfo di = new DirectoryInfo(path);
-            FileInfo[] files = di.GetFiles("*.var", SearchOption.AllDirectories);
+            
+            FileInfo[] files = null;
+            bool done = false;
+            System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+                try {
+                    List<string> fileList = new List<string>();
+                    FileManager.SafeGetFiles(path, "*.var", fileList);
+                    files = fileList.Select(f => new FileInfo(f)).ToArray();
+                } catch (Exception ex) {
+                    LogUtil.LogError("[VPB] ScanDirectoryCo GetFiles error: " + ex.Message);
+                    files = new FileInfo[0];
+                } finally {
+                    done = true;
+                }
+            });
+
+            while (!done) yield return null;
+            if (sw.ElapsedMilliseconds > 16) { yield return null; sw.Reset(); sw.Start(); }
+
             DateTime now = DateTime.Now;
             foreach (var file in files)
             {
@@ -2066,7 +2127,7 @@ namespace VPB
                     }
                 }
 
-                list.Add(new PackageManagerItem {
+                var item = new PackageManagerItem {
                     Uid = name,
                     Creator = PackageIDToCreator(name),
                     Path = relativePath,
@@ -2086,7 +2147,9 @@ namespace VPB
                     AutoLoad = isAutoLoad,
                     IsLatest = isLatest,
                     GroupId = FileManager.PackageIDToPackageGroupID(name)
-                });
+                };
+                UpdatePkgMgrItemCache(item);
+                list.Add(item);
 
                 if (!string.IsNullOrEmpty(type)) 
                 {
@@ -2101,6 +2164,8 @@ namespace VPB
                 if (isAutoLoad) m_PkgMgrCategoryCounts["Auto-Load (AL)"]++;
                 if (isLatest) m_PkgMgrCategoryCounts["Latest"]++;
                 else m_PkgMgrCategoryCounts["Old Version"]++;
+
+                if (sw.ElapsedMilliseconds > 16) { yield return null; sw.Reset(); sw.Start(); }
             }
         }
 

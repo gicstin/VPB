@@ -49,6 +49,7 @@ namespace VPB
         private bool m_ShowSpaceSaverWindow;
         private string m_AutoOptimizeReport;
         private float m_AutoOptimizeReportTimer;
+        private bool m_PendingAutoLoadRefresh;
         private Rect m_SpaceSaverWindowRect = new Rect(100, 100, 650, 200);
         private bool m_DecompressConfirmRequested;
         private bool m_CompressConfirmRequested;
@@ -669,60 +670,69 @@ namespace VPB
             }
             MVR.FileManagement.FileManager.RegisterInternalSecureWritePath("AllPackages");
 
-            m_PendingVamCacheCount = GetVamCacheFileCount();
+            int threshold = Settings.Instance.ThumbnailThreshold.Value;
+            System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+                try {
+                    int count = GetVamCacheFileCount(MVR.FileManagement.CacheManager.GetTextureCacheDir(), threshold);
+                    m_PendingVamCacheCount = count;
+                } catch {}
+            });
 
             AutoLoadALPackages();
         }
         
         void AutoLoadALPackages()
         {
-            try
-            {
-                if (!Directory.Exists("AllPackages")) return;
-                
-                var alPackages = AutoLoadPackagesManager.Instance.GetAutoLoadPackages();
-                if (alPackages.Count == 0) return;
-
-                string[] files = Directory.GetFiles("AllPackages", "*.var", SearchOption.AllDirectories);
-                bool moved = false;
-
-                foreach (string file in files)
+            System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+                try
                 {
-                    string name = Path.GetFileNameWithoutExtension(file);
-                    if (alPackages.Contains(name))
+                    if (!Directory.Exists("AllPackages")) return;
+                    
+                    var alPackages = AutoLoadPackagesManager.Instance.GetAutoLoadPackages();
+                    if (alPackages.Count == 0) return;
+
+                    List<string> fileList = new List<string>();
+                    FileManager.SafeGetFiles("AllPackages", "*.var", fileList);
+                    string[] files = fileList.ToArray();
+                    bool moved = false;
+
+                    foreach (string file in files)
                     {
-                        string relativePath = file.Replace('\\', '/');
-                        string targetPath = "AddonPackages" + relativePath.Substring("AllPackages".Length);
-                        
-                        string targetDir = Path.GetDirectoryName(targetPath);
-                        if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
-                        
-                        if (!File.Exists(targetPath))
+                        string name = Path.GetFileNameWithoutExtension(file);
+                        if (alPackages.Contains(name))
                         {
-                            try 
-                            { 
-                                File.Move(file, targetPath); 
-                                moved = true;
-                                LogUtil.Log("[VPB] Auto-Loaded package: " + name);
-                            }
-                            catch (Exception ex) 
-                            { 
-                                LogUtil.LogError("[VPB] Failed to auto-load " + name + ": " + ex.Message); 
+                            string relativePath = file.Replace('\\', '/');
+                            string targetPath = "AddonPackages" + relativePath.Substring("AllPackages".Length);
+                            
+                            string targetDir = Path.GetDirectoryName(targetPath);
+                            if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+                            
+                            if (!File.Exists(targetPath))
+                            {
+                                try 
+                                { 
+                                    File.Move(file, targetPath); 
+                                    moved = true;
+                                    LogUtil.Log("[VPB] Auto-Loaded package: " + name);
+                                }
+                                catch (Exception ex) 
+                                { 
+                                    LogUtil.LogError("[VPB] Failed to auto-load " + name + ": " + ex.Message); 
+                                }
                             }
                         }
                     }
-                }
 
-                if (moved)
-                {
-                    Refresh();
-                    ScanPackageManagerPackages();
+                    if (moved)
+                    {
+                        m_PendingAutoLoadRefresh = true;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("[VPB] Error during AutoLoadALPackages: " + ex.Message);
-            }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("[VPB] Error during AutoLoadALPackages: " + ex.Message);
+                }
+            });
         }
         void OnDestroy()
         {
@@ -801,6 +811,14 @@ namespace VPB
             }
 
             VdsLauncher.TryExecuteOnce();
+
+            if (m_PendingAutoLoadRefresh)
+            {
+                m_PendingAutoLoadRefresh = false;
+                Refresh();
+                ScanPackageManagerPackages();
+            }
+
             float unscaledDt = Time.unscaledDeltaTime;
             if (LogUtil.IsSceneLoadActive())
             {
@@ -983,8 +1001,18 @@ namespace VPB
                 });
             }
 
+            System.Diagnostics.Stopwatch initSw = System.Diagnostics.Stopwatch.StartNew();
+            LogUtil.Log("VPB Init start");
+            System.Diagnostics.Stopwatch cacheInitSw = System.Diagnostics.Stopwatch.StartNew();
             VarPackageMgr.singleton.Init();
+            cacheInitSw.Stop();
+            LogUtil.Log("VarPackageMgr.Init took " + cacheInitSw.ElapsedMilliseconds + "ms");
+            System.Diagnostics.Stopwatch refreshSw = System.Diagnostics.Stopwatch.StartNew();
             FileManager.Refresh(true);
+            refreshSw.Stop();
+            LogUtil.Log("FileManager.Refresh call took " + refreshSw.ElapsedMilliseconds + "ms");
+            initSw.Stop();
+            LogUtil.Log("VPB Init end in " + initSw.ElapsedMilliseconds + "ms");
         }
         void CreateFileBrowser()
         {
@@ -2107,7 +2135,10 @@ namespace VPB
                 GUI.backgroundColor = new Color(0.4f, 0.8f, 0.4f, 1f); // More vibrant green
                 if (GUILayout.Button("Compress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
                 {
-                    m_CachedTexturesSize = GetTexturesFolderSize();
+                    m_CachedTexturesSize = -1;
+                    System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+                        try { m_CachedTexturesSize = GetTexturesFolderSize(); } catch {}
+                    });
                     m_CompressConfirmRequested = true;
                 }
 
@@ -2116,7 +2147,10 @@ namespace VPB
                 GUI.backgroundColor = new Color(0.8f, 0.4f, 0.4f, 1f); // More vibrant red
                 if (GUILayout.Button("Decompress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
                 {
-                    m_CachedVpbSize = GetVpbCacheFolderSize();
+                    m_CachedVpbSize = -1;
+                    System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+                        try { m_CachedVpbSize = GetVpbCacheFolderSize(); } catch {}
+                    });
                     m_DecompressConfirmRequested = true;
                 }
                 
@@ -2252,6 +2286,7 @@ namespace VPB
 
         private string FormatBytes(long bytes)
         {
+            if (bytes < 0) return "Calculating...";
             string[] Suffix = { "B", "KB", "MB", "GB", "TB" };
             int i;
             double dblSByte = bytes;
@@ -2280,23 +2315,22 @@ namespace VPB
 
             // Header
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Remove Old/Damaged", m_StyleHeader);
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
-            {
-                m_ShowRemoveWindow = false;
-            }
-            GUILayout.EndHorizontal();
+            GUILayout.Label("Remove Old/Damaged", m_StyleHeader, GUILayout.ExpandWidth(false));
 
-            // Filter
-            GUILayout.BeginHorizontal();
+            GUILayout.Space(20);
             GUILayout.Label("Filter:", GUILayout.Width(50));
             GUI.SetNextControlName("RemoveFilter");
-            m_RemoveFilter = GUILayout.TextField(m_RemoveFilter);
+            m_RemoveFilter = GUILayout.TextField(m_RemoveFilter, GUILayout.MinWidth(100), GUILayout.MaxWidth(300));
             if (GUILayout.Button("Clear", m_StyleButtonSmall, GUILayout.Width(50)))
             {
                 m_RemoveFilter = "";
                 GUI.FocusControl("");
+            }
+
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
+            {
+                m_ShowRemoveWindow = false;
             }
             GUILayout.EndHorizontal();
 
