@@ -438,27 +438,34 @@ namespace VPB
 
         static void TryClearDirectory(string path)
         {
-            try
-            {
-                if (string.IsNullOrEmpty(path)) return;
-                if (!Directory.Exists(path)) return;
+            if (string.IsNullOrEmpty(path)) return;
+            if (!Directory.Exists(path)) return;
 
-                string[] files = Directory.GetFiles(path, "*", SearchOption.AllDirectories);
-                for (int i = 0; i < files.Length; i++)
+            System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+                try
                 {
-                    try { File.Delete(files[i]); } catch { }
-                }
+                    List<string> fileList = new List<string>();
+                    FileManager.SafeGetFiles(path, "*", fileList);
+                    string[] files = fileList.ToArray();
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        try { File.Delete(files[i]); } catch { }
+                    }
 
-                string[] dirs = Directory.GetDirectories(path, "*", SearchOption.AllDirectories);
-                for (int i = dirs.Length - 1; i >= 0; i--)
-                {
-                    try { Directory.Delete(dirs[i], false); } catch { }
+                    List<string> dirList = new List<string>();
+                    FileManager.SafeGetDirectories(path, "*", dirList);
+                    string[] dirs = dirList.ToArray();
+                    for (int i = dirs.Length - 1; i >= 0; i--)
+                    {
+                        try { Directory.Delete(dirs[i], false); } catch { }
+                    }
+                    LogUtil.Log("VDS clear cache complete for: " + path);
                 }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("VDS clear cache failed: " + ex.Message);
-            }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("VDS clear cache failed: " + ex.Message);
+                }
+            });
         }
 
         static bool ParseBool(string v)

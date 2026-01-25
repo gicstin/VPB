@@ -6,6 +6,7 @@ using System.IO;
 using UnityEngine;
 using Valve.Newtonsoft.Json;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Diagnostics;
 
 namespace VPB
 {
@@ -19,20 +20,52 @@ namespace VPB
         public static VarPackageMgr singleton=new VarPackageMgr();
 
         static string CachePath = "Cache/AllPackagesJSON/" + "AllPackages.bytes2";
+        const int CacheMagic = 0x56504231;
+        const int CacheVersion = 1;
+        readonly object lookupLock = new object();
         public Dictionary<string, SerializableVarPackage> lookup = new Dictionary<string, SerializableVarPackage>();
         
         public SerializableVarPackage TryGetCache(string uid)
         {
-            if (lookup.ContainsKey(uid))
+            lock (lookupLock)
             {
-                return lookup[uid];
+                if (lookup.ContainsKey(uid))
+                {
+                    return lookup[uid];
+                }
             }
             return null;
         }
+
+        public SerializableVarPackage TryGetCacheValidated(string uid, long fileSize, long lastWriteTimeUtcTicks)
+        {
+            var cached = TryGetCache(uid);
+            if (cached == null)
+                return null;
+            if (cached.VarFileSize <= 0 || cached.VarLastWriteTimeUtcTicks <= 0)
+                return null;
+            if (cached.VarFileSize != fileSize || cached.VarLastWriteTimeUtcTicks != lastWriteTimeUtcTicks)
+                return null;
+            return cached;
+        }
+        bool dirtyExternal = false;
         public bool existCache = false;
+        public void SetCache(string uid, SerializableVarPackage value)
+        {
+            lock (lookupLock)
+            {
+                if (lookup.ContainsKey(uid))
+                    lookup[uid] = value;
+                else
+                    lookup.Add(uid, value);
+            }
+            dirtyExternal = true;
+        }
         public void Init()
         {
             existCache = false;
+            int loadedCount = 0;
+            Stopwatch sw = Stopwatch.StartNew();
             if (File.Exists(CachePath))
             {
                 existCache = true;
@@ -41,79 +74,95 @@ namespace VPB
                     if (stream != null)
                     {
                         BinaryReader reader=new BinaryReader(stream);
-                        var count = reader.ReadInt32();
+                        int first = reader.ReadInt32();
+                        int count = 0;
+                        if (first == CacheMagic)
+                        {
+                            int version = reader.ReadInt32();
+                            if (version != CacheVersion)
+                            {
+                                sw.Stop();
+                                LogUtil.Log("VarPackageMgr cache version mismatch " + version);
+                                return;
+                            }
+                            count = reader.ReadInt32();
+                        }
+                        else
+                        {
+                            count = first;
+                        }
                         if (count > 0)
                         {
                             for (int i = 0; i < count; i++)
                             {
                                 var key = reader.ReadString();
                                 SerializableVarPackage pkg = new SerializableVarPackage();
-                                pkg.Read(reader);
+                                pkg.Read(reader, first == CacheMagic);
                                 var pair = new KeyValuePair<string, SerializableVarPackage>(key, pkg);
-                                if (!lookup.ContainsKey(key))
-                                    lookup.Add(key, pkg);
-
+                                lock (lookupLock)
+                                {
+                                    if (!lookup.ContainsKey(key))
+                                        lookup.Add(key, pkg);
+                                }
+                                loadedCount++;
                             }
                         }
                     }
                 }
+            }
+            sw.Stop();
+            if (existCache)
+            {
+                LogUtil.Log("VarPackageMgr cache load " + loadedCount + " in " + sw.ElapsedMilliseconds + "ms");
+            }
+            else
+            {
+                LogUtil.Log("VarPackageMgr cache missing");
             }
         }
         public void Refresh()
         {
-            bool dirty = false;
-            foreach(var item in FileManager.PackagesByUid)
+            if (!dirtyExternal)
+                return;
+
+            Stopwatch sw = Stopwatch.StartNew();
+            Dictionary<string, SerializableVarPackage> snapshot;
+            lock (lookupLock)
             {
-                var uid = item.Key;
-                if (!lookup.ContainsKey(uid))
-                {
-					string cacheJson = "Cache/AllPackagesJSON/" + uid + ".json";
-                    if (File.Exists(cacheJson))
-                    {
-                        string text = File.ReadAllText(cacheJson);
-                        SerializableVarPackage vp;
-                        try
-                        {
-                            lock (LogUtil.JsonLock)
-                            {
-                                vp = Valve.Newtonsoft.Json.JsonConvert.DeserializeObject<SerializableVarPackage>(text);
-                            }
-                            lookup.Add(uid, vp);
-                            dirty = true;
-                        }
-                        catch (Exception ex)
-                        {
-                            LogUtil.LogError("Failed to deserialize cache for " + uid + ": " + ex.Message);
-                            try { File.Delete(cacheJson); } catch { }
-                        }
-                    }
-                }
+                snapshot = new Dictionary<string, SerializableVarPackage>(lookup);
             }
-            if (dirty)
+            if (snapshot.Count == 0)
+                return;
+
+            string tempPath = CachePath + ".tmp";
+            try
             {
-                string tempPath = CachePath + ".tmp";
-                try
+                using (FileStream stream = new FileStream(tempPath, FileMode.Create))
                 {
-                    using (FileStream stream = new FileStream(tempPath, FileMode.Create))
+                    BinaryWriter writer = new BinaryWriter(stream);
+                    writer.Write(CacheMagic);
+                    writer.Write(CacheVersion);
+                    writer.Write(snapshot.Count);
+                    foreach (var item in snapshot)
                     {
-                        BinaryWriter writer = new BinaryWriter(stream);
-                        writer.Write(lookup.Count);
-                        foreach (var item in lookup)
-                        {
-                            writer.Write(item.Key);
-                            item.Value.Write(writer);
-                        }
-                        writer.Flush();
-                        writer.Close();
+                        writer.Write(item.Key);
+                        item.Value.Write(writer);
                     }
-                    if (File.Exists(CachePath)) File.Delete(CachePath);
-                    File.Move(tempPath, CachePath);
+                    writer.Flush();
+                    writer.Close();
                 }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("Failed to write main cache: " + ex.Message);
-                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-                }
+                if (File.Exists(CachePath)) File.Delete(CachePath);
+                File.Move(tempPath, CachePath);
+                sw.Stop();
+                long bytes = 0;
+                if (File.Exists(CachePath)) bytes = new FileInfo(CachePath).Length;
+                LogUtil.Log("VarPackageMgr cache write " + snapshot.Count + " in " + sw.ElapsedMilliseconds + "ms bytes=" + bytes);
+                dirtyExternal = false;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("Failed to write main cache: " + ex.Message);
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             }
         }
     }
