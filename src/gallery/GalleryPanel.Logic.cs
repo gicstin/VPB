@@ -309,9 +309,18 @@ namespace VPB
             categoriesCached = false;
 
             // Try to restore last tab if not specified
-            if (string.IsNullOrEmpty(currentPath) && Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
+            string lastPageName = null;
+            if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
             {
-                string lastPageName = Settings.Instance.LastGalleryPage.Value;
+                lastPageName = VPBConfig.Instance.LastGalleryCategory;
+            }
+            else if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
+            {
+                lastPageName = Settings.Instance.LastGalleryPage.Value;
+            }
+
+            if (string.IsNullOrEmpty(currentPath) && !string.IsNullOrEmpty(lastPageName))
+            {
                 var cat = categories.FirstOrDefault(c => c.name == lastPageName);
                 if (!string.IsNullOrEmpty(cat.name))
                 {

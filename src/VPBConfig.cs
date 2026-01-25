@@ -9,6 +9,36 @@ namespace VPB
     public class VPBConfig
     {
         private static VPBConfig _instance;
+        private static string s_LastLoggedSavedGalleryCategory;
+        private static string s_LastLoggedLoadedGalleryCategory;
+
+        public static void ReloadFromDisk()
+        {
+            _instance = null;
+        }
+
+        public static string ReadLastGalleryCategoryFromDisk()
+        {
+            try
+            {
+                string baseDir = Directory.GetCurrentDirectory();
+                string saveDir = Path.Combine(baseDir, "Saves");
+                saveDir = Path.Combine(saveDir, "PluginData");
+                saveDir = Path.Combine(saveDir, "VPB");
+                string path = Path.Combine(saveDir, "VPB.cfg");
+                if (!File.Exists(path)) return "";
+
+                string json = File.ReadAllText(path);
+                JSONNode node = JSON.Parse(json);
+                if (node == null) return "";
+                if (node["LastGalleryCategory"] == null) return "";
+                return node["LastGalleryCategory"].Value;
+            }
+            catch
+            {
+                return "";
+            }
+        }
         public static VPBConfig Instance
         {
             get
@@ -22,15 +52,19 @@ namespace VPB
             }
         }
 
+        public string ConfigPathForDebug => ConfigPath;
+
         private string ConfigPath
         {
             get
             {
-                // Try to find the plugin directory
-                string path = Path.Combine(Application.dataPath, "../Custom/Scripts/VPB/VPB.cfg");
-                string dir = Path.GetDirectoryName(path);
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                return path;
+                // Use PluginData for persistence (works reliably even with hot reloads / read-only Custom folders).
+                string baseDir = Directory.GetCurrentDirectory();
+                string saveDir = Path.Combine(baseDir, "Saves");
+                saveDir = Path.Combine(saveDir, "PluginData");
+                saveDir = Path.Combine(saveDir, "VPB");
+                if (!Directory.Exists(saveDir)) Directory.CreateDirectory(saveDir);
+                return Path.Combine(saveDir, "VPB.cfg");
             }
         }
 
@@ -63,6 +97,7 @@ namespace VPB
         public bool EnableGalleryTranslucency = false;
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
+        public string LastGalleryCategory = "";
         public bool DesktopFixedMode = false;
         public bool DesktopFixedAutoCollapse = true;
         public int DesktopFixedHeightMode = 0; // 0: Full, 1: Custom
@@ -136,6 +171,7 @@ namespace VPB
             EnableGalleryTranslucency = false;
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
+            LastGalleryCategory = "";
             DesktopFixedMode = false;
             DesktopFixedAutoCollapse = true;
             DesktopFixedHeightMode = 0;
@@ -146,6 +182,7 @@ namespace VPB
             {
                 if (File.Exists(ConfigPath))
                 {
+                    string prevLastGalleryCategory = LastGalleryCategory;
                     string json = File.ReadAllText(ConfigPath);
                     JSONNode node = JSON.Parse(json);
                     if (node != null)
@@ -193,12 +230,32 @@ namespace VPB
                         if (node["EnableGalleryTranslucency"] != null) EnableGalleryTranslucency = node["EnableGalleryTranslucency"].AsBool;
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
+                        if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                         if (node["DesktopFixedHeightMode"] != null) DesktopFixedHeightMode = node["DesktopFixedHeightMode"].AsInt;
                         if (node["DesktopCustomHeight"] != null) DesktopCustomHeight = node["DesktopCustomHeight"].AsFloat;
                         if (node["DesktopCustomWidth"] != null) DesktopCustomWidth = node["DesktopCustomWidth"].AsFloat;
                     }
+
+                    try
+                    {
+                        if (Settings.Instance != null && Settings.Instance.LogVerboseUi != null && Settings.Instance.LogVerboseUi.Value)
+                            LogUtil.Log("[VPBConfig] Loaded cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode);
+                    }
+                    catch { }
+
+                    try
+                    {
+                        if (!string.Equals(prevLastGalleryCategory, LastGalleryCategory, StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(s_LastLoggedLoadedGalleryCategory, LastGalleryCategory, StringComparison.OrdinalIgnoreCase) &&
+                            !string.IsNullOrEmpty(LastGalleryCategory))
+                        {
+                            s_LastLoggedLoadedGalleryCategory = LastGalleryCategory;
+                            LogUtil.Log("[VPBConfig] Loaded LastGalleryCategory='" + LastGalleryCategory + "' from " + ConfigPath);
+                        }
+                    }
+                    catch { }
                 }
             }
             catch (Exception ex)
@@ -211,6 +268,7 @@ namespace VPB
         {
             try
             {
+                string prevLogged = s_LastLoggedSavedGalleryCategory;
                 JSONClass node = new JSONClass();
                 node["EnableButtonGaps"].AsBool = EnableButtonGaps;
                 node["ShowSideButtons"].Value = ShowSideButtons;
@@ -225,12 +283,31 @@ namespace VPB
                 node["EnableGalleryTranslucency"].AsBool = EnableGalleryTranslucency;
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
+                node["LastGalleryCategory"].Value = LastGalleryCategory;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
                 node["DesktopFixedHeightMode"].AsInt = DesktopFixedHeightMode;
                 node["DesktopCustomHeight"].AsFloat = DesktopCustomHeight;
                 node["DesktopCustomWidth"].AsFloat = DesktopCustomWidth;
                 File.WriteAllText(ConfigPath, node.ToString());
+
+                try
+                {
+                    if (Settings.Instance != null && Settings.Instance.LogVerboseUi != null && Settings.Instance.LogVerboseUi.Value)
+                        LogUtil.Log("[VPBConfig] Saved cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode);
+                }
+                catch { }
+
+                try
+                {
+                    if (!string.Equals(prevLogged, LastGalleryCategory, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(LastGalleryCategory))
+                    {
+                        s_LastLoggedSavedGalleryCategory = LastGalleryCategory;
+                        LogUtil.Log("[VPBConfig] Saved LastGalleryCategory='" + LastGalleryCategory + "' to " + ConfigPath);
+                    }
+                }
+                catch { }
+
                 // No need to Invoke ConfigChanged here if we want to control it from the UI or if Save is the final action.
                 // Actually, Invoke is good if other components listen to file saves.
                 ConfigChanged?.Invoke();

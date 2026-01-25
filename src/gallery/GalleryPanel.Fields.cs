@@ -67,6 +67,7 @@ namespace VPB
                 if (VPBConfig.Instance != null) {
                     VPBConfig.Instance.DragDropReplaceMode = value;
                     VPBConfig.Instance.TriggerChange();
+                    try { VPBConfig.Instance.Save(); } catch { }
                 }
             }
         }
@@ -117,6 +118,11 @@ namespace VPB
         private Image rightReplaceBtnImage;
         private Text leftReplaceBtnText;
         private Image leftReplaceBtnImage;
+
+        private GameObject rightRemoveAllClothingBtn;
+        private GameObject rightRemoveAllHairBtn;
+        private GameObject leftRemoveAllClothingBtn;
+        private GameObject leftRemoveAllHairBtn;
         
         private Text leftSortBtnText;
         private Text rightSortBtnText;
@@ -209,6 +215,13 @@ namespace VPB
         private Image footerFollowDistanceImage;
         private GameObject footerFollowHeightBtn;
         private Image footerFollowHeightImage;
+
+        private GameObject footerRemoveAllClothingBtn;
+        private Image footerRemoveAllClothingBtnImage;
+        private Text footerRemoveAllClothingBtnText;
+        private GameObject footerRemoveAllHairBtn;
+        private Image footerRemoveAllHairBtnImage;
+        private Text footerRemoveAllHairBtnText;
 
         // Side buttons for dynamic positioning
         private List<RectTransform> rightSideButtons = new List<RectTransform>();

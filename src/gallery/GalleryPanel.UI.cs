@@ -125,6 +125,42 @@ namespace VPB
             footerAutoHideBtnImage = footerAutoHideBtn.GetComponent<Image>();
             footerAutoHideBtnText = footerAutoHideBtn.GetComponentInChildren<Text>();
 
+            // --- Context Actions (Category-aware) ---
+            footerRemoveAllClothingBtn = UI.CreateUIButton(rightSection, 40, 40, "Cl", 16, 0, 0, AnchorPresets.middleCenter, () => {
+                Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                if (target == null)
+                {
+                    LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                    return;
+                }
+
+                // Reuse existing action pipeline on UIDraggableItem
+                UIDraggableItem dragger = footerRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
+                if (dragger == null) dragger = footerRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
+                dragger.Panel = this;
+                dragger.RemoveAllClothing(target);
+            });
+            footerRemoveAllClothingBtnImage = footerRemoveAllClothingBtn.GetComponent<Image>();
+            footerRemoveAllClothingBtnText = footerRemoveAllClothingBtn.GetComponentInChildren<Text>();
+            AddTooltip(footerRemoveAllClothingBtn, "Remove All Clothing from Target");
+
+            footerRemoveAllHairBtn = UI.CreateUIButton(rightSection, 40, 40, "Hr", 16, 0, 0, AnchorPresets.middleCenter, () => {
+                Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                if (target == null)
+                {
+                    LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                    return;
+                }
+
+                UIDraggableItem dragger = footerRemoveAllHairBtn.GetComponent<UIDraggableItem>();
+                if (dragger == null) dragger = footerRemoveAllHairBtn.AddComponent<UIDraggableItem>();
+                dragger.Panel = this;
+                dragger.RemoveAllHair(target);
+            });
+            footerRemoveAllHairBtnImage = footerRemoveAllHairBtn.GetComponent<Image>();
+            footerRemoveAllHairBtnText = footerRemoveAllHairBtn.GetComponentInChildren<Text>();
+            AddTooltip(footerRemoveAllHairBtn, "Remove All Hair from Target");
+
             // Hover support
             AddHoverDelegate(paginationFirstBtn);
             AddTooltip(paginationFirstBtn, "First Page");
@@ -151,6 +187,8 @@ namespace VPB
             AddTooltip(footerHeightBtn, "Toggle Fixed Height Mode");
             AddHoverDelegate(footerAutoHideBtn);
             AddTooltip(footerAutoHideBtn, "Auto-Hide (Fixed)");
+            AddHoverDelegate(footerRemoveAllClothingBtn);
+            AddHoverDelegate(footerRemoveAllHairBtn);
 
             // Hover Path Text (Now placed above the buttons with background)
             GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.85f), AnchorPresets.hStretchBottom, 0, 40, new Vector2(0, 40));
@@ -189,7 +227,28 @@ namespace VPB
             UpdateFooterLayoutState();
             UpdateFooterHeightState();
             UpdateFooterAutoHideState();
+            UpdateFooterContextActions();
             UpdatePaginationText();
+        }
+
+        private void UpdateFooterContextActions()
+        {
+            // Default to hidden
+            if (footerRemoveAllClothingBtn != null) footerRemoveAllClothingBtn.SetActive(false);
+            if (footerRemoveAllHairBtn != null) footerRemoveAllHairBtn.SetActive(false);
+
+            string title = currentCategoryTitle ?? "";
+            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (footerRemoveAllClothingBtn != null) footerRemoveAllClothingBtn.SetActive(isClothing);
+            if (footerRemoveAllHairBtn != null) footerRemoveAllHairBtn.SetActive(isHair);
+
+            // Slight visual cue (optional but consistent with other footer buttons)
+            if (footerRemoveAllClothingBtnImage != null) footerRemoveAllClothingBtnImage.color = new Color(0.6f, 0.2f, 0.2f, 1f);
+            if (footerRemoveAllHairBtnImage != null) footerRemoveAllHairBtnImage.color = new Color(0.6f, 0.2f, 0.2f, 1f);
+            if (footerRemoveAllClothingBtnText != null) footerRemoveAllClothingBtnText.color = Color.white;
+            if (footerRemoveAllHairBtnText != null) footerRemoveAllHairBtnText.color = Color.white;
         }
 
         private void ToggleLayoutMode()
@@ -632,6 +691,9 @@ namespace VPB
             if (!categoriesCached) CacheCategoryCounts();
 
             if (contentScrollRT == null) return;
+
+            // Ensure UI reflects persisted replace mode even if the panel was recreated/re-shown.
+            UpdateReplaceButtonState();
             
             float leftOffset = 20;
             float rightOffset = -20;
@@ -977,7 +1039,10 @@ namespace VPB
 
         private SideButtonLayoutEntry[] GetSideButtonsLayout()
         {
-            // gapBeforeUnits is how many "groupGap" units to insert before this row (in addition to normal spacing)
+            string title = currentCategoryTitle ?? "";
+            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+
             return new SideButtonLayoutEntry[]
             {
                 new SideButtonLayoutEntry(0, 0, 0),
@@ -992,8 +1057,24 @@ namespace VPB
                 new SideButtonLayoutEntry(8, 0, 1), // Target
                 new SideButtonLayoutEntry(9, 0, 0), // Apply Mode
                 new SideButtonLayoutEntry(10, 0, 0), // Replace
-                new SideButtonLayoutEntry(12, 0, 1), // Undo
+                new SideButtonLayoutEntry(13, 0, 1), // Remove Clothing (context)
+                new SideButtonLayoutEntry(14, 0, isHair ? 1 : 0), // Remove Hair (context)
+                new SideButtonLayoutEntry(12, 0, (isClothing || isHair) ? 1 : 0), // Undo
             };
+        }
+
+        private void UpdateSideContextActions()
+        {
+            string title = currentCategoryTitle ?? "";
+            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(isClothing);
+            if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(isClothing);
+            if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(isHair);
+            if (leftRemoveAllHairBtn != null) leftRemoveAllHairBtn.SetActive(isHair);
+
+            UpdateSideButtonPositions();
         }
 
         private float GetSideButtonsStackHeight(float spacing, float gap)

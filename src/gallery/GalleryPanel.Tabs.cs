@@ -33,6 +33,9 @@ namespace VPB
                 else titleText.text = currentCategoryTitle;
             }
 
+            UpdateFooterContextActions();
+            UpdateSideContextActions();
+
             if (IsHubMode)
             {
                 UpdateHubLayout();
@@ -366,6 +369,11 @@ namespace VPB
                         if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
                         {
                             Settings.Instance.LastGalleryPage.Value = c.name;
+                        }
+                        if (VPBConfig.Instance != null)
+                        {
+                            VPBConfig.Instance.LastGalleryCategory = c.name;
+                            try { VPBConfig.Instance.Save(); } catch { }
                         }
                         UpdateTabs();
                     }, trackedButtons, () => {

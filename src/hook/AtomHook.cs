@@ -15,8 +15,6 @@ namespace VPB
 {
     class AtomHook
     {
-        static bool s_LoggedDllMarker;
-
         // Load-look feature
         //prefab:TabControlAtom
         [HarmonyPrefix]
@@ -146,6 +144,30 @@ namespace VPB
             }
             catch { }
 
+            try
+            {
+                var asm = typeof(AtomHook).Assembly;
+                string asmPath = null;
+                try { asmPath = asm != null ? asm.Location : null; } catch { }
+                if (string.IsNullOrEmpty(asmPath))
+                {
+                    try
+                    {
+                        string codeBase = asm != null ? asm.CodeBase : null;
+                        if (!string.IsNullOrEmpty(codeBase))
+                        {
+                            asmPath = new Uri(codeBase).LocalPath;
+                        }
+                    }
+                    catch { }
+                }
+                string asmVer = asm != null ? asm.GetName().Version.ToString() : "null";
+                string asmTime = "null";
+                try { if (!string.IsNullOrEmpty(asmPath)) asmTime = System.IO.File.GetLastWriteTime(asmPath).ToString("yyyy-MM-dd HH:mm:ss"); } catch { }
+                LogUtil.Log("[VPB] DLL marker (preset hook) | ver=" + asmVer + " | ts=" + asmTime + " | path=" + (string.IsNullOrEmpty(asmPath) ? "null" : asmPath));
+            }
+            catch { }
+
             LogUtil.Log($"[VPB hook]PresetManager PreLoadPresetPreFromJSON {atomName} {storableId} {__instance.presetName}");
             if (processJSON != null)
             {
@@ -155,21 +177,6 @@ namespace VPB
 
         static void EnsureInstalledFromJSON(JSONNode node)
         {
-            if (!s_LoggedDllMarker)
-            {
-                s_LoggedDllMarker = true;
-                try
-                {
-                    var asm = typeof(AtomHook).Assembly;
-                    string asmPath = asm != null ? asm.Location : "null";
-                    string asmVer = asm != null ? asm.GetName().Version.ToString() : "null";
-                    string asmTime = "null";
-                    try { if (!string.IsNullOrEmpty(asmPath)) asmTime = System.IO.File.GetLastWriteTime(asmPath).ToString("yyyy-MM-dd HH:mm:ss"); } catch { }
-                    LogUtil.Log("[VPB] DLL marker (preset hook) | ver=" + asmVer + " | ts=" + asmTime + " | path=" + asmPath);
-                }
-                catch { }
-            }
-
             var results = new HashSet<string>();
             JSONOptimization.ExtractAllVariableReferences(node, results);
             if (results.Count > 0)

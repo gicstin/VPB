@@ -686,11 +686,29 @@ namespace VPB
             try
             {
                 var asm = typeof(VamHookPlugin).Assembly;
-                string asmPath = asm != null ? asm.Location : "null";
+                string asmPath = null;
+                try { asmPath = asm != null ? asm.Location : null; } catch { }
+                if (string.IsNullOrEmpty(asmPath))
+                {
+                    try { asmPath = this.Info != null ? this.Info.Location : null; } catch { }
+                }
+                if (string.IsNullOrEmpty(asmPath))
+                {
+                    try
+                    {
+                        string codeBase = asm != null ? asm.CodeBase : null;
+                        if (!string.IsNullOrEmpty(codeBase))
+                        {
+                            asmPath = new Uri(codeBase).LocalPath;
+                        }
+                    }
+                    catch { }
+                }
+
                 string asmVer = asm != null ? asm.GetName().Version.ToString() : "null";
                 string asmTime = "null";
                 try { if (!string.IsNullOrEmpty(asmPath)) asmTime = System.IO.File.GetLastWriteTime(asmPath).ToString("yyyy-MM-dd HH:mm:ss"); } catch { }
-                LogUtil.Log("[VPB] DLL loaded | ver=" + asmVer + " | ts=" + asmTime + " | path=" + asmPath);
+                LogUtil.Log("[VPB] DLL loaded | ver=" + asmVer + " | ts=" + asmTime + " | path=" + (string.IsNullOrEmpty(asmPath) ? "null" : asmPath));
             }
             catch { }
 
@@ -733,8 +751,13 @@ namespace VPB
             }
 
             Settings.Init(this.Config);
-
-
+            try
+            {
+                VPBConfig.ReloadFromDisk();
+                var cfg = VPBConfig.Instance;
+                LogUtil.Log("[VPBConfig] Awake loaded | path=" + cfg.ConfigPathForDebug + " | LastGalleryCategory=" + cfg.LastGalleryCategory + " | DragDropReplaceMode=" + cfg.DragDropReplaceMode);
+            }
+            catch { }
 
             UIKey = KeyUtil.Parse(Settings.Instance.UIKey.Value);
             GalleryKey = KeyUtil.Parse(Settings.Instance.GalleryKey.Value);

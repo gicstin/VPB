@@ -60,19 +60,22 @@ namespace VPB
             // 2: Follow
             // 3: Clone
             // 4: Category
-            // 5: Creator
-            // 6: Status
-            // 7: Target
-            // 8: Apply Mode
-            // 9: Replace
-            // 10: Hub
-            // 11: Undo
+            // 5: ActiveItems
+            // 6: Creator
+            // 7: Status
+            // 8: Target
+            // 9: Apply Mode
+            // 10: Replace
+            // 11: Hub
+            // 12: Undo
+            // 13: Remove Clothing (context)
+            // 14: Remove Hair (context)
 
             int targetIndex = -1;
             switch(type)
             {
-                case ContentType.Creator: targetIndex = 5; break;
-                case ContentType.Status: targetIndex = 6; break;
+                case ContentType.Creator: targetIndex = 6; break;
+                case ContentType.Status: targetIndex = 7; break;
             }
 
             if (targetIndex >= 0)
@@ -874,6 +877,59 @@ namespace VPB
                 rightUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 rightSideButtons.Add(rightUndoBtn.GetComponent<RectTransform>());
 
+                // Context Actions (Right) - inserted above Undo
+                rightRemoveAllClothingBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nClothing", 18, 0, 0, AnchorPresets.centre, () => {
+                    LogUtil.Log("[VPB] SideButton click: Remove Clothing (Right)");
+                    try
+                    {
+                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        LogUtil.Log($"[VPB] Remove Clothing (Right) resolved target: {(target != null ? target.uid + " (" + target.type + ")" : "<null>")}");
+                        if (target == null)
+                        {
+                            LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                            return;
+                        }
+                        UIDraggableItem dragger = rightRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
+                        if (dragger == null) dragger = rightRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
+                        dragger.Panel = this;
+                        dragger.RemoveAllClothing(target);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Clothing (Right) exception: " + ex);
+                    }
+                });
+                rightRemoveAllClothingBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
+                rightRemoveAllClothingBtn.GetComponentInChildren<Text>().color = Color.white;
+                rightSideButtons.Add(rightRemoveAllClothingBtn.GetComponent<RectTransform>());
+                rightRemoveAllClothingBtn.SetActive(false);
+
+                rightRemoveAllHairBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nHair", 18, 0, 0, AnchorPresets.centre, () => {
+                    LogUtil.Log("[VPB] SideButton click: Remove Hair (Right)");
+                    try
+                    {
+                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        LogUtil.Log($"[VPB] Remove Hair (Right) resolved target: {(target != null ? target.uid + " (" + target.type + ")" : "<null>")}");
+                        if (target == null)
+                        {
+                            LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                            return;
+                        }
+                        UIDraggableItem dragger = rightRemoveAllHairBtn.GetComponent<UIDraggableItem>();
+                        if (dragger == null) dragger = rightRemoveAllHairBtn.AddComponent<UIDraggableItem>();
+                        dragger.Panel = this;
+                        dragger.RemoveAllHair(target);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Hair (Right) exception: " + ex);
+                    }
+                });
+                rightRemoveAllHairBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
+                rightRemoveAllHairBtn.GetComponentInChildren<Text>().color = Color.white;
+                rightSideButtons.Add(rightRemoveAllHairBtn.GetComponent<RectTransform>());
+                rightRemoveAllHairBtn.SetActive(false);
+
                 // Left Button Container
                 leftSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleLeft, 130, 700, new Vector2(-140, 0));
                 sideButtonGroups.Add(leftSideContainer.AddComponent<CanvasGroup>());
@@ -1014,6 +1070,59 @@ namespace VPB
                 GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
+
+                // Context Actions (Left) - inserted above Undo
+                leftRemoveAllClothingBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nClothing", 18, 0, 0, AnchorPresets.centre, () => {
+                    LogUtil.Log("[VPB] SideButton click: Remove Clothing (Left)");
+                    try
+                    {
+                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        LogUtil.Log($"[VPB] Remove Clothing (Left) resolved target: {(target != null ? target.uid + " (" + target.type + ")" : "<null>")}");
+                        if (target == null)
+                        {
+                            LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                            return;
+                        }
+                        UIDraggableItem dragger = leftRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
+                        if (dragger == null) dragger = leftRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
+                        dragger.Panel = this;
+                        dragger.RemoveAllClothing(target);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Clothing (Left) exception: " + ex);
+                    }
+                });
+                leftRemoveAllClothingBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
+                leftRemoveAllClothingBtn.GetComponentInChildren<Text>().color = Color.white;
+                leftSideButtons.Add(leftRemoveAllClothingBtn.GetComponent<RectTransform>());
+                leftRemoveAllClothingBtn.SetActive(false);
+
+                leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nHair", 18, 0, 0, AnchorPresets.centre, () => {
+                    LogUtil.Log("[VPB] SideButton click: Remove Hair (Left)");
+                    try
+                    {
+                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        LogUtil.Log($"[VPB] Remove Hair (Left) resolved target: {(target != null ? target.uid + " (" + target.type + ")" : "<null>")}");
+                        if (target == null)
+                        {
+                            LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                            return;
+                        }
+                        UIDraggableItem dragger = leftRemoveAllHairBtn.GetComponent<UIDraggableItem>();
+                        if (dragger == null) dragger = leftRemoveAllHairBtn.AddComponent<UIDraggableItem>();
+                        dragger.Panel = this;
+                        dragger.RemoveAllHair(target);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Hair (Left) exception: " + ex);
+                    }
+                });
+                leftRemoveAllHairBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
+                leftRemoveAllHairBtn.GetComponentInChildren<Text>().color = Color.white;
+                leftSideButtons.Add(leftRemoveAllHairBtn.GetComponent<RectTransform>());
+                leftRemoveAllHairBtn.SetActive(false);
 
 UpdateDesktopModeButton();
             }

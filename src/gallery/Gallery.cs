@@ -244,7 +244,52 @@ namespace VPB
             
             // Show default category
             if (categories.Count > 0)
-                 p.Show(categories[0].name, categories[0].extension, categories[0].path);
+            {
+                Gallery.Category initial = categories[0];
+                try
+                {
+                    string last = VPBConfig.ReadLastGalleryCategoryFromDisk();
+                    if (string.IsNullOrEmpty(last) && VPBConfig.Instance != null)
+                        last = VPBConfig.Instance.LastGalleryCategory;
+
+                    if (!string.IsNullOrEmpty(last))
+                    {
+                        // Normalize saved formats:
+                        // - "Category Hair" / "CategoryHair" -> "Hair"
+                        // - "Preset Hair" / "PresetHair" -> "Hair"
+                        // - "Scene" -> "Scenes"
+                        last = last.Trim();
+                        if (last.StartsWith("Category ", StringComparison.OrdinalIgnoreCase))
+                            last = last.Substring("Category ".Length);
+                        else if (last.StartsWith("Category", StringComparison.OrdinalIgnoreCase) && last.Length > "Category".Length)
+                            last = last.Substring("Category".Length);
+
+                        if (last.StartsWith("Preset ", StringComparison.OrdinalIgnoreCase))
+                            last = last.Substring("Preset ".Length);
+                        else if (last.StartsWith("Preset", StringComparison.OrdinalIgnoreCase) && last.Length > "Preset".Length)
+                            last = last.Substring("Preset".Length);
+
+                        last = last.Trim();
+
+                        if (string.Equals(last, "Scene", StringComparison.OrdinalIgnoreCase))
+                            last = "Scenes";
+
+                        for (int i = 0; i < categories.Count; i++)
+                        {
+                            if (string.Equals(categories[i].name, last, StringComparison.OrdinalIgnoreCase))
+                            {
+                                initial = categories[i];
+                                break;
+                            }
+                        }
+
+                        LogUtil.Log("[Gallery] CreatePane initial category='" + initial.name + "' (saved='" + last + "')");
+                    }
+                }
+                catch { }
+
+                p.Show(initial.name, initial.extension, initial.path);
+            }
         }
 
         public void Hide()

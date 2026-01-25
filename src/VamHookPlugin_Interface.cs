@@ -57,18 +57,54 @@ namespace VPB
             if (Gallery.singleton != null)
             {
                 if (!m_GalleryCatsInited) InitGalleryCategories();
-                
-                string lastPageName = (Settings.Instance != null && Settings.Instance.LastGalleryPage != null) ? Settings.Instance.LastGalleryPage.Value : "";
+
+                string lastPageName = "";
+                string diskLast = "";
+                try { diskLast = VPBConfig.ReadLastGalleryCategoryFromDisk(); } catch { }
+                if (!string.IsNullOrEmpty(diskLast))
+                {
+                    lastPageName = diskLast;
+                    LogUtil.Log("[Gallery] OpenGallery using disk LastGalleryCategory='" + lastPageName + "'");
+                }
+                else if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
+                {
+                    lastPageName = VPBConfig.Instance.LastGalleryCategory;
+                    LogUtil.Log("[Gallery] OpenGallery using memory LastGalleryCategory='" + lastPageName + "'");
+                }
+                else
+                {
+                    lastPageName = (Settings.Instance != null && Settings.Instance.LastGalleryPage != null) ? Settings.Instance.LastGalleryPage.Value : "";
+                    if (!string.IsNullOrEmpty(lastPageName))
+                        LogUtil.Log("[Gallery] OpenGallery using Settings.LastGalleryPage='" + lastPageName + "'");
+                }
+
                 if (!string.IsNullOrEmpty(lastPageName) && m_GalleryCategories != null)
                 {
+                    string rawLastPageName = lastPageName;
+
+                    // Normalize common variants written by legacy callers.
+                    if (lastPageName.StartsWith("Category ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        lastPageName = lastPageName.Substring("Category ".Length);
+                    }
+                    if (string.Equals(lastPageName, "Scene", StringComparison.OrdinalIgnoreCase))
+                    {
+                        lastPageName = "Scenes";
+                    }
+
+                    LogUtil.Log("[Gallery] OpenGallery restore raw='" + rawLastPageName + "' normalized='" + lastPageName + "'");
+
                     foreach (var cat in m_GalleryCategories)
                     {
                         if (string.Equals(cat.name, lastPageName, StringComparison.OrdinalIgnoreCase))
                         {
+                            LogUtil.Log("[Gallery] OpenGallery matched category='" + cat.name + "' path='" + cat.path + "'");
                             Gallery.singleton.Show(cat.name, cat.extension, cat.path);
                             return;
                         }
                     }
+
+                    LogUtil.LogWarning("[Gallery] OpenGallery no match for '" + lastPageName + "'");
                 }
             }
 
@@ -238,6 +274,36 @@ namespace VPB
             if (Gallery.singleton != null)
             {
                 if (!m_GalleryCatsInited) InitGalleryCategories();
+
+                // Persist only on explicit navigation (hotkeys/menu). Do NOT persist in GalleryPanel.Show()
+                // to avoid overwriting saved state during initial open/restore.
+                try
+                {
+                    if (VPBConfig.Instance != null)
+                    {
+                        string name = title;
+                        if (!string.IsNullOrEmpty(name) && name.StartsWith("Category ", StringComparison.OrdinalIgnoreCase))
+                            name = name.Substring("Category ".Length);
+                        if (string.Equals(name, "Scene", StringComparison.OrdinalIgnoreCase))
+                            name = "Scenes";
+
+                        if (!string.IsNullOrEmpty(name) && m_GalleryCategories != null)
+                        {
+                            for (int i = 0; i < m_GalleryCategories.Count; i++)
+                            {
+                                var c = m_GalleryCategories[i];
+                                if (string.Equals(c.name, name, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    VPBConfig.Instance.LastGalleryCategory = c.name;
+                                    try { VPBConfig.Instance.Save(); } catch { }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
                 Gallery.singleton.Show(title, extension, path);
             }
         }
