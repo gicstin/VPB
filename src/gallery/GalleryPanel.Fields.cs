@@ -103,6 +103,7 @@ namespace VPB
         
         private Text rightHubBtnText; // NEW
         private Image rightHubBtnImage; // NEW
+        private GameObject rightHubBtnGO;
 
         private Text leftCategoryBtnText;
         private Image leftCategoryBtnImage;
@@ -113,16 +114,22 @@ namespace VPB
 
         private Text leftHubBtnText; // NEW
         private Image leftHubBtnImage; // NEW
+        private GameObject leftHubBtnGO;
 
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
         private Text leftReplaceBtnText;
         private Image leftReplaceBtnImage;
 
+        private GameObject rightUndoBtnGO;
+        private GameObject leftUndoBtnGO;
+
         private GameObject rightRemoveAllClothingBtn;
         private GameObject rightRemoveAllHairBtn;
+        private GameObject rightRemoveAtomBtn;
         private GameObject leftRemoveAllClothingBtn;
         private GameObject leftRemoveAllHairBtn;
+        private GameObject leftRemoveAtomBtn;
 
         private GameObject rightRemoveClothingExpandBtn;
         private GameObject leftRemoveClothingExpandBtn;
@@ -161,9 +168,21 @@ namespace VPB
         private float clothingSubmenuLastHoverTime = 0f;
         private const float ClothingSubmenuAutoHideDelay = 0.75f;
 
+        private bool atomSubmenuOpen = false;
+        private List<GameObject> rightRemoveAtomSubmenuButtons = new List<GameObject>();
+        private List<GameObject> leftRemoveAtomSubmenuButtons = new List<GameObject>();
+
+        private bool atomSubmenuParentHovered = false;
+        private bool atomSubmenuOptionsHovered = false;
+        private int atomSubmenuParentHoverCount = 0;
+        private int atomSubmenuOptionsHoverCount = 0;
+        private float atomSubmenuLastHoverTime = 0f;
+        private const float AtomSubmenuAutoHideDelay = 0.75f;
+
         private int rightRemoveHairSubmenuStartIndex = -1;
         private int leftRemoveHairSubmenuStartIndex = -1;
         private const int HairSubmenuMaxButtons = 10;
+        private const int AtomSubmenuMaxButtons = 20;
         
         private Text leftSortBtnText;
         private Text rightSortBtnText;

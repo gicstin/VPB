@@ -861,6 +861,55 @@ namespace VPB
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
 
+                // Scene Context (Right)
+                rightRemoveAtomBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nAtom", 18, 0, 0, AnchorPresets.centre, () => {
+                    try
+                    {
+                        if (SuperController.singleton == null) return;
+                        ToggleAtomSubmenuFromSideButtons();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Atom (Right) exception: " + ex);
+                    }
+                });
+                rightRemoveAtomBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
+                rightRemoveAtomBtn.GetComponentInChildren<Text>().color = Color.white;
+                rightSideButtons.Add(rightRemoveAtomBtn.GetComponent<RectTransform>());
+                rightRemoveAtomBtn.SetActive(false);
+
+                try
+                {
+                    EventTrigger et = rightRemoveAtomBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = rightRemoveAtomBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            atomSubmenuParentHoverCount++;
+                            atomSubmenuParentHovered = true;
+                            atomSubmenuLastHoverTime = Time.unscaledTime;
+                            if (!atomSubmenuOpen) ToggleAtomSubmenuFromSideButtons();
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+
+                    var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    exitEntry.callback.AddListener((data) => {
+                        try
+                        {
+                            atomSubmenuParentHoverCount--;
+                            if (atomSubmenuParentHoverCount < 0) atomSubmenuParentHoverCount = 0;
+                            atomSubmenuParentHovered = atomSubmenuParentHoverCount > 0;
+                            atomSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(exitEntry);
+                }
+                catch { }
+
                 // Hub (Orange)
                 GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
                     if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
@@ -873,6 +922,7 @@ namespace VPB
                         Hide();
                     }
                 });
+                rightHubBtnGO = rightHubBtn;
                 rightHubBtnImage = rightHubBtn.GetComponent<Image>();
                 rightHubBtnImage.color = ColorHub;
                 rightHubBtnText = rightHubBtn.GetComponentInChildren<Text>();
@@ -891,6 +941,7 @@ namespace VPB
 
                 // Undo (Right)
                 GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
+                rightUndoBtnGO = rightUndoBtn;
                 rightUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 rightSideButtons.Add(rightUndoBtn.GetComponent<RectTransform>());
 
@@ -991,6 +1042,49 @@ namespace VPB
                 rightRemoveClothingExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
                 rightRemoveClothingExpandBtn.GetComponentInChildren<Text>().color = Color.white;
                 rightRemoveClothingExpandBtn.SetActive(false);
+
+                // Atom Submenu Buttons (Right) - pooled
+                for (int i = 0; i < AtomSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(rightSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                    rightSideButtons.Add(b.GetComponent<RectTransform>());
+                    rightRemoveAtomSubmenuButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                atomSubmenuOptionsHoverCount++;
+                                atomSubmenuOptionsHovered = true;
+                                atomSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                atomSubmenuOptionsHoverCount--;
+                                if (atomSubmenuOptionsHoverCount < 0) atomSubmenuOptionsHoverCount = 0;
+                                atomSubmenuOptionsHovered = atomSubmenuOptionsHoverCount > 0;
+                                atomSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
 
                 for (int i = 0; i < HairSubmenuMaxButtons; i++)
                 {
@@ -1298,6 +1392,55 @@ namespace VPB
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
 
+                // Scene Context (Left)
+                leftRemoveAtomBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nAtom", 18, 0, 0, AnchorPresets.centre, () => {
+                    try
+                    {
+                        if (SuperController.singleton == null) return;
+                        ToggleAtomSubmenuFromSideButtons();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Atom (Left) exception: " + ex);
+                    }
+                });
+                leftRemoveAtomBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
+                leftRemoveAtomBtn.GetComponentInChildren<Text>().color = Color.white;
+                leftSideButtons.Add(leftRemoveAtomBtn.GetComponent<RectTransform>());
+                leftRemoveAtomBtn.SetActive(false);
+
+                try
+                {
+                    EventTrigger et = leftRemoveAtomBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = leftRemoveAtomBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            atomSubmenuParentHoverCount++;
+                            atomSubmenuParentHovered = true;
+                            atomSubmenuLastHoverTime = Time.unscaledTime;
+                            if (!atomSubmenuOpen) ToggleAtomSubmenuFromSideButtons();
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+
+                    var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    exitEntry.callback.AddListener((data) => {
+                        try
+                        {
+                            atomSubmenuParentHoverCount--;
+                            if (atomSubmenuParentHoverCount < 0) atomSubmenuParentHoverCount = 0;
+                            atomSubmenuParentHovered = atomSubmenuParentHoverCount > 0;
+                            atomSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(exitEntry);
+                }
+                catch { }
+
                 // Hub (Orange)
                 GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
                     if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
@@ -1310,6 +1453,7 @@ namespace VPB
                         Hide();
                     }
                 });
+                leftHubBtnGO = leftHubBtn;
                 leftHubBtnImage = leftHubBtn.GetComponent<Image>();
                 leftHubBtnImage.color = ColorHub;
                 leftHubBtnText = leftHubBtn.GetComponentInChildren<Text>();
@@ -1328,6 +1472,7 @@ namespace VPB
 
                 // Undo (Left)
                 GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
+                leftUndoBtnGO = leftUndoBtn;
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
 
@@ -1428,6 +1573,49 @@ namespace VPB
                 leftRemoveClothingExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
                 leftRemoveClothingExpandBtn.GetComponentInChildren<Text>().color = Color.white;
                 leftRemoveClothingExpandBtn.SetActive(false);
+
+                // Atom Submenu Buttons (Left) - pooled
+                for (int i = 0; i < AtomSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(leftSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                    leftSideButtons.Add(b.GetComponent<RectTransform>());
+                    leftRemoveAtomSubmenuButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                atomSubmenuOptionsHoverCount++;
+                                atomSubmenuOptionsHovered = true;
+                                atomSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                atomSubmenuOptionsHoverCount--;
+                                if (atomSubmenuOptionsHoverCount < 0) atomSubmenuOptionsHoverCount = 0;
+                                atomSubmenuOptionsHovered = atomSubmenuOptionsHoverCount > 0;
+                                atomSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
 
                 for (int i = 0; i < HairSubmenuMaxButtons; i++)
                 {
@@ -1783,6 +1971,28 @@ UpdateDesktopModeButton();
                         else
                         {
                             clothingSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    if (atomSubmenuOpen)
+                    {
+                        bool hovered = atomSubmenuParentHovered || atomSubmenuOptionsHovered;
+                        if (!hovered)
+                        {
+                            if (Time.unscaledTime - atomSubmenuLastHoverTime >= AtomSubmenuAutoHideDelay)
+                            {
+                                atomSubmenuOpen = false;
+                                SetAtomSubmenuButtonsVisible(false);
+                                UpdateSideButtonPositions();
+                            }
+                        }
+                        else
+                        {
+                            atomSubmenuLastHoverTime = Time.unscaledTime;
                         }
                     }
                 }

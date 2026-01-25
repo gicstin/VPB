@@ -2,8 +2,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -1219,6 +1221,8 @@ namespace VPB
                 string title = currentCategoryTitle ?? "";
                 bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
                 bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
                 if (isHair && hairSubmenuOpen)
                 {
                     float xPad = 80f;
@@ -1322,6 +1326,58 @@ namespace VPB
                         }
                     }
                 }
+
+                if (isScene && atomSubmenuOpen)
+                {
+                    float xPad = 80f;
+
+                    RectTransform leftBaseRT = leftRemoveAtomBtn != null ? leftRemoveAtomBtn.GetComponent<RectTransform>() : null;
+                    RectTransform rightBaseRT = rightRemoveAtomBtn != null ? rightRemoveAtomBtn.GetComponent<RectTransform>() : null;
+
+                    int visibleCount = 0;
+                    for (int i = 0; i < leftRemoveAtomSubmenuButtons.Count; i++)
+                    {
+                        GameObject go = leftRemoveAtomSubmenuButtons[i];
+                        if (go != null && go.activeSelf) visibleCount++;
+                    }
+                    if (visibleCount == 0)
+                    {
+                        for (int i = 0; i < rightRemoveAtomSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = rightRemoveAtomSubmenuButtons[i];
+                            if (go != null && go.activeSelf) visibleCount++;
+                        }
+                    }
+                    float yStart = -(visibleCount - 1) * 0.5f * spacing;
+
+                    if (leftBaseRT != null)
+                    {
+                        float baseY = leftBaseRT.anchoredPosition.y;
+                        for (int i = 0; i < leftRemoveAtomSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = leftRemoveAtomSubmenuButtons[i];
+                            if (go == null || !go.activeSelf) continue;
+                            RectTransform rt = go.GetComponent<RectTransform>();
+                            if (rt == null) continue;
+                            float w = rt.sizeDelta.x;
+                            rt.anchoredPosition = new Vector2(-(w * 0.5f) - xPad, baseY + yStart + spacing * i);
+                        }
+                    }
+
+                    if (rightBaseRT != null)
+                    {
+                        float baseY = rightBaseRT.anchoredPosition.y;
+                        for (int i = 0; i < rightRemoveAtomSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = rightRemoveAtomSubmenuButtons[i];
+                            if (go == null || !go.activeSelf) continue;
+                            RectTransform rt = go.GetComponent<RectTransform>();
+                            if (rt == null) continue;
+                            float w = rt.sizeDelta.x;
+                            rt.anchoredPosition = new Vector2((w * 0.5f) + xPad, baseY + yStart + spacing * i);
+                        }
+                    }
+                }
             }
             catch { }
         }
@@ -1331,22 +1387,58 @@ namespace VPB
             string title = currentCategoryTitle ?? "";
             bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
 
             int idxRandom = 4;
             int idxRemoveHair = 15;
+            int idxRemoveClothing = 14;
+            int idxRemoveAtom = -1;
+            int idxHub = 12;
+            int idxUndo = 13;
             try
             {
-                if (rightSideButtons != null)
+                List<RectTransform> refList = rightSideButtons;
+                if (refList == null || refList.Count == 0) refList = leftSideButtons;
+                if (refList != null)
                 {
                     if (rightLoadRandomBtn != null)
                     {
-                        int i = rightSideButtons.FindIndex(rt => rt != null && rt.gameObject == rightLoadRandomBtn);
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == rightLoadRandomBtn);
                         if (i >= 0) idxRandom = i;
                     }
+
                     if (rightRemoveAllHairBtn != null)
                     {
-                        int i = rightSideButtons.FindIndex(rt => rt != null && rt.gameObject == rightRemoveAllHairBtn);
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == rightRemoveAllHairBtn);
                         if (i >= 0) idxRemoveHair = i;
+                    }
+
+                    if (rightRemoveAllClothingBtn != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == rightRemoveAllClothingBtn);
+                        if (i >= 0) idxRemoveClothing = i;
+                    }
+
+                    GameObject removeAtomGo = rightRemoveAtomBtn != null ? rightRemoveAtomBtn : leftRemoveAtomBtn;
+                    if (removeAtomGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == removeAtomGo);
+                        if (i >= 0) idxRemoveAtom = i;
+                    }
+
+                    GameObject hubGo = rightHubBtnGO != null ? rightHubBtnGO : leftHubBtnGO;
+                    if (hubGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == hubGo);
+                        if (i >= 0) idxHub = i;
+                    }
+
+                    GameObject undoGo = rightUndoBtnGO != null ? rightUndoBtnGO : leftUndoBtnGO;
+                    if (undoGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == undoGo);
+                        if (i >= 0) idxUndo = i;
                     }
                 }
             }
@@ -1362,17 +1454,257 @@ namespace VPB
                 new SideButtonLayoutEntry(6, 0, 0), // ActiveItems
                 new SideButtonLayoutEntry(7, 0, 0), // Creator
                 new SideButtonLayoutEntry(8, 0, 0), // Status
-                new SideButtonLayoutEntry(12, 0, 0), // Hub
+                new SideButtonLayoutEntry(idxHub, 0, 0), // Hub
                 new SideButtonLayoutEntry(9, 0, 1), // Target
                 new SideButtonLayoutEntry(10, 0, 0), // Apply Mode
                 new SideButtonLayoutEntry(11, 0, 0), // Replace
-                new SideButtonLayoutEntry(14, 0, 1), // Remove Clothing (context)
+                new SideButtonLayoutEntry(idxRemoveClothing, 0, 1), // Remove Clothing (context)
+                new SideButtonLayoutEntry(idxRemoveAtom, 0, isScene ? 1 : 0), // Remove Atom (scene)
                 new SideButtonLayoutEntry(idxRemoveHair, 0, isHair ? 1 : 0), // Remove Hair (context)
             };
 
             layout.Add(new SideButtonLayoutEntry(idxRandom, 0, 1)); // Random
-            layout.Add(new SideButtonLayoutEntry(13, 0, (isClothing || isHair) ? 1 : 0)); // Undo
+            layout.Add(new SideButtonLayoutEntry(idxUndo, 0, (isClothing || isHair || isScene) ? 1 : 0)); // Undo
             return layout.ToArray();
+        }
+
+        private void SetAtomSubmenuButtonsVisible(bool visible)
+        {
+            try
+            {
+                for (int i = 0; i < rightRemoveAtomSubmenuButtons.Count; i++)
+                {
+                    if (rightRemoveAtomSubmenuButtons[i] != null) rightRemoveAtomSubmenuButtons[i].SetActive(visible);
+                }
+                for (int i = 0; i < leftRemoveAtomSubmenuButtons.Count; i++)
+                {
+                    if (leftRemoveAtomSubmenuButtons[i] != null) leftRemoveAtomSubmenuButtons[i].SetActive(visible);
+                }
+            }
+            catch { }
+        }
+
+        private void PopulateAtomSubmenuButtons()
+        {
+            SetAtomSubmenuButtonsVisible(false);
+
+            if (SuperController.singleton == null) return;
+
+            bool IsEssentialAtom(Atom a)
+            {
+                if (a == null) return true;
+                string uid = null;
+                string type = null;
+                try { uid = a.uid; } catch { }
+                try { type = a.type; } catch { }
+
+                if (!string.IsNullOrEmpty(type) && type.Equals("CoreControl", StringComparison.OrdinalIgnoreCase)) return true;
+                if (!string.IsNullOrEmpty(uid) && uid.Equals("CoreControl", StringComparison.OrdinalIgnoreCase)) return true;
+                if (!string.IsNullOrEmpty(uid) && uid.StartsWith("CoreControl", StringComparison.OrdinalIgnoreCase)) return true;
+
+                if (!string.IsNullOrEmpty(type) && type.Equals("VRController", StringComparison.OrdinalIgnoreCase)) return true;
+                if (!string.IsNullOrEmpty(uid) && uid.Equals("CameraRig", StringComparison.OrdinalIgnoreCase)) return true;
+                if (!string.IsNullOrEmpty(uid) && uid.IndexOf("[CameraRig]", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                return false;
+            }
+
+            List<Atom> atoms = null;
+            try { atoms = SuperController.singleton.GetAtoms(); }
+            catch { }
+            if (atoms == null) atoms = new List<Atom>();
+
+            var options = new List<KeyValuePair<string, string>>();
+            try
+            {
+                for (int i = 0; i < atoms.Count; i++)
+                {
+                    Atom a = atoms[i];
+                    if (a == null) continue;
+                    if (string.IsNullOrEmpty(a.uid)) continue;
+
+                    if (IsEssentialAtom(a)) continue;
+
+                    string label = a.uid;
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(a.type)) label = a.type + ": " + a.uid;
+                    }
+                    catch { }
+
+                    options.Add(new KeyValuePair<string, string>(a.uid, label));
+                }
+
+                options = options
+                    .GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => g.First())
+                    .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch { }
+
+            int count = Mathf.Min(options.Count, AtomSubmenuMaxButtons);
+
+            for (int i = 0; i < AtomSubmenuMaxButtons; i++)
+            {
+                string uid = i < count ? options[i].Key : null;
+                string label = i < count ? options[i].Value : null;
+
+                void Configure(GameObject btnGO)
+                {
+                    if (btnGO == null) return;
+                    Button btn = btnGO.GetComponent<Button>();
+                    Text t = btnGO.GetComponentInChildren<Text>();
+                    if (t != null) t.text = label ?? "";
+                    if (btn != null)
+                    {
+                        btn.onClick.RemoveAllListeners();
+                        btn.interactable = !string.IsNullOrEmpty(uid);
+                        if (!string.IsNullOrEmpty(uid))
+                        {
+                            btn.onClick.AddListener(() => {
+                                try
+                                {
+                                    if (SuperController.singleton == null) return;
+                                    Atom a = null;
+                                    try { a = SuperController.singleton.GetAtomByUid(uid); }
+                                    catch { }
+                                    if (a == null) return;
+                                    if (IsEssentialAtom(a)) return;
+                                    PushUndoSnapshotForAtomRemoval(a);
+                                    SuperController.singleton.RemoveAtom(a);
+                                }
+                                finally
+                                {
+                                    atomSubmenuOpen = false;
+                                    SetAtomSubmenuButtonsVisible(false);
+                                    UpdateSideButtonPositions();
+                                }
+                            });
+                        }
+                    }
+                    btnGO.SetActive(i < count);
+                }
+
+                if (i < rightRemoveAtomSubmenuButtons.Count) Configure(rightRemoveAtomSubmenuButtons[i]);
+                if (i < leftRemoveAtomSubmenuButtons.Count) Configure(leftRemoveAtomSubmenuButtons[i]);
+            }
+        }
+
+        private void ToggleAtomSubmenuFromSideButtons()
+        {
+            atomSubmenuOpen = !atomSubmenuOpen;
+            if (atomSubmenuOpen)
+            {
+                PopulateAtomSubmenuButtons();
+            }
+            else
+            {
+                SetAtomSubmenuButtonsVisible(false);
+            }
+
+            UpdateSideButtonPositions();
+        }
+
+        private void PushUndoSnapshotForAtomRemoval(Atom atom)
+        {
+            if (atom == null) return;
+            if (SuperController.singleton == null) return;
+
+            try
+            {
+                string atomUid = null;
+                try { atomUid = atom.uid; } catch { }
+                if (string.IsNullOrEmpty(atomUid)) return;
+
+                JSONNode atomNode = null;
+                try
+                {
+                    // Try common serialization methods (VaM versions differ)
+                    string[] candidates = new[] { "GetSaveJSON", "GetJSON", "GetAtomJSON", "GetSceneJSON" };
+                    for (int i = 0; i < candidates.Length && atomNode == null; i++)
+                    {
+                        MethodInfo mi = null;
+                        try { mi = atom.GetType().GetMethod(candidates[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); }
+                        catch { }
+                        if (mi == null) continue;
+                        var ps = mi.GetParameters();
+                        if (ps != null && ps.Length != 0) continue;
+                        object result = null;
+                        try { result = mi.Invoke(atom, null); }
+                        catch { }
+                        if (result == null) continue;
+                        if (result is JSONNode node)
+                        {
+                            atomNode = node;
+                        }
+                        else
+                        {
+                            try
+                            {
+                                string s = result.ToString();
+                                if (!string.IsNullOrEmpty(s)) atomNode = JSON.Parse(s);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+                if (atomNode == null) return;
+
+                // Ensure id exists for merge-load
+                try
+                {
+                    if (atomNode["id"] == null || string.IsNullOrEmpty(atomNode["id"].Value)) atomNode["id"] = atomUid;
+                }
+                catch { }
+
+                // Freeze to a string now (atom may be removed after this)
+                string atomJson = null;
+                try { atomJson = atomNode.ToString(); }
+                catch { }
+                if (string.IsNullOrEmpty(atomJson)) return;
+
+                JSONClass mini = new JSONClass();
+                JSONArray one = new JSONArray();
+                try { one.Add(JSON.Parse(atomJson)); }
+                catch { one.Add(atomNode); }
+                mini["atoms"] = one;
+
+                string undoTempPath = Path.Combine(SuperController.singleton.savesDir, "vpb_temp_undo_atom_" + Guid.NewGuid().ToString() + ".json");
+                File.WriteAllText(undoTempPath, mini.ToString());
+
+                PushUndo(() => {
+                    try
+                    {
+                        if (SuperController.singleton == null) return;
+                        if (!File.Exists(undoTempPath)) return;
+
+                        MethodInfo loadMerge = SuperController.singleton.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
+                        if (loadMerge != null)
+                        {
+                            loadMerge.Invoke(SuperController.singleton, new object[] { undoTempPath });
+                        }
+                        else
+                        {
+                            MethodInfo loadInternal = SuperController.singleton.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            if (loadInternal != null)
+                            {
+                                loadInternal.Invoke(SuperController.singleton, new object[] { undoTempPath, true, false });
+                            }
+                            else
+                            {
+                                SuperController.singleton.Load(undoTempPath);
+                            }
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        try { if (File.Exists(undoTempPath)) File.Delete(undoTempPath); } catch { }
+                    }
+                });
+            }
+            catch { }
         }
 
         private void SetHairSubmenuButtonsVisible(bool visible)
@@ -1576,11 +1908,15 @@ namespace VPB
             string title = currentCategoryTitle ?? "";
             bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
 
             if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(isClothing);
             if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(isClothing);
             if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(isHair);
             if (leftRemoveAllHairBtn != null) leftRemoveAllHairBtn.SetActive(isHair);
+            if (rightRemoveAtomBtn != null) rightRemoveAtomBtn.SetActive(isScene);
+            if (leftRemoveAtomBtn != null) leftRemoveAtomBtn.SetActive(isScene);
 
             if (!isHair && hairSubmenuOpen)
             {
@@ -1592,6 +1928,12 @@ namespace VPB
             {
                 clothingSubmenuOpen = false;
                 SetClothingSubmenuButtonsVisible(false);
+            }
+
+            if (!isScene && atomSubmenuOpen)
+            {
+                atomSubmenuOpen = false;
+                SetAtomSubmenuButtonsVisible(false);
             }
 
             UpdateSideButtonPositions();
