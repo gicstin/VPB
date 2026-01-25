@@ -8,6 +8,7 @@ namespace VPB
     public static class ThirdPartyFixHook
     {
         private static bool _parentHoldLinkPatched = false;
+        private static bool _unityLogListenerPatched = false;
 
         public static void PatchAll(Harmony harmony)
         {
@@ -29,6 +30,30 @@ namespace VPB
                         }
                     }
                 }
+
+                if (!_unityLogListenerPatched)
+                {
+                    Type unityLogListenerType = AccessTools.TypeByName("BepInEx.Logging.UnityLogListener");
+                    if (unityLogListenerType != null)
+                    {
+                        MethodInfo prefix = AccessTools.Method(typeof(ThirdPartyFixHook), nameof(UnityLogListener_Log_Prefix));
+                        var methods = unityLogListenerType.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                        foreach (var m in methods)
+                        {
+                            if (m == null) continue;
+                            var p = m.GetParameters();
+                            if (p == null || p.Length != 3) continue;
+                            if (p[0].ParameterType != typeof(string)) continue;
+                            if (p[1].ParameterType != typeof(string)) continue;
+                            if (p[2].ParameterType != typeof(LogType)) continue;
+
+                            harmony.Patch(m, prefix: new HarmonyMethod(prefix));
+                            _unityLogListenerPatched = true;
+                            LogUtil.Log("[VPB] Patched BepInEx.Logging.UnityLogListener." + m.Name + " to suppress missing addon dependency spam");
+                            break;
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -45,6 +70,29 @@ namespace VPB
                 return null; // Suppress the exception
             }
             return null;
+        }
+
+        private static bool UnityLogListener_Log_Prefix(string __0, string __1, LogType __2)
+        {
+            try
+            {
+                if (__2 == LogType.Error)
+                {
+                    string msg = !string.IsNullOrEmpty(__0) ? __0 : __1;
+                    if (string.IsNullOrEmpty(msg)) msg = __1;
+
+                    if (!string.IsNullOrEmpty(msg)
+                        && msg.IndexOf("Missing addon package", StringComparison.OrdinalIgnoreCase) >= 0
+                        && msg.IndexOf("depends on", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return false;
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return true;
         }
     }
 }

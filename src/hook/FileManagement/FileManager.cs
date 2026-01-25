@@ -777,6 +777,7 @@ namespace VPB
 		IEnumerator ScanVarPackagesCo(bool clean, List<VarPackage> invalid)
 		{
 			if (packagesByUid == null) yield break;
+			Stopwatch indexAllSw = Stopwatch.StartNew();
 			List<string> list = new List<string>(packagesByUid.Keys);
 			int idx = 0;
 			int allCount = list.Count;
@@ -810,6 +811,9 @@ namespace VPB
 					cnt = 0;
 				}
 			}
+			indexAllSw.Stop();
+			double indexSeconds = indexAllSw.Elapsed.TotalSeconds;
+			LogUtil.Log("VarPackageMgr index all packages " + allCount + " in " + indexSeconds.ToString("0.00") + "s (" + indexAllSw.ElapsedMilliseconds + "ms)");
 		}
 
 		public List<string> GetAllVars()

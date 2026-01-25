@@ -204,7 +204,7 @@ namespace VPB
             {
                 var item = list[i];
                 if (!IsPackageManagerItemVisible(item)) continue;
-                rows.Add(new PackageManagerVisibleRow { Index = i });
+                rows.Add(new PackageManagerVisibleRow { Index = i, Header = null });
             }
 
             if (m_PkgMgrUseRelevanceSort && m_PkgMgrFilterTermsLower != null && m_PkgMgrFilterTermsLower.Length > 0)

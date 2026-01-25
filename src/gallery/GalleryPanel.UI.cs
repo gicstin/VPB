@@ -33,7 +33,7 @@ namespace VPB
             paginationRT.anchorMax = new Vector2(1, 0); // Stretch horizontally
             paginationRT.pivot = new Vector2(0.5f, 0);
             paginationRT.anchoredPosition = new Vector2(0, 0);
-            paginationRT.sizeDelta = new Vector2(0, 60); // Footer bar height for buttons
+            paginationRT.sizeDelta = new Vector2(0, 40); // Footer bar height for buttons
             
             HorizontalLayoutGroup footerHLG = pageContainer.AddComponent<HorizontalLayoutGroup>();
             footerHLG.padding = new RectOffset(60, 10, 0, 0); // 60 padding on left for resize handle
@@ -153,7 +153,7 @@ namespace VPB
             AddTooltip(footerAutoHideBtn, "Auto-Hide (Fixed)");
 
             // Hover Path Text (Now placed above the buttons with background)
-            GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.85f), AnchorPresets.hStretchBottom, 0, 60, new Vector2(0, 60));
+            GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.85f), AnchorPresets.hStretchBottom, 0, 40, new Vector2(0, 40));
             pathGO.name = "HoverPathContainer";
             pathGO.GetComponent<Image>().raycastTarget = false;
             hoverPathRT = pathGO.GetComponent<RectTransform>();

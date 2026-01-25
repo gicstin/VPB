@@ -20,6 +20,56 @@ namespace VPB
 
     public partial class VamHookPlugin : BaseUnityPlugin // Inherits BaseUnityPlugin
     {
+        private class FilteringLogHandler : ILogHandler
+        {
+            private readonly ILogHandler m_Inner;
+
+            public FilteringLogHandler(ILogHandler inner)
+            {
+                m_Inner = inner;
+            }
+
+            public void LogException(Exception exception, UnityEngine.Object context)
+            {
+                m_Inner.LogException(exception, context);
+            }
+
+            public void LogFormat(LogType logType, UnityEngine.Object context, string format, params object[] args)
+            {
+                try
+                {
+                    if (logType == LogType.Error && !string.IsNullOrEmpty(format) && IsMissingAddonDependencyMessage(format, args))
+                    {
+                        return;
+                    }
+                }
+                catch
+                {
+                }
+                m_Inner.LogFormat(logType, context, format, args);
+            }
+
+            private static bool IsMissingAddonDependencyMessage(string format, object[] args)
+            {
+                string msg = format;
+                if (args != null && args.Length > 0)
+                {
+                    try
+                    {
+                        msg = string.Format(format, args);
+                    }
+                    catch
+                    {
+                        msg = format;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(msg)) return false;
+                return msg.IndexOf("Missing addon package", StringComparison.OrdinalIgnoreCase) >= 0
+                    && msg.IndexOf("depends on", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+        }
+
         private KeyUtil UIKey;
         private KeyUtil GalleryKey;
         private KeyUtil CreateGalleryKey;
@@ -612,6 +662,18 @@ namespace VPB
         {
             singleton = this;
             IsFileManagerInited = false;
+
+            try
+            {
+                var current = Debug.unityLogger.logHandler;
+                if (!(current is FilteringLogHandler))
+                {
+                    Debug.unityLogger.logHandler = new FilteringLogHandler(current);
+                }
+            }
+            catch
+            {
+            }
             
             // Explicitly initialize ZstdNet native library early
             try { ExternMethods.Initialize(); } catch { }
