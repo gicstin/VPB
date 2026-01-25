@@ -123,6 +123,12 @@ namespace VPB
         private GameObject rightRemoveAllHairBtn;
         private GameObject leftRemoveAllClothingBtn;
         private GameObject leftRemoveAllHairBtn;
+
+        private GameObject rightRemoveClothingExpandBtn;
+        private GameObject leftRemoveClothingExpandBtn;
+
+        private GameObject clothingSlotPickerOverlayGO;
+        private GameObject clothingSlotPickerPanelGO;
         
         private Text leftSortBtnText;
         private Text rightSortBtnText;
@@ -215,10 +221,6 @@ namespace VPB
         private Image footerFollowDistanceImage;
         private GameObject footerFollowHeightBtn;
         private Image footerFollowHeightImage;
-
-        private GameObject footerRemoveAllClothingBtn;
-        private Image footerRemoveAllClothingBtnImage;
-        private Text footerRemoveAllClothingBtnText;
         private GameObject footerRemoveAllHairBtn;
         private Image footerRemoveAllHairBtnImage;
         private Text footerRemoveAllHairBtnText;
@@ -230,6 +232,9 @@ namespace VPB
         private GameObject leftClearStatusBtn;
         private GameObject rightClearCreatorBtn;
         private GameObject rightClearStatusBtn;
+
+        private GameObject leftLoadRandomBtn;
+        private GameObject rightLoadRandomBtn;
 
         // Settings Pane
         private SettingsPanel settingsPanel;

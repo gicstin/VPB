@@ -70,6 +70,7 @@ namespace VPB
             // 12: Undo
             // 13: Remove Clothing (context)
             // 14: Remove Hair (context)
+            // 15: Random
 
             int targetIndex = -1;
             switch(type)
@@ -786,6 +787,11 @@ namespace VPB
                 rightCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
                 rightSideButtons.Add(rightCloneBtn.GetComponent<RectTransform>());
 
+                // Load Random (always available)
+                rightLoadRandomBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Random", btnFontSize, 0, 0, AnchorPresets.centre, LoadRandom);
+                rightLoadRandomBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.55f, 1f);
+                rightSideButtons.Add(rightLoadRandomBtn.GetComponent<RectTransform>());
+
                 // Category (Red)
                 GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => {
                     if (isFixedLocally) ToggleLeft(ContentType.Category); else ToggleRight(ContentType.Category);
@@ -904,6 +910,63 @@ namespace VPB
                 rightSideButtons.Add(rightRemoveAllClothingBtn.GetComponent<RectTransform>());
                 rightRemoveAllClothingBtn.SetActive(false);
 
+                rightRemoveClothingExpandBtn = UI.CreateUIButton(rightRemoveAllClothingBtn, btnHeight, btnHeight, ">", 18, 104, 0, AnchorPresets.middleCenter, () => {
+                    try
+                    {
+                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        if (target == null)
+                        {
+                            LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                            return;
+                        }
+                        ToggleClothingSlotPicker("Remove Clothing", target, rightRemoveClothingExpandBtn.GetComponent<RectTransform>(), false, (slot) => {
+                            try
+                            {
+                                UIDraggableItem dragger = rightRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
+                                if (dragger == null) dragger = rightRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
+                                dragger.Panel = this;
+                                dragger.RemoveClothingItemByUid(target, slot);
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError("[VPB] Remove Clothing slot exception: " + ex);
+                            }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Clothing slot picker exception: " + ex);
+                    }
+                });
+                try
+                {
+                    EventTrigger et = rightRemoveClothingExpandBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = rightRemoveClothingExpandBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            if (target == null) return;
+                            DisplayClothingSlotPicker("Remove Clothing", target, rightRemoveClothingExpandBtn.GetComponent<RectTransform>(), false, (slot) => {
+                                try
+                                {
+                                    UIDraggableItem dragger = rightRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
+                                    if (dragger == null) dragger = rightRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
+                                    dragger.Panel = this;
+                                    dragger.RemoveClothingItemByUid(target, slot);
+                                }
+                                catch { }
+                            });
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+                }
+                catch { }
+                rightRemoveClothingExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
+                rightRemoveClothingExpandBtn.GetComponentInChildren<Text>().color = Color.white;
+
                 rightRemoveAllHairBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nHair", 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Right)");
                     try
@@ -987,6 +1050,11 @@ namespace VPB
                 });
                 leftCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
                 leftSideButtons.Add(leftCloneBtn.GetComponent<RectTransform>());
+
+                // Load Random (always available)
+                leftLoadRandomBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Random", btnFontSize, 0, 0, AnchorPresets.centre, LoadRandom);
+                leftLoadRandomBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.55f, 1f);
+                leftSideButtons.Add(leftLoadRandomBtn.GetComponent<RectTransform>());
 
                 // Category (Red)
                 GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
@@ -1097,6 +1165,63 @@ namespace VPB
                 leftRemoveAllClothingBtn.GetComponentInChildren<Text>().color = Color.white;
                 leftSideButtons.Add(leftRemoveAllClothingBtn.GetComponent<RectTransform>());
                 leftRemoveAllClothingBtn.SetActive(false);
+
+                leftRemoveClothingExpandBtn = UI.CreateUIButton(leftRemoveAllClothingBtn, btnHeight, btnHeight, "<", 18, -104, 0, AnchorPresets.middleCenter, () => {
+                    try
+                    {
+                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        if (target == null)
+                        {
+                            LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                            return;
+                        }
+                        ToggleClothingSlotPicker("Remove Clothing", target, leftRemoveClothingExpandBtn.GetComponent<RectTransform>(), true, (slot) => {
+                            try
+                            {
+                                UIDraggableItem dragger = leftRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
+                                if (dragger == null) dragger = leftRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
+                                dragger.Panel = this;
+                                dragger.RemoveClothingItemByUid(target, slot);
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError("[VPB] Remove Clothing slot exception: " + ex);
+                            }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Clothing slot picker exception: " + ex);
+                    }
+                });
+                try
+                {
+                    EventTrigger et = leftRemoveClothingExpandBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = leftRemoveClothingExpandBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            if (target == null) return;
+                            DisplayClothingSlotPicker("Remove Clothing", target, leftRemoveClothingExpandBtn.GetComponent<RectTransform>(), true, (slot) => {
+                                try
+                                {
+                                    UIDraggableItem dragger = leftRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
+                                    if (dragger == null) dragger = leftRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
+                                    dragger.Panel = this;
+                                    dragger.RemoveClothingItemByUid(target, slot);
+                                }
+                                catch { }
+                            });
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+                }
+                catch { }
+                leftRemoveClothingExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
+                leftRemoveClothingExpandBtn.GetComponentInChildren<Text>().color = Color.white;
 
                 leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nHair", 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Left)");

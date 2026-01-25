@@ -1,13 +1,13 @@
 using System;
-using System.Collections.Generic;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using MVR.FileManagement;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.Events;
+using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using SimpleJSON;
 
@@ -908,6 +908,80 @@ namespace VPB
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
         private static string _lastAppearanceClothingMode = "keep";
+
+        public static HashSet<string> GetTagSetForClothingItem(object item)
+        {
+            if (item == null) return null;
+            try
+            {
+                var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                Type t = item.GetType();
+
+                // Common patterns seen in VaM objects / mods
+                object tagsObj = null;
+                FieldInfo f = t.GetField("tags", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (f != null) tagsObj = f.GetValue(item);
+                if (tagsObj == null)
+                {
+                    PropertyInfo p = t.GetProperty("tags", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (p != null && p.CanRead) tagsObj = p.GetValue(item, null);
+                }
+
+                if (tagsObj is IEnumerable<string> tagsEnum)
+                {
+                    foreach (string s in tagsEnum)
+                    {
+                        if (string.IsNullOrEmpty(s)) continue;
+                        set.Add(s.Trim().ToLowerInvariant());
+                    }
+                }
+                else if (tagsObj is string tagStr)
+                {
+                    if (!string.IsNullOrEmpty(tagStr))
+                    {
+                        // Some implementations store comma-separated tags
+                        var parts = tagStr.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                        for (int i = 0; i < parts.Length; i++)
+                        {
+                            string s = parts[i].Trim();
+                            if (!string.IsNullOrEmpty(s)) set.Add(s.ToLowerInvariant());
+                        }
+                    }
+                }
+
+                // Body-region style properties sometimes exist
+                string[] extraNames = new string[] { "bodyRegion", "region", "clothingType", "type", "category", "slot" };
+                for (int i = 0; i < extraNames.Length; i++)
+                {
+                    string name = extraNames[i];
+                    try
+                    {
+                        FieldInfo ef = t.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (ef != null)
+                        {
+                            object v = ef.GetValue(item);
+                            if (v is string vs && !string.IsNullOrEmpty(vs)) set.Add(vs.Trim().ToLowerInvariant());
+                        }
+                        else
+                        {
+                            PropertyInfo ep = t.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            if (ep != null && ep.CanRead)
+                            {
+                                object v = ep.GetValue(item, null);
+                                if (v is string vs && !string.IsNullOrEmpty(vs)) set.Add(vs.Trim().ToLowerInvariant());
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                return set.Count > 0 ? set : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
         private void PushUndoSnapshotForClothingHair(Atom target)
         {
@@ -2460,6 +2534,285 @@ namespace VPB
             }
         }
 
+        public void RemoveClothingBySlot(Atom target, string slot)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveClothingBySlot: target is null");
+                return;
+            }
+            if (string.IsNullOrEmpty(slot))
+            {
+                LogUtil.LogWarning("[VPB] RemoveClothingBySlot: slot is empty");
+                return;
+            }
+
+            string slotLower = slot.Trim().ToLowerInvariant();
+            LogUtil.Log($"[VPB] RemoveClothingBySlot: target={target.uid} ({target.type}) slot={slotLower}");
+
+            PushUndoSnapshotForClothingHair(target);
+
+            JSONStorable geometry = null;
+            try { geometry = target.GetStorableByID("geometry"); }
+            catch { }
+
+            DAZCharacterSelector dcs = null;
+            try { dcs = target.GetComponentInChildren<DAZCharacterSelector>(); }
+            catch { }
+            if (dcs == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveClothingBySlot: DAZCharacterSelector not found on target");
+                return;
+            }
+
+            MethodInfo miSetActiveItem = null;
+            MethodInfo miSetActiveItemByUid = null;
+            try
+            {
+                foreach (var m in dcs.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                {
+                    if (m.Name != "SetActiveClothingItem") continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length >= 2)
+                    {
+                        if (ps[0].ParameterType == typeof(DAZClothingItem)) miSetActiveItem = m;
+                        else if (ps[0].ParameterType == typeof(string)) miSetActiveItemByUid = m;
+                    }
+                }
+            }
+            catch { }
+
+            string ResolveClothingItemPath(DAZClothingItem item)
+            {
+                if (item == null) return null;
+
+                string path = null;
+                try { path = item.uid; } catch { }
+
+                if (string.IsNullOrEmpty(path) || (!path.Contains(":/") && !path.Contains(":\\")))
+                {
+                    try
+                    {
+                        string internalId = null;
+                        string containingVAMDir = null;
+                        Type it = item.GetType();
+
+                        FieldInfo fInternalId = it.GetField("internalId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (fInternalId != null) internalId = fInternalId.GetValue(item) as string;
+
+                        FieldInfo fVamDir = it.GetField("containingVAMDir", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (fVamDir != null) containingVAMDir = fVamDir.GetValue(item) as string;
+
+                        if (string.IsNullOrEmpty(internalId))
+                        {
+                            FieldInfo fItemPath = it.GetField("itemPath", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            if (fItemPath != null) internalId = fItemPath.GetValue(item) as string;
+                        }
+
+                        if (!string.IsNullOrEmpty(containingVAMDir) && !string.IsNullOrEmpty(internalId))
+                        {
+                            path = containingVAMDir.Replace("\\", "/").TrimEnd('/') + "/" + internalId.Replace("\\", "/").TrimStart('/');
+                        }
+                    }
+                    catch { }
+                }
+
+                if (string.IsNullOrEmpty(path)) return null;
+                return path.Replace("\\", "/");
+            }
+
+            string ExtractClothingTypeFromPath(string path)
+            {
+                if (string.IsNullOrEmpty(path)) return null;
+                string pl = path.ToLowerInvariant();
+                int idx = pl.IndexOf("/custom/clothing/");
+                if (idx < 0) idx = pl.IndexOf("/clothing/");
+                if (idx < 0) return null;
+
+                string sub = path.Substring(idx);
+                string[] parts = sub.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts == null || parts.Length < 4) return null;
+                string typeFolder = parts[3];
+                if (string.IsNullOrEmpty(typeFolder)) return null;
+                return typeFolder.Trim().ToLowerInvariant();
+            }
+
+            int removedCount = 0;
+            try
+            {
+                if (dcs.clothingItems != null)
+                {
+                    foreach (var item in dcs.clothingItems)
+                    {
+                        if (item == null) continue;
+                        if (!item.active) continue;
+
+                        bool match = false;
+                        try
+                        {
+                            string p = ResolveClothingItemPath(item);
+                            string t = ExtractClothingTypeFromPath(p);
+                            if (!string.IsNullOrEmpty(t) && string.Equals(t, slotLower, StringComparison.OrdinalIgnoreCase)) match = true;
+                        }
+                        catch { }
+
+                        if (!match)
+                        {
+                            HashSet<string> tags = GetTagSetForClothingItem(item);
+                            match = tags != null && tags.Contains(slotLower);
+
+                            if (!match && tags == null)
+                            {
+                                string n = null;
+                                try { n = item.name; } catch { }
+                                if (!string.IsNullOrEmpty(n) && n.IndexOf(slotLower, StringComparison.OrdinalIgnoreCase) >= 0) match = true;
+                            }
+                        }
+
+                        if (!match) continue;
+
+                        try
+                        {
+                            if (geometry != null)
+                            {
+                                JSONStorableBool active = geometry.GetBoolJSONParam("clothing:" + item.uid);
+                                if (active != null) active.val = false;
+                            }
+                        }
+                        catch { }
+
+                        try
+                        {
+                            if (miSetActiveItem != null)
+                            {
+                                miSetActiveItem.Invoke(dcs, new object[] { item, false });
+                            }
+                            else if (miSetActiveItemByUid != null)
+                            {
+                                miSetActiveItemByUid.Invoke(dcs, new object[] { item.uid, false });
+                            }
+                            else
+                            {
+                                item.active = false;
+                            }
+                        }
+                        catch
+                        {
+                            try { item.active = false; } catch { }
+                        }
+
+                        removedCount++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] RemoveClothingBySlot exception: " + ex);
+            }
+
+            LogUtil.Log($"[VPB] RemoveClothingBySlot: removed/disabled {removedCount} items for slot={slotLower}");
+        }
+
+        public void RemoveClothingItemByUid(Atom target, string itemUid)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveClothingItemByUid: target is null");
+                return;
+            }
+            if (string.IsNullOrEmpty(itemUid))
+            {
+                LogUtil.LogWarning("[VPB] RemoveClothingItemByUid: itemUid is empty");
+                return;
+            }
+
+            PushUndoSnapshotForClothingHair(target);
+
+            JSONStorable geometry = null;
+            try { geometry = target.GetStorableByID("geometry"); }
+            catch { }
+
+            DAZCharacterSelector dcs = null;
+            try { dcs = target.GetComponentInChildren<DAZCharacterSelector>(); }
+            catch { }
+            if (dcs == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveClothingItemByUid: DAZCharacterSelector not found on target");
+                return;
+            }
+
+            MethodInfo miSetActiveItem = null;
+            MethodInfo miSetActiveItemByUid = null;
+            try
+            {
+                foreach (var m in dcs.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                {
+                    if (m.Name != "SetActiveClothingItem") continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length >= 2)
+                    {
+                        if (ps[0].ParameterType == typeof(DAZClothingItem)) miSetActiveItem = m;
+                        else if (ps[0].ParameterType == typeof(string)) miSetActiveItemByUid = m;
+                    }
+                }
+            }
+            catch { }
+
+            DAZClothingItem matched = null;
+            try
+            {
+                if (dcs.clothingItems != null)
+                {
+                    foreach (var it in dcs.clothingItems)
+                    {
+                        if (it == null) continue;
+                        if (string.Equals(it.uid, itemUid, StringComparison.OrdinalIgnoreCase))
+                        {
+                            matched = it;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            if (matched == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveClothingItemByUid: clothing item not found: " + itemUid);
+                return;
+            }
+
+            try
+            {
+                if (geometry != null)
+                {
+                    JSONStorableBool active = geometry.GetBoolJSONParam("clothing:" + matched.uid);
+                    if (active != null) active.val = false;
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (miSetActiveItem != null)
+                {
+                    miSetActiveItem.Invoke(dcs, new object[] { matched, false });
+                }
+                else if (miSetActiveItemByUid != null)
+                {
+                    miSetActiveItemByUid.Invoke(dcs, new object[] { matched.uid, false });
+                }
+                else
+                {
+                    matched.active = false;
+                }
+            }
+            catch
+            {
+                try { matched.active = false; } catch { }
+            }
+        }
+
         public void RemoveAllHair(Atom target)
         {
             if (target == null)
@@ -2797,6 +3150,8 @@ namespace VPB
                 
                 int appliedCount = 0;
                 int skippedCount = 0;
+
+                List<KeyValuePair<JSONStorable, JSONClass>> lateRestoreTargets = null;
                 
                 foreach (JSONNode storable in sourceAtom["storables"].AsArray)
                 {
@@ -2824,6 +3179,8 @@ namespace VPB
                             else
                             {
                                 targetStorable.RestoreFromJSON(storable.AsObject);
+                                if (lateRestoreTargets == null) lateRestoreTargets = new List<KeyValuePair<JSONStorable, JSONClass>>();
+                                lateRestoreTargets.Add(new KeyValuePair<JSONStorable, JSONClass>(targetStorable, storable.AsObject));
                                 appliedCount++;
                             }
                         }
@@ -2834,6 +3191,10 @@ namespace VPB
                     }
                 }
                 LogUtil.Log($"[VPB] Scene data application complete: {appliedCount} storables applied, {skippedCount} storables missing on target.");
+
+                // Align with BA SceneImportCache lifecycle: LateRestore next frame + reset sim clothing.
+                // We only LateRestore storables restored via RestoreFromJSON; preset managers handle their own internal lifecycle.
+                SceneLoadingUtils.SchedulePostPersonApplyFixup(targetAtom, lateRestoreTargets);
             }
             catch (Exception ex)
             {
@@ -3704,6 +4065,9 @@ namespace VPB
                                                             atom.PostRestore(true, false);
                                                             
                                                             LogUtil.Log($"[DragDropDebug] Native Atom Restoration complete.");
+
+                                                            // Post-fixup: sim clothing often needs a reset after pose/physics restore.
+                                                            SceneLoadingUtils.SchedulePostPersonApplyFixup(atom);
                                                             presetLoaded = true;
                                                             return; // Skip the rest of the PresetManager logic
                                                         }
@@ -3754,6 +4118,10 @@ namespace VPB
                                                 MVR.FileManagement.FileManager.PopLoadDir();
                                             }
                                             LogUtil.Log($"[DragDropDebug] Successfully loaded preset via PresetManager.LoadPresetFromJSON");
+
+                                            // Post-fixup: after applying appearance/clothing/morph/pose presets, reset sim clothing.
+                                            // This helps ensure clothing respects updated body physics/colliders.
+                                            SceneLoadingUtils.SchedulePostPersonApplyFixup(atom);
                                         }
                                         catch (Exception ex)
                                         {

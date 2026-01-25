@@ -9,6 +9,65 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private void LoadRandom()
+        {
+            try
+            {
+                if (lastFilteredFiles == null || lastFilteredFiles.Count == 0)
+                {
+                    LogUtil.LogWarning("[VPB] Load Random: no items available.");
+                    return;
+                }
+
+                int idx = UnityEngine.Random.Range(0, lastFilteredFiles.Count);
+                FileEntry file = lastFilteredFiles[idx];
+                if (file == null)
+                {
+                    LogUtil.LogWarning("[VPB] Load Random: selected file was null.");
+                    return;
+                }
+
+                // Select it
+                selectedFiles.Clear();
+                selectedFilePaths.Clear();
+                selectionAnchorPath = null;
+
+                selectedFiles.Add(file);
+                if (!string.IsNullOrEmpty(file.Path)) selectedFilePaths.Add(file.Path);
+                selectedPath = file.Path;
+                selectedHubItem = null;
+
+                SetHoverPath(file);
+                RefreshSelectionVisuals();
+                UpdatePaginationText();
+                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
+
+                // Apply (same logic as click)
+                string pathLower = (file.Path ?? "").ToLowerInvariant();
+                bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || (currentCategoryTitle != null && currentCategoryTitle.Contains("SubScene"));
+                bool isScene = !isSubScene && pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || (currentCategoryTitle != null && currentCategoryTitle.Contains("Scene")));
+
+                if (isScene)
+                {
+                    UI.LoadSceneFile(file);
+                    return;
+                }
+
+                if (actionsPanel != null)
+                {
+                    bool success = actionsPanel.ExecuteAutoAction();
+                    if (!success)
+                    {
+                        LogUtil.LogWarning("[VPB] Load Random: no auto action available for this item.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Load Random exception: " + ex);
+            }
+        }
+
         public void Show(string title, string extension, string path)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();

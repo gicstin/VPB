@@ -257,6 +257,12 @@ namespace VPB
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
             try
             {
+                try
+                {
+                    SceneLoadingUtils.NotifySceneLoadStarting(saveName, loadMerge);
+                }
+                catch { }
+
                 if (ImageLoadingMgr.singleton != null)
                 {
                     ImageLoadingMgr.singleton.ClearCandidates();
@@ -303,6 +309,13 @@ namespace VPB
             string saveName, bool loadMerge, bool editMode)
         {
             LogUtil.EndSceneLoadInternal("LoadInternal");
+
+            try
+            {
+                // Schedule a fixup pass after the load has settled; throttled to run once per full scene load.
+                SceneLoadingUtils.SchedulePostSceneLoadFixup();
+            }
+            catch { }
         }
 
         /// <summary>
