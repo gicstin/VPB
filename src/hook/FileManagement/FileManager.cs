@@ -520,10 +520,6 @@ namespace VPB
             string stackTrace = new System.Diagnostics.StackTrace().ToString();
             LogUtil.LogWarning("Refresh " + stackTrace);
 #endif
-            {
-                LogUtil.LogWarning(string.Format("FileManager Refresh({0},{1},{2})", init, clean, removeOldVersion));
-            }
-            Stopwatch swTotal = Stopwatch.StartNew();
             if (packagesByUid == null)
             {
                 packagesByUid = new Dictionary<string, VarPackage>(StringComparer.OrdinalIgnoreCase);
@@ -572,9 +568,8 @@ namespace VPB
 
             if (Directory.Exists("AllPackages"))
             {
-                Stopwatch swEnumerate = Stopwatch.StartNew();
                 List<string> allVarFiles = new List<string>();
-                string[] scanRoots = new string[] { "AddonPackages", "AllPackages", "Custom", "Saves", "BuiltinPackages", "VaM_Data/StreamingAssets/BuiltinPackages" };
+                string[] scanRoots = new string[] { "AddonPackages", "AllPackages" };
 
                 ManualResetEvent doneEvent = new ManualResetEvent(false);
                 ThreadPool.QueueUserWorkItem((state) => {
@@ -600,8 +595,6 @@ namespace VPB
                 try
                 {
                     string[] varPaths = allVarFiles.ToArray();
-                    swEnumerate.Stop();
-                    LogUtil.Log("FileManager Refresh enumerate vars: " + varPaths.Length + " in " + swEnumerate.ElapsedMilliseconds + "ms");
 
                     HashSet<string> hashSet = new HashSet<string>();
                     HashSet<string> addSet = new HashSet<string>();
@@ -633,7 +626,6 @@ namespace VPB
                         }
                     }
 
-                    Stopwatch swUpdate = Stopwatch.StartNew();
                     HashSet<VarPackage> removeSet = new HashSet<VarPackage>();
                     foreach (VarPackage value3 in packagesByUid.Values)
                     {
@@ -680,8 +672,6 @@ namespace VPB
                             RemoveToInvalid(item, "OldVersion");
                         }
                     }
-                    swUpdate.Stop();
-                    LogUtil.Log("FileManager Refresh update: add=" + addSet.Count + " remove=" + removeSet.Count + " oldVersion=" + oldVersion.Count + " in " + swUpdate.ElapsedMilliseconds + "ms");
                 }
                 catch (Exception arg)
                 {
@@ -693,34 +683,32 @@ namespace VPB
             {
                 StartScan(init, flag, clean, true);
 
-                swTotal.Stop();
-                LogUtil.Log("FileManager Refresh pre-scan completed in " + swTotal.ElapsedMilliseconds + "ms");
+                lastPackageRefreshTime = DateTime.Now;
+
+                s_InstalledCount = 0;
+                foreach (var item in packagesByUid)
+                {
+                    if (item.Value.IsInstalled())
+                    {
+                        s_InstalledCount++;
+                    }
+                }
+                m_RefreshCo = null;
+                if (m_RefreshPending)
+                {
+                    bool nextInit = m_RefreshPendingInit;
+                    bool nextClean = m_RefreshPendingClean;
+                    bool nextRemoveOld = m_RefreshPendingRemoveOldVersion;
+                    m_RefreshPending = false;
+                    m_RefreshPendingInit = false;
+                    m_RefreshPendingClean = false;
+                    m_RefreshPendingRemoveOldVersion = false;
+                    m_RefreshCo = StartCoroutine(RefreshCo(nextInit, nextClean, nextRemoveOld));
+                }
             }
             catch (Exception arg)
             {
                 LogUtil.LogError("Exception during package refresh finalization " + arg);
-            }
-            lastPackageRefreshTime = DateTime.Now;
-
-            s_InstalledCount = 0;
-            foreach (var item in packagesByUid)
-            {
-                if (item.Value.IsInstalled())
-                {
-                    s_InstalledCount++;
-                }
-            }
-            m_RefreshCo = null;
-            if (m_RefreshPending)
-            {
-                bool nextInit = m_RefreshPendingInit;
-                bool nextClean = m_RefreshPendingClean;
-                bool nextRemoveOld = m_RefreshPendingRemoveOldVersion;
-                m_RefreshPending = false;
-                m_RefreshPendingInit = false;
-                m_RefreshPendingClean = false;
-                m_RefreshPendingRemoveOldVersion = false;
-                m_RefreshCo = StartCoroutine(RefreshCo(nextInit, nextClean, nextRemoveOld));
             }
         }
 
@@ -736,11 +724,6 @@ namespace VPB
 
 		IEnumerator StartScanCo(bool init, bool flag, bool clean, bool runCo)
 		{
-			Stopwatch swScan = Stopwatch.StartNew();
-			int pkgCount = (packagesByUid != null) ? packagesByUid.Count : 0;
-			LogUtil.Log(string.Format("FileManager StartScan begin runCo={0} packages={1}", runCo ? "True" : "False", pkgCount));
-
-			VarPackage.ResetScanCounters();
 			List<VarPackage> invalid = new List<VarPackage>();
 			if (runCo)
 			{
@@ -788,10 +771,6 @@ namespace VPB
 				if (flag && onRefreshHandlers != null) onRefreshHandlers();
 			}
 			MessageKit.post(MessageDef.FileManagerRefresh);
-
-			VarPackage.GetScanCounters(out long total, out long cacheValidatedHit, out long cacheHit, out long zipScan);
-			swScan.Stop();
-			LogUtil.Log(string.Format("FileManager StartScan complete in {0}ms total={1} cacheValidated={2} cacheFallback={3} zipScan={4} invalid={5}", swScan.ElapsedMilliseconds, total, cacheValidatedHit, cacheHit, zipScan, invalid.Count));
 			m_StartScanCo = null;
 		}
 
@@ -801,7 +780,8 @@ namespace VPB
 			List<string> list = new List<string>(packagesByUid.Keys);
 			int idx = 0;
 			int allCount = list.Count;
-			int step = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 200 : 20;
+			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 50 : 200;
+			int step = uiUpdateStep;
 			int cnt = 0;
 			for (int i = 0; i < list.Count; i++)
 			{
@@ -819,7 +799,10 @@ namespace VPB
 					}
 				}
 				idx++;
-				MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+				if ((idx % uiUpdateStep) == 0 || idx == allCount)
+				{
+					MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+				}
 				cnt++;
 				if (cnt > step)
 				{

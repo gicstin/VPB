@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
@@ -23,6 +24,7 @@ namespace VPB
         private KeyUtil GalleryKey;
         private KeyUtil CreateGalleryKey;
         private KeyUtil HubKey;
+        private KeyUtil ClearConsoleKey;
         private Vector2 UIPosition;
         private bool MiniMode;
         
@@ -34,6 +36,78 @@ namespace VPB
             public string Path;
             public string Type;
             public bool Checked;
+        }
+
+        private const int STD_OUTPUT_HANDLE = -11;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct COORD
+        {
+            public short X;
+            public short Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SMALL_RECT
+        {
+            public short Left;
+            public short Top;
+            public short Right;
+            public short Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct CONSOLE_SCREEN_BUFFER_INFO
+        {
+            public COORD dwSize;
+            public COORD dwCursorPosition;
+            public short wAttributes;
+            public SMALL_RECT srWindow;
+            public COORD dwMaximumWindowSize;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetStdHandle(int nStdHandle);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetConsoleScreenBufferInfo(IntPtr hConsoleOutput, out CONSOLE_SCREEN_BUFFER_INFO lpConsoleScreenBufferInfo);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool FillConsoleOutputCharacter(IntPtr hConsoleOutput, char cCharacter, uint nLength, COORD dwWriteCoord, out uint lpNumberOfCharsWritten);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool FillConsoleOutputAttribute(IntPtr hConsoleOutput, ushort wAttribute, uint nLength, COORD dwWriteCoord, out uint lpNumberOfAttrsWritten);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetConsoleCursorPosition(IntPtr hConsoleOutput, COORD dwCursorPosition);
+
+        private static void TryClearConsole()
+        {
+            try
+            {
+                IntPtr h = GetStdHandle(STD_OUTPUT_HANDLE);
+                if (h == IntPtr.Zero || h == new IntPtr(-1))
+                {
+                    try { Console.Clear(); } catch { }
+                    return;
+                }
+
+                if (!GetConsoleScreenBufferInfo(h, out CONSOLE_SCREEN_BUFFER_INFO csbi))
+                {
+                    try { Console.Clear(); } catch { }
+                    return;
+                }
+
+                uint cellCount = (uint)(csbi.dwSize.X * csbi.dwSize.Y);
+                COORD home = new COORD { X = 0, Y = 0 };
+                FillConsoleOutputCharacter(h, ' ', cellCount, home, out _);
+                FillConsoleOutputAttribute(h, (ushort)csbi.wAttributes, cellCount, home, out _);
+                SetConsoleCursorPosition(h, home);
+            }
+            catch
+            {
+                try { Console.Clear(); } catch { }
+            }
         }
         private bool m_ShowRemoveWindow = false;
         private System.Collections.Generic.List<RemoveItem> m_RemoveList = new System.Collections.Generic.List<RemoveItem>();
@@ -593,6 +667,7 @@ namespace VPB
             GalleryKey = KeyUtil.Parse(Settings.Instance.GalleryKey.Value);
             CreateGalleryKey = KeyUtil.Parse(Settings.Instance.CreateGalleryKey.Value);
             HubKey = KeyUtil.Parse(Settings.Instance.HubKey.Value);
+            ClearConsoleKey = KeyUtil.Parse(Settings.Instance.ClearConsoleKey.Value);
             m_UIScale = Settings.Instance.UIScale.Value;
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
@@ -868,6 +943,10 @@ namespace VPB
             if (UIKey.TestKeyDown())
             {
                 m_Show = !m_Show;
+            }
+            if (ClearConsoleKey != null && ClearConsoleKey.TestKeyDown())
+            {
+                TryClearConsole();
             }
             // Hotkeys
             if (m_Inited)

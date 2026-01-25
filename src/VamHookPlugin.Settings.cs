@@ -16,6 +16,7 @@ namespace VPB
             m_SettingsGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.GalleryKey != null) ? Settings.Instance.GalleryKey.Value : "";
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
+            m_SettingsClearConsoleKeyDraft = (Settings.Instance != null && Settings.Instance.ClearConsoleKey != null) ? Settings.Instance.ClearConsoleKey.Value : "";
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsLoadDependenciesWithPackageDraft = (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null) ? Settings.Instance.LoadDependenciesWithPackage.Value : true;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
@@ -32,8 +33,12 @@ namespace VPB
                 var parsedGalleryKey = KeyUtil.Parse(m_SettingsGalleryKeyDraft ?? "");
                 var parsedCreateGalleryKey = KeyUtil.Parse(m_SettingsCreateGalleryKeyDraft ?? "");
                 var parsedHubKey = KeyUtil.Parse(m_SettingsHubKeyDraft ?? "");
+                var parsedClearConsoleKey = KeyUtil.Parse(m_SettingsClearConsoleKeyDraft ?? "");
 
-                if (parsed.IsSame(parsedGalleryKey) || parsed.IsSame(parsedCreateGalleryKey) || parsed.IsSame(parsedHubKey) || parsedGalleryKey.IsSame(parsedCreateGalleryKey) || parsedGalleryKey.IsSame(parsedHubKey) || parsedCreateGalleryKey.IsSame(parsedHubKey))
+                if (parsed.IsSame(parsedGalleryKey) || parsed.IsSame(parsedCreateGalleryKey) || parsed.IsSame(parsedHubKey) || parsed.IsSame(parsedClearConsoleKey)
+                    || parsedGalleryKey.IsSame(parsedCreateGalleryKey) || parsedGalleryKey.IsSame(parsedHubKey) || parsedGalleryKey.IsSame(parsedClearConsoleKey)
+                    || parsedCreateGalleryKey.IsSame(parsedHubKey) || parsedCreateGalleryKey.IsSame(parsedClearConsoleKey)
+                    || parsedHubKey.IsSame(parsedClearConsoleKey))
                 {
                     m_SettingsError = "Duplicate hotkeys are not allowed.";
                     return;
@@ -54,6 +59,10 @@ namespace VPB
                 if (Settings.Instance != null && Settings.Instance.HubKey != null)
                 {
                     Settings.Instance.HubKey.Value = parsedHubKey.keyPattern;
+                }
+                if (Settings.Instance != null && Settings.Instance.ClearConsoleKey != null)
+                {
+                    Settings.Instance.ClearConsoleKey.Value = parsedClearConsoleKey.keyPattern;
                 }
                 if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
                 {
@@ -102,6 +111,8 @@ namespace VPB
                 GalleryKey = parsedGalleryKey;
                 CreateGalleryKey = parsedCreateGalleryKey;
                 HubKey = parsedHubKey;
+                ClearConsoleKey = parsedClearConsoleKey;
+                this.Config.Save();
                 CloseSettings();
             }
             catch
@@ -186,6 +197,7 @@ namespace VPB
 
             m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide VPB", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
             m_SettingsHubKeyDraft = DrawHotkeyField("Open Hub Browser", "HubKeyField", m_SettingsHubKeyDraft ?? "", buttonHeight);
+            m_SettingsClearConsoleKeyDraft = DrawHotkeyField("Clear Console", "ClearConsoleKeyField", m_SettingsClearConsoleKeyDraft ?? "", buttonHeight);
 
             GUILayout.Space(6);
 

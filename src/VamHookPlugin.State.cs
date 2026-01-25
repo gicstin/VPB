@@ -11,6 +11,7 @@ namespace VPB
             public string GalleryKeyDraft;
             public string CreateGalleryKeyDraft;
             public string HubKeyDraft;
+            public string ClearConsoleKeyDraft;
             public bool PluginsAlwaysEnabledDraft;
             public bool LoadDependenciesWithPackageDraft;
             public bool IsDevModeDraft;
@@ -53,6 +54,7 @@ namespace VPB
         private string m_SettingsGalleryKeyDraft { get => m_SettingsDraft.GalleryKeyDraft; set => m_SettingsDraft.GalleryKeyDraft = value; }
         private string m_SettingsCreateGalleryKeyDraft { get => m_SettingsDraft.CreateGalleryKeyDraft; set => m_SettingsDraft.CreateGalleryKeyDraft = value; }
         private string m_SettingsHubKeyDraft { get => m_SettingsDraft.HubKeyDraft; set => m_SettingsDraft.HubKeyDraft = value; }
+        private string m_SettingsClearConsoleKeyDraft { get => m_SettingsDraft.ClearConsoleKeyDraft; set => m_SettingsDraft.ClearConsoleKeyDraft = value; }
         private bool m_SettingsPluginsAlwaysEnabledDraft { get => m_SettingsDraft.PluginsAlwaysEnabledDraft; set => m_SettingsDraft.PluginsAlwaysEnabledDraft = value; }
         private bool m_SettingsLoadDependenciesWithPackageDraft { get => m_SettingsDraft.LoadDependenciesWithPackageDraft; set => m_SettingsDraft.LoadDependenciesWithPackageDraft = value; }
         private bool m_SettingsIsDevModeDraft { get => m_SettingsDraft.IsDevModeDraft; set => m_SettingsDraft.IsDevModeDraft = value; }

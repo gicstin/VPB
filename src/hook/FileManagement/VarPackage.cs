@@ -268,6 +268,20 @@ namespace VPB
 		static long scanCacheValidatedHit;
 		static long scanCacheHit;
 		static long scanZip;
+		static readonly object scanErrorLogLock = new object();
+		static readonly HashSet<string> scanErrorLogged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		static void LogScanErrorOnce(string uid, string context, Exception ex)
+		{
+			string key = (uid ?? "") + "|" + (context ?? "");
+			lock (scanErrorLogLock)
+			{
+				if (scanErrorLogged.Contains(key)) return;
+				scanErrorLogged.Add(key);
+			}
+			string msg = (ex != null) ? ex.Message : "";
+			LogUtil.LogError(context + " " + uid + " : " + msg);
+		}
 
 		private static int GetZipNameCodePageForVar(string varPath)
 		{
@@ -937,17 +951,18 @@ namespace VPB
 					ZipFile zipFile = null;
 					try
 					{
-						FileInfo fileInfo = new FileInfo(Path);
-						LastWriteTime = fileInfo.LastWriteTime;
-						// Sort "new to old" by file creation time
-						CreationTime = fileInfo.CreationTime;
-						Size = fileInfo.Length;
-
 						metaEntry = null;
-						long lastWriteTimeUtcTicks = fileInfo.LastWriteTimeUtc.Ticks;
-						SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCacheValidated(this.Uid, Size, lastWriteTimeUtcTicks);
+						SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCache(this.Uid);
 						if (vp != null && vp.FileEntryNames != null)
 						{
+							// Fast path: trust cached data (matches old behavior style)
+							if (vp.VarFileSize > 0) Size = vp.VarFileSize;
+							if (vp.VarLastWriteTimeUtcTicks > 0)
+							{
+								LastWriteTime = new DateTime(vp.VarLastWriteTimeUtcTicks, DateTimeKind.Utc).ToLocalTime();
+								CreationTime = LastWriteTime;
+							}
+
 							this.ClothingFileEntryNames = vp.ClothingFileEntryNames;
 							this.ClothingTags = vp.ClothingTags;
 							this.HairFileEntryNames = vp.HairFileEntryNames;
@@ -967,41 +982,18 @@ namespace VPB
 							if (metaEntry != null)
 							{
 								flag = true;
-								Interlocked.Increment(ref scanCacheValidatedHit);
+								Interlocked.Increment(ref scanCacheHit);
 							}
 						}
 
 						if (!flag)
 						{
-							var cached = VarPackageMgr.singleton.TryGetCache(this.Uid);
-							if (cached != null && cached.FileEntryNames != null)
-							{
-								this.ClothingFileEntryNames = cached.ClothingFileEntryNames;
-								this.ClothingTags = cached.ClothingTags;
-								this.HairFileEntryNames = cached.HairFileEntryNames;
-								this.HairTags = cached.HairTags;
+							FileInfo fileInfo = new FileInfo(Path);
+							LastWriteTime = fileInfo.LastWriteTime;
+							// Sort "new to old" by file creation time
+							CreationTime = fileInfo.CreationTime;
+							Size = fileInfo.Length;
 
-								for (int i = 0; i < cached.FileEntryNames.Count; i++)
-								{
-									string item = cached.FileEntryNames[i];
-									VarFileEntry varFileEntry = new VarFileEntry(this, item, DateTime.Parse(cached.FileEntryLastWriteTimes[i]), cached.FileEntrySizes[i]);
-									FileEntries.Add(varFileEntry);
-									if (item == "meta.json")
-									{
-										metaEntry = varFileEntry;
-									}
-								}
-								this.RecursivePackageDependencies = cached.RecursivePackageDependencies;
-								if (metaEntry != null)
-								{
-									flag = true;
-									Interlocked.Increment(ref scanCacheHit);
-								}
-							}
-						}
-
-						if (!flag)
-						{
 							Interlocked.Increment(ref scanZip);
 							FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
 							zipFile = new ZipFile(file);
@@ -1154,11 +1146,11 @@ namespace VPB
 						{
 							IsCorruptedArchive = true;
 							invalid = true;
-							LogUtil.LogError("Exception during zip file scan of " + Path + ": " + ex);
+							LogScanErrorOnce(Uid, "Exception during zip file scan of", ex);
 							Scaned = true;
 							return;
 						}
-						LogUtil.LogError("Exception during zip file scan of " + Path + ": " + ex);
+						LogScanErrorOnce(Uid, "Exception during zip file scan of", ex);
 					}
 				}
 				if (!flag)
@@ -1309,10 +1301,10 @@ namespace VPB
 						{
 							IsCorruptedArchive = true;
 							invalid = true;
-							LogUtil.LogError("DumpVarPackage ClothingFileEntries " + ex.ToString());
+							LogScanErrorOnce(Uid, "DumpVarPackage ClothingFileEntries", ex);
 							return;
 						}
-						LogUtil.LogError("DumpVarPackage ClothingFileEntries " + ex.ToString());
+						LogScanErrorOnce(Uid, "DumpVarPackage ClothingFileEntries", ex);
 					}
 				}
 			}
@@ -1352,10 +1344,10 @@ namespace VPB
 						{
 							IsCorruptedArchive = true;
 							invalid = true;
-							LogUtil.LogError("DumpVarPackage HairFileEntries " + ex.ToString());
+							LogScanErrorOnce(Uid, "DumpVarPackage HairFileEntries", ex);
 							return;
 						}
-						LogUtil.LogError("DumpVarPackage HairFileEntries " + ex.ToString());
+						LogScanErrorOnce(Uid, "DumpVarPackage HairFileEntries", ex);
 					}
 				}
 			}
@@ -1386,10 +1378,10 @@ namespace VPB
 					{
 						IsCorruptedArchive = true;
 						invalid = true;
-						LogUtil.LogError("DumpVarPackage " + ex3.ToString());
+						LogScanErrorOnce(Uid, "DumpVarPackage", ex3);
 						return;
 					}
-					LogUtil.LogError("DumpVarPackage " + ex3.ToString());
+					LogScanErrorOnce(Uid, "DumpVarPackage", ex3);
 				}
 			}
 
