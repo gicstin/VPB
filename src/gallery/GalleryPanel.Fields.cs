@@ -17,6 +17,11 @@ namespace VPB
         private GameObject contentGO;
         // private GameObject tabContainerGO; // Unused
         private ScrollRect scrollRect;
+        private GameObject loadingOverlayGO;
+        private RectTransform loadingBarContainerRT;
+        private RectTransform loadingBarFillRT;
+        private bool isLoadingOverlayVisible;
+        private float loadingBarAnimT;
         private Text titleText;
         private Text fpsText;
         

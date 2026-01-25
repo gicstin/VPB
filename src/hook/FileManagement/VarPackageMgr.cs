@@ -21,7 +21,7 @@ namespace VPB
 
         static string CachePath = "Cache/AllPackagesJSON/" + "AllPackages.bytes2";
         const int CacheMagic = 0x56504231;
-        const int CacheVersion = 1;
+        const int CacheVersion = 4;
         readonly object lookupLock = new object();
         public Dictionary<string, SerializableVarPackage> lookup = new Dictionary<string, SerializableVarPackage>();
         

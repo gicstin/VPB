@@ -778,18 +778,78 @@ namespace VPB
 		{
 			if (packagesByUid == null) yield break;
 			Stopwatch indexAllSw = Stopwatch.StartNew();
-			List<string> list = new List<string>(packagesByUid.Keys);
+			VarPackage[] packages = packagesByUid.Values.ToArray();
 			int idx = 0;
-			int allCount = list.Count;
-			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 50 : 200;
+			int allCount = packages.Length;
+			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 100 : 200;
 			int step = uiUpdateStep;
 			int cnt = 0;
-			for (int i = 0; i < list.Count; i++)
+			bool useCache = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache);
+			if (!useCache)
 			{
-				string uid = list[i];
-				if (packagesByUid.ContainsKey(uid))
+				int maxWorkers = Math.Min(8, Math.Max(1, System.Environment.ProcessorCount));
+				int nextIndex = -1;
+				int doneWorkers = 0;
+				int scannedCount = 0;
+				object invalidLock = new object();
+				ManualResetEvent doneEvent = new ManualResetEvent(false);
+				for (int w = 0; w < maxWorkers; w++)
 				{
-					VarPackage pkg = packagesByUid[uid];
+					ThreadPool.QueueUserWorkItem((state) =>
+					{
+						try
+						{
+							while (true)
+							{
+								int i = Interlocked.Increment(ref nextIndex);
+								if (i >= packages.Length) break;
+								VarPackage pkg = packages[i];
+								if (pkg != null)
+								{
+									pkg.Scan();
+									if (pkg.invalid)
+									{
+										lock (invalidLock)
+										{
+											invalid.Add(pkg);
+										}
+									}
+								}
+								Interlocked.Increment(ref scannedCount);
+							}
+						}
+						finally
+						{
+							if (Interlocked.Increment(ref doneWorkers) == maxWorkers)
+							{
+								doneEvent.Set();
+							}
+						}
+					});
+				}
+
+				while (!doneEvent.WaitOne(0))
+				{
+					int current = Interlocked.CompareExchange(ref scannedCount, 0, 0);
+					if (current != idx)
+					{
+						idx = current;
+						if ((idx % uiUpdateStep) == 0 || idx == allCount)
+						{
+							MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+						}
+					}
+					yield return null;
+				}
+				doneEvent.Close();
+				idx = allCount;
+				MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+			}
+			else
+			{
+				for (int i = 0; i < packages.Length; i++)
+				{
+					VarPackage pkg = packages[i];
 					if (pkg != null)
 					{
 						pkg.Scan();
@@ -798,22 +858,28 @@ namespace VPB
 							invalid.Add(pkg);
 						}
 					}
-				}
-				idx++;
-				if ((idx % uiUpdateStep) == 0 || idx == allCount)
-				{
-					MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
-				}
-				cnt++;
-				if (cnt > step)
-				{
-					yield return null;
-					cnt = 0;
+					idx++;
+					if ((idx % uiUpdateStep) == 0 || idx == allCount)
+					{
+						MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+					}
+					cnt++;
+					if (cnt > step)
+					{
+						yield return null;
+						cnt = 0;
+					}
 				}
 			}
 			indexAllSw.Stop();
 			double indexSeconds = indexAllSw.Elapsed.TotalSeconds;
 			LogUtil.Log("VarPackageMgr index all packages " + allCount + " in " + indexSeconds.ToString("0.00") + "s (" + indexAllSw.ElapsedMilliseconds + "ms)");
+			long total;
+			long cacheValidatedHit;
+			long cacheHit;
+			long zipScan;
+			VarPackage.GetScanCounters(out total, out cacheValidatedHit, out cacheHit, out zipScan);
+			LogUtil.Log("VarPackageMgr scan stats total=" + total + " cacheValidatedHit=" + cacheValidatedHit + " cacheHit=" + cacheHit + " zipScan=" + zipScan);
 		}
 
 		public List<string> GetAllVars()
@@ -1830,6 +1896,28 @@ namespace VPB
 						{
 							pkg = GetPackage("AddonPackages/" + pkgName, false);
 							if (pkg == null) pkg = GetPackage("AllPackages/" + pkgName, false);
+						}
+					}
+
+					if (pkg != null && pkg.ZipFile == null)
+					{
+						VarFileEntry cachedEntry;
+						if (pkg.TryCreateVarFileEntryFromCache(internalPath, out cachedEntry))
+						{
+							value = cachedEntry;
+							try
+							{
+								if (uidToVarFileEntry != null && !uidToVarFileEntry.ContainsKey(value.Uid))
+								{
+									uidToVarFileEntry.Add(value.Uid, value);
+								}
+								if (pathToVarFileEntry != null && !pathToVarFileEntry.ContainsKey(value.Path))
+								{
+									pathToVarFileEntry.Add(value.Path, value);
+								}
+							}
+							catch { }
+							return value;
 						}
 					}
 

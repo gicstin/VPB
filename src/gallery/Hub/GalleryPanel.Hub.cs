@@ -311,6 +311,7 @@ namespace VPB
 
         public void RefreshHubItems()
         {
+            ShowLoadingOverlay("Loading...");
             if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
             refreshCoroutine = StartCoroutine(RefreshHubItemsRoutine());
         }
@@ -354,6 +355,7 @@ namespace VPB
             {
                 string msg = !string.IsNullOrEmpty(error) ? error : "Request Timeout";
                 if (paginationText != null) paginationText.text = "Error: " + msg;
+                HideLoadingOverlay();
                 refreshCoroutine = null;
                 yield break;
             }
@@ -377,6 +379,7 @@ namespace VPB
                 CreateHubItemButton(item);
             }
             
+            HideLoadingOverlay();
             refreshCoroutine = null;
         }
 

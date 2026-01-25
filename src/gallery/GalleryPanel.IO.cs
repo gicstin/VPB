@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -138,6 +139,7 @@ namespace VPB
                 RefreshHubItems();
                 return;
             }
+            ShowLoadingOverlay("Loading...");
             if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
@@ -200,32 +202,169 @@ namespace VPB
             }
             else if (FileManager.PackagesByUid != null)
             {
-                foreach (var pkg in FileManager.PackagesByUid.Values)
-                {
-                    string filterCreator = currentCreator;
-                    if (!string.IsNullOrEmpty(filterCreator))
-                    {
-                        if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
-                    }
+                string localLoadingGroupId = currentLoadingGroupId;
 
-                    if (pkg.FileEntries != null)
+                Queue<FileEntry> candidateQueue = new Queue<FileEntry>();
+                object candidateQueueLock = new object();
+                int workerDoneFlag = 0;
+
+                ThreadPool.QueueUserWorkItem((state) =>
+                {
+                    try
                     {
-                        foreach (var entry in pkg.FileEntries)
+                        foreach (var pkg in FileManager.PackagesByUid.Values)
                         {
-                            // Time-based yield
-                            if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
+                            if (localLoadingGroupId != currentLoadingGroupId) return;
+
+                            string filterCreator = currentCreator;
+                            if (!string.IsNullOrEmpty(filterCreator))
                             {
-                                yield return null;
-                                yieldWatch.Reset();
-                                yieldWatch.Start();
+                                if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
                             }
 
-                            if (IsMatch(entry, currentPaths, currentPath, extensions) && PassesFilters(entry))
+                            List<string> names;
+                            List<long> ticks;
+                            List<long> sizes;
+                            if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
                             {
-                                files.Add(entry);
+                                continue;
+                            }
+
+                            for (int i = 0; i < names.Count; i++)
+                            {
+                                if (localLoadingGroupId != currentLoadingGroupId) return;
+                                string internalPath = names[i];
+
+                                string checkPath = internalPath;
+
+                                bool extMatch = false;
+                                if (extensions == null || extensions.Length == 0 || (extensions.Length == 1 && string.IsNullOrEmpty(extensions[0])))
+                                {
+                                    extMatch = true;
+                                }
+                                else
+                                {
+                                    string entryExt = Path.GetExtension(checkPath);
+                                    if (!string.IsNullOrEmpty(entryExt))
+                                    {
+                                        entryExt = entryExt.Substring(1);
+                                        for (int e = 0; e < extensions.Length; e++)
+                                        {
+                                            string ext = extensions[e];
+                                            if (string.Equals(entryExt, ext, StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                extMatch = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                if (!extMatch) continue;
+
+                                bool pathOk = true;
+                                if (currentPaths != null && currentPaths.Count > 0)
+                                {
+                                    pathOk = false;
+                                    for (int p = 0; p < currentPaths.Count; p++)
+                                    {
+                                        string pref = currentPaths[p];
+                                        if (checkPath.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            if (string.Equals(pref, "Saves/Person", StringComparison.OrdinalIgnoreCase) || string.Equals(pref, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                if (checkPath.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                                                    continue;
+                                            }
+                                            pathOk = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                else if (!string.IsNullOrEmpty(currentPath))
+                                {
+                                    pathOk = false;
+                                    if (checkPath.StartsWith(currentPath, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        if (string.Equals(currentPath, "Saves/Person", StringComparison.OrdinalIgnoreCase) || string.Equals(currentPath, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            if (!checkPath.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                                                pathOk = true;
+                                        }
+                                        else
+                                        {
+                                            pathOk = true;
+                                        }
+                                    }
+                                }
+                                if (!pathOk) continue;
+
+                                if (hasNameFilter)
+                                {
+                                    if (pkg.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0
+                                        && internalPath.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
+                                    {
+                                        continue;
+                                    }
+                                }
+
+                                DateTime entryTime = new DateTime(ticks[i], DateTimeKind.Utc).ToLocalTime();
+                                long entrySize = (sizes != null && i < sizes.Count) ? sizes[i] : 0;
+                                lock (candidateQueueLock)
+                                {
+                                    candidateQueue.Enqueue(new VarFileEntry(pkg, internalPath, entryTime, entrySize));
+                                }
                             }
                         }
                     }
+                    finally
+                    {
+                        Interlocked.Exchange(ref workerDoneFlag, 1);
+                    }
+                });
+
+                // Drain results incrementally on main thread
+                while (true)
+                {
+                    if (localLoadingGroupId != currentLoadingGroupId)
+                    {
+                        HideLoadingOverlay();
+                        refreshCoroutine = null;
+                        yield break;
+                    }
+
+                    FileEntry entry;
+                    bool hadWork = false;
+                    while (true)
+                    {
+                        lock (candidateQueueLock)
+                        {
+                            if (candidateQueue.Count == 0)
+                            {
+                                break;
+                            }
+
+                            entry = candidateQueue.Dequeue();
+                        }
+
+                        hadWork = true;
+                        if (PassesFilters(entry))
+                        {
+                            files.Add(entry);
+                        }
+
+                        if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
+                        {
+                            yield return null;
+                            yieldWatch.Reset();
+                            yieldWatch.Start();
+                        }
+                    }
+
+                    if (!hadWork && Interlocked.CompareExchange(ref workerDoneFlag, 0, 0) == 1)
+                    {
+                        break;
+                    }
+                    yield return null;
                 }
             }
 
@@ -373,6 +512,7 @@ namespace VPB
                 scrollRect.verticalNormalizedPosition = scrollToBottom ? 0f : 1f;
             }
 
+            HideLoadingOverlay();
             refreshCoroutine = null;
             LogUtil.Log("RefreshFilesRoutine took: " + swTotal.ElapsedMilliseconds + "ms");
         }

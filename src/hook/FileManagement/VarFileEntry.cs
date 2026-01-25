@@ -30,7 +30,8 @@ namespace VPB
 			InternalPath = entryName;
 			Uid = vp.Uid + ":/" + InternalPath;
 			Path = vp.Path + ":/" + InternalPath;
-			Name = Regex.Replace(Path, ".*/", string.Empty);
+			int lastSlash = Path.LastIndexOf('/');
+			Name = (lastSlash >= 0 && lastSlash + 1 < Path.Length) ? Path.Substring(lastSlash + 1) : Path;
 			Exists = true;
 			LastWriteTime = lastWriteTime;
 			base.Size = size;

@@ -1067,6 +1067,67 @@ namespace VPB
             }
         }
 
+        private void CreateLoadingOverlay(GameObject parentGO)
+        {
+            if (parentGO == null) return;
+            if (loadingOverlayGO != null) return;
+
+            loadingOverlayGO = new GameObject("LoadingOverlay");
+            loadingOverlayGO.transform.SetParent(parentGO.transform, false);
+            RectTransform overlayRT = loadingOverlayGO.AddComponent<RectTransform>();
+            overlayRT.anchorMin = Vector2.zero;
+            overlayRT.anchorMax = Vector2.one;
+            overlayRT.sizeDelta = Vector2.zero;
+            overlayRT.anchoredPosition = Vector2.zero;
+
+            Image overlayImg = loadingOverlayGO.AddComponent<Image>();
+            overlayImg.color = new Color(0f, 0f, 0f, 0.35f);
+            overlayImg.raycastTarget = true;
+
+            GameObject barGO = new GameObject("LoadingBar");
+            barGO.transform.SetParent(loadingOverlayGO.transform, false);
+            loadingBarContainerRT = barGO.AddComponent<RectTransform>();
+            loadingBarContainerRT.anchorMin = new Vector2(0.5f, 0.5f);
+            loadingBarContainerRT.anchorMax = new Vector2(0.5f, 0.5f);
+            loadingBarContainerRT.pivot = new Vector2(0.5f, 0.5f);
+            loadingBarContainerRT.anchoredPosition = Vector2.zero;
+            loadingBarContainerRT.sizeDelta = new Vector2(420, 10);
+            Image barBg = barGO.AddComponent<Image>();
+            barBg.color = new Color(1f, 1f, 1f, 0.18f);
+            barBg.raycastTarget = false;
+
+            GameObject fillGO = new GameObject("Fill");
+            fillGO.transform.SetParent(barGO.transform, false);
+            loadingBarFillRT = fillGO.AddComponent<RectTransform>();
+            loadingBarFillRT.anchorMin = new Vector2(0.5f, 0.5f);
+            loadingBarFillRT.anchorMax = new Vector2(0.5f, 0.5f);
+            loadingBarFillRT.pivot = new Vector2(0.5f, 0.5f);
+            loadingBarFillRT.sizeDelta = new Vector2(120, 10);
+            loadingBarFillRT.anchoredPosition = Vector2.zero;
+            Image fillImg = fillGO.AddComponent<Image>();
+            fillImg.color = new Color(1f, 1f, 1f, 0.85f);
+            fillImg.raycastTarget = false;
+
+            SetLayerRecursive(loadingOverlayGO, parentGO.layer);
+            loadingOverlayGO.SetActive(false);
+            isLoadingOverlayVisible = false;
+            loadingBarAnimT = 0f;
+        }
+
+        private void ShowLoadingOverlay(string message)
+        {
+            if (loadingOverlayGO == null) return;
+            loadingBarAnimT = 0f;
+            isLoadingOverlayVisible = true;
+            loadingOverlayGO.SetActive(true);
+        }
+
+        private void HideLoadingOverlay()
+        {
+            isLoadingOverlayVisible = false;
+            if (loadingOverlayGO != null) loadingOverlayGO.SetActive(false);
+        }
+
         public void DisplayColorPicker(string title, Color initialColor, UnityAction<Color> onConfirm)
         {
              // Use the singleton

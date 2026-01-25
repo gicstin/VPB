@@ -1026,6 +1026,7 @@ namespace VPB
             contentScrollRT.offsetMax = new Vector2(-230, -65); // Default top margin (Quick Filters hidden)
             
             contentGO = scrollRect.content.gameObject;
+            CreateLoadingOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
             // Remove VerticalLayoutGroup added by CreateVScrollableContent since we want GridLayoutGroup
             var oldVlg = contentGO.GetComponent<VerticalLayoutGroup>();
             if (oldVlg != null) DestroyImmediate(oldVlg);
@@ -1136,11 +1137,22 @@ namespace VPB
             temporaryStatusCoroutine = null;
         }
 
-        void Update()
+        private void Update()
         {
             if (canvas != null && VPBConfig.Instance != null)
             {
                 UpdateTargetMarker();
+
+                if (isLoadingOverlayVisible && loadingBarFillRT != null)
+                {
+                    loadingBarAnimT += Time.deltaTime;
+                    float barWidth = (loadingBarContainerRT != null ? loadingBarContainerRT.rect.width : 420f);
+                    float fillWidth = loadingBarFillRT.sizeDelta.x;
+                    float travel = Mathf.Max(0f, (barWidth - fillWidth) * 0.5f);
+                    float t = Mathf.PingPong(loadingBarAnimT * 1.2f, 1f);
+                    float x = Mathf.Lerp(-travel, travel, t);
+                    loadingBarFillRT.anchoredPosition = new Vector2(x, 0f);
+                }
 
                 if (isFixedLocally)
                 {

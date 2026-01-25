@@ -19,13 +19,14 @@ namespace VPB
     public class SerializableVarPackage
     {
         public List<string> FileEntryNames;
-        public List<string> FileEntryLastWriteTimes;
+        public List<long> FileEntryLastWriteTimeUtcTicks;
         public List<long> FileEntrySizes;
         public List<string> RecursivePackageDependencies;
         public long VarFileSize;
         public long VarLastWriteTimeUtcTicks;
+        public bool IsInvalid;
 
-		public List<string> ClothingFileEntryNames;
+        public List<string> ClothingFileEntryNames;
         public List<string> ClothingTags;
         public List<string> HairFileEntryNames;
         public List<string> HairTags;
@@ -49,15 +50,15 @@ namespace VPB
                     }
                 }
             }
-            //FileEntryLastWriteTimes
+            //FileEntryLastWriteTimeUtcTicks
             {
                 var count = reader.ReadInt32();
                 if (count > 0)
                 {
-                    FileEntryLastWriteTimes = new List<string>(count);
+                    FileEntryLastWriteTimeUtcTicks = new List<long>(count);
                     for (int i = 0; i < count; i++)
                     {
-                        FileEntryLastWriteTimes.Add(reader.ReadString());
+                        FileEntryLastWriteTimeUtcTicks.Add(reader.ReadInt64());
                     }
                 }
             }
@@ -138,6 +139,7 @@ namespace VPB
             {
                 VarFileSize = reader.ReadInt64();
                 VarLastWriteTimeUtcTicks = reader.ReadInt64();
+                IsInvalid = reader.ReadBoolean();
             }
         }
 
@@ -155,15 +157,15 @@ namespace VPB
                     }
                 }
             }
-            //FileEntryLastWriteTimes
+            //FileEntryLastWriteTimeUtcTicks
             {
-                var count = FileEntryLastWriteTimes?.Count ?? 0;
+                var count = FileEntryLastWriteTimeUtcTicks?.Count ?? 0;
                 writer.Write(count);
                 if (count > 0)
                 {
-                    for (int i = 0; i < FileEntryLastWriteTimes.Count; i++)
+                    for (int i = 0; i < FileEntryLastWriteTimeUtcTicks.Count; i++)
                     {
-                        writer.Write(FileEntryLastWriteTimes[i]);
+                        writer.Write(FileEntryLastWriteTimeUtcTicks[i]);
                     }
                 }
             }
@@ -242,11 +244,18 @@ namespace VPB
             }
             writer.Write(VarFileSize);
             writer.Write(VarLastWriteTimeUtcTicks);
+            writer.Write(IsInvalid);
         }
     }
 
 	public class VarPackage
 	{
+		List<string> cachedFileEntryNames;
+		List<long> cachedFileEntryLastWriteTimeUtcTicks;
+		List<long> cachedFileEntrySizes;
+		Dictionary<string, int> cachedInternalPathToIndex;
+		readonly object cachedEntriesLock = new object();
+		List<VarFileEntry> fileEntries;
 		private const int CodePageUtf8 = 65001;
 		private const int CodePageGbk = 936;
 		private const int CodePageSystemDefault = 0;
@@ -711,8 +720,87 @@ namespace VPB
 
 		public List<VarFileEntry> FileEntries
 		{
-			get;
-			protected set;
+			get
+			{
+				EnsureFileEntriesMaterialized();
+				return fileEntries;
+			}
+			protected set
+			{
+				fileEntries = value;
+				if (value != null)
+				{
+					cachedFileEntryNames = null;
+					cachedFileEntryLastWriteTimeUtcTicks = null;
+					cachedFileEntrySizes = null;
+					cachedInternalPathToIndex = null;
+				}
+			}
+		}
+
+		void EnsureFileEntriesMaterialized()
+		{
+			if (fileEntries != null) return;
+			if (cachedFileEntryNames == null || cachedFileEntryLastWriteTimeUtcTicks == null || cachedFileEntrySizes == null) return;
+			lock (cachedEntriesLock)
+			{
+				if (fileEntries != null) return;
+				int count = cachedFileEntryNames.Count;
+				fileEntries = new List<VarFileEntry>(count);
+				metaEntry = null;
+				for (int i = 0; i < count; i++)
+				{
+					string internalPath = cachedFileEntryNames[i];
+					DateTime entryTime = new DateTime(cachedFileEntryLastWriteTimeUtcTicks[i], DateTimeKind.Utc).ToLocalTime();
+					VarFileEntry vfe = new VarFileEntry(this, internalPath, entryTime, cachedFileEntrySizes[i]);
+					fileEntries.Add(vfe);
+					if (internalPath == "meta.json") metaEntry = vfe;
+				}
+				cachedInternalPathToIndex = null;
+			}
+		}
+
+		public bool TryCreateVarFileEntryFromCache(string internalPath, out VarFileEntry entry)
+		{
+			entry = null;
+			if (string.IsNullOrEmpty(internalPath)) return false;
+			if (cachedFileEntryNames == null || cachedFileEntryLastWriteTimeUtcTicks == null || cachedFileEntrySizes == null) return false;
+			lock (cachedEntriesLock)
+			{
+				if (cachedInternalPathToIndex == null)
+				{
+					cachedInternalPathToIndex = new Dictionary<string, int>(cachedFileEntryNames.Count, StringComparer.OrdinalIgnoreCase);
+					for (int i = 0; i < cachedFileEntryNames.Count; i++)
+					{
+						string p = cachedFileEntryNames[i];
+						if (!cachedInternalPathToIndex.ContainsKey(p)) cachedInternalPathToIndex.Add(p, i);
+					}
+				}
+				int idx;
+				if (!cachedInternalPathToIndex.TryGetValue(internalPath, out idx))
+				{
+					return false;
+				}
+				DateTime entryTime = new DateTime(cachedFileEntryLastWriteTimeUtcTicks[idx], DateTimeKind.Utc).ToLocalTime();
+				entry = new VarFileEntry(this, cachedFileEntryNames[idx], entryTime, cachedFileEntrySizes[idx]);
+				return true;
+			}
+		}
+
+		public bool TryGetCachedFileEntryData(out List<string> names, out List<long> lastWriteTimeUtcTicks, out List<long> sizes)
+		{
+			names = null;
+			lastWriteTimeUtcTicks = null;
+			sizes = null;
+			if (cachedFileEntryNames == null || cachedFileEntryLastWriteTimeUtcTicks == null || cachedFileEntrySizes == null) return false;
+			lock (cachedEntriesLock)
+			{
+				if (cachedFileEntryNames == null || cachedFileEntryLastWriteTimeUtcTicks == null || cachedFileEntrySizes == null) return false;
+				names = cachedFileEntryNames;
+				lastWriteTimeUtcTicks = cachedFileEntryLastWriteTimeUtcTicks;
+				sizes = cachedFileEntrySizes;
+				return true;
+			}
 		}
 		public List<VarFileEntry> ClothingFileEntries
 		{
@@ -949,51 +1037,44 @@ namespace VPB
 				if (File.Exists(Path))
 				{
 					ZipFile zipFile = null;
+					long lastWriteUtcTicks = 0;
 					try
 					{
 						metaEntry = null;
-						SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCache(this.Uid);
+						FileInfo fileInfo = new FileInfo(Path);
+						LastWriteTime = fileInfo.LastWriteTime;
+						CreationTime = fileInfo.CreationTime;
+						Size = fileInfo.Length;
+						lastWriteUtcTicks = fileInfo.LastWriteTimeUtc.Ticks;
+						SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCacheValidated(this.Uid, Size, lastWriteUtcTicks);
 						if (vp != null && vp.FileEntryNames != null)
 						{
-							// Fast path: trust cached data (matches old behavior style)
-							if (vp.VarFileSize > 0) Size = vp.VarFileSize;
-							if (vp.VarLastWriteTimeUtcTicks > 0)
+							if (vp.IsInvalid)
 							{
-								LastWriteTime = new DateTime(vp.VarLastWriteTimeUtcTicks, DateTimeKind.Utc).ToLocalTime();
-								CreationTime = LastWriteTime;
+								invalid = true;
+								Scaned = true;
+								return;
 							}
-
+							// Fast path: keep cached lists and defer VarFileEntry object creation
+							fileEntries = null;
+							cachedFileEntryNames = vp.FileEntryNames;
+							cachedFileEntryLastWriteTimeUtcTicks = vp.FileEntryLastWriteTimeUtcTicks;
+							cachedFileEntrySizes = vp.FileEntrySizes;
+							cachedInternalPathToIndex = null;
 							this.ClothingFileEntryNames = vp.ClothingFileEntryNames;
 							this.ClothingTags = vp.ClothingTags;
 							this.HairFileEntryNames = vp.HairFileEntryNames;
 							this.HairTags = vp.HairTags;
-
-							for (int i = 0; i < vp.FileEntryNames.Count; i++)
-							{
-								string item = vp.FileEntryNames[i];
-								VarFileEntry varFileEntry = new VarFileEntry(this, item, DateTime.Parse(vp.FileEntryLastWriteTimes[i]), vp.FileEntrySizes[i]);
-								FileEntries.Add(varFileEntry);
-								if (item == "meta.json")
-								{
-									metaEntry = varFileEntry;
-								}
-							}
 							this.RecursivePackageDependencies = vp.RecursivePackageDependencies;
-							if (metaEntry != null)
-							{
-								flag = true;
-								Interlocked.Increment(ref scanCacheHit);
-							}
+							flag = true;
+							Interlocked.Increment(ref scanCacheHit);
+							Interlocked.Increment(ref scanCacheValidatedHit);
+							Scaned = true;
+							return;
 						}
 
 						if (!flag)
 						{
-							FileInfo fileInfo = new FileInfo(Path);
-							LastWriteTime = fileInfo.LastWriteTime;
-							// Sort "new to old" by file creation time
-							CreationTime = fileInfo.CreationTime;
-							Size = fileInfo.Length;
-
 							Interlocked.Increment(ref scanZip);
 							FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
 							zipFile = new ZipFile(file);
@@ -1134,11 +1215,19 @@ namespace VPB
 						DumpVarPackage();
 						if (invalid)
 						{
+							try
+							{
+								SerializableVarPackage bad = new SerializableVarPackage();
+								bad.VarFileSize = Size;
+								bad.VarLastWriteTimeUtcTicks = lastWriteUtcTicks;
+								bad.IsInvalid = true;
+								VarPackageMgr.singleton.SetCache(this.Uid, bad);
+							}
+							catch { }
 							Scaned = true;
 							return;
 						}
 					}
-
 					catch (Exception ex)
 					{
 						zipFile?.Close();
@@ -1147,10 +1236,22 @@ namespace VPB
 							IsCorruptedArchive = true;
 							invalid = true;
 							LogScanErrorOnce(Uid, "Exception during zip file scan of", ex);
-							Scaned = true;
-							return;
 						}
-						LogScanErrorOnce(Uid, "Exception during zip file scan of", ex);
+						else
+						{
+							LogScanErrorOnce(Uid, "Exception during zip file scan of", ex);
+						}
+						try
+						{
+							SerializableVarPackage bad = new SerializableVarPackage();
+							bad.VarFileSize = Size;
+							bad.VarLastWriteTimeUtcTicks = lastWriteUtcTicks;
+							bad.IsInvalid = true;
+							VarPackageMgr.singleton.SetCache(this.Uid, bad);
+						}
+						catch { }
+						Scaned = true;
+						return;
 					}
 				}
 				if (!flag)
@@ -1386,16 +1487,16 @@ namespace VPB
 			}
 
 			List<string> list1 = new List<string>();
-			List<string> list2 = new List<string>();
+			List<long> list2 = new List<long>();
 			List<long> list3 = new List<long>();
 			foreach (var item in FileEntries)
 			{
 				list1.Add(item.InternalPath);
-				list2.Add(item.LastWriteTime.ToString());
+				list2.Add(item.LastWriteTime.ToUniversalTime().Ticks);
 				list3.Add(item.Size);
 			}
 			svp.FileEntryNames = list1;//.ToArray();
-			svp.FileEntryLastWriteTimes = list2;//.ToArray();
+			svp.FileEntryLastWriteTimeUtcTicks = list2;//.ToArray();
 			svp.FileEntrySizes = list3;//.ToArray();
 			svp.VarFileSize = Size;
 			svp.VarLastWriteTimeUtcTicks = LastWriteTime.ToUniversalTime().Ticks;
