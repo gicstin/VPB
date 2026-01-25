@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace VPB
 {
@@ -123,7 +125,7 @@ namespace VPB
         private string m_PkgMgrLastOperationDetails = "";
         private System.Collections.Generic.List<PackageManagerUndoOperation> m_PkgMgrUndoStack = new System.Collections.Generic.List<PackageManagerUndoOperation>();
         private const int PkgMgrMaxUndoSteps = 10;
-        
+
         private void RefreshVisibleIndices()
         {
             RefreshVisibleRows(m_AddonList, m_AddonVisibleRows);
@@ -154,6 +156,34 @@ namespace VPB
         private bool IsPackageManagerBusy()
         {
             return m_ScanPkgMgrCo != null || m_PkgMgrIsolateCo != null;
+        }
+
+        private void SetPkgMgrFilter(string filter)
+        {
+            string newPkgMgrFilter = filter ?? "";
+            if (newPkgMgrFilter != m_PkgMgrFilter)
+            {
+                m_PkgMgrFilter = newPkgMgrFilter;
+                m_PkgMgrFilterLower = m_PkgMgrFilter.ToLower();
+                m_PkgMgrFilterTermsLower = m_PkgMgrFilterLower.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                m_PkgMgrIndicesDirty = true;
+                UpdatePkgMgrHighlights();
+            }
+        }
+
+        private void TogglePackageManagerUI()
+        {
+            bool useUGUI = Settings.Instance != null && Settings.Instance.UseUGUIPackageManager != null && Settings.Instance.UseUGUIPackageManager.Value;
+            if (useUGUI)
+            {
+                if (IsPackageManagerUGUIVisible()) ClosePackageManagerUGUI();
+                else OpenPackageManagerUGUI();
+                return;
+            }
+
+            if (IsPackageManagerUGUIVisible()) ClosePackageManagerUGUI();
+            if (m_ShowPackageManagerWindow) m_ShowPackageManagerWindow = false;
+            else OpenPackageManagerWindow();
         }
 
         private int GetPkgMgrShiftAnchorIndex(System.Collections.Generic.List<PackageManagerItem> list)

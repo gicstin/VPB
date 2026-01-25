@@ -1534,8 +1534,16 @@ namespace VPB
                     // ========== PACKAGE MANAGER ==========
                     if (GUILayout.Button("Package Manager", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                     {
-                        if (m_ShowPackageManagerWindow) m_ShowPackageManagerWindow = false;
-                        else OpenPackageManagerWindow();
+                        bool forceUGUI = (Event.current != null) && (Event.current.control || Event.current.command);
+                        if (forceUGUI)
+                        {
+                            if (IsPackageManagerUGUIVisible()) ClosePackageManagerUGUI();
+                            else OpenPackageManagerUGUI();
+                        }
+                        else
+                        {
+                            TogglePackageManagerUI();
+                        }
                     }
 
                     // ========== HUB BROWSE ==========

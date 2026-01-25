@@ -323,6 +323,7 @@
     <Compile Include="src\gallery\Gallery.cs" />
     <Compile Include="src\gallery\GalleryActionsPanel.cs" />
     <Compile Include="src\gallery\GalleryActionTabBase.cs" />
+    <Compile Include="src\gallery\Gallery.PackageManager.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\tabs\GalleryPrimaryActionTab.cs" />
     <Compile Include="src\gallery\tabs\GalleryAudioActionTab.cs" />
