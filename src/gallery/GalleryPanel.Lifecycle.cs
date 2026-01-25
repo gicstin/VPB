@@ -725,6 +725,17 @@ namespace VPB
                 // Right Button Container
                 rightSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleRight, 130, 700, new Vector2(140, 0));
                 sideButtonGroups.Add(rightSideContainer.AddComponent<CanvasGroup>());
+                AddHoverDelegate(rightSideContainer);
+
+                // Full-height hover strip to cover top/bottom gaps outside the 700px side container
+                rightSideHoverStrip = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.vStretchRight, 130, 0, new Vector2(140, 0));
+                AddHoverDelegate(rightSideHoverStrip);
+                try
+                {
+                    // Ensure it doesn't intercept clicks on actual buttons (place behind container)
+                    rightSideHoverStrip.transform.SetAsFirstSibling();
+                }
+                catch { }
 
                 rightClearCreatorBtn = UI.CreateUIButton(backgroundBoxGO, 40, 40, "X", 24, 0, 0, AnchorPresets.middleRight, () => {
                     currentCreator = "";
@@ -910,6 +921,40 @@ namespace VPB
                 rightSideButtons.Add(rightRemoveAllClothingBtn.GetComponent<RectTransform>());
                 rightRemoveAllClothingBtn.SetActive(false);
 
+                try
+                {
+                    EventTrigger et = rightRemoveAllClothingBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = rightRemoveAllClothingBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            if (target == null) return;
+                            clothingSubmenuParentHoverCount++;
+                            clothingSubmenuParentHovered = true;
+                            clothingSubmenuLastHoverTime = Time.unscaledTime;
+                            if (!clothingSubmenuOpen) ToggleClothingSubmenuFromSideButtons(target);
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+
+                    var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    exitEntry.callback.AddListener((data) => {
+                        try
+                        {
+                            clothingSubmenuParentHoverCount--;
+                            if (clothingSubmenuParentHoverCount < 0) clothingSubmenuParentHoverCount = 0;
+                            clothingSubmenuParentHovered = clothingSubmenuParentHoverCount > 0;
+                            clothingSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(exitEntry);
+                }
+                catch { }
+
                 rightRemoveClothingExpandBtn = UI.CreateUIButton(rightRemoveAllClothingBtn, btnHeight, btnHeight, ">", 18, 104, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
@@ -919,19 +964,7 @@ namespace VPB
                             LogUtil.LogWarning("[VPB] Please select a Person atom.");
                             return;
                         }
-                        ToggleClothingSlotPicker("Remove Clothing", target, rightRemoveClothingExpandBtn.GetComponent<RectTransform>(), false, (slot) => {
-                            try
-                            {
-                                UIDraggableItem dragger = rightRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
-                                if (dragger == null) dragger = rightRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
-                                dragger.Panel = this;
-                                dragger.RemoveClothingItemByUid(target, slot);
-                            }
-                            catch (Exception ex)
-                            {
-                                LogUtil.LogError("[VPB] Remove Clothing slot exception: " + ex);
-                            }
-                        });
+                        ToggleClothingSubmenuFromSideButtons(target);
                     }
                     catch (Exception ex)
                     {
@@ -948,16 +981,7 @@ namespace VPB
                         {
                             Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
                             if (target == null) return;
-                            DisplayClothingSlotPicker("Remove Clothing", target, rightRemoveClothingExpandBtn.GetComponent<RectTransform>(), false, (slot) => {
-                                try
-                                {
-                                    UIDraggableItem dragger = rightRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
-                                    if (dragger == null) dragger = rightRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
-                                    dragger.Panel = this;
-                                    dragger.RemoveClothingItemByUid(target, slot);
-                                }
-                                catch { }
-                            });
+                            if (!clothingSubmenuOpen) ToggleClothingSubmenuFromSideButtons(target);
                         }
                         catch { }
                     });
@@ -966,6 +990,49 @@ namespace VPB
                 catch { }
                 rightRemoveClothingExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
                 rightRemoveClothingExpandBtn.GetComponentInChildren<Text>().color = Color.white;
+                rightRemoveClothingExpandBtn.SetActive(false);
+
+                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(rightSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                    rightSideButtons.Add(b.GetComponent<RectTransform>());
+                    rightRemoveClothingSubmenuButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                clothingSubmenuOptionsHoverCount++;
+                                clothingSubmenuOptionsHovered = true;
+                                clothingSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                clothingSubmenuOptionsHoverCount--;
+                                if (clothingSubmenuOptionsHoverCount < 0) clothingSubmenuOptionsHoverCount = 0;
+                                clothingSubmenuOptionsHovered = clothingSubmenuOptionsHoverCount > 0;
+                                clothingSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
 
                 rightRemoveAllHairBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nHair", 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Right)");
@@ -993,9 +1060,134 @@ namespace VPB
                 rightSideButtons.Add(rightRemoveAllHairBtn.GetComponent<RectTransform>());
                 rightRemoveAllHairBtn.SetActive(false);
 
+                try
+                {
+                    EventTrigger et = rightRemoveAllHairBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = rightRemoveAllHairBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            if (target == null) return;
+                            hairSubmenuParentHoverCount++;
+                            hairSubmenuParentHovered = true;
+                            hairSubmenuLastHoverTime = Time.unscaledTime;
+                            if (!hairSubmenuOpen) ToggleHairSubmenuFromSideButtons(target);
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+
+                    var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    exitEntry.callback.AddListener((data) => {
+                        try
+                        {
+                            hairSubmenuParentHoverCount--;
+                            if (hairSubmenuParentHoverCount < 0) hairSubmenuParentHoverCount = 0;
+                            hairSubmenuParentHovered = hairSubmenuParentHoverCount > 0;
+                            hairSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(exitEntry);
+                }
+                catch { }
+
+                rightRemoveHairExpandBtn = UI.CreateUIButton(rightRemoveAllHairBtn, btnHeight, btnHeight, ">", 18, 104, 0, AnchorPresets.middleCenter, () => {
+                    try
+                    {
+                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        if (target == null)
+                        {
+                            LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                            return;
+                        }
+                        ToggleHairSubmenuFromSideButtons(target);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Hair slot picker exception: " + ex);
+                    }
+                });
+                try
+                {
+                    EventTrigger et = rightRemoveHairExpandBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = rightRemoveHairExpandBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            if (target == null) return;
+                            if (!hairSubmenuOpen) ToggleHairSubmenuFromSideButtons(target);
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+                }
+                catch { }
+                rightRemoveHairExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
+                rightRemoveHairExpandBtn.GetComponentInChildren<Text>().color = Color.white;
+                rightRemoveHairExpandBtn.SetActive(false);
+
+                // Hair Submenu Buttons (Right) - pooled, treated as real side buttons
+                rightRemoveHairSubmenuStartIndex = rightSideButtons.Count;
+                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(rightSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                    rightSideButtons.Add(b.GetComponent<RectTransform>());
+                    rightRemoveHairSubmenuButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                hairSubmenuOptionsHoverCount++;
+                                hairSubmenuOptionsHovered = true;
+                                hairSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                hairSubmenuOptionsHoverCount--;
+                                if (hairSubmenuOptionsHoverCount < 0) hairSubmenuOptionsHoverCount = 0;
+                                hairSubmenuOptionsHovered = hairSubmenuOptionsHoverCount > 0;
+                                hairSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
+
                 // Left Button Container
                 leftSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleLeft, 130, 700, new Vector2(-140, 0));
                 sideButtonGroups.Add(leftSideContainer.AddComponent<CanvasGroup>());
+                AddHoverDelegate(leftSideContainer);
+
+                // Full-height hover strip to cover top/bottom gaps outside the 700px side container
+                leftSideHoverStrip = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.vStretchLeft, 130, 0, new Vector2(-140, 0));
+                AddHoverDelegate(leftSideHoverStrip);
+                try
+                {
+                    // Ensure it doesn't intercept clicks on actual buttons (place behind container)
+                    leftSideHoverStrip.transform.SetAsFirstSibling();
+                }
+                catch { }
 
                 leftClearCreatorBtn = UI.CreateUIButton(backgroundBoxGO, 40, 40, "X", 24, 0, 0, AnchorPresets.middleLeft, () => {
                     currentCreator = "";
@@ -1166,6 +1358,40 @@ namespace VPB
                 leftSideButtons.Add(leftRemoveAllClothingBtn.GetComponent<RectTransform>());
                 leftRemoveAllClothingBtn.SetActive(false);
 
+                try
+                {
+                    EventTrigger et = leftRemoveAllClothingBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = leftRemoveAllClothingBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            if (target == null) return;
+                            clothingSubmenuParentHoverCount++;
+                            clothingSubmenuParentHovered = true;
+                            clothingSubmenuLastHoverTime = Time.unscaledTime;
+                            if (!clothingSubmenuOpen) ToggleClothingSubmenuFromSideButtons(target);
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+
+                    var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    exitEntry.callback.AddListener((data) => {
+                        try
+                        {
+                            clothingSubmenuParentHoverCount--;
+                            if (clothingSubmenuParentHoverCount < 0) clothingSubmenuParentHoverCount = 0;
+                            clothingSubmenuParentHovered = clothingSubmenuParentHoverCount > 0;
+                            clothingSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(exitEntry);
+                }
+                catch { }
+
                 leftRemoveClothingExpandBtn = UI.CreateUIButton(leftRemoveAllClothingBtn, btnHeight, btnHeight, "<", 18, -104, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
@@ -1175,19 +1401,7 @@ namespace VPB
                             LogUtil.LogWarning("[VPB] Please select a Person atom.");
                             return;
                         }
-                        ToggleClothingSlotPicker("Remove Clothing", target, leftRemoveClothingExpandBtn.GetComponent<RectTransform>(), true, (slot) => {
-                            try
-                            {
-                                UIDraggableItem dragger = leftRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
-                                if (dragger == null) dragger = leftRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
-                                dragger.Panel = this;
-                                dragger.RemoveClothingItemByUid(target, slot);
-                            }
-                            catch (Exception ex)
-                            {
-                                LogUtil.LogError("[VPB] Remove Clothing slot exception: " + ex);
-                            }
-                        });
+                        ToggleClothingSubmenuFromSideButtons(target);
                     }
                     catch (Exception ex)
                     {
@@ -1204,16 +1418,7 @@ namespace VPB
                         {
                             Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
                             if (target == null) return;
-                            DisplayClothingSlotPicker("Remove Clothing", target, leftRemoveClothingExpandBtn.GetComponent<RectTransform>(), true, (slot) => {
-                                try
-                                {
-                                    UIDraggableItem dragger = leftRemoveAllClothingBtn.GetComponent<UIDraggableItem>();
-                                    if (dragger == null) dragger = leftRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
-                                    dragger.Panel = this;
-                                    dragger.RemoveClothingItemByUid(target, slot);
-                                }
-                                catch { }
-                            });
+                            if (!clothingSubmenuOpen) ToggleClothingSubmenuFromSideButtons(target);
                         }
                         catch { }
                     });
@@ -1222,6 +1427,49 @@ namespace VPB
                 catch { }
                 leftRemoveClothingExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
                 leftRemoveClothingExpandBtn.GetComponentInChildren<Text>().color = Color.white;
+                leftRemoveClothingExpandBtn.SetActive(false);
+
+                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(leftSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                    leftSideButtons.Add(b.GetComponent<RectTransform>());
+                    leftRemoveClothingSubmenuButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                clothingSubmenuOptionsHoverCount++;
+                                clothingSubmenuOptionsHovered = true;
+                                clothingSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                clothingSubmenuOptionsHoverCount--;
+                                if (clothingSubmenuOptionsHoverCount < 0) clothingSubmenuOptionsHoverCount = 0;
+                                clothingSubmenuOptionsHovered = clothingSubmenuOptionsHoverCount > 0;
+                                clothingSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
 
                 leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nHair", 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Left)");
@@ -1248,6 +1496,120 @@ namespace VPB
                 leftRemoveAllHairBtn.GetComponentInChildren<Text>().color = Color.white;
                 leftSideButtons.Add(leftRemoveAllHairBtn.GetComponent<RectTransform>());
                 leftRemoveAllHairBtn.SetActive(false);
+
+                try
+                {
+                    EventTrigger et = leftRemoveAllHairBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = leftRemoveAllHairBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            if (target == null) return;
+                            hairSubmenuParentHoverCount++;
+                            hairSubmenuParentHovered = true;
+                            hairSubmenuLastHoverTime = Time.unscaledTime;
+                            if (!hairSubmenuOpen) ToggleHairSubmenuFromSideButtons(target);
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+
+                    var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    exitEntry.callback.AddListener((data) => {
+                        try
+                        {
+                            hairSubmenuParentHoverCount--;
+                            if (hairSubmenuParentHoverCount < 0) hairSubmenuParentHoverCount = 0;
+                            hairSubmenuParentHovered = hairSubmenuParentHoverCount > 0;
+                            hairSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(exitEntry);
+                }
+                catch { }
+
+                leftRemoveHairExpandBtn = UI.CreateUIButton(leftRemoveAllHairBtn, btnHeight, btnHeight, "<", 18, -104, 0, AnchorPresets.middleCenter, () => {
+                    try
+                    {
+                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        if (target == null)
+                        {
+                            LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                            return;
+                        }
+                        ToggleHairSubmenuFromSideButtons(target);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Hair slot picker exception: " + ex);
+                    }
+                });
+                try
+                {
+                    EventTrigger et = leftRemoveHairExpandBtn.GetComponent<EventTrigger>();
+                    if (et == null) et = leftRemoveHairExpandBtn.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            if (target == null) return;
+                            if (!hairSubmenuOpen) ToggleHairSubmenuFromSideButtons(target);
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+                }
+                catch { }
+                leftRemoveHairExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
+                leftRemoveHairExpandBtn.GetComponentInChildren<Text>().color = Color.white;
+                leftRemoveHairExpandBtn.SetActive(false);
+
+                // Hair Submenu Buttons (Left) - pooled, treated as real side buttons
+                leftRemoveHairSubmenuStartIndex = leftSideButtons.Count;
+                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(leftSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                    leftSideButtons.Add(b.GetComponent<RectTransform>());
+                    leftRemoveHairSubmenuButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                hairSubmenuOptionsHoverCount++;
+                                hairSubmenuOptionsHovered = true;
+                                hairSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                hairSubmenuOptionsHoverCount--;
+                                if (hairSubmenuOptionsHoverCount < 0) hairSubmenuOptionsHoverCount = 0;
+                                hairSubmenuOptionsHovered = hairSubmenuOptionsHoverCount > 0;
+                                hairSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
 
 UpdateDesktopModeButton();
             }
@@ -1381,6 +1743,50 @@ UpdateDesktopModeButton();
             if (canvas != null && VPBConfig.Instance != null)
             {
                 UpdateTargetMarker();
+
+                try
+                {
+                    if (hairSubmenuOpen)
+                    {
+                        bool hovered = hairSubmenuParentHovered || hairSubmenuOptionsHovered;
+                        if (!hovered)
+                        {
+                            if (Time.unscaledTime - hairSubmenuLastHoverTime >= HairSubmenuAutoHideDelay)
+                            {
+                                hairSubmenuOpen = false;
+                                SetHairSubmenuButtonsVisible(false);
+                                UpdateSideButtonPositions();
+                            }
+                        }
+                        else
+                        {
+                            hairSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    if (clothingSubmenuOpen)
+                    {
+                        bool hovered = clothingSubmenuParentHovered || clothingSubmenuOptionsHovered;
+                        if (!hovered)
+                        {
+                            if (Time.unscaledTime - clothingSubmenuLastHoverTime >= ClothingSubmenuAutoHideDelay)
+                            {
+                                clothingSubmenuOpen = false;
+                                SetClothingSubmenuButtonsVisible(false);
+                                UpdateSideButtonPositions();
+                            }
+                        }
+                        else
+                        {
+                            clothingSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                    }
+                }
+                catch { }
 
                 if (isLoadingOverlayVisible && loadingBarFillRT != null)
                 {
@@ -1596,6 +2002,18 @@ UpdateDesktopModeButton();
 
             // Side Buttons Auto-Hide Logic
             bool showSideButtons = hoverCount > 0;
+            if (showSideButtons)
+            {
+                sideButtonsFadeDelayTimer = 0f;
+            }
+            else
+            {
+                sideButtonsFadeDelayTimer += Time.deltaTime;
+                if (sideButtonsFadeDelayTimer < SideButtonsFadeDelay)
+                {
+                    showSideButtons = true;
+                }
+            }
             
             bool enableFade = (VPBConfig.Instance != null) ? VPBConfig.Instance.EnableGalleryFade : true;
             float targetAlpha = (showSideButtons || isResizing || !enableFade) ? 1.0f : 0.0f;

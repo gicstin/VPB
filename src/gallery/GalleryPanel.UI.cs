@@ -440,6 +440,168 @@ namespace VPB
             UpdateSideButtonPositions();
         }
 
+        private void PopulateClothingSubmenuButtons(Atom target)
+        {
+            SetClothingSubmenuButtonsVisible(false);
+
+            if (target == null) return;
+
+            List<KeyValuePair<string, string>> options = null;
+            try
+            {
+                var items = new List<KeyValuePair<string, string>>();
+                DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
+                if (dcs != null && dcs.clothingItems != null)
+                {
+                    foreach (var item in dcs.clothingItems)
+                    {
+                        if (item == null || !item.active) continue;
+
+                        string path = null;
+                        try { path = item.uid; } catch { }
+                        if (string.IsNullOrEmpty(path) || (!path.Contains(":/") && !path.Contains(":\\")))
+                        {
+                            try
+                            {
+                                string internalId = null;
+                                string containingVAMDir = null;
+                                Type it = item.GetType();
+
+                                FieldInfo fInternalId = it.GetField("internalId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                if (fInternalId != null) internalId = fInternalId.GetValue(item) as string;
+
+                                FieldInfo fVamDir = it.GetField("containingVAMDir", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                if (fVamDir != null) containingVAMDir = fVamDir.GetValue(item) as string;
+
+                                if (string.IsNullOrEmpty(internalId))
+                                {
+                                    FieldInfo fItemPath = it.GetField("itemPath", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                    if (fItemPath != null) internalId = fItemPath.GetValue(item) as string;
+                                }
+
+                                if (!string.IsNullOrEmpty(containingVAMDir) && !string.IsNullOrEmpty(internalId))
+                                {
+                                    path = containingVAMDir.Replace("\\", "/").TrimEnd('/') + "/" + internalId.Replace("\\", "/").TrimStart('/');
+                                }
+                            }
+                            catch { }
+                        }
+
+                        if (string.IsNullOrEmpty(path)) continue;
+                        string p = path.Replace("\\", "/");
+                        string pl = p.ToLowerInvariant();
+                        int idx = pl.IndexOf("/custom/clothing/");
+                        if (idx < 0) idx = pl.IndexOf("/clothing/");
+                        if (idx >= 0)
+                        {
+                            string sub = p.Substring(idx);
+                            string[] parts = sub.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                            for (int pi = 0; pi < parts.Length; pi++) parts[pi] = parts[pi].Trim();
+
+                            string typeFolder = (parts.Length >= 4) ? parts[3] : null;
+                            string fileName = null;
+                            try
+                            {
+                                string last = parts.Length > 0 ? parts[parts.Length - 1] : null;
+                                if (!string.IsNullOrEmpty(last))
+                                {
+                                    int dot = last.LastIndexOf('.');
+                                    fileName = dot > 0 ? last.Substring(0, dot) : last;
+                                }
+                            }
+                            catch { }
+
+                            if (string.IsNullOrEmpty(fileName))
+                            {
+                                try { fileName = item.name; }
+                                catch { }
+                            }
+
+                            string label = !string.IsNullOrEmpty(typeFolder)
+                                ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + (fileName ?? ""))
+                                : (fileName ?? "");
+
+                            if (!string.IsNullOrEmpty(label))
+                            {
+                                items.Add(new KeyValuePair<string, string>(item.uid, label));
+                            }
+                        }
+                    }
+                }
+
+                options = items
+                    .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && !string.IsNullOrEmpty(kvp.Value))
+                    .GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => g.First())
+                    .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch { }
+
+            if (options == null) options = new List<KeyValuePair<string, string>>();
+            int count = Mathf.Min(options.Count, HairSubmenuMaxButtons);
+
+            for (int i = 0; i < HairSubmenuMaxButtons; i++)
+            {
+                string uid = i < count ? options[i].Key : null;
+                string label = i < count ? options[i].Value : null;
+
+                void Configure(GameObject btnGO)
+                {
+                    if (btnGO == null) return;
+                    Button btn = btnGO.GetComponent<Button>();
+                    Text t = btnGO.GetComponentInChildren<Text>();
+                    if (t != null) t.text = label ?? "";
+                    if (btn != null)
+                    {
+                        btn.onClick.RemoveAllListeners();
+                        if (!string.IsNullOrEmpty(uid))
+                        {
+                            btn.onClick.AddListener(() => {
+                                try
+                                {
+                                    Atom tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                    if (tgt == null) return;
+                                    UIDraggableItem dragger = rightRemoveAllClothingBtn != null ? rightRemoveAllClothingBtn.GetComponent<UIDraggableItem>() : null;
+                                    if (dragger == null && rightRemoveAllClothingBtn != null) dragger = rightRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
+                                    if (dragger != null)
+                                    {
+                                        dragger.Panel = this;
+                                        dragger.RemoveClothingItemByUid(tgt, uid);
+                                    }
+                                }
+                                finally
+                                {
+                                    clothingSubmenuOpen = false;
+                                    SetClothingSubmenuButtonsVisible(false);
+                                    UpdateSideButtonPositions();
+                                }
+                            });
+                        }
+                    }
+                    btnGO.SetActive(i < count);
+                }
+
+                if (i < rightRemoveClothingSubmenuButtons.Count) Configure(rightRemoveClothingSubmenuButtons[i]);
+                if (i < leftRemoveClothingSubmenuButtons.Count) Configure(leftRemoveClothingSubmenuButtons[i]);
+            }
+        }
+
+        private void ToggleClothingSubmenuFromSideButtons(Atom target)
+        {
+            clothingSubmenuOpen = !clothingSubmenuOpen;
+            if (clothingSubmenuOpen)
+            {
+                PopulateClothingSubmenuButtons(target);
+            }
+            else
+            {
+                SetClothingSubmenuButtonsVisible(false);
+            }
+
+            UpdateSideButtonPositions();
+        }
+
         private void ToggleDesktopMode()
         {
             if (VPBConfig.Instance == null) return;
@@ -1040,9 +1202,9 @@ namespace VPB
             if (leftFollowBtnImage != null) leftFollowBtnImage.color = color;
         }
 
-        private void UpdateSideButtonPositions()
+        public void UpdateSideButtonPositions()
         {
-            if (VPBConfig.Instance == null) return;
+            if (backgroundBoxGO == null) return;
             float spacing = 60f;
             float groupGap = VPBConfig.Instance.EnableButtonGaps ? 20f : 0f;
             float stackHeight = GetSideButtonsStackHeight(spacing, groupGap);
@@ -1051,6 +1213,117 @@ namespace VPB
             // Settings
             UpdateListPositions(rightSideButtons, topY, spacing, groupGap);
             UpdateListPositions(leftSideButtons, topY, spacing, groupGap);
+
+            try
+            {
+                string title = currentCategoryTitle ?? "";
+                bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (isHair && hairSubmenuOpen)
+                {
+                    float xPad = 80f;
+
+                    RectTransform leftBaseRT = leftRemoveAllHairBtn != null ? leftRemoveAllHairBtn.GetComponent<RectTransform>() : null;
+                    RectTransform rightBaseRT = rightRemoveAllHairBtn != null ? rightRemoveAllHairBtn.GetComponent<RectTransform>() : null;
+
+                    int visibleCount = 0;
+                    for (int i = 0; i < leftRemoveHairSubmenuButtons.Count; i++)
+                    {
+                        GameObject go = leftRemoveHairSubmenuButtons[i];
+                        if (go != null && go.activeSelf) visibleCount++;
+                    }
+                    if (visibleCount == 0)
+                    {
+                        for (int i = 0; i < rightRemoveHairSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = rightRemoveHairSubmenuButtons[i];
+                            if (go != null && go.activeSelf) visibleCount++;
+                        }
+                    }
+                    float yStart = -(visibleCount - 1) * 0.5f * spacing;
+
+                    if (leftBaseRT != null)
+                    {
+                        float baseY = leftBaseRT.anchoredPosition.y;
+                        for (int i = 0; i < leftRemoveHairSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = leftRemoveHairSubmenuButtons[i];
+                            if (go == null || !go.activeSelf) continue;
+                            RectTransform rt = go.GetComponent<RectTransform>();
+                            if (rt == null) continue;
+                            float w = rt.sizeDelta.x;
+                            rt.anchoredPosition = new Vector2(-(w * 0.5f) - xPad, baseY + yStart + spacing * i);
+                        }
+                    }
+
+                    if (rightBaseRT != null)
+                    {
+                        float baseY = rightBaseRT.anchoredPosition.y;
+                        for (int i = 0; i < rightRemoveHairSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = rightRemoveHairSubmenuButtons[i];
+                            if (go == null || !go.activeSelf) continue;
+                            RectTransform rt = go.GetComponent<RectTransform>();
+                            if (rt == null) continue;
+                            float w = rt.sizeDelta.x;
+                            rt.anchoredPosition = new Vector2((w * 0.5f) + xPad, baseY + yStart + spacing * i);
+                        }
+                    }
+                }
+
+                if (isClothing && clothingSubmenuOpen)
+                {
+                    float xPad = 80f;
+
+                    RectTransform leftBaseRT = leftRemoveAllClothingBtn != null ? leftRemoveAllClothingBtn.GetComponent<RectTransform>() : null;
+                    RectTransform rightBaseRT = rightRemoveAllClothingBtn != null ? rightRemoveAllClothingBtn.GetComponent<RectTransform>() : null;
+
+                    int visibleCount = 0;
+                    for (int i = 0; i < leftRemoveClothingSubmenuButtons.Count; i++)
+                    {
+                        GameObject go = leftRemoveClothingSubmenuButtons[i];
+                        if (go != null && go.activeSelf) visibleCount++;
+                    }
+                    if (visibleCount == 0)
+                    {
+                        for (int i = 0; i < rightRemoveClothingSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = rightRemoveClothingSubmenuButtons[i];
+                            if (go != null && go.activeSelf) visibleCount++;
+                        }
+                    }
+                    float yStart = -(visibleCount - 1) * 0.5f * spacing;
+
+                    if (leftBaseRT != null)
+                    {
+                        float baseY = leftBaseRT.anchoredPosition.y;
+                        for (int i = 0; i < leftRemoveClothingSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = leftRemoveClothingSubmenuButtons[i];
+                            if (go == null || !go.activeSelf) continue;
+                            RectTransform rt = go.GetComponent<RectTransform>();
+                            if (rt == null) continue;
+                            float w = rt.sizeDelta.x;
+                            rt.anchoredPosition = new Vector2(-(w * 0.5f) - xPad, baseY + yStart + spacing * i);
+                        }
+                    }
+
+                    if (rightBaseRT != null)
+                    {
+                        float baseY = rightBaseRT.anchoredPosition.y;
+                        for (int i = 0; i < rightRemoveClothingSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = rightRemoveClothingSubmenuButtons[i];
+                            if (go == null || !go.activeSelf) continue;
+                            RectTransform rt = go.GetComponent<RectTransform>();
+                            if (rt == null) continue;
+                            float w = rt.sizeDelta.x;
+                            rt.anchoredPosition = new Vector2((w * 0.5f) + xPad, baseY + yStart + spacing * i);
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         private SideButtonLayoutEntry[] GetSideButtonsLayout()
@@ -1059,7 +1332,27 @@ namespace VPB
             bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
 
-            return new SideButtonLayoutEntry[]
+            int idxRandom = 4;
+            int idxRemoveHair = 15;
+            try
+            {
+                if (rightSideButtons != null)
+                {
+                    if (rightLoadRandomBtn != null)
+                    {
+                        int i = rightSideButtons.FindIndex(rt => rt != null && rt.gameObject == rightLoadRandomBtn);
+                        if (i >= 0) idxRandom = i;
+                    }
+                    if (rightRemoveAllHairBtn != null)
+                    {
+                        int i = rightSideButtons.FindIndex(rt => rt != null && rt.gameObject == rightRemoveAllHairBtn);
+                        if (i >= 0) idxRemoveHair = i;
+                    }
+                }
+            }
+            catch { }
+
+            var layout = new List<SideButtonLayoutEntry>()
             {
                 new SideButtonLayoutEntry(0, 0, 0),
                 new SideButtonLayoutEntry(1, 0, 0),
@@ -1074,10 +1367,208 @@ namespace VPB
                 new SideButtonLayoutEntry(10, 0, 0), // Apply Mode
                 new SideButtonLayoutEntry(11, 0, 0), // Replace
                 new SideButtonLayoutEntry(14, 0, 1), // Remove Clothing (context)
-                new SideButtonLayoutEntry(15, 0, isHair ? 1 : 0), // Remove Hair (context)
-                new SideButtonLayoutEntry(4, 0, 1), // Random
-                new SideButtonLayoutEntry(13, 0, (isClothing || isHair) ? 1 : 0), // Undo
+                new SideButtonLayoutEntry(idxRemoveHair, 0, isHair ? 1 : 0), // Remove Hair (context)
             };
+
+            layout.Add(new SideButtonLayoutEntry(idxRandom, 0, 1)); // Random
+            layout.Add(new SideButtonLayoutEntry(13, 0, (isClothing || isHair) ? 1 : 0)); // Undo
+            return layout.ToArray();
+        }
+
+        private void SetHairSubmenuButtonsVisible(bool visible)
+        {
+            try
+            {
+                for (int i = 0; i < rightRemoveHairSubmenuButtons.Count; i++)
+                {
+                    if (rightRemoveHairSubmenuButtons[i] != null) rightRemoveHairSubmenuButtons[i].SetActive(visible);
+                }
+                for (int i = 0; i < leftRemoveHairSubmenuButtons.Count; i++)
+                {
+                    if (leftRemoveHairSubmenuButtons[i] != null) leftRemoveHairSubmenuButtons[i].SetActive(visible);
+                }
+            }
+            catch { }
+        }
+
+        private void SetClothingSubmenuButtonsVisible(bool visible)
+        {
+            try
+            {
+                for (int i = 0; i < rightRemoveClothingSubmenuButtons.Count; i++)
+                {
+                    if (rightRemoveClothingSubmenuButtons[i] != null) rightRemoveClothingSubmenuButtons[i].SetActive(visible);
+                }
+                for (int i = 0; i < leftRemoveClothingSubmenuButtons.Count; i++)
+                {
+                    if (leftRemoveClothingSubmenuButtons[i] != null) leftRemoveClothingSubmenuButtons[i].SetActive(visible);
+                }
+            }
+            catch { }
+        }
+
+        private void PopulateHairSubmenuButtons(Atom target)
+        {
+            // Hide all first
+            SetHairSubmenuButtonsVisible(false);
+
+            if (target == null) return;
+
+            List<KeyValuePair<string, string>> options = null;
+            try
+            {
+                var items = new List<KeyValuePair<string, string>>();
+                DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
+                if (dcs != null && dcs.hairItems != null)
+                {
+                    foreach (var item in dcs.hairItems)
+                    {
+                        if (item == null || !item.active) continue;
+
+                        string path = null;
+                        try { path = item.uid; } catch { }
+                        if (string.IsNullOrEmpty(path) || (!path.Contains(":/") && !path.Contains(":\\")))
+                        {
+                            try
+                            {
+                                string internalId = null;
+                                string containingVAMDir = null;
+                                Type it = item.GetType();
+
+                                FieldInfo fInternalId = it.GetField("internalId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                if (fInternalId != null) internalId = fInternalId.GetValue(item) as string;
+
+                                FieldInfo fVamDir = it.GetField("containingVAMDir", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                if (fVamDir != null) containingVAMDir = fVamDir.GetValue(item) as string;
+
+                                if (string.IsNullOrEmpty(internalId))
+                                {
+                                    FieldInfo fItemPath = it.GetField("itemPath", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                    if (fItemPath != null) internalId = fItemPath.GetValue(item) as string;
+                                }
+
+                                if (!string.IsNullOrEmpty(containingVAMDir) && !string.IsNullOrEmpty(internalId))
+                                {
+                                    path = containingVAMDir.Replace("\\", "/").TrimEnd('/') + "/" + internalId.Replace("\\", "/").TrimStart('/');
+                                }
+                            }
+                            catch { }
+                        }
+
+                        if (string.IsNullOrEmpty(path)) continue;
+                        string p = path.Replace("\\", "/");
+                        string pl = p.ToLowerInvariant();
+                        int idx = pl.IndexOf("/custom/hair/");
+                        if (idx < 0) idx = pl.IndexOf("/hair/");
+                        if (idx >= 0)
+                        {
+                            string sub = p.Substring(idx);
+                            string[] parts = sub.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                            for (int pi = 0; pi < parts.Length; pi++) parts[pi] = parts[pi].Trim();
+
+                            string typeFolder = (parts.Length >= 4) ? parts[3] : null;
+                            string fileName = null;
+                            try
+                            {
+                                string last = parts.Length > 0 ? parts[parts.Length - 1] : null;
+                                if (!string.IsNullOrEmpty(last))
+                                {
+                                    int dot = last.LastIndexOf('.');
+                                    fileName = dot > 0 ? last.Substring(0, dot) : last;
+                                }
+                            }
+                            catch { }
+
+                            if (string.IsNullOrEmpty(fileName))
+                            {
+                                try { fileName = item.name; }
+                                catch { }
+                            }
+
+                            string label = !string.IsNullOrEmpty(typeFolder)
+                                ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + (fileName ?? ""))
+                                : (fileName ?? "");
+
+                            if (!string.IsNullOrEmpty(label))
+                            {
+                                items.Add(new KeyValuePair<string, string>(item.uid, label));
+                            }
+                        }
+                    }
+                }
+
+                options = items
+                    .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && !string.IsNullOrEmpty(kvp.Value))
+                    .GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => g.First())
+                    .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch { }
+
+            if (options == null) options = new List<KeyValuePair<string, string>>();
+            int count = Mathf.Min(options.Count, HairSubmenuMaxButtons);
+
+            // Populate buttons on both sides (they share the same label/callback).
+            for (int i = 0; i < HairSubmenuMaxButtons; i++)
+            {
+                string uid = i < count ? options[i].Key : null;
+                string label = i < count ? options[i].Value : null;
+
+                void Configure(GameObject btnGO)
+                {
+                    if (btnGO == null) return;
+                    Button btn = btnGO.GetComponent<Button>();
+                    Text t = btnGO.GetComponentInChildren<Text>();
+                    if (t != null) t.text = label ?? "";
+                    if (btn != null)
+                    {
+                        btn.onClick.RemoveAllListeners();
+                        if (!string.IsNullOrEmpty(uid))
+                        {
+                            btn.onClick.AddListener(() => {
+                                try
+                                {
+                                    Atom tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                    if (tgt == null) return;
+                                    UIDraggableItem dragger = rightRemoveAllHairBtn != null ? rightRemoveAllHairBtn.GetComponent<UIDraggableItem>() : null;
+                                    if (dragger == null && rightRemoveAllHairBtn != null) dragger = rightRemoveAllHairBtn.AddComponent<UIDraggableItem>();
+                                    if (dragger != null)
+                                    {
+                                        dragger.Panel = this;
+                                        dragger.RemoveHairItemByUid(tgt, uid);
+                                    }
+                                }
+                                finally
+                                {
+                                    hairSubmenuOpen = false;
+                                    SetHairSubmenuButtonsVisible(false);
+                                    UpdateSideButtonPositions();
+                                }
+                            });
+                        }
+                    }
+                    btnGO.SetActive(i < count);
+                }
+
+                if (i < rightRemoveHairSubmenuButtons.Count) Configure(rightRemoveHairSubmenuButtons[i]);
+                if (i < leftRemoveHairSubmenuButtons.Count) Configure(leftRemoveHairSubmenuButtons[i]);
+            }
+        }
+
+        private void ToggleHairSubmenuFromSideButtons(Atom target)
+        {
+            hairSubmenuOpen = !hairSubmenuOpen;
+            if (hairSubmenuOpen)
+            {
+                PopulateHairSubmenuButtons(target);
+            }
+            else
+            {
+                SetHairSubmenuButtonsVisible(false);
+            }
+
+            UpdateSideButtonPositions();
         }
 
         private void UpdateSideContextActions()
@@ -1090,6 +1581,18 @@ namespace VPB
             if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(isClothing);
             if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(isHair);
             if (leftRemoveAllHairBtn != null) leftRemoveAllHairBtn.SetActive(isHair);
+
+            if (!isHair && hairSubmenuOpen)
+            {
+                hairSubmenuOpen = false;
+                SetHairSubmenuButtonsVisible(false);
+            }
+
+            if (!isClothing && clothingSubmenuOpen)
+            {
+                clothingSubmenuOpen = false;
+                SetClothingSubmenuButtonsVisible(false);
+            }
 
             UpdateSideButtonPositions();
         }
@@ -1410,6 +1913,489 @@ namespace VPB
             DisplayClothingSlotPicker(title, target, anchorRT, openToLeft, onSelect);
         }
 
+        private void CloseHairSlotPicker()
+        {
+            try
+            {
+                if (hairSlotPickerPanelGO != null) Destroy(hairSlotPickerPanelGO);
+                if (hairSlotPickerOverlayGO != null) Destroy(hairSlotPickerOverlayGO);
+            }
+            catch { }
+            hairSlotPickerPanelGO = null;
+            hairSlotPickerOverlayGO = null;
+        }
+
+        private void ToggleHairSlotPicker(string title, Atom target, RectTransform anchorRT, bool openToLeft, System.Action<string> onSelect)
+        {
+            if (hairSlotPickerOverlayGO != null || hairSlotPickerPanelGO != null)
+            {
+                CloseHairSlotPicker();
+                return;
+            }
+
+            DisplayHairSlotPicker(title, target, anchorRT, openToLeft, onSelect);
+        }
+
+        private void CloseRemoveHairSubmenu(bool isRight)
+        {
+            try
+            {
+                if (isRight)
+                {
+                    if (rightRemoveHairSubmenuPanelGO != null) Destroy(rightRemoveHairSubmenuPanelGO);
+                    rightRemoveHairSubmenuPanelGO = null;
+                }
+                else
+                {
+                    if (leftRemoveHairSubmenuPanelGO != null) Destroy(leftRemoveHairSubmenuPanelGO);
+                    leftRemoveHairSubmenuPanelGO = null;
+                }
+            }
+            catch { }
+        }
+
+        private void ToggleRemoveHairSubmenu(string title, Atom target, RectTransform anchorRT, bool openToLeft, bool isRight, System.Action<string> onSelect)
+        {
+            if (isRight)
+            {
+                if (rightRemoveHairSubmenuPanelGO != null)
+                {
+                    CloseRemoveHairSubmenu(true);
+                    return;
+                }
+            }
+            else
+            {
+                if (leftRemoveHairSubmenuPanelGO != null)
+                {
+                    CloseRemoveHairSubmenu(false);
+                    return;
+                }
+            }
+
+            DisplayRemoveHairSubmenu(title, target, anchorRT, openToLeft, isRight, onSelect);
+        }
+
+        private void DisplayRemoveHairSubmenu(string title, Atom target, RectTransform anchorRT, bool openToLeft, bool isRight, System.Action<string> onSelect)
+        {
+            if (backgroundBoxGO == null) return;
+
+            CloseRemoveHairSubmenu(isRight);
+
+            List<KeyValuePair<string, string>> options = null;
+            if (target != null)
+            {
+                try
+                {
+                    var items = new List<KeyValuePair<string, string>>();
+                    DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
+                    if (dcs != null && dcs.hairItems != null)
+                    {
+                        foreach (var item in dcs.hairItems)
+                        {
+                            if (item == null || !item.active) continue;
+
+                            string path = null;
+                            try { path = item.uid; } catch { }
+                            if (string.IsNullOrEmpty(path) || (!path.Contains(":/") && !path.Contains(":\\")))
+                            {
+                                try
+                                {
+                                    string internalId = null;
+                                    string containingVAMDir = null;
+                                    Type it = item.GetType();
+
+                                    FieldInfo fInternalId = it.GetField("internalId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                    if (fInternalId != null) internalId = fInternalId.GetValue(item) as string;
+
+                                    FieldInfo fVamDir = it.GetField("containingVAMDir", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                    if (fVamDir != null) containingVAMDir = fVamDir.GetValue(item) as string;
+
+                                    if (string.IsNullOrEmpty(internalId))
+                                    {
+                                        FieldInfo fItemPath = it.GetField("itemPath", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                        if (fItemPath != null) internalId = fItemPath.GetValue(item) as string;
+                                    }
+
+                                    if (!string.IsNullOrEmpty(containingVAMDir) && !string.IsNullOrEmpty(internalId))
+                                    {
+                                        path = containingVAMDir.Replace("\\", "/").TrimEnd('/') + "/" + internalId.Replace("\\", "/").TrimStart('/');
+                                    }
+                                }
+                                catch { }
+                            }
+
+                            if (string.IsNullOrEmpty(path)) continue;
+                            string p = path.Replace("\\", "/");
+                            string pl = p.ToLowerInvariant();
+                            int idx = pl.IndexOf("/custom/hair/");
+                            if (idx < 0) idx = pl.IndexOf("/hair/");
+                            if (idx >= 0)
+                            {
+                                string sub = p.Substring(idx);
+                                string[] parts = sub.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                                for (int pi = 0; pi < parts.Length; pi++) parts[pi] = parts[pi].Trim();
+
+                                string typeFolder = (parts.Length >= 4) ? parts[3] : null;
+                                string fileName = null;
+                                try
+                                {
+                                    string last = parts.Length > 0 ? parts[parts.Length - 1] : null;
+                                    if (!string.IsNullOrEmpty(last))
+                                    {
+                                        int dot = last.LastIndexOf('.');
+                                        fileName = dot > 0 ? last.Substring(0, dot) : last;
+                                    }
+                                }
+                                catch { }
+
+                                if (string.IsNullOrEmpty(fileName))
+                                {
+                                    try { fileName = item.name; }
+                                    catch { }
+                                }
+
+                                string label = !string.IsNullOrEmpty(typeFolder)
+                                    ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + (fileName ?? ""))
+                                    : (fileName ?? "");
+
+                                if (!string.IsNullOrEmpty(label))
+                                {
+                                    items.Add(new KeyValuePair<string, string>(item.uid, label));
+                                }
+                            }
+                        }
+                    }
+                    options = items
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && !string.IsNullOrEmpty(kvp.Value))
+                        .GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                }
+                catch { }
+            }
+
+            if (options == null) options = new List<KeyValuePair<string, string>>();
+            if (options.Count == 0)
+            {
+                LogUtil.LogWarning("[VPB] No hair slot options available.");
+                return;
+            }
+
+            // Side-button style submenu: no full-screen overlay. Panel is a child of the arrow/anchor.
+            GameObject panelGO = new GameObject(isRight ? "RightRemoveHairSubmenu" : "LeftRemoveHairSubmenu");
+            Transform panelParent = (anchorRT != null ? anchorRT.transform : backgroundBoxGO.transform);
+            panelGO.transform.SetParent(panelParent, false);
+            RectTransform panelRT = panelGO.AddComponent<RectTransform>();
+            panelRT.pivot = openToLeft ? new Vector2(1, 0.5f) : new Vector2(0, 0.5f);
+            panelRT.anchorMin = new Vector2(openToLeft ? 0f : 1f, 0.5f);
+            panelRT.anchorMax = new Vector2(openToLeft ? 0f : 1f, 0.5f);
+            panelRT.anchoredPosition = new Vector2(openToLeft ? -4f : 4f, 0f);
+
+            AddHoverDelegate(panelGO);
+
+            Image panelImg = panelGO.AddComponent<Image>();
+            panelImg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+
+            // Layout
+            int rows = Mathf.Clamp(options.Count, 1, 10);
+            float rowH = 42f;
+            float rowGap = 6f;
+            float panelW = 260f;
+            float titleH = 24f;
+            float padTop = 10f;
+            float innerBottom = 10f;
+            float listH = rows * rowH + Mathf.Max(0, rows - 1) * rowGap;
+            float panelH = padTop + titleH + innerBottom + listH + 18f;
+            panelRT.sizeDelta = new Vector2(panelW, panelH);
+
+            GameObject titleGO = new GameObject("Title");
+            titleGO.transform.SetParent(panelGO.transform, false);
+            Text titleText = titleGO.AddComponent<Text>();
+            titleText.text = title;
+            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            titleText.fontSize = 18;
+            titleText.color = Color.white;
+            titleText.alignment = TextAnchor.MiddleCenter;
+            RectTransform titleRT = titleGO.GetComponent<RectTransform>();
+            titleRT.anchorMin = new Vector2(0, 1);
+            titleRT.anchorMax = new Vector2(1, 1);
+            titleRT.pivot = new Vector2(0.5f, 1);
+            titleRT.anchoredPosition = new Vector2(0, -5);
+            titleRT.sizeDelta = new Vector2(0, 24);
+
+            GameObject listGO = new GameObject("List");
+            listGO.transform.SetParent(panelGO.transform, false);
+            RectTransform listRT = listGO.AddComponent<RectTransform>();
+            listRT.anchorMin = new Vector2(0, 0);
+            listRT.anchorMax = new Vector2(1, 1);
+            listRT.offsetMin = new Vector2(10, 10);
+            listRT.offsetMax = new Vector2(-10, -34);
+
+            VerticalLayoutGroup vlg = listGO.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = rowGap;
+            vlg.childControlHeight = true;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childForceExpandWidth = true;
+
+            ContentSizeFitter csf = listGO.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            for (int i = 0; i < options.Count; i++)
+            {
+                string itemUid = options[i].Key;
+                string buttonLabel = options[i].Value;
+
+                GameObject btn = UI.CreateUIButton(listGO, panelW - 20f, rowH, buttonLabel, 16, 0, 0, AnchorPresets.middleCenter, () => {
+                    try { onSelect?.Invoke(itemUid); }
+                    finally { CloseRemoveHairSubmenu(isRight); }
+                });
+                btn.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                AddHoverDelegate(btn);
+            }
+
+            if (isRight) rightRemoveHairSubmenuPanelGO = panelGO;
+            else leftRemoveHairSubmenuPanelGO = panelGO;
+
+            SetLayerRecursive(panelGO, backgroundBoxGO.layer);
+        }
+
+        public void DisplayHairSlotPicker(string title, Atom target, RectTransform anchorRT, bool openToLeft, System.Action<string> onSelect)
+        {
+            if (backgroundBoxGO == null) return;
+
+            CloseHairSlotPicker();
+
+            List<KeyValuePair<string, string>> options = null;
+            if (target != null)
+            {
+                try
+                {
+                    var items = new List<KeyValuePair<string, string>>();
+                    DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
+                    if (dcs != null && dcs.hairItems != null)
+                    {
+                        foreach (var item in dcs.hairItems)
+                        {
+                            if (item == null || !item.active) continue;
+
+                            string path = null;
+                            try { path = item.uid; } catch { }
+                            if (string.IsNullOrEmpty(path) || (!path.Contains(":/") && !path.Contains(":\\")))
+                            {
+                                try
+                                {
+                                    string internalId = null;
+                                    string containingVAMDir = null;
+                                    Type it = item.GetType();
+
+                                    FieldInfo fInternalId = it.GetField("internalId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                    if (fInternalId != null) internalId = fInternalId.GetValue(item) as string;
+
+                                    FieldInfo fVamDir = it.GetField("containingVAMDir", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                    if (fVamDir != null) containingVAMDir = fVamDir.GetValue(item) as string;
+
+                                    if (string.IsNullOrEmpty(internalId))
+                                    {
+                                        FieldInfo fItemPath = it.GetField("itemPath", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                        if (fItemPath != null) internalId = fItemPath.GetValue(item) as string;
+                                    }
+
+                                    if (!string.IsNullOrEmpty(containingVAMDir) && !string.IsNullOrEmpty(internalId))
+                                    {
+                                        path = containingVAMDir.Replace("\\", "/").TrimEnd('/') + "/" + internalId.Replace("\\", "/").TrimStart('/');
+                                    }
+                                }
+                                catch { }
+                            }
+
+                            if (string.IsNullOrEmpty(path)) continue;
+                            string p = path.Replace("\\", "/");
+                            string pl = p.ToLowerInvariant();
+                            int idx = pl.IndexOf("/custom/hair/");
+                            if (idx < 0) idx = pl.IndexOf("/hair/");
+                            if (idx >= 0)
+                            {
+                                string sub = p.Substring(idx);
+                                string[] parts = sub.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                                for (int pi = 0; pi < parts.Length; pi++) parts[pi] = parts[pi].Trim();
+
+                                string typeFolder = (parts.Length >= 4) ? parts[3] : null;
+                                string fileName = null;
+                                try
+                                {
+                                    string last = parts.Length > 0 ? parts[parts.Length - 1] : null;
+                                    if (!string.IsNullOrEmpty(last))
+                                    {
+                                        int dot = last.LastIndexOf('.');
+                                        fileName = dot > 0 ? last.Substring(0, dot) : last;
+                                    }
+                                }
+                                catch { }
+
+                                if (string.IsNullOrEmpty(fileName))
+                                {
+                                    try { fileName = item.name; }
+                                    catch { }
+                                }
+
+                                string label = !string.IsNullOrEmpty(typeFolder)
+                                    ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + (fileName ?? ""))
+                                    : (fileName ?? "");
+
+                                if (!string.IsNullOrEmpty(label))
+                                {
+                                    items.Add(new KeyValuePair<string, string>(item.uid, label));
+                                }
+                            }
+                        }
+                    }
+                    options = items
+                        .Where(kvp => !string.IsNullOrEmpty(kvp.Key) && !string.IsNullOrEmpty(kvp.Value))
+                        .GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                }
+                catch { }
+            }
+
+            if (options == null) options = new List<KeyValuePair<string, string>>();
+
+            if (options.Count == 0)
+            {
+                LogUtil.LogWarning("[VPB] No hair slot options available.");
+                return;
+            }
+
+            GameObject overlayGO = new GameObject("HairSlotPickerOverlay");
+            overlayGO.transform.SetParent(backgroundBoxGO.transform, false);
+            RectTransform overlayRT = overlayGO.AddComponent<RectTransform>();
+            overlayRT.anchorMin = Vector2.zero;
+            overlayRT.anchorMax = Vector2.one;
+            overlayRT.sizeDelta = Vector2.zero;
+
+            AddHoverDelegate(overlayGO);
+
+            Image overlayImg = overlayGO.AddComponent<Image>();
+            overlayImg.color = new Color(0, 0, 0, 0.01f);
+            overlayImg.raycastTarget = true;
+
+            Button overlayBtn = overlayGO.AddComponent<Button>();
+
+            GameObject panelGO = new GameObject("Panel");
+            Transform panelParent = (anchorRT != null ? anchorRT.transform : overlayGO.transform);
+            panelGO.transform.SetParent(panelParent, false);
+            RectTransform panelRT = panelGO.AddComponent<RectTransform>();
+            panelRT.pivot = openToLeft ? new Vector2(1, 0.5f) : new Vector2(0, 0.5f);
+            panelRT.anchorMin = new Vector2(openToLeft ? 0f : 1f, 0.5f);
+            panelRT.anchorMax = new Vector2(openToLeft ? 0f : 1f, 0.5f);
+            panelRT.anchoredPosition = new Vector2(openToLeft ? -4f : 4f, 0f);
+
+            AddHoverDelegate(panelGO);
+
+            // Ensure the anchored panel consistently renders/raycasts above the full-screen overlay.
+            try
+            {
+                Canvas panelCanvas = panelGO.AddComponent<Canvas>();
+                panelCanvas.overrideSorting = true;
+                panelCanvas.sortingOrder = 1000;
+            }
+            catch { }
+
+            // Prevent side-button auto-hide CanvasGroups (on parent containers) from disabling picker interaction.
+            try
+            {
+                CanvasGroup cg = panelGO.AddComponent<CanvasGroup>();
+                cg.ignoreParentGroups = true;
+                cg.alpha = 1f;
+                cg.interactable = true;
+                cg.blocksRaycasts = true;
+            }
+            catch { }
+
+            Image panelImg = panelGO.AddComponent<Image>();
+            panelImg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+
+            int cols = 1;
+            int rows = Mathf.Clamp(options.Count, 1, 10);
+            float rowH = 42f;
+            float rowGap = 6f;
+            float panelW = 260f;
+            float titleH = 24f;
+            float padTop = 10f;
+            float innerBottom = 10f;
+            float listH = rows * rowH + Mathf.Max(0, rows - 1) * rowGap;
+            float panelH = padTop + titleH + innerBottom + listH + 18f;
+            panelRT.sizeDelta = new Vector2(panelW, panelH);
+
+            GameObject titleGO = new GameObject("Title");
+            titleGO.transform.SetParent(panelGO.transform, false);
+            Text titleText = titleGO.AddComponent<Text>();
+            titleText.text = title;
+            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            titleText.fontSize = 18;
+            titleText.color = Color.white;
+            titleText.alignment = TextAnchor.MiddleCenter;
+            RectTransform titleRT = titleGO.GetComponent<RectTransform>();
+            titleRT.anchorMin = new Vector2(0, 1);
+            titleRT.anchorMax = new Vector2(1, 1);
+            titleRT.pivot = new Vector2(0.5f, 1);
+            titleRT.anchoredPosition = new Vector2(0, -5);
+            titleRT.sizeDelta = new Vector2(0, 24);
+
+            GameObject listGO = new GameObject("List");
+            listGO.transform.SetParent(panelGO.transform, false);
+            RectTransform listRT = listGO.AddComponent<RectTransform>();
+            listRT.anchorMin = new Vector2(0, 0);
+            listRT.anchorMax = new Vector2(1, 1);
+            listRT.offsetMin = new Vector2(10, 10);
+            listRT.offsetMax = new Vector2(-10, -34);
+
+            GridLayoutGroup glg = listGO.AddComponent<GridLayoutGroup>();
+            glg.cellSize = new Vector2(panelW - 20f, rowH);
+            glg.spacing = new Vector2(0, 6);
+            glg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            glg.constraintCount = cols;
+
+            for (int i = 0; i < options.Count; i++)
+            {
+                string itemUid = options[i].Key;
+                string buttonLabel = options[i].Value;
+                GameObject btn = UI.CreateUIButton(listGO, 200, 42, buttonLabel, 16, 0, 0, AnchorPresets.middleCenter, () => {
+                    try { onSelect?.Invoke(itemUid); }
+                    finally
+                    {
+                        try
+                        {
+                            if (hairSlotPickerPanelGO != null) Destroy(hairSlotPickerPanelGO);
+                            if (hairSlotPickerOverlayGO != null) Destroy(hairSlotPickerOverlayGO);
+                        }
+                        catch { }
+                    }
+                });
+                btn.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                AddHoverDelegate(btn);
+            }
+
+            hairSlotPickerOverlayGO = overlayGO;
+            hairSlotPickerPanelGO = panelGO;
+
+            overlayBtn.onClick.AddListener(() => {
+                try
+                {
+                    if (hairSlotPickerPanelGO != null) Destroy(hairSlotPickerPanelGO);
+                    if (hairSlotPickerOverlayGO != null) Destroy(hairSlotPickerOverlayGO);
+                }
+                catch { }
+            });
+
+            SetLayerRecursive(overlayGO, backgroundBoxGO.layer);
+            if (anchorRT != null) SetLayerRecursive(panelGO, backgroundBoxGO.layer);
+        }
+
         public void DisplayClothingSlotPicker(string title, Atom target, RectTransform anchorRT, bool openToLeft, System.Action<string> onSelect)
         {
             if (backgroundBoxGO == null) return;
@@ -1525,6 +2511,8 @@ namespace VPB
             overlayRT.anchorMax = Vector2.one;
             overlayRT.sizeDelta = Vector2.zero;
 
+            AddHoverDelegate(overlayGO);
+
             Image overlayImg = overlayGO.AddComponent<Image>();
             overlayImg.color = new Color(0, 0, 0, 0.01f);
             overlayImg.raycastTarget = true;
@@ -1540,6 +2528,19 @@ namespace VPB
             panelRT.anchorMin = new Vector2(openToLeft ? 0f : 1f, 0.5f);
             panelRT.anchorMax = new Vector2(openToLeft ? 0f : 1f, 0.5f);
             panelRT.anchoredPosition = new Vector2(openToLeft ? -4f : 4f, 0f);
+
+            AddHoverDelegate(panelGO);
+
+            // Prevent side-button auto-hide CanvasGroups (on parent containers) from disabling picker interaction.
+            try
+            {
+                CanvasGroup cg = panelGO.AddComponent<CanvasGroup>();
+                cg.ignoreParentGroups = true;
+                cg.alpha = 1f;
+                cg.interactable = true;
+                cg.blocksRaycasts = true;
+            }
+            catch { }
 
             Image panelImg = panelGO.AddComponent<Image>();
             panelImg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
@@ -1602,6 +2603,7 @@ namespace VPB
                     }
                 });
                 btn.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                AddHoverDelegate(btn);
             }
 
             clothingSlotPickerOverlayGO = overlayGO;

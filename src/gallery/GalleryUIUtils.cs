@@ -2893,6 +2893,160 @@ namespace VPB
             }
         }
 
+        public void RemoveHairItemByUid(Atom target, string itemUid)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveHairItemByUid: target is null");
+                return;
+            }
+            if (string.IsNullOrEmpty(itemUid))
+            {
+                LogUtil.LogWarning("[VPB] RemoveHairItemByUid: itemUid is empty");
+                return;
+            }
+
+            PushUndoSnapshotForClothingHair(target);
+
+            JSONStorable geometry = null;
+            try { geometry = target.GetStorableByID("geometry"); }
+            catch { }
+
+            DAZCharacterSelector dcs = null;
+            try { dcs = target.GetComponentInChildren<DAZCharacterSelector>(); }
+            catch { }
+            if (dcs == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveHairItemByUid: DAZCharacterSelector not found on target");
+                return;
+            }
+
+            MethodInfo miSetActiveItem = null;
+            MethodInfo miSetActiveItemByUid = null;
+            try
+            {
+                foreach (var m in dcs.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                {
+                    if (m.Name != "SetActiveHairItem") continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length >= 2)
+                    {
+                        if (ps[0].ParameterType == typeof(string))
+                        {
+                            miSetActiveItemByUid = m;
+                        }
+                        else
+                        {
+                            // Don't take a hard dependency on DAZHairItem type (it may not exist in some builds)
+                            miSetActiveItem = m;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            object matched = null;
+            try
+            {
+                if (dcs.hairItems != null)
+                {
+                    foreach (var it in dcs.hairItems)
+                    {
+                        if (it == null) continue;
+
+                        string uid = null;
+                        try
+                        {
+                            var pUid = it.GetType().GetProperty("uid", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            if (pUid != null) uid = pUid.GetValue(it, null) as string;
+                            if (string.IsNullOrEmpty(uid))
+                            {
+                                var fUid = it.GetType().GetField("uid", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                                if (fUid != null) uid = fUid.GetValue(it) as string;
+                            }
+                        }
+                        catch { }
+
+                        if (string.Equals(uid, itemUid, StringComparison.OrdinalIgnoreCase))
+                        {
+                            matched = it;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            if (matched == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveHairItemByUid: hair item not found: " + itemUid);
+                return;
+            }
+
+            try
+            {
+                if (geometry != null)
+                {
+                    string uid = null;
+                    try
+                    {
+                        var pUid = matched.GetType().GetProperty("uid", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (pUid != null) uid = pUid.GetValue(matched, null) as string;
+                        if (string.IsNullOrEmpty(uid))
+                        {
+                            var fUid = matched.GetType().GetField("uid", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            if (fUid != null) uid = fUid.GetValue(matched) as string;
+                        }
+                    }
+                    catch { }
+
+                    if (string.IsNullOrEmpty(uid)) uid = itemUid;
+
+                    JSONStorableBool active = geometry.GetBoolJSONParam("hair:" + uid);
+                    if (active != null) active.val = false;
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (miSetActiveItem != null)
+                {
+                    miSetActiveItem.Invoke(dcs, new object[] { matched, false });
+                }
+                else if (miSetActiveItemByUid != null)
+                {
+                    miSetActiveItemByUid.Invoke(dcs, new object[] { itemUid, false });
+                }
+                else
+                {
+                    try
+                    {
+                        var pActive = matched.GetType().GetProperty("active", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (pActive != null && pActive.CanWrite)
+                        {
+                            pActive.SetValue(matched, false, null);
+                        }
+                        else
+                        {
+                            var fActive = matched.GetType().GetField("active", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            if (fActive != null) fActive.SetValue(matched, false);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch
+            {
+                try
+                {
+                    var pActive = matched.GetType().GetProperty("active", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (pActive != null && pActive.CanWrite) pActive.SetValue(matched, false, null);
+                }
+                catch { }
+            }
+        }
+
         public void PlayAudioPreview(string path)
         {
             if (string.IsNullOrEmpty(path)) return;

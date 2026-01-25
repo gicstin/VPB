@@ -127,8 +127,43 @@ namespace VPB
         private GameObject rightRemoveClothingExpandBtn;
         private GameObject leftRemoveClothingExpandBtn;
 
+        private GameObject rightRemoveHairExpandBtn;
+        private GameObject leftRemoveHairExpandBtn;
+
         private GameObject clothingSlotPickerOverlayGO;
         private GameObject clothingSlotPickerPanelGO;
+
+        private GameObject hairSlotPickerOverlayGO;
+        private GameObject hairSlotPickerPanelGO;
+
+        private GameObject rightRemoveHairSubmenuPanelGO;
+        private GameObject leftRemoveHairSubmenuPanelGO;
+
+        private bool hairSubmenuOpen = false;
+        private List<GameObject> rightRemoveHairSubmenuButtons = new List<GameObject>();
+        private List<GameObject> leftRemoveHairSubmenuButtons = new List<GameObject>();
+
+        private bool hairSubmenuParentHovered = false;
+        private bool hairSubmenuOptionsHovered = false;
+        private int hairSubmenuParentHoverCount = 0;
+        private int hairSubmenuOptionsHoverCount = 0;
+        private float hairSubmenuLastHoverTime = 0f;
+        private const float HairSubmenuAutoHideDelay = 0.75f;
+
+        private bool clothingSubmenuOpen = false;
+        private List<GameObject> rightRemoveClothingSubmenuButtons = new List<GameObject>();
+        private List<GameObject> leftRemoveClothingSubmenuButtons = new List<GameObject>();
+
+        private bool clothingSubmenuParentHovered = false;
+        private bool clothingSubmenuOptionsHovered = false;
+        private int clothingSubmenuParentHoverCount = 0;
+        private int clothingSubmenuOptionsHoverCount = 0;
+        private float clothingSubmenuLastHoverTime = 0f;
+        private const float ClothingSubmenuAutoHideDelay = 0.75f;
+
+        private int rightRemoveHairSubmenuStartIndex = -1;
+        private int leftRemoveHairSubmenuStartIndex = -1;
+        private const int HairSubmenuMaxButtons = 10;
         
         private Text leftSortBtnText;
         private Text rightSortBtnText;
@@ -179,10 +214,14 @@ namespace VPB
         private List<Atom> personAtoms = new List<Atom>();
         private GameObject leftSideContainer;
         private GameObject rightSideContainer;
+        private GameObject leftSideHoverStrip;
+        private GameObject rightSideHoverStrip;
         private Stack<GameObject> tabButtonPool = new Stack<GameObject>();
 
         private List<CanvasGroup> sideButtonGroups = new List<CanvasGroup>();
         private float sideButtonsAlpha = 1f;
+        private float sideButtonsFadeDelayTimer = 0f;
+        private const float SideButtonsFadeDelay = 0.6f;
         private bool isResizing = false;
         private int hoverCount = 0;
         private UIDraggable dragger;
