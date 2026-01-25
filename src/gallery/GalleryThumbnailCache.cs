@@ -632,9 +632,11 @@ namespace VPB
                 float aspect = (float)w / h;
                 if (w > h) { w = maxDim; h = Mathf.RoundToInt(maxDim / aspect); }
                 else { h = maxDim; w = Mathf.RoundToInt(maxDim * aspect); }
+                yield return null;
 
                 RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.Default);
                 Graphics.Blit(sourceTex, rt);
+                yield return null;
                 
                 RenderTexture prev = RenderTexture.active;
                 RenderTexture.active = rt;
@@ -643,6 +645,7 @@ namespace VPB
                 Texture2D newTex = new Texture2D(w, h, format, false);
                 newTex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
                 newTex.Apply();
+                yield return null;
                 
                 RenderTexture.active = prev;
                 RenderTexture.ReleaseTemporary(rt);

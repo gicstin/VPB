@@ -1015,7 +1015,7 @@ namespace VPB
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
 
-                UpdateDesktopModeButton();
+UpdateDesktopModeButton();
             }
 
             // Main Content Area
@@ -1024,6 +1024,11 @@ namespace VPB
             contentScrollRT = scrollGO.GetComponent<RectTransform>();
             contentScrollRT.offsetMin = new Vector2(20, 110);
             contentScrollRT.offsetMax = new Vector2(-230, -65); // Default top margin (Quick Filters hidden)
+            lastScrollTime = Time.unscaledTime;
+            if (scrollRect != null)
+            {
+                scrollRect.onValueChanged.AddListener((v) => { lastScrollTime = Time.unscaledTime; });
+            }
             
             contentGO = scrollRect.content.gameObject;
             CreateLoadingOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
@@ -1152,6 +1157,14 @@ namespace VPB
                     float t = Mathf.PingPong(loadingBarAnimT * 1.2f, 1f);
                     float x = Mathf.Lerp(-travel, travel, t);
                     loadingBarFillRT.anchoredPosition = new Vector2(x, 0f);
+                }
+
+                if (thumbnailCacheCoroutine == null && pendingThumbnailCacheJobs != null && pendingThumbnailCacheJobs.Count > 0)
+                {
+                    if (Time.unscaledTime - lastScrollTime > 0.25f)
+                    {
+                        thumbnailCacheCoroutine = StartCoroutine(ProcessThumbnailCacheQueue());
+                    }
                 }
 
                 if (isFixedLocally)

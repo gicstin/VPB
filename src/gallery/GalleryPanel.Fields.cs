@@ -22,6 +22,9 @@ namespace VPB
         private RectTransform loadingBarFillRT;
         private bool isLoadingOverlayVisible;
         private float loadingBarAnimT;
+        private float lastScrollTime;
+        private Queue<ThumbnailCacheJob> pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
+        private Coroutine thumbnailCacheCoroutine;
         private Text titleText;
         private Text fpsText;
         

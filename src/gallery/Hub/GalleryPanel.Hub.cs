@@ -311,6 +311,9 @@ namespace VPB
 
         public void RefreshHubItems()
         {
+            if (thumbnailCacheCoroutine != null) StopCoroutine(thumbnailCacheCoroutine);
+            thumbnailCacheCoroutine = null;
+            if (pendingThumbnailCacheJobs != null) pendingThumbnailCacheJobs.Clear();
             ShowLoadingOverlay("Loading...");
             if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
             refreshCoroutine = StartCoroutine(RefreshHubItemsRoutine());

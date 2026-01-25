@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using UnityEngine;
@@ -9,6 +10,46 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private struct ThumbnailCacheJob
+        {
+            public string Path;
+            public Texture2D Texture;
+            public long LastWriteTime;
+            public string GroupId;
+        }
+
+        private IEnumerator ProcessThumbnailCacheQueue()
+        {
+            try
+            {
+                while (pendingThumbnailCacheJobs != null && pendingThumbnailCacheJobs.Count > 0)
+                {
+                    if (Time.unscaledTime - lastScrollTime <= 0.25f)
+                    {
+                        yield return null;
+                        continue;
+                    }
+
+                    ThumbnailCacheJob job = pendingThumbnailCacheJobs.Dequeue();
+                    if (string.IsNullOrEmpty(job.Path) || job.Texture == null) { yield return null; continue; }
+                    if (!string.IsNullOrEmpty(job.GroupId) && job.GroupId != currentLoadingGroupId) { yield return null; continue; }
+
+                    yield return StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(job.Path, job.Texture, job.LastWriteTime));
+                    yield return null;
+                }
+            }
+            finally
+            {
+                thumbnailCacheCoroutine = null;
+            }
+        }
+
+        private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId)
+        {
+            if (pendingThumbnailCacheJobs == null) pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
+            pendingThumbnailCacheJobs.Enqueue(new ThumbnailCacheJob { Path = path, Texture = tex, LastWriteTime = lastWriteTime, GroupId = groupId });
+        }
+
         private void LoadThumbnail(FileEntry file, RawImage target)
         {
             string imgPath = "";
@@ -77,7 +118,7 @@ namespace VPB
                     
                     if (!res.loadedFromGalleryCache)
                     {
-                        StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(imgPath, res.tex, imgTime));
+                        EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, currentLoadingGroupId);
                     }
                 }
             };
