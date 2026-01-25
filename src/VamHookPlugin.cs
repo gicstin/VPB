@@ -683,6 +683,17 @@ namespace VPB
 
             LogUtil.SetLogSource(Logger);
 
+            try
+            {
+                var asm = typeof(VamHookPlugin).Assembly;
+                string asmPath = asm != null ? asm.Location : "null";
+                string asmVer = asm != null ? asm.GetName().Version.ToString() : "null";
+                string asmTime = "null";
+                try { if (!string.IsNullOrEmpty(asmPath)) asmTime = System.IO.File.GetLastWriteTime(asmPath).ToString("yyyy-MM-dd HH:mm:ss"); } catch { }
+                LogUtil.Log("[VPB] DLL loaded | ver=" + asmVer + " | ts=" + asmTime + " | path=" + asmPath);
+            }
+            catch { }
+
             LogUtil.MarkPluginAwake();
 
             VdsLauncher.ParseOnce();
@@ -742,7 +753,8 @@ namespace VPB
             m_ExpandedHeight = Mathf.Max(m_Rect.height, MiniModeHeight);
 
             this.Config.SaveOnConfigSet = true;
-            Debug.Log("VPB hook start");
+            if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                Debug.Log("VPB hook start");
             m_Harmony = new Harmony("VPB_hook");
             // Patch VaM/Harmony hook points.
             SuperControllerHook.PatchOptional(m_Harmony);
@@ -1181,7 +1193,7 @@ namespace VPB
 	
         void CreateHubBrowse()
         {
-            LogUtil.LogWarning("VPB CreateHubBrowse");
+            LogUtil.LogVerboseUi("VPB CreateHubBrowse");
             if (m_HubBrowse == null)
             {
 
@@ -1420,7 +1432,7 @@ namespace VPB
                 }
                 
                 m_QuickMenuButtonInited = true;
-                LogUtil.Log("QuickMenuButton created. VR: " + isVR);
+                LogUtil.LogVerboseUi("QuickMenuButton created. VR: " + isVR);
             }
             catch (Exception ex)
             {

@@ -41,6 +41,9 @@ namespace VPB
         public ConfigEntry<string> LastGalleryPage;
         public ConfigEntry<int> TextureLogLevel;
 
+        public ConfigEntry<bool> LogStartupDetails;
+        public ConfigEntry<bool> LogHubRequests;
+
         public ConfigEntry<bool> LogImageQueueEvents;
         public ConfigEntry<bool> LogVerboseUi;
         public ConfigEntry<bool> EnableUiTransparency;
@@ -98,6 +101,9 @@ namespace VPB
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 1, "0=off, 1=summary only, 2=verbose per-texture trace.");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");
             LogVerboseUi = config.Bind<bool>("Logging", "LogVerboseUi", false, "Log verbose UI lifecycle messages (can be noisy).");
+
+            LogStartupDetails = config.Bind<bool>("Logging", "LogStartupDetails", false, "Log additional startup/patch/initialization details (can be noisy). Enable when troubleshooting.");
+            LogHubRequests = config.Bind<bool>("Logging", "LogHubRequests", false, "Log detailed Hub request timing and payload information (very verbose). Enable when troubleshooting Hub issues.");
 
 
             AutoOptimizeCache = config.Bind<bool>("Optimze", "AutoOptimizeCache", false, "When checked, clicking Optimize Cache button will start compression without opening the confirmation window.");

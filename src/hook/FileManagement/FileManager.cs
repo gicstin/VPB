@@ -518,7 +518,8 @@ namespace VPB
         {
 #if DEBUG
             string stackTrace = new System.Diagnostics.StackTrace().ToString();
-            LogUtil.LogWarning("Refresh " + stackTrace);
+            if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                LogUtil.LogWarning("Refresh " + stackTrace);
 #endif
             if (packagesByUid == null)
             {
@@ -1454,35 +1455,70 @@ namespace VPB
 
 		public static VarPackage GetPackage(string packageUidOrPath, bool ensureInstalled = true)
 		{
-			VarPackage value = null;
-			Match match;
-			if ((match = Regex.Match(packageUidOrPath, "^([^\\.]+\\.[^\\.]+)\\.latest$")).Success)
+			VarPackage TryResolve(string uidOrPath)
 			{
-				string value2 = match.Groups[1].Value;
-				VarPackageGroup packageGroup = GetPackageGroup(value2);
-				if (packageGroup != null)
+				VarPackage resolved = null;
+				Match match;
+				if ((match = Regex.Match(uidOrPath, "^([^\\.]+\\.[^\\.]+)\\.latest$")).Success)
 				{
-					value = packageGroup.NewestPackage;
+					string value2 = match.Groups[1].Value;
+					VarPackageGroup packageGroup = GetPackageGroup(value2);
+					if (packageGroup != null)
+					{
+						resolved = packageGroup.NewestPackage;
+					}
+				}
+				else if ((match = Regex.Match(uidOrPath, "^([^\\.]+\\.[^\\.]+)\\.min([0-9]+)$")).Success)
+				{
+					string value3 = match.Groups[1].Value;
+					int requestVersion = int.Parse(match.Groups[2].Value);
+					VarPackageGroup packageGroup2 = GetPackageGroup(value3);
+					if (packageGroup2 != null)
+					{
+						resolved = packageGroup2.GetClosestMatchingPackageVersion(requestVersion, false, false);
+					}
+				}
+				else if (packagesByUid != null && packagesByUid.ContainsKey(uidOrPath))
+				{
+					packagesByUid.TryGetValue(uidOrPath, out resolved);
+				}
+				else if (packagesByPath != null && packagesByPath.ContainsKey(uidOrPath))
+				{
+					packagesByPath.TryGetValue(uidOrPath, out resolved);
+				}
+				return resolved;
+			}
+
+			VarPackage value = TryResolve(packageUidOrPath);
+			if (value == null && !string.IsNullOrEmpty(packageUidOrPath) && Regex.IsMatch(packageUidOrPath, "\\s"))
+			{
+				string normalized = Regex.Replace(packageUidOrPath, "\\s+", string.Empty);
+				if (!string.Equals(normalized, packageUidOrPath, StringComparison.Ordinal))
+				{
+					value = TryResolve(normalized);
+					try
+					{
+						if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+						{
+							LogUtil.Log("GetPackage normalize whitespace | raw=" + packageUidOrPath + " | normalized=" + normalized + " | found=" + (value != null));
+						}
+					}
+					catch { }
 				}
 			}
-			else if ((match = Regex.Match(packageUidOrPath, "^([^\\.]+\\.[^\\.]+)\\.min([0-9]+)$")).Success)
+
+			if (value == null)
 			{
-				string value3 = match.Groups[1].Value;
-				int requestVersion = int.Parse(match.Groups[2].Value);
-				VarPackageGroup packageGroup2 = GetPackageGroup(value3);
-				if (packageGroup2 != null)
+				try
 				{
-					value = packageGroup2.GetClosestMatchingPackageVersion(requestVersion, false, false);
+					if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+					{
+						LogUtil.Log("GetPackage not found: " + packageUidOrPath);
+					}
 				}
+				catch { }
 			}
-			else if (packagesByUid != null && packagesByUid.ContainsKey(packageUidOrPath))
-			{
-				packagesByUid.TryGetValue(packageUidOrPath, out value);
-			}
-			else if (packagesByPath != null && packagesByPath.ContainsKey(packageUidOrPath))
-			{
-				packagesByPath.TryGetValue(packageUidOrPath, out value);
-			}
+
 			if (value != null && ensureInstalled) EnsurePackageInstalled(value);
 			return value;
 		}

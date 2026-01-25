@@ -222,7 +222,6 @@ namespace VPB
         }
         public void EnsureInstalled()
         {
-            LogUtil.Log("EnsureInstalled " + fullPath);
             string text = File.ReadAllText(fullPath);
             EnsureInstalledInternal(text);
         }
@@ -248,7 +247,6 @@ namespace VPB
             bool flag = false;
             foreach (var key in set)
             {
-                LogUtil.Log("Try Install " + key);
                 VarPackage package = FileManager.GetPackage(key);
                 if (package != null)
                 {
@@ -256,12 +254,8 @@ namespace VPB
                     bool dirty = package.InstallRecursive();
                     if (dirty)
                     {
-                        LogUtil.Log("Install Success " + key + " path=" + path);
+                        LogUtil.Log("Installed " + key + " path=" + path);
                         flag = true;
-                    }
-                    else
-                    {
-                        LogUtil.Log("Install Skipped (already installed) " + key + " path=" + path);
                     }
                 }
                 else
@@ -269,7 +263,6 @@ namespace VPB
                     if (!key.EndsWith(".latest"))
                     {
                         string newKey = key.Substring(0, key.LastIndexOf('.'))+ ".latest";
-                        LogUtil.LogWarning("install try latest version:" + newKey);
                         VarPackage packageNewest = FileManager.GetPackage(newKey);
                         if (packageNewest != null)
                         {
@@ -277,12 +270,8 @@ namespace VPB
                             bool dirty = packageNewest.InstallRecursive();
                             if (dirty)
                             {
-                                LogUtil.Log("Install Success " + newKey + " path=" + pathLatest);
+                                LogUtil.Log("Installed " + newKey + " path=" + pathLatest + " (requested " + key + ")");
                                 flag = true;
-                            }
-                            else
-                            {
-                                LogUtil.Log("Install Skipped (already installed) " + newKey + " path=" + pathLatest);
                             }
                         }
                         else
@@ -303,8 +292,6 @@ namespace VPB
 
         public static void EnsureInstalledInternal(string text)
         {
-            LogUtil.Log("FileButton.EnsureInstalledInternal");
-
             bool dirty=EnsureInstalledByText(text);
             if (dirty)
             {
@@ -315,7 +302,6 @@ namespace VPB
 
         public void OnInstalled(bool b)
         {
-            LogUtil.Log("OnInstalled " + b+" "+ fullPath);
             bool flag = false;
             FileEntry fileEntry = FileManager.GetFileEntry(fullPath, true);// Without the AllPackages prefix
             if (fileEntry != null && (fileEntry is VarFileEntry))
@@ -325,31 +311,45 @@ namespace VPB
                 if (!b)
                 {
                     bool dirty=entry.Package.UninstallSelf();
-                    if (dirty) flag = true;
+                    if (dirty)
+                    {
+                        LogUtil.Log("Uninstalled " + entry.Package.Uid + " path=" + entry.Package.Path);
+                        flag = true;
+                    }
                 }
                 else
                 {
                     bool dirty = entry.Package.InstallRecursive();
-                    if (dirty) flag = true;
+                    if (dirty)
+                    {
+                        LogUtil.Log("Installed " + entry.Package.Uid + " path=" + entry.Package.Path);
+                        flag = true;
+                    }
                 }
             }
             else if (fileEntry != null && (fileEntry is SystemFileEntry))
             {
                 SystemFileEntry entry = fileEntry as SystemFileEntry;
-                LogUtil.Log("OnInstalled " + entry.Path+" isVar:"+ entry.isVar);
                 if (entry.isVar)
                 {
                     if (!b)
                     {
                         bool dirty = entry.Uninstall();
-                    if (dirty) flag = true;
+                    if (dirty) 
+                    {
+                        LogUtil.Log("Uninstalled " + entry.Uid + " path=" + entry.Path);
+                        flag = true;
+                    }
                     }
 
                     else
                     {
                         bool dirty = entry.Install();
-                        if (dirty) flag = true;
-
+                        if (dirty) 
+                        {
+                            LogUtil.Log("Installed " + entry.Uid + " path=" + entry.Path);
+                            flag = true;
+                        }
                     }
                 }
                 else

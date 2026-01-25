@@ -70,7 +70,8 @@ namespace VPB
                 if (mReadAllBytes != null)
                 {
                     harmony.Patch(mReadAllBytes, postfix: new HarmonyMethod(typeof(GenericTextureHook), nameof(File_ReadAllBytes_Postfix)));
-                    LogUtil.Log("Patched File.ReadAllBytes");
+                    if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                        LogUtil.Log("Patched File.ReadAllBytes");
                 }
 
                 // Patch Texture2D.LoadImage (2 args)
@@ -80,7 +81,8 @@ namespace VPB
                     harmony.Patch(mLoadImage, 
                         prefix: new HarmonyMethod(typeof(GenericTextureHook), nameof(Texture2D_LoadImage_Prefix)),
                         postfix: new HarmonyMethod(typeof(GenericTextureHook), nameof(Texture2D_LoadImage_Postfix)));
-                    LogUtil.Log("Patched Texture2D.LoadImage(byte[], bool)");
+                    if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                        LogUtil.Log("Patched Texture2D.LoadImage(byte[], bool)");
                 }
 
                 // Patch Texture2D.LoadImage (1 arg)
@@ -90,7 +92,8 @@ namespace VPB
                     harmony.Patch(mLoadImageSimple, 
                         prefix: new HarmonyMethod(typeof(GenericTextureHook), nameof(Texture2D_LoadImage_Prefix_Simple)),
                         postfix: new HarmonyMethod(typeof(GenericTextureHook), nameof(Texture2D_LoadImage_Postfix_Simple)));
-                    LogUtil.Log("Patched Texture2D.LoadImage(byte[])");
+                    if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                        LogUtil.Log("Patched Texture2D.LoadImage(byte[])");
                 }
 
                 // Patch ImageConversion.LoadImage (Unity 2017+)
@@ -103,7 +106,8 @@ namespace VPB
                         harmony.Patch(mLoadImageIC, 
                             prefix: new HarmonyMethod(typeof(GenericTextureHook), nameof(ImageConversion_LoadImage_Prefix)),
                             postfix: new HarmonyMethod(typeof(GenericTextureHook), nameof(ImageConversion_LoadImage_Postfix)));
-                        LogUtil.Log("Patched ImageConversion.LoadImage");
+                        if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                            LogUtil.Log("Patched ImageConversion.LoadImage");
                     }
                 }
                 
@@ -122,13 +126,15 @@ namespace VPB
                     if (mWWWCtor != null)
                     {
                         harmony.Patch(mWWWCtor, postfix: new HarmonyMethod(typeof(GenericTextureHook), nameof(WWW_Ctor_Postfix)));
-                        LogUtil.Log("Patched WWW(string)");
+                        if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                            LogUtil.Log("Patched WWW(string)");
                     }
                     var mWWWTexture = AccessTools.Property(wwwType, "texture").GetGetMethod();
                     if (mWWWTexture != null)
                     {
                         harmony.Patch(mWWWTexture, postfix: new HarmonyMethod(typeof(GenericTextureHook), nameof(WWW_texture_Postfix)));
-                        LogUtil.Log("Patched WWW.texture");
+                        if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                            LogUtil.Log("Patched WWW.texture");
                     }
                 }
                 catch (Exception ex)
@@ -147,7 +153,8 @@ namespace VPB
                          if (mGet != null)
                          {
                              harmony.Patch(mGet, postfix: new HarmonyMethod(typeof(GenericTextureHook), nameof(UnityWebRequest_Get_Postfix)));
-                             LogUtil.Log("Patched UnityWebRequest.Get");
+                             if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                                 LogUtil.Log("Patched UnityWebRequest.Get");
                          }
                     }
 
@@ -159,7 +166,8 @@ namespace VPB
                         if (mTex != null)
                         {
                             harmony.Patch(mTex, postfix: new HarmonyMethod(typeof(GenericTextureHook), nameof(DownloadHandlerTexture_texture_Postfix)));
-                            LogUtil.Log("Patched DownloadHandlerTexture.texture");
+                            if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+                                LogUtil.Log("Patched DownloadHandlerTexture.texture");
                         }
                     }
                 }

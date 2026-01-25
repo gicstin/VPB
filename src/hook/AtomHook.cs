@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Text;
 using BepInEx;
 using UnityEngine;
 using HarmonyLib;
@@ -14,6 +15,8 @@ namespace VPB
 {
     class AtomHook
     {
+        static bool s_LoggedDllMarker;
+
         // Load-look feature
         //prefab:TabControlAtom
         [HarmonyPrefix]
@@ -152,30 +155,60 @@ namespace VPB
 
         static void EnsureInstalledFromJSON(JSONNode node)
         {
+            if (!s_LoggedDllMarker)
+            {
+                s_LoggedDllMarker = true;
+                try
+                {
+                    var asm = typeof(AtomHook).Assembly;
+                    string asmPath = asm != null ? asm.Location : "null";
+                    string asmVer = asm != null ? asm.GetName().Version.ToString() : "null";
+                    string asmTime = "null";
+                    try { if (!string.IsNullOrEmpty(asmPath)) asmTime = System.IO.File.GetLastWriteTime(asmPath).ToString("yyyy-MM-dd HH:mm:ss"); } catch { }
+                    LogUtil.Log("[VPB] DLL marker (preset hook) | ver=" + asmVer + " | ts=" + asmTime + " | path=" + asmPath);
+                }
+                catch { }
+            }
+
             var results = new HashSet<string>();
             JSONOptimization.ExtractAllVariableReferences(node, results);
             if (results.Count > 0)
             {
-                bool dirty = FileButton.EnsureInstalledBySet(results);
-                if (dirty)
-                {
-                    MVR.FileManagement.FileManager.Refresh();
-                    VPB.FileManager.Refresh();
-                }
-
+                // Resolve + install (if needed) via FileManager.GetPackage, which also normalizes whitespace.
+                // Keep logs high-signal: only summarize missing packages.
+                var missing = new List<string>();
                 foreach (var key in results)
                 {
-                    var pkg = FileManager.GetPackage(key) ?? FileManager.GetPackage(key + ".latest");
-                    if (pkg != null && !pkg.IsInstalled())
+                    if (string.IsNullOrEmpty(key)) continue;
+
+                    // EnsureInstalled defaults to true; will install recursively if the package exists but is not installed.
+                    var pkg = FileManager.GetPackage(key);
+                    if (pkg == null && !key.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
                     {
-                        LogUtil.Log($"Waiting for install: {pkg.Uid}");
-                        bool moved = pkg.InstallRecursive();
-                        if (moved)
-                        {
-                            MVR.FileManagement.FileManager.Refresh();
-                            VPB.FileManager.Refresh();
-                        }
+                        pkg = FileManager.GetPackage(key + ".latest");
                     }
+
+                    if (pkg == null)
+                    {
+                        missing.Add(key);
+                    }
+                }
+
+                if (missing.Count > 0)
+                {
+                    // Dedup + keep output short by default.
+                    var unique = new HashSet<string>(missing, StringComparer.OrdinalIgnoreCase);
+                    int shown = 0;
+                    var sb = new StringBuilder();
+                    sb.Append("Missing dependency packages (").Append(unique.Count).Append("):");
+                    foreach (var k in unique)
+                    {
+                        if (shown >= 8) break;
+                        sb.Append(" ").Append(k).Append(";");
+                        shown++;
+                    }
+                    if (unique.Count > shown) sb.Append(" ...");
+                    LogUtil.LogWarning(sb.ToString());
                 }
             }
         }

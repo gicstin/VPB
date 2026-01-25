@@ -398,19 +398,22 @@ namespace VPB
         private IEnumerator GetRequest(string uri, RequestSuccessCallback callback, RequestErrorCallback errorCallback)
         {
             Stopwatch totalSw = Stopwatch.StartNew();
-            LogUtil.Log($"HubBrowse.GetRequest START uri={uri}");
+            if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                LogUtil.Log($"HubBrowse.GetRequest START uri={uri}");
 
             Stopwatch sw = Stopwatch.StartNew();
             using (UnityWebRequest webRequest = UnityWebRequest.Get(uri))
             {
                 long createMs = sw.ElapsedMilliseconds;
-                LogUtil.Log($"HubBrowse.GetRequest CREATED uri={uri} ms={createMs}");
+                if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                    LogUtil.Log($"HubBrowse.GetRequest CREATED uri={uri} ms={createMs}");
 
                 sw.Reset();
                 sw.Start();
                 var op = webRequest.SendWebRequest();
                 long sendMs = sw.ElapsedMilliseconds;
-                LogUtil.Log($"HubBrowse.GetRequest SEND uri={uri} ms={sendMs}");
+                if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                    LogUtil.Log($"HubBrowse.GetRequest SEND uri={uri} ms={sendMs}");
 
                 sw.Reset();
                 sw.Start();
@@ -432,13 +435,15 @@ namespace VPB
                 {
                     string text = webRequest.downloadHandler != null ? webRequest.downloadHandler.text : null;
                     int textLen = text != null ? text.Length : 0;
-                    LogUtil.Log($"HubBrowse.GetRequest DONE_OK uri={uri} waitMs={waitMs} totalMs={totalSw.ElapsedMilliseconds} code={webRequest.responseCode} bytes={webRequest.downloadedBytes} textLen={textLen}");
+                    if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                        LogUtil.Log($"HubBrowse.GetRequest DONE_OK uri={uri} waitMs={waitMs} totalMs={totalSw.ElapsedMilliseconds} code={webRequest.responseCode} bytes={webRequest.downloadedBytes} textLen={textLen}");
 
                     sw.Reset();
                     sw.Start();
                     SimpleJSON.JSONNode jsonNode = JSON.Parse(text);
                     long parseMs = sw.ElapsedMilliseconds;
-                    LogUtil.Log($"HubBrowse.GetRequest PARSED uri={uri} parseMs={parseMs} totalMs={totalSw.ElapsedMilliseconds}");
+                    if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                        LogUtil.Log($"HubBrowse.GetRequest PARSED uri={uri} parseMs={parseMs} totalMs={totalSw.ElapsedMilliseconds}");
 
                     sw.Reset();
                     sw.Start();
@@ -447,7 +452,8 @@ namespace VPB
                         callback(jsonNode);
                     }
                     long callbackMs = sw.ElapsedMilliseconds;
-                    LogUtil.Log($"HubBrowse.GetRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
+                    if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                        LogUtil.Log($"HubBrowse.GetRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
                 }
             }
         }
@@ -506,7 +512,8 @@ namespace VPB
         {
             Stopwatch totalSw = Stopwatch.StartNew();
             int postLen = postData != null ? postData.Length : 0;
-            LogUtil.Log($"HubBrowse.PostRequest START uri={uri} postLen={postLen}");
+            if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                LogUtil.Log($"HubBrowse.PostRequest START uri={uri} postLen={postLen}");
 
             Stopwatch sw = Stopwatch.StartNew();
             using (UnityWebRequest webRequest = UnityWebRequest.Post(uri, postData))
@@ -515,13 +522,15 @@ namespace VPB
                 webRequest.SetRequestHeader("Content-Type", "application/json");
                 webRequest.SetRequestHeader("Accept", "application/json");
                 long createMs = sw.ElapsedMilliseconds;
-                LogUtil.Log($"HubBrowse.PostRequest CREATED uri={uri} ms={createMs}");
+                if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                    LogUtil.Log($"HubBrowse.PostRequest CREATED uri={uri} ms={createMs}");
 
                 sw.Reset();
                 sw.Start();
                 var op = webRequest.SendWebRequest();
                 long sendMs = sw.ElapsedMilliseconds;
-                LogUtil.Log($"HubBrowse.PostRequest SEND uri={uri} ms={sendMs}");
+                if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                    LogUtil.Log($"HubBrowse.PostRequest SEND uri={uri} ms={sendMs}");
 
                 sw.Reset();
                 sw.Start();
@@ -545,13 +554,15 @@ namespace VPB
 
                 string text = webRequest.downloadHandler != null ? webRequest.downloadHandler.text : null;
                 int textLen = text != null ? text.Length : 0;
-                LogUtil.Log($"HubBrowse.PostRequest DONE_OK uri={uri} page={pages[page]} waitMs={waitMs} totalMs={totalSw.ElapsedMilliseconds} code={webRequest.responseCode} bytes={webRequest.downloadedBytes} textLen={textLen}");
+                if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                    LogUtil.Log($"HubBrowse.PostRequest DONE_OK uri={uri} page={pages[page]} waitMs={waitMs} totalMs={totalSw.ElapsedMilliseconds} code={webRequest.responseCode} bytes={webRequest.downloadedBytes} textLen={textLen}");
 
                 sw.Reset();
                 sw.Start();
                 SimpleJSON.JSONNode jSONNode = JSON.Parse(text);
                 long parseMs = sw.ElapsedMilliseconds;
-                LogUtil.Log($"HubBrowse.PostRequest PARSED uri={uri} parseMs={parseMs} totalMs={totalSw.ElapsedMilliseconds}");
+                if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                    LogUtil.Log($"HubBrowse.PostRequest PARSED uri={uri} parseMs={parseMs} totalMs={totalSw.ElapsedMilliseconds}");
                 if (jSONNode == null)
                 {
                     string errText = "Error - Invalid JSON response: " + text;
@@ -567,7 +578,8 @@ namespace VPB
                     sw.Start();
                     callback(jSONNode);
                     long callbackMs = sw.ElapsedMilliseconds;
-                    LogUtil.Log($"HubBrowse.PostRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
+                    if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                        LogUtil.Log($"HubBrowse.PostRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
                 }
             }
         }
@@ -2218,7 +2230,7 @@ namespace VPB
             }
             
 
-                LogUtil.Log("HubBrowse Init End");
+                LogUtil.LogVerboseUi("HubBrowse Init End");
         }
         JSONStorableBool onlyDownloadable;
         protected void OnLoad(ZenFulcrum.EmbeddedBrowser.JSONNode loadData)

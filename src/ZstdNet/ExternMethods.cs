@@ -46,10 +46,7 @@ namespace ZstdNet
                 try { bepRoot = BepInEx.Paths.BepInExRootPath; } catch {}
                 
                 string scriptDir = !string.IsNullOrEmpty(bepRoot) ? Path.Combine(bepRoot, "scripts") : null;
-                
-                SafeLog(string.Format("[ZstdNet] Paths - Assembly: {0}, Plugins: {1}, Scripts: {2}", 
-                    assemblyDir ?? "null", pluginDir ?? "null", scriptDir ?? "null"));
-                
+
                 System.Collections.Generic.List<string> searchDirs = new System.Collections.Generic.List<string>();
                 
                 // 1. Target specific directory: BepInEx/plugins/VPB/zstd/dll/ (Standard Installation)
@@ -94,7 +91,9 @@ namespace ZstdNet
                     }
                 }
 
-                SafeLog("[ZstdNet] Searching for libzstd.dll...");
+                string foundPath = null;
+                string loadedVia = null;
+                System.Text.StringBuilder failDetails = new System.Text.StringBuilder();
 
                 foreach (string dir in searchDirs)
                 {
@@ -103,7 +102,7 @@ namespace ZstdNet
                     string fullPath = Path.Combine(dir, dllName);
                     if (File.Exists(fullPath))
                     {
-                        SafeLog(string.Format("[ZstdNet] Found {0} at {1}", dllName, fullPath));
+                        foundPath = fullPath;
                         
                         // Set DLL directory so subsequent DllImports can find it
                         SetDllDirectory(dir);
@@ -112,17 +111,35 @@ namespace ZstdNet
                         IntPtr handle = LoadLibrary(fullPath);
                         if (handle != IntPtr.Zero)
                         {
-                            SafeLog("[ZstdNet] Successfully loaded libzstd.dll via LoadLibrary");
+                            loadedVia = "LoadLibrary";
+                            if (VPB.Settings.Instance != null && VPB.Settings.Instance.LogStartupDetails != null && VPB.Settings.Instance.LogStartupDetails.Value)
+                            {
+                                SafeLog(string.Format("[ZstdNet] libzstd.dll loaded OK | via: {0} | path: {1} | Assembly: {2}, Plugins: {3}, Scripts: {4}",
+                                    loadedVia,
+                                    foundPath ?? "null",
+                                    assemblyDir ?? "null",
+                                    pluginDir ?? "null",
+                                    scriptDir ?? "null"));
+                            }
                             return;
                         }
                         else
                         {
-                            SafeLog(string.Format("[ZstdNet] LoadLibrary failed for {0}. Error: {1}", fullPath, Marshal.GetLastWin32Error()));
+                            long err = Marshal.GetLastWin32Error();
+                            failDetails.Append("[ZstdNet] LoadLibrary failed for ").Append(fullPath).Append(". Error: ").Append(err).AppendLine();
                         }
                     }
                 }
-                
-                SafeLog("[ZstdNet] libzstd.dll not found in search paths. Falling back to default search.");
+
+                failDetails.Append("[ZstdNet] libzstd.dll not found in search paths. Falling back to default search.").AppendLine();
+                failDetails.Append("[ZstdNet] Paths - Assembly: ").Append(assemblyDir ?? "null").Append(", Plugins: ").Append(pluginDir ?? "null").Append(", Scripts: ").Append(scriptDir ?? "null").AppendLine();
+                failDetails.Append("[ZstdNet] SearchDirs:").AppendLine();
+                foreach (string dir in searchDirs)
+                {
+                    failDetails.Append("[ZstdNet]  ").Append(dir ?? "null").AppendLine();
+                }
+
+                SafeLog(failDetails.ToString().TrimEnd('\r', '\n'));
             }
             catch (Exception ex)
             {
@@ -134,8 +151,20 @@ namespace ZstdNet
         {
             try
             {
-                UnityEngine.Debug.Log(message);
-                VPB.LogUtil.Log(message);
+                bool logged = false;
+                try
+                {
+                    VPB.LogUtil.Log(message);
+                    logged = true;
+                }
+                catch
+                {
+                }
+
+                if (!logged)
+                {
+                    UnityEngine.Debug.Log(message);
+                }
             }
             catch
             {

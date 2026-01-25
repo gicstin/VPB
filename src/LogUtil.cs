@@ -18,6 +18,8 @@ namespace VPB
         static ManualLogSource logSource;
 
         static readonly DateTime processStartTime;
+        static DateTime pluginSessionStartTime;
+        static float pluginSessionEngineStartSeconds;
         static readonly Stopwatch sincePluginAwake = new Stopwatch();
         static readonly Stopwatch sceneClickStopwatch = new Stopwatch();
         static bool sceneClickActive;
@@ -99,12 +101,28 @@ namespace VPB
             {
                 processStartTime = DateTime.Now;
             }
+
+            ResetPluginSession();
+        }
+
+        static void ResetPluginSession()
+        {
+            pluginSessionStartTime = DateTime.Now;
+            pluginSessionEngineStartSeconds = Time.realtimeSinceStartup;
+            readyLogged = false;
+            startupReadyLogged = false;
+            readyProcessSeconds = null;
+            sincePluginAwake.Reset();
+            pluginAwakeMarked = false;
         }
 
 
         public static void SetLogSource(ManualLogSource source)
         {
             logSource = source;
+            // Treat a new log source as a new plugin session. This ensures timing output
+            // is meaningful across BepInEx hot reloads (game/process not restarted).
+            ResetPluginSession();
         }
 
 
@@ -1111,10 +1129,11 @@ namespace VPB
 
             readyLogged = true;
 
-            readyProcessSeconds = (double)Time.realtimeSinceStartup;
+            readyProcessSeconds = (double)(Time.realtimeSinceStartup - pluginSessionEngineStartSeconds);
             var sinceProcessStart = DateTime.Now - processStartTime;
+            var sincePluginSessionStart = DateTime.Now - pluginSessionStartTime;
             var sincePluginStart = sincePluginAwake.IsRunning ? sincePluginAwake.Elapsed : TimeSpan.Zero;
-            LogWarning(string.Format("READY {0} | since engine start: {1:0.000}s | since process start: {2:0.000}s | since plugin awake: {3:0.000}s", context, readyProcessSeconds.Value, sinceProcessStart.TotalSeconds, sincePluginStart.TotalSeconds));
+            LogWarning(string.Format("READY {0} | since plugin session start: {1:0.000}s | since process start: {2:0.000}s | since plugin awake: {3:0.000}s", context, sincePluginSessionStart.TotalSeconds, sinceProcessStart.TotalSeconds, sincePluginStart.TotalSeconds));
         }
 
         public static double GetSecondsSinceProcessStart()
@@ -1129,7 +1148,7 @@ namespace VPB
                 return readyProcessSeconds.Value;
             }
 
-            return (double)Time.realtimeSinceStartup;
+            return (double)(Time.realtimeSinceStartup - pluginSessionEngineStartSeconds);
         }
 
         static class StringBuilderPool
