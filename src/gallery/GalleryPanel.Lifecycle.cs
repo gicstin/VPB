@@ -1043,6 +1043,54 @@ namespace VPB
                 rightRemoveClothingExpandBtn.GetComponentInChildren<Text>().color = Color.white;
                 rightRemoveClothingExpandBtn.SetActive(false);
 
+                // Clothing Submenu Hover Panel (Right) - catches pointer over gaps
+                try
+                {
+                    rightRemoveClothingSubmenuPanelGO = new GameObject("RightRemoveClothingSubmenuPanel");
+                    rightRemoveClothingSubmenuPanelGO.transform.SetParent(rightSideContainer.transform, false);
+                    RectTransform prt = rightRemoveClothingSubmenuPanelGO.AddComponent<RectTransform>();
+                    prt.anchorMin = new Vector2(0.5f, 0.5f);
+                    prt.anchorMax = new Vector2(0.5f, 0.5f);
+                    prt.pivot = new Vector2(0.5f, 0.5f);
+                    prt.sizeDelta = new Vector2(btnWidth * 1.6f, btnHeight);
+                    prt.anchoredPosition = Vector2.zero;
+
+                    AddHoverDelegate(rightRemoveClothingSubmenuPanelGO);
+
+                    Image pimg = rightRemoveClothingSubmenuPanelGO.AddComponent<Image>();
+                    pimg.color = new Color(0, 0, 0, 0.01f);
+                    pimg.raycastTarget = true;
+
+                    EventTrigger pet = rightRemoveClothingSubmenuPanelGO.AddComponent<EventTrigger>();
+                    var pe = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    pe.callback.AddListener((data) => {
+                        try
+                        {
+                            clothingSubmenuOptionsHoverCount++;
+                            clothingSubmenuOptionsHovered = true;
+                            clothingSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(pe);
+
+                    var px = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    px.callback.AddListener((data) => {
+                        try
+                        {
+                            clothingSubmenuOptionsHoverCount--;
+                            if (clothingSubmenuOptionsHoverCount < 0) clothingSubmenuOptionsHoverCount = 0;
+                            clothingSubmenuOptionsHovered = clothingSubmenuOptionsHoverCount > 0;
+                            clothingSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(px);
+
+                    rightRemoveClothingSubmenuPanelGO.SetActive(false);
+                }
+                catch { }
+
                 // Atom Submenu Buttons (Right) - pooled
                 for (int i = 0; i < AtomSubmenuMaxButtons; i++)
                 {
@@ -1078,6 +1126,49 @@ namespace VPB
                                 if (atomSubmenuOptionsHoverCount < 0) atomSubmenuOptionsHoverCount = 0;
                                 atomSubmenuOptionsHovered = atomSubmenuOptionsHoverCount > 0;
                                 atomSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
+
+                // Clothing Visibility Toggle Buttons (Right) - pooled, placed outside submenu items
+                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(rightSideContainer, 80f, btnHeight, "Hide", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
+                    rightSideButtons.Add(b.GetComponent<RectTransform>());
+                    rightRemoveClothingVisibilityToggleButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                clothingSubmenuOptionsHoverCount++;
+                                clothingSubmenuOptionsHovered = true;
+                                clothingSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                clothingSubmenuOptionsHoverCount--;
+                                if (clothingSubmenuOptionsHoverCount < 0) clothingSubmenuOptionsHoverCount = 0;
+                                clothingSubmenuOptionsHovered = clothingSubmenuOptionsHoverCount > 0;
+                                clothingSubmenuLastHoverTime = Time.unscaledTime;
                             }
                             catch { }
                         });
@@ -1224,6 +1315,53 @@ namespace VPB
                 rightRemoveHairExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
                 rightRemoveHairExpandBtn.GetComponentInChildren<Text>().color = Color.white;
                 rightRemoveHairExpandBtn.SetActive(false);
+
+                try
+                {
+                    rightRemoveHairSubmenuGapPanelGO = new GameObject("RightRemoveHairSubmenuGapPanel");
+                    rightRemoveHairSubmenuGapPanelGO.transform.SetParent(rightSideContainer.transform, false);
+                    RectTransform prt = rightRemoveHairSubmenuGapPanelGO.AddComponent<RectTransform>();
+                    prt.anchorMin = new Vector2(0.5f, 0.5f);
+                    prt.anchorMax = new Vector2(0.5f, 0.5f);
+                    prt.pivot = new Vector2(0.5f, 0.5f);
+                    prt.sizeDelta = new Vector2(btnWidth * 1.6f, btnHeight);
+                    prt.anchoredPosition = Vector2.zero;
+
+                    AddHoverDelegate(rightRemoveHairSubmenuGapPanelGO);
+
+                    Image pimg = rightRemoveHairSubmenuGapPanelGO.AddComponent<Image>();
+                    pimg.color = new Color(0, 0, 0, 0.01f);
+                    pimg.raycastTarget = true;
+
+                    EventTrigger pet = rightRemoveHairSubmenuGapPanelGO.AddComponent<EventTrigger>();
+                    var pe = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    pe.callback.AddListener((data) => {
+                        try
+                        {
+                            hairSubmenuOptionsHoverCount++;
+                            hairSubmenuOptionsHovered = true;
+                            hairSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(pe);
+
+                    var px = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    px.callback.AddListener((data) => {
+                        try
+                        {
+                            hairSubmenuOptionsHoverCount--;
+                            if (hairSubmenuOptionsHoverCount < 0) hairSubmenuOptionsHoverCount = 0;
+                            hairSubmenuOptionsHovered = hairSubmenuOptionsHoverCount > 0;
+                            hairSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(px);
+
+                    rightRemoveHairSubmenuGapPanelGO.SetActive(false);
+                }
+                catch { }
 
                 // Hair Submenu Buttons (Right) - pooled, treated as real side buttons
                 rightRemoveHairSubmenuStartIndex = rightSideButtons.Count;
@@ -1574,6 +1712,54 @@ namespace VPB
                 leftRemoveClothingExpandBtn.GetComponentInChildren<Text>().color = Color.white;
                 leftRemoveClothingExpandBtn.SetActive(false);
 
+                // Clothing Submenu Hover Panel (Left) - catches pointer over gaps
+                try
+                {
+                    leftRemoveClothingSubmenuPanelGO = new GameObject("LeftRemoveClothingSubmenuPanel");
+                    leftRemoveClothingSubmenuPanelGO.transform.SetParent(leftSideContainer.transform, false);
+                    RectTransform prt = leftRemoveClothingSubmenuPanelGO.AddComponent<RectTransform>();
+                    prt.anchorMin = new Vector2(0.5f, 0.5f);
+                    prt.anchorMax = new Vector2(0.5f, 0.5f);
+                    prt.pivot = new Vector2(0.5f, 0.5f);
+                    prt.sizeDelta = new Vector2(btnWidth * 1.6f, btnHeight);
+                    prt.anchoredPosition = Vector2.zero;
+
+                    AddHoverDelegate(leftRemoveClothingSubmenuPanelGO);
+
+                    Image pimg = leftRemoveClothingSubmenuPanelGO.AddComponent<Image>();
+                    pimg.color = new Color(0, 0, 0, 0.01f);
+                    pimg.raycastTarget = true;
+
+                    EventTrigger pet = leftRemoveClothingSubmenuPanelGO.AddComponent<EventTrigger>();
+                    var pe = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    pe.callback.AddListener((data) => {
+                        try
+                        {
+                            clothingSubmenuOptionsHoverCount++;
+                            clothingSubmenuOptionsHovered = true;
+                            clothingSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(pe);
+
+                    var px = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    px.callback.AddListener((data) => {
+                        try
+                        {
+                            clothingSubmenuOptionsHoverCount--;
+                            if (clothingSubmenuOptionsHoverCount < 0) clothingSubmenuOptionsHoverCount = 0;
+                            clothingSubmenuOptionsHovered = clothingSubmenuOptionsHoverCount > 0;
+                            clothingSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(px);
+
+                    leftRemoveClothingSubmenuPanelGO.SetActive(false);
+                }
+                catch { }
+
                 // Atom Submenu Buttons (Left) - pooled
                 for (int i = 0; i < AtomSubmenuMaxButtons; i++)
                 {
@@ -1623,6 +1809,49 @@ namespace VPB
                     b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
                     leftSideButtons.Add(b.GetComponent<RectTransform>());
                     leftRemoveClothingSubmenuButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                clothingSubmenuOptionsHoverCount++;
+                                clothingSubmenuOptionsHovered = true;
+                                clothingSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                clothingSubmenuOptionsHoverCount--;
+                                if (clothingSubmenuOptionsHoverCount < 0) clothingSubmenuOptionsHoverCount = 0;
+                                clothingSubmenuOptionsHovered = clothingSubmenuOptionsHoverCount > 0;
+                                clothingSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
+
+                // Clothing Visibility Toggle Buttons (Left) - pooled, placed outside submenu items
+                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(leftSideContainer, 80f, btnHeight, "Hide", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
+                    leftSideButtons.Add(b.GetComponent<RectTransform>());
+                    leftRemoveClothingVisibilityToggleButtons.Add(b);
                     b.SetActive(false);
                     AddHoverDelegate(b);
 
@@ -1755,6 +1984,53 @@ namespace VPB
                 leftRemoveHairExpandBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
                 leftRemoveHairExpandBtn.GetComponentInChildren<Text>().color = Color.white;
                 leftRemoveHairExpandBtn.SetActive(false);
+
+                try
+                {
+                    leftRemoveHairSubmenuGapPanelGO = new GameObject("LeftRemoveHairSubmenuGapPanel");
+                    leftRemoveHairSubmenuGapPanelGO.transform.SetParent(leftSideContainer.transform, false);
+                    RectTransform prt = leftRemoveHairSubmenuGapPanelGO.AddComponent<RectTransform>();
+                    prt.anchorMin = new Vector2(0.5f, 0.5f);
+                    prt.anchorMax = new Vector2(0.5f, 0.5f);
+                    prt.pivot = new Vector2(0.5f, 0.5f);
+                    prt.sizeDelta = new Vector2(btnWidth * 1.6f, btnHeight);
+                    prt.anchoredPosition = Vector2.zero;
+
+                    AddHoverDelegate(leftRemoveHairSubmenuGapPanelGO);
+
+                    Image pimg = leftRemoveHairSubmenuGapPanelGO.AddComponent<Image>();
+                    pimg.color = new Color(0, 0, 0, 0.01f);
+                    pimg.raycastTarget = true;
+
+                    EventTrigger pet = leftRemoveHairSubmenuGapPanelGO.AddComponent<EventTrigger>();
+                    var pe = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    pe.callback.AddListener((data) => {
+                        try
+                        {
+                            hairSubmenuOptionsHoverCount++;
+                            hairSubmenuOptionsHovered = true;
+                            hairSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(pe);
+
+                    var px = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    px.callback.AddListener((data) => {
+                        try
+                        {
+                            hairSubmenuOptionsHoverCount--;
+                            if (hairSubmenuOptionsHoverCount < 0) hairSubmenuOptionsHoverCount = 0;
+                            hairSubmenuOptionsHovered = hairSubmenuOptionsHoverCount > 0;
+                            hairSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(px);
+
+                    leftRemoveHairSubmenuGapPanelGO.SetActive(false);
+                }
+                catch { }
 
                 // Hair Submenu Buttons (Left) - pooled, treated as real side buttons
                 leftRemoveHairSubmenuStartIndex = leftSideButtons.Count;
@@ -1936,7 +2212,46 @@ UpdateDesktopModeButton();
                 {
                     if (hairSubmenuOpen)
                     {
-                        bool hovered = hairSubmenuParentHovered || hairSubmenuOptionsHovered;
+                        bool hoveredManual = false;
+                        try
+                        {
+                            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null;
+
+                            RectTransform lrt = leftRemoveAllHairBtn != null ? leftRemoveAllHairBtn.GetComponent<RectTransform>() : null;
+                            RectTransform rrt = rightRemoveAllHairBtn != null ? rightRemoveAllHairBtn.GetComponent<RectTransform>() : null;
+
+                            RectTransform lprt = leftRemoveHairSubmenuGapPanelGO != null ? leftRemoveHairSubmenuGapPanelGO.GetComponent<RectTransform>() : null;
+                            RectTransform rprt = rightRemoveHairSubmenuGapPanelGO != null ? rightRemoveHairSubmenuGapPanelGO.GetComponent<RectTransform>() : null;
+
+                            if (lrt != null && leftRemoveAllHairBtn.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(lrt, Input.mousePosition, cam)) hoveredManual = true;
+                            else if (rrt != null && rightRemoveAllHairBtn.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(rrt, Input.mousePosition, cam)) hoveredManual = true;
+                            else if (lprt != null && leftRemoveHairSubmenuGapPanelGO.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(lprt, Input.mousePosition, cam)) hoveredManual = true;
+                            else if (rprt != null && rightRemoveHairSubmenuGapPanelGO.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(rprt, Input.mousePosition, cam)) hoveredManual = true;
+
+                            if (!hoveredManual)
+                            {
+                                for (int i = 0; i < leftRemoveHairSubmenuButtons.Count; i++)
+                                {
+                                    GameObject go = leftRemoveHairSubmenuButtons[i];
+                                    if (go == null || !go.activeInHierarchy) continue;
+                                    RectTransform rt = go.GetComponent<RectTransform>();
+                                    if (rt != null && RectTransformUtility.RectangleContainsScreenPoint(rt, Input.mousePosition, cam)) { hoveredManual = true; break; }
+                                }
+                            }
+                            if (!hoveredManual)
+                            {
+                                for (int i = 0; i < rightRemoveHairSubmenuButtons.Count; i++)
+                                {
+                                    GameObject go = rightRemoveHairSubmenuButtons[i];
+                                    if (go == null || !go.activeInHierarchy) continue;
+                                    RectTransform rt = go.GetComponent<RectTransform>();
+                                    if (rt != null && RectTransformUtility.RectangleContainsScreenPoint(rt, Input.mousePosition, cam)) { hoveredManual = true; break; }
+                                }
+                            }
+                        }
+                        catch { }
+
+                        bool hovered = hoveredManual || hairSubmenuParentHovered || hairSubmenuOptionsHovered;
                         if (!hovered)
                         {
                             if (Time.unscaledTime - hairSubmenuLastHoverTime >= HairSubmenuAutoHideDelay)
@@ -1958,7 +2273,46 @@ UpdateDesktopModeButton();
                 {
                     if (clothingSubmenuOpen)
                     {
-                        bool hovered = clothingSubmenuParentHovered || clothingSubmenuOptionsHovered;
+                        bool hoveredManual = false;
+                        try
+                        {
+                            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null;
+
+                            RectTransform lrt = leftRemoveAllClothingBtn != null ? leftRemoveAllClothingBtn.GetComponent<RectTransform>() : null;
+                            RectTransform rrt = rightRemoveAllClothingBtn != null ? rightRemoveAllClothingBtn.GetComponent<RectTransform>() : null;
+
+                            RectTransform lprt = leftRemoveClothingSubmenuPanelGO != null ? leftRemoveClothingSubmenuPanelGO.GetComponent<RectTransform>() : null;
+                            RectTransform rprt = rightRemoveClothingSubmenuPanelGO != null ? rightRemoveClothingSubmenuPanelGO.GetComponent<RectTransform>() : null;
+
+                            if (lrt != null && leftRemoveAllClothingBtn.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(lrt, Input.mousePosition, cam)) hoveredManual = true;
+                            else if (rrt != null && rightRemoveAllClothingBtn.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(rrt, Input.mousePosition, cam)) hoveredManual = true;
+                            else if (lprt != null && leftRemoveClothingSubmenuPanelGO.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(lprt, Input.mousePosition, cam)) hoveredManual = true;
+                            else if (rprt != null && rightRemoveClothingSubmenuPanelGO.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(rprt, Input.mousePosition, cam)) hoveredManual = true;
+
+                            if (!hoveredManual)
+                            {
+                                for (int i = 0; i < leftRemoveClothingSubmenuButtons.Count; i++)
+                                {
+                                    GameObject go = leftRemoveClothingSubmenuButtons[i];
+                                    if (go == null || !go.activeInHierarchy) continue;
+                                    RectTransform rt = go.GetComponent<RectTransform>();
+                                    if (rt != null && RectTransformUtility.RectangleContainsScreenPoint(rt, Input.mousePosition, cam)) { hoveredManual = true; break; }
+                                }
+                            }
+                            if (!hoveredManual)
+                            {
+                                for (int i = 0; i < rightRemoveClothingSubmenuButtons.Count; i++)
+                                {
+                                    GameObject go = rightRemoveClothingSubmenuButtons[i];
+                                    if (go == null || !go.activeInHierarchy) continue;
+                                    RectTransform rt = go.GetComponent<RectTransform>();
+                                    if (rt != null && RectTransformUtility.RectangleContainsScreenPoint(rt, Input.mousePosition, cam)) { hoveredManual = true; break; }
+                                }
+                            }
+                        }
+                        catch { }
+
+                        bool hovered = hoveredManual || clothingSubmenuParentHovered || clothingSubmenuOptionsHovered;
                         if (!hovered)
                         {
                             if (Time.unscaledTime - clothingSubmenuLastHoverTime >= ClothingSubmenuAutoHideDelay)

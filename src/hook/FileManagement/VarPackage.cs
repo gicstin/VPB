@@ -279,9 +279,20 @@ namespace VPB
 		static long scanZip;
 		static readonly object scanErrorLogLock = new object();
 		static readonly HashSet<string> scanErrorLogged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		static readonly HashSet<string> scanErrorLoggedByUid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 		static void LogScanErrorOnce(string uid, string context, Exception ex)
 		{
+			string uidKey = uid ?? "";
+			if (!string.IsNullOrEmpty(uidKey))
+			{
+				lock (scanErrorLogLock)
+				{
+					if (scanErrorLoggedByUid.Contains(uidKey)) return;
+					scanErrorLoggedByUid.Add(uidKey);
+				}
+			}
+
 			string key = (uid ?? "") + "|" + (context ?? "");
 			lock (scanErrorLogLock)
 			{
@@ -289,7 +300,7 @@ namespace VPB
 				scanErrorLogged.Add(key);
 			}
 			string msg = (ex != null) ? ex.Message : "";
-			LogUtil.LogError(context + " " + uid + " : " + msg);
+			LogUtil.LogWarning(context + " " + uid + " : " + msg);
 		}
 
 		private static int GetZipNameCodePageForVar(string varPath)

@@ -134,6 +134,9 @@ namespace VPB
         private GameObject rightRemoveClothingExpandBtn;
         private GameObject leftRemoveClothingExpandBtn;
 
+        private GameObject rightRemoveClothingSubmenuPanelGO;
+        private GameObject leftRemoveClothingSubmenuPanelGO;
+
         private GameObject rightRemoveHairExpandBtn;
         private GameObject leftRemoveHairExpandBtn;
 
@@ -146,6 +149,9 @@ namespace VPB
         private GameObject rightRemoveHairSubmenuPanelGO;
         private GameObject leftRemoveHairSubmenuPanelGO;
 
+        private GameObject rightRemoveHairSubmenuGapPanelGO;
+        private GameObject leftRemoveHairSubmenuGapPanelGO;
+
         private bool hairSubmenuOpen = false;
         private List<GameObject> rightRemoveHairSubmenuButtons = new List<GameObject>();
         private List<GameObject> leftRemoveHairSubmenuButtons = new List<GameObject>();
@@ -155,18 +161,31 @@ namespace VPB
         private int hairSubmenuParentHoverCount = 0;
         private int hairSubmenuOptionsHoverCount = 0;
         private float hairSubmenuLastHoverTime = 0f;
-        private const float HairSubmenuAutoHideDelay = 0.75f;
+        private const float HairSubmenuAutoHideDelay = 1.5f;
 
         private bool clothingSubmenuOpen = false;
         private List<GameObject> rightRemoveClothingSubmenuButtons = new List<GameObject>();
         private List<GameObject> leftRemoveClothingSubmenuButtons = new List<GameObject>();
+
+        private List<GameObject> rightRemoveClothingVisibilityToggleButtons = new List<GameObject>();
+        private List<GameObject> leftRemoveClothingVisibilityToggleButtons = new List<GameObject>();
 
         private bool clothingSubmenuParentHovered = false;
         private bool clothingSubmenuOptionsHovered = false;
         private int clothingSubmenuParentHoverCount = 0;
         private int clothingSubmenuOptionsHoverCount = 0;
         private float clothingSubmenuLastHoverTime = 0f;
-        private const float ClothingSubmenuAutoHideDelay = 0.75f;
+        private const float ClothingSubmenuAutoHideDelay = 1.5f;
+
+        private string clothingSubmenuTargetAtomUid = null;
+
+        private float clothingLabelLastCheckTime = 0f;
+        private string clothingLabelLastAtomUid = null;
+        private bool clothingLabelLastHasOptions = false;
+
+        private string previewRemoveClothingAtomUid = null;
+        private string previewRemoveClothingItemUid = null;
+        private bool? previewRemoveClothingPrevGeometryVal = null;
 
         private bool atomSubmenuOpen = false;
         private List<GameObject> rightRemoveAtomSubmenuButtons = new List<GameObject>();

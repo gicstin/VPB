@@ -549,10 +549,6 @@ namespace VPB
             bool flag = false;
             try
             {
-                if (!Directory.Exists("Cache/AllPackagesJSON"))
-                {
-                    Directory.CreateDirectory("Cache/AllPackagesJSON");
-                }
                 if (!Directory.Exists("AddonPackages"))
                 {
                     CreateDirectory("AddonPackages");

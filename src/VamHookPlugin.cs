@@ -1002,6 +1002,13 @@ namespace VPB
                 LogUtil.SceneClickUpdate();
             }
 
+            // Fail-safe: ensure startup timer cannot run indefinitely if READY never occurs (UI init stuck).
+            try
+            {
+                LogUtil.StartupWatchdogUpdate(IsFileManagerInited, m_UIInited);
+            }
+            catch { }
+
             if (!m_UIInited || !IsFileManagerInited)
             {
                 m_FpsSmoothedDelta = 0f;

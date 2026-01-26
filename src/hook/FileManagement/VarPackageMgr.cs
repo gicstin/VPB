@@ -19,7 +19,8 @@ namespace VPB
     {
         public static VarPackageMgr singleton=new VarPackageMgr();
 
-        static string CachePath = "Cache/AllPackagesJSON/" + "AllPackages.bytes2";
+        static string CacheDir = "Cache/VPB";
+        static string CachePath = "Cache/VPB/" + "AllPackages.bytes2";
         const int CacheMagic = 0x56504231;
         const int CacheVersion = 4;
         readonly object lookupLock = new object();
@@ -66,6 +67,11 @@ namespace VPB
             existCache = false;
             int loadedCount = 0;
             Stopwatch sw = Stopwatch.StartNew();
+            try
+            {
+                if (!Directory.Exists(CacheDir)) Directory.CreateDirectory(CacheDir);
+            }
+            catch { }
             if (File.Exists(CachePath))
             {
                 existCache = true;
@@ -137,6 +143,11 @@ namespace VPB
             string tempPath = CachePath + ".tmp";
             try
             {
+                try
+                {
+                    if (!Directory.Exists(CacheDir)) Directory.CreateDirectory(CacheDir);
+                }
+                catch { }
                 using (FileStream stream = new FileStream(tempPath, FileMode.Create))
                 {
                     BinaryWriter writer = new BinaryWriter(stream);

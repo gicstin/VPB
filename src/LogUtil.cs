@@ -27,6 +27,7 @@ namespace VPB
         static string sceneClickName;
         static bool sceneClickSawImageWork;
         static float sceneClickLastActivityRealtime;
+        static float sceneClickBeginRealtime;
         static bool sceneClickSceneLoadTotalEnded;
         static float sceneClickEndArmRealtime;
         static bool sceneClickEndArmed;
@@ -88,6 +89,7 @@ namespace VPB
         static bool readyLogged;
         static double? readyProcessSeconds;
         static bool startupReadyLogged;
+        static bool startupAutoReadyLogged;
 
 
 
@@ -111,6 +113,7 @@ namespace VPB
             pluginSessionEngineStartSeconds = Time.realtimeSinceStartup;
             readyLogged = false;
             startupReadyLogged = false;
+            startupAutoReadyLogged = false;
             readyProcessSeconds = null;
             sincePluginAwake.Reset();
             pluginAwakeMarked = false;
@@ -374,7 +377,7 @@ namespace VPB
             }
 
             startupReadyLogged = true;
-            LogWarning("STARTUP_READY " + context + " | since process start: " + GetSecondsSinceProcessStart().ToString("0.000") + "s");
+            LogWarning("STARTUP_MILESTONE " + context + " | since process start: " + GetSecondsSinceProcessStart().ToString("0.000") + "s");
         }
 
         public static void BeginSceneClick(string saveName)
@@ -389,6 +392,7 @@ namespace VPB
             sceneClickActive = true;
             sceneClickSawImageWork = false;
             sceneClickLastActivityRealtime = Time.realtimeSinceStartup;
+            sceneClickBeginRealtime = Time.realtimeSinceStartup;
             sceneClickSceneLoadTotalEnded = false;
             sceneClickEndArmRealtime = 0f;
             sceneClickEndArmed = false;
@@ -405,6 +409,21 @@ namespace VPB
         {
             if (!sceneClickActive)
             {
+                return;
+            }
+
+            // Hard safety timeout: if we never see EndSceneLoadTotal (or never reach idle), don't run forever.
+            if ((Time.realtimeSinceStartup - sceneClickBeginRealtime) > 600f)
+            {
+                try
+                {
+                    sceneClickStopwatch.Stop();
+                }
+                catch { }
+                sceneClickActive = false;
+                sceneClickLastSeconds = sceneClickStopwatch.Elapsed.TotalSeconds;
+                sceneClickName = null;
+                LogWarning("SCENE_CLICK auto-end: timeout");
                 return;
             }
 
@@ -459,6 +478,23 @@ namespace VPB
             sceneClickActive = false;
             sceneClickLastSeconds = sceneClickStopwatch.Elapsed.TotalSeconds;
             sceneClickName = null;
+        }
+
+        public static void StartupWatchdogUpdate(bool isFileManagerInited, bool isUiInited)
+        {
+            if (readyLogged) return;
+            if (startupAutoReadyLogged) return;
+
+            // Require at least some signal of progress before auto-ready.
+            if (!startupReadyLogged && !isFileManagerInited) return;
+
+            // Conservative timeout to avoid false positives on very slow machines.
+            // If UI init never completes (exceptions, missing dependencies, etc), freeze timer anyway.
+            float elapsed = Time.realtimeSinceStartup - pluginSessionEngineStartSeconds;
+            if (elapsed < 180f) return;
+
+            startupAutoReadyLogged = true;
+            LogReadyOnce("AutoReady.Timeout");
         }
 
         public static double? GetSceneClickSecondsForDisplay()

@@ -2500,32 +2500,24 @@ namespace VPB
                         return;
                     }
 
-                    DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
-                    if (dcs == null)
-                    {
-                        LogUtil.LogWarning("[VPB] RemoveAllClothing: DAZCharacterSelector not found on target");
-                        return;
-                    }
-
                     int disabledCount = 0;
-                    if (dcs.clothingItems != null)
+                    int totalClothingParams = 0;
+                    foreach (var name in geometry.GetBoolParamNames())
                     {
-                        foreach (var item in dcs.clothingItems)
-                        {
-                            if (item == null) continue;
-                            JSONStorableBool active = geometry.GetBoolJSONParam("clothing:" + item.uid);
-                            if (active != null)
-                            {
-                                if (active.val)
-                                {
-                                    active.val = false;
-                                    disabledCount++;
-                                }
-                            }
-                        }
+                        if (string.IsNullOrEmpty(name)) continue;
+                        if (!name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+                        totalClothingParams++;
+
+                        JSONStorableBool active = null;
+                        try { active = geometry.GetBoolJSONParam(name); } catch { }
+                        if (active == null) continue;
+                        if (!active.val) continue;
+
+                        active.val = false;
+                        disabledCount++;
                     }
 
-                    LogUtil.Log($"[VPB] RemoveAllClothing: geometry fallback disabled {disabledCount} clothing items");
+                    LogUtil.Log($"[VPB] RemoveAllClothing: geometry fallback disabled {disabledCount} clothing items (params={totalClothingParams})");
                 }
                 catch (Exception ex)
                 {
@@ -2749,7 +2741,7 @@ namespace VPB
                 {
                     if (m.Name != "SetActiveClothingItem") continue;
                     var ps = m.GetParameters();
-                    if (ps.Length >= 2)
+                    if (ps.Length == 2 && ps[1].ParameterType == typeof(bool))
                     {
                         if (ps[0].ParameterType == typeof(DAZClothingItem)) miSetActiveItem = m;
                         else if (ps[0].ParameterType == typeof(string)) miSetActiveItemByUid = m;
@@ -2782,15 +2774,115 @@ namespace VPB
                 return;
             }
 
+            
+
+            bool geometryBoolWasTrue = false;
+            bool geometryBoolFound = false;
+            bool itemWasActive = false;
+            try { itemWasActive = matched.active; } catch { itemWasActive = false; }
+
+            // Prefer ref-style removal: flip the geometry clothing:<uid> bool.
+            // This is the canonical wear/remove signal in VaM and triggers callbacks.
+            JSONStorableBool itemJsb = null;
             try
             {
                 if (geometry != null)
                 {
-                    JSONStorableBool active = geometry.GetBoolJSONParam("clothing:" + matched.uid);
-                    if (active != null) active.val = false;
+                    try { itemJsb = geometry.GetBoolJSONParam("clothing:" + itemUid); } catch { }
                 }
             }
             catch { }
+
+            string NormalizeClothingUid(string uid)
+            {
+                if (string.IsNullOrEmpty(uid)) return null;
+                string u = uid.Replace("\\", "/");
+                // Strip VAR prefix like "Author.Package.1:" if present
+                int colon = u.IndexOf(":/");
+                if (colon >= 0) u = u.Substring(colon + 2);
+                // Remove leading slashes
+                while (u.StartsWith("/")) u = u.Substring(1);
+                return u;
+            }
+
+            string wantedNorm = NormalizeClothingUid(itemUid);
+
+            try
+            {
+                if (geometry == null)
+                {
+                    LogUtil.LogWarning("[VPB] RemoveClothingItemByUid: geometry storable not found");
+                }
+                else if (itemJsb != null)
+                {
+                    geometryBoolFound = true;
+                    geometryBoolWasTrue = itemJsb.val;
+                    bool before = itemJsb.val;
+                    itemJsb.val = false;
+                }
+                else
+                {
+                    LogUtil.LogWarning($"[VPB] RemoveClothingItemByUid: geometry bool not found for clothing:{itemUid}");
+                }
+            }
+            catch { }
+
+            // If the exact uid bool wasn't active, try to find the active clothing bool by normalized uid suffix.
+            if (geometry != null && (!geometryBoolFound || !geometryBoolWasTrue) && !string.IsNullOrEmpty(wantedNorm))
+            {
+                try
+                {
+                    int matches = 0;
+                    string bestKey = null;
+                    JSONStorableBool bestJsb = null;
+
+                    foreach (var n in geometry.GetBoolParamNames())
+                    {
+                        if (string.IsNullOrEmpty(n)) continue;
+                        if (!n.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+                        JSONStorableBool jsb = null;
+                        try { jsb = geometry.GetBoolJSONParam(n); } catch { }
+                        if (jsb == null || !jsb.val) continue;
+
+                        string uid = null;
+                        try { uid = n.Substring(9); } catch { }
+                        if (string.IsNullOrEmpty(uid)) continue;
+
+                        string candNorm = NormalizeClothingUid(uid);
+                        if (string.IsNullOrEmpty(candNorm)) continue;
+
+                        // match if exact normalized match or suffix match (handles different root prefixes)
+                        if (string.Equals(candNorm, wantedNorm, StringComparison.OrdinalIgnoreCase) ||
+                            candNorm.EndsWith(wantedNorm, StringComparison.OrdinalIgnoreCase) ||
+                            wantedNorm.EndsWith(candNorm, StringComparison.OrdinalIgnoreCase))
+                        {
+                            matches++;
+                            // Prefer the longest normalized uid as the most specific
+                            if (bestKey == null || candNorm.Length > NormalizeClothingUid(bestKey).Length)
+                            {
+                                bestKey = uid;
+                                bestJsb = jsb;
+                            }
+                        }
+                    }
+
+                    if (matches > 0 && bestJsb != null && bestKey != null)
+                    {
+                        bool before = bestJsb.val;
+                        // toggle true->false to ensure callbacks fire
+                        bestJsb.val = true;
+                        bestJsb.val = false;
+                        geometryBoolFound = true;
+                        geometryBoolWasTrue = true;
+                        LogUtil.Log($"[VPB] RemoveClothingItemByUid: normalized match removed clothing:{bestKey} true -> false (matches={matches})");
+                    }
+                    else
+                    {
+                        LogUtil.Log($"[VPB] RemoveClothingItemByUid: normalized match found 0 active clothing bools for '{wantedNorm}'");
+                    }
+                }
+                catch { }
+            }
 
             try
             {
@@ -2811,6 +2903,169 @@ namespace VPB
             {
                 try { matched.active = false; } catch { }
             }
+
+            // If we couldn't target the exact jsb, try to find active clothing JSBs by filename match.
+            if (geometry != null && (!geometryBoolFound || !geometryBoolWasTrue))
+            {
+                try
+                {
+                    string wanted = null;
+                    try
+                    {
+                        string p = itemUid.Replace("\\", "/");
+                        int slash = p.LastIndexOf('/');
+                        string last = slash >= 0 ? p.Substring(slash + 1) : p;
+                        int dot = last.LastIndexOf('.');
+                        wanted = dot > 0 ? last.Substring(0, dot) : last;
+                    }
+                    catch { }
+
+                    if (!string.IsNullOrEmpty(wanted))
+                    {
+                        int hits = 0;
+                        foreach (var n in geometry.GetBoolParamNames())
+                        {
+                            if (string.IsNullOrEmpty(n)) continue;
+                            if (!n.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+                            JSONStorableBool jsb = null;
+                            try { jsb = geometry.GetBoolJSONParam(n); } catch { }
+                            if (jsb == null || !jsb.val) continue;
+
+                            string uid = null;
+                            try { uid = n.Substring(9); } catch { }
+                            if (string.IsNullOrEmpty(uid)) continue;
+
+                            string candidate = null;
+                            try
+                            {
+                                string p = uid.Replace("\\", "/");
+                                int slash = p.LastIndexOf('/');
+                                string last = slash >= 0 ? p.Substring(slash + 1) : p;
+                                int dot = last.LastIndexOf('.');
+                                candidate = dot > 0 ? last.Substring(0, dot) : last;
+                            }
+                            catch { }
+
+                            if (string.Equals(candidate, wanted, StringComparison.OrdinalIgnoreCase))
+                            {
+                                bool before = jsb.val;
+                                jsb.val = false;
+                                hits++;
+                                LogUtil.Log($"[VPB] RemoveClothingItemByUid: filename-match removed clothing:{uid} {before} -> {jsb.val}");
+                            }
+                        }
+
+                        if (hits > 0)
+                        {
+                            geometryBoolFound = true;
+                            geometryBoolWasTrue = true;
+                            LogUtil.Log($"[VPB] RemoveClothingItemByUid: filename-match removed {hits} items for '{wanted}'");
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // If the item was already inactive/hidden, try a stronger approach to actually unload/remove.
+            // Some VaM versions keep inactive clothing items in the list; we attempt to force a refresh and/or invoke remove-style APIs via reflection.
+            if (!itemWasActive && geometryBoolFound && !geometryBoolWasTrue)
+            {
+                try
+                {
+                    if (miSetActiveItem != null)
+                    {
+                        LogUtil.Log("[VPB] RemoveClothingItemByUid: item already inactive; attempting force refresh via SetActiveClothingItem(true->false)");
+                        miSetActiveItem.Invoke(dcs, new object[] { matched, true });
+                        miSetActiveItem.Invoke(dcs, new object[] { matched, false });
+                    }
+                    else if (miSetActiveItemByUid != null)
+                    {
+                        LogUtil.Log("[VPB] RemoveClothingItemByUid: item already inactive; attempting force refresh via SetActiveClothingItem(uid, true->false)");
+                        miSetActiveItemByUid.Invoke(dcs, new object[] { matched.uid, true });
+                        miSetActiveItemByUid.Invoke(dcs, new object[] { matched.uid, false });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB] RemoveClothingItemByUid: force refresh exception: " + ex.Message);
+                }
+
+                // Try calling remove/unload methods if present.
+                try
+                {
+                    bool invoked = false;
+
+                    try
+                    {
+                        JSONStorable clothing = null;
+                        try { clothing = target.GetStorableByID("Clothing"); } catch { }
+                        if (clothing != null)
+                        {
+                            foreach (var m in clothing.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                            {
+                                if (m == null) continue;
+                                if (m.Name == null) continue;
+                                if (m.Name.IndexOf("remove", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                                var ps = m.GetParameters();
+                                if (ps == null) continue;
+
+                                if (ps.Length == 1 && ps[0].ParameterType == typeof(string))
+                                {
+                                    LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking Clothing.{m.Name}(string)");
+                                    m.Invoke(clothing, new object[] { matched.uid });
+                                    invoked = true;
+                                }
+                                else if (ps.Length == 1 && ps[0].ParameterType == typeof(DAZClothingItem))
+                                {
+                                    LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking Clothing.{m.Name}(DAZClothingItem)");
+                                    m.Invoke(clothing, new object[] { matched });
+                                    invoked = true;
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        foreach (var m in dcs.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                        {
+                            if (m == null) continue;
+                            if (m.Name == null) continue;
+                            if (m.Name.IndexOf("remove", StringComparison.OrdinalIgnoreCase) < 0 && m.Name.IndexOf("unload", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                            var ps = m.GetParameters();
+                            if (ps == null) continue;
+
+                            if (ps.Length == 1 && ps[0].ParameterType == typeof(string))
+                            {
+                                LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking DAZCharacterSelector.{m.Name}(string)");
+                                m.Invoke(dcs, new object[] { matched.uid });
+                                invoked = true;
+                            }
+                            else if (ps.Length == 1 && ps[0].ParameterType == typeof(DAZClothingItem))
+                            {
+                                LogUtil.Log($"[VPB] RemoveClothingItemByUid: invoking DAZCharacterSelector.{m.Name}(DAZClothingItem)");
+                                m.Invoke(dcs, new object[] { matched });
+                                invoked = true;
+                            }
+                        }
+                    }
+                    catch { }
+
+                    if (!invoked)
+                    {
+                        LogUtil.Log("[VPB] RemoveClothingItemByUid: no remove/unload methods found to invoke");
+                    }
+                }
+                catch { }
+            }
+
+            // Ref implementation refreshes dynamic items after clothing/hair toggles.
+            
+
+            
         }
 
         public void RemoveAllHair(Atom target)

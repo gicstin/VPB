@@ -211,10 +211,28 @@ namespace VPB
                     var colors = receiver.GetColorParamNames();
                     if (colors != null && colors.Contains("rootColor")) continue;
 
-                    JSONStorableBool simEnabledBool = receiver.GetBoolJSONParam("simEnabled");
+                    bool hasSimEnabled = false;
+                    try
+                    {
+                        var boolNames = receiver.GetBoolParamNames();
+                        hasSimEnabled = (boolNames != null && boolNames.Contains("simEnabled"));
+                    }
+                    catch { }
+
+                    if (!hasSimEnabled) continue;
+
+                    JSONStorableBool simEnabledBool = null;
+                    try { simEnabledBool = receiver.GetBoolJSONParam("simEnabled"); } catch { }
                     if (simEnabledBool != null && simEnabledBool.val)
                     {
-                        receiver.CallAction("Reset");
+                        try
+                        {
+                            if (receiver.GetActionNames() != null && receiver.GetActionNames().Contains("Reset"))
+                            {
+                                receiver.CallAction("Reset");
+                            }
+                        }
+                        catch { }
                     }
                 }
                 catch { }
