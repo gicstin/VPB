@@ -580,6 +580,16 @@ namespace VPB
                 {
                     LogUtil.LogError("Error during Undo: " + ex.Message);
                 }
+                try
+                {
+                    // Ensure context submenus refresh immediately after Undo restores items.
+                    Atom tgt = null;
+                    try { tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { }
+                    if (clothingSubmenuOpen) SyncClothingSubmenu(tgt, true);
+                    if (hairSubmenuOpen) SyncHairSubmenu(tgt, true);
+                    UpdateSideContextActions();
+                }
+                catch { }
             }
         }
 

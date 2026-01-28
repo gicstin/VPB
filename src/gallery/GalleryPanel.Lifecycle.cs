@@ -2218,8 +2218,39 @@ UpdateDesktopModeButton();
 
                 try
                 {
+                    if (Time.unscaledTime - sideContextLastUpdateTime >= SideContextUpdateInterval)
+                    {
+                        sideContextLastUpdateTime = Time.unscaledTime;
+                        UpdateSideContextActions();
+                    }
+                }
+                catch { }
+
+                try
+                {
                     if (hairSubmenuOpen)
                     {
+                        // Periodic resync to keep submenu reflecting live hair state (e.g. after Undo)
+                        try
+                        {
+                            bool allowResync = !(hairSubmenuParentHovered || hairSubmenuOptionsHovered);
+                            if (allowResync && Time.unscaledTime - hairSubmenuLastSyncTime >= HairSubmenuSyncInterval)
+                            {
+                                hairSubmenuLastSyncTime = Time.unscaledTime;
+                                Atom tgt = null;
+                                try
+                                {
+                                    if (!string.IsNullOrEmpty(hairSubmenuTargetAtomUid))
+                                        tgt = SuperController.singleton.GetAtomByUid(hairSubmenuTargetAtomUid);
+                                }
+                                catch { }
+                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                // Keep open if there are still options; auto-closes inside if empty.
+                                SyncHairSubmenu(tgt, true);
+                            }
+                        }
+                        catch { }
+
                         bool hoveredManual = false;
                         try
                         {
@@ -2284,7 +2315,8 @@ UpdateDesktopModeButton();
                         // Periodic resync to keep submenu reflecting live clothing state
                         try
                         {
-                            if (Time.unscaledTime - clothingSubmenuLastSyncTime >= ClothingSubmenuSyncInterval)
+                            bool allowResync = !(clothingSubmenuParentHovered || clothingSubmenuOptionsHovered);
+                            if (allowResync && Time.unscaledTime - clothingSubmenuLastSyncTime >= ClothingSubmenuSyncInterval)
                             {
                                 clothingSubmenuLastSyncTime = Time.unscaledTime;
                                 Atom tgt = null;

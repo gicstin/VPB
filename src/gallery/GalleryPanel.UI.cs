@@ -450,7 +450,8 @@ namespace VPB
 
         private void PopulateClothingSubmenuButtons(Atom target)
         {
-            SetClothingSubmenuButtonsVisible(false);
+            // Avoid briefly hiding buttons during periodic resync while the pointer is over the submenu.
+            if (!clothingSubmenuOpen) SetClothingSubmenuButtonsVisible(false);
 
             if (target == null) return;
 
@@ -600,9 +601,11 @@ namespace VPB
             catch { }
 
             if (options == null) options = new List<KeyValuePair<string, string>>();
-            int count = Mathf.Min(options.Count, HairSubmenuMaxButtons);
+            int optionTotal = options.Count;
+            int count = Mathf.Min(optionTotal, HairSubmenuMaxButtons);
 
-            UpdateRemoveClothingButtonLabels(count > 0);
+            clothingSubmenuLastOptionCount = optionTotal;
+            UpdateRemoveClothingButtonLabels(optionTotal);
 
             try
             {
@@ -773,7 +776,7 @@ namespace VPB
                 clothingSubmenuOptionsHoverCount = 0;
                 clothingSubmenuLastOptionCount = 0;
                 SetClothingSubmenuButtonsVisible(false);
-                UpdateRemoveClothingButtonLabels(false);
+                UpdateRemoveClothingButtonLabels(0);
             }
             catch { }
         }
@@ -813,22 +816,30 @@ namespace VPB
             UpdateSideButtonPositions();
         }
 
-        private void UpdateRemoveClothingButtonLabels(bool hasOptions)
+        private void UpdateRemoveButtonLabels(GameObject leftBtn, GameObject rightBtn, string baseLabel, int optionCount)
         {
             try
             {
-                if (leftRemoveAllClothingBtn != null)
+                bool hasOptions = optionCount > 0;
+                string suffix = hasOptions ? (" (" + optionCount.ToString() + ")") : "";
+
+                if (leftBtn != null)
                 {
-                    Text t = leftRemoveAllClothingBtn.GetComponentInChildren<Text>();
-                    if (t != null) t.text = hasOptions ? "< Remove\nClothing" : "Remove\nClothing";
+                    Text t = leftBtn.GetComponentInChildren<Text>();
+                    if (t != null) t.text = hasOptions ? ("< " + baseLabel + suffix) : baseLabel;
                 }
-                if (rightRemoveAllClothingBtn != null)
+                if (rightBtn != null)
                 {
-                    Text t = rightRemoveAllClothingBtn.GetComponentInChildren<Text>();
-                    if (t != null) t.text = hasOptions ? "Remove\nClothing >" : "Remove\nClothing";
+                    Text t = rightBtn.GetComponentInChildren<Text>();
+                    if (t != null) t.text = hasOptions ? (baseLabel + " >" + suffix) : baseLabel;
                 }
             }
             catch { }
+        }
+
+        private void UpdateRemoveClothingButtonLabels(int optionCount)
+        {
+            UpdateRemoveButtonLabels(leftRemoveAllClothingBtn, rightRemoveAllClothingBtn, "Remove\nClothing", optionCount);
         }
 
         private void ApplyClothingPreview(Atom target, string itemUid)
@@ -2270,10 +2281,16 @@ namespace VPB
 
         private void PopulateHairSubmenuButtons(Atom target)
         {
-            // Hide all first
-            SetHairSubmenuButtonsVisible(false);
+            // Avoid briefly hiding buttons during periodic resync while the pointer is over the submenu.
+            if (!hairSubmenuOpen) SetHairSubmenuButtonsVisible(false);
 
             if (target == null) return;
+
+            try
+            {
+                hairSubmenuTargetAtomUid = target.uid;
+            }
+            catch { }
 
             List<KeyValuePair<string, string>> options = null;
             try
@@ -2368,7 +2385,11 @@ namespace VPB
             catch { }
 
             if (options == null) options = new List<KeyValuePair<string, string>>();
-            int count = Mathf.Min(options.Count, HairSubmenuMaxButtons);
+            int optionTotal = options.Count;
+            int count = Mathf.Min(optionTotal, HairSubmenuMaxButtons);
+
+            try { hairSubmenuLastOptionCount = optionTotal; } catch { }
+            UpdateRemoveHairButtonLabels(optionTotal);
 
             // Populate buttons on both sides (they share the same label/callback).
             for (int i = 0; i < HairSubmenuMaxButtons; i++)
@@ -2382,16 +2403,88 @@ namespace VPB
                     Button btn = btnGO.GetComponent<Button>();
                     Text t = btnGO.GetComponentInChildren<Text>();
                     if (t != null) t.text = label ?? "";
+
+                    if (btn != null) btn.transition = Selectable.Transition.None;
+
+                    try
+                    {
+                        var et = btnGO.GetComponent<EventTrigger>();
+                        if (et == null) et = btnGO.AddComponent<EventTrigger>();
+
+                        if (et.triggers == null) et.triggers = new List<EventTrigger.Entry>();
+                        et.triggers.RemoveAll(e => e != null && (e.eventID == EventTriggerType.PointerEnter || e.eventID == EventTriggerType.PointerExit));
+
+                        var enterEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        enterEntry.callback.AddListener((data) => {
+                            try
+                            {
+                                hairSubmenuOptionsHoverCount++;
+                                hairSubmenuOptionsHovered = true;
+                                hairSubmenuLastHoverTime = Time.unscaledTime;
+
+                                Atom tgt = null;
+                                try
+                                {
+                                    if (!string.IsNullOrEmpty(hairSubmenuTargetAtomUid)) tgt = SuperController.singleton.GetAtomByUid(hairSubmenuTargetAtomUid);
+                                }
+                                catch { }
+                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+
+                                if (tgt != null && !string.IsNullOrEmpty(uid))
+                                {
+                                    ApplyHairPreview(tgt, uid);
+                                }
+                            }
+                            catch { }
+                        });
+                        et.triggers.Add(enterEntry);
+
+                        var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        exitEntry.callback.AddListener((data) => {
+                            try
+                            {
+                                hairSubmenuOptionsHoverCount--;
+                                if (hairSubmenuOptionsHoverCount < 0) hairSubmenuOptionsHoverCount = 0;
+                                hairSubmenuOptionsHovered = hairSubmenuOptionsHoverCount > 0;
+                                hairSubmenuLastHoverTime = Time.unscaledTime;
+
+                                Atom tgt = null;
+                                try
+                                {
+                                    if (!string.IsNullOrEmpty(hairSubmenuTargetAtomUid)) tgt = SuperController.singleton.GetAtomByUid(hairSubmenuTargetAtomUid);
+                                }
+                                catch { }
+                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+
+                                if (tgt != null && !string.IsNullOrEmpty(uid))
+                                {
+                                    ClearHairPreview(tgt, uid);
+                                }
+                            }
+                            catch { }
+                        });
+                        et.triggers.Add(exitEntry);
+                    }
+                    catch { }
                     if (btn != null)
                     {
                         btn.onClick.RemoveAllListeners();
                         if (!string.IsNullOrEmpty(uid))
                         {
                             btn.onClick.AddListener(() => {
+                                Atom tgt = null;
                                 try
                                 {
-                                    Atom tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                    try
+                                    {
+                                        if (!string.IsNullOrEmpty(hairSubmenuTargetAtomUid)) tgt = SuperController.singleton.GetAtomByUid(hairSubmenuTargetAtomUid);
+                                    }
+                                    catch { }
+                                    if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
                                     if (tgt == null) return;
+
+                                    ClearHairPreview();
+
                                     UIDraggableItem dragger = rightRemoveAllHairBtn != null ? rightRemoveAllHairBtn.GetComponent<UIDraggableItem>() : null;
                                     if (dragger == null && rightRemoveAllHairBtn != null) dragger = rightRemoveAllHairBtn.AddComponent<UIDraggableItem>();
                                     if (dragger != null)
@@ -2400,11 +2493,19 @@ namespace VPB
                                         dragger.RemoveHairItemByUid(tgt, uid);
                                     }
                                 }
+                                catch { }
                                 finally
                                 {
-                                    hairSubmenuOpen = false;
-                                    SetHairSubmenuButtonsVisible(false);
-                                    UpdateSideButtonPositions();
+                                    // Keep submenu open; SyncHairSubmenu will close only if no options remain.
+                                    if (tgt != null)
+                                    {
+                                        SyncHairSubmenu(tgt, true);
+                                        hairSubmenuLastHoverTime = Time.unscaledTime;
+                                        hairSubmenuParentHovered = true;
+                                        hairSubmenuOptionsHovered = true;
+                                        hairSubmenuParentHoverCount = Mathf.Max(1, hairSubmenuParentHoverCount);
+                                        hairSubmenuOptionsHoverCount = Mathf.Max(1, hairSubmenuOptionsHoverCount);
+                                    }
                                 }
                             });
                         }
@@ -2422,14 +2523,158 @@ namespace VPB
             hairSubmenuOpen = !hairSubmenuOpen;
             if (hairSubmenuOpen)
             {
+                ClearHairPreview();
                 PopulateHairSubmenuButtons(target);
             }
             else
             {
-                SetHairSubmenuButtonsVisible(false);
+                CloseHairSubmenuUI();
             }
 
             UpdateSideButtonPositions();
+        }
+
+        private void CloseHairSubmenuUI()
+        {
+            try
+            {
+                ClearHairPreview();
+                hairSubmenuOpen = false;
+                hairSubmenuParentHovered = false;
+                hairSubmenuOptionsHovered = false;
+                hairSubmenuParentHoverCount = 0;
+                hairSubmenuOptionsHoverCount = 0;
+                hairSubmenuLastOptionCount = 0;
+                SetHairSubmenuButtonsVisible(false);
+            }
+            catch { }
+        }
+
+        private void SyncHairSubmenu(Atom target, bool keepOpenIfHasOptions)
+        {
+            if (target == null) { CloseHairSubmenuUI(); return; }
+            PopulateHairSubmenuButtons(target);
+            int options = 0;
+            try { options = hairSubmenuLastOptionCount; }
+            catch { options = 0; }
+
+            if (options <= 0)
+            {
+                CloseHairSubmenuUI();
+            }
+            else
+            {
+                hairSubmenuOpen = keepOpenIfHasOptions;
+                UpdateRemoveHairButtonLabels(options);
+            }
+            UpdateSideButtonPositions();
+        }
+
+        private void UpdateRemoveHairButtonLabels(int optionCount)
+        {
+            UpdateRemoveButtonLabels(leftRemoveAllHairBtn, rightRemoveAllHairBtn, "Remove\nHair", optionCount);
+        }
+
+        private void ApplyHairPreview(Atom target, string itemUid)
+        {
+            try
+            {
+                if (target == null || string.IsNullOrEmpty(itemUid)) return;
+
+                if (!string.IsNullOrEmpty(previewRemoveHairAtomUid) && !string.IsNullOrEmpty(previewRemoveHairItemUid))
+                {
+                    if (!string.Equals(previewRemoveHairAtomUid, target.uid, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(previewRemoveHairItemUid, itemUid, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ClearHairPreview();
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(previewRemoveHairAtomUid) && !string.IsNullOrEmpty(previewRemoveHairItemUid))
+                {
+                    return;
+                }
+
+                JSONStorable geometry = null;
+                try { geometry = target.GetStorableByID("geometry"); } catch { }
+                if (geometry == null) return;
+
+                JSONStorableBool active = null;
+                try { active = geometry.GetBoolJSONParam("hair:" + itemUid); } catch { }
+                if (active == null) return;
+
+                previewRemoveHairAtomUid = target.uid;
+                previewRemoveHairItemUid = itemUid;
+                previewRemoveHairPrevGeometryVal = active.val;
+
+                if (active.val) active.val = false;
+            }
+            catch { }
+        }
+
+        private void ClearHairPreview(Atom target, string itemUid)
+        {
+            try
+            {
+                if (target == null || string.IsNullOrEmpty(itemUid)) return;
+                if (string.IsNullOrEmpty(previewRemoveHairAtomUid) || string.IsNullOrEmpty(previewRemoveHairItemUid)) return;
+                if (!string.Equals(previewRemoveHairAtomUid, target.uid, StringComparison.OrdinalIgnoreCase)) return;
+                if (!string.Equals(previewRemoveHairItemUid, itemUid, StringComparison.OrdinalIgnoreCase)) return;
+                RestoreHairPreview();
+            }
+            catch { }
+        }
+
+        private void ClearHairPreview()
+        {
+            try { RestoreHairPreview(); }
+            catch { }
+        }
+
+        private void RestoreHairPreview()
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(previewRemoveHairAtomUid) || string.IsNullOrEmpty(previewRemoveHairItemUid))
+                {
+                    previewRemoveHairAtomUid = null;
+                    previewRemoveHairItemUid = null;
+                    previewRemoveHairPrevGeometryVal = null;
+                    return;
+                }
+
+                Atom atom = null;
+                try { atom = SuperController.singleton.GetAtomByUid(previewRemoveHairAtomUid); } catch { }
+                if (atom == null)
+                {
+                    previewRemoveHairAtomUid = null;
+                    previewRemoveHairItemUid = null;
+                    previewRemoveHairPrevGeometryVal = null;
+                    return;
+                }
+
+                JSONStorable geometry = null;
+                try { geometry = atom.GetStorableByID("geometry"); } catch { }
+                if (geometry != null)
+                {
+                    JSONStorableBool active = null;
+                    try { active = geometry.GetBoolJSONParam("hair:" + previewRemoveHairItemUid); } catch { }
+                    if (active != null && previewRemoveHairPrevGeometryVal.HasValue)
+                    {
+                        active.val = previewRemoveHairPrevGeometryVal.Value;
+                    }
+                }
+
+                previewRemoveHairAtomUid = null;
+                previewRemoveHairItemUid = null;
+                previewRemoveHairPrevGeometryVal = null;
+            }
+            catch
+            {
+                previewRemoveHairAtomUid = null;
+                previewRemoveHairItemUid = null;
+                previewRemoveHairPrevGeometryVal = null;
+            }
         }
 
         private void UpdateSideContextActions()
@@ -2453,11 +2698,18 @@ namespace VPB
                 Atom tgt = null;
                 try { tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { }
 
-                bool hasOptions = false;
+                int count = 0;
                 try
                 {
                     if (tgt != null)
                     {
+                        // When submenu is open, keep label count stable by using the cached submenu option count.
+                        if (clothingSubmenuOpen)
+                        {
+                            count = clothingSubmenuLastOptionCount;
+                        }
+                        else
+                        {
                         bool shouldCheck = true;
                         try
                         {
@@ -2470,11 +2722,10 @@ namespace VPB
 
                         if (!shouldCheck)
                         {
-                            hasOptions = clothingLabelLastHasOptions;
+                            count = clothingLabelLastCount;
                         }
                         else
                         {
-                            bool found = false;
                             try
                             {
                                 JSONStorable geometry = null;
@@ -2485,40 +2736,89 @@ namespace VPB
                                     {
                                         if (string.IsNullOrEmpty(name)) continue;
                                         if (!name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+
+                                        string clothingUid = null;
+                                        try { clothingUid = name.Substring(9); } catch { }
+                                        if (string.IsNullOrEmpty(clothingUid)) continue;
+
+                                        // Skip built-in clothing (ref impl does this to avoid issues)
+                                        if (!clothingUid.Contains("/")) continue;
+
+                                        bool isPreviewItem = (!string.IsNullOrEmpty(previewRemoveClothingAtomUid)
+                                            && !string.IsNullOrEmpty(previewRemoveClothingItemUid)
+                                            && string.Equals(previewRemoveClothingAtomUid, tgt.uid, StringComparison.OrdinalIgnoreCase)
+                                            && string.Equals(previewRemoveClothingItemUid, clothingUid, StringComparison.OrdinalIgnoreCase)
+                                            && previewRemoveClothingPrevGeometryVal.HasValue
+                                            && previewRemoveClothingPrevGeometryVal.Value);
+
                                         JSONStorableBool jsb = null;
                                         try { jsb = geometry.GetBoolJSONParam(name); } catch { }
-                                        if (jsb == null || !jsb.val) continue;
+                                        if (jsb == null) continue;
 
-                                        string uid = null;
-                                        try { uid = name.Substring(9); } catch { }
-                                        if (string.IsNullOrEmpty(uid)) continue;
-                                        if (!uid.Contains("/")) continue;
-
-                                        found = true;
-                                        break;
+                                        // Count submenu options, not current active bools.
+                                        if (jsb.val || isPreviewItem) count++;
                                     }
                                 }
                             }
                             catch { }
 
-                            hasOptions = found;
                             try
                             {
                                 clothingLabelLastCheckTime = Time.unscaledTime;
                                 clothingLabelLastAtomUid = tgt.uid;
-                                clothingLabelLastHasOptions = hasOptions;
+                                clothingLabelLastHasOptions = count > 0;
+                                clothingLabelLastCount = count;
                             }
                             catch { }
+                        }
                         }
                     }
                 }
                 catch { }
 
-                UpdateRemoveClothingButtonLabels(hasOptions);
+                UpdateRemoveClothingButtonLabels(count);
             }
             else
             {
-                UpdateRemoveClothingButtonLabels(false);
+                UpdateRemoveClothingButtonLabels(0);
+            }
+
+            if (isHair)
+            {
+                int count = 0;
+                try
+                {
+                    Atom tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                    if (tgt != null)
+                    {
+                        // When submenu is open, keep label count stable by using the cached submenu option count.
+                        if (hairSubmenuOpen)
+                        {
+                            count = hairSubmenuLastOptionCount;
+                        }
+                        else
+                        {
+                            DAZCharacterSelector dcs = null;
+                            try { dcs = tgt.GetComponentInChildren<DAZCharacterSelector>(); } catch { }
+                            if (dcs != null && dcs.hairItems != null)
+                            {
+                                foreach (var it in dcs.hairItems)
+                                {
+                                    if (it == null) continue;
+                                    bool active = false;
+                                    try { active = it.active; } catch { active = false; }
+                                    if (active) count++;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+                UpdateRemoveHairButtonLabels(count);
+            }
+            else
+            {
+                UpdateRemoveHairButtonLabels(0);
             }
 
             if (!isHair && hairSubmenuOpen)

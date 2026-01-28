@@ -163,6 +163,17 @@ namespace VPB
         private float hairSubmenuLastHoverTime = 0f;
         private const float HairSubmenuAutoHideDelay = 1.5f;
 
+        private string hairSubmenuTargetAtomUid = null;
+
+        private int hairSubmenuLastOptionCount = 0;
+
+        private float hairSubmenuLastSyncTime = 0f;
+        private const float HairSubmenuSyncInterval = 0.5f;
+
+        private string previewRemoveHairAtomUid = null;
+        private string previewRemoveHairItemUid = null;
+        private bool? previewRemoveHairPrevGeometryVal = null;
+
         private bool clothingSubmenuOpen = false;
         private List<GameObject> rightRemoveClothingSubmenuButtons = new List<GameObject>();
         private List<GameObject> leftRemoveClothingSubmenuButtons = new List<GameObject>();
@@ -186,6 +197,10 @@ namespace VPB
         private float clothingLabelLastCheckTime = 0f;
         private string clothingLabelLastAtomUid = null;
         private bool clothingLabelLastHasOptions = false;
+        private int clothingLabelLastCount = 0;
+
+        private float sideContextLastUpdateTime = 0f;
+        private const float SideContextUpdateInterval = 0.25f;
 
         private string previewRemoveClothingAtomUid = null;
         private string previewRemoveClothingItemUid = null;
