@@ -797,13 +797,6 @@ namespace VPB
                     m3.Invoke(sc, new object[] { saveName, false, false });
                     return true;
                 }
-
-                var mi = t.GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[] { typeof(string), typeof(bool), typeof(bool) }, null);
-                if (mi != null)
-                {
-                    mi.Invoke(sc, new object[] { saveName, false, false });
-                    return true;
-                }
             }
             catch (Exception ex)
             {

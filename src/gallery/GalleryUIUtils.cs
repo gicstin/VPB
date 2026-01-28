@@ -2281,7 +2281,33 @@ namespace VPB
 
         public void LoadSceneFile(string path)
         {
-            UI.LoadSceneFile(FileEntry);
+            try
+            {
+                FileEntry entry = FileEntry;
+                if (!string.IsNullOrEmpty(path))
+                {
+                    if (entry == null
+                        || (!string.Equals(entry.Uid, path, StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(entry.Path, path, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        entry = VPB.FileManager.GetFileEntry(path);
+                    }
+                }
+
+                if (entry != null)
+                {
+                    UI.LoadSceneFile(entry);
+                }
+                else if (!string.IsNullOrEmpty(path) && SuperController.singleton != null)
+                {
+                    string normalized = UI.NormalizePath(path);
+                    SuperController.singleton.Load(normalized);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] LoadSceneFile error: {ex.Message}");
+            }
         }
 
         public void LoadClothing(Atom target)
@@ -3363,7 +3389,12 @@ namespace VPB
             try
             {
                 LogUtil.Log($"[VPB] MergeSceneFile started: {path} (atPlayer: {atPlayer})");
-                bool installed = EnsureInstalled();
+                FileEntry entryForPath = null;
+                try { entryForPath = VPB.FileManager.GetFileEntry(path); } catch { }
+                if (entryForPath == null) entryForPath = FileEntry;
+
+                bool installed = false;
+                try { installed = UI.EnsureInstalled(entryForPath); } catch { installed = false; }
 
                 if (installed)
                 {
@@ -3375,8 +3406,7 @@ namespace VPB
                 string normalizedPath = UI.NormalizePath(path);
                 try
                 {
-                    FileEntry fe = FileManager.GetFileEntry(path);
-                    if (SceneLoadingUtils.TryPrepareLocalSceneForLoad(fe, out string rewritten))
+                    if (SceneLoadingUtils.TryPrepareLocalSceneForLoad(entryForPath, out string rewritten))
                     {
                         normalizedPath = UI.NormalizePath(rewritten);
                         LogUtil.Log($"[VPB] Using rewritten scene: {normalizedPath}");
@@ -3399,27 +3429,9 @@ namespace VPB
                         foreach (Atom a in sc.GetAtoms()) atomsBefore.Add(a.uid);
                     }
 
-                    // Try LoadMerge first (public in some versions/scripts)
-                    MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
-                    if (loadMerge != null)
+                    if (!SceneLoadingUtils.LoadScene(normalizedPath, true))
                     {
-                        LogUtil.Log("[VPB] Calling sc.LoadMerge");
-                        loadMerge.Invoke(sc, new object[] { normalizedPath });
-                    }
-                    else
-                    {
-                        // Use reflection to call LoadInternal which supports merging
-                        MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (loadInternal != null)
-                        {
-                            LogUtil.Log("[VPB] Calling sc.LoadInternal(merge=true)");
-                            loadInternal.Invoke(sc, new object[] { normalizedPath, true, false });
-                        }
-                        else
-                        {
-                            LogUtil.LogWarning("[VPB] No merge method found, falling back to sc.Load");
-                            sc.Load(normalizedPath);
-                        }
+                        LogUtil.LogError("[VPB] MergeSceneFile failed: scene load returned false");
                     }
 
                     if (atPlayer)
@@ -3644,31 +3656,15 @@ namespace VPB
                 LogUtil.Log($"[VPB] Tracking {atomsBefore.Count} atoms before merge for teleport.");
             }
 
-            string tempPath = CreateFilteredSceneJSON(normalizedPath, this.FileEntry, atomFilter, ensureUniqueIds);
+            string tempPath = SceneLoadingUtils.CreateFilteredSceneJSON(normalizedPath, this.FileEntry, atomFilter, ensureUniqueIds);
             if (!string.IsNullOrEmpty(tempPath))
             {
                 LogUtil.Log($"[VPB] Created filtered temp file: {tempPath}");
                 try
                 {
-                    MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
-                    if (loadMerge != null)
+                    if (!SceneLoadingUtils.LoadScene(tempPath, true))
                     {
-                        LogUtil.Log("[VPB] Calling sc.LoadMerge");
-                        loadMerge.Invoke(sc, new object[] { tempPath });
-                    }
-                    else
-                    {
-                        MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (loadInternal != null) 
-                        {
-                            LogUtil.Log("[VPB] Calling sc.LoadInternal(merge=true)");
-                            loadInternal.Invoke(sc, new object[] { tempPath, true, false });
-                        }
-                        else
-                        {
-                            LogUtil.LogWarning("[VPB] Neither LoadMerge nor LoadInternal found, falling back to sc.Load (might not merge!)");
-                            sc.Load(tempPath);
-                        }
+                        LogUtil.LogError($"[VPB] Failed to {label}: scene load returned false");
                     }
                     
                     if (atPlayer && atomsBefore != null)
@@ -3676,11 +3672,6 @@ namespace VPB
                         if (Panel != null) Panel.StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
                         else StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
                     }
-
-                    // Keep temp file for a bit to ensure VaM finishes loading it? 
-                    // Actually LoadMerge is synchronous for the file read, but asynchronous for the actual loading?
-                    // Usually it's safe to delete after the call returns.
-                    if (File.Exists(tempPath)) File.Delete(tempPath);
                 }
                 catch (Exception ex)
                 {
@@ -3709,7 +3700,7 @@ namespace VPB
             
             if (personUids.Count == 0)
             {
-                sc.Load(normalizedPath);
+                SceneLoadingUtils.LoadScene(normalizedPath, false);
                 yield break;
             }
 
@@ -3729,94 +3720,25 @@ namespace VPB
             string newSceneNoPersons = CreateFilteredSceneJSON(normalizedPath, this.FileEntry, (atom) => atom["type"].Value != "Person", false);
             string sceneToLoad = string.IsNullOrEmpty(newSceneNoPersons) ? normalizedPath : newSceneNoPersons;
             
-            sc.Load(sceneToLoad);
+            SceneLoadingUtils.LoadScene(sceneToLoad, false);
             
             // Wait for load
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame(); // Extra frame
-            
-            MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
-            if (loadMerge != null)
-            {
-                loadMerge.Invoke(sc, new object[] { personsOnlyTemp });
-            }
-            else
-            {
-                 // Fallback reflection
-                 MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                 if (loadInternal != null) loadInternal.Invoke(sc, new object[] { personsOnlyTemp, true, false });
-            }
-            
-            if (File.Exists(personsOnlyTemp)) File.Delete(personsOnlyTemp);
-            if (File.Exists(newSceneNoPersons)) File.Delete(newSceneNoPersons);
+
+            SceneLoadingUtils.LoadScene(personsOnlyTemp, true);
         }
 
         private string CreateFilteredSceneJSON(string path, FileEntry entry, Func<JSONNode, bool> atomFilter, bool ensureUniqueIds = false)
         {
             try
             {
-                LogUtil.Log($"[VPB] CreateFilteredSceneJSON: {path}");
-                
-                // Use helper which handles LoadJSON + manual read fallback
-                JSONNode root = UI.LoadJSONWithFallback(path, entry);
-                
-                if (root == null || root["atoms"] == null) 
-                {
-                    LogUtil.LogError($"[VPB] Failed to load scene JSON from {path}");
-                    return null;
-                }
-                
-                JSONArray atoms = root["atoms"].AsArray;
-                JSONArray newAtoms = new JSONArray();
-                
-                Dictionary<string, string> idMapping = new Dictionary<string, string>();
-
-                foreach(JSONNode atom in atoms)
-                {
-                    if (atomFilter(atom))
-                    {
-                        if (ensureUniqueIds)
-                        {
-                            string oldId = atom["id"].Value;
-                            string newId = oldId;
-                            
-                            if (SuperController.singleton.GetAtomByUid(newId) != null || idMapping.ContainsValue(newId))
-                            {
-                                int count = 2;
-                                while (SuperController.singleton.GetAtomByUid(newId + "#" + count) != null || idMapping.ContainsValue(newId + "#" + count))
-                                {
-                                    count++;
-                                }
-                                newId = newId + "#" + count;
-                                atom["id"] = newId;
-                                idMapping[oldId] = newId;
-                                LogUtil.Log($"[VPB] Renamed atom {oldId} to {newId} to avoid collision.");
-                            }
-                        }
-                        
-                        newAtoms.Add(atom);
-                    }
-                }
-                
-                LogUtil.Log($"[VPB] Filtered {newAtoms.Count} atoms out of {atoms.Count}");
-
-                if (newAtoms.Count == 0)
-                {
-                    LogUtil.LogWarning("[VPB] No atoms passed the filter.");
-                    return null;
-                }
-
-                root["atoms"] = newAtoms;
-                
-                string tempPath = Path.Combine(SuperController.singleton.savesDir, "vpb_temp_" + Guid.NewGuid().ToString() + ".json");
-                File.WriteAllText(tempPath, root.ToString());
-                return tempPath;
+                return SceneLoadingUtils.CreateFilteredSceneJSON(path, entry, atomFilter, ensureUniqueIds);
             }
-            catch(Exception e) 
-            { 
-                LogUtil.LogError("[VPB] Error creating filtered scene: " + e.Message + "\n" + e.StackTrace); 
-                return null; 
+            catch
+            {
+                return null;
             }
         }
 

@@ -1782,7 +1782,7 @@ namespace VPB
             // Apply UI scaling by scaling the entire GUI matrix.
             GUI.matrix = Matrix4x4.TRS(new Vector3(0, 0, 0), Quaternion.identity, new Vector3(m_UIScale, m_UIScale, 1));
 
-            if (m_Inited && LogUtil.IsSceneLoading())
+            if (m_Inited && LogUtil.IsSceneLoading() && Settings.Instance != null && Settings.Instance.ShowSceneLoadingOverlay != null && Settings.Instance.ShowSceneLoadingOverlay.Value)
             {
                 EnsureStyles();
                 var prevDepth = GUI.depth;
@@ -2108,8 +2108,18 @@ namespace VPB
         {
             LogUtil.LogWarning("LoadFromSceneWorldDialog " + saveName);
 
-            MethodInfo loadInternalMethod = typeof(SuperController).GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            loadInternalMethod.Invoke(SuperController.singleton, new object[3] { saveName, false, false });
+            try
+            {
+                if (SuperController.singleton != null)
+                {
+                    string normalized = UI.NormalizePath(saveName);
+                    SuperController.singleton.Load(normalized);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] LoadFromSceneWorldDialog failed: " + ex.Message);
+            }
 
             // Hide UI while loading a scene.
             if (m_FileBrowser != null)

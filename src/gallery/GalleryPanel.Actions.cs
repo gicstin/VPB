@@ -275,7 +275,8 @@ namespace VPB
             }
 
             float time = Time.realtimeSinceStartup;
-            bool isDoubleClick = (time - lastClickTime < 0.3f && selectedPath == file.Path);
+            string fileKey = !string.IsNullOrEmpty(file.Path) ? file.Path : file.Uid;
+            bool isDoubleClick = (time - lastClickTime < 0.3f && string.Equals(selectedPath, fileKey, StringComparison.OrdinalIgnoreCase));
             lastClickTime = time;
 
             bool selectionChanged = false;
@@ -355,9 +356,9 @@ namespace VPB
             }
 
             // Keep primary selection path for double-click detection / hover path
-            if (selectionChanged || selectedPath != file.Path)
+            if (selectionChanged || !string.Equals(selectedPath, fileKey, StringComparison.OrdinalIgnoreCase))
             {
-                selectedPath = file.Path;
+                selectedPath = fileKey;
                 selectedHubItem = null;
                 SetHoverPath(file);
                 RefreshSelectionVisuals();

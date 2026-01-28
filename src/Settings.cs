@@ -48,6 +48,7 @@ namespace VPB
         public ConfigEntry<bool> LogVerboseUi;
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<float> UiTransparencyValue;
+        public ConfigEntry<bool> ShowSceneLoadingOverlay;
         public ConfigEntry<bool> AutoPageEnabled;
         public ConfigEntry<bool> LoadDependenciesWithPackage;
         public ConfigEntry<Rect> PackageManagerWindowRect;
@@ -88,6 +89,7 @@ namespace VPB
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
+            ShowSceneLoadingOverlay = config.Bind<bool>("UI", "ShowSceneLoadingOverlay", false, "Show VPB full-screen loading overlay during scene loads.");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
             LoadDependenciesWithPackage = config.Bind<bool>("Settings", "LoadDependenciesWithPackage", true, "When loading a package, also load all its dependencies.");
 

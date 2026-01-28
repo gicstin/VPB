@@ -15,7 +15,123 @@ namespace VPB
         static int sceneLoadSerial;
         static int lastScheduledSceneLoadSerial;
 
-        private static string CreateFilteredSceneJSON(string path, FileEntry entry, Func<JSONNode, bool> atomFilter, bool ensureUniqueIds = false)
+        private static MethodInfo s_LoadMergeMethod;
+        private static MethodInfo s_LoadInternalMethod;
+
+        private static void EnsureLoadMethodsCached(SuperController sc)
+        {
+            if (sc == null) return;
+            if (s_LoadMergeMethod != null && s_LoadInternalMethod != null) return;
+
+            try
+            {
+                // Prefer public LoadMerge when present.
+                if (s_LoadMergeMethod == null)
+                {
+                    s_LoadMergeMethod = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (s_LoadInternalMethod == null)
+                {
+                    s_LoadInternalMethod = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                }
+            }
+            catch { }
+        }
+
+        public static bool LoadScene(string normalizedPath, bool merge)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(normalizedPath)) return false;
+                SuperController sc = SuperController.singleton;
+                if (sc == null) return false;
+
+                EnsureLoadMethodsCached(sc);
+
+                if (!merge)
+                {
+                    // Prefer direct public API.
+                    sc.Load(normalizedPath);
+                    return true;
+                }
+
+                // Merge load: prefer public LoadMerge when available, otherwise fallback to LoadInternal.
+                if (s_LoadMergeMethod != null)
+                {
+                    s_LoadMergeMethod.Invoke(sc, new object[] { normalizedPath });
+                    return true;
+                }
+
+                if (s_LoadInternalMethod != null)
+                {
+                    s_LoadInternalMethod.Invoke(sc, new object[] { normalizedPath, true, false });
+                    return true;
+                }
+
+                // Last resort fallback (might not merge).
+                sc.Load(normalizedPath);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string GetTempScenesDir()
+        {
+            return "Saves/scene/VPB_TempScenes";
+        }
+
+        private static void ScheduleTempFileDelete(string path, int frames = 10)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path)) return;
+                if (SuperController.singleton == null) return;
+                SuperController.singleton.StartCoroutine(DeleteFileAfterFrames(path, frames));
+            }
+            catch { }
+        }
+
+        private static IEnumerator DeleteFileAfterFrames(string path, int frames)
+        {
+            if (string.IsNullOrEmpty(path)) yield break;
+            if (frames < 1) frames = 1;
+
+            for (int i = 0; i < frames; i++) yield return new WaitForEndOfFrame();
+
+            try { if (File.Exists(path)) File.Delete(path); } catch { }
+        }
+
+        private static string WriteTempSceneJson(JSONNode root, string filePrefix)
+        {
+            try
+            {
+                if (root == null) return null;
+
+                string dir = GetTempScenesDir();
+                try { Directory.CreateDirectory(dir); } catch { }
+
+                string name = (string.IsNullOrEmpty(filePrefix) ? "vpb_scene" : filePrefix) + "_" + Guid.NewGuid().ToString() + ".json";
+                string tempPath = Path.Combine(dir, name);
+                File.WriteAllText(tempPath, root.ToString());
+
+                ScheduleTempFileDelete(tempPath, 20);
+                return tempPath.Replace('\\', '/');
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public static string CreateFilteredSceneJSON(string path, FileEntry entry, Func<JSONNode, bool> atomFilter, bool ensureUniqueIds = false)
         {
             try
             {
@@ -54,10 +170,7 @@ namespace VPB
                 if (newAtoms.Count == 0) return null;
                 root["atoms"] = newAtoms;
 
-                if (SuperController.singleton == null) return null;
-                string tempPath = Path.Combine(SuperController.singleton.savesDir, "vpb_temp_scene_" + Guid.NewGuid().ToString() + ".json");
-                File.WriteAllText(tempPath, root.ToString());
-                return tempPath;
+                return WriteTempSceneJson(root, "vpb_filtered");
             }
             catch
             {
@@ -73,28 +186,11 @@ namespace VPB
                 if (SuperController.singleton == null) return false;
 
                 string tempPath = CreateFilteredSceneJSON(scenePath, entry, (atom) => atom != null && atom["type"].Value != "Person", true);
-                if (string.IsNullOrEmpty(tempPath) || !File.Exists(tempPath)) return false;
+                if (string.IsNullOrEmpty(tempPath)) return false;
 
-                try
-                {
-                    SuperController sc = SuperController.singleton;
-                    MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
-                    if (loadMerge != null)
-                    {
-                        loadMerge.Invoke(sc, new object[] { tempPath });
-                    }
-                    else
-                    {
-                        MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (loadInternal == null) return false;
-                        loadInternal.Invoke(sc, new object[] { tempPath, true, false });
-                    }
-                    return true;
-                }
-                finally
-                {
-                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-                }
+                string loadPath = UI.NormalizePath(tempPath);
+
+                return LoadScene(loadPath, true);
             }
             catch
             {
@@ -132,12 +228,21 @@ namespace VPB
 
             if (personUids.Count == 0)
             {
-                sc.Load(scenePath);
+                sc.Load(UI.NormalizePath(scenePath));
                 yield break;
             }
 
-            string currentSceneTemp = Path.Combine(sc.savesDir, "vpb_temp_current_" + Guid.NewGuid().ToString() + ".json");
-            sc.Save(currentSceneTemp);
+            string currentSceneTemp = Path.Combine(GetTempScenesDir(), "vpb_temp_current_" + Guid.NewGuid().ToString() + ".json").Replace('\\', '/');
+            try { Directory.CreateDirectory(GetTempScenesDir()); } catch { }
+            try
+            {
+                sc.Save(currentSceneTemp);
+            }
+            catch
+            {
+                currentSceneTemp = Path.Combine(sc.savesDir, "vpb_temp_current_" + Guid.NewGuid().ToString() + ".json");
+                sc.Save(currentSceneTemp);
+            }
 
             string personsOnlyTemp = CreateFilteredSceneJSON(currentSceneTemp, null, (atom) => atom != null && atom["type"].Value == "Person", false);
             try { if (File.Exists(currentSceneTemp)) File.Delete(currentSceneTemp); } catch { }
@@ -161,25 +266,16 @@ namespace VPB
                 false);
 
             string sceneToLoad = string.IsNullOrEmpty(newSceneFiltered) ? scenePath : newSceneFiltered;
-            sc.Load(sceneToLoad);
+            LoadScene(UI.NormalizePath(sceneToLoad), false);
 
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
 
-            MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
-            if (loadMerge != null)
-            {
-                loadMerge.Invoke(sc, new object[] { personsOnlyTemp });
-            }
-            else
-            {
-                MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (loadInternal != null) loadInternal.Invoke(sc, new object[] { personsOnlyTemp, true, false });
-            }
+            LoadScene(UI.NormalizePath(personsOnlyTemp), true);
 
-            try { if (File.Exists(personsOnlyTemp)) File.Delete(personsOnlyTemp); } catch { }
-            try { if (!string.IsNullOrEmpty(newSceneFiltered) && File.Exists(newSceneFiltered)) File.Delete(newSceneFiltered); } catch { }
+            ScheduleTempFileDelete(personsOnlyTemp, 30);
+            ScheduleTempFileDelete(newSceneFiltered, 30);
         }
 
         private static void RewriteCustomPathsRecursive(JSONNode node, List<string> unresolved, ref int replaced)
@@ -233,11 +329,19 @@ namespace VPB
             loadPath = null;
             if (entry == null) return false;
 
-            string uidOrPath = entry.Uid;
+            string uidOrPath = !string.IsNullOrEmpty(entry.Uid) ? entry.Uid : entry.Path;
             if (string.IsNullOrEmpty(uidOrPath)) return false;
 
-            string p = uidOrPath.Replace('\\', '/');
-            if (!p.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase)) return false;
+            string p;
+            try
+            {
+                p = UI.NormalizePath(uidOrPath);
+            }
+            catch
+            {
+                p = uidOrPath;
+            }
+            p = (p ?? "").Replace('\\', '/');
             if (!p.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
 
             JSONNode root;
@@ -274,21 +378,9 @@ namespace VPB
                 return false;
             }
 
-            string tempDir = "Saves/PluginData/VPB/TempScenes";
-            string safeName = entry.Name;
-            string outPath = tempDir + "/" + safeName + ".vpb.json";
-
-            try
-            {
-                Directory.CreateDirectory(tempDir);
-                File.WriteAllText(outPath, root.ToString());
-                loadPath = outPath;
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogWarning($"[VPB] TryPrepareLocalSceneForLoad: failed to write temp scene {outPath}: {ex.Message}");
-                return false;
-            }
+            string outPath = WriteTempSceneJson(root, "vpb_rewrite");
+            if (string.IsNullOrEmpty(outPath)) return false;
+            loadPath = outPath;
 
             if (unresolved.Count > 0)
             {

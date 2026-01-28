@@ -2,6 +2,7 @@
 using System.Text.RegularExpressions;
 using System;
 using System.IO;
+using System.Reflection;
 using System.Collections.Generic;
 using BepInEx;
 using UnityEngine;
@@ -27,6 +28,37 @@ namespace VPB
                 if (LogUtil.IsSceneLoading()) return;
 
                 _forcedLoadingUiFrame = Time.frameCount;
+
+                // Best-effort: enable VaM's loading UI *only* if a well-known flag exists.
+                // Do NOT invoke unknown methods or force 'isLoading' flags, as that can block scene loads.
+                try
+                {
+                    var t = sc.GetType();
+                    const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+                    try
+                    {
+                        var p = t.GetProperty("loadingUIActive", flags);
+                        if (p != null && p.PropertyType == typeof(bool) && p.CanWrite)
+                        {
+                            p.SetValue(sc, true, null);
+                            return;
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        var f = t.GetField("loadingUIActive", flags);
+                        if (f != null && f.FieldType == typeof(bool))
+                        {
+                            f.SetValue(sc, true);
+                            return;
+                        }
+                    }
+                    catch { }
+                }
+                catch { }
             }
             catch { }
         }

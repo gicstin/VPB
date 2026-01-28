@@ -2135,23 +2135,7 @@ namespace VPB
                         if (SuperController.singleton == null) return;
                         if (!File.Exists(undoTempPath)) return;
 
-                        MethodInfo loadMerge = SuperController.singleton.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
-                        if (loadMerge != null)
-                        {
-                            loadMerge.Invoke(SuperController.singleton, new object[] { undoTempPath });
-                        }
-                        else
-                        {
-                            MethodInfo loadInternal = SuperController.singleton.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                            if (loadInternal != null)
-                            {
-                                loadInternal.Invoke(SuperController.singleton, new object[] { undoTempPath, true, false });
-                            }
-                            else
-                            {
-                                SuperController.singleton.Load(undoTempPath);
-                            }
-                        }
+                        SceneLoadingUtils.LoadScene(undoTempPath, true);
                     }
                     catch { }
                     finally
