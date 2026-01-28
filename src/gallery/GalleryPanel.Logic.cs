@@ -181,6 +181,10 @@ namespace VPB
             tagCounts.Clear();
             if (FileManager.PackagesByUid == null) return;
 
+            clothingGenderCountAll = 0;
+            clothingGenderCountFemale = 0;
+            clothingGenderCountMale = 0;
+
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             // Build extension set for fast lookup
             HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -257,6 +261,32 @@ namespace VPB
                     }
 
                     if (!match) continue;
+
+                    // Update clothing gender counts (before applying gender filter)
+                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        ClothingLoadingUtils.ResourceKind kAll;
+                        ClothingLoadingUtils.ResourceGender gAll;
+                        ClothingLoadingUtils.ClassifyClothingHairPath(internalPath, out kAll, out gAll);
+                        if (kAll == ClothingLoadingUtils.ResourceKind.Clothing)
+                        {
+                            clothingGenderCountAll++;
+                            if (gAll == ClothingLoadingUtils.ResourceGender.Female) clothingGenderCountFemale++;
+                            else if (gAll == ClothingLoadingUtils.ResourceGender.Male) clothingGenderCountMale++;
+                        }
+                    }
+
+                    // Clothing gender filter affects tag counts too
+                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        !string.IsNullOrEmpty(currentClothingGenderFilter) && currentClothingGenderFilter != "All")
+                    {
+                        ClothingLoadingUtils.ResourceKind k;
+                        ClothingLoadingUtils.ResourceGender g;
+                        ClothingLoadingUtils.ClassifyClothingHairPath(internalPath, out k, out g);
+                        if (k != ClothingLoadingUtils.ResourceKind.Clothing) continue;
+                        if (currentClothingGenderFilter == "Female" && g != ClothingLoadingUtils.ResourceGender.Female) continue;
+                        if (currentClothingGenderFilter == "Male" && g != ClothingLoadingUtils.ResourceGender.Male) continue;
+                    }
 
                     string pathLower = internalPath.ToLowerInvariant();
                     

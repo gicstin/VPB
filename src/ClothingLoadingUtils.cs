@@ -14,6 +14,90 @@ namespace VPB
     {
         private static MethodInfo s_ClothingClearMethod;
 
+        public enum ResourceGender
+        {
+            Unknown = 0,
+            Female = 1,
+            Male = 2,
+        }
+
+        public enum ResourceKind
+        {
+            Unknown = 0,
+            Clothing = 1,
+            Hair = 2,
+        }
+
+        public static void ClassifyClothingHairPath(string pathOrUid, out ResourceKind kind, out ResourceGender gender)
+        {
+            kind = ResourceKind.Unknown;
+            gender = ResourceGender.Unknown;
+            if (string.IsNullOrEmpty(pathOrUid)) return;
+
+            // Expected patterns include:
+            // - Custom/Clothing/Female/...
+            // - Custom/Clothing/Male/...
+            // - package.var:/Custom/Clothing/Female/...
+            // We keep this allocation-free: no Replace/ToLower/Substring.
+
+            int start = 0;
+            int idx = pathOrUid.IndexOf(":/", StringComparison.Ordinal);
+            if (idx >= 0) start = idx + 2;
+            else
+            {
+                idx = pathOrUid.IndexOf(":\\", StringComparison.Ordinal);
+                if (idx >= 0) start = idx + 2;
+            }
+            if (start < pathOrUid.Length && (pathOrUid[start] == '/' || pathOrUid[start] == '\\')) start++;
+
+            // Also handle cases where we get full paths that contain "/Custom/..." somewhere in the middle.
+            int customIdx = pathOrUid.IndexOf("Custom/", start, StringComparison.OrdinalIgnoreCase);
+            if (customIdx < 0) customIdx = pathOrUid.IndexOf("Custom\\", start, StringComparison.OrdinalIgnoreCase);
+            if (customIdx >= 0) start = customIdx;
+
+            if (pathOrUid.IndexOf("Custom/Clothing/Female", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pathOrUid.IndexOf("Custom\\Clothing\\Female", start, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                kind = ResourceKind.Clothing;
+                gender = ResourceGender.Female;
+                return;
+            }
+            if (pathOrUid.IndexOf("Custom/Clothing/Male", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pathOrUid.IndexOf("Custom\\Clothing\\Male", start, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                kind = ResourceKind.Clothing;
+                gender = ResourceGender.Male;
+                return;
+            }
+            if (pathOrUid.IndexOf("Custom/Hair/Female", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pathOrUid.IndexOf("Custom\\Hair\\Female", start, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                kind = ResourceKind.Hair;
+                gender = ResourceGender.Female;
+                return;
+            }
+            if (pathOrUid.IndexOf("Custom/Hair/Male", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pathOrUid.IndexOf("Custom\\Hair\\Male", start, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                kind = ResourceKind.Hair;
+                gender = ResourceGender.Male;
+                return;
+            }
+
+            if (pathOrUid.IndexOf("Custom/Clothing", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pathOrUid.IndexOf("Custom\\Clothing", start, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                kind = ResourceKind.Clothing;
+                return;
+            }
+            if (pathOrUid.IndexOf("Custom/Hair", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pathOrUid.IndexOf("Custom\\Hair", start, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                kind = ResourceKind.Hair;
+                return;
+            }
+        }
+
         private static bool TryInvokeAction(JSONStorable storable, string actionName)
         {
             if (storable == null || string.IsNullOrEmpty(actionName)) return false;

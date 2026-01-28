@@ -2024,6 +2024,20 @@ namespace VPB
 				FileEntry fileEntry = sortedFilesAndDir.FileEntry;
 				if (fileEntry != null)
 				{
+						if (needFilterClothing && clothingGenderFilterChooser != null && clothingGenderFilterChooser.val != null && clothingGenderFilterChooser.val != "All")
+						{
+							ClothingLoadingUtils.ResourceKind k;
+							ClothingLoadingUtils.ResourceGender g;
+							ClothingLoadingUtils.ClassifyClothingHairPath(fileEntry.Uid, out k, out g);
+							if (k != ClothingLoadingUtils.ResourceKind.Clothing ||
+								(g != ClothingLoadingUtils.ResourceGender.Female && g != ClothingLoadingUtils.ResourceGender.Male) ||
+								(clothingGenderFilterChooser.val == "Female" && g != ClothingLoadingUtils.ResourceGender.Female) ||
+								(clothingGenderFilterChooser.val == "Male" && g != ClothingLoadingUtils.ResourceGender.Male))
+							{
+								HideButton(sortedFilesAndDir);
+								continue;
+							}
+						}
 						if (clothTag != null && clothTag.Count > 0)
 						{
 							bool includeNoTag = clothTag.Contains("no tag");
@@ -2456,6 +2470,7 @@ namespace VPB
 						if (item.val) h = h * 31 + item.name.GetHashCode();
 					}
 					h = h * 31 + (unknownClothingTagFilterChooser == null || unknownClothingTagFilterChooser.val == null ? 0 : unknownClothingTagFilterChooser.val.GetHashCode());
+					h = h * 31 + (clothingGenderFilterChooser == null || clothingGenderFilterChooser.val == null ? 0 : clothingGenderFilterChooser.val.GetHashCode());
 				}
 				if (needFilterHair)
 				{
@@ -2629,6 +2644,21 @@ namespace VPB
 			}
 			FileEntry fileEntry = info.FileEntry;
 
+			if (needFilterClothing && clothingGenderFilterChooser != null && clothingGenderFilterChooser.val != null && clothingGenderFilterChooser.val != "All")
+			{
+				ClothingLoadingUtils.ResourceKind k;
+				ClothingLoadingUtils.ResourceGender g;
+				ClothingLoadingUtils.ClassifyClothingHairPath(fileEntry.Uid, out k, out g);
+				if (k != ClothingLoadingUtils.ResourceKind.Clothing ||
+					(g != ClothingLoadingUtils.ResourceGender.Female && g != ClothingLoadingUtils.ResourceGender.Male) ||
+					(clothingGenderFilterChooser.val == "Female" && g != ClothingLoadingUtils.ResourceGender.Female) ||
+					(clothingGenderFilterChooser.val == "Male" && g != ClothingLoadingUtils.ResourceGender.Male))
+				{
+					return false;
+				}
+			}
+
+			if (clothTag != null && clothTag.Count > 0)
 			{
 				bool includeNoTag = clothTag.Contains("no tag");
 				bool includeUnknownTag = clothTag.Contains("unknown");
@@ -3384,6 +3414,13 @@ namespace VPB
 				onlyAllowSingleFilter = new JSONStorableBool("Only Allow Single Filter", false, SetClothingOnlyAllowSingleFilter);
 				CreateToggle(container0, onlyAllowSingleFilter);// Height 50
 
+				var genderList = new List<string>();
+				genderList.Add("All");
+				genderList.Add("Female");
+				genderList.Add("Male");
+				clothingGenderFilterChooser = new JSONStorableStringChooser("Gender", genderList, "All", "Gender", SyncClothingGenderFilter);
+				CreateFilterablePopup(container0, clothingGenderFilterChooser);// Height 120
+
 				var list = new List<string>();
 				foreach (var item in TagFilter.ClothingUnknownTags)
 				{
@@ -3438,7 +3475,12 @@ namespace VPB
 
 		}
 		JSONStorableStringChooser unknownClothingTagFilterChooser;
+		JSONStorableStringChooser clothingGenderFilterChooser;
 		JSONStorableStringChooser unknownHairTagFilterChooser;
+		void SyncClothingGenderFilter(string s)
+		{
+			ResetDisplayedPage();
+		}
 		void SyncUnknownClothingFilter(string s)
 		{
 			ResetDisplayedPage();

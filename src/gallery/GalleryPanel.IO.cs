@@ -15,6 +15,20 @@ namespace VPB
         {
             if (entry == null) return false;
 
+            // Clothing gender filter (Gallery left Tags panel)
+            // Only applies when browsing Clothing category and user selected Female/Male.
+            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isClothing && !string.IsNullOrEmpty(currentClothingGenderFilter) && currentClothingGenderFilter != "All")
+            {
+                ClothingLoadingUtils.ResourceKind k;
+                ClothingLoadingUtils.ResourceGender g;
+                ClothingLoadingUtils.ClassifyClothingHairPath(entry.Path, out k, out g);
+                if (k != ClothingLoadingUtils.ResourceKind.Clothing) return false;
+                if (currentClothingGenderFilter == "Female" && g != ClothingLoadingUtils.ResourceGender.Female) return false;
+                if (currentClothingGenderFilter == "Male" && g != ClothingLoadingUtils.ResourceGender.Male) return false;
+            }
+
             // Status Filter
             if (!string.IsNullOrEmpty(currentStatus))
             {

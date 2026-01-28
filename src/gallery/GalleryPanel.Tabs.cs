@@ -565,6 +565,35 @@ namespace VPB
                 
                 if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
+                    // Gender filter controls (shown only for Clothing)
+                    {
+                        Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
+                        Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
+
+                        string[] options = new string[] { "All", "Female", "Male" };
+                        for (int gi = 0; gi < options.Length; gi++)
+                        {
+                            string opt = options[gi];
+                            bool isActive = string.Equals(currentClothingGenderFilter ?? "All", opt, StringComparison.OrdinalIgnoreCase);
+                            Color btnColor = isActive ? active : inactive;
+
+                            int cnt = 0;
+                            if (opt == "All") cnt = clothingGenderCountAll;
+                            else if (opt == "Female") cnt = clothingGenderCountFemale;
+                            else if (opt == "Male") cnt = clothingGenderCountMale;
+
+                            string label = opt + " (" + cnt + ")";
+
+                            CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                                currentClothingGenderFilter = opt;
+                                tagsCached = false;
+                                currentPage = 0;
+                                RefreshFiles();
+                                UpdateTabs();
+                            }, trackedButtons);
+                        }
+                    }
+
                     tagsToShow.AddRange(TagFilter.ClothingTypeTags);
                     tagsToShow.AddRange(TagFilter.ClothingRegionTags);
                     tagsToShow.AddRange(TagFilter.ClothingOtherTags);
