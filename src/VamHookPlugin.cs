@@ -210,6 +210,7 @@ namespace VPB
         private Texture2D m_TexBtnCheckboxBgActive;
         private Texture2D m_TexWindowBorder;
         private Texture2D m_TexWindowBorderActive;
+        private Texture2D m_TexLoadingOverlay;
         private Texture2D m_TexInfoCardBg;
         private Texture2D m_TexFpsBadgeBg;
         private Texture2D m_TexFpsBadgeOuterBg;
@@ -387,6 +388,7 @@ namespace VPB
 
             m_TexWindowBorder = MakeTex(new Color(0.20f, 0.22f, 0.26f, borderAlpha));
             m_TexWindowBorderActive = MakeTex(new Color(0.12f, 0.50f, 0.85f, 0.88f));
+            m_TexLoadingOverlay = MakeTex(new Color(0f, 0f, 0f, 1f));
             m_TexInfoCardBg = MakeBorderedTex(12, 12, new Color(0.12f, 0.14f, 0.18f, 0.82f), new Color(0.60f, 0.75f, 0.95f, 0.12f), 1);
             m_TexFpsBadgeBg = MakeTex(new Color(0.10f, 0.11f, 0.13f, 0.90f));
             m_TexFpsBadgeOuterBg = MakeBorderedTex(12, 12, new Color(0f, 0f, 0f, 0f), new Color(0.12f, 0.50f, 0.85f, 0.92f), 2);
@@ -778,7 +780,14 @@ namespace VPB
             this.Config.SaveOnConfigSet = true;
             if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
                 Debug.Log("VPB hook start");
+
             m_Harmony = new Harmony("VPB_hook");
+
+            try
+            {
+                m_Harmony.UnpatchAll("VPB_hook");
+            }
+            catch { }
             // Patch VaM/Harmony hook points.
             SuperControllerHook.PatchOptional(m_Harmony);
             m_Harmony.PatchAll(typeof(AtomHook));
@@ -975,11 +984,16 @@ namespace VPB
         {
             if (m_PendingGc)
             {
-                m_PendingGc = false;
-                DAZMorphMgr.singleton.cache.Clear();
-                ImageLoadingMgr.singleton.ClearCache();
-                GC.Collect();
-                Resources.UnloadUnusedAssets();
+                // Avoid forcing unload/GC during scene load; it can interfere with VaM's load lifecycle
+                // and cause visible scene/atom pops.
+                if (!LogUtil.IsSceneLoading())
+                {
+                    m_PendingGc = false;
+                    DAZMorphMgr.singleton.cache.Clear();
+                    ImageLoadingMgr.singleton.ClearCache();
+                    GC.Collect();
+                    Resources.UnloadUnusedAssets();
+                }
             }
 
             VdsLauncher.TryExecuteOnce();
@@ -1768,6 +1782,34 @@ namespace VPB
             // Apply UI scaling by scaling the entire GUI matrix.
             GUI.matrix = Matrix4x4.TRS(new Vector3(0, 0, 0), Quaternion.identity, new Vector3(m_UIScale, m_UIScale, 1));
 
+            if (m_Inited && LogUtil.IsSceneLoading())
+            {
+                EnsureStyles();
+                var prevDepth = GUI.depth;
+                var prevColor = GUI.color;
+                GUI.depth = -10000;
+                GUI.color = Color.white;
+                var overlayRect = new Rect(0f, 0f, Screen.width / m_UIScale, Screen.height / m_UIScale);
+                GUI.DrawTexture(overlayRect, m_TexLoadingOverlay);
+
+                string progress = m_ProgressText;
+                if (string.IsNullOrEmpty(progress))
+                {
+                    progress = "Loading...";
+                }
+                var labelStyle = (m_StyleHeader != null) ? m_StyleHeader : GUI.skin.label;
+                var prevAlign = labelStyle.alignment;
+                var prevWrap = labelStyle.wordWrap;
+                labelStyle.alignment = TextAnchor.MiddleCenter;
+                labelStyle.wordWrap = true;
+                GUI.Label(overlayRect, progress, labelStyle);
+                labelStyle.alignment = prevAlign;
+                labelStyle.wordWrap = prevWrap;
+
+                GUI.color = prevColor;
+                GUI.depth = prevDepth;
+            }
+
             if (m_Inited)
             {
                 bool show = true;
@@ -1902,21 +1944,34 @@ namespace VPB
                         var sceneClickSeconds = LogUtil.GetSceneClickSecondsForDisplay();
                         var sceneLoadSeconds = LogUtil.GetSceneLoadSecondsForDisplay();
                         string tagText;
+                        string tagTextHover;
                         if (sceneLoadSeconds.HasValue)
                         {
                             // Prefer showing load time; keep text compact to avoid truncation in small headers.
                             tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneLoadSeconds.Value);
+                            tagTextHover = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.BuildVersion, startupSeconds, sceneLoadSeconds.Value);
                         }
                         else if (sceneClickSeconds.HasValue)
                         {
                             tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneClickSeconds.Value);
+                            tagTextHover = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.BuildVersion, startupSeconds, sceneClickSeconds.Value);
                         }
                         else
                         {
                             tagText = string.Format("VPB {0} | {1:0.0}s", PluginVersionInfo.Version, startupSeconds);
+                            tagTextHover = string.Format("VPB {0} | {1:0.0}s", PluginVersionInfo.BuildVersion, startupSeconds);
                         }
-                        var tagContent = new GUIContent(tagText);
-                        float desiredTagWidth = m_TitleTagStyle != null ? m_TitleTagStyle.CalcSize(tagContent).x : 100f;
+
+                        var tagContent = new GUIContent(tagText, "VPB v" + PluginVersionInfo.Version + "\nBuild " + PluginVersionInfo.BuildVersion);
+                        var tagContentHover = new GUIContent(tagTextHover, "VPB v" + PluginVersionInfo.Version + "\nBuild " + PluginVersionInfo.BuildVersion);
+                        float desiredTagWidth = 100f;
+                        if (m_TitleTagStyle != null)
+                        {
+                            desiredTagWidth = Mathf.Max(
+                                m_TitleTagStyle.CalcSize(tagContent).x,
+                                m_TitleTagStyle.CalcSize(tagContentHover).x
+                            );
+                        }
                         float availableTagWidth = Mathf.Max(0f, m_Rect.width - 6f - titleRightPadding - fpsWidth);
                         float tagWidth = Mathf.Min(desiredTagWidth, availableTagWidth);
                         var tagRect = new Rect(m_Rect.x + 6f, headerRow1Y, tagWidth, headerHeight);
@@ -1924,7 +1979,8 @@ namespace VPB
                         GUI.contentColor = new Color(1f, 1f, 1f, m_WindowAlphaState);
                         if (m_TitleTagStyle != null)
                         {
-                            GUI.Label(tagRect, tagText, m_TitleTagStyle);
+                            bool isTagHover = tagRect.Contains(Event.current.mousePosition);
+                            GUI.Label(tagRect, isTagHover ? tagContentHover : tagContent, m_TitleTagStyle);
                         }
 
                         if (!string.IsNullOrEmpty(fpsText) && fpsRect.width > 4f && m_StyleFpsBadgeOuter != null && m_StyleFpsBadge != null)

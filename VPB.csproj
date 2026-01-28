@@ -403,6 +403,12 @@
       <PluginVersionGeneratedFile>$(IntermediateOutputPath)PluginVersion.g.cs</PluginVersionGeneratedFile>
     </PropertyGroup>
 
+    <PropertyGroup>
+      <PluginBuildDayOfYear>$([System.String]::Format('{0:000}', $([System.DateTime]::Now.DayOfYear)))</PluginBuildDayOfYear>
+      <PluginBuildTime>$([System.DateTime]::Now.ToString('HHmm'))</PluginBuildTime>
+      <PluginBuildVersion>$(PluginBuildDayOfYear).$(PluginBuildTime)</PluginBuildVersion>
+    </PropertyGroup>
+
     <ReadLinesFromFile File="$(PluginVersionFile)">
       <Output TaskParameter="Lines" ItemName="_PluginVersionLines" />
     </ReadLinesFromFile>
@@ -417,6 +423,7 @@
       <_PluginVersionSourceLines Include="namespace VPB {" />
       <_PluginVersionSourceLines Include="    internal static class PluginVersionInfo {" />
       <_PluginVersionSourceLines Include="        public const string Version = &quot;$(PluginVersion)&quot;%3B" />
+      <_PluginVersionSourceLines Include="        public const string BuildVersion = &quot;$(PluginBuildVersion)&quot;%3B" />
       <_PluginVersionSourceLines Include="    }" />
       <_PluginVersionSourceLines Include="}" />
     </ItemGroup>

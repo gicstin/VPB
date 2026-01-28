@@ -3,6 +3,7 @@ using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using MVR.FileManagement;
 using SimpleJSON;
 using UnityEngine;
@@ -13,6 +14,293 @@ namespace VPB
     {
         static int sceneLoadSerial;
         static int lastScheduledSceneLoadSerial;
+
+        private static string CreateFilteredSceneJSON(string path, FileEntry entry, Func<JSONNode, bool> atomFilter, bool ensureUniqueIds = false)
+        {
+            try
+            {
+                JSONNode root = UI.LoadJSONWithFallback(path, entry);
+                if (root == null || root["atoms"] == null) return null;
+
+                JSONArray atoms = root["atoms"].AsArray;
+                JSONArray newAtoms = new JSONArray();
+
+                Dictionary<string, string> idMapping = new Dictionary<string, string>();
+                foreach (JSONNode atom in atoms)
+                {
+                    if (atomFilter(atom))
+                    {
+                        if (ensureUniqueIds)
+                        {
+                            string oldId = atom["id"].Value;
+                            string newId = oldId;
+                            if (SuperController.singleton != null && (SuperController.singleton.GetAtomByUid(newId) != null || idMapping.ContainsValue(newId)))
+                            {
+                                int count = 2;
+                                while (SuperController.singleton.GetAtomByUid(newId + "#" + count) != null || idMapping.ContainsValue(newId + "#" + count))
+                                {
+                                    count++;
+                                }
+                                newId = newId + "#" + count;
+                                atom["id"] = newId;
+                                idMapping[oldId] = newId;
+                            }
+                        }
+
+                        newAtoms.Add(atom);
+                    }
+                }
+
+                if (newAtoms.Count == 0) return null;
+                root["atoms"] = newAtoms;
+
+                if (SuperController.singleton == null) return null;
+                string tempPath = Path.Combine(SuperController.singleton.savesDir, "vpb_temp_scene_" + Guid.NewGuid().ToString() + ".json");
+                File.WriteAllText(tempPath, root.ToString());
+                return tempPath;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public static bool TryMergeLoadSceneNoPersons(string scenePath, FileEntry entry)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(scenePath)) return false;
+                if (SuperController.singleton == null) return false;
+
+                string tempPath = CreateFilteredSceneJSON(scenePath, entry, (atom) => atom != null && atom["type"].Value != "Person", true);
+                if (string.IsNullOrEmpty(tempPath) || !File.Exists(tempPath)) return false;
+
+                try
+                {
+                    SuperController sc = SuperController.singleton;
+                    MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
+                    if (loadMerge != null)
+                    {
+                        loadMerge.Invoke(sc, new object[] { tempPath });
+                    }
+                    else
+                    {
+                        MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (loadInternal == null) return false;
+                        loadInternal.Invoke(sc, new object[] { tempPath, true, false });
+                    }
+                    return true;
+                }
+                finally
+                {
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static bool TryReplaceSceneKeepPersons(string scenePath, FileEntry entry)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(scenePath)) return false;
+                if (SuperController.singleton == null) return false;
+                if (Messager.singleton == null) return false;
+
+                Messager.singleton.StartCoroutine(ReplaceSceneKeepPersonsCoroutine(scenePath, entry));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static IEnumerator ReplaceSceneKeepPersonsCoroutine(string scenePath, FileEntry entry)
+        {
+            SuperController sc = SuperController.singleton;
+            if (sc == null) yield break;
+
+            List<string> personUids = new List<string>();
+            foreach (Atom a in sc.GetAtoms())
+            {
+                if (a.type == "Person") personUids.Add(a.uid);
+            }
+
+            if (personUids.Count == 0)
+            {
+                sc.Load(scenePath);
+                yield break;
+            }
+
+            string currentSceneTemp = Path.Combine(sc.savesDir, "vpb_temp_current_" + Guid.NewGuid().ToString() + ".json");
+            sc.Save(currentSceneTemp);
+
+            string personsOnlyTemp = CreateFilteredSceneJSON(currentSceneTemp, null, (atom) => atom != null && atom["type"].Value == "Person", false);
+            try { if (File.Exists(currentSceneTemp)) File.Delete(currentSceneTemp); } catch { }
+
+            if (string.IsNullOrEmpty(personsOnlyTemp))
+            {
+                yield break;
+            }
+
+            // Remove persons from new scene to prevent duplication/conflict.
+            string newSceneFiltered = CreateFilteredSceneJSON(
+                scenePath,
+                entry,
+                (atom) =>
+                {
+                    if (atom == null) return false;
+                    string t = atom["type"].Value;
+                    if (t == "Person") return false;
+                    return true;
+                },
+                false);
+
+            string sceneToLoad = string.IsNullOrEmpty(newSceneFiltered) ? scenePath : newSceneFiltered;
+            sc.Load(sceneToLoad);
+
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+
+            MethodInfo loadMerge = sc.GetType().GetMethod("LoadMerge", BindingFlags.Instance | BindingFlags.Public);
+            if (loadMerge != null)
+            {
+                loadMerge.Invoke(sc, new object[] { personsOnlyTemp });
+            }
+            else
+            {
+                MethodInfo loadInternal = sc.GetType().GetMethod("LoadInternal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (loadInternal != null) loadInternal.Invoke(sc, new object[] { personsOnlyTemp, true, false });
+            }
+
+            try { if (File.Exists(personsOnlyTemp)) File.Delete(personsOnlyTemp); } catch { }
+            try { if (!string.IsNullOrEmpty(newSceneFiltered) && File.Exists(newSceneFiltered)) File.Delete(newSceneFiltered); } catch { }
+        }
+
+        private static void RewriteCustomPathsRecursive(JSONNode node, List<string> unresolved, ref int replaced)
+        {
+            if (node == null) return;
+
+            if (node is JSONData jd)
+            {
+                string v = jd.Value;
+                if (!string.IsNullOrEmpty(v))
+                {
+                    string candidate = v;
+                    if (candidate.StartsWith("/")) candidate = candidate.Substring(1);
+                    if (candidate.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (VPB.FileManager.TryResolveCustomInternalPathToUidPath(candidate, out string uidPath) && !string.IsNullOrEmpty(uidPath))
+                        {
+                            jd.Value = uidPath;
+                            replaced++;
+                        }
+                        else
+                        {
+                            if (unresolved != null && unresolved.Count < 8) unresolved.Add(v);
+                        }
+                    }
+                }
+                return;
+            }
+
+            if (node is JSONArray ja)
+            {
+                for (int i = 0; i < ja.Count; i++)
+                {
+                    RewriteCustomPathsRecursive(ja[i], unresolved, ref replaced);
+                }
+                return;
+            }
+
+            if (node is JSONClass jc)
+            {
+                foreach (string k in jc.Keys)
+                {
+                    RewriteCustomPathsRecursive(jc[k], unresolved, ref replaced);
+                }
+                return;
+            }
+        }
+
+        public static bool TryPrepareLocalSceneForLoad(FileEntry entry, out string loadPath)
+        {
+            loadPath = null;
+            if (entry == null) return false;
+
+            string uidOrPath = entry.Uid;
+            if (string.IsNullOrEmpty(uidOrPath)) return false;
+
+            string p = uidOrPath.Replace('\\', '/');
+            if (!p.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!p.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+
+            JSONNode root;
+            try
+            {
+                using (var reader = entry.OpenStreamReader())
+                {
+                    string content = reader.ReadToEnd();
+                    if (string.IsNullOrEmpty(content)) return false;
+                    root = JSON.Parse(content);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning($"[VPB] TryPrepareLocalSceneForLoad: failed to read/parse scene {uidOrPath}: {ex.Message}");
+                return false;
+            }
+
+            if (root == null) return false;
+
+            int replaced = 0;
+            var unresolved = new List<string>();
+            try
+            {
+                RewriteCustomPathsRecursive(root, unresolved, ref replaced);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning($"[VPB] TryPrepareLocalSceneForLoad: rewrite failed for {uidOrPath}: {ex.Message}");
+            }
+
+            if (replaced == 0)
+            {
+                return false;
+            }
+
+            string tempDir = "Saves/PluginData/VPB/TempScenes";
+            string safeName = entry.Name;
+            string outPath = tempDir + "/" + safeName + ".vpb.json";
+
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                File.WriteAllText(outPath, root.ToString());
+                loadPath = outPath;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning($"[VPB] TryPrepareLocalSceneForLoad: failed to write temp scene {outPath}: {ex.Message}");
+                return false;
+            }
+
+            if (unresolved.Count > 0)
+            {
+                LogUtil.LogWarning($"[VPB] Scene rewrite: replaced {replaced} Custom paths, unresolved sample: {string.Join(", ", unresolved.ToArray())}");
+            }
+            else
+            {
+                LogUtil.Log($"[VPB] Scene rewrite: replaced {replaced} Custom paths");
+            }
+
+            return true;
+        }
 
         public static bool EnsureInstalled(FileEntry entry)
         {
@@ -41,9 +329,50 @@ namespace VPB
                             string content = reader.ReadToEnd();
                             if (!string.IsNullOrEmpty(content))
                             {
-                                if (FileButton.EnsureInstalledByText(content))
+                                HashSet<string> deps = null;
+                                try
                                 {
-                                    flag = true;
+                                    deps = VarNameParser.Parse(content);
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogUtil.LogWarning($"[VPB] EnsureInstalled: dependency parse failed for {entry.Path}: {ex.Message}");
+                                }
+
+                                if (deps != null)
+                                {
+                                    try
+                                    {
+                                        int depCount = deps.Count;
+                                        if (depCount > 0)
+                                        {
+                                            string sample = string.Join(", ", deps.Take(5).ToArray());
+                                            LogUtil.Log($"[VPB] EnsureInstalled: Parsed {depCount} package refs from {entry.Name}. Sample: {sample}");
+                                        }
+
+                                        int missing = 0;
+                                        foreach (string key in deps)
+                                        {
+                                            VarPackage pkg = FileManager.GetPackage(key, false);
+                                            if (pkg != null) continue;
+
+                                            if (!key.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                string latest = key.Substring(0, key.LastIndexOf('.')) + ".latest";
+                                                pkg = FileManager.GetPackage(latest, false);
+                                                if (pkg != null) continue;
+                                            }
+                                            missing++;
+                                        }
+                                        if (missing > 0)
+                                        {
+                                            LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}");
+                                        }
+                                    }
+                                    catch { }
+
+                                    bool depsChanged = FileButton.EnsureInstalledBySet(deps);
+                                    if (depsChanged) flag = true;
                                 }
                             }
                         }

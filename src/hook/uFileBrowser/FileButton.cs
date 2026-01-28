@@ -247,7 +247,7 @@ namespace VPB
             bool flag = false;
             foreach (var key in set)
             {
-                VarPackage package = FileManager.GetPackage(key);
+                VarPackage package = FileManager.GetPackage(key, false);
                 if (package != null)
                 {
                     string path = package.Path;
@@ -263,7 +263,7 @@ namespace VPB
                     if (!key.EndsWith(".latest"))
                     {
                         string newKey = key.Substring(0, key.LastIndexOf('.'))+ ".latest";
-                        VarPackage packageNewest = FileManager.GetPackage(newKey);
+                        VarPackage packageNewest = FileManager.GetPackage(newKey, false);
                         if (packageNewest != null)
                         {
                             string pathLatest = packageNewest.Path;

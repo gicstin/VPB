@@ -1627,12 +1627,26 @@ namespace VPB
 
 			LogUtil.Log($"Installing package: {Uid} from {this.Path} to {linkvar}");
 
-			// Move the file
+			// Install must be atomic.
+			// On Windows, File.Move across volumes falls back to copy+delete, which can expose a partially-copied
+			// file at the final path. VaM may read it immediately and throw ZipException (wrong local header).
 			string dir = System.IO.Path.GetDirectoryName(linkvar);
 			if (!Directory.Exists(dir))
 				Directory.CreateDirectory(dir);
 
-			File.Move(this.Path, linkvar);
+			string sourcePath = this.Path;
+			string tempTarget = linkvar + ".installing";
+			try
+			{
+				if (File.Exists(tempTarget)) File.Delete(tempTarget);
+				File.Copy(sourcePath, tempTarget, false);
+				File.Move(tempTarget, linkvar);
+				File.Delete(sourcePath);
+			}
+			finally
+			{
+				try { if (File.Exists(tempTarget)) File.Delete(tempTarget); } catch { }
+			}
 			this.Path = linkvar.Replace('\\', '/');
 			if (this.Path.StartsWith("AddonPackages/"))
 				RelativePath = this.Path.Substring("AddonPackages/".Length);

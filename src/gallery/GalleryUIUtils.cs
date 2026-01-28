@@ -3373,6 +3373,19 @@ namespace VPB
                 }
 
                 string normalizedPath = UI.NormalizePath(path);
+                try
+                {
+                    FileEntry fe = FileManager.GetFileEntry(path);
+                    if (SceneLoadingUtils.TryPrepareLocalSceneForLoad(fe, out string rewritten))
+                    {
+                        normalizedPath = UI.NormalizePath(rewritten);
+                        LogUtil.Log($"[VPB] Using rewritten scene: {normalizedPath}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning($"[VPB] Scene rewrite skipped due to error: {ex.Message}");
+                }
                 LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
                 
                 SuperController sc = SuperController.singleton;
@@ -5632,21 +5645,14 @@ namespace VPB
 
     public static class UI
     {
+        private static float _lastLoadSceneStartTime = -9999f;
+
         public static bool EnsureInstalled(FileEntry entry)
         {
             if (entry == null) return false;
             try
             {
-                bool installed = false;
-                if (entry is VarFileEntry varEntry && varEntry.Package != null)
-                {
-                    installed = varEntry.Package.InstallRecursive();
-                }
-                else if (entry is SystemFileEntry sysEntry && sysEntry.package != null)
-                {
-                    installed = sysEntry.package.InstallRecursive();
-                }
-                return installed;
+                return SceneLoadingUtils.EnsureInstalled(entry);
             }
             catch (Exception ex)
             {
@@ -5658,13 +5664,28 @@ namespace VPB
         public static void LoadSceneFile(FileEntry entry)
         {
             if (entry == null) return;
+
+            // Guard against duplicate triggers in the same click/frame burst.
+            // This can happen via UI event duplication and causes visible "default Person" flashes.
+            float now = Time.unscaledTime;
+            if (now - _lastLoadSceneStartTime < 0.75f)
+            {
+                LogUtil.LogWarning("[VPB] UI.LoadSceneFile ignored (throttled)");
+                return;
+            }
+            _lastLoadSceneStartTime = now;
+
             try
             {
                 string path = entry.Uid;
                 LogUtil.Log($"[VPB] UI.LoadSceneFile started for: {path}");
                 
                 bool installed = EnsureInstalled(entry);
-                LogUtil.Log($"[VPB] UI.EnsureInstalled result: {installed}");
+                LogUtil.Log($"[VPB] UI.EnsureInstalled (with dependency scan) depsChanged: {installed}");
+                if (!installed)
+                {
+                    LogUtil.Log("[VPB] UI.EnsureInstalled: depsChanged=false means no packages were moved; missing deps (if any) are logged above by EnsureInstalled.");
+                }
 
                 if (installed)
                 {
@@ -5676,6 +5697,19 @@ namespace VPB
                 }
 
                 string normalizedPath = UI.NormalizePath(path);
+                try
+                {
+                    if (SceneLoadingUtils.TryPrepareLocalSceneForLoad(entry, out string rewritten))
+                    {
+                        normalizedPath = UI.NormalizePath(rewritten);
+                        LogUtil.Log($"[VPB] Using rewritten scene: {normalizedPath}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning($"[VPB] Scene rewrite skipped due to error: {ex.Message}");
+                }
+
                 LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
                 
                 SuperController sc = SuperController.singleton;

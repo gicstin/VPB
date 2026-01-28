@@ -15,6 +15,22 @@ namespace VPB
         static Dictionary<string, int> _priorityCache = new Dictionary<string, int>(StringComparer.Ordinal);
         static object _priorityCacheLock = new object();
 
+        static int _forcedLoadingUiFrame = -1;
+
+        static void TryForceLoadingUiEarly(SuperController sc, string saveName)
+        {
+            try
+            {
+                if (sc == null) return;
+                if (string.IsNullOrEmpty(saveName)) return;
+                if (_forcedLoadingUiFrame == Time.frameCount) return;
+                if (LogUtil.IsSceneLoading()) return;
+
+                _forcedLoadingUiFrame = Time.frameCount;
+            }
+            catch { }
+        }
+
         static bool Has(string source, string value)
         {
             if (source == null || value == null) return false;
@@ -248,6 +264,20 @@ namespace VPB
         }
 
         [HarmonyPrefix]
+        [HarmonyPatch(typeof(SuperController), "Load", new Type[] { typeof(string) })]
+        public static void PreLoad(SuperController __instance, string saveName)
+        {
+            TryForceLoadingUiEarly(__instance, saveName);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SuperController), "LoadMerge", new Type[] { typeof(string) })]
+        public static void PreLoadMerge(SuperController __instance, string saveName)
+        {
+            TryForceLoadingUiEarly(__instance, saveName);
+        }
+
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(SuperController), "LoadInternal", new Type[] {
             typeof(string),typeof(bool),typeof(bool)
         })]
@@ -309,13 +339,6 @@ namespace VPB
             string saveName, bool loadMerge, bool editMode)
         {
             LogUtil.EndSceneLoadInternal("LoadInternal");
-
-            try
-            {
-                // Schedule a fixup pass after the load has settled; throttled to run once per full scene load.
-                SceneLoadingUtils.SchedulePostSceneLoadFixup();
-            }
-            catch { }
         }
 
         /// <summary>
@@ -383,7 +406,14 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null) return true;
             if (!Settings.Instance.EnableZstdCompression.Value) return true;
+
+            if (ImageLoadingMgr.singleton == null)
+            {
+                LogUtil.LogWarning("[VPB] PreQueueThumbnail: ImageLoadingMgr.singleton is null");
+                return true;
+            }
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
@@ -429,7 +459,10 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null) return true;
             if (!Settings.Instance.EnableZstdCompression.Value) return true;
+
+            if (ImageLoadingMgr.singleton == null) return true;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -471,7 +504,10 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null) return true;
             if (!Settings.Instance.EnableZstdCompression.Value) return true;
+
+            if (ImageLoadingMgr.singleton == null) return true;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
@@ -506,6 +542,7 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null) return;
             if (!Settings.Instance.EnableZstdCompression.Value) return;
 
 
@@ -513,7 +550,10 @@ namespace VPB
             // Ignore hub browse
             if (__instance.tex != null)
             {
-                ImageLoadingMgr.singleton.ResolveInflightForQueuedImage(__instance);
+                if (ImageLoadingMgr.singleton != null)
+                {
+                    ImageLoadingMgr.singleton.ResolveInflightForQueuedImage(__instance);
+                }
             }
 
         }

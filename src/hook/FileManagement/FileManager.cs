@@ -52,6 +52,9 @@ namespace VPB
         protected static OnRefresh onRefreshHandlers;
         protected static HashSet<string> restrictedReadPaths;
 
+        protected static Dictionary<string, string> internalPathToUidPath;
+        protected static readonly object internalPathToUidPathLock = new object();
+
         protected static HashSet<string> secureReadPaths;
 
         protected static HashSet<string> secureInternalWritePaths;
@@ -491,6 +494,50 @@ namespace VPB
             if (pathToVarFileEntry != null)
             {
                 pathToVarFileEntry.Clear();
+            }
+
+            if (internalPathToUidPath != null)
+            {
+                internalPathToUidPath.Clear();
+            }
+        }
+
+        private static void EnsureInternalPathIndex()
+        {
+            if (internalPathToUidPath == null)
+            {
+                internalPathToUidPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+            if (internalPathToUidPath.Count > 0) return;
+
+            if (allVarFileEntries == null) return;
+
+            foreach (var fe in allVarFileEntries)
+            {
+                if (fe == null) continue;
+                if (string.IsNullOrEmpty(fe.InternalPath)) continue;
+                if (string.IsNullOrEmpty(fe.Uid)) continue;
+                if (!internalPathToUidPath.ContainsKey(fe.InternalPath))
+                {
+                    internalPathToUidPath.Add(fe.InternalPath, fe.Uid);
+                }
+            }
+        }
+
+        public static bool TryResolveCustomInternalPathToUidPath(string customPath, out string uidPath)
+        {
+            uidPath = null;
+            if (string.IsNullOrEmpty(customPath)) return false;
+
+            string p = customPath.Replace('\\', '/');
+            if (p.StartsWith("/")) p = p.Substring(1);
+            if (!p.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return false;
+
+            lock (internalPathToUidPathLock)
+            {
+                EnsureInternalPathIndex();
+                if (internalPathToUidPath == null) return false;
+                return internalPathToUidPath.TryGetValue(p, out uidPath);
             }
         }
 

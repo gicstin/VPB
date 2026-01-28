@@ -171,8 +171,6 @@ namespace VPB
                         ResolveInflight(cacheKey, tex);
                         
                         Messager.singleton.StartCoroutine(DelayDoCallback(qi));
-                        
-                        LogUtil.Log("[VPB] Loaded from Zstd cache: " + Path.GetFileName(vpbCachePath));
                         return true;
                     }
                 }
