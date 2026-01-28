@@ -562,7 +562,7 @@ namespace VPB
                 // Determine which tags to show
                 List<string> tagsToShow = new List<string>();
                 string title = titleText != null ? titleText.text : "";
-                
+
                 if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     // Clothing subfilters (shown only for Clothing)
@@ -570,24 +570,37 @@ namespace VPB
                         Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
                         Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
 
-                        string[] options = new string[] { "All Clothing", "Presets", "Items", "Male", "Female" };
+                        string[] options = new string[] { "Real Clothing", "Presets", "Items", "Male", "Female", "Decals" };
                         for (int gi = 0; gi < options.Length; gi++)
                         {
                             string opt = options[gi];
-                            bool isActive = string.Equals(currentClothingSubfilter ?? "All Clothing", opt, StringComparison.OrdinalIgnoreCase);
+                            ClothingSubfilter flag = 0;
+                            if (opt == "Real Clothing") flag = ClothingSubfilter.RealClothing;
+                            else if (opt == "Presets") flag = ClothingSubfilter.Presets;
+                            else if (opt == "Items") flag = ClothingSubfilter.Items;
+                            else if (opt == "Male") flag = ClothingSubfilter.Male;
+                            else if (opt == "Female") flag = ClothingSubfilter.Female;
+                            else if (opt == "Decals") flag = ClothingSubfilter.Decals;
+
+                            bool isActive = (flag != 0) && ((clothingSubfilter & flag) != 0);
                             Color btnColor = isActive ? active : inactive;
 
                             int cnt = 0;
-                            if (opt == "All Clothing") cnt = clothingSubfilterCountAll;
-                            else if (opt == "Presets") cnt = clothingSubfilterCountPresets;
-                            else if (opt == "Items") cnt = clothingSubfilterCountItems;
-                            else if (opt == "Male") cnt = clothingSubfilterCountMale;
-                            else if (opt == "Female") cnt = clothingSubfilterCountFemale;
+                            if (opt == "Real Clothing") cnt = clothingSubfilterFacetCountReal;
+                            else if (opt == "Presets") cnt = clothingSubfilterFacetCountPresets;
+                            else if (opt == "Items") cnt = clothingSubfilterFacetCountItems;
+                            else if (opt == "Male") cnt = clothingSubfilterFacetCountMale;
+                            else if (opt == "Female") cnt = clothingSubfilterFacetCountFemale;
+                            else if (opt == "Decals") cnt = clothingSubfilterFacetCountDecals;
 
                             string label = opt + " (" + cnt + ")";
 
                             CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                                currentClothingSubfilter = opt;
+                                if (flag != 0)
+                                {
+                                    if ((clothingSubfilter & flag) != 0) clothingSubfilter &= ~flag;
+                                    else clothingSubfilter |= flag;
+                                }
                                 tagsCached = false;
                                 currentPage = 0;
                                 RefreshFiles();

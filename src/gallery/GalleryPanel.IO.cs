@@ -21,36 +21,46 @@ namespace VPB
             bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
             if (isClothing)
             {
-                string sf = currentClothingSubfilter ?? "All Clothing";
-                if (sf != "All Clothing")
+                // Determine file extension
+                string p = entry.Path;
+                int lastDot = (p != null) ? p.LastIndexOf('.') : -1;
+                string ext = (lastDot >= 0 && lastDot < p.Length - 1) ? p.Substring(lastDot + 1) : "";
+                bool isPreset = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
+
+                ClothingLoadingUtils.ResourceKind k;
+                ClothingLoadingUtils.ResourceGender g;
+                ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
+                if (k != ClothingLoadingUtils.ResourceKind.Clothing) return false;
+
+                bool isDecal = ClothingLoadingUtils.IsDecalLikePath(p);
+
+                // Multi-select subfilter semantics:
+                // - No flags selected: show all clothing content.
+                // - Real Clothing / Decals: type filters (OR within type group).
+                // - Presets/Items/Male/Female: additional constraints (AND).
+                if (clothingSubfilter != 0)
                 {
-                    // Determine file extension without allocations
-                    string p = entry.Path;
-                    int lastDot = (p != null) ? p.LastIndexOf('.') : -1;
-                    string ext = (lastDot >= 0 && lastDot < p.Length - 1) ? p.Substring(lastDot + 1) : "";
-                    bool isPreset = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
+                    bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
+                    bool wantsDecalType = ((clothingSubfilter & ClothingSubfilter.Decals) != 0);
 
-                    ClothingLoadingUtils.ResourceKind k;
-                    ClothingLoadingUtils.ResourceGender g;
-                    ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
-                    if (k != ClothingLoadingUtils.ResourceKind.Clothing) return false;
+                    bool typeExplicit = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
+                    if (typeExplicit)
+                    {
+                        bool okType = (!isDecal && (clothingSubfilter & ClothingSubfilter.RealClothing) != 0) ||
+                                      (isDecal && (clothingSubfilter & ClothingSubfilter.Decals) != 0);
+                        if (!okType) return false;
+                    }
+                    else
+                    {
+                        // If user selected real-only constraints but didn't explicitly pick type, default to real clothing.
+                        if (wantsRealType && isDecal && !wantsDecalType) return false;
+                    }
 
-                    if (sf == "Presets")
-                    {
-                        if (!isPreset) return false;
-                    }
-                    else if (sf == "Items")
-                    {
-                        if (isPreset) return false;
-                    }
-                    else if (sf == "Male")
-                    {
-                        if (g != ClothingLoadingUtils.ResourceGender.Male) return false;
-                    }
-                    else if (sf == "Female")
-                    {
-                        if (g != ClothingLoadingUtils.ResourceGender.Female) return false;
-                    }
+                    // Additional constraints
+                    if ((clothingSubfilter & ClothingSubfilter.Presets) != 0) { if (!isPreset) return false; }
+                    if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
+                    if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male) return false; }
+                    if ((clothingSubfilter & ClothingSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female) return false; }
                 }
             }
 
@@ -490,9 +500,15 @@ namespace VPB
 
             if (paginationPrevBtn != null) 
                 paginationPrevBtn.GetComponent<Button>().interactable = (currentPage > 0);
+
+            if (paginationPrev10Btn != null)
+                paginationPrev10Btn.GetComponent<Button>().interactable = (currentPage > 0);
             
             if (paginationNextBtn != null) 
                 paginationNextBtn.GetComponent<Button>().interactable = (currentPage < totalPages - 1);
+
+            if (paginationNext10Btn != null)
+                paginationNext10Btn.GetComponent<Button>().interactable = (currentPage < totalPages - 1);
 
             if (paginationFirstBtn != null)
                 paginationFirstBtn.GetComponent<Button>().interactable = (currentPage > 0);

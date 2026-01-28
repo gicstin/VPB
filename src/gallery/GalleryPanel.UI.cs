@@ -121,6 +121,7 @@ namespace VPB
             centerHLG.spacing = 10;
 
             paginationFirstBtn = UI.CreateUIButton(centerSection, 40, 40, "|<", 18, 0, 0, AnchorPresets.middleCenter, FirstPage);
+            paginationPrev10Btn = UI.CreateUIButton(centerSection, 40, 40, "<<", 18, 0, 0, AnchorPresets.middleCenter, Prev10Page);
             paginationPrevBtn = UI.CreateUIButton(centerSection, 40, 40, "<", 20, 0, 0, AnchorPresets.middleCenter, PrevPage);
             
             GameObject textGO = new GameObject("PageText");
@@ -136,6 +137,7 @@ namespace VPB
             textRT.sizeDelta = new Vector2(200, 40);
 
             paginationNextBtn = UI.CreateUIButton(centerSection, 40, 40, ">", 20, 0, 0, AnchorPresets.middleCenter, NextPage);
+            paginationNext10Btn = UI.CreateUIButton(centerSection, 40, 40, ">>", 18, 0, 0, AnchorPresets.middleCenter, Next10Page);
             paginationLastBtn = UI.CreateUIButton(centerSection, 40, 40, ">|", 18, 0, 0, AnchorPresets.middleCenter, LastPage);
 
             // --- Right Section (Utility Controls) ---
@@ -188,10 +190,14 @@ namespace VPB
             // Hover support
             AddHoverDelegate(paginationFirstBtn);
             AddTooltip(paginationFirstBtn, "First Page");
+            AddHoverDelegate(paginationPrev10Btn);
+            AddTooltip(paginationPrev10Btn, "Back 10 Pages");
             AddHoverDelegate(paginationPrevBtn);
             AddTooltip(paginationPrevBtn, "Previous Page");
             AddHoverDelegate(paginationNextBtn);
             AddTooltip(paginationNextBtn, "Next Page");
+            AddHoverDelegate(paginationNext10Btn);
+            AddTooltip(paginationNext10Btn, "Forward 10 Pages");
             AddHoverDelegate(paginationLastBtn);
             AddTooltip(paginationLastBtn, "Last Page");
             AddHoverDelegate(selectAllBtn);
@@ -713,16 +719,14 @@ namespace VPB
                                     {
                                         LogUtil.LogWarning("[VPB] RemoveClothing submenu click: UIDraggableItem not available");
                                     }
-                                    PopulateClothingSubmenuButtons(tgt);
-                                    SetClothingSubmenuButtonsVisible(true);
-                                    UpdateSideButtonPositions();
+                                    SyncClothingSubmenu(tgt, true);
                                     keepSubmenuOpen = true;
                                 }
                                 finally
                                 {
                                     if (!keepSubmenuOpen)
                                     {
-                                        ClearClothingPreview();
+                                        CloseClothingSubmenuUI();
                                         clothingSubmenuOpen = false;
                                         SetClothingSubmenuButtonsVisible(false);
                                         UpdateSideButtonPositions();
@@ -745,15 +749,67 @@ namespace VPB
             if (clothingSubmenuOpen)
             {
                 ClearClothingPreview();
+                clothingSubmenuLastSyncTime = Time.unscaledTime;
                 PopulateClothingSubmenuButtons(target);
+                clothingSubmenuLastOptionCount = Mathf.Min(HairSubmenuMaxButtons, rightRemoveClothingSubmenuButtons != null ? rightRemoveClothingSubmenuButtons.Count : 0);
             }
             else
             {
+                CloseClothingSubmenuUI();
+            }
+
+            UpdateSideButtonPositions();
+        }
+
+        private void CloseClothingSubmenuUI()
+        {
+            try
+            {
                 ClearClothingPreview();
+                clothingSubmenuOpen = false;
+                clothingSubmenuParentHovered = false;
+                clothingSubmenuOptionsHovered = false;
+                clothingSubmenuParentHoverCount = 0;
+                clothingSubmenuOptionsHoverCount = 0;
+                clothingSubmenuLastOptionCount = 0;
                 SetClothingSubmenuButtonsVisible(false);
                 UpdateRemoveClothingButtonLabels(false);
             }
+            catch { }
+        }
 
+        private void SyncClothingSubmenu(Atom target, bool keepOpenIfHasOptions)
+        {
+            if (target == null) { CloseClothingSubmenuUI(); return; }
+            PopulateClothingSubmenuButtons(target);
+            int options = 0;
+            try
+            {
+                options = 0;
+                int optionsLeft = 0;
+                for (int i = 0; i < rightRemoveClothingSubmenuButtons.Count; i++)
+                {
+                    var b = rightRemoveClothingSubmenuButtons[i];
+                    if (b != null && b.activeSelf) options++;
+                }
+                for (int i = 0; i < leftRemoveClothingSubmenuButtons.Count; i++)
+                {
+                    var b = leftRemoveClothingSubmenuButtons[i];
+                    if (b != null && b.activeSelf) optionsLeft++;
+                }
+                options = Mathf.Max(options, optionsLeft);
+            }
+            catch { }
+            clothingSubmenuLastOptionCount = options;
+            if (options <= 0)
+            {
+                CloseClothingSubmenuUI();
+            }
+            else
+            {
+                clothingSubmenuOpen = keepOpenIfHasOptions;
+                SetClothingSubmenuButtonsVisible(true);
+            }
             UpdateSideButtonPositions();
         }
 
@@ -970,6 +1026,12 @@ namespace VPB
             RefreshFiles();
         }
 
+        private void Next10Page()
+        {
+            currentPage += 10;
+            RefreshFiles();
+        }
+
         private void FirstPage()
         {
             currentPage = 0;
@@ -987,6 +1049,15 @@ namespace VPB
             if (currentPage > 0)
             {
                 currentPage--;
+                RefreshFiles(false, true);
+            }
+        }
+
+        private void Prev10Page()
+        {
+            if (currentPage > 0)
+            {
+                currentPage = Mathf.Max(0, currentPage - 10);
                 RefreshFiles(false, true);
             }
         }

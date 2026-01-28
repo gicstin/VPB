@@ -179,6 +179,10 @@ namespace VPB
 
         private string clothingSubmenuTargetAtomUid = null;
 
+        private int clothingSubmenuLastOptionCount = 0;
+        private float clothingSubmenuLastSyncTime = 0f;
+        private const float ClothingSubmenuSyncInterval = 0.5f;
+
         private float clothingLabelLastCheckTime = 0f;
         private string clothingLabelLastAtomUid = null;
         private bool clothingLabelLastHasOptions = false;
@@ -240,13 +244,33 @@ namespace VPB
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        private string currentClothingSubfilter = "All Clothing";
+        [Flags]
+        private enum ClothingSubfilter
+        {
+            RealClothing = 1 << 0,
+            Presets = 1 << 1,
+            Items = 1 << 2,
+            Male = 1 << 3,
+            Female = 1 << 4,
+            Decals = 1 << 5,
+        }
+
+        private ClothingSubfilter clothingSubfilter = 0;
 
         private int clothingSubfilterCountAll = 0;
+        private int clothingSubfilterCountReal = 0;
         private int clothingSubfilterCountPresets = 0;
         private int clothingSubfilterCountItems = 0;
         private int clothingSubfilterCountMale = 0;
         private int clothingSubfilterCountFemale = 0;
+        private int clothingSubfilterCountDecals = 0;
+
+        private int clothingSubfilterFacetCountReal = 0;
+        private int clothingSubfilterFacetCountPresets = 0;
+        private int clothingSubfilterFacetCountItems = 0;
+        private int clothingSubfilterFacetCountMale = 0;
+        private int clothingSubfilterFacetCountFemale = 0;
+        private int clothingSubfilterFacetCountDecals = 0;
 
         private InputField leftSearchInput;
         private InputField rightSearchInput;
@@ -345,7 +369,9 @@ namespace VPB
         private CanvasGroup hoverPathCanvasGroup;
         private Coroutine hoverFadeCoroutine;
         private GameObject paginationPrevBtn;
+        private GameObject paginationPrev10Btn;
         private GameObject paginationNextBtn;
+        private GameObject paginationNext10Btn;
         private GameObject paginationFirstBtn;
         private GameObject paginationLastBtn;
         private GameObject selectAllBtn;

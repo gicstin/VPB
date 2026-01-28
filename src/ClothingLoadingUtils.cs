@@ -14,6 +14,12 @@ namespace VPB
     {
         private static MethodInfo s_ClothingClearMethod;
 
+        private static bool Has(string source, string value)
+        {
+            if (source == null || value == null) return false;
+            return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         public enum ResourceGender
         {
             Unknown = 0,
@@ -26,6 +32,30 @@ namespace VPB
             Unknown = 0,
             Clothing = 1,
             Hair = 2,
+        }
+
+        public static bool IsDecalLikePath(string pathOrUid)
+        {
+            if (string.IsNullOrEmpty(pathOrUid)) return false;
+            string p = pathOrUid;
+
+            if (Has(p, "/textures/makeups/") || Has(p, "/textures/makeup/") || Has(p, "/makeups/") || Has(p, "makeup")) return true;
+            if (Has(p, "/textures/decals/") || Has(p, "/textures/decal/") || Has(p, "/decals/") || Has(p, "/decal/")) return true;
+            if (Has(p, "/textures/overlays/") || Has(p, "/textures/overlay/") || Has(p, "/overlays/") || Has(p, "/overlay/")) return true;
+
+            if (Has(p, "freckle") || Has(p, "blush") || Has(p, "eyeshadow") || Has(p, "eye_shadow") || Has(p, "eyeliner") || Has(p, "eye_liner") ||
+                Has(p, "lipstick") || Has(p, "foundation") || Has(p, "concealer") || Has(p, "highlight") || Has(p, "highlighter") || Has(p, "contour") || Has(p, "powder"))
+                return true;
+
+            if (Has(p, "facemask") || Has(p, "face_mask") || Has(p, "mask") || Has(p, "opacity") || Has(p, "alpha"))
+            {
+                if (Has(p, "face") || Has(p, "makeup") || Has(p, "makeups") || Has(p, "freckle") || Has(p, "blush")) return true;
+            }
+
+            if (Has(p, "iris") || Has(p, "cornea") || Has(p, "eyeball") || Has(p, "sclera")) return true;
+            if (Has(p, "eye") && (Has(p, "enhance") || Has(p, "enhancement") || Has(p, "overlay") || Has(p, "decal") || Has(p, "makeup"))) return true;
+
+            return false;
         }
 
         public static void ClassifyClothingHairPath(string pathOrUid, out ResourceKind kind, out ResourceGender gender)

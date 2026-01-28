@@ -182,10 +182,19 @@ namespace VPB
             if (FileManager.PackagesByUid == null) return;
 
             clothingSubfilterCountAll = 0;
+            clothingSubfilterCountReal = 0;
             clothingSubfilterCountPresets = 0;
             clothingSubfilterCountItems = 0;
             clothingSubfilterCountMale = 0;
             clothingSubfilterCountFemale = 0;
+            clothingSubfilterCountDecals = 0;
+
+            clothingSubfilterFacetCountReal = 0;
+            clothingSubfilterFacetCountPresets = 0;
+            clothingSubfilterFacetCountItems = 0;
+            clothingSubfilterFacetCountMale = 0;
+            clothingSubfilterFacetCountFemale = 0;
+            clothingSubfilterFacetCountDecals = 0;
 
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             // Build extension set for fast lookup
@@ -196,7 +205,6 @@ namespace VPB
             HashSet<string> tagsToCount = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string title = titleText != null ? titleText.text : "";
             bool isClothingTitle = (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0);
-            string clothingSf = currentClothingSubfilter ?? "All Clothing";
             if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 tagsToCount.UnionWith(TagFilter.AllClothingTags);
@@ -280,28 +288,94 @@ namespace VPB
                             // For Clothing category we include both .vam and .vap, and subfilters split them.
                             isPresetEntry = (ext.Equals("vap", StringComparison.OrdinalIgnoreCase));
 
-                            clothingSubfilterCountAll++;
-                            if (isPresetEntry) clothingSubfilterCountPresets++;
-                            else clothingSubfilterCountItems++;
-                            if (cg == ClothingLoadingUtils.ResourceGender.Male) clothingSubfilterCountMale++;
-                            else if (cg == ClothingLoadingUtils.ResourceGender.Female) clothingSubfilterCountFemale++;
+                            bool isDecal = ClothingLoadingUtils.IsDecalLikePath(internalPath);
 
-                            // Apply current subfilter to tag counting.
-                            if (clothingSf == "Presets")
+                            ClothingSubfilter cur = clothingSubfilter;
+                            bool PassesClothingSubfilters(ClothingSubfilter f)
                             {
-                                if (!isPresetEntry) continue;
+                                if (f == 0) return true;
+
+                                bool wantsRealType = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
+                                bool wantsDecalType = ((f & ClothingSubfilter.Decals) != 0);
+
+                                bool typeExplicit = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
+                                if (typeExplicit)
+                                {
+                                    bool okType = (!isDecal && (f & ClothingSubfilter.RealClothing) != 0) ||
+                                                  (isDecal && (f & ClothingSubfilter.Decals) != 0);
+                                    if (!okType) return false;
+                                }
+                                else
+                                {
+                                    if (wantsRealType && isDecal && !wantsDecalType) return false;
+                                }
+
+                                if ((f & ClothingSubfilter.Presets) != 0) { if (!isPresetEntry) return false; }
+                                if ((f & ClothingSubfilter.Items) != 0) { if (isPresetEntry) return false; }
+                                if ((f & ClothingSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male) return false; }
+                                if ((f & ClothingSubfilter.Female) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Female) return false; }
+
+                                return true;
                             }
-                            else if (clothingSf == "Items")
+
+                            // Facet counts: how many would be shown if the user toggled that flag now.
+                            if (PassesClothingSubfilters(cur ^ ClothingSubfilter.RealClothing)) clothingSubfilterFacetCountReal++;
+                            if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Presets)) clothingSubfilterFacetCountPresets++;
+                            if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Items)) clothingSubfilterFacetCountItems++;
+                            if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Male)) clothingSubfilterFacetCountMale++;
+                            if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Female)) clothingSubfilterFacetCountFemale++;
+                            if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Decals)) clothingSubfilterFacetCountDecals++;
+
+							// All Clothing includes everything: real clothing + decals
+							clothingSubfilterCountAll++;
+
+                            // Decals are counted separately and excluded from real clothing filters by default.
+                            if (isDecal)
                             {
-                                if (isPresetEntry) continue;
+                                clothingSubfilterCountDecals++;
+
+                                // Apply active subfilters (if any) to tag counting.
+                                if (clothingSubfilter != 0)
+                                {
+                                    bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
+                                    bool wantsDecalType = ((clothingSubfilter & ClothingSubfilter.Decals) != 0);
+
+                                    bool typeExplicit = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
+                                    if (typeExplicit)
+                                    {
+                                        if ((clothingSubfilter & ClothingSubfilter.Decals) == 0) continue;
+                                    }
+                                    else
+                                    {
+                                        if (wantsRealType && !wantsDecalType) continue;
+                                    }
+
+                                    // If user also selected real-only constraints, decals won't match.
+                                    if ((clothingSubfilter & (ClothingSubfilter.Presets | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0) continue;
+                                }
                             }
-                            else if (clothingSf == "Male")
+                            else
                             {
-                                if (cg != ClothingLoadingUtils.ResourceGender.Male) continue;
-                            }
-                            else if (clothingSf == "Female")
-                            {
-                                if (cg != ClothingLoadingUtils.ResourceGender.Female) continue;
+                                clothingSubfilterCountReal++;
+                                if (isPresetEntry) clothingSubfilterCountPresets++;
+                                else clothingSubfilterCountItems++;
+                                if (cg == ClothingLoadingUtils.ResourceGender.Male) clothingSubfilterCountMale++;
+                                else if (cg == ClothingLoadingUtils.ResourceGender.Female) clothingSubfilterCountFemale++;
+
+                                // Apply active subfilters (if any) to tag counting.
+                                if (clothingSubfilter != 0)
+                                {
+                                    bool typeExplicit = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
+                                    if (typeExplicit)
+                                    {
+                                        if ((clothingSubfilter & ClothingSubfilter.RealClothing) == 0) continue;
+                                    }
+                                    // Additional constraints
+                                    if ((clothingSubfilter & ClothingSubfilter.Presets) != 0) { if (!isPresetEntry) continue; }
+                                    if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPresetEntry) continue; }
+                                    if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male) continue; }
+                                    if ((clothingSubfilter & ClothingSubfilter.Female) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Female) continue; }
+                                }
                             }
                         }
                         else

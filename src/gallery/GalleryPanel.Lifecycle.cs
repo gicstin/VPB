@@ -961,6 +961,10 @@ namespace VPB
                         if (dragger == null) dragger = rightRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
                         dragger.Panel = this;
                         dragger.RemoveAllClothing(target);
+
+                        // Robust UI sync: close submenu immediately after remove-all.
+                        CloseClothingSubmenuUI();
+                        UpdateSideButtonPositions();
                     }
                     catch (Exception ex)
                     {
@@ -1630,6 +1634,10 @@ namespace VPB
                         if (dragger == null) dragger = leftRemoveAllClothingBtn.AddComponent<UIDraggableItem>();
                         dragger.Panel = this;
                         dragger.RemoveAllClothing(target);
+
+                        // Robust UI sync: close submenu immediately after remove-all.
+                        CloseClothingSubmenuUI();
+                        UpdateSideButtonPositions();
                     }
                     catch (Exception ex)
                     {
@@ -2273,6 +2281,26 @@ UpdateDesktopModeButton();
                 {
                     if (clothingSubmenuOpen)
                     {
+                        // Periodic resync to keep submenu reflecting live clothing state
+                        try
+                        {
+                            if (Time.unscaledTime - clothingSubmenuLastSyncTime >= ClothingSubmenuSyncInterval)
+                            {
+                                clothingSubmenuLastSyncTime = Time.unscaledTime;
+                                Atom tgt = null;
+                                try
+                                {
+                                    if (!string.IsNullOrEmpty(clothingSubmenuTargetAtomUid))
+                                        tgt = SuperController.singleton.GetAtomByUid(clothingSubmenuTargetAtomUid);
+                                }
+                                catch { }
+                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                // Keep open if there are still options; auto-closes inside if empty.
+                                SyncClothingSubmenu(tgt, true);
+                            }
+                        }
+                        catch { }
+
                         bool hoveredManual = false;
                         try
                         {
