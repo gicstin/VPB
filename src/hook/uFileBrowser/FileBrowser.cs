@@ -827,10 +827,17 @@ namespace VPB
 
 		public void ClearImageQueue()
 		{
+			if (queuedThumbnails == null)
+			{
+				return;
+			}
 			foreach (VPB.CustomImageLoaderThreaded.QueuedImage queuedThumbnail in queuedThumbnails)
 			{
-				queuedThumbnail.cancel = true;
-                //VPB.CustomImageLoaderThreaded.QIPool.Return(queuedThumbnail);
+				if (queuedThumbnail != null)
+				{
+					queuedThumbnail.cancel = true;
+					//VPB.CustomImageLoaderThreaded.QIPool.Return(queuedThumbnail);
+				}
 			}
 			queuedThumbnails.Clear();
 		}
@@ -1142,6 +1149,10 @@ namespace VPB
 		}
 		public void Hide()
 		{
+			if (window == null)
+			{
+				return;
+			}
 			if (window.activeSelf)
 			{
 				if (selected != null)
@@ -1155,7 +1166,7 @@ namespace VPB
 					currentPath = string.Empty;
 				}
 				selected = null;
-				if ((bool)overlay)
+				if (overlay != null && (bool)overlay)
 				{
 					overlay.SetActive(false);
 				}

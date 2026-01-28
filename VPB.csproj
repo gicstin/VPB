@@ -261,6 +261,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src\ByteArrayPool.cs" />
+    <Compile Include="src\ClothingLoadingUtils.cs" />
     <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\GlobalInfo.cs" />
     <Compile Include="src\VdsLauncher.cs" />
