@@ -201,11 +201,10 @@ namespace VPB
                 // 1. Static/Legacy Categories
                 addCat("Scenes", "json", "Saves/scene");
                 addCat("SubScenes", "json", "Custom/SubScene");
-                addCat("Clothing", "vam", "Custom/Clothing");
-                addCat("Hair", "vam", "Custom/Hair");
+                addCat("Clothing", "vam|vap", "Custom/Clothing");
+                addCat("Hair", "vam|vap", "Custom/Hair");
                 addCat("Pose", "json", "Saves/Person"); // Was Person
-                addCat("Clothing", "vap", "Custom/Clothing"); // Was P.Clothing
-                addCat("Hair", "vap", "Custom/Hair"); // Was P.Hair
+                // Clothing/Hair presets are included in the unified Clothing/Hair categories.
                 // addCat("CUA", "assetbundle|unity3d", "Custom/Assets");
 
                 // 2. Dynamic Discovery from Custom/Atom

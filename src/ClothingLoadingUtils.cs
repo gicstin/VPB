@@ -84,6 +84,20 @@ namespace VPB
                 return;
             }
 
+            // Atom-level preset folders (used by VaM for person clothing/hair presets)
+            if (pathOrUid.IndexOf("Custom/Atom/Person/Clothing", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pathOrUid.IndexOf("Custom\\Atom\\Person\\Clothing", start, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                kind = ResourceKind.Clothing;
+                return;
+            }
+            if (pathOrUid.IndexOf("Custom/Atom/Person/Hair", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                pathOrUid.IndexOf("Custom\\Atom\\Person\\Hair", start, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                kind = ResourceKind.Hair;
+                return;
+            }
+
             if (pathOrUid.IndexOf("Custom/Clothing", start, StringComparison.OrdinalIgnoreCase) >= 0 ||
                 pathOrUid.IndexOf("Custom\\Clothing", start, StringComparison.OrdinalIgnoreCase) >= 0)
             {

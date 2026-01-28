@@ -565,27 +565,29 @@ namespace VPB
                 
                 if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    // Gender filter controls (shown only for Clothing)
+                    // Clothing subfilters (shown only for Clothing)
                     {
                         Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
                         Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
 
-                        string[] options = new string[] { "All", "Female", "Male" };
+                        string[] options = new string[] { "All Clothing", "Presets", "Items", "Male", "Female" };
                         for (int gi = 0; gi < options.Length; gi++)
                         {
                             string opt = options[gi];
-                            bool isActive = string.Equals(currentClothingGenderFilter ?? "All", opt, StringComparison.OrdinalIgnoreCase);
+                            bool isActive = string.Equals(currentClothingSubfilter ?? "All Clothing", opt, StringComparison.OrdinalIgnoreCase);
                             Color btnColor = isActive ? active : inactive;
 
                             int cnt = 0;
-                            if (opt == "All") cnt = clothingGenderCountAll;
-                            else if (opt == "Female") cnt = clothingGenderCountFemale;
-                            else if (opt == "Male") cnt = clothingGenderCountMale;
+                            if (opt == "All Clothing") cnt = clothingSubfilterCountAll;
+                            else if (opt == "Presets") cnt = clothingSubfilterCountPresets;
+                            else if (opt == "Items") cnt = clothingSubfilterCountItems;
+                            else if (opt == "Male") cnt = clothingSubfilterCountMale;
+                            else if (opt == "Female") cnt = clothingSubfilterCountFemale;
 
                             string label = opt + " (" + cnt + ")";
 
                             CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                                currentClothingGenderFilter = opt;
+                                currentClothingSubfilter = opt;
                                 tagsCached = false;
                                 currentPage = 0;
                                 RefreshFiles();

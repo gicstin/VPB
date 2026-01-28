@@ -15,18 +15,43 @@ namespace VPB
         {
             if (entry == null) return false;
 
-            // Clothing gender filter (Gallery left Tags panel)
-            // Only applies when browsing Clothing category and user selected Female/Male.
+            // Clothing subfilter (Gallery left Tags panel)
+            // Applies only when browsing Clothing category.
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
             bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (isClothing && !string.IsNullOrEmpty(currentClothingGenderFilter) && currentClothingGenderFilter != "All")
+            if (isClothing)
             {
-                ClothingLoadingUtils.ResourceKind k;
-                ClothingLoadingUtils.ResourceGender g;
-                ClothingLoadingUtils.ClassifyClothingHairPath(entry.Path, out k, out g);
-                if (k != ClothingLoadingUtils.ResourceKind.Clothing) return false;
-                if (currentClothingGenderFilter == "Female" && g != ClothingLoadingUtils.ResourceGender.Female) return false;
-                if (currentClothingGenderFilter == "Male" && g != ClothingLoadingUtils.ResourceGender.Male) return false;
+                string sf = currentClothingSubfilter ?? "All Clothing";
+                if (sf != "All Clothing")
+                {
+                    // Determine file extension without allocations
+                    string p = entry.Path;
+                    int lastDot = (p != null) ? p.LastIndexOf('.') : -1;
+                    string ext = (lastDot >= 0 && lastDot < p.Length - 1) ? p.Substring(lastDot + 1) : "";
+                    bool isPreset = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
+
+                    ClothingLoadingUtils.ResourceKind k;
+                    ClothingLoadingUtils.ResourceGender g;
+                    ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
+                    if (k != ClothingLoadingUtils.ResourceKind.Clothing) return false;
+
+                    if (sf == "Presets")
+                    {
+                        if (!isPreset) return false;
+                    }
+                    else if (sf == "Items")
+                    {
+                        if (isPreset) return false;
+                    }
+                    else if (sf == "Male")
+                    {
+                        if (g != ClothingLoadingUtils.ResourceGender.Male) return false;
+                    }
+                    else if (sf == "Female")
+                    {
+                        if (g != ClothingLoadingUtils.ResourceGender.Female) return false;
+                    }
+                }
             }
 
             // Status Filter

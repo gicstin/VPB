@@ -240,11 +240,13 @@ namespace VPB
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        private string currentClothingGenderFilter = "All";
+        private string currentClothingSubfilter = "All Clothing";
 
-        private int clothingGenderCountAll = 0;
-        private int clothingGenderCountFemale = 0;
-        private int clothingGenderCountMale = 0;
+        private int clothingSubfilterCountAll = 0;
+        private int clothingSubfilterCountPresets = 0;
+        private int clothingSubfilterCountItems = 0;
+        private int clothingSubfilterCountMale = 0;
+        private int clothingSubfilterCountFemale = 0;
 
         private InputField leftSearchInput;
         private InputField rightSearchInput;

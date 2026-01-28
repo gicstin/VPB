@@ -181,9 +181,11 @@ namespace VPB
             tagCounts.Clear();
             if (FileManager.PackagesByUid == null) return;
 
-            clothingGenderCountAll = 0;
-            clothingGenderCountFemale = 0;
-            clothingGenderCountMale = 0;
+            clothingSubfilterCountAll = 0;
+            clothingSubfilterCountPresets = 0;
+            clothingSubfilterCountItems = 0;
+            clothingSubfilterCountMale = 0;
+            clothingSubfilterCountFemale = 0;
 
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             // Build extension set for fast lookup
@@ -193,6 +195,8 @@ namespace VPB
             // Collect all relevant tags to count
             HashSet<string> tagsToCount = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string title = titleText != null ? titleText.text : "";
+            bool isClothingTitle = (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0);
+            string clothingSf = currentClothingSubfilter ?? "All Clothing";
             if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 tagsToCount.UnionWith(TagFilter.AllClothingTags);
@@ -262,30 +266,49 @@ namespace VPB
 
                     if (!match) continue;
 
-                    // Update clothing gender counts (before applying gender filter)
-                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (isClothingTitle)
                     {
-                        ClothingLoadingUtils.ResourceKind kAll;
-                        ClothingLoadingUtils.ResourceGender gAll;
-                        ClothingLoadingUtils.ClassifyClothingHairPath(internalPath, out kAll, out gAll);
-                        if (kAll == ClothingLoadingUtils.ResourceKind.Clothing)
-                        {
-                            clothingGenderCountAll++;
-                            if (gAll == ClothingLoadingUtils.ResourceGender.Female) clothingGenderCountFemale++;
-                            else if (gAll == ClothingLoadingUtils.ResourceGender.Male) clothingGenderCountMale++;
-                        }
-                    }
+						ClothingLoadingUtils.ResourceKind ck = ClothingLoadingUtils.ResourceKind.Unknown;
+						ClothingLoadingUtils.ResourceGender cg = ClothingLoadingUtils.ResourceGender.Unknown;
+						bool isClothingEntry = false;
+						bool isPresetEntry = false;
 
-                    // Clothing gender filter affects tag counts too
-                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                        !string.IsNullOrEmpty(currentClothingGenderFilter) && currentClothingGenderFilter != "All")
-                    {
-                        ClothingLoadingUtils.ResourceKind k;
-                        ClothingLoadingUtils.ResourceGender g;
-                        ClothingLoadingUtils.ClassifyClothingHairPath(internalPath, out k, out g);
-                        if (k != ClothingLoadingUtils.ResourceKind.Clothing) continue;
-                        if (currentClothingGenderFilter == "Female" && g != ClothingLoadingUtils.ResourceGender.Female) continue;
-                        if (currentClothingGenderFilter == "Male" && g != ClothingLoadingUtils.ResourceGender.Male) continue;
+						ClothingLoadingUtils.ClassifyClothingHairPath(internalPath, out ck, out cg);
+						isClothingEntry = (ck == ClothingLoadingUtils.ResourceKind.Clothing);
+						if (isClothingEntry)
+                        {
+                            // For Clothing category we include both .vam and .vap, and subfilters split them.
+                            isPresetEntry = (ext.Equals("vap", StringComparison.OrdinalIgnoreCase));
+
+                            clothingSubfilterCountAll++;
+                            if (isPresetEntry) clothingSubfilterCountPresets++;
+                            else clothingSubfilterCountItems++;
+                            if (cg == ClothingLoadingUtils.ResourceGender.Male) clothingSubfilterCountMale++;
+                            else if (cg == ClothingLoadingUtils.ResourceGender.Female) clothingSubfilterCountFemale++;
+
+                            // Apply current subfilter to tag counting.
+                            if (clothingSf == "Presets")
+                            {
+                                if (!isPresetEntry) continue;
+                            }
+                            else if (clothingSf == "Items")
+                            {
+                                if (isPresetEntry) continue;
+                            }
+                            else if (clothingSf == "Male")
+                            {
+                                if (cg != ClothingLoadingUtils.ResourceGender.Male) continue;
+                            }
+                            else if (clothingSf == "Female")
+                            {
+                                if (cg != ClothingLoadingUtils.ResourceGender.Female) continue;
+                            }
+                        }
+                        else
+                        {
+                            // When browsing Clothing, ignore non-clothing entries for tag counts.
+                            continue;
+                        }
                     }
 
                     string pathLower = internalPath.ToLowerInvariant();
