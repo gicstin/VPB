@@ -902,6 +902,10 @@ namespace VPB
         private GameObject ghostObject;
         private Image ghostBorder;
         private Text ghostText; // Added text component
+        private Renderer ghostRenderer;
+        private GameObject groundIndicator;
+        private Vector3 lastGroundPoint;
+        private bool hasGroundPoint;
         // private Vector3 offset; // Unused
         private float planeDistance;
         private Camera dragCam;
@@ -2002,6 +2006,7 @@ namespace VPB
             if (isDraggingItem)
             {
                 DestroyGhost();
+                DestroyGroundIndicator();
                 isDraggingItem = false;
                 
                 if (Panel != null)
@@ -2122,6 +2127,7 @@ namespace VPB
             if (isDraggingItem)
             {
                 DestroyGhost();
+                DestroyGroundIndicator();
                 isDraggingItem = false;
                 if (Panel != null) Panel.SetStatus("");
                 dragCam = null;
@@ -2133,6 +2139,7 @@ namespace VPB
             if (!hasFocus && isDraggingItem)
             {
                 DestroyGhost();
+                DestroyGroundIndicator();
                 isDraggingItem = false;
                 if (Panel != null) Panel.SetStatus("");
                 dragCam = null;
@@ -4671,67 +4678,96 @@ namespace VPB
              Camera cam = dragCam != null ? dragCam : eventData.pressEventCamera;
              if (cam == null) cam = Camera.main;
              if (cam == null) return;
-             
-             ghostObject = new GameObject("DragGhost");
-             
-             Canvas rootCanvas = GetComponentInParent<Canvas>();
-             if (rootCanvas == null && Panel != null) rootCanvas = Panel.canvas;
-             
-             if (rootCanvas != null) 
-             {
-                 ghostObject.transform.SetParent(rootCanvas.transform, false);
-                 ghostObject.layer = rootCanvas.gameObject.layer;
-                 ghostObject.transform.localScale = Vector3.one; 
-             }
-             
-             ghostBorder = ghostObject.AddComponent<Image>();
-             ghostBorder.raycastTarget = false;
-             ghostBorder.color = new Color(1, 1, 1, 0.2f);
-             
-             // --- Added Text ---
-             GameObject textGO = new GameObject("ActionText");
-             textGO.transform.SetParent(ghostObject.transform, false);
-             ghostText = textGO.AddComponent<Text>();
-             ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-             ghostText.fontSize = 24;
-             ghostText.color = Color.white;
-             ghostText.alignment = TextAnchor.UpperCenter;
-             ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
-             ghostText.verticalOverflow = VerticalWrapMode.Overflow;
-             
-             // Add Outline
-             textGO.AddComponent<Outline>().effectColor = Color.black;
 
-             RectTransform textRT = textGO.GetComponent<RectTransform>();
-             textRT.anchorMin = new Vector2(0.5f, 0);
-             textRT.anchorMax = new Vector2(0.5f, 0);
-             textRT.pivot = new Vector2(0.5f, 1);
-             textRT.anchoredPosition = new Vector2(0, -10);
-             textRT.sizeDelta = new Vector2(400, 60);
-             // ------------------
+             ghostRenderer = null;
 
-             GameObject contentGO = new GameObject("Content");
-             contentGO.transform.SetParent(ghostObject.transform, false);
-             contentGO.layer = ghostObject.layer;
-             RawImage img = contentGO.AddComponent<RawImage>();
-             img.raycastTarget = false;
-             img.color = new Color(1, 1, 1, 0.7f);
-             if (ThumbnailImage != null)
+             bool fixedMode = false;
+             try { fixedMode = (Panel != null && Panel.isFixedLocally); } catch { }
+
+             if (fixedMode)
              {
-                 img.texture = ThumbnailImage.texture;
+                 ghostObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                 ghostObject.name = "DragGhost";
+                 ghostObject.layer = 2;
+                 Collider c = null;
+                 try { c = ghostObject.GetComponent<Collider>(); } catch { }
+                 try { if (c != null) Destroy(c); } catch { }
+
+                 try
+                 {
+                     ghostRenderer = ghostObject.GetComponent<Renderer>();
+                     if (ghostRenderer != null)
+                     {
+                         Material m = new Material(Shader.Find("Unlit/Transparent"));
+                         if (ThumbnailImage != null) m.mainTexture = ThumbnailImage.texture;
+                         m.color = new Color(1f, 1f, 1f, 0.9f);
+                         ghostRenderer.material = m;
+                     }
+                 }
+                 catch { }
+
+                 try { ghostObject.transform.localScale = new Vector3(0.22f, 0.22f, 0.22f); } catch { }
              }
-             
-             RectTransform rt = ghostObject.GetComponent<RectTransform>();
-             if (rt == null) rt = ghostObject.AddComponent<RectTransform>();
-             rt.sizeDelta = new Vector2(80, 80); 
-             rt.pivot = new Vector2(0.5f, 0.5f);
-             
-             RectTransform contentRT = contentGO.GetComponent<RectTransform>();
-             if (contentRT == null) contentRT = contentGO.AddComponent<RectTransform>();
-             contentRT.anchorMin = Vector2.zero;
-             contentRT.anchorMax = Vector2.one;
-             contentRT.offsetMin = new Vector2(5, 5);
-             contentRT.offsetMax = new Vector2(-5, -5);
+             else
+             {
+                 ghostObject = new GameObject("DragGhost");
+                 
+                 Canvas rootCanvas = GetComponentInParent<Canvas>();
+                 if (rootCanvas == null && Panel != null) rootCanvas = Panel.canvas;
+                 
+                 if (rootCanvas != null) 
+                 {
+                     ghostObject.transform.SetParent(rootCanvas.transform, false);
+                     ghostObject.layer = rootCanvas.gameObject.layer;
+                     ghostObject.transform.localScale = Vector3.one;
+                 }
+                 
+                 ghostBorder = ghostObject.AddComponent<Image>();
+                 ghostBorder.raycastTarget = false;
+                 ghostBorder.color = new Color(1, 1, 1, 0.2f);
+                 
+                 GameObject textGO = new GameObject("ActionText");
+                 textGO.transform.SetParent(ghostObject.transform, false);
+                 ghostText = textGO.AddComponent<Text>();
+                 ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                 ghostText.fontSize = 24;
+                 ghostText.color = Color.white;
+                 ghostText.alignment = TextAnchor.UpperCenter;
+                 ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                 ghostText.verticalOverflow = VerticalWrapMode.Overflow;
+                 
+                 textGO.AddComponent<Outline>().effectColor = Color.black;
+
+                 RectTransform textRT = textGO.GetComponent<RectTransform>();
+                 textRT.anchorMin = new Vector2(0.5f, 0);
+                 textRT.anchorMax = new Vector2(0.5f, 0);
+                 textRT.pivot = new Vector2(0.5f, 1);
+                 textRT.anchoredPosition = new Vector2(0, -10);
+                 textRT.sizeDelta = new Vector2(400, 60);
+
+                 GameObject contentGO = new GameObject("Content");
+                 contentGO.transform.SetParent(ghostObject.transform, false);
+                 contentGO.layer = ghostObject.layer;
+                 RawImage img = contentGO.AddComponent<RawImage>();
+                 img.raycastTarget = false;
+                 img.color = new Color(1, 1, 1, 0.7f);
+                 if (ThumbnailImage != null)
+                 {
+                     img.texture = ThumbnailImage.texture;
+                 }
+                 
+                 RectTransform rt = ghostObject.GetComponent<RectTransform>();
+                 if (rt == null) rt = ghostObject.AddComponent<RectTransform>();
+                 rt.sizeDelta = new Vector2(80, 80); 
+                 rt.pivot = new Vector2(0.5f, 0.5f);
+                 
+                 RectTransform contentRT = contentGO.GetComponent<RectTransform>();
+                 if (contentRT == null) contentRT = contentGO.AddComponent<RectTransform>();
+                 contentRT.anchorMin = Vector2.zero;
+                 contentRT.anchorMax = Vector2.one;
+                 contentRT.offsetMin = new Vector2(5, 5);
+                 contentRT.offsetMax = new Vector2(-5, -5);
+             }
              
              planeDistance = Vector3.Dot(transform.position - cam.transform.position, cam.transform.forward);
              
@@ -4764,6 +4800,23 @@ namespace VPB
              bool isScene = itemType == ItemType.Scene;
 
              UpdateGhostPosition(eventData, isValidTarget, distance);
+
+             if (itemType == ItemType.Appearance)
+             {
+                 UpdateGroundIndicator(eventData);
+                 if (ghostBorder != null) ghostBorder.color = new Color(0f, 1f, 0f, 0.25f);
+                 if (ghostRenderer != null) try { ghostRenderer.material.color = new Color(1f, 1f, 1f, 0.95f); } catch { }
+                 if (ghostText != null)
+                 {
+                     ghostText.text = "Release for options";
+                     ghostText.color = new Color(0.5f, 1f, 0.5f);
+                 }
+                 return;
+             }
+             else
+             {
+                 HideGroundIndicator();
+             }
              
              if (isScene)
              {
@@ -4824,6 +4877,89 @@ namespace VPB
                  if (ghostBorder != null) ghostBorder.color = new Color(1, 1, 1, 0.2f);
                  if (ghostText != null) ghostText.text = "";
              }
+        }
+
+        private void UpdateGroundIndicator(PointerEventData eventData)
+        {
+            hasGroundPoint = false;
+            Camera cam = dragCam != null ? dragCam : eventData.pressEventCamera;
+            if (cam == null) cam = Camera.main;
+            if (cam == null) { HideGroundIndicator(); return; }
+
+            Ray ray = cam.ScreenPointToRay(eventData.position);
+            Vector3 floorPoint;
+            if (SpawnAtomElement.TryRaycastFloor(ray, out floorPoint))
+            {
+                lastGroundPoint = floorPoint;
+                hasGroundPoint = true;
+            }
+
+            if (!hasGroundPoint) { HideGroundIndicator(); return; }
+
+            if (groundIndicator == null) CreateGroundIndicator();
+            if (groundIndicator == null) return;
+            groundIndicator.SetActive(true);
+            try
+            {
+                var r = groundIndicator.GetComponent<Renderer>();
+                if (r != null) r.enabled = true;
+            }
+            catch { }
+            groundIndicator.transform.position = lastGroundPoint + Vector3.up * 0.01f;
+        }
+
+        private void CreateGroundIndicator()
+        {
+            try
+            {
+                groundIndicator = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                groundIndicator.name = "VPB_DropIndicator";
+                groundIndicator.layer = 2;
+
+                Collider col = groundIndicator.GetComponent<Collider>();
+                if (col != null) Destroy(col);
+
+                groundIndicator.transform.localScale = new Vector3(0.35f, 0.005f, 0.35f);
+
+                var r = groundIndicator.GetComponent<Renderer>();
+                if (r != null)
+                {
+                    Material m = new Material(Shader.Find("Unlit/Color"));
+                    m.color = new Color(0.2f, 1f, 0.2f, 0.65f);
+                    r.material = m;
+                    r.enabled = false;
+                }
+
+                try { groundIndicator.transform.position = new Vector3(0, -10000f, 0); } catch { }
+                groundIndicator.SetActive(false);
+            }
+            catch
+            {
+                groundIndicator = null;
+            }
+        }
+
+        private void HideGroundIndicator()
+        {
+            if (groundIndicator != null)
+            {
+                try
+                {
+                    var r = groundIndicator.GetComponent<Renderer>();
+                    if (r != null) r.enabled = false;
+                }
+                catch { }
+                groundIndicator.SetActive(false);
+            }
+        }
+
+        private void DestroyGroundIndicator()
+        {
+            if (groundIndicator != null)
+            {
+                Destroy(groundIndicator);
+                groundIndicator = null;
+            }
         }
         
         private void UpdateGhostPosition(PointerEventData eventData, bool isValidTarget, float distance)
@@ -5231,6 +5367,7 @@ namespace VPB
                 Destroy(ghostObject);
                 ghostObject = null;
                 ghostBorder = null;
+                ghostRenderer = null;
             }
         }
 
@@ -5240,7 +5377,7 @@ namespace VPB
             ItemType type = GetItemType(entry);
             
             if (type == ItemType.Scene) return true;
-            if (atom != null && atom.type == "Person" && type == ItemType.Appearance) return true;
+            if (type == ItemType.Appearance) return true;
             
             return false;
         }
@@ -5262,9 +5399,12 @@ namespace VPB
                      }, false, true));
                  } 
             }
-            else if (type == ItemType.Appearance && atom != null && atom.type == "Person")
+            else if (type == ItemType.Appearance)
             {
-                 AddAppearanceOptions(options, mode => ApplyClothingToAtom(atom, entry.Uid, mode));
+                AddAppearanceOptions(options, mode => {
+                    Vector3 pos = position;
+                    StartCoroutine(CreatePersonAndApplyAppearance(entry, pos, mode));
+                });
             }
             
             if (options.Count > 0)
@@ -5281,6 +5421,42 @@ namespace VPB
                 if (type == ItemType.Scene) LoadSceneFile(entry.Uid);
                 else if (atom != null) ApplyClothingToAtom(atom, entry.Uid);
             }
+        }
+
+        private IEnumerator CreatePersonAndApplyAppearance(FileEntry entry, Vector3 position, string clothingMode)
+        {
+            if (entry == null) yield break;
+
+            Atom spawned = null;
+            SpawnAtomElement.SpawnSuppressionHandle suppression = null;
+            yield return SpawnAtomElement.SpawnPersonAtFloorSuppressed(position, (a, h) => { spawned = a; suppression = h; });
+
+            if (spawned == null) yield break;
+
+            try
+            {
+                ApplyClothingToAtom(spawned, entry.Uid, clothingMode);
+            }
+            catch { }
+
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+
+            try
+            {
+                SceneLoadingUtils.SchedulePostPersonApplyFixup(spawned);
+            }
+            catch { }
+
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+
+            try
+            {
+                if (suppression != null) suppression.Restore();
+            }
+            catch { }
         }
 
         private void ShowImportCategories(FileEntry entry, Atom targetAtom)

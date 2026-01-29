@@ -359,6 +359,7 @@
     <Compile Include="src\RatingsManager.cs" />
     <Compile Include="src\LockedPackagesManager.cs" />
     <Compile Include="src\AutoLoadPackagesManager.cs" />
+    <Compile Include="src\SpawnAtomElement.cs" />
     <Compile Include="src\hook\FileManagement\DirectoryEntry.cs" />
     <Compile Include="src\hook\FileManagement\FileEntry.cs" />
     <Compile Include="src\hook\FileManagement\FileEntryStream.cs" />
