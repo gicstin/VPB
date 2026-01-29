@@ -276,6 +276,9 @@ namespace VPB
         {
             Presets = 1 << 0,
             Custom = 1 << 1,
+            Male = 1 << 2,
+            Female = 1 << 3,
+            Futa = 1 << 4,
         }
 
         private ClothingSubfilter clothingSubfilter = 0;
@@ -300,9 +303,15 @@ namespace VPB
         private int appearanceSubfilterCountAll = 0;
         private int appearanceSubfilterCountPresets = 0;
         private int appearanceSubfilterCountCustom = 0;
+        private int appearanceSubfilterCountMale = 0;
+        private int appearanceSubfilterCountFemale = 0;
+        private int appearanceSubfilterCountFuta = 0;
 
         private int appearanceSubfilterFacetCountPresets = 0;
         private int appearanceSubfilterFacetCountCustom = 0;
+        private int appearanceSubfilterFacetCountMale = 0;
+        private int appearanceSubfilterFacetCountFemale = 0;
+        private int appearanceSubfilterFacetCountFuta = 0;
 
         private int appearanceSourceCountAll = 0;
         private int appearanceSourceCountPresets = 0;
@@ -317,6 +326,75 @@ namespace VPB
         private Image rightTargetBtnImage;
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
+
+        private enum AppearanceGender
+        {
+            Unknown,
+            Female,
+            Male,
+            Futa,
+        }
+
+        private static AppearanceGender GetAppearanceGender(FileEntry entry)
+        {
+            if (entry == null) return AppearanceGender.Unknown;
+
+            string p = entry.Path ?? "";
+            string ip = null;
+            try
+            {
+                if (entry is VarFileEntry vfe) ip = vfe.InternalPath;
+            }
+            catch { }
+
+            HashSet<string> userTags = null;
+            try { userTags = TagsManager.Instance.GetTags(entry.Uid); } catch { userTags = null; }
+            if (userTags != null && userTags.Count > 0)
+            {
+                foreach (var t in userTags)
+                {
+                    if (string.IsNullOrEmpty(t)) continue;
+                    string tl = t.Trim().ToLowerInvariant();
+                    if (tl == "futa" || tl == "herm" || tl == "shemale" || tl == "dickgirl") return AppearanceGender.Futa;
+                }
+                foreach (var t in userTags)
+                {
+                    if (string.IsNullOrEmpty(t)) continue;
+                    string tl = t.Trim().ToLowerInvariant();
+                    if (tl == "female" || tl == "woman" || tl == "girl") return AppearanceGender.Female;
+                    if (tl == "male" || tl == "man" || tl == "boy") return AppearanceGender.Male;
+                }
+            }
+
+            string name = entry.Name ?? "";
+            string pkgUid = "";
+            try
+            {
+                if (entry is VarFileEntry vfe2 && vfe2.Package != null) pkgUid = vfe2.Package.Uid ?? "";
+            }
+            catch { }
+
+            string s = (string.IsNullOrEmpty(ip) ? p : ip).Replace('\\', '/');
+            string combined = (s + " " + name + " " + pkgUid).ToLowerInvariant();
+
+            char[] seps = new char[] { '/', '\\', '.', '_', '-', ' ', '(', ')', '[', ']', '{', '}', ',', ';', ':' };
+            string[] tokens = combined.Split(seps, StringSplitOptions.RemoveEmptyEntries);
+
+            bool HasToken(string tok)
+            {
+                for (int i = 0; i < tokens.Length; i++)
+                {
+                    if (tokens[i] == tok) return true;
+                }
+                return false;
+            }
+
+            if (HasToken("futa") || HasToken("herm") || HasToken("shemale") || HasToken("dickgirl")) return AppearanceGender.Futa;
+            if (HasToken("female") || HasToken("woman") || HasToken("girl")) return AppearanceGender.Female;
+            if (HasToken("male") || HasToken("man") || HasToken("boy")) return AppearanceGender.Male;
+
+            return AppearanceGender.Unknown;
+        }
         private List<Atom> personAtoms = new List<Atom>();
         private GameObject leftSideContainer;
         private GameObject rightSideContainer;

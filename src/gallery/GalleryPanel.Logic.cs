@@ -196,6 +196,9 @@ namespace VPB
             appearanceSubfilterCountAll = 0;
             appearanceSubfilterCountPresets = 0;
             appearanceSubfilterCountCustom = 0;
+            appearanceSubfilterCountMale = 0;
+            appearanceSubfilterCountFemale = 0;
+            appearanceSubfilterCountFuta = 0;
 
             clothingSubfilterFacetCountReal = 0;
             clothingSubfilterFacetCountPresets = 0;
@@ -206,6 +209,9 @@ namespace VPB
 
             appearanceSubfilterFacetCountPresets = 0;
             appearanceSubfilterFacetCountCustom = 0;
+            appearanceSubfilterFacetCountMale = 0;
+            appearanceSubfilterFacetCountFemale = 0;
+            appearanceSubfilterFacetCountFuta = 0;
 
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             // Build extension set for fast lookup
@@ -413,9 +419,15 @@ namespace VPB
                         bool isCustomAppearance = p.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                         bool isPresetAppearance = p.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
 
+                        AppearanceGender g = AppearanceGender.Unknown;
+                        try { g = GetAppearanceGender(entry); } catch { g = AppearanceGender.Unknown; }
+
                         appearanceSubfilterCountAll++;
                         if (isPresetAppearance) appearanceSubfilterCountPresets++;
                         if (isCustomAppearance) appearanceSubfilterCountCustom++;
+                        if (g == AppearanceGender.Male) appearanceSubfilterCountMale++;
+                        if (g == AppearanceGender.Female) appearanceSubfilterCountFemale++;
+                        if (g == AppearanceGender.Futa) appearanceSubfilterCountFuta++;
 
                         AppearanceSubfilter cur = appearanceSubfilter;
                         bool PassesAppearanceSubfilters(AppearanceSubfilter f)
@@ -423,17 +435,39 @@ namespace VPB
                             if (f == 0) return true;
                             bool wantsPresets = (f & AppearanceSubfilter.Presets) != 0;
                             bool wantsCustom = (f & AppearanceSubfilter.Custom) != 0;
+                            bool wantsMale = (f & AppearanceSubfilter.Male) != 0;
+                            bool wantsFemale = (f & AppearanceSubfilter.Female) != 0;
+                            bool wantsFuta = (f & AppearanceSubfilter.Futa) != 0;
 
                             // If both are selected, it's effectively no type restriction.
-                            if (wantsPresets && wantsCustom) return true;
-                            if (wantsPresets) return isPresetAppearance;
-                            if (wantsCustom) return isCustomAppearance;
+                            bool typeOk = true;
+                            if (wantsPresets || wantsCustom)
+                            {
+                                if (wantsPresets && wantsCustom) typeOk = true;
+                                else if (wantsPresets) typeOk = isPresetAppearance;
+                                else if (wantsCustom) typeOk = isCustomAppearance;
+                            }
+                            if (!typeOk) return false;
+
+                            bool wantsAnyGender = wantsMale || wantsFemale || wantsFuta;
+                            if (wantsAnyGender)
+                            {
+                                bool genderOk = false;
+                                if (wantsMale && g == AppearanceGender.Male) genderOk = true;
+                                if (wantsFemale && g == AppearanceGender.Female) genderOk = true;
+                                if (wantsFuta && g == AppearanceGender.Futa) genderOk = true;
+                                if (!genderOk) return false;
+                            }
+
                             return true;
                         }
 
                         // Facet counts: how many would be shown if the user toggled that flag now.
                         if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Presets)) appearanceSubfilterFacetCountPresets++;
                         if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Custom)) appearanceSubfilterFacetCountCustom++;
+                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Male)) appearanceSubfilterFacetCountMale++;
+                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Female)) appearanceSubfilterFacetCountFemale++;
+                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Futa)) appearanceSubfilterFacetCountFuta++;
 
                         // Apply active subfilters (if any) to tag counting.
                         if (appearanceSubfilter != 0)

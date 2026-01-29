@@ -521,6 +521,43 @@ namespace VPB
                         UpdateTabs();
                     }, trackedButtons);
                 }
+
+                {
+                    Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
+                    Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
+
+                    string[] options = new string[] { "Female", "Male", "Futa" };
+                    for (int gi = 0; gi < options.Length; gi++)
+                    {
+                        string opt = options[gi];
+                        AppearanceSubfilter flag = 0;
+                        if (opt == "Male") flag = AppearanceSubfilter.Male;
+                        else if (opt == "Female") flag = AppearanceSubfilter.Female;
+                        else if (opt == "Futa") flag = AppearanceSubfilter.Futa;
+
+                        bool isGenderActive = (flag != 0) && ((appearanceSubfilter & flag) != 0);
+                        Color btnColor2 = isGenderActive ? active : inactive;
+
+                        int cnt = 0;
+                        if (opt == "Male") cnt = appearanceSubfilterFacetCountMale;
+                        else if (opt == "Female") cnt = appearanceSubfilterFacetCountFemale;
+                        else if (opt == "Futa") cnt = appearanceSubfilterFacetCountFuta;
+
+                        string label2 = opt + " (" + cnt + ")";
+
+                        CreateTabButton(container.transform, label2, btnColor2, isGenderActive, () => {
+                            if (flag != 0)
+                            {
+                                if ((appearanceSubfilter & flag) != 0) appearanceSubfilter &= ~flag;
+                                else appearanceSubfilter |= flag;
+                            }
+                            tagsCached = false;
+                            currentPage = 0;
+                            RefreshFiles();
+                            UpdateTabs();
+                        }, trackedButtons);
+                    }
+                }
             }
             else if (contentType == ContentType.Size)
             {
@@ -655,6 +692,45 @@ namespace VPB
                     tagsToShow.AddRange(TagFilter.ClothingTypeTags);
                     tagsToShow.AddRange(TagFilter.ClothingRegionTags);
                     tagsToShow.AddRange(TagFilter.ClothingOtherTags);
+                }
+                else if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    {
+                        Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
+                        Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
+
+                        string[] options = new string[] { "Female", "Male", "Futa" };
+                        for (int gi = 0; gi < options.Length; gi++)
+                        {
+                            string opt = options[gi];
+                            AppearanceSubfilter flag = 0;
+                            if (opt == "Male") flag = AppearanceSubfilter.Male;
+                            else if (opt == "Female") flag = AppearanceSubfilter.Female;
+                            else if (opt == "Futa") flag = AppearanceSubfilter.Futa;
+
+                            bool isActive = (flag != 0) && ((appearanceSubfilter & flag) != 0);
+                            Color btnColor = isActive ? active : inactive;
+
+                            int cnt = 0;
+                            if (opt == "Male") cnt = appearanceSubfilterFacetCountMale;
+                            else if (opt == "Female") cnt = appearanceSubfilterFacetCountFemale;
+                            else if (opt == "Futa") cnt = appearanceSubfilterFacetCountFuta;
+
+                            string label = opt + " (" + cnt + ")";
+
+                            CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                                if (flag != 0)
+                                {
+                                    if ((appearanceSubfilter & flag) != 0) appearanceSubfilter &= ~flag;
+                                    else appearanceSubfilter |= flag;
+                                }
+                                tagsCached = false;
+                                currentPage = 0;
+                                RefreshFiles();
+                                UpdateTabs();
+                            }, trackedButtons);
+                        }
+                    }
                 }
                 else if (title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
                 {

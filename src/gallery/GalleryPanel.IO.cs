@@ -107,6 +107,48 @@ namespace VPB
                         if (!isLocalAppearanceVap) return false;
                     }
                 }
+
+                if (appearanceSubfilter != 0)
+                {
+                    bool isCustomAppearance = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
+                    bool isPresetAppearance = false;
+                    if (entry is VarFileEntry vfe2)
+                    {
+                        string ip2 = (vfe2.InternalPath ?? "").Replace('\\', '/');
+                        isPresetAppearance = isVap && ip2.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        isPresetAppearance = isVap && norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
+                    }
+
+                    AppearanceGender g = AppearanceGender.Unknown;
+                    try { g = GetAppearanceGender(entry); } catch { g = AppearanceGender.Unknown; }
+
+                    bool wantsPresets = (appearanceSubfilter & AppearanceSubfilter.Presets) != 0;
+                    bool wantsCustom = (appearanceSubfilter & AppearanceSubfilter.Custom) != 0;
+                    if (wantsPresets || wantsCustom)
+                    {
+                        if (!(wantsPresets && wantsCustom))
+                        {
+                            if (wantsPresets && !isPresetAppearance) return false;
+                            if (wantsCustom && !isCustomAppearance) return false;
+                        }
+                    }
+
+                    bool wantsMale = (appearanceSubfilter & AppearanceSubfilter.Male) != 0;
+                    bool wantsFemale = (appearanceSubfilter & AppearanceSubfilter.Female) != 0;
+                    bool wantsFuta = (appearanceSubfilter & AppearanceSubfilter.Futa) != 0;
+                    bool wantsAnyGender = wantsMale || wantsFemale || wantsFuta;
+                    if (wantsAnyGender)
+                    {
+                        bool ok = false;
+                        if (wantsMale && g == AppearanceGender.Male) ok = true;
+                        if (wantsFemale && g == AppearanceGender.Female) ok = true;
+                        if (wantsFuta && g == AppearanceGender.Futa) ok = true;
+                        if (!ok) return false;
+                    }
+                }
             }
 
             // Status Filter
