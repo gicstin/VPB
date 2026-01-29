@@ -171,6 +171,8 @@ namespace VPB
                     // Consolidate names
                     if (name.Equals("Person Hair", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Hair", StringComparison.OrdinalIgnoreCase)) name = "Hair";
                     if (name.Equals("Person Clothing", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Clothing", StringComparison.OrdinalIgnoreCase)) name = "Clothing";
+                    if (name.Equals("Person Appearance", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Appearance", StringComparison.OrdinalIgnoreCase)) name = "Appearance";
+                    if (name.Equals("Person AppearancePresets", StringComparison.OrdinalIgnoreCase) || name.Equals("Person Appearance Presets", StringComparison.OrdinalIgnoreCase)) name = "Appearance";
                     if (name.Equals("Person Pose", StringComparison.OrdinalIgnoreCase)) name = "Pose";
                     if (name.Equals("Person", StringComparison.OrdinalIgnoreCase)) name = "Pose"; // Merge Person into Pose as requested
 
@@ -204,6 +206,7 @@ namespace VPB
                 addCat("Clothing", "vam|vap", "Custom/Clothing");
                 addCat("Hair", "vam|vap", "Custom/Hair");
                 addCat("Pose", "json", "Saves/Person"); // Was Person
+                addCat("Appearance", "json|vap", "Saves/Person/appearance");
                 // Clothing/Hair presets are included in the unified Clothing/Hair categories.
                 // addCat("CUA", "assetbundle|unity3d", "Custom/Assets");
 

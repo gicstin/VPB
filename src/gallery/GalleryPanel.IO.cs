@@ -64,6 +64,51 @@ namespace VPB
                 }
             }
 
+            // Appearance subfilter (Gallery left Tags panel)
+            // Applies only when browsing Appearance category.
+            bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isAppearance)
+            {
+                string p = entry.Path ?? "";
+                string norm = p.Replace('\\', '/');
+
+                int lastDot = norm.LastIndexOf('.');
+                string ext = (lastDot >= 0 && lastDot < norm.Length - 1) ? norm.Substring(lastDot + 1) : "";
+                bool isVap = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
+
+                bool isVarEntry = (entry is VarFileEntry);
+
+                // Inside .var: identify by internal path prefix
+                bool isVarAppearanceVap = false;
+                var vfe = entry as VarFileEntry;
+                if (vfe != null)
+                {
+                    string ip = (vfe.InternalPath ?? "").Replace('\\', '/');
+                    isVarAppearanceVap = isVap && ip.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
+                }
+
+                // Outside .var: identify by VaM folders
+                bool isLocalAppearanceVap = (!isVarEntry) && isVap &&
+                    (
+                        norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase) ||
+                        norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase)
+                    );
+
+                if (!string.IsNullOrEmpty(currentAppearanceSourceFilter))
+                {
+                    if (currentAppearanceSourceFilter == "presets")
+                    {
+                        // Presets = appearance .vap in a .var package
+                        if (!isVarAppearanceVap) return false;
+                    }
+                    else if (currentAppearanceSourceFilter == "custom")
+                    {
+                        // Custom = appearance presets outside .var (Saves/Custom folders)
+                        if (!isLocalAppearanceVap) return false;
+                    }
+                }
+            }
+
             // Status Filter
             if (!string.IsNullOrEmpty(currentStatus))
             {

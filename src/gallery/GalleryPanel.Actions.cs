@@ -84,6 +84,7 @@ namespace VPB
                 // currentCreator = ""; // Keep creator filter across categories
                 activeTags.Clear();
                 currentSceneSourceFilter = "";
+                currentAppearanceSourceFilter = "";
                 currentPage = 0;
             }
             currentExtension = extension;

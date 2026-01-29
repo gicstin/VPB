@@ -181,6 +181,10 @@ namespace VPB
             tagCounts.Clear();
             if (FileManager.PackagesByUid == null) return;
 
+            appearanceSourceCountAll = 0;
+            appearanceSourceCountPresets = 0;
+            appearanceSourceCountCustom = 0;
+
             clothingSubfilterCountAll = 0;
             clothingSubfilterCountReal = 0;
             clothingSubfilterCountPresets = 0;
@@ -189,12 +193,19 @@ namespace VPB
             clothingSubfilterCountFemale = 0;
             clothingSubfilterCountDecals = 0;
 
+            appearanceSubfilterCountAll = 0;
+            appearanceSubfilterCountPresets = 0;
+            appearanceSubfilterCountCustom = 0;
+
             clothingSubfilterFacetCountReal = 0;
             clothingSubfilterFacetCountPresets = 0;
             clothingSubfilterFacetCountItems = 0;
             clothingSubfilterFacetCountMale = 0;
             clothingSubfilterFacetCountFemale = 0;
             clothingSubfilterFacetCountDecals = 0;
+
+            appearanceSubfilterFacetCountPresets = 0;
+            appearanceSubfilterFacetCountCustom = 0;
 
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             // Build extension set for fast lookup
@@ -205,6 +216,7 @@ namespace VPB
             HashSet<string> tagsToCount = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string title = titleText != null ? titleText.text : "";
             bool isClothingTitle = (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool isAppearanceTitle = (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0);
             if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 tagsToCount.UnionWith(TagFilter.AllClothingTags);
@@ -219,17 +231,20 @@ namespace VPB
             // Include user-defined tags
             tagsToCount.UnionWith(TagsManager.Instance.GetAllUserTags());
 
-            if (tagsToCount.Count == 0) return;
+            bool hasAnyTagsToCount = (tagsToCount.Count > 0);
 
             // Split tags into single-word and multi-word
             HashSet<string> singleWordTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             List<string> multiWordTags = new List<string>();
             char[] separators = new char[] { '/', '\\', '.', '_', '-', ' ' };
 
-            foreach (var t in tagsToCount)
+            if (hasAnyTagsToCount)
             {
-                if (t.IndexOfAny(new char[] { ' ', '_', '-' }) >= 0) multiWordTags.Add(t);
-                else singleWordTags.Add(t);
+                foreach (var t in tagsToCount)
+                {
+                    if (t.IndexOfAny(new char[] { ' ', '_', '-' }) >= 0) multiWordTags.Add(t);
+                    else singleWordTags.Add(t);
+                }
             }
 
             foreach (var pkg in FileManager.PackagesByUid.Values)
@@ -385,48 +400,149 @@ namespace VPB
                         }
                     }
 
+                    if (isAppearanceTitle)
+                    {
+                        string p = internalPath.Replace('\\', '/');
+                        bool isAppearance = p.IndexOf("/appearance", StringComparison.OrdinalIgnoreCase) >= 0;
+                        if (!isAppearance)
+                        {
+                            // When browsing Appearance, ignore non-appearance entries for tag counts.
+                            continue;
+                        }
+
+                        bool isCustomAppearance = p.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
+                        bool isPresetAppearance = p.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
+
+                        appearanceSubfilterCountAll++;
+                        if (isPresetAppearance) appearanceSubfilterCountPresets++;
+                        if (isCustomAppearance) appearanceSubfilterCountCustom++;
+
+                        AppearanceSubfilter cur = appearanceSubfilter;
+                        bool PassesAppearanceSubfilters(AppearanceSubfilter f)
+                        {
+                            if (f == 0) return true;
+                            bool wantsPresets = (f & AppearanceSubfilter.Presets) != 0;
+                            bool wantsCustom = (f & AppearanceSubfilter.Custom) != 0;
+
+                            // If both are selected, it's effectively no type restriction.
+                            if (wantsPresets && wantsCustom) return true;
+                            if (wantsPresets) return isPresetAppearance;
+                            if (wantsCustom) return isCustomAppearance;
+                            return true;
+                        }
+
+                        // Facet counts: how many would be shown if the user toggled that flag now.
+                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Presets)) appearanceSubfilterFacetCountPresets++;
+                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Custom)) appearanceSubfilterFacetCountCustom++;
+
+                        // Apply active subfilters (if any) to tag counting.
+                        if (appearanceSubfilter != 0)
+                        {
+                            if (!PassesAppearanceSubfilters(appearanceSubfilter)) continue;
+                        }
+                    }
+
+                    // Appearance split-pane counts (All/Presets/Custom)
+                    if (isAppearanceTitle)
+                    {
+                        int lastDotAppearance = internalPath.LastIndexOf('.');
+                        string extAppearance = (lastDotAppearance >= 0 && lastDotAppearance < internalPath.Length - 1) ? internalPath.Substring(lastDotAppearance + 1) : "";
+                        if (string.Equals(extAppearance, "vap", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (internalPath.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase))
+                            {
+                                // Presets = appearance .vap inside .var packages
+                                appearanceSourceCountPresets++;
+                                appearanceSourceCountAll++;
+                            }
+                        }
+                    }
+
                     string pathLower = internalPath.ToLowerInvariant();
                     
-                    // 3. Count tags
-                    // Optimization: Tokenize path for single-word tags
-                    string[] tokens = pathLower.Split(separators);
-                    
-                    HashSet<string> foundTags = new HashSet<string>();
-
-                    // Check tokens against single word tags
-                    for (int k = 0; k < tokens.Length; k++)
+                    if (hasAnyTagsToCount)
                     {
-                        if (singleWordTags.Contains(tokens[k]))
+                        // 3. Count tags
+                        // Optimization: Tokenize path for single-word tags
+                        string[] tokens = pathLower.Split(separators);
+                        
+                        HashSet<string> foundTags = new HashSet<string>();
+
+                        // Check tokens against single word tags
+                        for (int k = 0; k < tokens.Length; k++)
                         {
-                            foundTags.Add(tokens[k]);
+                            if (singleWordTags.Contains(tokens[k]))
+                            {
+                                foundTags.Add(tokens[k]);
+                            }
                         }
-                    }
 
-                    // Check multi-word tags using Contains
-                    for (int k = 0; k < multiWordTags.Count; k++)
-                    {
-                        if (pathLower.Contains(multiWordTags[k]))
+                        // Check multi-word tags using Contains
+                        for (int k = 0; k < multiWordTags.Count; k++)
                         {
-                            foundTags.Add(multiWordTags[k]);
+                            if (pathLower.Contains(multiWordTags[k]))
+                            {
+                                foundTags.Add(multiWordTags[k]);
+                            }
                         }
-                    }
 
-                    // Check user-defined tags specifically for this entry
-                    var uTags = TagsManager.Instance.GetTags(entry.Uid);
-                    foreach (var ut in uTags)
-                    {
-                        // Ensure we only count it if it's in our tagsToCount (which it should be now)
-                        if (tagsToCount.Contains(ut)) foundTags.Add(ut);
-                    }
+                        // Check user-defined tags specifically for this entry
+                        var uTags = TagsManager.Instance.GetTags(entry.Uid);
+                        foreach (var ut in uTags)
+                        {
+                            // Ensure we only count it if it's in our tagsToCount (which it should be now)
+                            if (tagsToCount.Contains(ut)) foundTags.Add(ut);
+                        }
 
-                    // Increment counts
-                    foreach (var tag in foundTags)
-                    {
-                        if (!tagCounts.ContainsKey(tag)) tagCounts[tag] = 0;
-                        tagCounts[tag]++;
+                        // Increment counts
+                        foreach (var tag in foundTags)
+                        {
+                            if (!tagCounts.ContainsKey(tag)) tagCounts[tag] = 0;
+                            tagCounts[tag]++;
+                        }
                     }
                 }
             }
+
+            // Count Custom (local filesystem) appearances for split-pane counts.
+            // This is intentionally separate from the package loop above.
+            if (isAppearanceTitle)
+            {
+                List<string> pathsToSearch = new List<string>();
+                if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
+                else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
+
+                for (int pi = 0; pi < pathsToSearch.Count; pi++)
+                {
+                    string searchPath = pathsToSearch[pi];
+                    if (string.IsNullOrEmpty(searchPath) || !Directory.Exists(searchPath)) continue;
+
+                    List<string> sysFileList = new List<string>();
+                    try
+                    {
+                        FileManager.SafeGetFiles(searchPath, "*.vap", sysFileList);
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    for (int fi = 0; fi < sysFileList.Count; fi++)
+                    {
+                        string sysPath = sysFileList[fi] ?? "";
+                        string norm = sysPath.Replace('\\', '/');
+                        if (!norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase) &&
+                            !norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        appearanceSourceCountCustom++;
+                        appearanceSourceCountAll++;
+                    }
+                }
+            }
+
             tagsCached = true;
         }
 

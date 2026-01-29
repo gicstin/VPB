@@ -249,6 +249,7 @@ namespace VPB
         private string creatorFilter = "";
         private string tagFilter = ""; // NEW
         private string currentSceneSourceFilter = ""; // NEW
+        private string currentAppearanceSourceFilter = "";
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
         
@@ -270,7 +271,16 @@ namespace VPB
             Decals = 1 << 5,
         }
 
+        [Flags]
+        private enum AppearanceSubfilter
+        {
+            Presets = 1 << 0,
+            Custom = 1 << 1,
+        }
+
         private ClothingSubfilter clothingSubfilter = 0;
+
+        private AppearanceSubfilter appearanceSubfilter = 0;
 
         private int clothingSubfilterCountAll = 0;
         private int clothingSubfilterCountReal = 0;
@@ -286,6 +296,17 @@ namespace VPB
         private int clothingSubfilterFacetCountMale = 0;
         private int clothingSubfilterFacetCountFemale = 0;
         private int clothingSubfilterFacetCountDecals = 0;
+
+        private int appearanceSubfilterCountAll = 0;
+        private int appearanceSubfilterCountPresets = 0;
+        private int appearanceSubfilterCountCustom = 0;
+
+        private int appearanceSubfilterFacetCountPresets = 0;
+        private int appearanceSubfilterFacetCountCustom = 0;
+
+        private int appearanceSourceCountAll = 0;
+        private int appearanceSourceCountPresets = 0;
+        private int appearanceSourceCountCustom = 0;
 
         private InputField leftSearchInput;
         private InputField rightSearchInput;

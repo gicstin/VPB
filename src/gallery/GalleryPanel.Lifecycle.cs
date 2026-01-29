@@ -538,6 +538,7 @@ namespace VPB
                 rightSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, "Clear Selected", 14, 0, 0, AnchorPresets.bottomRight, () => {
                     activeTags.Clear();
                     currentSceneSourceFilter = "";
+                    currentAppearanceSourceFilter = "";
                     currentPage = 0;
                     RefreshFiles();
                     UpdateTabs();
@@ -661,6 +662,7 @@ namespace VPB
                 leftSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, "Clear Selected", 14, 0, 0, AnchorPresets.bottomLeft, () => {
                     activeTags.Clear();
                     currentSceneSourceFilter = "";
+                    currentAppearanceSourceFilter = "";
                     currentPage = 0;
                     RefreshFiles();
                     UpdateTabs();

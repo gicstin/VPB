@@ -54,6 +54,7 @@ namespace VPB
                     string title = titleText != null ? titleText.text : "";
                     if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
                         title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         splitView = true;
@@ -116,6 +117,10 @@ namespace VPB
                         {
                             subType = ContentType.SceneSource;
                         }
+                        else if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            subType = ContentType.AppearanceSource;
+                        }
                     }
                     
                     UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
@@ -147,6 +152,7 @@ namespace VPB
                     string title = titleText != null ? titleText.text : "";
                     if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
                         title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         splitView = true;
@@ -220,6 +226,10 @@ namespace VPB
                         if (title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
                             subType = ContentType.SceneSource;
+                        }
+                        else if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            subType = ContentType.AppearanceSource;
                         }
                     }
 
@@ -473,6 +483,39 @@ namespace VPB
                         if (currentRatingFilter == rating) currentRatingFilter = "";
                         else currentRatingFilter = rating;
                         
+                        currentPage = 0;
+                        RefreshFiles();
+                        UpdateTabs();
+                    }, trackedButtons);
+                }
+            }
+            else if (contentType == ContentType.AppearanceSource)
+            {
+                Color appearanceColor = new Color(0.2f, 0.4f, 0.7f, 1f);
+
+                if (!tagsCached) CacheTagCounts();
+
+                int allCount = appearanceSourceCountAll;
+                int presetsCount = appearanceSourceCountPresets;
+                int customCount = appearanceSourceCountCustom;
+
+                string[] appearanceKeys = new string[] { "", "presets", "custom" };
+                string[] appearanceLabels = new string[]
+                {
+                    "All (" + allCount + ")",
+                    "Presets (" + presetsCount + ")",
+                    "Custom (" + customCount + ")",
+                };
+
+                for (int i = 0; i < appearanceKeys.Length; i++)
+                {
+                    string key = appearanceKeys[i];
+                    string label = appearanceLabels[i];
+                    bool isActive = string.Equals(currentAppearanceSourceFilter, key, StringComparison.OrdinalIgnoreCase);
+                    Color btnColor = isActive ? appearanceColor : new Color(0.25f, 0.25f, 0.25f, 1f);
+
+                    CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                        currentAppearanceSourceFilter = key;
                         currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
