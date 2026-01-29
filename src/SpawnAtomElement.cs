@@ -366,42 +366,12 @@ namespace VPB
             SuperController sc = SuperController.singleton;
             if (sc == null) yield break;
 
+            string uid = null;
+            try { uid = "Person_" + Guid.NewGuid().ToString("N").Substring(0, 8); } catch { uid = "Person_" + UnityEngine.Random.Range(100000, 999999).ToString(); }
+            Vector3 hiddenSpawnPos = new Vector3(position.x, position.y - 1000f, position.z);
+
             Atom prevSelected = null;
             try { prevSelected = sc.GetSelectedAtom(); } catch { }
-
-            Atom anchorAtom = null;
-            HashSet<string> beforeAnchor = SnapshotAtomUids(sc);
-
-            IEnumerator anchorIe = null;
-            try { anchorIe = sc.AddAtomByType("Empty", "", false, false, false); }
-            catch { anchorIe = null; }
-
-            while (anchorIe != null && anchorIe.MoveNext())
-            {
-                yield return anchorIe.Current;
-            }
-
-            anchorAtom = FindNewAtomByType(sc, "Empty", beforeAnchor);
-
-            if (anchorAtom != null)
-            {
-                try { anchorAtom.transform.position = position; } catch { }
-                try
-                {
-                    if (anchorAtom.mainController != null)
-                    {
-                        anchorAtom.mainController.transform.position = position;
-                    }
-                }
-                catch { }
-
-                try
-                {
-                    MethodInfo selectAtom = sc.GetType().GetMethod("SelectAtom", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (selectAtom != null) selectAtom.Invoke(sc, new object[] { anchorAtom });
-                }
-                catch { }
-            }
 
             HashSet<string> before = SnapshotAtomUids(sc);
 
@@ -435,9 +405,9 @@ namespace VPB
                     {
                         Type pt = ps[pi].ParameterType;
                         if (pi == 0 && pt == typeof(string)) { args[pi] = "Person"; continue; }
-                        if (pi == 1 && pt == typeof(string)) { args[pi] = ""; continue; }
+                        if (pi == 1 && pt == typeof(string)) { args[pi] = uid; continue; }
 
-                        if (pt == typeof(Vector3)) { args[pi] = position; continue; }
+                        if (pt == typeof(Vector3)) { args[pi] = hiddenSpawnPos; continue; }
                         if (pt == typeof(Quaternion)) { args[pi] = Quaternion.identity; continue; }
                         if (pt == typeof(bool)) { args[pi] = false; continue; }
                         if (pt == typeof(int)) { args[pi] = 0; continue; }
@@ -481,10 +451,10 @@ namespace VPB
                             handle = new SpawnSuppressionHandle();
                             ApplySuppression(spawnedPerson, handle);
 
-                            try { spawnedPerson.transform.position = position; } catch { }
+                            try { spawnedPerson.transform.position = hiddenSpawnPos; } catch { }
                             try
                             {
-                                if (spawnedPerson.mainController != null) spawnedPerson.mainController.transform.position = position;
+                                if (spawnedPerson.mainController != null) spawnedPerson.mainController.transform.position = hiddenSpawnPos;
                             }
                             catch { }
 
@@ -507,10 +477,10 @@ namespace VPB
                 handle = new SpawnSuppressionHandle();
                 ApplySuppression(positionalSpawnAtom, handle);
 
-                try { positionalSpawnAtom.transform.position = position; } catch { }
+                try { positionalSpawnAtom.transform.position = hiddenSpawnPos; } catch { }
                 try
                 {
-                    if (positionalSpawnAtom.mainController != null) positionalSpawnAtom.mainController.transform.position = position;
+                    if (positionalSpawnAtom.mainController != null) positionalSpawnAtom.mainController.transform.position = hiddenSpawnPos;
                 }
                 catch { }
 
@@ -553,11 +523,11 @@ namespace VPB
 
                                 try
                                 {
-                                    if (f.FieldType == typeof(Vector3)) f.SetValue(sc, position);
+                                    if (f.FieldType == typeof(Vector3)) f.SetValue(sc, hiddenSpawnPos);
                                     else if (typeof(Transform).IsAssignableFrom(f.FieldType))
                                     {
                                         Transform tr = f.GetValue(sc) as Transform;
-                                        if (tr != null) tr.position = position;
+                                        if (tr != null) tr.position = hiddenSpawnPos;
                                     }
                                 }
                                 catch { }
@@ -585,11 +555,11 @@ namespace VPB
 
                                 try
                                 {
-                                    if (p.PropertyType == typeof(Vector3)) p.SetValue(sc, position, null);
+                                    if (p.PropertyType == typeof(Vector3)) p.SetValue(sc, hiddenSpawnPos, null);
                                     else if (typeof(Transform).IsAssignableFrom(p.PropertyType))
                                     {
                                         Transform tr = p.GetValue(sc, null) as Transform;
-                                        if (tr != null) tr.position = position;
+                                        if (tr != null) tr.position = hiddenSpawnPos;
                                     }
                                 }
                                 catch { }
@@ -599,7 +569,7 @@ namespace VPB
                     catch { }
 
                     IEnumerator addIe = null;
-                    try { addIe = sc.AddAtomByType("Person", "", false, false, false); }
+                    try { addIe = sc.AddAtomByType("Person", uid, false, false, false); }
                     catch { addIe = null; }
 
                     while (addIe != null && addIe.MoveNext())
@@ -613,10 +583,10 @@ namespace VPB
                                 {
                                     handle = new SpawnSuppressionHandle();
                                     ApplySuppression(earlyPerson, handle);
-                                    try { earlyPerson.transform.position = position; } catch { }
+                                    try { earlyPerson.transform.position = hiddenSpawnPos; } catch { }
                                     try
                                     {
-                                        if (earlyPerson.mainController != null) earlyPerson.mainController.transform.position = position;
+                                        if (earlyPerson.mainController != null) earlyPerson.mainController.transform.position = hiddenSpawnPos;
                                     }
                                     catch { }
                                     earlyMoved = true;
@@ -636,16 +606,6 @@ namespace VPB
             Atom newPerson = FindNewAtomByType(sc, "Person", before);
             if (newPerson == null)
             {
-                try
-                {
-                    if (anchorAtom != null)
-                    {
-                        sc.RemoveAtom(anchorAtom);
-                        anchorAtom = null;
-                    }
-                }
-                catch { }
-
                 yield break;
             }
 
@@ -654,6 +614,8 @@ namespace VPB
                 handle = new SpawnSuppressionHandle();
                 ApplySuppression(newPerson, handle);
             }
+
+            try { newPerson.transform.position = position; } catch { }
 
             try
             {
@@ -687,16 +649,6 @@ namespace VPB
                 {
                     MethodInfo selectAtom = sc.GetType().GetMethod("SelectAtom", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     if (selectAtom != null) selectAtom.Invoke(sc, new object[] { prevSelected });
-                }
-            }
-            catch { }
-
-            try
-            {
-                if (anchorAtom != null)
-                {
-                    sc.RemoveAtom(anchorAtom);
-                    anchorAtom = null;
                 }
             }
             catch { }

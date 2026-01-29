@@ -4803,7 +4803,7 @@ namespace VPB
 
              if (itemType == ItemType.Appearance)
              {
-                 UpdateGroundIndicator(eventData);
+                 HideGroundIndicator();
                  if (ghostBorder != null) ghostBorder.color = new Color(0f, 1f, 0f, 0.25f);
                  if (ghostRenderer != null) try { ghostRenderer.material.color = new Color(1f, 1f, 1f, 0.95f); } catch { }
                  if (ghostText != null)
@@ -5401,10 +5401,11 @@ namespace VPB
             }
             else if (type == ItemType.Appearance)
             {
-                AddAppearanceOptions(options, mode => {
+                options.Add(new ContextMenuPanel.Option("Spawn Person Appearance", () => {
+                    try { if (ContextMenuPanel.Instance != null) ContextMenuPanel.Instance.Hide(); } catch { }
                     Vector3 pos = position;
-                    StartCoroutine(CreatePersonAndApplyAppearance(entry, pos, mode));
-                });
+                    StartCoroutine(CreatePersonAndApplyAppearance(entry, pos, "replace"));
+                }));
             }
             
             if (options.Count > 0)
@@ -5433,11 +5434,22 @@ namespace VPB
 
             if (spawned == null) yield break;
 
+            FileEntry prevEntry = FileEntry;
+            try { FileEntry = entry; } catch { }
+
             try
             {
                 ApplyClothingToAtom(spawned, entry.Uid, clothingMode);
             }
             catch { }
+
+            try
+            {
+                ApplyPoseFromPresetPath(spawned, entry.Uid, true);
+            }
+            catch { }
+
+            try { FileEntry = prevEntry; } catch { }
 
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
@@ -5457,6 +5469,120 @@ namespace VPB
                 if (suppression != null) suppression.Restore();
             }
             catch { }
+
+            try
+            {
+                if (Panel != null && spawned != null)
+                {
+                    string spawnedUid = null;
+                    try { spawnedUid = spawned.uid; } catch { }
+                    if (!string.IsNullOrEmpty(spawnedUid))
+                    {
+                        GalleryPanel panelRef = Panel;
+                        Panel.PushUndo(() =>
+                        {
+                            try
+                            {
+                                if (SuperController.singleton == null) return;
+                                Atom a = null;
+                                try { a = SuperController.singleton.GetAtomByUid(spawnedUid); } catch { a = null; }
+                                if (a != null) SuperController.singleton.RemoveAtom(a);
+                            }
+                            catch { }
+
+                            try
+                            {
+                                if (panelRef != null) panelRef.RefreshTargetDropdown();
+                            }
+                            catch { }
+                        });
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (Panel != null) Panel.RefreshTargetDropdown();
+            }
+            catch { }
+        }
+
+        private void ApplyPoseFromPresetPath(Atom target, string path, bool suppressRoot)
+        {
+            if (target == null) return;
+            if (string.IsNullOrEmpty(path)) return;
+
+            string normalizedPath = UI.NormalizePath(path);
+            JSONNode node = null;
+            try { node = SuperController.singleton.LoadJSON(normalizedPath); } catch { node = null; }
+            if (node == null) return;
+
+            JSONClass presetJSON = null;
+            try { presetJSON = node.AsObject; } catch { presetJSON = null; }
+            if (presetJSON == null) return;
+
+            try
+            {
+                if (presetJSON["atoms"] != null)
+                {
+                    JSONClass extracted = ExtractAtomFromScene(presetJSON, "Person");
+                    if (extracted != null) presetJSON = extracted;
+                }
+            }
+            catch { }
+
+            if (suppressRoot)
+            {
+                try
+                {
+                    if (presetJSON["storables"] != null)
+                    {
+                        JSONArray storables = presetJSON["storables"] as JSONArray;
+                        if (storables != null)
+                        {
+                            for (int i = 0; i < storables.Count; i++)
+                            {
+                                JSONClass s = storables[i] as JSONClass;
+                                if (s == null) continue;
+                                if (s["id"].Value == "control")
+                                {
+                                    if (s.HasKey("position")) s.Remove("position");
+                                    if (s.HasKey("rotation")) s.Remove("rotation");
+                                }
+
+                                if (s["id"].Value == "PosePresets" || s["id"].Value == "control")
+                                {
+                                    if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
+                                }
+                            }
+                        }
+                    }
+                    else if (presetJSON["presets"] != null)
+                    {
+                        CleanPresets(presetJSON["presets"] as JSONArray);
+                    }
+                }
+                catch { }
+            }
+
+            JSONStorable presetStorable = null;
+            try { presetStorable = target.GetStorableByID("PosePresets"); } catch { presetStorable = null; }
+            if (presetStorable == null) return;
+
+            MeshVR.PresetManager pm = null;
+            try { pm = presetStorable.GetComponentInChildren<MeshVR.PresetManager>(); } catch { pm = null; }
+            if (pm == null) return;
+
+            try
+            {
+                MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath);
+                pm.LoadPresetFromJSON(presetJSON, false);
+            }
+            finally
+            {
+                try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { }
+            }
         }
 
         private void ShowImportCategories(FileEntry entry, Atom targetAtom)
