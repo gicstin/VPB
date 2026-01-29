@@ -707,6 +707,10 @@ namespace VPB
                 }
                 catch { }
             }
+            else
+            {
+                LogUtil.Log("[VPB] Undo: stack empty");
+            }
         }
 
         private bool IsMatch(FileEntry entry, List<string> paths, string singlePath, string[] extensions)
