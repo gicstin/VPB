@@ -1297,6 +1297,74 @@ namespace VPB
             }
         }
 
+        private bool IsPluginLikeStorableId(string sid)
+        {
+            if (string.IsNullOrEmpty(sid)) return false;
+            if (string.Equals(sid, "PluginPresets", StringComparison.OrdinalIgnoreCase)) return false;
+            if (sid.IndexOf("plugin#", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (sid.IndexOf("clothingplugin", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (sid.IndexOf("hairplugin", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (sid.IndexOf("plugindestructor", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (sid.IndexOf("stopper.", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (sid.IndexOf("plugin", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        private IEnumerator PostUndoPersonRefreshCoroutine(string atomUid, JSONClass geometrySnapshot, JSONClass skinSnapshot, int framesToWait)
+        {
+            if (framesToWait < 1) framesToWait = 1;
+            for (int i = 0; i < framesToWait; i++)
+            {
+                yield return new WaitForEndOfFrame();
+            }
+
+            Atom targetAtom = null;
+            try { targetAtom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { }
+            if (targetAtom == null) yield break;
+
+            try
+            {
+                if (geometrySnapshot != null)
+                {
+                    JSONStorable geo = null;
+                    try { geo = targetAtom.GetStorableByID("geometry"); } catch { }
+                    try { if (geo != null) geo.RestoreFromJSON(geometrySnapshot); } catch { }
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (skinSnapshot != null)
+                {
+                    JSONStorable skin = null;
+                    try { skin = targetAtom.GetStorableByID("Skin"); } catch { }
+                    try { if (skin != null) skin.RestoreFromJSON(skinSnapshot); } catch { }
+                }
+            }
+            catch { }
+
+            try
+            {
+                DAZCharacterSelector dcs = null;
+                try { dcs = targetAtom.GetComponentInChildren<DAZCharacterSelector>(); } catch { }
+                if (dcs != null)
+                {
+                    string[] methodCandidates = new[] { "Refresh", "RefreshAll", "RefreshGeometry", "RefreshSkin", "ResetSkin", "ResetMaterials", "SyncSkin", "SyncMaterials" };
+                    for (int i = 0; i < methodCandidates.Length; i++)
+                    {
+                        MethodInfo mi = null;
+                        try { mi = dcs.GetType().GetMethod(methodCandidates[i], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic); } catch { }
+                        if (mi == null) continue;
+                        var ps = mi.GetParameters();
+                        if (ps != null && ps.Length != 0) continue;
+                        try { mi.Invoke(dcs, null); } catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
         private JSONClass ExtractAtomFromScene(JSONClass sceneJSON, string atomType)
         {
             if (sceneJSON == null || sceneJSON["atoms"] == null) return null;
@@ -3896,15 +3964,23 @@ namespace VPB
                             LogUtil.LogWarning("[VPB] Full atom undo snapshot unavailable; falling back to storable snapshot for " + atom.uid);
 
                             List<JSONClass> storableSnapshotsAll = new List<JSONClass>();
+                            JSONClass geometrySnapshotAll = null;
+                            JSONClass skinSnapshotAll = null;
                             try
                             {
                                 foreach (var sid in atom.GetStorableIDs())
                                 {
+                                    if (IsPluginLikeStorableId(sid)) continue;
                                     JSONStorable s = null;
                                     try { s = atom.GetStorableByID(sid); } catch { }
                                     if (s == null) continue;
                                     JSONClass snap = null;
                                     try { snap = s.GetJSON(); } catch { }
+                                    if (snap != null)
+                                    {
+                                        if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) geometrySnapshotAll = snap;
+                                        if (string.Equals(sid, "Skin", StringComparison.OrdinalIgnoreCase)) skinSnapshotAll = snap;
+                                    }
                                     if (snap != null) storableSnapshotsAll.Add(snap);
                                 }
                             }
@@ -3928,11 +4004,18 @@ namespace VPB
                                     string sid = null;
                                     try { sid = snap["id"].Value; } catch { }
                                     if (string.IsNullOrEmpty(sid)) continue;
+                                    if (IsPluginLikeStorableId(sid)) continue;
                                     JSONStorable s = null;
                                     try { s = targetAtom.GetStorableByID(sid); } catch { }
                                     if (s == null) continue;
                                     try { s.RestoreFromJSON(snap); } catch { }
                                 }
+
+                                try
+                                {
+                                    StartCoroutine(PostUndoPersonRefreshCoroutine(atomUid, geometrySnapshotAll, skinSnapshotAll, 5));
+                                }
+                                catch { }
 
                                 LogUtil.Log("[VPB] Undo performed on " + atomUid + " (AllStorables)");
                             });
