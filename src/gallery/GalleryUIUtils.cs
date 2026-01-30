@@ -2108,7 +2108,13 @@ namespace VPB
                             dropPos = ray.GetPoint(dist);
                         }
 
-                        if (IsAmbiguousDrop(atom, FileEntry))
+                        // Special case: dropping an Appearance preset onto an existing Person atom should
+                        // apply to that person (instead of spawning a new person).
+                        if (itemType == ItemType.Appearance && atom.type == "Person")
+                        {
+                            ApplyClothingToAtom(atom, FileEntry.Uid, "replace");
+                        }
+                        else if (IsAmbiguousDrop(atom, FileEntry))
                         {
                             HandleDropWithContext(atom, FileEntry, dropPos);
                         }

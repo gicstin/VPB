@@ -213,6 +213,11 @@ namespace VPB
             appearanceSubfilterFacetCountFemale = 0;
             appearanceSubfilterFacetCountFuta = 0;
 
+            appearanceSubfilterCurrentCountAll = 0;
+            appearanceSubfilterCurrentCountMale = 0;
+            appearanceSubfilterCurrentCountFemale = 0;
+            appearanceSubfilterCurrentCountFuta = 0;
+
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             // Build extension set for fast lookup
             HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -468,6 +473,15 @@ namespace VPB
                         if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Male)) appearanceSubfilterFacetCountMale++;
                         if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Female)) appearanceSubfilterFacetCountFemale++;
                         if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Futa)) appearanceSubfilterFacetCountFuta++;
+
+                        // Current counts: how many are shown under the current active subfilter set.
+                        if (PassesAppearanceSubfilters(appearanceSubfilter))
+                        {
+                            appearanceSubfilterCurrentCountAll++;
+                            if (g == AppearanceGender.Male) appearanceSubfilterCurrentCountMale++;
+                            if (g == AppearanceGender.Female) appearanceSubfilterCurrentCountFemale++;
+                            if (g == AppearanceGender.Futa) appearanceSubfilterCurrentCountFuta++;
+                        }
 
                         // Apply active subfilters (if any) to tag counting.
                         if (appearanceSubfilter != 0)

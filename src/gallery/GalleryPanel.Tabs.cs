@@ -539,9 +539,9 @@ namespace VPB
                         Color btnColor2 = isGenderActive ? active : inactive;
 
                         int cnt = 0;
-                        if (opt == "Male") cnt = appearanceSubfilterFacetCountMale;
-                        else if (opt == "Female") cnt = appearanceSubfilterFacetCountFemale;
-                        else if (opt == "Futa") cnt = appearanceSubfilterFacetCountFuta;
+                        if (opt == "Male") cnt = isGenderActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
+                        else if (opt == "Female") cnt = isGenderActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
+                        else if (opt == "Futa") cnt = isGenderActive ? appearanceSubfilterCurrentCountFuta : appearanceSubfilterFacetCountFuta;
 
                         string label2 = opt + " (" + cnt + ")";
 
@@ -712,9 +712,9 @@ namespace VPB
                             Color btnColor = isActive ? active : inactive;
 
                             int cnt = 0;
-                            if (opt == "Male") cnt = appearanceSubfilterFacetCountMale;
-                            else if (opt == "Female") cnt = appearanceSubfilterFacetCountFemale;
-                            else if (opt == "Futa") cnt = appearanceSubfilterFacetCountFuta;
+                            if (opt == "Male") cnt = isActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
+                            else if (opt == "Female") cnt = isActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
+                            else if (opt == "Futa") cnt = isActive ? appearanceSubfilterCurrentCountFuta : appearanceSubfilterFacetCountFuta;
 
                             string label = opt + " (" + cnt + ")";
 

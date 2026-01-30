@@ -313,6 +313,11 @@ namespace VPB
         private int appearanceSubfilterFacetCountFemale = 0;
         private int appearanceSubfilterFacetCountFuta = 0;
 
+        private int appearanceSubfilterCurrentCountAll = 0;
+        private int appearanceSubfilterCurrentCountMale = 0;
+        private int appearanceSubfilterCurrentCountFemale = 0;
+        private int appearanceSubfilterCurrentCountFuta = 0;
+
         private int appearanceSourceCountAll = 0;
         private int appearanceSourceCountPresets = 0;
         private int appearanceSourceCountCustom = 0;
