@@ -55,6 +55,7 @@ namespace VPB
                     if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
                         title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         splitView = true;
@@ -153,6 +154,7 @@ namespace VPB
                     if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
                         title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         splitView = true;
@@ -725,6 +727,33 @@ namespace VPB
                                     else appearanceSubfilter |= flag;
                                 }
                                 tagsCached = false;
+                                currentPage = 0;
+                                RefreshFiles();
+                                UpdateTabs();
+                            }, trackedButtons);
+                        }
+                    }
+                }
+                else if (title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    {
+                        Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
+                        Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
+
+                        // Pose people-count filter (Single vs Dual)
+                        {
+                            bool isSingleActive = (posePeopleFilter == PosePeopleFilter.Single);
+                            bool isDualActive = (posePeopleFilter == PosePeopleFilter.Dual);
+
+                            CreateTabButton(container.transform, "Single (" + posePeopleFacetCountSingle + ")", isSingleActive ? active : inactive, isSingleActive, () => {
+                                posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Single) ? PosePeopleFilter.All : PosePeopleFilter.Single;
+                                currentPage = 0;
+                                RefreshFiles();
+                                UpdateTabs();
+                            }, trackedButtons);
+
+                            CreateTabButton(container.transform, "Dual (" + posePeopleFacetCountDual + ")", isDualActive ? active : inactive, isDualActive, () => {
+                                posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Dual) ? PosePeopleFilter.All : PosePeopleFilter.Dual;
                                 currentPage = 0;
                                 RefreshFiles();
                                 UpdateTabs();

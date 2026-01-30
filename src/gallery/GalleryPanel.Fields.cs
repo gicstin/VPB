@@ -250,6 +250,14 @@ namespace VPB
         private string tagFilter = ""; // NEW
         private string currentSceneSourceFilter = ""; // NEW
         private string currentAppearanceSourceFilter = "";
+        private PosePeopleFilter posePeopleFilter = PosePeopleFilter.All;
+        private readonly Dictionary<string, int> posePeopleCountCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private readonly object posePeopleCountCacheLock = new object();
+        private readonly Queue<FileEntry> posePeopleIndexQueue = new Queue<FileEntry>();
+        private readonly HashSet<string> posePeopleIndexQueued = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private Coroutine posePeopleIndexCoroutine;
+        private int posePeopleFacetUnknownCount = 0;
+        private string posePeopleIndexGroupId = "";
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
         
@@ -279,6 +287,13 @@ namespace VPB
             Male = 1 << 2,
             Female = 1 << 3,
             Futa = 1 << 4,
+        }
+
+        private enum PosePeopleFilter
+        {
+            All,
+            Single,
+            Dual,
         }
 
         private ClothingSubfilter clothingSubfilter = 0;
@@ -317,6 +332,9 @@ namespace VPB
         private int appearanceSubfilterCurrentCountMale = 0;
         private int appearanceSubfilterCurrentCountFemale = 0;
         private int appearanceSubfilterCurrentCountFuta = 0;
+
+        private int posePeopleFacetCountSingle = 0;
+        private int posePeopleFacetCountDual = 0;
 
         private int appearanceSourceCountAll = 0;
         private int appearanceSourceCountPresets = 0;

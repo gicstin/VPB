@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,7 +12,377 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private bool TryGetKnownPosePeopleCount(FileEntry entry, out int peopleCount)
+        {
+            peopleCount = 1;
+            if (entry == null) return false;
+
+            string p = null;
+            try { p = entry.Path; } catch { p = null; }
+            if (string.IsNullOrEmpty(p) || !p.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string key = null;
+            try { key = !string.IsNullOrEmpty(entry.Uid) ? entry.Uid : entry.Path; } catch { key = entry.Path; }
+            if (string.IsNullOrEmpty(key)) return false;
+
+            try
+            {
+                int persisted;
+                if (PosePeopleCountIndex.Instance.TryGet(key, out persisted) && persisted > 0)
+                {
+                    peopleCount = persisted;
+                    return true;
+                }
+            }
+            catch { }
+
+            lock (posePeopleCountCacheLock)
+            {
+                int cached;
+                if (posePeopleCountCache.TryGetValue(key, out cached) && cached > 0)
+                {
+                    peopleCount = cached;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void EnqueuePosePeopleIndex(FileEntry entry)
+        {
+            if (entry == null) return;
+            string key = null;
+            try { key = !string.IsNullOrEmpty(entry.Uid) ? entry.Uid : entry.Path; } catch { key = entry.Path; }
+            if (string.IsNullOrEmpty(key)) return;
+
+            lock (posePeopleCountCacheLock)
+            {
+                if (posePeopleIndexQueued.Contains(key)) return;
+                posePeopleIndexQueued.Add(key);
+                posePeopleIndexQueue.Enqueue(entry);
+            }
+        }
+
+        private void StartPosePeopleIndexCoroutine(string groupId)
+        {
+            posePeopleIndexGroupId = groupId ?? "";
+            if (posePeopleIndexCoroutine != null) StopCoroutine(posePeopleIndexCoroutine);
+            posePeopleIndexCoroutine = StartCoroutine(PosePeopleIndexRoutine(groupId));
+        }
+
+        private IEnumerator PosePeopleIndexRoutine(string groupId)
+        {
+            int processed = 0;
+            int sinceSave = 0;
+            float lastUiUpdate = Time.realtimeSinceStartup;
+
+            while (true)
+            {
+                if (groupId != posePeopleIndexGroupId) yield break;
+
+                FileEntry entry = null;
+                lock (posePeopleCountCacheLock)
+                {
+                    if (posePeopleIndexQueue.Count > 0) entry = posePeopleIndexQueue.Dequeue();
+                }
+
+                if (entry == null) break;
+
+                // This will do the expensive scan only once and persist it.
+                try { GetPosePeopleCount(entry); } catch { }
+
+                processed++;
+                sinceSave++;
+
+                // Periodically update UI counters (non-blocking)
+                if (Time.realtimeSinceStartup - lastUiUpdate > 0.35f)
+                {
+                    lastUiUpdate = Time.realtimeSinceStartup;
+                    try { UpdateTabs(); } catch { }
+                }
+
+                // Save occasionally
+                if (sinceSave >= 100)
+                {
+                    sinceSave = 0;
+                    try { PosePeopleCountIndex.Instance.Save(); } catch { }
+                }
+
+                // If filtering by Dual/Single, re-run refresh sometimes so list becomes accurate as we learn counts.
+                if (posePeopleFilter != PosePeopleFilter.All && (processed % 150) == 0)
+                {
+                    try { RefreshFiles(true); } catch { }
+                }
+
+                // Yield every few items to keep UI responsive.
+                if ((processed % 10) == 0) yield return null;
+            }
+
+            try { PosePeopleCountIndex.Instance.Save(); } catch { }
+            posePeopleIndexCoroutine = null;
+        }
+
+        private static bool TryParsePeopleCountFromJsonText(string text, out int count)
+        {
+            count = 0;
+            if (string.IsNullOrEmpty(text)) return false;
+
+            int idx = text.LastIndexOf("\"PeopleCount\"", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) return false;
+
+            int colon = text.IndexOf(':', idx);
+            if (colon < 0) return false;
+
+            int i = colon + 1;
+            while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
+            if (i < text.Length && text[i] == '"') i++;
+
+            int start = i;
+            while (i < text.Length && char.IsDigit(text[i])) i++;
+            if (i <= start) return false;
+
+            int parsed;
+            if (!int.TryParse(text.Substring(start, i - start), out parsed)) return false;
+            if (parsed <= 0) return false;
+
+            count = parsed;
+            return true;
+        }
+
+        private int GetPosePeopleCount(FileEntry entry)
+        {
+            if (entry == null) return 1;
+
+            // Only .json poses can be dual/multi; everything else is treated as Single.
+            string entryPath = null;
+            try { entryPath = entry.Path; } catch { entryPath = null; }
+            if (string.IsNullOrEmpty(entryPath) || !entryPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                return 1;
+
+            string key = null;
+            try { key = !string.IsNullOrEmpty(entry.Uid) ? entry.Uid : entry.Path; } catch { key = entry.Path; }
+            if (string.IsNullOrEmpty(key)) return 1;
+
+            // Persistent index for .var (and any UID-based entries)
+            try
+            {
+                int persisted;
+                if (PosePeopleCountIndex.Instance.TryGet(key, out persisted))
+                {
+                    lock (posePeopleCountCacheLock)
+                    {
+                        if (posePeopleCountCache.Count > 20000) posePeopleCountCache.Clear();
+                        posePeopleCountCache[key] = persisted;
+                    }
+                    return persisted;
+                }
+            }
+            catch { }
+
+            lock (posePeopleCountCacheLock)
+            {
+                int cached;
+                if (posePeopleCountCache.TryGetValue(key, out cached)) return cached;
+            }
+
+            int count = 1;
+            try
+            {
+                string p = entry.Path ?? "";
+                string norm = p.Replace('\\', '/');
+
+                // Only attempt JSON read for pose-like json
+                if (norm.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Avoid parsing non-pose json when possible
+                    bool looksPose = norm.IndexOf("/pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    norm.IndexOf("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    norm.IndexOf("Saves/Person", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    if (looksPose)
+                    {
+                        bool haveValue = false;
+
+                        // If stream is seekable (local files), read the tail where PeopleCount typically lives.
+                        try
+                        {
+                            using (var stream = entry.OpenStream())
+                            {
+                                if (stream != null && stream.Stream != null && stream.Stream.CanSeek)
+                                {
+                                    Stream s = stream.Stream;
+                                    long len = 0;
+                                    try { len = s.Length; } catch { len = 0; }
+
+                                    if (len > 0)
+                                    {
+                                        long readLen = Math.Min(65536, len);
+                                        s.Seek(-readLen, SeekOrigin.End);
+                                        byte[] tailBytes = new byte[(int)readLen];
+                                        int totalRead = 0;
+                                        while (totalRead < (int)readLen)
+                                        {
+                                            int r = s.Read(tailBytes, totalRead, (int)readLen - totalRead);
+                                            if (r <= 0) break;
+                                            totalRead += r;
+                                        }
+
+                                        if (totalRead > 0)
+                                        {
+                                            string tailText = Encoding.UTF8.GetString(tailBytes, 0, totalRead);
+
+                                            int parsed;
+                                            if (TryParsePeopleCountFromJsonText(tailText, out parsed))
+                                            {
+                                                count = parsed;
+                                                haveValue = true;
+                                            }
+                                            else if (tailText.IndexOf("\"Person2\"", StringComparison.OrdinalIgnoreCase) >= 0)
+                                            {
+                                                count = 2;
+                                                haveValue = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+
+                        if (haveValue)
+                        {
+                            // fall through to cache write
+                        }
+                        else
+                        {
+                        // Stream scan for "PeopleCount" to avoid reading entire file into memory.
+                        // This is a simple state machine that matches the exact key (case-sensitive as stored).
+                        const string needle = "\"PeopleCount\"";
+                        int match = 0;
+                        bool foundKey = false;
+                        bool afterColon = false;
+                        int parsed = 0;
+                        bool parsingDigits = false;
+                        bool haveValue2 = false;
+
+                        try
+                        {
+                            using (var reader = entry.OpenStreamReader())
+                            {
+                                char[] buf = new char[4096];
+                                int n;
+                                if (reader.StreamReader == null) throw new Exception("Null StreamReader");
+                                while ((n = reader.StreamReader.Read(buf, 0, buf.Length)) > 0)
+                                {
+                                    for (int bi = 0; bi < n; bi++)
+                                    {
+                                        char c = buf[bi];
+
+                                        if (!foundKey)
+                                        {
+                                            if (c == needle[match])
+                                            {
+                                                match++;
+                                                if (match == needle.Length)
+                                                {
+                                                    foundKey = true;
+                                                    match = 0;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                match = (c == needle[0]) ? 1 : 0;
+                                            }
+                                            continue;
+                                        }
+
+                                        if (!afterColon)
+                                        {
+                                            if (c == ':')
+                                            {
+                                                afterColon = true;
+                                            }
+                                            continue;
+                                        }
+
+                                        if (!parsingDigits)
+                                        {
+                                            if (char.IsWhiteSpace(c)) continue;
+                                            if (c == '"') continue;
+                                            if (char.IsDigit(c))
+                                            {
+                                                parsingDigits = true;
+                                                parsed = (c - '0');
+                                                continue;
+                                            }
+                                            // Unexpected token; stop trying.
+                                            break;
+                                        }
+
+                                        // parsingDigits
+                                        if (char.IsDigit(c))
+                                        {
+                                            int d = (c - '0');
+                                            // Avoid overflow; PeopleCount is tiny.
+                                            if (parsed < 1000) parsed = parsed * 10 + d;
+                                            continue;
+                                        }
+
+                                        // End of digits
+                                        if (parsed > 0)
+                                        {
+                                            count = parsed;
+                                            haveValue2 = true;
+                                        }
+                                        break;
+                                    }
+
+                                    // Early exit once we got a value.
+                                    if (haveValue2) break;
+                                }
+
+                                // Handle case where digits end at EOF
+                                if (!haveValue2 && foundKey && afterColon && parsingDigits && parsed > 0) count = parsed;
+                            }
+                        }
+                        catch
+                        {
+                            // ignore
+                        }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                count = 1;
+            }
+
+            lock (posePeopleCountCacheLock)
+            {
+                // Cap cache size to avoid unbounded growth
+                if (posePeopleCountCache.Count > 20000) posePeopleCountCache.Clear();
+                posePeopleCountCache[key] = count;
+            }
+
+            try
+            {
+                // Persist discovered counts so VAR pose browsing doesn't need rescans next time.
+                PosePeopleCountIndex.Instance.Set(key, count);
+            }
+            catch { }
+
+            return count;
+        }
+
         private bool PassesFilters(FileEntry entry)
+        {
+            return PassesFilters(entry, false);
+        }
+
+        private bool PassesFilters(FileEntry entry, bool ignorePosePeopleFilter)
         {
             if (entry == null) return false;
 
@@ -61,6 +432,22 @@ namespace VPB
                     if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
                     if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male) return false; }
                     if ((clothingSubfilter & ClothingSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female) return false; }
+                }
+            }
+
+            // Pose subfilter (Single vs Dual)
+            bool isPose = title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!ignorePosePeopleFilter && isPose && posePeopleFilter != PosePeopleFilter.All)
+            {
+                int peopleCount = GetPosePeopleCount(entry);
+                bool isDual = peopleCount >= 2;
+                if (posePeopleFilter == PosePeopleFilter.Single)
+                {
+                    if (isDual) return false;
+                }
+                else if (posePeopleFilter == PosePeopleFilter.Dual)
+                {
+                    if (!isDual) return false;
                 }
             }
 
@@ -287,6 +674,11 @@ namespace VPB
         {
             yield return null; // Allow UI to render first
             var swTotal = System.Diagnostics.Stopwatch.StartNew();
+
+            // Reset pose facet counts for this refresh
+            posePeopleFacetCountSingle = 0;
+            posePeopleFacetCountDual = 0;
+            posePeopleFacetUnknownCount = 0;
             
             if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
             {
@@ -308,6 +700,24 @@ namespace VPB
             List<FileEntry> files = new List<FileEntry>();
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             bool hasNameFilter = !string.IsNullOrEmpty(nameFilterLower);
+
+            string titleForCounts = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            bool isPoseCategory = titleForCounts.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            // Note: Show() calls RefreshFiles() before UpdateTabs(), so the split sub-pane may not be active yet.
+            // We still want counters to populate as soon as loading finishes.
+            bool wantsPoseCounts = isPoseCategory;
+
+            // Reset progressive index queue when browsing Pose
+            if (isPoseCategory)
+            {
+                lock (posePeopleCountCacheLock)
+                {
+                    posePeopleIndexQueue.Clear();
+                    posePeopleIndexQueued.Clear();
+                }
+                posePeopleIndexGroupId = currentLoadingGroupId;
+            }
             
             // Time-based yielding configuration
             var yieldWatch = new System.Diagnostics.Stopwatch();
@@ -327,16 +737,51 @@ namespace VPB
                         yieldWatch.Start();
                     }
 
-                    if (PassesFilters(entry))
+                    bool baseOk = PassesFilters(entry, true);
+                    if (!baseOk) continue;
+
+                    int pcPose = 1;
+                    bool needPc = wantsPoseCounts || (posePeopleFilter != PosePeopleFilter.All);
+                    if (needPc)
                     {
-                        // Check name filter if set
-                        if (hasNameFilter)
+                        bool isJsonPose = false;
+                        try { isJsonPose = (entry.Path != null && entry.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)); } catch { isJsonPose = false; }
+                        if (isJsonPose)
                         {
-                            if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
-                                continue;
+                            int known;
+                            if (TryGetKnownPosePeopleCount(entry, out known))
+                            {
+                                pcPose = known;
+                            }
+                            else
+                            {
+                                // Unknown: enqueue for background indexing, assume single for now.
+                                posePeopleFacetUnknownCount++;
+                                EnqueuePosePeopleIndex(entry);
+                                pcPose = 1;
+                            }
                         }
-                        files.Add(entry);
+                        else
+                        {
+                            pcPose = 1;
+                        }
+                        if (wantsPoseCounts)
+                        {
+                            if (pcPose >= 2) posePeopleFacetCountDual++;
+                            else posePeopleFacetCountSingle++;
+                        }
+
+                        if (posePeopleFilter == PosePeopleFilter.Single && pcPose >= 2) continue;
+                        if (posePeopleFilter == PosePeopleFilter.Dual && pcPose < 2) continue;
                     }
+
+                    // Check name filter if set
+                    if (hasNameFilter)
+                    {
+                        if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
+                            continue;
+                    }
+                    files.Add(entry);
                 }
             }
             else if (FileManager.PackagesByUid != null)
@@ -486,10 +931,44 @@ namespace VPB
                         }
 
                         hadWork = true;
-                        if (PassesFilters(entry))
+
+                        bool baseOk = PassesFilters(entry, true);
+                        if (!baseOk) continue;
+
+                        int pcPose = 1;
+                        bool needPc = wantsPoseCounts || (posePeopleFilter != PosePeopleFilter.All);
+                        if (needPc)
                         {
-                            files.Add(entry);
+                            bool isJsonPose = false;
+                            try { isJsonPose = (entry.Path != null && entry.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)); } catch { isJsonPose = false; }
+                            if (isJsonPose)
+                            {
+                                int known;
+                                if (TryGetKnownPosePeopleCount(entry, out known))
+                                {
+                                    pcPose = known;
+                                }
+                                else
+                                {
+                                    posePeopleFacetUnknownCount++;
+                                    EnqueuePosePeopleIndex(entry);
+                                    pcPose = 1;
+                                }
+                            }
+                            else
+                            {
+                                pcPose = 1;
+                            }
+                            if (wantsPoseCounts)
+                            {
+                                if (pcPose >= 2) posePeopleFacetCountDual++;
+                                else posePeopleFacetCountSingle++;
+                            }
+                            if (posePeopleFilter == PosePeopleFilter.Single && pcPose >= 2) continue;
+                            if (posePeopleFilter == PosePeopleFilter.Dual && pcPose < 2) continue;
                         }
+
+                        files.Add(entry);
 
                         if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
                         {
@@ -540,10 +1019,44 @@ namespace VPB
                                 }
 
                                 var sysEntry = new SystemFileEntry(sysPath);
-                                if (PassesFilters(sysEntry))
+
+                                bool baseOk = PassesFilters(sysEntry, true);
+                                if (!baseOk) continue;
+
+                                int pcPose = 1;
+                                bool needPc = wantsPoseCounts || (posePeopleFilter != PosePeopleFilter.All);
+                                if (needPc)
                                 {
-                                    files.Add(sysEntry);
+                                    bool isJsonPose = false;
+                                    try { isJsonPose = (sysEntry.Path != null && sysEntry.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)); } catch { isJsonPose = false; }
+                                    if (isJsonPose)
+                                    {
+                                        int known;
+                                        if (TryGetKnownPosePeopleCount(sysEntry, out known))
+                                        {
+                                            pcPose = known;
+                                        }
+                                        else
+                                        {
+                                            posePeopleFacetUnknownCount++;
+                                            EnqueuePosePeopleIndex(sysEntry);
+                                            pcPose = 1;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        pcPose = 1;
+                                    }
+                                    if (wantsPoseCounts)
+                                    {
+                                        if (pcPose >= 2) posePeopleFacetCountDual++;
+                                        else posePeopleFacetCountSingle++;
+                                    }
+                                    if (posePeopleFilter == PosePeopleFilter.Single && pcPose >= 2) continue;
+                                    if (posePeopleFilter == PosePeopleFilter.Dual && pcPose < 2) continue;
                                 }
+
+                                files.Add(sysEntry);
                             }
                         }
                     }
@@ -659,6 +1172,19 @@ namespace VPB
 
             HideLoadingOverlay();
             refreshCoroutine = null;
+            if (isPoseCategory)
+            {
+                try { UpdateTabs(); } catch { }
+                try { PosePeopleCountIndex.Instance.Save(); } catch { }
+
+                // Start background indexing for unknown pose json entries.
+                bool hasWork = false;
+                lock (posePeopleCountCacheLock) { hasWork = posePeopleIndexQueue.Count > 0; }
+                if (hasWork)
+                {
+                    try { StartPosePeopleIndexCoroutine(currentLoadingGroupId); } catch { }
+                }
+            }
             LogUtil.Log("RefreshFilesRoutine took: " + swTotal.ElapsedMilliseconds + "ms");
         }
     }
