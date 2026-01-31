@@ -14,6 +14,7 @@ namespace VPB
             public string ClearConsoleKeyDraft;
             public bool PluginsAlwaysEnabledDraft;
             public bool LoadDependenciesWithPackageDraft;
+            public bool ForceLatestDependenciesDraft;
             public bool IsDevModeDraft;
             public bool EnableUiTransparencyDraft;
             public float UiTransparencyValueDraft;
@@ -57,6 +58,7 @@ namespace VPB
         private string m_SettingsClearConsoleKeyDraft { get => m_SettingsDraft.ClearConsoleKeyDraft; set => m_SettingsDraft.ClearConsoleKeyDraft = value; }
         private bool m_SettingsPluginsAlwaysEnabledDraft { get => m_SettingsDraft.PluginsAlwaysEnabledDraft; set => m_SettingsDraft.PluginsAlwaysEnabledDraft = value; }
         private bool m_SettingsLoadDependenciesWithPackageDraft { get => m_SettingsDraft.LoadDependenciesWithPackageDraft; set => m_SettingsDraft.LoadDependenciesWithPackageDraft = value; }
+        private bool m_SettingsForceLatestDependenciesDraft { get => m_SettingsDraft.ForceLatestDependenciesDraft; set => m_SettingsDraft.ForceLatestDependenciesDraft = value; }
         private bool m_SettingsIsDevModeDraft { get => m_SettingsDraft.IsDevModeDraft; set => m_SettingsDraft.IsDevModeDraft = value; }
         private bool m_SettingsEnableUiTransparencyDraft { get => m_SettingsDraft.EnableUiTransparencyDraft; set => m_SettingsDraft.EnableUiTransparencyDraft = value; }
         private float m_SettingsUiTransparencyValueDraft { get => m_SettingsDraft.UiTransparencyValueDraft; set => m_SettingsDraft.UiTransparencyValueDraft = value; }

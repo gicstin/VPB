@@ -252,11 +252,12 @@ namespace VPB
             }
             try
             {
-                FileManager.WriteAllBytes("AllPackages/" + text, data);
+                FileManager.CreateDirectory("AddonPackages");
+                FileManager.WriteAllBytes("AddonPackages/" + text, data);
             }
             catch (Exception)
             {
-                LogUtil.Log("Error while trying to save file AllPackages/" + text + " after download");
+                LogUtil.Log("Error while trying to save file AddonPackages/" + text + " after download");
                 isDownloadQueuedJSON.val = false;
                 isDownloadingJSON.val = false;
             }

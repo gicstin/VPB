@@ -44,6 +44,18 @@ namespace VPB
         public ConfigEntry<bool> LogStartupDetails;
         public ConfigEntry<bool> LogHubRequests;
 
+        public ConfigEntry<string> HubHostedOption;
+        public ConfigEntry<string> HubPayTypeFilter;
+        public ConfigEntry<string> HubCategoryFilter;
+        public ConfigEntry<string> HubCreatorFilter;
+        public ConfigEntry<string> HubTagsFilter;
+        public ConfigEntry<string> HubSearchText;
+        public ConfigEntry<string> HubSortPrimary;
+        public ConfigEntry<string> HubSortSecondary;
+        public ConfigEntry<int> HubItemsPerPage;
+        public ConfigEntry<int> HubCurrentPage;
+        public ConfigEntry<bool> HubOnlyDownloadable;
+
         public ConfigEntry<bool> LogImageQueueEvents;
         public ConfigEntry<bool> LogVerboseUi;
         public ConfigEntry<bool> EnableUiTransparency;
@@ -51,6 +63,9 @@ namespace VPB
         public ConfigEntry<bool> ShowSceneLoadingOverlay;
         public ConfigEntry<bool> AutoPageEnabled;
         public ConfigEntry<bool> LoadDependenciesWithPackage;
+        public ConfigEntry<bool> ForceLatestDependencies;
+        public ConfigEntry<string> ForceLatestDependencyPackageGroups;
+        public ConfigEntry<string> ForceLatestDependencyIgnorePackageGroups;
         public ConfigEntry<Rect> PackageManagerWindowRect;
         public ConfigEntry<string> PackageManagerSortField;
         public ConfigEntry<bool> PackageManagerSortAscending;
@@ -92,6 +107,9 @@ namespace VPB
             ShowSceneLoadingOverlay = config.Bind<bool>("UI", "ShowSceneLoadingOverlay", false, "Show VPB full-screen loading overlay during scene loads.");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
             LoadDependenciesWithPackage = config.Bind<bool>("Settings", "LoadDependenciesWithPackage", true, "When loading a package, also load all its dependencies.");
+            ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
+            ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");
+            ForceLatestDependencyIgnorePackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyIgnorePackageGroups", "", "Comma/space separated list of package groups (Author.Package) to ignore (do not force) even when ForceLatestDependencies is enabled.");
 
             PackageManagerWindowRect = config.Bind<Rect>("PackageManager", "WindowRect", new Rect(100, 100, 1000, 600), "Package Manager window position and size.");
             PackageManagerSortField = config.Bind<string>("PackageManager", "SortField", "Name", "Package Manager sort field.");
@@ -106,6 +124,18 @@ namespace VPB
 
             LogStartupDetails = config.Bind<bool>("Logging", "LogStartupDetails", false, "Log additional startup/patch/initialization details (can be noisy). Enable when troubleshooting.");
             LogHubRequests = config.Bind<bool>("Logging", "LogHubRequests", false, "Log detailed Hub request timing and payload information (very verbose). Enable when troubleshooting Hub issues.");
+
+            HubHostedOption = config.Bind<string>("HubBrowser", "HostedOption", "Hub And Dependencies", "Hub Browser: Hosted option filter.");
+            HubPayTypeFilter = config.Bind<string>("HubBrowser", "PayTypeFilter", "Free", "Hub Browser: Pay type filter.");
+            HubCategoryFilter = config.Bind<string>("HubBrowser", "CategoryFilter", "All", "Hub Browser: Category filter.");
+            HubCreatorFilter = config.Bind<string>("HubBrowser", "CreatorFilter", "All", "Hub Browser: Creator filter.");
+            HubTagsFilter = config.Bind<string>("HubBrowser", "TagsFilter", "All", "Hub Browser: Tags filter.");
+            HubSearchText = config.Bind<string>("HubBrowser", "SearchText", "", "Hub Browser: Search text.");
+            HubSortPrimary = config.Bind<string>("HubBrowser", "SortPrimary", "Latest Update", "Hub Browser: Primary sort.");
+            HubSortSecondary = config.Bind<string>("HubBrowser", "SortSecondary", "None", "Hub Browser: Secondary sort.");
+            HubItemsPerPage = config.Bind<int>("HubBrowser", "ItemsPerPage", 48, "Hub Browser: Items per page.");
+            HubCurrentPage = config.Bind<int>("HubBrowser", "CurrentPage", 1, "Hub Browser: Current page.");
+            HubOnlyDownloadable = config.Bind<bool>("HubBrowser", "OnlyDownloadable", true, "Hub Browser: Only show downloadable resources.");
 
 
             AutoOptimizeCache = config.Bind<bool>("Optimze", "AutoOptimizeCache", false, "When checked, clicking Optimize Cache button will start compression without opening the confirmation window.");

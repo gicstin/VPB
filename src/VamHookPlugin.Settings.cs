@@ -19,6 +19,7 @@ namespace VPB
             m_SettingsClearConsoleKeyDraft = (Settings.Instance != null && Settings.Instance.ClearConsoleKey != null) ? Settings.Instance.ClearConsoleKey.Value : "";
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsLoadDependenciesWithPackageDraft = (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null) ? Settings.Instance.LoadDependenciesWithPackage.Value : true;
+            m_SettingsForceLatestDependenciesDraft = (Settings.Instance != null && Settings.Instance.ForceLatestDependencies != null) ? Settings.Instance.ForceLatestDependencies.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
             m_SettingsUiTransparencyValueDraft = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
             m_SettingsIsDevModeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.IsDevMode : false;
@@ -76,6 +77,13 @@ namespace VPB
                     if (Settings.Instance.LoadDependenciesWithPackage.Value != m_SettingsLoadDependenciesWithPackageDraft)
                     {
                         Settings.Instance.LoadDependenciesWithPackage.Value = m_SettingsLoadDependenciesWithPackageDraft;
+                    }
+                }
+                if (Settings.Instance != null && Settings.Instance.ForceLatestDependencies != null)
+                {
+                    if (Settings.Instance.ForceLatestDependencies.Value != m_SettingsForceLatestDependenciesDraft)
+                    {
+                        Settings.Instance.ForceLatestDependencies.Value = m_SettingsForceLatestDependenciesDraft;
                     }
                 }
                 if (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null)
@@ -238,6 +246,19 @@ namespace VPB
                 m_SettingsLoadDependenciesWithPackageDraft = !m_SettingsLoadDependenciesWithPackageDraft;
             }
             GUILayout.Label("Load dependencies when loading a package");
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(m_SettingsForceLatestDependenciesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                m_SettingsForceLatestDependenciesDraft = !m_SettingsForceLatestDependenciesDraft;
+            }
+            GUILayout.Label("Force latest dependency versions");
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Whitelist", m_StyleButtonSmall, GUILayout.Width(110f), GUILayout.Height(buttonHeight)))
+            {
+                OpenDependencyWhitelistUGUI();
+            }
             GUILayout.EndHorizontal();
 
             GUILayout.Space(6);

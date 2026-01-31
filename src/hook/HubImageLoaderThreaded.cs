@@ -782,17 +782,50 @@ namespace VPB
                     }
                     if (value.webRequest.isDone)
                     {
-                        if (!value.webRequest.isNetworkError && value.webRequest.responseCode == 200)
+                        long code = value.webRequest.responseCode;
+                        if (!value.webRequest.isNetworkError && code >= 200 && code < 300)
                         {
                             value.webRequestData = value.webRequest.downloadHandler.data;
                             value.webRequestDone = true;
+                        }
+                        else if (!value.webRequest.isNetworkError && (code == 301 || code == 302 || code == 307 || code == 308))
+                        {
+                            try
+                            {
+                                var headers = value.webRequest.GetResponseHeaders();
+                                string location;
+                                if (headers != null && headers.TryGetValue("Location", out location) && !string.IsNullOrEmpty(location))
+                                {
+                                    if (Settings.Instance != null && Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
+                                        LogUtil.Log($"[VPB] Hub thumbnail redirect {code}: {value.imgPath} -> {location}");
+
+                                    value.webRequest.Dispose();
+                                    value.webRequest = UnityWebRequest.Get(location);
+                                    value.webRequest.timeout = 30;
+                                    value.webRequest.SendWebRequest();
+                                    return;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                if (Settings.Instance != null && Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
+                                    LogUtil.LogWarning($"[VPB] Hub thumbnail redirect handling failed for {value.imgPath}: {ex.Message}");
+                            }
+
+                            value.webRequestHadError = true;
+                            value.webRequestDone = true;
+                            value.hadError = true;
+                            value.errorText = "Redirect " + code;
                         }
                         else
                         {
                             value.webRequestHadError = true;
                             value.webRequestDone = true;
                             value.hadError = true;
-                            value.errorText = "Error " + value.webRequest.responseCode;
+                            value.errorText = "Error " + code;
+
+                            if (Settings.Instance != null && Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
+                                LogUtil.LogWarning($"[VPB] Hub thumbnail HTTP error {code} url={value.imgPath} err={value.webRequest.error}");
                         }
                     }
                 }

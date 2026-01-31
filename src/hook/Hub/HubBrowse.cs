@@ -186,6 +186,9 @@ namespace VPB
 
         protected JSONStorableStringChooser sortSecondaryChooser;
 
+        protected bool hubSettingsApplied;
+        protected bool suppressHubSettingsSave;
+
         protected Dictionary<string, HubResourceItemDetailUI> savedResourceDetailsPanels;
 
         protected Stack<HubResourceItemDetailUI> resourceDetailStack;
@@ -879,6 +882,10 @@ namespace VPB
         protected void SyncNumPerPage(float f)
         {
             _numPerPageInt = (int)f;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubItemsPerPage != null)
+            {
+                Settings.Instance.HubItemsPerPage.Value = _numPerPageInt;
+            }
             ResetRefresh();
         }
 
@@ -896,6 +903,10 @@ namespace VPB
             _currentPageString = "1";
             _currentPageInt = 1;
             currentPageJSON.valNoCallback = _currentPageString;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubCurrentPage != null)
+            {
+                Settings.Instance.HubCurrentPage.Value = 1;
+            }
             SetPageInfo();
             RefreshResources();
         }
@@ -908,6 +919,10 @@ namespace VPB
             if (int.TryParse(s, out result))
             {
                 _currentPageInt = result;
+            }
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubCurrentPage != null)
+            {
+                Settings.Instance.HubCurrentPage.Value = _currentPageInt;
             }
             SetPageInfo();
             RefreshResources();
@@ -957,12 +972,20 @@ namespace VPB
         protected void SyncHostedOption(string s)
         {
             _hostedOption = s;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubHostedOption != null)
+            {
+                Settings.Instance.HubHostedOption.Value = _hostedOption;
+            }
             ResetRefresh();
         }
 
         protected void SyncPayTypeFilter(string s)
         {
             _payTypeFilter = s;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubPayTypeFilter != null)
+            {
+                Settings.Instance.HubPayTypeFilter.Value = _payTypeFilter;
+            }
             if (_payTypeFilter != "Free" && _hostedOption != "All")
             {
                 hostedOptionChooser.val = "All";
@@ -987,6 +1010,10 @@ namespace VPB
         protected void SyncSearchFilter(string s)
         {
             _searchFilter = s;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubSearchText != null)
+            {
+                Settings.Instance.HubSearchText.Value = _searchFilter;
+            }
             bool flag = false;
             if (_searchFilter.Length > 2)
             {
@@ -1014,6 +1041,10 @@ namespace VPB
         protected void SyncCategoryFilter(string s)
         {
             _categoryFilter = s;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubCategoryFilter != null)
+            {
+                Settings.Instance.HubCategoryFilter.Value = _categoryFilter;
+            }
             ResetRefresh();
         }
 
@@ -1034,24 +1065,40 @@ namespace VPB
         protected void SyncCreatorFilter(string s)
         {
             _creatorFilter = s;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubCreatorFilter != null)
+            {
+                Settings.Instance.HubCreatorFilter.Value = _creatorFilter;
+            }
             ResetRefresh();
         }
 
         protected void SyncTagsFilter(string s)
         {
             _tagsFilter = s;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubTagsFilter != null)
+            {
+                Settings.Instance.HubTagsFilter.Value = _tagsFilter;
+            }
             ResetRefresh();
         }
 
         protected void SyncSortPrimary(string s)
         {
             _sortPrimary = s;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubSortPrimary != null)
+            {
+                Settings.Instance.HubSortPrimary.Value = _sortPrimary;
+            }
             ResetRefresh();
         }
 
         protected void SyncSortSecondary(string s)
         {
             _sortSecondary = s;
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubSortSecondary != null)
+            {
+                Settings.Instance.HubSortSecondary.Value = _sortSecondary;
+            }
             ResetRefresh();
         }
 
@@ -1633,7 +1680,7 @@ namespace VPB
         {
             if (GetBrowserCookiesRoutine == null && browser != null)
             {
-                StartCoroutine(GetBrowserCookies());
+                GetBrowserCookiesRoutine = StartCoroutine(GetBrowserCookies());
             }
         }
 
@@ -1908,12 +1955,123 @@ namespace VPB
                     sortSecondaryChooser.choices = list7;
                 }
             }
+
+            ApplyPersistedHubSettingsIfNeeded();
+
             string text = asObject["last_update"];
             if (packagesJSONUrl != null && packagesJSONUrl != string.Empty && text != null)
             {
                 string uri = packagesJSONUrl + "?" + text;
                 LogUtil.Log($"HubBrowse requesting packages.json uri={uri}");
                 StartCoroutine(GetRequest(uri, GetPackagesJSONCallback, GetPackagesJSONErrorCallback));
+            }
+        }
+
+        protected static string NormalizeHubSetting(string v)
+        {
+            if (v == null) return string.Empty;
+            v = v.Trim();
+            if (string.Equals(v, "null", StringComparison.OrdinalIgnoreCase)) return string.Empty;
+            return v;
+        }
+
+        protected static string ValidateChoice(JSONStorableStringChooser chooser, string desired, string fallback)
+        {
+            string d = NormalizeHubSetting(desired);
+            if (string.IsNullOrEmpty(d)) return fallback;
+            if (chooser == null || chooser.choices == null) return fallback;
+            foreach (var c in chooser.choices)
+            {
+                if (string.Equals(c, d, StringComparison.OrdinalIgnoreCase))
+                {
+                    return c;
+                }
+            }
+            return fallback;
+        }
+
+        protected static int ClampInt(int v, int min, int max)
+        {
+            if (v < min) return min;
+            if (v > max) return max;
+            return v;
+        }
+
+        protected void ApplyPersistedHubSettingsIfNeeded()
+        {
+            if (hubSettingsApplied) return;
+            if (Settings.Instance == null) return;
+
+            suppressHubSettingsSave = true;
+            try
+            {
+                bool onlyDl = (Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : true;
+                if (onlyDownloadable != null)
+                {
+                    onlyDownloadable.valNoCallback = onlyDl;
+                }
+
+                string hosted = (Settings.Instance.HubHostedOption != null) ? Settings.Instance.HubHostedOption.Value : _hostedOption;
+                hosted = ValidateChoice(hostedOptionChooser, hosted, "All");
+                _hostedOption = hosted;
+                if (hostedOptionChooser != null) hostedOptionChooser.valNoCallback = hosted;
+
+                string payType = (Settings.Instance.HubPayTypeFilter != null) ? Settings.Instance.HubPayTypeFilter.Value : _payTypeFilter;
+                payType = ValidateChoice(payTypeFilterChooser, payType, "All");
+                if (onlyDl) payType = "Free";
+                _payTypeFilter = payType;
+                if (payTypeFilterChooser != null) payTypeFilterChooser.valNoCallback = payType;
+
+                string category = (Settings.Instance.HubCategoryFilter != null) ? Settings.Instance.HubCategoryFilter.Value : _categoryFilter;
+                category = ValidateChoice(categoryFilterChooser, category, "All");
+                _categoryFilter = category;
+                if (categoryFilterChooser != null) categoryFilterChooser.valNoCallback = category;
+
+                string creator = (Settings.Instance.HubCreatorFilter != null) ? Settings.Instance.HubCreatorFilter.Value : _creatorFilter;
+                creator = ValidateChoice(creatorFilterChooser, creator, "All");
+                _creatorFilter = creator;
+                if (creatorFilterChooser != null) creatorFilterChooser.valNoCallback = creator;
+
+                string tags = (Settings.Instance.HubTagsFilter != null) ? Settings.Instance.HubTagsFilter.Value : _tagsFilter;
+                tags = ValidateChoice(tagsFilterChooser, tags, "All");
+                _tagsFilter = tags;
+                if (tagsFilterChooser != null) tagsFilterChooser.valNoCallback = tags;
+
+                string sortPrimary = (Settings.Instance.HubSortPrimary != null) ? Settings.Instance.HubSortPrimary.Value : _sortPrimary;
+                sortPrimary = ValidateChoice(sortPrimaryChooser, sortPrimary, "Latest Update");
+                _sortPrimary = sortPrimary;
+                if (sortPrimaryChooser != null) sortPrimaryChooser.valNoCallback = sortPrimary;
+
+                string sortSecondary = (Settings.Instance.HubSortSecondary != null) ? Settings.Instance.HubSortSecondary.Value : _sortSecondary;
+                sortSecondary = ValidateChoice(sortSecondaryChooser, sortSecondary, "None");
+                _sortSecondary = sortSecondary;
+                if (sortSecondaryChooser != null) sortSecondaryChooser.valNoCallback = sortSecondary;
+
+                string search = (Settings.Instance.HubSearchText != null) ? Settings.Instance.HubSearchText.Value : _searchFilter;
+                search = NormalizeHubSetting(search);
+                _searchFilter = search;
+                _minLengthSearchFilter = (search.Length > 2) ? search : string.Empty;
+                if (searchFilterJSON != null) searchFilterJSON.valNoCallback = search;
+
+                int perPage = (Settings.Instance.HubItemsPerPage != null) ? Settings.Instance.HubItemsPerPage.Value : _numPerPageInt;
+                _numPerPageInt = ClampInt(perPage, 1, 500);
+
+                int page = (Settings.Instance.HubCurrentPage != null) ? Settings.Instance.HubCurrentPage.Value : _currentPageInt;
+                _currentPageInt = ClampInt(page, 1, 99999);
+                _currentPageString = _currentPageInt.ToString();
+                if (currentPageJSON != null) currentPageJSON.valNoCallback = _currentPageString;
+                SetPageInfo();
+            }
+            finally
+            {
+                suppressHubSettingsSave = false;
+            }
+
+            hubSettingsApplied = true;
+
+            if (_hubEnabled && _isShowing)
+            {
+                RefreshResources();
             }
         }
 
@@ -1971,6 +2129,29 @@ namespace VPB
         protected void Init()
         {
             LogUtil.LogVerboseUi("HubBrowse Init");
+
+            if (Settings.Instance != null)
+            {
+                if (Settings.Instance.HubHostedOption != null) _hostedOption = NormalizeHubSetting(Settings.Instance.HubHostedOption.Value);
+                if (Settings.Instance.HubPayTypeFilter != null) _payTypeFilter = NormalizeHubSetting(Settings.Instance.HubPayTypeFilter.Value);
+                if (Settings.Instance.HubCategoryFilter != null) _categoryFilter = NormalizeHubSetting(Settings.Instance.HubCategoryFilter.Value);
+                if (Settings.Instance.HubCreatorFilter != null) _creatorFilter = NormalizeHubSetting(Settings.Instance.HubCreatorFilter.Value);
+                if (Settings.Instance.HubTagsFilter != null) _tagsFilter = NormalizeHubSetting(Settings.Instance.HubTagsFilter.Value);
+                if (Settings.Instance.HubSortPrimary != null) _sortPrimary = NormalizeHubSetting(Settings.Instance.HubSortPrimary.Value);
+                if (Settings.Instance.HubSortSecondary != null) _sortSecondary = NormalizeHubSetting(Settings.Instance.HubSortSecondary.Value);
+                if (Settings.Instance.HubSearchText != null)
+                {
+                    _searchFilter = NormalizeHubSetting(Settings.Instance.HubSearchText.Value);
+                    _minLengthSearchFilter = (_searchFilter.Length > 2) ? _searchFilter : string.Empty;
+                }
+                if (Settings.Instance.HubItemsPerPage != null) _numPerPageInt = ClampInt(Settings.Instance.HubItemsPerPage.Value, 1, 500);
+                if (Settings.Instance.HubCurrentPage != null)
+                {
+                    _currentPageInt = ClampInt(Settings.Instance.HubCurrentPage.Value, 1, 99999);
+                    _currentPageString = _currentPageInt.ToString();
+                }
+            }
+
             hubEnabledJSON = new JSONStorableBool("hubEnabled", _hubEnabled, SyncHubEnabled);
             enableHubAction = new JSONStorableAction("EnableHub", EnableHub);
             webBrowserEnabledJSON = new JSONStorableBool("webBrowserEnabled", _webBrowserEnabled, SyncWebBrowserEnabled);
@@ -1980,7 +2161,7 @@ namespace VPB
             numResourcesJSON = new JSONStorableString("numResources", "0", SyncNumResources);
             pageInfoJSON = new JSONStorableString("pageInfo", "Page 0 of 0");
             numPagesJSON = new JSONStorableString("numPages", "0", SyncNumPages);
-            currentPageJSON = new JSONStorableString("currentPage", "1", SyncCurrentPage);
+            currentPageJSON = new JSONStorableString("currentPage", _currentPageString, SyncCurrentPage);
             firstPageAction = new JSONStorableAction("FirstPage", FirstPage);
             previousPageAction = new JSONStorableAction("PreviousPage", PreviousPage);
             RegisterAction(previousPageAction);
@@ -1990,6 +2171,11 @@ namespace VPB
             RegisterAction(refreshResourcesAction);
             clearFiltersAction = new JSONStorableAction("ResetFilters", ResetFiltersAndRefresh);
             RegisterAction(clearFiltersAction);
+
+            numPerPageJSON = new JSONStorableFloat("numPerPage", _numPerPageInt, SyncNumPerPage, 1f, 500f, true, false);
+            numPerPageJSON.isStorable = false;
+            numPerPageJSON.isRestorable = false;
+            RegisterFloat(numPerPageJSON);
 
             List<string> list = new List<string>();
             list.Add("All");
@@ -2211,7 +2397,8 @@ namespace VPB
             var relPos = openMissingPackagesPanelButton.transform.localPosition;
             Transform parent = openMissingPackagesPanelButton.transform.parent;
 
-            onlyDownloadable = new JSONStorableBool("Only Downloadable", true);
+            bool initialOnlyDownloadable = (Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : true;
+            onlyDownloadable = new JSONStorableBool("Only Downloadable", initialOnlyDownloadable, SyncOnlyDownloadable);
             var manager = SuperController.singleton.transform.Find("ScenePluginManager").GetComponent<MVRPluginManager>();
             if (manager != null && manager.configurableTogglePrefab != null)
             {
@@ -2233,10 +2420,52 @@ namespace VPB
                 LogUtil.LogVerboseUi("HubBrowse Init End");
         }
         JSONStorableBool onlyDownloadable;
+
+        protected void SyncOnlyDownloadable(bool b)
+        {
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null)
+            {
+                Settings.Instance.HubOnlyDownloadable.Value = b;
+            }
+
+            if (b)
+            {
+                // PayType must be Free when Only Downloadable is enabled.
+                if (_payTypeFilter != "Free")
+                {
+                    _payTypeFilter = "Free";
+                    if (payTypeFilterChooser != null) payTypeFilterChooser.valNoCallback = "Free";
+                    if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubPayTypeFilter != null)
+                    {
+                        Settings.Instance.HubPayTypeFilter.Value = "Free";
+                    }
+                }
+            }
+
+            ResetRefresh();
+        }
         protected void OnLoad(ZenFulcrum.EmbeddedBrowser.JSONNode loadData)
         {
-            browser.EvalJS("\r\n\t\t\t\twindow.scrollTo(0,0);\r\n\t\t\t");
-            RefreshCookies();
+            try
+            {
+                if (browser != null && browser.IsReady)
+                {
+                    browser.EvalJS("\r\n\t\t\t\twindow.scrollTo(0,0);\r\n\t\t\t");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning($"[VPB] HubBrowse OnLoad EvalJS failed: {ex.Message}");
+            }
+
+            try
+            {
+                RefreshCookies();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning($"[VPB] HubBrowse RefreshCookies failed: {ex.Message}");
+            }
         }
 
         protected override void Awake()

@@ -755,6 +755,12 @@ namespace VPB
             Settings.Init(this.Config);
             try
             {
+                // Ensure dependency whitelist (Saves/PluginData/VPB/dependency_whitelist.json) is loaded early.
+                var _ = DependencyWhitelistManager.Instance;
+            }
+            catch { }
+            try
+            {
                 VPBConfig.ReloadFromDisk();
                 var cfg = VPBConfig.Instance;
                 LogUtil.Log("[VPBConfig] Awake loaded | path=" + cfg.ConfigPathForDebug + " | LastGalleryCategory=" + cfg.LastGalleryCategory + " | DragDropReplaceMode=" + cfg.DragDropReplaceMode);

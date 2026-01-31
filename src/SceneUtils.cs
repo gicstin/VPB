@@ -445,15 +445,8 @@ namespace VPB
                                         int missing = 0;
                                         foreach (string key in deps)
                                         {
-                                            VarPackage pkg = FileManager.GetPackage(key, false);
+                                            VarPackage pkg = FileManager.GetPackageForDependency(key, false);
                                             if (pkg != null) continue;
-
-                                            if (!key.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                string latest = key.Substring(0, key.LastIndexOf('.')) + ".latest";
-                                                pkg = FileManager.GetPackage(latest, false);
-                                                if (pkg != null) continue;
-                                            }
                                             missing++;
                                         }
                                         if (missing > 0)

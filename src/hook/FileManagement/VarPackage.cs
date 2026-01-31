@@ -1539,7 +1539,7 @@ namespace VPB
 			{
 				foreach (string key in asObject.Keys)
 				{
-					VarPackage package = FileManager.GetPackage(key, false);
+					VarPackage package = FileManager.GetPackageForDependency(key, false);
 					if (package == null)
 					{
 						HasMissingDependencies = true;
@@ -1592,7 +1592,7 @@ namespace VPB
             {
 				foreach (var key in this.RecursivePackageDependencies)
 				{
-					VarPackage package = FileManager.GetPackage(key, false);
+					VarPackage package = FileManager.GetPackageForDependency(key, false);
 					if (package != null)
 					{
 						bool dirty2= package.InstallRecursive(visited);

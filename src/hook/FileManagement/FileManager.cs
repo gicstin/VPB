@@ -28,6 +28,8 @@ namespace VPB
         Coroutine m_Co = null;
         Coroutine m_RefreshCo = null;
         Coroutine m_StartScanCo = null;
+        Coroutine m_MvrRefreshCo = null;
+        bool m_MvrRefreshPending = false;
         bool m_RefreshPending = false;
         bool m_RefreshPendingInit = false;
         bool m_RefreshPendingClean = false;
@@ -962,6 +964,137 @@ namespace VPB
 			return hashSet;
 		}
 
+		private static HashSet<string> ParsePackageGroupList(string raw)
+		{
+			HashSet<string> set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			if (string.IsNullOrEmpty(raw)) return set;
+			string[] parts = Regex.Split(raw, "[\\s,;]+", RegexOptions.CultureInvariant);
+			for (int i = 0; i < parts.Length; i++)
+			{
+				string p = parts[i];
+				if (string.IsNullOrEmpty(p)) continue;
+				p = p.Trim();
+				if (p.Length == 0) continue;
+				set.Add(p);
+			}
+			return set;
+		}
+
+		private static bool TryGetPackageGroupFromDependencyId(string depId, out string packageGroup)
+		{
+			packageGroup = null;
+			if (string.IsNullOrEmpty(depId)) return false;
+			Match match;
+			if ((match = Regex.Match(depId, "^([^\\.]+\\.[^\\.]+)\\.[0-9]+$", RegexOptions.CultureInvariant)).Success)
+			{
+				packageGroup = match.Groups[1].Value;
+				return true;
+			}
+			if ((match = Regex.Match(depId, "^([^\\.]+\\.[^\\.]+)\\.min[0-9]+$", RegexOptions.CultureInvariant)).Success)
+			{
+				packageGroup = match.Groups[1].Value;
+				return true;
+			}
+			if ((match = Regex.Match(depId, "^([^\\.]+\\.[^\\.]+)\\.latest$", RegexOptions.CultureInvariant)).Success)
+			{
+				packageGroup = match.Groups[1].Value;
+				return true;
+			}
+			return false;
+		}
+
+		private static readonly HashSet<string> s_ForceLatestDepLogOnce = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		private static bool s_ForceLatestSummaryLogged = false;
+
+		private static bool ShouldLogForceLatestDependencies()
+		{
+			try
+			{
+				return VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		private static void LogForceLatestDecisionOnce(string key, string message)
+		{
+			if (!ShouldLogForceLatestDependencies()) return;
+			if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(message)) return;
+			try
+			{
+				if (s_ForceLatestDepLogOnce.Add(key))
+				{
+					LogUtil.Log(message);
+				}
+			}
+			catch { }
+		}
+
+		private static string MaybeForceLatestDependency(string dependencyId)
+		{
+			try
+			{
+				if (Settings.Instance == null || Settings.Instance.ForceLatestDependencies == null || !Settings.Instance.ForceLatestDependencies.Value)
+					return dependencyId;
+
+				// One-time dev-mode summary so you can confirm settings and list sizes.
+				if (!s_ForceLatestSummaryLogged && ShouldLogForceLatestDependencies())
+				{
+					s_ForceLatestSummaryLogged = true;
+					try
+					{
+						string ignoreRaw0 = (Settings.Instance.ForceLatestDependencyIgnorePackageGroups != null) ? Settings.Instance.ForceLatestDependencyIgnorePackageGroups.Value : null;
+						string forceRaw0 = (Settings.Instance.ForceLatestDependencyPackageGroups != null) ? Settings.Instance.ForceLatestDependencyPackageGroups.Value : null;
+						int ignoreCount0 = ParsePackageGroupList(ignoreRaw0).Count;
+						int forceCount0 = ParsePackageGroupList(forceRaw0).Count;
+						LogUtil.Log("[VPB] ForceLatestDeps: ENABLED | forceCount=" + forceCount0 + " | whitelistCount=" + ignoreCount0);
+					}
+					catch { }
+				}
+
+				if (!TryGetPackageGroupFromDependencyId(dependencyId, out string packageGroup) || string.IsNullOrEmpty(packageGroup))
+					return dependencyId;
+
+				string ignoreRaw = (Settings.Instance.ForceLatestDependencyIgnorePackageGroups != null) ? Settings.Instance.ForceLatestDependencyIgnorePackageGroups.Value : null;
+				HashSet<string> ignore = ParsePackageGroupList(ignoreRaw);
+				if (ignore.Contains(packageGroup))
+				{
+					LogForceLatestDecisionOnce("wl:" + packageGroup, "[VPB] ForceLatestDeps: SKIP (whitelisted) dep='" + dependencyId + "'");
+					return dependencyId;
+				}
+
+				string forceRaw = (Settings.Instance.ForceLatestDependencyPackageGroups != null) ? Settings.Instance.ForceLatestDependencyPackageGroups.Value : null;
+				HashSet<string> force = ParsePackageGroupList(forceRaw);
+				if (!force.Contains(packageGroup))
+				{
+					LogForceLatestDecisionOnce("nf:" + packageGroup, "[VPB] ForceLatestDeps: SKIP (not in force list) dep='" + dependencyId + "'");
+					return dependencyId;
+				}
+
+				if (dependencyId.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+				{
+					LogForceLatestDecisionOnce("al:" + dependencyId, "[VPB] ForceLatestDeps: KEEP (already .latest) dep='" + dependencyId + "'");
+					return dependencyId;
+				}
+
+				string forced = packageGroup + ".latest";
+				LogForceLatestDecisionOnce("ap:" + dependencyId + "=>" + forced, "[VPB] ForceLatestDeps: APPLY dep='" + dependencyId + "' -> '" + forced + "'");
+				return forced;
+			}
+			catch
+			{
+				return dependencyId;
+			}
+		}
+
+		public static VarPackage GetPackageForDependency(string dependencyId, bool ensureInstalled = true)
+		{
+			string resolvedId = MaybeForceLatestDependency(dependencyId);
+			return GetPackage(resolvedId, ensureInstalled);
+		}
+
 		public List<string> GetMissingDependenciesNames()
 		{
 			HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -974,7 +1107,7 @@ namespace VPB
 					{
 						foreach (var key in vp.RecursivePackageDependencies)
 						{
-							VarPackage pkg = FileManager.GetPackage(key);
+							VarPackage pkg = FileManager.GetPackageForDependency(key);
 							if (pkg == null)
 							{
 								hashSet.Add(key);
@@ -1576,8 +1709,37 @@ namespace VPB
 			if (moved)
 			{
 				LogUtil.Log($"[VPB] Dependencies installed/verified for: {package.Uid}");
-				MVR.FileManagement.FileManager.Refresh();
+				ScheduleMvrRefresh();
 				FileManager.Refresh();
+			}
+		}
+
+		private static void ScheduleMvrRefresh()
+		{
+			if (singleton == null) return;
+			if (singleton.m_MvrRefreshCo != null)
+			{
+				singleton.m_MvrRefreshPending = true;
+				return;
+			}
+			singleton.m_MvrRefreshCo = singleton.StartCoroutine(singleton.MvrRefreshCo());
+		}
+
+		private IEnumerator MvrRefreshCo()
+		{
+			try
+			{
+				yield return new WaitForSeconds(0.5f);
+				MVR.FileManagement.FileManager.Refresh();
+			}
+			finally
+			{
+				m_MvrRefreshCo = null;
+				if (m_MvrRefreshPending)
+				{
+					m_MvrRefreshPending = false;
+					m_MvrRefreshCo = StartCoroutine(MvrRefreshCo());
+				}
 			}
 		}
 

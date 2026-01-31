@@ -247,7 +247,7 @@ namespace VPB
             bool flag = false;
             foreach (var key in set)
             {
-                VarPackage package = FileManager.GetPackage(key, false);
+                VarPackage package = FileManager.GetPackageForDependency(key, false);
                 if (package != null)
                 {
                     string path = package.Path;
@@ -260,29 +260,7 @@ namespace VPB
                 }
                 else
                 {
-                    if (!key.EndsWith(".latest"))
-                    {
-                        string newKey = key.Substring(0, key.LastIndexOf('.'))+ ".latest";
-                        VarPackage packageNewest = FileManager.GetPackage(newKey, false);
-                        if (packageNewest != null)
-                        {
-                            string pathLatest = packageNewest.Path;
-                            bool dirty = packageNewest.InstallRecursive();
-                            if (dirty)
-                            {
-                                LogUtil.Log("Installed " + newKey + " path=" + pathLatest + " (requested " + key + ")");
-                                flag = true;
-                            }
-                        }
-                        else
-                        {
-                            LogUtil.LogError("Install Failed (package not found) " + newKey);
-                        }
-                    }
-                    else
-                    {
-                        LogUtil.LogError("Install Failed (package not found) " + key);
-                    }
+                    LogUtil.LogError("Install Failed (package not found) " + key);
                 }
             }
             if (flag)
