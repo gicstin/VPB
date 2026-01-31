@@ -408,7 +408,15 @@ namespace VPB
             if (del == null) del = go.AddComponent<UIHoverDelegate>();
             
             del.OnHoverChange += (enter) => {
-                if (enter) temporaryStatusMsg = tooltip;
+                if (enter)
+                {
+                    if (temporaryStatusCoroutine != null)
+                    {
+                        StopCoroutine(temporaryStatusCoroutine);
+                        temporaryStatusCoroutine = null;
+                    }
+                    temporaryStatusMsg = tooltip;
+                }
                 else if (temporaryStatusMsg == tooltip) temporaryStatusMsg = null;
             };
         }

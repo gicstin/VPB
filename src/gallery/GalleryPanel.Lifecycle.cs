@@ -160,7 +160,10 @@ namespace VPB
 
         private void AddHoverDelegate(GameObject go)
         {
-            var del = go.AddComponent<UIHoverDelegate>();
+            if (go == null) return;
+
+            var del = go.GetComponent<UIHoverDelegate>();
+            if (del == null) del = go.AddComponent<UIHoverDelegate>();
             del.OnHoverChange += (enter) => {
                 if (enter) hoverCount++;
                 else hoverCount--;

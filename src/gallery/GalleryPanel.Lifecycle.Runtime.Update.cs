@@ -390,6 +390,16 @@ namespace VPB
                 finalStatus = temporaryStatusMsg;
             }
 
+            if (!string.IsNullOrEmpty(finalStatus) && hoverPathCanvasGroup != null)
+            {
+                if (hoverFadeCoroutine != null)
+                {
+                    StopCoroutine(hoverFadeCoroutine);
+                    hoverFadeCoroutine = null;
+                }
+                hoverPathCanvasGroup.alpha = 1f;
+            }
+
             if (statusBarText != null)
             {
                 statusBarText.text = finalStatus ?? "";
