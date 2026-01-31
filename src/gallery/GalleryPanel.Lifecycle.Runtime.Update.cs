@@ -581,6 +581,11 @@ namespace VPB
             ApplyCurvatureToChildren();
         }
 
+        public void ResetFollowOffsets()
+        {
+            offsetsInitialized = false;
+        }
+
         public void RepositionInFront()
         {
             if (Camera.main != null)

@@ -299,5 +299,43 @@ namespace VPB
                 p.Hide();
             }
         }
+
+        public void CloseAll()
+        {
+            foreach (var p in panels.ToList())
+            {
+                if (p == null) continue;
+                p.Close();
+            }
+        }
+
+        public void BringAllToFront()
+        {
+            Transform camTrans = Camera.main != null ? Camera.main.transform : null;
+            if (camTrans == null && SuperController.singleton != null && SuperController.singleton.centerCameraTarget != null)
+                camTrans = SuperController.singleton.centerCameraTarget.transform;
+
+            if (camTrans == null) return;
+
+            Vector3 basePos = camTrans.position + camTrans.forward * 2.0f;
+            Vector3 right = camTrans.right;
+
+            int count = panels.Count;
+            float spacing = 0.35f;
+            float start = -(count - 1) * 0.5f * spacing;
+
+            for (int i = 0; i < panels.Count; i++)
+            {
+                var p = panels[i];
+                if (p == null || p.canvas == null) continue;
+                if (p.isFixedLocally) continue;
+
+                Vector3 pos = basePos + right * (start + i * spacing);
+                p.canvas.transform.position = pos;
+                p.canvas.transform.rotation = Quaternion.LookRotation(pos - camTrans.position, Vector3.up);
+
+                try { p.ResetFollowOffsets(); } catch { }
+            }
+        }
     }
 }

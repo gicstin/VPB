@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using UnityEngine;
@@ -57,7 +56,7 @@ namespace VPB
             try { key = !string.IsNullOrEmpty(entry.Uid) ? entry.Uid : entry.Path; } catch { key = entry.Path; }
             if (string.IsNullOrEmpty(key)) return;
 
-            lock (posePeopleCountCacheLock)
+            lock (posePeopleIndexLock)
             {
                 if (posePeopleIndexQueued.Contains(key)) return;
                 posePeopleIndexQueued.Add(key);
@@ -68,7 +67,11 @@ namespace VPB
         private void StartPosePeopleIndexCoroutine(string groupId)
         {
             posePeopleIndexGroupId = groupId ?? "";
-            if (posePeopleIndexCoroutine != null) StopCoroutine(posePeopleIndexCoroutine);
+            if (posePeopleIndexCoroutine != null)
+            {
+                StopCoroutine(posePeopleIndexCoroutine);
+                posePeopleIndexCoroutine = null;
+            }
             posePeopleIndexCoroutine = StartCoroutine(PosePeopleIndexRoutine(groupId));
         }
 
@@ -77,13 +80,14 @@ namespace VPB
             int processed = 0;
             int sinceSave = 0;
             float lastUiUpdate = Time.realtimeSinceStartup;
+            float lastRefresh = Time.realtimeSinceStartup;
 
             while (true)
             {
                 if (groupId != posePeopleIndexGroupId) yield break;
 
                 FileEntry entry = null;
-                lock (posePeopleCountCacheLock)
+                lock (posePeopleIndexLock)
                 {
                     if (posePeopleIndexQueue.Count > 0) entry = posePeopleIndexQueue.Dequeue();
                 }
@@ -111,9 +115,15 @@ namespace VPB
                 }
 
                 // If filtering by Dual/Single, re-run refresh sometimes so list becomes accurate as we learn counts.
-                if (posePeopleFilter != PosePeopleFilter.All && (processed % 150) == 0)
+                // NOTE: don't call RefreshFiles() here; it resets currentLoadingGroupId and would cancel this coroutine.
+                // We instead just refresh the tab labels and let the user trigger a refresh if needed.
+                if (posePeopleFilter != PosePeopleFilter.All && (processed % 250) == 0)
                 {
-                    try { RefreshFiles(true); } catch { }
+                    if (Time.realtimeSinceStartup - lastRefresh > 1.0f)
+                    {
+                        lastRefresh = Time.realtimeSinceStartup;
+                        try { UpdateTabs(); } catch { }
+                    }
                 }
 
                 // Yield every few items to keep UI responsive.
@@ -121,6 +131,11 @@ namespace VPB
             }
 
             try { PosePeopleCountIndex.Instance.Save(); } catch { }
+            lock (posePeopleIndexLock)
+            {
+                posePeopleIndexQueue.Clear();
+                posePeopleIndexQueued.Clear();
+            }
             posePeopleIndexCoroutine = null;
         }
 
@@ -678,7 +693,7 @@ namespace VPB
             // Reset pose facet counts for this refresh
             posePeopleFacetCountSingle = 0;
             posePeopleFacetCountDual = 0;
-            posePeopleFacetUnknownCount = 0;
+            // posePeopleFacetUnknownCount removed (unused)
             
             if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
             {
@@ -711,12 +726,27 @@ namespace VPB
             // Reset progressive index queue when browsing Pose
             if (isPoseCategory)
             {
-                lock (posePeopleCountCacheLock)
+                lock (posePeopleIndexLock)
                 {
                     posePeopleIndexQueue.Clear();
                     posePeopleIndexQueued.Clear();
                 }
                 posePeopleIndexGroupId = currentLoadingGroupId;
+            }
+            else
+            {
+                // Cancel any outstanding pose indexing work when leaving Pose category.
+                posePeopleIndexGroupId = "";
+                if (posePeopleIndexCoroutine != null)
+                {
+                    try { StopCoroutine(posePeopleIndexCoroutine); } catch { }
+                    posePeopleIndexCoroutine = null;
+                }
+                lock (posePeopleIndexLock)
+                {
+                    posePeopleIndexQueue.Clear();
+                    posePeopleIndexQueued.Clear();
+                }
             }
             
             // Time-based yielding configuration
@@ -756,7 +786,6 @@ namespace VPB
                             else
                             {
                                 // Unknown: enqueue for background indexing, assume single for now.
-                                posePeopleFacetUnknownCount++;
                                 EnqueuePosePeopleIndex(entry);
                                 pcPose = 1;
                             }
@@ -950,7 +979,6 @@ namespace VPB
                                 }
                                 else
                                 {
-                                    posePeopleFacetUnknownCount++;
                                     EnqueuePosePeopleIndex(entry);
                                     pcPose = 1;
                                 }
@@ -1038,7 +1066,6 @@ namespace VPB
                                         }
                                         else
                                         {
-                                            posePeopleFacetUnknownCount++;
                                             EnqueuePosePeopleIndex(sysEntry);
                                             pcPose = 1;
                                         }
@@ -1179,7 +1206,7 @@ namespace VPB
 
                 // Start background indexing for unknown pose json entries.
                 bool hasWork = false;
-                lock (posePeopleCountCacheLock) { hasWork = posePeopleIndexQueue.Count > 0; }
+                lock (posePeopleIndexLock) { hasWork = posePeopleIndexQueue.Count > 0; }
                 if (hasWork)
                 {
                     try { StartPosePeopleIndexCoroutine(currentLoadingGroupId); } catch { }

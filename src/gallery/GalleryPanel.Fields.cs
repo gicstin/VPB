@@ -253,10 +253,10 @@ namespace VPB
         private PosePeopleFilter posePeopleFilter = PosePeopleFilter.All;
         private readonly Dictionary<string, int> posePeopleCountCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private readonly object posePeopleCountCacheLock = new object();
+        private readonly object posePeopleIndexLock = new object();
         private readonly Queue<FileEntry> posePeopleIndexQueue = new Queue<FileEntry>();
         private readonly HashSet<string> posePeopleIndexQueued = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private Coroutine posePeopleIndexCoroutine;
-        private int posePeopleFacetUnknownCount = 0;
         private string posePeopleIndexGroupId = "";
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;

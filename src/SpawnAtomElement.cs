@@ -20,8 +20,8 @@ namespace VPB
 
             public void Restore()
             {
-                try { RestorePhysics(PhysicsState); } catch { }
                 try { RestoreCollisions(CollisionState); } catch { }
+                try { RestorePhysics(PhysicsState); } catch { }
                 try { RestoreRenderers(RendererState); } catch { }
             }
         }

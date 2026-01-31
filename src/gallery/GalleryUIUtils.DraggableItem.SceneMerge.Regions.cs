@@ -432,6 +432,12 @@ namespace VPB
                     Vector3 pos = position;
                     StartCoroutine(CreatePersonAndApplyAppearance(entry, pos, "replace"));
                 }));
+
+                options.Add(new ContextMenuPanel.Option("Spawn With Collisions Disabled", () => {
+                    try { if (ContextMenuPanel.Instance != null) ContextMenuPanel.Instance.Hide(); } catch { }
+                    Vector3 pos = position;
+                    StartCoroutine(CreatePersonAndApplyAppearance(entry, pos, "replace", true));
+                }));
             }
             
             if (options.Count > 0)
@@ -450,7 +456,7 @@ namespace VPB
             }
         }
 
-        private IEnumerator CreatePersonAndApplyAppearance(FileEntry entry, Vector3 position, string clothingMode)
+        private IEnumerator CreatePersonAndApplyAppearance(FileEntry entry, Vector3 position, string clothingMode, bool disableCollisions = false)
         {
             if (entry == null) yield break;
 
@@ -459,6 +465,83 @@ namespace VPB
             yield return SpawnAtomElement.SpawnPersonAtFloorSuppressed(position, (a, h) => { spawned = a; suppression = h; });
 
             if (spawned == null) yield break;
+
+            Action applyCollisionDisabled = () =>
+            {
+                try
+                {
+                    var receiver = spawned.GetStorableByID("AtomControl");
+                    if (receiver == null) return;
+                    JSONStorableBool collisionEnabled = receiver.GetBoolJSONParam("collisionEnabled");
+                    if (collisionEnabled != null) collisionEnabled.val = false;
+                }
+                catch { }
+            };
+
+            Action applyUnityCollisionDisabled = () =>
+            {
+                try
+                {
+                    if (spawned == null) return;
+                    var root = spawned.gameObject;
+                    if (root == null) return;
+
+                    try
+                    {
+                        var colliders = root.GetComponentsInChildren<Collider>(true);
+                        if (colliders != null)
+                        {
+                            for (int i = 0; i < colliders.Length; i++)
+                            {
+                                var c = colliders[i];
+                                if (c == null) continue;
+                                if (!c.enabled) continue;
+                                c.enabled = false;
+                            }
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        var ccs = root.GetComponentsInChildren<CharacterController>(true);
+                        if (ccs != null)
+                        {
+                            for (int i = 0; i < ccs.Length; i++)
+                            {
+                                var cc = ccs[i];
+                                if (cc == null) continue;
+                                if (!cc.enabled) continue;
+                                cc.enabled = false;
+                            }
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        var rbs = root.GetComponentsInChildren<Rigidbody>(true);
+                        if (rbs != null)
+                        {
+                            for (int i = 0; i < rbs.Length; i++)
+                            {
+                                var rb = rbs[i];
+                                if (rb == null) continue;
+                                if (!rb.detectCollisions) continue;
+                                rb.detectCollisions = false;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                catch { }
+            };
+
+            if (disableCollisions)
+            {
+                applyCollisionDisabled();
+                applyUnityCollisionDisabled();
+            }
 
             FileEntry prevEntry = FileEntry;
             try { FileEntry = entry; } catch { }
@@ -469,11 +552,23 @@ namespace VPB
             }
             catch { }
 
+            if (disableCollisions)
+            {
+                applyCollisionDisabled();
+                applyUnityCollisionDisabled();
+            }
+
             try
             {
                 ApplyPoseFromPresetPath(spawned, entry.Uid, true);
             }
             catch { }
+
+            if (disableCollisions)
+            {
+                applyCollisionDisabled();
+                applyUnityCollisionDisabled();
+            }
 
             try { FileEntry = prevEntry; } catch { }
 
@@ -487,6 +582,12 @@ namespace VPB
             }
             catch { }
 
+            if (disableCollisions)
+            {
+                applyCollisionDisabled();
+                applyUnityCollisionDisabled();
+            }
+
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
 
@@ -495,6 +596,12 @@ namespace VPB
                 if (suppression != null) suppression.Restore();
             }
             catch { }
+
+            if (disableCollisions)
+            {
+                applyCollisionDisabled();
+                applyUnityCollisionDisabled();
+            }
 
             try
             {

@@ -1121,12 +1121,23 @@ namespace VPB
             {
                 CreateQuickMenuButton();
             }
+            else if ((m_CloseAllButtonGO == null || m_BringFrontButtonGO == null) && SuperController.singleton != null && SuperController.singleton.mainHUD != null)
+            {
+                // Handle hot-reload updates: older sessions may have created the quick menu canvas
+                // before these buttons existed.
+                m_QuickMenuButtonInited = false;
+                CreateQuickMenuButton();
+            }
             else if (m_ShowHideButtonGO != null && Gallery.singleton != null)
             {
                 if (!Settings.Instance.QuickMenuShowHideEnabled.Value)
                 {
                     if (m_ShowHideButtonGO.activeSelf)
                         m_ShowHideButtonGO.SetActive(false);
+                    if (m_CloseAllButtonGO != null && m_CloseAllButtonGO.activeSelf)
+                        m_CloseAllButtonGO.SetActive(false);
+                    if (m_BringFrontButtonGO != null && m_BringFrontButtonGO.activeSelf)
+                        m_BringFrontButtonGO.SetActive(false);
                     return;
                 }
 
@@ -1135,6 +1146,14 @@ namespace VPB
                 if (m_ShowHideButtonGO.activeSelf != shouldShow)
                 {
                     m_ShowHideButtonGO.SetActive(shouldShow);
+                }
+                if (m_CloseAllButtonGO != null && m_CloseAllButtonGO.activeSelf != shouldShow)
+                {
+                    m_CloseAllButtonGO.SetActive(shouldShow);
+                }
+                if (m_BringFrontButtonGO != null && m_BringFrontButtonGO.activeSelf != shouldShow)
+                {
+                    m_BringFrontButtonGO.SetActive(shouldShow);
                 }
                 
                 if (shouldShow && m_ShowHideButton != null)
@@ -1325,7 +1344,11 @@ namespace VPB
         GameObject m_ShowHideButtonGO;
         UIDynamicButton m_ShowHideButton;
         GameObject m_CreateGalleryButtonGO;
+        GameObject m_CloseAllButtonGO;
+        GameObject m_BringFrontButtonGO;
         RectTransform m_CreateGalleryButtonRT;
+        RectTransform m_CloseAllButtonRT;
+        RectTransform m_BringFrontButtonRT;
         RectTransform m_ShowHideButtonRT;
 
 
@@ -1430,6 +1453,91 @@ namespace VPB
                     }
                 }
 
+                Vector2 createPos = isVR ? Settings.Instance.QuickMenuCreateGalleryPosVR.Value : Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
+                Vector2 step = new Vector2(0f, -50f);
+
+                Vector2 showHidePos = createPos + step;
+                Vector2 bringFrontPos = createPos + step * 2f;
+                Vector2 closeAllPos = createPos + step * 3f;
+
+                // Button 1.5: Close All
+                {
+                    Transform btnTrMid = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
+                    if (btnTrMid != null && m_QuickMenuCanvas.transform != null)
+                    {
+                        m_CloseAllButtonGO = btnTrMid.gameObject;
+                        btnTrMid.SetParent(m_QuickMenuCanvas.transform, false);
+
+                        RectTransform rt = btnTrMid.GetComponent<RectTransform>();
+                        if (rt != null)
+                        {
+                            m_CloseAllButtonRT = rt;
+                            rt.sizeDelta = new Vector2(100f, 40f);
+                            rt.anchoredPosition = closeAllPos;
+                        }
+
+                        UIDynamicButton uiBtn = btnTrMid.GetComponent<UIDynamicButton>();
+                        if (uiBtn != null)
+                        {
+                            uiBtn.label = "Close All";
+                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
+                            if (uiBtn.button != null)
+                            {
+                                uiBtn.button.onClick.AddListener(() => {
+                                    if (Gallery.singleton != null)
+                                    {
+                                        Gallery.singleton.CloseAll();
+                                    }
+                                });
+                            }
+
+                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
+                            hover.targetButton = uiBtn;
+                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                        }
+                        m_CloseAllButtonGO.SetActive(false);
+                    }
+                }
+
+                // Button 1.75: Bring Front
+                {
+                    Transform btnTrMid2 = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
+                    if (btnTrMid2 != null && m_QuickMenuCanvas.transform != null)
+                    {
+                        m_BringFrontButtonGO = btnTrMid2.gameObject;
+                        btnTrMid2.SetParent(m_QuickMenuCanvas.transform, false);
+
+                        RectTransform rt = btnTrMid2.GetComponent<RectTransform>();
+                        if (rt != null)
+                        {
+                            m_BringFrontButtonRT = rt;
+                            rt.sizeDelta = new Vector2(100f, 40f);
+                            rt.anchoredPosition = bringFrontPos;
+                        }
+
+                        UIDynamicButton uiBtn = btnTrMid2.GetComponent<UIDynamicButton>();
+                        if (uiBtn != null)
+                        {
+                            uiBtn.label = "Bring Front";
+                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 22;
+                            if (uiBtn.button != null)
+                            {
+                                uiBtn.button.onClick.AddListener(() => {
+                                    if (Gallery.singleton != null)
+                                    {
+                                        Gallery.singleton.BringAllToFront();
+                                    }
+                                });
+                            }
+
+                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
+                            hover.targetButton = uiBtn;
+                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                        }
+                        m_BringFrontButtonGO.SetActive(false);
+                    }
+                }
+
                 // Button 2: Show/Hide (Right)
                 if (Settings.Instance.QuickMenuShowHideEnabled.Value)
                 {
@@ -1444,7 +1552,7 @@ namespace VPB
                         {
                             m_ShowHideButtonRT = rt;
                             rt.sizeDelta = new Vector2(100f, 40f);
-                            rt.anchoredPosition = isVR ? Settings.Instance.QuickMenuShowHidePosVR.Value : Settings.Instance.QuickMenuShowHidePosDesktop.Value;
+                            rt.anchoredPosition = showHidePos;
                         }
 
                         UIDynamicButton uiBtn = btnTr2.GetComponent<UIDynamicButton>();

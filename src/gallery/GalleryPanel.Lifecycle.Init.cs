@@ -1929,16 +1929,7 @@ UpdateDesktopModeButton();
 
             // Close button - Rendered last to be on top
             GameObject closeBtn = UI.CreateUIButton(backgroundBoxGO, 50, 50, "X", 30, 0, 0, AnchorPresets.topRight, () => {
-                if (Gallery.singleton != null) Gallery.singleton.RemovePanel(this);
-                
-                // Destroy canvas explicitly
-                if (canvas != null)
-                {
-                    if (SuperController.singleton != null) SuperController.singleton.RemoveCanvas(canvas);
-                    Destroy(canvas.gameObject);
-                }
-                
-                Destroy(this.gameObject);
+                Close();
             });
             closeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(closeBtn);

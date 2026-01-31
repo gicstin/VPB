@@ -5,6 +5,25 @@ namespace VPB
 {
     public partial class VamHookPlugin
     {
+        private void ResetQuickMenuPositionDefaults()
+        {
+            var def = new Vector2(-470f, -66f);
+
+            m_QuickMenuPosCreateX = def.x;
+            m_QuickMenuPosCreateY = def.y;
+            m_QuickMenuPosCreateXText = ((int)m_QuickMenuPosCreateX).ToString();
+            m_QuickMenuPosCreateYText = ((int)m_QuickMenuPosCreateY).ToString();
+
+            m_QuickMenuPosCreateXVR = def.x;
+            m_QuickMenuPosCreateYVR = def.y;
+            m_QuickMenuPosCreateXVRText = ((int)m_QuickMenuPosCreateXVR).ToString();
+            m_QuickMenuPosCreateYVRText = ((int)m_QuickMenuPosCreateYVR).ToString();
+
+            m_QuickMenuPosUseSameCreateInVR = true;
+
+            ApplyQuickMenuPositionPreview();
+        }
+
         private void OpenQuickMenuPositionWindow()
         {
             bool isVR = false;
@@ -53,9 +72,20 @@ namespace VPB
             {
                 m_CreateGalleryButtonRT.anchoredPosition = new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
             }
+
+            Vector2 step = new Vector2(0f, -50f);
+            Vector2 createPos = new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
             if (m_ShowHideButtonRT != null)
             {
-                m_ShowHideButtonRT.anchoredPosition = new Vector2(m_QuickMenuPosShowHideX, m_QuickMenuPosShowHideY);
+                m_ShowHideButtonRT.anchoredPosition = createPos + step;
+            }
+            if (m_BringFrontButtonRT != null)
+            {
+                m_BringFrontButtonRT.anchoredPosition = createPos + step * 2f;
+            }
+            if (m_CloseAllButtonRT != null)
+            {
+                m_CloseAllButtonRT.anchoredPosition = createPos + step * 3f;
             }
         }
 
@@ -158,28 +188,28 @@ namespace VPB
             if (save)
             {
                 var newCreate = new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
-                var newShowHide = new Vector2(m_QuickMenuPosShowHideX, m_QuickMenuPosShowHideY);
 
                 var newCreateVR = m_QuickMenuPosUseSameCreateInVR ? newCreate : new Vector2(m_QuickMenuPosCreateXVR, m_QuickMenuPosCreateYVR);
-                var newShowHideVR = m_QuickMenuPosUseSameShowHideInVR ? newShowHide : new Vector2(m_QuickMenuPosShowHideXVR, m_QuickMenuPosShowHideYVR);
 
                 Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value = newCreate;
-                Settings.Instance.QuickMenuShowHidePosDesktop.Value = newShowHide;
                 Settings.Instance.QuickMenuCreateGalleryPosVR.Value = newCreateVR;
-                Settings.Instance.QuickMenuShowHidePosVR.Value = newShowHideVR;
 
                 if (Settings.Instance.QuickMenuCreateGalleryUseSameInVR != null)
                     Settings.Instance.QuickMenuCreateGalleryUseSameInVR.Value = m_QuickMenuPosUseSameCreateInVR;
-                if (Settings.Instance.QuickMenuShowHideUseSameInVR != null)
-                    Settings.Instance.QuickMenuShowHideUseSameInVR.Value = m_QuickMenuPosUseSameShowHideInVR;
                 try { this.Config.Save(); } catch { }
             }
             else
             {
                 if (m_CreateGalleryButtonRT != null)
                     m_CreateGalleryButtonRT.anchoredPosition = m_QuickMenuPosOriginalCreate;
+
+                Vector2 step = new Vector2(0f, -60f);
                 if (m_ShowHideButtonRT != null)
-                    m_ShowHideButtonRT.anchoredPosition = m_QuickMenuPosOriginalShowHide;
+                    m_ShowHideButtonRT.anchoredPosition = m_QuickMenuPosOriginalCreate + step;
+                if (m_BringFrontButtonRT != null)
+                    m_BringFrontButtonRT.anchoredPosition = m_QuickMenuPosOriginalCreate + step * 2f;
+                if (m_CloseAllButtonRT != null)
+                    m_CloseAllButtonRT.anchoredPosition = m_QuickMenuPosOriginalCreate + step * 3f;
             }
 
             m_ShowQuickMenuPosWindow = false;
@@ -240,37 +270,6 @@ namespace VPB
                 m_QuickMenuPosCreateYVR = createYVR;
                 m_QuickMenuPosCreateYVRText = createYVRText;
             }
-            GUILayout.Space(6);
-            float showHideX = m_QuickMenuPosShowHideX;
-            string showHideXText = m_QuickMenuPosShowHideXText;
-            float showHideY = m_QuickMenuPosShowHideY;
-            string showHideYText = m_QuickMenuPosShowHideYText;
-            DrawQuickMenuPosRow("Show/Hide", "QmShowHide", ref showHideX, ref showHideXText, ref showHideY, ref showHideYText, xMin, xMax, yMin, yMax);
-            m_QuickMenuPosShowHideX = showHideX;
-            m_QuickMenuPosShowHideXText = showHideXText;
-            m_QuickMenuPosShowHideY = showHideY;
-            m_QuickMenuPosShowHideYText = showHideYText;
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_QuickMenuPosUseSameShowHideInVR ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_QuickMenuPosUseSameShowHideInVR = !m_QuickMenuPosUseSameShowHideInVR;
-            }
-            GUILayout.Label("Use same position in VR mode");
-            GUILayout.EndHorizontal();
-
-            if (!m_QuickMenuPosUseSameShowHideInVR)
-            {
-                GUILayout.Space(4);
-                float showHideXVR = m_QuickMenuPosShowHideXVR;
-                string showHideXVRText = m_QuickMenuPosShowHideXVRText;
-                float showHideYVR = m_QuickMenuPosShowHideYVR;
-                string showHideYVRText = m_QuickMenuPosShowHideYVRText;
-                DrawQuickMenuPosRow("Show/Hide (VR)", "QmShowHideVR", ref showHideXVR, ref showHideXVRText, ref showHideYVR, ref showHideYVRText, xMin, xMax, yMin, yMax);
-                m_QuickMenuPosShowHideXVR = showHideXVR;
-                m_QuickMenuPosShowHideXVRText = showHideXVRText;
-                m_QuickMenuPosShowHideYVR = showHideYVR;
-                m_QuickMenuPosShowHideYVRText = showHideYVRText;
-            }
 
             GUILayout.Space(8);
 
@@ -278,6 +277,10 @@ namespace VPB
             if (GUILayout.Button("Cancel", m_StyleButton, GUILayout.Height(26)))
             {
                 CloseQuickMenuPositionWindow(false);
+            }
+            if (GUILayout.Button("Defaults", m_StyleButton, GUILayout.Height(26)))
+            {
+                ResetQuickMenuPositionDefaults();
             }
             if (GUILayout.Button("Save", m_StyleButtonPrimary, GUILayout.Height(26)))
             {

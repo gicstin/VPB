@@ -10,6 +10,22 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
 {
+        public void Close()
+        {
+            if (Gallery.singleton != null)
+            {
+                Gallery.singleton.RemovePanel(this);
+            }
+
+            if (canvas != null)
+            {
+                if (SuperController.singleton != null) SuperController.singleton.RemoveCanvas(canvas);
+                Destroy(canvas.gameObject);
+            }
+
+            Destroy(this.gameObject);
+        }
+
         private void UpdateSideButtonsVisibility()
         {
             if (VPBConfig.Instance == null) return;
