@@ -110,7 +110,6 @@ namespace VPB
             RefreshTargetDropdown();
 
             canvas.gameObject.SetActive(true);
-            LogUtil.Log("GalleryPanel Show setup took: " + sw.ElapsedMilliseconds + "ms");
             
             // Only refresh if params changed OR if we are empty (first run) OR explicit refresh needed
             if (paramsChanged || activeButtons.Count == 0)

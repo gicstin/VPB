@@ -86,6 +86,7 @@ namespace VPB
                 {
                     UpdateSortButtonText(fileSortBtnText, entry.SortState);
                 }
+                SyncRatingSortToggleState();
             }
 
             // 6. Refresh

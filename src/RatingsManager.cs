@@ -36,6 +36,7 @@ namespace VPB
         private Dictionary<string, int> ratings = new Dictionary<string, int>();
         private readonly object lockObj = new object();
         private bool hasLoadedSuccessfully = false;
+        private bool legacyFavImportComplete = false;
 
         public RatingsManager()
         {
@@ -56,6 +57,12 @@ namespace VPB
 
                 // Load existing JSON if it exists
                 Load();
+
+                try
+                {
+                    FileManager.RegisterRefreshHandler(OnFileManagerRefresh);
+                }
+                catch { }
 
                 // Legacy migration check (can merge into existing)
                 string oldPath = Path.Combine(saveDir, "ratings.bin");
@@ -85,10 +92,163 @@ namespace VPB
                         Debug.LogWarning("[VPB] RatingsManager: Failed to rename legacy binary: " + ex.Message);
                     }
                 }
+
+                TryImportLegacyFavRatings();
             }
             catch (Exception ex)
             {
                 Debug.LogError("[VPB] RatingsManager initialization failed: " + ex.Message);
+            }
+        }
+
+        private void OnFileManagerRefresh()
+        {
+            TryImportLegacyFavRatings();
+        }
+
+        private void TryImportLegacyFavRatings()
+        {
+            if (legacyFavImportComplete) return;
+            if (!hasLoadedSuccessfully) return;
+            if (FileManager.PackagesByUid == null || FileManager.PackagesByUid.Count == 0) return;
+
+            bool anyAdded = false;
+            try
+            {
+                // Native VaM favorites live in AddonPackagesFilePrefs\<packageUid>\...\<resource>.<ext>.fav
+                // and are typically empty marker files.
+                string prefsDir = GetAddonPackagesFilePrefsDir();
+                if (!string.IsNullOrEmpty(prefsDir) && Directory.Exists(prefsDir))
+                {
+                    string[] favFiles;
+                    try { favFiles = Directory.GetFiles(prefsDir, "*.fav", SearchOption.AllDirectories); }
+                    catch { favFiles = new string[0]; }
+
+                    foreach (var favFile in favFiles)
+                    {
+                        int rating = TryReadLegacyFavRating(favFile);
+                        if (rating <= 0) continue;
+
+                        if (TryParseLegacyFavToRatingKey(prefsDir, favFile, out string key))
+                        {
+                            if (TryAddRatingIfMissing(key, rating)) anyAdded = true;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            if (anyAdded) Save();
+            legacyFavImportComplete = true;
+        }
+
+        private int TryReadLegacyFavRating(string favPath)
+        {
+            try
+            {
+                string txt = File.ReadAllText(favPath);
+                if (IsNullOrWhiteSpace(txt)) return 1;
+                if (int.TryParse(txt.Trim(), out int r)) return Mathf.Clamp(r, 1, 5);
+            }
+            catch { }
+            return 1;
+        }
+
+        private bool IsNullOrWhiteSpace(string s)
+        {
+            if (s == null) return true;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (!char.IsWhiteSpace(s[i])) return false;
+            }
+            return true;
+        }
+
+        private bool TryParseLegacyFavToRatingKey(string prefsDir, string favFile, out string key)
+        {
+            key = null;
+            try
+            {
+                if (string.IsNullOrEmpty(prefsDir) || string.IsNullOrEmpty(favFile)) return false;
+
+                string rel = MakeRelativePath(prefsDir, favFile);
+                if (string.IsNullOrEmpty(rel)) return false;
+
+                rel = rel.Replace('\\', '/');
+                if (rel.StartsWith("./")) rel = rel.Substring(2);
+                if (rel.StartsWith("../")) return false;
+
+                int slash = rel.IndexOf('/');
+                if (slash <= 0) return false;
+
+                string pkgUid = rel.Substring(0, slash);
+                string rest = rel.Substring(slash + 1);
+                if (string.IsNullOrEmpty(pkgUid) || string.IsNullOrEmpty(rest)) return false;
+                if (!rest.EndsWith(".fav", StringComparison.OrdinalIgnoreCase)) return false;
+
+                // remove .fav -> get original relative file reference used by VaM
+                string originalRef = rest.Substring(0, rest.Length - 4);
+                originalRef = originalRef.Replace('\\', '/');
+
+                // Case 1: package-level .var marker (e.g. AddonPackages/Foo.Bar.1.var)
+                if (originalRef.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
+                    originalRef.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
+                {
+                    key = originalRef;
+                    return true;
+                }
+
+                // Case 2: a file inside a var package: key is the VarFileEntry uid "<pkgUid>:/<internalPath>"
+                key = pkgUid + ":/" + originalRef;
+                return true;
+            }
+            catch { }
+
+            return false;
+        }
+
+        private string MakeRelativePath(string basePath, string fullPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(basePath) || string.IsNullOrEmpty(fullPath)) return null;
+
+                string b = Path.GetFullPath(basePath).TrimEnd('\\', '/');
+                string f = Path.GetFullPath(fullPath);
+
+                if (!f.StartsWith(b, StringComparison.OrdinalIgnoreCase)) return null;
+                if (f.Length == b.Length) return "";
+
+                string rel = f.Substring(b.Length);
+                if (rel.StartsWith("\\") || rel.StartsWith("/")) rel = rel.Substring(1);
+                return rel;
+            }
+            catch { }
+            return null;
+        }
+
+        private string GetAddonPackagesFilePrefsDir()
+        {
+            try
+            {
+                string baseDir = Directory.GetCurrentDirectory();
+                return Path.Combine(baseDir, "AddonPackagesFilePrefs");
+            }
+            catch { }
+            return null;
+        }
+
+        private bool TryAddRatingIfMissing(string uid, int rating)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            rating = Mathf.Clamp(rating, 0, 5);
+            if (rating <= 0) return false;
+
+            lock (lockObj)
+            {
+                if (ratings.TryGetValue(uid, out int existing) && existing > 0) return false;
+                ratings[uid] = rating;
+                return true;
             }
         }
 
@@ -310,6 +470,94 @@ namespace VPB
             }
 
             Save();
+
+            TrySyncLegacyFavFile(entry, rating);
+        }
+
+        private void TrySyncLegacyFavFile(FileEntry entry, int rating)
+        {
+            try
+            {
+                if (entry == null) return;
+                if (rating < 0) return;
+
+                string prefsDir = GetAddonPackagesFilePrefsDir();
+                if (string.IsNullOrEmpty(prefsDir)) return;
+                if (!Directory.Exists(prefsDir)) Directory.CreateDirectory(prefsDir);
+
+                string favPath = null;
+                if (!TryBuildLegacyFavPath(prefsDir, entry, out favPath)) return;
+                string markerPath = favPath + ".vpb";
+
+                bool favExists = false;
+                try { favExists = File.Exists(favPath); } catch { favExists = false; }
+                bool ownedByVPB = false;
+                try { ownedByVPB = File.Exists(markerPath); } catch { ownedByVPB = false; }
+
+                if (rating <= 0)
+                {
+                    // Safety: never delete user-managed legacy .fav files.
+                    // Only delete if VPB previously created the file (marker exists).
+                    if (ownedByVPB)
+                    {
+                        try { if (favExists) File.Delete(favPath); } catch { }
+                        try { File.Delete(markerPath); } catch { }
+                    }
+                    return;
+                }
+
+                // Safety: don't overwrite existing .fav files unless VPB owns them.
+                // If a user already has a legacy .fav marker, leave it alone.
+                if (favExists && !ownedByVPB) return;
+
+                string dir = Path.GetDirectoryName(favPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                File.WriteAllText(favPath, Mathf.Clamp(rating, 1, 5).ToString());
+                try { if (!ownedByVPB) File.WriteAllBytes(markerPath, new byte[] { 0 }); } catch { }
+            }
+            catch { }
+        }
+
+        private bool TryBuildLegacyFavPath(string prefsDir, FileEntry entry, out string favPath)
+        {
+            favPath = null;
+            try
+            {
+                if (string.IsNullOrEmpty(prefsDir) || entry == null) return false;
+
+                // Var-internal file
+                if (entry is VarFileEntry vfe && vfe.Package != null)
+                {
+                    string pkgUid = vfe.Package.Uid;
+                    string internalPath = vfe.InternalPath ?? "";
+                    internalPath = internalPath.Replace('\\', '/');
+
+                    string folder = Path.GetDirectoryName(internalPath)?.Replace('\\', '/');
+                    string fileName = Path.GetFileName(internalPath);
+                    if (string.IsNullOrEmpty(fileName)) return false;
+
+                    string rel = string.IsNullOrEmpty(folder) ? fileName : (folder + "/" + fileName);
+                    rel = rel.Replace('/', '\\');
+
+                    favPath = Path.Combine(Path.Combine(prefsDir, pkgUid), rel + ".fav");
+                    return true;
+                }
+
+                // Package (.var) file on disk
+                if (entry is SystemFileEntry sfe && sfe.package != null)
+                {
+                    string pkgUid = sfe.package.Uid;
+                    string sysPath = (sfe.Path ?? "").Replace('\\', '/');
+                    if (string.IsNullOrEmpty(sysPath)) return false;
+
+                    // Store under AddonPackagesFilePrefs\<pkgUid>\<sysPath>.fav
+                    favPath = Path.Combine(Path.Combine(prefsDir, pkgUid), sysPath.Replace('/', '\\') + ".fav");
+                    return true;
+                }
+            }
+            catch { }
+
+            return false;
         }
     }
 }

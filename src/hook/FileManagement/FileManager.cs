@@ -727,7 +727,10 @@ namespace VPB
             
             try
             {
-                StartScan(init, flag, clean, true);
+                if (init || flag || clean || removeOldVersion)
+                {
+                    StartScan(init, flag, clean, true);
+                }
 
                 lastPackageRefreshTime = DateTime.Now;
 
@@ -1010,7 +1013,9 @@ namespace VPB
 		{
 			try
 			{
-				return VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode;
+				if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode) return true;
+				if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value) return true;
+				return false;
 			}
 			catch
 			{
@@ -1303,6 +1308,8 @@ namespace VPB
 
         public static VarPackage ResolveDependency(string uid)
         {
+            uid = MaybeForceLatestDependency(uid);
+
             // Try exact match
             if (packagesByUid.ContainsKey(uid)) return packagesByUid[uid];
 

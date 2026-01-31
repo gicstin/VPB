@@ -303,7 +303,6 @@ namespace VPB
                     if (!string.Equals(prevLogged, LastGalleryCategory, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(LastGalleryCategory))
                     {
                         s_LastLoggedSavedGalleryCategory = LastGalleryCategory;
-                        LogUtil.Log("[VPBConfig] Saved LastGalleryCategory='" + LastGalleryCategory + "' to " + ConfigPath);
                     }
                 }
                 catch { }

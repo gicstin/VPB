@@ -42,11 +42,47 @@ namespace VPB
                     {
                         return;
                     }
+
+                    if (logType == LogType.Log && !string.IsNullOrEmpty(format) && IsUnloadPersonMessage(format, args))
+                    {
+                        return;
+                    }
                 }
                 catch
                 {
                 }
                 m_Inner.LogFormat(logType, context, format, args);
+            }
+
+            private static bool IsUnloadPersonMessage(string format, object[] args)
+            {
+                string msg = format;
+                if (args != null && args.Length > 0)
+                {
+                    try
+                    {
+                        msg = string.Format(format, args);
+                    }
+                    catch
+                    {
+                        msg = format;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(msg)) return false;
+
+                // VaM/Unity spam during unload; shows up as "[Info   : Unity Log] Unload Person ..." in BepInEx output.
+                // The string passed through Unity's logger is typically just "Unload Person ...".
+                if (msg.StartsWith("Unload Person ", StringComparison.OrdinalIgnoreCase)) return true;
+
+                // Defensive: if the prefix is included in the formatted message for some reason.
+                if (msg.IndexOf("Unload Person ", StringComparison.OrdinalIgnoreCase) >= 0
+                    && msg.IndexOf("Unity Log", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+
+                return false;
             }
 
             private static bool IsMissingAddonDependencyMessage(string format, object[] args)
@@ -247,6 +283,7 @@ namespace VPB
         private Rect m_RealWindowRect; // Capture the fully rendered rect from Repaint for accurate hover detection
 
         public static VamHookPlugin singleton;
+        private static bool s_FileManagerInitialRefreshCompleted;
 
         public static string CurrentScenePackageUid;
 
@@ -1229,10 +1266,18 @@ namespace VPB
             VarPackageMgr.singleton.Init();
             cacheInitSw.Stop();
             LogUtil.Log("VarPackageMgr.Init took " + cacheInitSw.ElapsedMilliseconds + "ms");
-            System.Diagnostics.Stopwatch refreshSw = System.Diagnostics.Stopwatch.StartNew();
-            FileManager.Refresh(true);
-            refreshSw.Stop();
-            LogUtil.Log("FileManager.Refresh call took " + refreshSw.ElapsedMilliseconds + "ms");
+            if (!s_FileManagerInitialRefreshCompleted)
+            {
+                System.Diagnostics.Stopwatch refreshSw = System.Diagnostics.Stopwatch.StartNew();
+                FileManager.Refresh(true);
+                refreshSw.Stop();
+                LogUtil.Log("FileManager.Refresh call took " + refreshSw.ElapsedMilliseconds + "ms");
+                s_FileManagerInitialRefreshCompleted = true;
+            }
+            else
+            {
+                IsFileManagerInited = true;
+            }
             initSw.Stop();
             LogUtil.Log("VPB Init end in " + initSw.ElapsedMilliseconds + "ms");
         }

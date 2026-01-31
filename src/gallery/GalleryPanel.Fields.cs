@@ -590,5 +590,9 @@ namespace VPB
         
         private Text fileSortBtnText; // NEW
         private Text quickFiltersToggleBtnText; // NEW
+        private GameObject ratingSortToggleBtn;
+        private Text ratingSortToggleBtnText;
+        private bool isRatingSortToggleEnabled;
+        private SortState ratingSortTogglePreviousState;
     }
 }

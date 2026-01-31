@@ -220,6 +220,21 @@ namespace VPB
             // Init File Sort State
             UpdateSortButtonText(fileSortBtnText, GetSortState("Files"));
 
+            ratingSortToggleBtn = UI.CreateUIButton(titleBarGO, 40, 40, "★", 18, 0, 0, AnchorPresets.middleCenter, null);
+            ratingSortToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            ratingSortToggleBtnText = ratingSortToggleBtn.GetComponentInChildren<Text>();
+            ratingSortToggleBtnText.color = Color.white;
+            RectTransform ratingSortToggleRT = ratingSortToggleBtn.GetComponent<RectTransform>();
+            ratingSortToggleRT.anchorMin = new Vector2(0.5f, 0.5f);
+            ratingSortToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
+            ratingSortToggleRT.pivot = new Vector2(0.5f, 0.5f);
+            ratingSortToggleRT.anchoredPosition = new Vector2(220, 0);
+            Button ratingSortToggleButton = ratingSortToggleBtn.GetComponent<Button>();
+            ratingSortToggleButton.onClick.RemoveAllListeners();
+            ratingSortToggleButton.onClick.AddListener(ToggleRatingSort);
+            AddTooltip(ratingSortToggleBtn, "Show Only Rated Items");
+            SyncRatingSortToggleState();
+
             // Filter Presets Button
             GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 160, 45, "Filter Presets", 20, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
             qfToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);

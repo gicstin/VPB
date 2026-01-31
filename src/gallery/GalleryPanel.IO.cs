@@ -810,6 +810,10 @@ namespace VPB
                         if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
                             continue;
                     }
+                    if (isRatingSortToggleEnabled)
+                    {
+                        if (RatingsManager.Instance.GetRating(entry) <= 0) continue;
+                    }
                     files.Add(entry);
                 }
             }
@@ -996,6 +1000,11 @@ namespace VPB
                             if (posePeopleFilter == PosePeopleFilter.Dual && pcPose < 2) continue;
                         }
 
+                        if (isRatingSortToggleEnabled)
+                        {
+                            if (RatingsManager.Instance.GetRating(entry) <= 0) continue;
+                        }
+
                         files.Add(entry);
 
                         if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
@@ -1081,6 +1090,11 @@ namespace VPB
                                     }
                                     if (posePeopleFilter == PosePeopleFilter.Single && pcPose >= 2) continue;
                                     if (posePeopleFilter == PosePeopleFilter.Dual && pcPose < 2) continue;
+                                }
+
+                                if (isRatingSortToggleEnabled)
+                                {
+                                    if (RatingsManager.Instance.GetRating(sysEntry) <= 0) continue;
                                 }
 
                                 files.Add(sysEntry);
@@ -1212,7 +1226,6 @@ namespace VPB
                     try { StartPosePeopleIndexCoroutine(currentLoadingGroupId); } catch { }
                 }
             }
-            LogUtil.Log("RefreshFilesRoutine took: " + swTotal.ElapsedMilliseconds + "ms");
         }
     }
 }
