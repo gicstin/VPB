@@ -726,6 +726,7 @@ namespace VPB
             int idxRemoveAtom = -1;
             int idxHub = 12;
             int idxUndo = 13;
+            int idxRedo = 16;
             try
             {
                 List<RectTransform> refList = rightSideButtons;
@@ -770,6 +771,13 @@ namespace VPB
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == undoGo);
                         if (i >= 0) idxUndo = i;
                     }
+
+                    GameObject redoGo = rightRedoBtnGO != null ? rightRedoBtnGO : leftRedoBtnGO;
+                    if (redoGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == redoGo);
+                        if (i >= 0) idxRedo = i;
+                    }
                 }
             }
             catch { }
@@ -795,6 +803,7 @@ namespace VPB
 
             layout.Add(new SideButtonLayoutEntry(idxRandom, 0, 1)); // Random
             layout.Add(new SideButtonLayoutEntry(idxUndo, 0, (isClothing || isHair || isScene) ? 1 : 0)); // Undo
+            layout.Add(new SideButtonLayoutEntry(idxRedo, 0, (isClothing || isHair || isScene) ? 0 : 0)); // Redo
             return layout.ToArray();
         }
 

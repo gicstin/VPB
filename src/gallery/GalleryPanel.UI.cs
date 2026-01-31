@@ -610,7 +610,7 @@ namespace VPB
 
             if (options == null) options = new List<KeyValuePair<string, string>>();
             int optionTotal = options.Count;
-            int count = Mathf.Min(optionTotal, HairSubmenuMaxButtons);
+            int count = Mathf.Min(optionTotal, ClothingSubmenuMaxButtons);
 
             clothingSubmenuLastOptionCount = optionTotal;
             UpdateRemoveClothingButtonLabels(optionTotal);
@@ -622,7 +622,7 @@ namespace VPB
             }
             catch { }
 
-            for (int i = 0; i < HairSubmenuMaxButtons; i++)
+            for (int i = 0; i < ClothingSubmenuMaxButtons; i++)
             {
                 string uid = i < count ? options[i].Key : null;
                 string label = i < count ? options[i].Value : null;
@@ -762,7 +762,7 @@ namespace VPB
                 ClearClothingPreview();
                 clothingSubmenuLastSyncTime = Time.unscaledTime;
                 PopulateClothingSubmenuButtons(target);
-                clothingSubmenuLastOptionCount = Mathf.Min(HairSubmenuMaxButtons, rightRemoveClothingSubmenuButtons != null ? rightRemoveClothingSubmenuButtons.Count : 0);
+                clothingSubmenuLastOptionCount = Mathf.Min(ClothingSubmenuMaxButtons, rightRemoveClothingSubmenuButtons != null ? rightRemoveClothingSubmenuButtons.Count : 0);
             }
             else
             {

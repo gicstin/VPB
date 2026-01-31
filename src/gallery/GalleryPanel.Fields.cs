@@ -45,6 +45,8 @@ namespace VPB
         private Dictionary<string, Image> fileButtonImages = new Dictionary<string, Image>();
         private string selectedPath = null;
         private Stack<Action> undoStack = new Stack<Action>();
+        private Stack<Action> redoStack = new Stack<Action>();
+        private bool isApplyingUndoRedo = false;
         private List<GameObject> leftActiveTabButtons = new List<GameObject>();
         private List<GameObject> leftSubActiveTabButtons = new List<GameObject>(); // NEW
         private List<GameObject> rightActiveTabButtons = new List<GameObject>();
@@ -123,6 +125,8 @@ namespace VPB
 
         private GameObject rightUndoBtnGO;
         private GameObject leftUndoBtnGO;
+        private GameObject rightRedoBtnGO;
+        private GameObject leftRedoBtnGO;
 
         private GameObject rightRemoveAllClothingBtn;
         private GameObject rightRemoveAllHairBtn;
@@ -220,6 +224,7 @@ namespace VPB
         private int rightRemoveHairSubmenuStartIndex = -1;
         private int leftRemoveHairSubmenuStartIndex = -1;
         private const int HairSubmenuMaxButtons = 10;
+        private const int ClothingSubmenuMaxButtons = 30;
         private const int AtomSubmenuMaxButtons = 20;
         
         private Text leftSortBtnText;

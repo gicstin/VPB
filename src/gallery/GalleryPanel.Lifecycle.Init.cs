@@ -722,6 +722,12 @@ namespace VPB
                 rightUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 rightSideButtons.Add(rightUndoBtn.GetComponent<RectTransform>());
 
+                // Redo (Right)
+                GameObject rightRedoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Redo", btnFontSize, 0, startY - spacing * 13 - groupGap * 5, AnchorPresets.centre, Redo);
+                rightRedoBtnGO = rightRedoBtn;
+                rightRedoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
+                rightSideButtons.Add(rightRedoBtn.GetComponent<RectTransform>());
+
                 // Context Actions (Right) - inserted above Undo
                 rightRemoveAllClothingBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nClothing", 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Right)");
@@ -916,7 +922,7 @@ namespace VPB
                 }
 
                 // Clothing Visibility Toggle Buttons (Right) - pooled, placed outside submenu items
-                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                for (int i = 0; i < ClothingSubmenuMaxButtons; i++)
                 {
                     GameObject b = UI.CreateUIButton(rightSideContainer, 80f, btnHeight, "Hide", 16, 0, 0, AnchorPresets.centre, null);
                     b.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
@@ -958,7 +964,7 @@ namespace VPB
                     catch { }
                 }
 
-                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                for (int i = 0; i < ClothingSubmenuMaxButtons; i++)
                 {
                     GameObject b = UI.CreateUIButton(rightSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
                     b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
@@ -1395,6 +1401,12 @@ namespace VPB
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
 
+                // Redo (Left)
+                GameObject leftRedoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Redo", btnFontSize, 0, startY - spacing * 13 - groupGap * 5, AnchorPresets.centre, Redo);
+                leftRedoBtnGO = leftRedoBtn;
+                leftRedoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
+                leftSideButtons.Add(leftRedoBtn.GetComponent<RectTransform>());
+
                 // Context Actions (Left) - inserted above Undo
                 leftRemoveAllClothingBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nClothing", 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Left)");
@@ -1425,6 +1437,8 @@ namespace VPB
                 leftRemoveAllClothingBtn.GetComponentInChildren<Text>().color = Color.white;
                 leftSideButtons.Add(leftRemoveAllClothingBtn.GetComponent<RectTransform>());
                 leftRemoveAllClothingBtn.SetActive(false);
+
+                try { UpdateUndoRedoButtonLabels(); } catch { }
 
                 try
                 {
@@ -1588,7 +1602,7 @@ namespace VPB
                     catch { }
                 }
 
-                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                for (int i = 0; i < ClothingSubmenuMaxButtons; i++)
                 {
                     GameObject b = UI.CreateUIButton(leftSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
                     b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
@@ -1631,7 +1645,7 @@ namespace VPB
                 }
 
                 // Clothing Visibility Toggle Buttons (Left) - pooled, placed outside submenu items
-                for (int i = 0; i < HairSubmenuMaxButtons; i++)
+                for (int i = 0; i < ClothingSubmenuMaxButtons; i++)
                 {
                     GameObject b = UI.CreateUIButton(leftSideContainer, 80f, btnHeight, "Hide", 16, 0, 0, AnchorPresets.centre, null);
                     b.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);

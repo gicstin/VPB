@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -645,10 +647,379 @@ namespace VPB
         {
             if (action == null) return;
             undoStack.Push(action);
+            if (!isApplyingUndoRedo)
+            {
+                try { redoStack.Clear(); } catch { }
+            }
+            UpdateUndoRedoButtonLabels();
             if (undoStack.Count > 20) // Limit stack size
             {
                 // Stack doesn't have RemoveFromBottom, but 20 is small enough.
                 // Or we can just let it grow a bit. 20 is safe.
+            }
+        }
+
+        private void UpdateUndoRedoButtonLabels()
+        {
+            try
+            {
+                string undoText = "Undo (" + (undoStack != null ? undoStack.Count : 0) + ")";
+                string redoText = "Redo (" + (redoStack != null ? redoStack.Count : 0) + ")";
+
+                if (rightUndoBtnGO != null)
+                {
+                    Text t = null;
+                    try { t = rightUndoBtnGO.GetComponentInChildren<Text>(true); } catch { }
+                    if (t != null) t.text = undoText;
+                }
+                if (leftUndoBtnGO != null)
+                {
+                    Text t = null;
+                    try { t = leftUndoBtnGO.GetComponentInChildren<Text>(true); } catch { }
+                    if (t != null) t.text = undoText;
+                }
+
+                if (rightRedoBtnGO != null)
+                {
+                    Text t = null;
+                    try { t = rightRedoBtnGO.GetComponentInChildren<Text>(true); } catch { }
+                    if (t != null) t.text = redoText;
+                }
+                if (leftRedoBtnGO != null)
+                {
+                    Text t = null;
+                    try { t = leftRedoBtnGO.GetComponentInChildren<Text>(true); } catch { }
+                    if (t != null) t.text = redoText;
+                }
+            }
+            catch { }
+        }
+
+        private Atom GetBestUndoRedoTargetAtom()
+        {
+            Atom a = null;
+            try { a = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { a = null; }
+            if (a == null)
+            {
+                try { a = SelectedTargetAtom; } catch { a = null; }
+            }
+            if (a == null)
+            {
+                try
+                {
+                    if (SuperController.singleton != null)
+                    {
+                        var atoms = SuperController.singleton.GetAtoms();
+                        if (atoms != null) a = atoms.FirstOrDefault(x => x != null && x.type == "Person");
+                    }
+                }
+                catch { a = null; }
+            }
+            return a;
+        }
+
+        private Action CaptureAtomSnapshotAction(Atom atom)
+        {
+            if (atom == null) return null;
+            string atomUid = null;
+            try { atomUid = atom.uid; } catch { atomUid = null; }
+            if (string.IsNullOrEmpty(atomUid)) return null;
+
+            Dictionary<string, bool> geometryToggleSnapshot = null;
+            List<JSONClass> storableSnapshots = new List<JSONClass>();
+
+            bool ShouldSnapshotStorableId(string sid)
+            {
+                if (string.IsNullOrEmpty(sid)) return false;
+                if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.Equals(sid, "Skin", StringComparison.OrdinalIgnoreCase)) return true;
+                if (sid.EndsWith("Presets", StringComparison.OrdinalIgnoreCase)) return true;
+                if (sid.EndsWith("Preset", StringComparison.OrdinalIgnoreCase)) return true;
+                if (sid.IndexOf("clothing", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (sid.IndexOf("appearance", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                return false;
+            }
+
+            try
+            {
+                JSONStorable geometry = null;
+                try { geometry = atom.GetStorableByID("geometry"); } catch { geometry = null; }
+                if (geometry != null)
+                {
+                    geometryToggleSnapshot = new Dictionary<string, bool>();
+                    List<string> names = null;
+                    try { names = geometry.GetBoolParamNames(); } catch { names = null; }
+                    if (names != null)
+                    {
+                        foreach (string key in names)
+                        {
+                            if (key == null) continue;
+                            if (!(key.StartsWith("clothing:") || key.StartsWith("hair:"))) continue;
+                            JSONStorableBool b = null;
+                            try { b = geometry.GetBoolJSONParam(key); } catch { b = null; }
+                            if (b != null) geometryToggleSnapshot[key] = b.val;
+                        }
+                    }
+                }
+            }
+            catch { geometryToggleSnapshot = null; }
+
+            try
+            {
+                List<string> ids = null;
+                try { ids = atom.GetStorableIDs(); } catch { ids = null; }
+                if (ids != null)
+                {
+                    for (int i = 0; i < ids.Count; i++)
+                    {
+                        string sid = ids[i];
+                        if (string.IsNullOrEmpty(sid)) continue;
+                        if (!ShouldSnapshotStorableId(sid)) continue;
+                        JSONStorable s = null;
+                        try { s = atom.GetStorableByID(sid); } catch { s = null; }
+                        if (s == null) continue;
+                        JSONClass snap = null;
+                        try { snap = s.GetJSON(); } catch { snap = null; }
+                        if (snap != null) storableSnapshots.Add(snap);
+                    }
+                }
+            }
+            catch { }
+
+            return () =>
+            {
+                Atom targetAtom = null;
+                try { targetAtom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { targetAtom = null; }
+                if (targetAtom == null) return;
+
+                try
+                {
+                    if (geometryToggleSnapshot != null)
+                    {
+                        JSONStorable geo = null;
+                        try { geo = targetAtom.GetStorableByID("geometry"); } catch { geo = null; }
+                        if (geo != null)
+                        {
+                            foreach (var kvp in geometryToggleSnapshot)
+                            {
+                                JSONStorableBool b = null;
+                                try { b = geo.GetBoolJSONParam(kvp.Key); } catch { b = null; }
+                                if (b != null) b.val = kvp.Value;
+                            }
+
+                            List<string> currentNames = null;
+                            try { currentNames = geo.GetBoolParamNames(); } catch { currentNames = null; }
+                            if (currentNames != null)
+                            {
+                                foreach (string key2 in currentNames)
+                                {
+                                    if (string.IsNullOrEmpty(key2)) continue;
+                                    if ((key2.StartsWith("clothing:") || key2.StartsWith("hair:")) && !geometryToggleSnapshot.ContainsKey(key2))
+                                    {
+                                        JSONStorableBool b2 = null;
+                                        try { b2 = geo.GetBoolJSONParam(key2); } catch { b2 = null; }
+                                        if (b2 != null) b2.val = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    for (int i = 0; i < storableSnapshots.Count; i++)
+                    {
+                        JSONClass snap = storableSnapshots[i];
+                        if (snap == null) continue;
+                        string sid = null;
+                        try { sid = snap["id"].Value; } catch { sid = null; }
+                        if (string.IsNullOrEmpty(sid)) continue;
+                        if (!ShouldSnapshotStorableId(sid)) continue;
+                        JSONStorable s = null;
+                        try { s = targetAtom.GetStorableByID(sid); } catch { s = null; }
+                        if (s == null) continue;
+                        try { s.RestoreFromJSON(snap); } catch { }
+                    }
+                }
+                catch { }
+            };
+        }
+
+        private Action CaptureUndoRedoSnapshotAction()
+        {
+            Atom a = GetBestUndoRedoTargetAtom();
+            if (a != null && string.Equals(a.type, "Person", StringComparison.OrdinalIgnoreCase))
+            {
+                Action atomSnap = CaptureAtomSnapshotAction(a);
+                if (atomSnap != null) return atomSnap;
+            }
+            return CaptureSceneSnapshotAction();
+        }
+
+        private Action CaptureSceneSnapshotAction()
+        {
+            try
+            {
+                if (SuperController.singleton == null) return null;
+                string tempPath = Path.Combine(SuperController.singleton.savesDir, "vpb_temp_undo_redo_scene_" + Guid.NewGuid().ToString() + ".json");
+
+                JSONNode sceneRoot = null;
+                try
+                {
+                    SuperController sc = SuperController.singleton;
+                    if (sc == null) return null;
+
+                    string[] candidates = new[]
+                    {
+                        "GetSaveJSON",
+                        "GetSaveSceneJSON",
+                        "GetSceneJSON",
+                        "GetJSON",
+                        "GetSaveJson",
+                        "GetSceneJson",
+                    };
+
+                    object TryInvoke(MethodInfo mi)
+                    {
+                        if (mi == null) return null;
+                        ParameterInfo[] ps = null;
+                        try { ps = mi.GetParameters(); }
+                        catch { ps = null; }
+
+                        Atom bestAtom = null;
+                        try { bestAtom = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { }
+                        if (bestAtom == null)
+                        {
+                            try { bestAtom = SelectedTargetAtom; } catch { bestAtom = null; }
+                        }
+                        if (bestAtom == null)
+                        {
+                            try
+                            {
+                                if (SuperController.singleton != null)
+                                {
+                                    var atoms = SuperController.singleton.GetAtoms();
+                                    if (atoms != null) bestAtom = atoms.FirstOrDefault(a => a != null && a.type == "Person");
+                                }
+                            }
+                            catch { bestAtom = null; }
+                        }
+
+                        object[] args = null;
+                        if (ps != null && ps.Length > 0)
+                        {
+                            args = new object[ps.Length];
+                            for (int pi = 0; pi < ps.Length; pi++)
+                            {
+                                Type t = ps[pi].ParameterType;
+                                bool isByRef = false;
+                                try { isByRef = t != null && t.IsByRef; } catch { isByRef = false; }
+                                if (isByRef)
+                                {
+                                    try { t = t.GetElementType(); }
+                                    catch { t = ps[pi].ParameterType; }
+                                }
+
+                                if (t == typeof(bool)) args[pi] = false;
+                                else if (t == typeof(int)) args[pi] = 0;
+                                else if (t == typeof(float)) args[pi] = 0f;
+                                else if (t == typeof(string)) args[pi] = "";
+                                else if (t == typeof(JSONNode) || t == typeof(JSONClass)) args[pi] = new JSONClass();
+                                else if (t == typeof(Atom)) args[pi] = bestAtom;
+                                else
+                                {
+                                    return null;
+                                }
+                            }
+                        }
+
+                        try { return mi.Invoke(sc, args); }
+                        catch { return null; }
+                    }
+
+                    bool TrySetSceneRootFromResult(object result)
+                    {
+                        if (result == null) return false;
+                        try
+                        {
+                            if (result is JSONNode node)
+                            {
+                                sceneRoot = node;
+                                return true;
+                            }
+
+                            string s = null;
+                            try { s = result.ToString(); }
+                            catch { s = null; }
+                            if (string.IsNullOrEmpty(s)) return false;
+
+                            try
+                            {
+                                JSONNode parsed = JSON.Parse(s);
+                                if (parsed != null)
+                                {
+                                    sceneRoot = parsed;
+                                    return true;
+                                }
+                            }
+                            catch { }
+                        }
+                        catch { }
+                        return false;
+                    }
+
+                    for (int i = 0; i < candidates.Length && sceneRoot == null; i++)
+                    {
+                        MethodInfo[] methods = null;
+                        try { methods = sc.GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Where(m => string.Equals(m.Name, candidates[i], StringComparison.Ordinal)).ToArray(); }
+                        catch { methods = null; }
+                        if (methods == null || methods.Length == 0) continue;
+
+                        for (int m = 0; m < methods.Length && sceneRoot == null; m++)
+                        {
+                            object result = TryInvoke(methods[m]);
+                            if (TrySetSceneRootFromResult(result)) break;
+                        }
+                    }
+                }
+                catch { sceneRoot = null; }
+
+                if (sceneRoot == null) return null;
+
+                try
+                {
+                    File.WriteAllText(tempPath, sceneRoot.ToString());
+                }
+                catch
+                {
+                    return null;
+                }
+
+                string loadPath = null;
+                try { loadPath = UI.NormalizePath(tempPath); }
+                catch { loadPath = tempPath; }
+
+                return () =>
+                {
+                    try
+                    {
+                        if (SuperController.singleton == null) return;
+                        if (!File.Exists(tempPath)) return;
+                        SceneLoadingUtils.LoadScene(loadPath, true);
+                    }
+                    catch { }
+                    finally
+                    {
+                        try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                    }
+                };
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -738,12 +1109,21 @@ namespace VPB
                 Action action = undoStack.Pop();
                 try
                 {
+                    Action redoAction = CaptureUndoRedoSnapshotAction();
+                    if (redoAction != null) redoStack.Push(redoAction);
+                    isApplyingUndoRedo = true;
                     action?.Invoke();
                 }
                 catch (Exception ex)
                 {
                     LogUtil.LogError("Error during Undo: " + ex.Message);
                 }
+                finally
+                {
+                    isApplyingUndoRedo = false;
+                }
+
+                UpdateUndoRedoButtonLabels();
                 try
                 {
                     // Ensure context submenus refresh immediately after Undo restores items.
@@ -758,6 +1138,46 @@ namespace VPB
             else
             {
                 LogUtil.Log("[VPB] Undo: stack empty");
+                UpdateUndoRedoButtonLabels();
+            }
+        }
+
+        private void Redo()
+        {
+            if (redoStack.Count > 0)
+            {
+                Action action = redoStack.Pop();
+                try
+                {
+                    Action undoAction = CaptureUndoRedoSnapshotAction();
+                    if (undoAction != null) undoStack.Push(undoAction);
+                    isApplyingUndoRedo = true;
+                    action?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("Error during Redo: " + ex.Message);
+                }
+                finally
+                {
+                    isApplyingUndoRedo = false;
+                }
+
+                UpdateUndoRedoButtonLabels();
+                try
+                {
+                    Atom tgt = null;
+                    try { tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { }
+                    if (clothingSubmenuOpen) SyncClothingSubmenu(tgt, true);
+                    if (hairSubmenuOpen) SyncHairSubmenu(tgt, true);
+                    UpdateSideContextActions();
+                }
+                catch { }
+            }
+            else
+            {
+                LogUtil.Log("[VPB] Redo: stack empty");
+                UpdateUndoRedoButtonLabels();
             }
         }
 

@@ -555,7 +555,7 @@ namespace VPB
 
                                 try
                                 {
-                                    StartCoroutine(PostUndoPersonRefreshCoroutine(atomUid, geometrySnapshotAll, skinSnapshotAll, 5));
+                                    if (Panel != null) Panel.StartCoroutine(PostUndoPersonRefreshCoroutine(atomUid, geometrySnapshotAll, skinSnapshotAll, 5));
                                 }
                                 catch { }
 
@@ -1094,6 +1094,14 @@ namespace VPB
                                             bool merge = true;
                                             if (itemType == ItemType.Appearance) merge = (appearanceMode == "merge");
                                             else if (itemType == ItemType.Pose) merge = false;
+
+                                            bool ddReplaceMode = Panel != null && Panel.DragDropReplaceMode;
+                                            bool isPersonClothingPreset = itemType == ItemType.Clothing && ext == ".vap" && storableId == "ClothingPresets";
+                                            if (ddReplaceMode && isPersonClothingPreset)
+                                            {
+                                                ClothingLoadingUtils.RemoveAllClothing(atom);
+                                                merge = false;
+                                            }
 
                                             LogUtil.Log($"[DragDropDebug] Calling LoadPresetFromJSON (merge={merge})...");
                                             try

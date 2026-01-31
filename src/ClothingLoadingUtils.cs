@@ -641,7 +641,15 @@ namespace VPB
         {
             if (atom == null || entry == null) return;
             string path = entry.Path;
+
+            if (isClothing && VPBConfig.Instance != null && VPBConfig.Instance.DragDropReplaceMode)
+            {
+                RemoveAllClothing(atom);
+            }
+
             string normalizedPath = UI.NormalizePath(path);
+            string creator;
+            TryGetCreatorFromPresetPath(path, isClothing, out creator);
 
             string itemName = "";
             string packageName = "";
