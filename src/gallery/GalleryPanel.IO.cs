@@ -413,6 +413,14 @@ namespace VPB
                 string ext = (lastDot >= 0 && lastDot < p.Length - 1) ? p.Substring(lastDot + 1) : "";
                 bool isPreset = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
 
+                string norm = (p ?? "").Replace('\\', '/');
+                bool isVarEntry = (entry is VarFileEntry) || ((entry as SystemFileEntry) != null && ((SystemFileEntry)entry).isVar);
+                bool isCustomLoose = !isVarEntry &&
+                                    (norm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
+                                     norm.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase) ||
+                                     norm.IndexOf("/Custom/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                     norm.IndexOf("/Saves/", StringComparison.OrdinalIgnoreCase) >= 0);
+
                 ClothingLoadingUtils.ResourceKind k;
                 ClothingLoadingUtils.ResourceGender g;
                 ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
@@ -426,7 +434,7 @@ namespace VPB
                 // - Presets/Items/Male/Female: additional constraints (AND).
                 if (clothingSubfilter != 0)
                 {
-                    bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
+                    bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
                     bool wantsDecalType = ((clothingSubfilter & ClothingSubfilter.Decals) != 0);
 
                     bool typeExplicit = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
@@ -443,7 +451,10 @@ namespace VPB
                     }
 
                     // Additional constraints
-                    if ((clothingSubfilter & ClothingSubfilter.Presets) != 0) { if (!isPreset) return false; }
+                    bool wantsPresets = (clothingSubfilter & ClothingSubfilter.Presets) != 0;
+                    bool wantsCustom = (clothingSubfilter & ClothingSubfilter.Custom) != 0;
+                    if (wantsPresets) { if (!isPreset) return false; }
+                    if (wantsCustom) { if (!isCustomLoose) return false; }
                     if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
                     if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male) return false; }
                     if ((clothingSubfilter & ClothingSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female) return false; }

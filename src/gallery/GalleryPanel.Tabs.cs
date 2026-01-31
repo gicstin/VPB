@@ -652,13 +652,14 @@ namespace VPB
                         Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
                         Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
 
-                        string[] options = new string[] { "Real Clothing", "Presets", "Items", "Male", "Female", "Decals" };
+                        string[] options = new string[] { "Real Clothing", "Presets", "Custom", "Items", "Male", "Female", "Decals" };
                         for (int gi = 0; gi < options.Length; gi++)
                         {
                             string opt = options[gi];
                             ClothingSubfilter flag = 0;
                             if (opt == "Real Clothing") flag = ClothingSubfilter.RealClothing;
                             else if (opt == "Presets") flag = ClothingSubfilter.Presets;
+                            else if (opt == "Custom") flag = ClothingSubfilter.Custom;
                             else if (opt == "Items") flag = ClothingSubfilter.Items;
                             else if (opt == "Male") flag = ClothingSubfilter.Male;
                             else if (opt == "Female") flag = ClothingSubfilter.Female;
@@ -668,12 +669,13 @@ namespace VPB
                             Color btnColor = isActive ? active : inactive;
 
                             int cnt = 0;
-                            if (opt == "Real Clothing") cnt = clothingSubfilterFacetCountReal;
-                            else if (opt == "Presets") cnt = clothingSubfilterFacetCountPresets;
-                            else if (opt == "Items") cnt = clothingSubfilterFacetCountItems;
-                            else if (opt == "Male") cnt = clothingSubfilterFacetCountMale;
-                            else if (opt == "Female") cnt = clothingSubfilterFacetCountFemale;
-                            else if (opt == "Decals") cnt = clothingSubfilterFacetCountDecals;
+                            if (opt == "Real Clothing") cnt = clothingSubfilterCountReal;
+                            else if (opt == "Presets") cnt = clothingSubfilterCountPresets;
+                            else if (opt == "Custom") cnt = clothingSubfilterCountCustom;
+                            else if (opt == "Items") cnt = clothingSubfilterCountItems;
+                            else if (opt == "Male") cnt = clothingSubfilterCountMale;
+                            else if (opt == "Female") cnt = clothingSubfilterCountFemale;
+                            else if (opt == "Decals") cnt = clothingSubfilterCountDecals;
 
                             string label = opt + " (" + cnt + ")";
 

@@ -282,6 +282,7 @@ namespace VPB
             Male = 1 << 3,
             Female = 1 << 4,
             Decals = 1 << 5,
+            Custom = 1 << 6,
         }
 
         [Flags]
@@ -308,6 +309,7 @@ namespace VPB
         private int clothingSubfilterCountAll = 0;
         private int clothingSubfilterCountReal = 0;
         private int clothingSubfilterCountPresets = 0;
+        private int clothingSubfilterCountCustom = 0;
         private int clothingSubfilterCountItems = 0;
         private int clothingSubfilterCountMale = 0;
         private int clothingSubfilterCountFemale = 0;
@@ -315,6 +317,7 @@ namespace VPB
 
         private int clothingSubfilterFacetCountReal = 0;
         private int clothingSubfilterFacetCountPresets = 0;
+        private int clothingSubfilterFacetCountCustom = 0;
         private int clothingSubfilterFacetCountItems = 0;
         private int clothingSubfilterFacetCountMale = 0;
         private int clothingSubfilterFacetCountFemale = 0;

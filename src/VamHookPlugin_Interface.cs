@@ -204,6 +204,8 @@ namespace VPB
                 addCat("Scenes", "json", "Saves/scene");
                 addCat("SubScenes", "json", "Custom/SubScene");
                 addCat("Clothing", "vam|vap", "Custom/Clothing");
+                addCat("Clothing", "vap", "Custom/Atom/Person/Clothing");
+                addCat("Clothing", "vam|vap", "Saves/Person/Clothing");
                 addCat("Hair", "vam|vap", "Custom/Hair");
                 addCat("Pose", "json", "Saves/Person"); // Was Person
                 addCat("Appearance", "json|vap", "Saves/Person/appearance");
