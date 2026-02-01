@@ -13,6 +13,57 @@ namespace VPB
         {
             if (canvas != null && VPBConfig.Instance != null)
             {
+                try
+                {
+                    if (Input.GetKeyDown(KeyCode.F3))
+                    {
+                        FileEntry fe = null;
+                        try
+                        {
+                            if (selectedFiles != null && selectedFiles.Count > 0) fe = selectedFiles[0];
+                        }
+                        catch { }
+
+                        string pkgPath = "";
+                        try
+                        {
+                            // If selecting a file inside a VAR, the path looks like: <varPath>:/<internalPath>
+                            // e.g. AllPackages/foo.bar.1.var:/Saves/scene/x.json
+                            if (fe is VarFileEntry vfe && vfe.Package != null)
+                            {
+                                pkgPath = vfe.Package.Path;
+                            }
+                            else
+                            {
+                                string p = fe != null ? (fe.Path ?? "") : "";
+                                int idx = !string.IsNullOrEmpty(p) ? p.IndexOf(":/", StringComparison.Ordinal) : -1;
+                                if (idx > 0) pkgPath = p.Substring(0, idx);
+                                else pkgPath = p;
+                            }
+                        }
+                        catch { }
+
+                        string selectedPath = fe != null ? (fe.Path ?? "") : "";
+                        string selectedLower = selectedPath.ToLowerInvariant();
+
+                        if (!string.IsNullOrEmpty(selectedLower) && selectedLower.EndsWith(".json"))
+                        {
+                            ShowTemporaryStatus("Caching scene textures...", 2f);
+                            NativeTextureOnDemandCache.TryBuildSceneCacheOnDemand(this, selectedPath);
+                        }
+                        else if (!string.IsNullOrEmpty(pkgPath) && pkgPath.ToLowerInvariant().EndsWith(".var"))
+                        {
+                            ShowTemporaryStatus("Building texture cache...", 2f);
+                            NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, pkgPath);
+                        }
+                        else
+                        {
+                            ShowTemporaryStatus("Select a .var package or scene .json first", 2f);
+                        }
+                    }
+                }
+                catch { }
+
                 UpdateTargetMarker();
 
                 try

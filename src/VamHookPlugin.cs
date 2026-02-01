@@ -1109,6 +1109,7 @@ namespace VPB
             {
                 TryClearConsole();
             }
+            OnDemandTextureCacheHook.Update();
             // Hotkeys
             if (m_Inited)
             {

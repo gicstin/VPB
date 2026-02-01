@@ -18,6 +18,11 @@ namespace VPB
 
 		public string InternalPath { get; protected set; }
 
+		public long EntrySize
+		{
+			get { return base.Size; }
+		}
+
 		public override long Size 
 		{ 
 			get { return Package != null ? Package.Size : base.Size; }

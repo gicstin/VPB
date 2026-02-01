@@ -438,6 +438,15 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                {
+                    LogImageRequestDetails("thumb", qi);
+                }
+            }
+            catch { }
+
             if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null) return true;
             if (!Settings.Instance.EnableZstdCompression.Value) return true;
 
@@ -482,6 +491,34 @@ namespace VPB
             return true;
         }
 
+        private static void LogImageRequestDetails(string kind, ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
+
+            string imgPath = qi.imgPath;
+            string nativeCachePath = null;
+            bool nativeExists = false;
+            bool metaExists = false;
+            FileEntry fe = null;
+
+            try { fe = FileManager.GetFileEntry(imgPath); } catch { fe = null; }
+
+            try
+            {
+                nativeCachePath = TextureUtil.GetNativeCachePath(imgPath);
+                if (!string.IsNullOrEmpty(nativeCachePath))
+                {
+                    nativeExists = File.Exists(nativeCachePath);
+                    metaExists = File.Exists(nativeCachePath + "meta");
+                }
+            }
+            catch { }
+
+            string feInfo = fe != null ? ("fe=1 size=" + fe.Size + " ts=" + fe.LastWriteTime.ToFileTime()) : "fe=0";
+            string cacheInfo = !string.IsNullOrEmpty(nativeCachePath) ? ("cache=1 exists=" + (nativeExists ? "1" : "0") + " meta=" + (metaExists ? "1" : "0")) : "cache=0";
+            LogUtil.Log("[VPB] [VaMLoad] " + kind + " | " + imgPath + " | " + feInfo + " | " + cacheInfo);
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnailImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static bool PreQueueThumbnailImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
@@ -490,6 +527,15 @@ namespace VPB
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
+
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                {
+                    LogImageRequestDetails("thumb.immediate", qi);
+                }
+            }
+            catch { }
 
             if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null) return true;
             if (!Settings.Instance.EnableZstdCompression.Value) return true;
@@ -535,6 +581,15 @@ namespace VPB
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
+
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                {
+                    LogImageRequestDetails("img", qi);
+                }
+            }
+            catch { }
 
             if (Settings.Instance == null || Settings.Instance.EnableZstdCompression == null) return true;
             if (!Settings.Instance.EnableZstdCompression.Value) return true;

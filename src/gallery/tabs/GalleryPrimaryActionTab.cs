@@ -28,6 +28,23 @@ namespace VPB
             {
                 string pathLower = SelectedFile.Path.ToLowerInvariant();
                 string category = parentPanel.ParentPanel.CurrentCategoryTitle ?? "";
+
+                if (pathLower.EndsWith(".var"))
+                {
+                    CreateActionButton(++buttonCount, "Build Texture Cache", (dragger) => {
+                        try
+                        {
+                            if (dragger != null && dragger.Panel != null && dragger.FileEntry != null)
+                            {
+                                NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(dragger.Panel, dragger.FileEntry.Path);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("Build Texture Cache failed: " + ex);
+                        }
+                    }, SelectedFile, selectedHubItem);
+                }
                 
                 if (pathLower.Contains("/clothing/") || pathLower.Contains("\\clothing\\") || category.Contains("Clothing"))
                 {

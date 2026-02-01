@@ -271,15 +271,80 @@ namespace VPB
 
         public static void Texture2D_LoadRawTextureData_Prefix(Texture2D __instance, byte[] data)
         {
-            if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                LogUtil.Log("Texture2D_LoadRawTextureData_Prefix");
-            if (ImageLoadingMgr.singleton == null) return;
+            int logLevel = 0;
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null) logLevel = Settings.Instance.TextureLogLevel.Value;
+            }
+            catch { }
+
+            bool hasMgr = ImageLoadingMgr.singleton != null;
 
             string path = null;
+            string pathSource = null;
+
             if (data != null)
             {
-                _dataToPath.TryGetValue(data, out path);
+                if (_dataToPath.TryGetValue(data, out path) && !string.IsNullOrEmpty(path))
+                {
+                    pathSource = "data";
+                }
             }
+
+            if (string.IsNullOrEmpty(path))
+            {
+                string cur = null;
+                try { cur = ImageLoadingMgr.currentProcessingPath; } catch { }
+                if (!string.IsNullOrEmpty(cur))
+                {
+                    path = cur;
+                    pathSource = "current";
+                }
+            }
+
+            if (string.IsNullOrEmpty(path) && __instance != null && !string.IsNullOrEmpty(__instance.name))
+            {
+                string n = __instance.name;
+                if (n.IndexOf(':') >= 0 || n.IndexOf('/') >= 0 || n.IndexOf('\\') >= 0)
+                {
+                    path = n;
+                    pathSource = "name";
+                }
+            }
+
+            if (logLevel >= 2)
+            {
+                int w = 0;
+                int h = 0;
+                TextureFormat fmt = default(TextureFormat);
+                string texName = null;
+                try
+                {
+                    if (__instance != null)
+                    {
+                        w = __instance.width;
+                        h = __instance.height;
+                        fmt = __instance.format;
+                        texName = __instance.name;
+                    }
+                }
+                catch { }
+
+                int dataLen = data != null ? data.Length : 0;
+                long expected = -1;
+                try { expected = ExpectedRawDataSize(w, h, fmt); } catch { }
+
+                LogUtil.Log("Texture2D_LoadRawTextureData" +
+                    " | mgr=" + (hasMgr ? "1" : "0") +
+                    " | tex='" + (texName ?? "") + "'" +
+                    " | " + w + "x" + h + " " + fmt +
+                    " | data=" + dataLen +
+                    " | expected=" + expected +
+                    " | path=" + (string.IsNullOrEmpty(path) ? "(none)" : path) +
+                    " | src=" + (string.IsNullOrEmpty(pathSource) ? "(none)" : pathSource));
+            }
+
+            if (!hasMgr) return;
 
             if (!string.IsNullOrEmpty(path))
             {
