@@ -35,6 +35,7 @@ namespace VPB
         public ConfigEntry<bool> EnableZstdCompression;
         public ConfigEntry<int> ZstdCompressionLevel;
         public ConfigEntry<bool> DeleteOriginalCacheAfterCompression;
+        public ConfigEntry<bool> Downscale8kTo4kBeforeZstdCache;
         public ConfigEntry<int> ThumbnailThreshold;
 
         public ConfigEntry<bool> AutoOptimizeCache;
@@ -100,6 +101,7 @@ namespace VPB
             
             ZstdCompressionLevel = config.Bind<int>("Optimze", "ZstdCompressionLevel", 5, "Zstd compression level (1-22, higher = better compression but slower).");
             DeleteOriginalCacheAfterCompression = config.Bind<bool>("Optimze", "DeleteOriginalCacheAfterCompression", true, "Delete original .vamcache files after successful Zstd compression.");
+            Downscale8kTo4kBeforeZstdCache = config.Bind<bool>("Optimze", "Downscale8kTo4kBeforeZstdCache", false, "Downscale 8K (8192x8192) textures to 4K before writing Zstd texture cache.");
             ThumbnailThreshold = config.Bind<int>("Optimze", "ThumbnailThreshold", 600, "Resolution threshold (width & height) below which a texture is considered a thumbnail and skipped by VPB optimizations.");
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
@@ -138,7 +140,7 @@ namespace VPB
             HubOnlyDownloadable = config.Bind<bool>("HubBrowser", "OnlyDownloadable", true, "Hub Browser: Only show downloadable resources.");
 
 
-            AutoOptimizeCache = config.Bind<bool>("Optimze", "AutoOptimizeCache", false, "When checked, clicking Optimize Cache button will start compression without opening the confirmation window.");
+            AutoOptimizeCache = config.Bind<bool>("Optimze", "AutoOptimizeCache", false, "When checked, clicking Compress Cache button will start compression without opening the confirmation window.");
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "CategoryHair", "Last opened Gallery page.");
         }
     }

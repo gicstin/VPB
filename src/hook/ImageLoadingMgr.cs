@@ -26,8 +26,14 @@ namespace VPB
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
 
+        private static string GetDownscaledKey(string cacheKey)
+        {
+            return "ILM:" + (cacheKey ?? string.Empty);
+        }
+
         public void ClearCache()
         {
+            TextureUtil.UnmarkDownscaledActiveByPrefix("ILM:");
             cache.Clear();
         }
 
@@ -36,6 +42,7 @@ namespace VPB
             if (cache.TryGetValue(path, out var tex))
             {
                 if (tex != null) return tex;
+                TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
                 cache.Remove(path);
             }
             return null;
@@ -44,6 +51,7 @@ namespace VPB
         void RegisterTexture(string path, Texture2D tex)
         {
             if (string.IsNullOrEmpty(path) || tex == null) return;
+            TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
             cache[path] = tex;
         }
 
@@ -156,6 +164,8 @@ namespace VPB
                         int width = metaJson["width"].AsInt;
                         int height = metaJson["height"].AsInt;
                         TextureFormat format = (TextureFormat)Enum.Parse(typeof(TextureFormat), metaJson["format"].Value);
+                        bool isDownscaled = false;
+                        try { isDownscaled = metaJson["downscaled"].AsBool; } catch { isDownscaled = false; }
 
                         byte[] compressed = File.ReadAllBytes(vpbCachePath);
                         byte[] decompressed = ZstdCompressor.Decompress(compressed);
@@ -166,6 +176,7 @@ namespace VPB
                         qi.tex = tex;
 
                         RegisterTexture(cacheKey, tex);
+                        if (isDownscaled) TextureUtil.MarkDownscaledActive(GetDownscaledKey(cacheKey));
                         
                         // Resolve others waiting for this same key
                         ResolveInflight(cacheKey, tex);

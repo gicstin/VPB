@@ -1742,10 +1742,11 @@ namespace VPB
                 
                 {
                     // ========== ZSTD CACHE SETTINGS ==========
+
                     GUILayout.BeginVertical(m_StyleSection);
                     
                     var stats = ImageLoadingMgr.singleton.CurrentZstdStats;
-                    var btnLabel = m_PendingVamCacheCount > 0 ? string.Format("Optimize Cache ({0})", m_PendingVamCacheCount) : "Optimize Cache";
+                    var btnLabel = m_PendingVamCacheCount > 0 ? string.Format("Compress Cache ({0})", m_PendingVamCacheCount) : "Compress Cache";
                     var btnRect = GUILayoutUtility.GetRect(new GUIContent(btnLabel), m_StyleButtonPrimary, GUILayout.Height(buttonHeight));
                     
                     if (Event.current.type == EventType.Repaint && btnRect.Contains(Event.current.mousePosition))
@@ -1824,6 +1825,14 @@ namespace VPB
                         Settings.Instance.AutoOptimizeCache.Value = !Settings.Instance.AutoOptimizeCache.Value;
                     }
                     GUILayout.Label("Optimize: No Confirmation", m_StyleInfoCardText);
+                    GUILayout.EndHorizontal();
+
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button(Settings.Instance.Downscale8kTo4kBeforeZstdCache.Value ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+                    {
+                        Settings.Instance.Downscale8kTo4kBeforeZstdCache.Value = !Settings.Instance.Downscale8kTo4kBeforeZstdCache.Value;
+                    }
+                    GUILayout.Label("Downscale 8K->4K (In Scene: " + TextureUtil.GetDownscaledActiveCount() + ")", m_StyleInfoCardText);
                     GUILayout.EndHorizontal();
 
                     if (m_ShowSpaceSaverWindow)
@@ -2030,7 +2039,7 @@ namespace VPB
 
                     if (m_ShowSpaceSaverWindow)
                     {
-                        // Block world interaction when mouse is over the Optimize Cache window
+                        // Block world interaction when mouse is over the Compress Cache window
                         var screenSpaceRect = new Rect(m_SpaceSaverWindowRect.x * m_UIScale, m_SpaceSaverWindowRect.y * m_UIScale, m_SpaceSaverWindowRect.width * m_UIScale, m_SpaceSaverWindowRect.height * m_UIScale);
                         if (screenSpaceRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)))
                         {
@@ -2343,7 +2352,7 @@ namespace VPB
             GUI.Box(headerBgRect, "", m_StyleSection);
 
             // Draw title in the header area (the padding gap)
-            GUI.Label(new Rect(15, 12, m_SpaceSaverWindowRect.width - 60, 25), "Optimize Cache (Zstd)", m_StyleHeader);
+            GUI.Label(new Rect(15, 12, m_SpaceSaverWindowRect.width - 60, 25), "Compress Cache (Zstd)", m_StyleHeader);
 
             // Block game input when interacting with the window
             if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp || Event.current.type == EventType.MouseMove)

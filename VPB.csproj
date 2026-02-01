@@ -273,6 +273,7 @@
     <Compile Include="src\hook\FileManagement\VarPackageMgr.cs" />
     <Compile Include="src\hook\HubResourcePackageHook.cs" />
     <Compile Include="src\hook\NativeTextureOnDemandCache.cs" />
+    <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
     <Compile Include="src\hook\HubImageLoaderThreaded.cs" />
     <Compile Include="src\hook\CustomAssetLoader.cs" />

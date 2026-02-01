@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using System.Runtime.InteropServices;
 
@@ -6,6 +7,56 @@ namespace VPB
 {
     public static class TextureUtil
     {
+        private static readonly object s_DownscaledActiveLock = new object();
+        private static readonly HashSet<string> s_DownscaledActiveKeys = new HashSet<string>();
+
+        public static int GetDownscaledActiveCount()
+        {
+            lock (s_DownscaledActiveLock)
+            {
+                return s_DownscaledActiveKeys.Count;
+            }
+        }
+
+        public static void MarkDownscaledActive(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            lock (s_DownscaledActiveLock)
+            {
+                s_DownscaledActiveKeys.Add(key);
+            }
+        }
+
+        public static void UnmarkDownscaledActive(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            lock (s_DownscaledActiveLock)
+            {
+                s_DownscaledActiveKeys.Remove(key);
+            }
+        }
+
+        public static void UnmarkDownscaledActiveByPrefix(string prefix)
+        {
+            if (string.IsNullOrEmpty(prefix)) return;
+            lock (s_DownscaledActiveLock)
+            {
+                if (s_DownscaledActiveKeys.Count == 0) return;
+                var remove = new List<string>();
+                foreach (var k in s_DownscaledActiveKeys)
+                {
+                    if (k != null && k.StartsWith(prefix))
+                    {
+                        remove.Add(k);
+                    }
+                }
+                for (int i = 0; i < remove.Count; i++)
+                {
+                    s_DownscaledActiveKeys.Remove(remove[i]);
+                }
+            }
+        }
+
         public static int GetExpectedRawDataSize(int w, int h, TextureFormat fmt)
         {
             switch (fmt)

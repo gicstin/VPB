@@ -29,6 +29,7 @@ namespace VPB
                 processed = false;
                 preprocessed = false;
                 loadedFromCache = false;
+                loadedFromDownscaledCache = false;
                 cancel = false;
                 finished = false;
                 isNormalMap = false;
@@ -76,6 +77,7 @@ namespace VPB
             public bool processed;
             public bool preprocessed;
             public bool loadedFromCache;
+            public bool loadedFromDownscaledCache;
             public bool cancel;
             public bool finished;
             public bool isNormalMap;
@@ -202,6 +204,8 @@ namespace VPB
                     if (asObject["width"] != null) width = asObject["width"].AsInt;
                     if (asObject["height"] != null) height = asObject["height"].AsInt;
                     if (asObject["format"] != null) textureFormat = (TextureFormat)Enum.Parse(typeof(TextureFormat), asObject["format"]);
+                    try { loadedFromDownscaledCache = asObject["downscaled"].AsBool; }
+                    catch { loadedFromDownscaledCache = false; }
                 }
             }
 
@@ -351,10 +355,29 @@ namespace VPB
 
                 if (createAlphaFromGrayscale)
                 {
-                    for (int k = 0; k < num8; k += 4)
+                    bool hasExistingAlpha = false;
+                    for (int k = 3; k < num8; k += 4)
                     {
-                        int avg = (raw[k] + raw[k + 1] + raw[k + 2]) / 3;
-                        raw[k + 3] = (byte)avg;
+                        if (raw[k] != byte.MaxValue)
+                        {
+                            hasExistingAlpha = true;
+                            break;
+                        }
+                    }
+
+                    if (!hasExistingAlpha)
+                    {
+                        for (int k = 0; k < num8; k += 4)
+                        {
+                            int avg = (raw[k] + raw[k + 1] + raw[k + 2]) / 3;
+                            raw[k + 3] = (byte)avg;
+                        }
+                    }
+
+                    bool enforceDxt5 = compress && imgPath != null && imgPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+                    if (enforceDxt5)
+                    {
+                        raw[3] = 128;
                     }
                 }
 
@@ -676,7 +699,11 @@ namespace VPB
         public void PurgeAllTextures()
         {
             if (textureCache == null) return;
-            foreach (Texture2D value in textureCache.Values) UnityEngine.Object.Destroy(value);
+            foreach (Texture2D value in textureCache.Values)
+            {
+                if (value != null) TextureUtil.UnmarkDownscaledActive("HIL:" + value.name);
+                UnityEngine.Object.Destroy(value);
+            }
             textureUseCount.Clear();
             textureCache.Clear();
             textureTrackedCache.Clear();
@@ -736,6 +763,7 @@ namespace VPB
                         {
                             textureCache.Add(value.cacheSignature, value.tex);
                             textureTrackedCache.Add(value.tex, true);
+                            if (value.loadedFromDownscaledCache) TextureUtil.MarkDownscaledActive("HIL:" + value.cacheSignature);
                         }
                     }
                     value.DoCallback();
@@ -765,7 +793,7 @@ namespace VPB
                 }
                 else if (textureCache != null && textureCache.TryGetValue(value.cacheSignature, out value2))
                 {
-                    if (value2 == null) { textureCache.Remove(value.cacheSignature); textureTrackedCache.Remove(value2); }
+                    if (value2 == null) { TextureUtil.UnmarkDownscaledActive("HIL:" + value.cacheSignature); textureCache.Remove(value.cacheSignature); textureTrackedCache.Remove(value2); }
                     else { value.tex = value2; value.processed = true; value.finished = true; }
                 }
             }

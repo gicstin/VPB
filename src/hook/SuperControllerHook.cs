@@ -9,10 +9,25 @@ using UnityEngine;
 using HarmonyLib;
 using Prime31.MessageKit;
 using GPUTools.Hair.Scripts.Settings;
+
 namespace VPB
 {
-    class SuperControllerHook
+    public class SuperControllerHook
     {
+        private static bool IsPluginsAlwaysEnabledSettingOn()
+        {
+            try
+            {
+                return Settings.Instance != null
+                    && Settings.Instance.PluginsAlwaysEnabled != null
+                    && Settings.Instance.PluginsAlwaysEnabled.Value;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         static Dictionary<string, int> _priorityCache = new Dictionary<string, int>(StringComparer.Ordinal);
         static object _priorityCacheLock = new object();
 
@@ -381,8 +396,27 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.VarPackage), "LoadUserPrefs")]
         public static void PostLoadUserPrefs(MVR.FileManagement.VarPackage __instance)
         {
-            if (Settings.Instance.PluginsAlwaysEnabled.Value)
+            if (__instance == null) return;
+            if (!IsPluginsAlwaysEnabledSettingOn()) return;
+            try
+            {
                 Traverse.Create(__instance).Field("_pluginsAlwaysEnabled").SetValue(true);
+            }
+            catch { }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.VarPackage), "get_PluginsAlwaysEnabled")]
+        public static void PostGetPluginsAlwaysEnabled(ref bool __result)
+        {
+            if (IsPluginsAlwaysEnabledSettingOn()) __result = true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.VarPackage), "get_PluginsAlwaysDisabled")]
+        public static void PostGetPluginsAlwaysDisabled(ref bool __result)
+        {
+            if (IsPluginsAlwaysEnabledSettingOn()) __result = false;
         }
 
         [HarmonyPrefix]

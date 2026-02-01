@@ -87,6 +87,7 @@ namespace VPB
 			public bool preprocessed;
 			public bool loadedFromGalleryCache;
 			public bool loadedFromCache;
+			public bool loadedFromDownscaledCache;
 			public bool cancel;
 
 			public bool finished;
@@ -292,6 +293,8 @@ namespace VPB
 					{
 						textureFormat = (TextureFormat)Enum.Parse(typeof(TextureFormat), asObject["format"]);
 					}
+					try { loadedFromDownscaledCache = asObject["downscaled"].AsBool; }
+					catch { loadedFromDownscaledCache = false; }
 				}
 			}
 
@@ -415,6 +418,7 @@ namespace VPB
 									preprocessed = true;
 									loadedFromGalleryCache = true;
 									loadedFromCache = true;
+									loadedFromDownscaledCache = false;
 								}
 							}
 						}
@@ -656,10 +660,29 @@ namespace VPB
 
                 if (createAlphaFromGrayscale)
                 {
-                    for (int k = 0; k < num8; k += 4)
+                    bool hasExistingAlpha = false;
+                    for (int k = 3; k < num8; k += 4)
                     {
-                        int avg = (raw[k] + raw[k + 1] + raw[k + 2]) / 3;
-                        raw[k + 3] = (byte)avg;
+                        if (raw[k] != byte.MaxValue)
+                        {
+                            hasExistingAlpha = true;
+                            break;
+                        }
+                    }
+
+                    if (!hasExistingAlpha)
+                    {
+                        for (int k = 0; k < num8; k += 4)
+                        {
+                            int avg = (raw[k] + raw[k + 1] + raw[k + 2]) / 3;
+                            raw[k + 3] = (byte)avg;
+                        }
+                    }
+
+                    bool enforceDxt5 = compress && imgPath != null && imgPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+                    if (enforceDxt5)
+                    {
+                        raw[3] = 128;
                     }
                 }
 
@@ -1032,6 +1055,7 @@ namespace VPB
 				else
 				{
 					textureUseCount.Remove(tex);
+					TextureUtil.UnmarkDownscaledActive("CIL:" + tex.name);
 					textureCache.Remove(tex.name);
 					textureTrackedCache.Remove(tex);
 					UnityEngine.Object.Destroy(tex);
@@ -1067,6 +1091,7 @@ namespace VPB
 			}
 			foreach (Texture2D value in textureCache.Values)
 			{
+				if (value != null) TextureUtil.UnmarkDownscaledActive("CIL:" + value.name);
 				UnityEngine.Object.Destroy(value);
 			}
 			textureUseCount.Clear();
@@ -1082,6 +1107,7 @@ namespace VPB
 			}
 			foreach (Texture2D value in immediateTextureCache.Values)
 			{
+				if (value != null) TextureUtil.UnmarkDownscaledActive("CIL:" + value.name);
 				UnityEngine.Object.Destroy(value);
 			}
 			immediateTextureCache.Clear();
@@ -1189,6 +1215,7 @@ namespace VPB
 			if (!qi.skipCache && !immediateTextureCache.ContainsKey(qi.cacheSignature) && qi.tex != null)
 			{
 				immediateTextureCache.Add(qi.cacheSignature, qi.tex);
+				if (qi.loadedFromDownscaledCache) TextureUtil.MarkDownscaledActive("CIL:" + qi.cacheSignature);
 			}
 		}
 
@@ -1257,6 +1284,7 @@ namespace VPB
 						{
 							textureCache.Add(value.cacheSignature, value.tex);
 							textureTrackedCache.Add(value.tex, true);
+							if (value.loadedFromDownscaledCache) TextureUtil.MarkDownscaledActive("CIL:" + value.cacheSignature);
 						}
 					}
 					value.DoCallback();

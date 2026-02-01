@@ -15,7 +15,7 @@ namespace VPB
             {
                 try
                 {
-                    if (Input.GetKeyDown(KeyCode.F3))
+                    if (false && Input.GetKeyDown(KeyCode.F3))
                     {
                         FileEntry fe = null;
                         try
