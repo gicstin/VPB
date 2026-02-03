@@ -64,6 +64,28 @@ namespace VPB
                 }
                 catch { }
 
+                try
+                {
+                    if (saveSubmenuOpen)
+                    {
+                        bool hovered = saveSubmenuParentHovered || saveSubmenuOptionsHovered;
+                        if (!hovered)
+                        {
+                            if (Time.unscaledTime - saveSubmenuLastHoverTime >= SaveSubmenuAutoHideDelay)
+                            {
+                                saveSubmenuOpen = false;
+                                CloseSaveSubmenuUI();
+                                UpdateSideButtonPositions();
+                            }
+                        }
+                        else
+                        {
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                    }
+                }
+                catch { }
+
                 UpdateTargetMarker();
 
                 try

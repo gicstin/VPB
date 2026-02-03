@@ -935,8 +935,8 @@ namespace VPB
                                     }
                                 }
 
-                                DateTime entryTime = new DateTime(ticks[i], DateTimeKind.Utc).ToLocalTime();
-                                long entrySize = (sizes != null && i < sizes.Count) ? sizes[i] : 0;
+                                DateTime entryTime = pkg != null ? pkg.LastWriteTime : DateTime.MinValue;
+                                long entrySize = pkg != null ? pkg.Size : 0;
                                 lock (candidateQueueLock)
                                 {
                                     candidateQueue.Enqueue(new VarFileEntry(pkg, internalPath, entryTime, entrySize));

@@ -73,6 +73,10 @@ namespace VPB
             var sw = System.Diagnostics.Stopwatch.StartNew();
             if (canvas == null) Init();
 
+            DateTime pkgRefreshTime = DateTime.MinValue;
+            try { pkgRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
+            bool packagesChanged = refreshOnNextShow || (pkgRefreshTime > lastAppliedPackageRefreshTime);
+
             titleText.text = title;
             currentCategoryTitle = title;
             bool paramsChanged = (currentExtension != extension || currentPath != path);
@@ -86,6 +90,12 @@ namespace VPB
                 currentSceneSourceFilter = "";
                 currentAppearanceSourceFilter = "";
                 currentPage = 0;
+            }
+            else if (packagesChanged)
+            {
+                creatorsCached = false;
+                tagsCached = false;
+                categoriesCached = false;
             }
             currentExtension = extension;
             currentPath = path;
@@ -112,9 +122,11 @@ namespace VPB
             canvas.gameObject.SetActive(true);
             
             // Only refresh if params changed OR if we are empty (first run) OR explicit refresh needed
-            if (paramsChanged || activeButtons.Count == 0)
+            if (paramsChanged || activeButtons.Count == 0 || packagesChanged)
             {
-                RefreshFiles();
+                RefreshFiles(!paramsChanged);
+                refreshOnNextShow = false;
+                lastAppliedPackageRefreshTime = pkgRefreshTime;
             }
             
             UpdateTabs();
@@ -418,6 +430,18 @@ namespace VPB
         public void ToggleSettings(bool onRight)
         {
             if (settingsPanel != null) settingsPanel.Toggle(onRight);
+        }
+
+        public bool NotifyPackagesChanged(DateTime refreshTime)
+        {
+            if (refreshTime <= DateTime.MinValue) refreshTime = DateTime.Now;
+            if (refreshTime <= lastAppliedPackageRefreshTime) return false;
+
+            refreshOnNextShow = true;
+            creatorsCached = false;
+            tagsCached = false;
+            categoriesCached = false;
+            return true;
         }
     }
 }

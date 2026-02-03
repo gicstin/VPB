@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using UnityEngine;
 using System.Collections.Generic;
 
@@ -15,9 +16,20 @@ namespace VPB
 			Exists = File.Exists(Path);
 			if (Exists)
 			{
-				FileInfo fileInfo = new FileInfo(Path);
-				LastWriteTime = fileInfo.LastWriteTime;
-				Size = fileInfo.Length;
+				DateTime creationTime;
+				DateTime lastWriteTime;
+				long size;
+				if (FileStat.TryGetFileStat(Path, out creationTime, out lastWriteTime, out size))
+				{
+					LastWriteTime = lastWriteTime;
+					Size = size;
+				}
+				else
+				{
+					FileInfo fileInfo = new FileInfo(Path);
+					LastWriteTime = fileInfo.LastWriteTime;
+					Size = fileInfo.Length;
+				}
 			}
 
 			//isPlugin = false;

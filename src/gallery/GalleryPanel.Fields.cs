@@ -60,6 +60,9 @@ namespace VPB
         
         public bool IsVisible => canvas != null && canvas.gameObject.activeSelf;
         
+        private bool refreshOnNextShow;
+        private DateTime lastAppliedPackageRefreshTime = DateTime.MinValue;
+        
         // Configuration
         // public bool IsUndocked = false; // Removed
         public bool DragDropReplaceMode
@@ -153,6 +156,23 @@ namespace VPB
         private GameObject rightRemoveHairSubmenuPanelGO;
         private GameObject leftRemoveHairSubmenuPanelGO;
 
+        private GameObject rightSaveBtnGO;
+        private GameObject leftSaveBtnGO;
+
+        private GameObject rightSaveSubmenuPanelGO;
+        private GameObject leftSaveSubmenuPanelGO;
+
+        private bool saveSubmenuOpen = false;
+        private List<GameObject> rightSaveSubmenuButtons = new List<GameObject>();
+        private List<GameObject> leftSaveSubmenuButtons = new List<GameObject>();
+
+        private bool saveSubmenuParentHovered = false;
+        private bool saveSubmenuOptionsHovered = false;
+        private int saveSubmenuParentHoverCount = 0;
+        private int saveSubmenuOptionsHoverCount = 0;
+        private float saveSubmenuLastHoverTime = 0f;
+        private const float SaveSubmenuAutoHideDelay = 1.0f;
+
         private GameObject rightRemoveHairSubmenuGapPanelGO;
         private GameObject leftRemoveHairSubmenuGapPanelGO;
 
@@ -226,11 +246,16 @@ namespace VPB
         private const int HairSubmenuMaxButtons = 10;
         private const int ClothingSubmenuMaxButtons = 30;
         private const int AtomSubmenuMaxButtons = 20;
+
+        private const int SaveSubmenuMaxButtons = 12;
         
         private Text leftSortBtnText;
         private Text rightSortBtnText;
         private GameObject leftSortBtn;
         private GameObject rightSortBtn;
+
+        private GameObject rightRefreshBtn;
+        private Text rightRefreshBtnText;
 
         // Sub Sort/Search
         private GameObject leftSubSortBtn;

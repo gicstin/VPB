@@ -730,9 +730,8 @@ namespace VPB
                 if (init || flag || clean || removeOldVersion)
                 {
                     StartScan(init, flag, clean, true);
+                    lastPackageRefreshTime = DateTime.Now;
                 }
-
-                lastPackageRefreshTime = DateTime.Now;
 
                 s_InstalledCount = 0;
                 foreach (var item in packagesByUid)

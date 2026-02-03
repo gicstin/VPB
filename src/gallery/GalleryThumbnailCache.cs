@@ -294,18 +294,7 @@ namespace VPB
                     if (dataLen < 0 || fileStream.Position + dataLen > fileStream.Length) break;
 
                     long dataOffset = fileStream.Position;
-                    
-                    byte[] dataBuffer = new byte[dataLen];
-                    int bytesRead = fileStream.Read(dataBuffer, 0, dataLen);
-                    if (bytesRead != dataLen) break;
-
-                    uint calculatedCrc = CalculateCRC32(dataBuffer, 0, dataLen);
-                    if (calculatedCrc != crc32)
-                    {
-                        Debug.LogWarning("GalleryThumbnailCache: CRC mismatch for " + path + " (expected " + crc32 + ", got " + calculatedCrc + "), skipping entry");
-                        continue;
-                    }
-
+                    fileStream.Seek(dataLen, SeekOrigin.Current);
                     lastValidPos = fileStream.Position;
 
                     int expected = GetExpectedRawDataSize(width, height, format);
@@ -446,7 +435,9 @@ namespace VPB
                 if (pkgPath.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || pkgPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 {
                     string pkgName = Path.GetFileName(pkgPath);
-                    return "VAR:/" + pkgName + ":/" + internalPath;
+                    string root = pkgPath.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase) ? "AllPackages" :
+                                  (pkgPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ? "AddonPackages" : "Packages");
+                    return "VAR:/" + root + "/" + pkgName + ":/" + internalPath;
                 }
             }
             // Also handle the package file itself being the target (e.g. for scene gallery)
@@ -455,7 +446,8 @@ namespace VPB
                 if (normalizedPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) || 
                     normalizedPath.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
                 {
-                    return "VAR:/" + Path.GetFileName(normalizedPath);
+                    string root = normalizedPath.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase) ? "AllPackages" : "AddonPackages";
+                    return "VAR:/" + root + "/" + Path.GetFileName(normalizedPath);
                 }
             }
 

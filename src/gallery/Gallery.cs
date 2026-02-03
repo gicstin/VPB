@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Prime31.MessageKit;
 using UnityEngine;
 
 namespace VPB
@@ -8,6 +10,8 @@ namespace VPB
     public class Gallery : MonoBehaviour
     {
         public static Gallery singleton;
+
+        private DateTime lastObservedPackageRefreshTime = DateTime.MinValue;
 
         public struct Category
         {
@@ -35,9 +39,73 @@ namespace VPB
         public int PanelCount => panels.Count;
         public List<GalleryPanel> Panels => panels;
 
+        private Coroutine autoRefreshCoroutine;
+        private bool autoRefreshPending;
+
         void Awake()
         {
             singleton = this;
+        }
+
+        void OnEnable()
+        {
+            MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+        }
+
+        void OnDisable()
+        {
+            MessageKit.removeObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+        }
+
+        private void OnFileManagerRefresh()
+        {
+            DateTime refreshTime = DateTime.MinValue;
+            try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
+
+            if (refreshTime <= lastObservedPackageRefreshTime) return;
+            lastObservedPackageRefreshTime = refreshTime;
+
+            if (autoRefreshCoroutine != null)
+            {
+                autoRefreshPending = true;
+                return;
+            }
+            autoRefreshCoroutine = StartCoroutine(AutoRefreshAfterPackageScan());
+        }
+
+        private IEnumerator AutoRefreshAfterPackageScan()
+        {
+            yield return null;
+            try
+            {
+                while (true)
+                {
+                    autoRefreshPending = false;
+
+                    DateTime refreshTime = DateTime.MinValue;
+                    try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
+
+                    foreach (var p in panels)
+                    {
+                        if (p == null) continue;
+                        if (p.IsHubMode) continue;
+
+						bool changed = false;
+						try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
+
+						if (!p.IsVisible) continue;
+						if (changed) p.RefreshFiles(true);
+                    }
+
+                    if (!autoRefreshPending) break;
+                    yield return null;
+                }
+            }
+            finally
+            {
+                autoRefreshCoroutine = null;
+                autoRefreshPending = false;
+            }
         }
 
         void OnDestroy()

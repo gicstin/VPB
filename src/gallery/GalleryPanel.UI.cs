@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using MVR.FileManagement;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
@@ -63,6 +64,418 @@ namespace VPB
                 this.buttonIndex = buttonIndex;
                 this.row = row;
                 this.gapTier = gapTier;
+            }
+        }
+
+        private class SaveMenuOption
+        {
+            public string Label;
+            public Action Action;
+            public bool Enabled;
+        }
+
+        private void SetSaveSubmenuButtonsVisible(bool visible)
+        {
+            try
+            {
+                if (rightSaveSubmenuPanelGO != null) rightSaveSubmenuPanelGO.SetActive(visible);
+                if (leftSaveSubmenuPanelGO != null) leftSaveSubmenuPanelGO.SetActive(visible);
+
+                for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
+                {
+                    if (rightSaveSubmenuButtons[i] != null) rightSaveSubmenuButtons[i].SetActive(visible);
+                }
+                for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
+                {
+                    if (leftSaveSubmenuButtons[i] != null) leftSaveSubmenuButtons[i].SetActive(visible);
+                }
+            }
+            catch { }
+        }
+
+        private void CloseAtomSubmenuUI()
+        {
+            try
+            {
+                atomSubmenuOpen = false;
+                atomSubmenuParentHovered = false;
+                atomSubmenuOptionsHovered = false;
+                atomSubmenuParentHoverCount = 0;
+                atomSubmenuOptionsHoverCount = 0;
+                SetAtomSubmenuButtonsVisible(false);
+            }
+            catch { }
+        }
+
+        private void CloseOtherSubmenus(string keep)
+        {
+            if (!string.Equals(keep, "Save", StringComparison.OrdinalIgnoreCase) && saveSubmenuOpen)
+            {
+                CloseSaveSubmenuUI();
+            }
+            if (!string.Equals(keep, "Clothing", StringComparison.OrdinalIgnoreCase) && clothingSubmenuOpen)
+            {
+                CloseClothingSubmenuUI();
+            }
+            if (!string.Equals(keep, "Hair", StringComparison.OrdinalIgnoreCase) && hairSubmenuOpen)
+            {
+                CloseHairSubmenuUI();
+            }
+            if (!string.Equals(keep, "Atom", StringComparison.OrdinalIgnoreCase) && atomSubmenuOpen)
+            {
+                CloseAtomSubmenuUI();
+            }
+        }
+
+        private List<SaveMenuOption> BuildSaveMenuOptions()
+        {
+            var options = new List<SaveMenuOption>();
+
+            if (IsHubMode) return options;
+
+            options.Add(new SaveMenuOption
+            {
+                Label = "Save Scene...",
+                Enabled = SuperController.singleton != null,
+                Action = () => SaveSceneFromGallery()
+            });
+
+            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+            bool hasTarget = target != null && target.type == "Person";
+
+            void AddPresetOption(string label, string storableId)
+            {
+                options.Add(new SaveMenuOption
+                {
+                    Label = label,
+                    Enabled = hasTarget,
+                    Action = () => SavePresetFromStorable(target, storableId)
+                });
+            }
+
+            AddPresetOption("Save Appearance Preset...", "AppearancePresets");
+            AddPresetOption("Save Pose Preset...", "PosePresets");
+            AddPresetOption("Save Clothing Preset...", "ClothingPresets");
+            AddPresetOption("Save Hair Preset...", "HairPresets");
+            AddPresetOption("Save Skin Preset...", "SkinPresets");
+            AddPresetOption("Save Morph Preset...", "MorphPresets");
+            AddPresetOption("Save Animation Preset...", "AnimationPresets");
+            AddPresetOption("Save Plugin Preset...", "PluginPresets");
+            AddPresetOption("Save Breast Phys Preset...", "FemaleBreastPhysicsPresets");
+            AddPresetOption("Save Glute Phys Preset...", "FemaleGlutePhysicsPresets");
+
+            return options;
+        }
+
+        private void PopulateSaveSubmenuButtons()
+        {
+            if (!saveSubmenuOpen) SetSaveSubmenuButtonsVisible(false);
+
+            var options = BuildSaveMenuOptions();
+            int count = Mathf.Min(options.Count, SaveSubmenuMaxButtons);
+
+            try
+            {
+                if (rightSaveSubmenuPanelGO != null) rightSaveSubmenuPanelGO.SetActive(count > 0);
+                if (leftSaveSubmenuPanelGO != null) leftSaveSubmenuPanelGO.SetActive(count > 0);
+            }
+            catch { }
+
+            for (int i = 0; i < SaveSubmenuMaxButtons; i++)
+            {
+                SaveMenuOption option = i < count ? options[i] : null;
+
+                void Configure(GameObject btnGO)
+                {
+                    if (btnGO == null) return;
+                    Button btn = btnGO.GetComponent<Button>();
+                    Text t = btnGO.GetComponentInChildren<Text>();
+
+                    if (t != null) t.text = option != null ? option.Label : "";
+                    if (btn != null)
+                    {
+                        btn.onClick.RemoveAllListeners();
+                        btn.interactable = option != null && option.Enabled;
+                        if (option != null && option.Enabled)
+                        {
+                            btn.onClick.AddListener(() => {
+                                try
+                                {
+                                    option.Action?.Invoke();
+                                }
+                                finally
+                                {
+                                    saveSubmenuOpen = false;
+                                    CloseSaveSubmenuUI();
+                                    UpdateSideButtonPositions();
+                                }
+                            });
+                        }
+                    }
+
+                    Image img = btnGO.GetComponent<Image>();
+                    if (img != null)
+                    {
+                        img.color = (option != null && option.Enabled)
+                            ? new Color(0.2f, 0.2f, 0.2f, 1f)
+                            : new Color(0.15f, 0.15f, 0.15f, 0.7f);
+                    }
+
+                    btnGO.SetActive(i < count);
+                }
+
+                if (i < rightSaveSubmenuButtons.Count) Configure(rightSaveSubmenuButtons[i]);
+                if (i < leftSaveSubmenuButtons.Count) Configure(leftSaveSubmenuButtons[i]);
+            }
+        }
+
+        private void ToggleSaveSubmenuFromSideButtons()
+        {
+            saveSubmenuOpen = !saveSubmenuOpen;
+            if (saveSubmenuOpen)
+            {
+                CloseOtherSubmenus("Save");
+                saveSubmenuLastHoverTime = Time.unscaledTime;
+                PopulateSaveSubmenuButtons();
+                SetSaveSubmenuButtonsVisible(true);
+            }
+            else
+            {
+                CloseSaveSubmenuUI();
+            }
+
+            UpdateSideButtonPositions();
+        }
+
+        private void CloseSaveSubmenuUI()
+        {
+            try
+            {
+                saveSubmenuOpen = false;
+                saveSubmenuParentHovered = false;
+                saveSubmenuOptionsHovered = false;
+                saveSubmenuParentHoverCount = 0;
+                saveSubmenuOptionsHoverCount = 0;
+                SetSaveSubmenuButtonsVisible(false);
+            }
+            catch { }
+        }
+
+        private void SaveSceneFromGallery()
+        {
+            if (SuperController.singleton == null) return;
+            string defaultFolder = "Saves/scene";
+            string defaultName = "scene_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+
+            SuperController.singleton.GetMediaPathDialog((selectedPath) =>
+            {
+                if (string.IsNullOrEmpty(selectedPath)) return;
+                string path = selectedPath;
+                if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) path += ".json";
+                try
+                {
+                    SuperController.singleton.Save(path);
+                    ShowTemporaryStatus("Scene saved: " + path, 2f);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("[VPB] Save Scene failed: " + ex);
+                    ShowTemporaryStatus("Save failed. See log.");
+                }
+            }, "json", defaultFolder, false, true, false, null, true);
+
+            try
+            {
+                if (SuperController.singleton.mediaFileBrowserUI != null)
+                {
+                    SuperController.singleton.mediaFileBrowserUI.SetTextEntry(true);
+                    if (SuperController.singleton.mediaFileBrowserUI.fileEntryField != null)
+                    {
+                        SuperController.singleton.mediaFileBrowserUI.fileEntryField.text = defaultName;
+                        SuperController.singleton.mediaFileBrowserUI.ActivateFileNameField();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void SavePresetFromStorable(Atom target, string storableId)
+        {
+            if (target == null)
+            {
+                ShowTemporaryStatus("Select a Person atom to save presets.");
+                return;
+            }
+            string rootFolder;
+            if (!TryGetPresetSaveRootFolder(storableId, out rootFolder))
+            {
+                ShowTemporaryStatus("Preset not available: " + storableId);
+                return;
+            }
+
+            string defaultName = GetDefaultPresetSaveName(target, storableId, rootFolder);
+            SuperController.singleton.GetMediaPathDialog((selectedPath) =>
+            {
+                SavePresetFileSelected(target, storableId, rootFolder, selectedPath, true);
+            }, "vap", rootFolder, false, true, false, "Preset_", true);
+
+            try
+            {
+                if (SuperController.singleton.mediaFileBrowserUI != null)
+                {
+                    SuperController.singleton.mediaFileBrowserUI.SetTextEntry(true);
+                    if (SuperController.singleton.mediaFileBrowserUI.fileEntryField != null)
+                    {
+                        SuperController.singleton.mediaFileBrowserUI.fileEntryField.text = defaultName ?? string.Empty;
+                        SuperController.singleton.mediaFileBrowserUI.ActivateFileNameField();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private bool TryGetPresetSaveRootFolder(string storableId, out string rootFolder)
+        {
+            rootFolder = null;
+            if (string.IsNullOrEmpty(storableId)) return false;
+
+            switch (storableId)
+            {
+                case "AppearancePresets":
+                    rootFolder = "Custom\\Atom\\Person\\Appearance";
+                    break;
+                case "PosePresets":
+                    rootFolder = "Custom\\Atom\\Person\\Pose";
+                    break;
+                case "ClothingPresets":
+                    rootFolder = "Custom\\Atom\\Person\\Clothing";
+                    break;
+                case "HairPresets":
+                    rootFolder = "Custom\\Atom\\Person\\Hair";
+                    break;
+                case "SkinPresets":
+                    rootFolder = "Custom\\Atom\\Person\\Skin";
+                    break;
+                case "MorphPresets":
+                    rootFolder = "Custom\\Atom\\Person\\Morphs";
+                    break;
+                case "AnimationPresets":
+                    rootFolder = "Custom\\Atom\\Person\\AnimationPresets";
+                    break;
+                case "PluginPresets":
+                    rootFolder = "Custom\\Atom\\Person\\Plugins";
+                    break;
+                case "FemaleBreastPhysicsPresets":
+                    rootFolder = "Custom\\Atom\\Person\\BreastPhysics";
+                    break;
+                case "FemaleGlutePhysicsPresets":
+                    rootFolder = "Custom\\Atom\\Person\\GlutePhysics";
+                    break;
+            }
+
+            return !string.IsNullOrEmpty(rootFolder);
+        }
+
+        private string GetDefaultPresetSaveName(Atom target, string storableId, string rootFolder)
+        {
+            try
+            {
+                JSONStorable storable = target != null ? target.GetStorableByID(storableId) : null;
+                if (storable != null)
+                {
+                    JSONStorableString presetName = null;
+                    try { presetName = storable.GetStringJSONParam("presetName"); } catch { presetName = null; }
+                    if (presetName != null && !string.IsNullOrEmpty(presetName.val))
+                    {
+                        try
+                        {
+                            string currentPresetName = MVR.FileManagementSecure.FileManagerSecure.GetFileName(presetName.val);
+                            if (!string.IsNullOrEmpty(currentPresetName))
+                            {
+                                return currentPresetName;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+
+            return "preset_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        }
+
+        private void SavePresetFileSelected(Atom target, string storableId, string rootFolder, string fileNamePath, bool useScreenshot)
+        {
+            if (string.IsNullOrEmpty(fileNamePath)) return;
+            if (string.IsNullOrEmpty(rootFolder)) return;
+
+            if (!fileNamePath.StartsWith(rootFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                ShowTemporaryStatus("Preset must be saved under: " + rootFolder, 2f);
+                return;
+            }
+
+            string path = fileNamePath + ".vap";
+            try
+            {
+                string dir = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(path);
+                string fileName = MVR.FileManagementSecure.FileManagerSecure.GetFileName(path);
+                path = dir + "\\Preset_" + fileName;
+            }
+            catch { }
+
+            if (MVR.FileManagementSecure.FileManagerSecure.FileExists(path))
+            {
+                try
+                {
+                    SuperController.singleton.Alert("Resource " + path + " already exists. Overwrite?", () =>
+                    {
+                        SavePresetFinal(target, storableId, path, useScreenshot);
+                    }, () => { });
+                }
+                catch
+                {
+                    ShowTemporaryStatus("Preset already exists.", 2f);
+                }
+            }
+            else
+            {
+                SavePresetFinal(target, storableId, path, useScreenshot);
+            }
+        }
+
+        private void SavePresetFinal(Atom target, string storableId, string path, bool useScreenshot)
+        {
+            if (target == null) return;
+            JSONStorable presetJS = null;
+            try { presetJS = target.GetStorableByID(storableId); } catch { presetJS = null; }
+            if (presetJS == null)
+            {
+                ShowTemporaryStatus("Preset not available: " + storableId, 2f);
+                return;
+            }
+
+            JSONStorableBool loadOnSelectJSB = null;
+            try { loadOnSelectJSB = presetJS.GetBoolJSONParam("loadPresetOnSelect"); } catch { loadOnSelectJSB = null; }
+            bool loadOnSelectPreState = loadOnSelectJSB != null && loadOnSelectJSB.val;
+            if (loadOnSelectJSB != null) loadOnSelectJSB.val = false;
+
+            try
+            {
+                JSONStorableUrl presetPathJSON = presetJS.GetUrlJSONParam("presetBrowsePath");
+                if (presetPathJSON != null) presetPathJSON.val = SuperController.singleton.NormalizePath(path);
+                if (useScreenshot) presetJS.CallAction("StorePresetWithScreenshot");
+                else presetJS.CallAction("StorePreset");
+                ShowTemporaryStatus("Preset saved: " + path, 2f);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Save preset failed: " + ex);
+                ShowTemporaryStatus("Preset save failed. See log.", 2f);
+            }
+            finally
+            {
+                if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
             }
         }
         private void CreatePaginationControls()
@@ -133,6 +546,7 @@ namespace VPB
             paginationText.alignment = TextAnchor.MiddleCenter;
             paginationText.text = "1 / 1";
             paginationText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            paginationText.verticalOverflow = VerticalWrapMode.Overflow;
             RectTransform textRT = textGO.GetComponent<RectTransform>();
             textRT.sizeDelta = new Vector2(200, 40);
 
@@ -759,6 +1173,7 @@ namespace VPB
             clothingSubmenuOpen = !clothingSubmenuOpen;
             if (clothingSubmenuOpen)
             {
+                CloseOtherSubmenus("Clothing");
                 ClearClothingPreview();
                 clothingSubmenuLastSyncTime = Time.unscaledTime;
                 PopulateClothingSubmenuButtons(target);

@@ -953,6 +953,14 @@ namespace VPB
 		protected bool _threadsRunning;
 
 		protected Dictionary<string, Texture2D> thumbnailCache;
+		private const int ThumbnailCacheMaxItems = 512;
+		private LinkedList<string> thumbnailCacheLru;
+		private Dictionary<string, LinkedListNode<string>> thumbnailCacheLruNodes;
+		private Dictionary<Texture2D, int> thumbnailUseCount;
+		private HashSet<Texture2D> thumbnailEvicted;
+
+		private readonly object pendingThumbnailLock = new object();
+		private Dictionary<string, List<ImageLoaderCallback>> pendingThumbnailCallbacks;
 
 		protected Dictionary<string, Texture2D> textureCache;
 
@@ -1113,13 +1121,59 @@ namespace VPB
 			immediateTextureCache.Clear();
 		}
 
+		public void RegisterThumbnailUse(Texture2D tex)
+		{
+			if (tex == null) return;
+			if (thumbnailUseCount == null) thumbnailUseCount = new Dictionary<Texture2D, int>();
+			int c;
+			if (thumbnailUseCount.TryGetValue(tex, out c)) thumbnailUseCount[tex] = c + 1;
+			else thumbnailUseCount[tex] = 1;
+		}
+
+		public void DeregisterThumbnailUse(Texture2D tex)
+		{
+			if (tex == null || thumbnailUseCount == null) return;
+			int c;
+			if (!thumbnailUseCount.TryGetValue(tex, out c)) return;
+			c--;
+			if (c > 0)
+			{
+				thumbnailUseCount[tex] = c;
+				return;
+			}
+			thumbnailUseCount.Remove(tex);
+			if (thumbnailEvicted != null && thumbnailEvicted.Remove(tex))
+			{
+				UnityEngine.Object.Destroy(tex);
+			}
+		}
+
+		private bool IsThumbnailInUse(Texture2D tex)
+		{
+			if (tex == null || thumbnailUseCount == null) return false;
+			int c;
+			return thumbnailUseCount.TryGetValue(tex, out c) && c > 0;
+		}
+
 		public void ClearCacheThumbnail(string imgPath)
 		{
 			Texture2D value;
 			if (thumbnailCache != null && thumbnailCache.TryGetValue(imgPath, out value))
 			{
 				thumbnailCache.Remove(imgPath);
-				UnityEngine.Object.Destroy(value);
+				RemoveThumbnailCacheLru(imgPath);
+				if (value != null)
+				{
+					if (IsThumbnailInUse(value))
+					{
+						if (thumbnailEvicted == null) thumbnailEvicted = new HashSet<Texture2D>();
+						thumbnailEvicted.Add(value);
+					}
+					else
+					{
+						UnityEngine.Object.Destroy(value);
+					}
+				}
 			}
 		}
 
@@ -1137,69 +1191,181 @@ namespace VPB
 			Texture2D value;
 			if (thumbnailCache != null && thumbnailCache.TryGetValue(path, out value))
 			{
+				if (value == null)
+				{
+					thumbnailCache.Remove(path);
+					RemoveThumbnailCacheLru(path);
+					return null;
+				}
+				TouchThumbnailCacheLru(path);
 				return value;
 			}
 			return null;
 		}
 
-        public void AddCachedThumbnail(string path, Texture2D tex)
-        {
-            if (thumbnailCache != null && !thumbnailCache.ContainsKey(path))
-            {
-                thumbnailCache.Add(path, tex);
-            }
-        }
-
-        public void CancelGroup(string groupId)
-        {
-            if (string.IsNullOrEmpty(groupId)) return;
-            if (queuedImages != null && queuedImages.data != null)
-            {
-                foreach(var qi in queuedImages.data)
-                {
-                    if (qi.groupId == groupId)
-                    {
-                        qi.cancel = true;
-                    }
-                }
-            }
-        }
-
-        public void QueueImage(QueuedImage qi)
-        {
-            //if (ImageLoadingMgr.singleton.Request(qi))
-            //    return;
-
-            if (queuedImages != null)
-            {
-                qi.priority = SuperControllerHook.GetImagePriority(qi.imgPath);
-                qi.insertionIndex = ++_insertionOrderCounter;
-                queuedImages.Enqueue(qi);
-            }
-            numRealQueuedImages++;
-            progressMax++;
-        }
-
-        public void QueueThumbnail(QueuedImage qi)
-        {
-            qi.isThumbnail = true;
-            // LogUtil.Log("QueueThumbnail: " + qi.imgPath);
-            if (queuedImages != null)
-            {
-                // qi.priority = 1000; // Don't overwrite if set by caller
-                qi.insertionIndex = ++_insertionOrderCounter;
-                queuedImages.Enqueue(qi);
-            }
-        }
-
-        public void QueueThumbnailImmediate(QueuedImage qi)
+		public void AddCachedThumbnail(string path, Texture2D tex)
 		{
-			qi.isThumbnail = true;
+			CacheThumbnail(path, tex);
+		}
+
+		private void CacheThumbnail(string path, Texture2D tex)
+		{
+			if (thumbnailCache == null || string.IsNullOrEmpty(path) || tex == null) return;
+			if (!thumbnailCache.ContainsKey(path)) thumbnailCache.Add(path, tex);
+			TouchThumbnailCacheLru(path);
+			EnforceThumbnailCacheLimit();
+		}
+
+		private void TouchThumbnailCacheLru(string path)
+		{
+			if (thumbnailCacheLru == null || thumbnailCacheLruNodes == null || string.IsNullOrEmpty(path)) return;
+			LinkedListNode<string> node;
+			if (thumbnailCacheLruNodes.TryGetValue(path, out node) && node != null)
+			{
+				thumbnailCacheLru.Remove(node);
+				thumbnailCacheLru.AddFirst(node);
+			}
+			else
+			{
+				node = thumbnailCacheLru.AddFirst(path);
+				thumbnailCacheLruNodes[path] = node;
+			}
+		}
+
+		private void RemoveThumbnailCacheLru(string path)
+		{
+			if (thumbnailCacheLru == null || thumbnailCacheLruNodes == null || string.IsNullOrEmpty(path)) return;
+			LinkedListNode<string> node;
+			if (thumbnailCacheLruNodes.TryGetValue(path, out node) && node != null)
+			{
+				thumbnailCacheLru.Remove(node);
+			}
+			thumbnailCacheLruNodes.Remove(path);
+		}
+
+		private void EnforceThumbnailCacheLimit()
+		{
+			if (thumbnailCache == null || thumbnailCacheLru == null || ThumbnailCacheMaxItems <= 0) return;
+			while (thumbnailCache.Count > ThumbnailCacheMaxItems)
+			{
+				LinkedListNode<string> last = thumbnailCacheLru.Last;
+				if (last == null) break;
+				string key = last.Value;
+				thumbnailCacheLru.RemoveLast();
+				if (thumbnailCacheLruNodes != null) thumbnailCacheLruNodes.Remove(key);
+
+				Texture2D victim;
+				if (thumbnailCache.TryGetValue(key, out victim))
+				{
+					thumbnailCache.Remove(key);
+					if (victim != null)
+					{
+						if (IsThumbnailInUse(victim))
+						{
+							if (thumbnailEvicted == null) thumbnailEvicted = new HashSet<Texture2D>();
+							thumbnailEvicted.Add(victim);
+						}
+						else
+						{
+							UnityEngine.Object.Destroy(victim);
+						}
+					}
+				}
+			}
+		}
+
+		private void DispatchPendingThumbnailCallbacks(QueuedImage res)
+		{
+			if (res == null || string.IsNullOrEmpty(res.imgPath)) return;
+			List<ImageLoaderCallback> callbacks = null;
+			lock (pendingThumbnailLock)
+			{
+				if (pendingThumbnailCallbacks != null && pendingThumbnailCallbacks.TryGetValue(res.imgPath, out callbacks))
+				{
+					pendingThumbnailCallbacks.Remove(res.imgPath);
+				}
+			}
+			if (callbacks == null) return;
+			for (int i = 0; i < callbacks.Count; i++)
+			{
+				try
+				{
+					ImageLoaderCallback cb = callbacks[i];
+					if (cb != null) cb(res);
+				}
+				catch (Exception ex)
+				{
+					LogUtil.LogError("Thumbnail callback error: " + ex);
+				}
+			}
+		}
+
+		public void CancelGroup(string groupId)
+		{
+			if (string.IsNullOrEmpty(groupId)) return;
+			if (queuedImages != null && queuedImages.data != null)
+			{
+				foreach (var qi in queuedImages.data)
+				{
+					if (qi.groupId == groupId)
+					{
+						qi.cancel = true;
+					}
+				}
+			}
+		}
+
+		public void QueueImage(QueuedImage qi)
+		{
 			if (queuedImages != null)
 			{
-                qi.priority = -1;
-                qi.insertionIndex = ++_insertionOrderCounter;
-                queuedImages.Enqueue(qi);
+				qi.priority = SuperControllerHook.GetImagePriority(qi.imgPath);
+				qi.insertionIndex = ++_insertionOrderCounter;
+				queuedImages.Enqueue(qi);
+			}
+			numRealQueuedImages++;
+			progressMax++;
+		}
+
+		public void QueueThumbnail(QueuedImage qi)
+		{
+			if (qi == null) return;
+			qi.isThumbnail = true;
+			if (!string.IsNullOrEmpty(qi.imgPath))
+			{
+				lock (pendingThumbnailLock)
+				{
+					if (pendingThumbnailCallbacks == null) pendingThumbnailCallbacks = new Dictionary<string, List<ImageLoaderCallback>>();
+					List<ImageLoaderCallback> list;
+					if (pendingThumbnailCallbacks.TryGetValue(qi.imgPath, out list))
+					{
+						if (qi.callback != null) list.Add(qi.callback);
+						pool.Return(qi);
+						return;
+					}
+					list = new List<ImageLoaderCallback>(4);
+					if (qi.callback != null) list.Add(qi.callback);
+					pendingThumbnailCallbacks[qi.imgPath] = list;
+					qi.callback = (res) => { DispatchPendingThumbnailCallbacks(res); };
+				}
+			}
+			if (queuedImages != null)
+			{
+				qi.insertionIndex = ++_insertionOrderCounter;
+				queuedImages.Enqueue(qi);
+			}
+		}
+
+		public void QueueThumbnailImmediate(QueuedImage qi)
+		{
+			if (qi == null) return;
+			qi.isThumbnail = true;
+			qi.cancel = false;
+			if (queuedImages != null)
+			{
+				qi.priority = -1;
+				qi.insertionIndex = ++_insertionOrderCounter;
+				queuedImages.Enqueue(qi);
 			}
 		}
 
@@ -1231,6 +1397,13 @@ namespace VPB
 					queuedImages.Dequeue();
                     if (value.cancel)
                     {
+						if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
+						{
+							lock (pendingThumbnailLock)
+							{
+								if (pendingThumbnailCallbacks != null) pendingThumbnailCallbacks.Remove(value.imgPath);
+							}
+						}
                         pool.Return(value);
                         continue;
                     }
@@ -1275,10 +1448,7 @@ namespace VPB
 					{
 						if (value.isThumbnail)
 						{
-							if (!thumbnailCache.ContainsKey(value.imgPath) && value.tex != null)
-							{
-								thumbnailCache.Add(value.imgPath, value.tex);
-							}
+							if (value.tex != null) CacheThumbnail(value.imgPath, value.tex);
 						}
 						else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
 						{
@@ -1359,18 +1529,8 @@ namespace VPB
 				Texture2D value2;
 				if (value.isThumbnail)
 				{
-					if (thumbnailCache != null && thumbnailCache.TryGetValue(value.imgPath, out value2))
-					{
-						if (value2 == null)
-						{
-							LogUtil.LogError("Trying to use cached texture at " + value.imgPath + " after it has been destroyed");
-							thumbnailCache.Remove(value.imgPath);
-						}
-						else
-						{
-							UseCachedTex(value, value2);
-						}
-					}
+					Texture2D cached = GetCachedThumbnail(value.imgPath);
+					if (cached != null) UseCachedTex(value, cached);
 				}
 				else if (textureCache != null && textureCache.TryGetValue(value.cacheSignature, out value2))
 				{
@@ -1487,6 +1647,11 @@ namespace VPB
 			textureCache = new Dictionary<string, Texture2D>();
 			textureTrackedCache = new Dictionary<Texture2D, bool>();
 			thumbnailCache = new Dictionary<string, Texture2D>();
+			thumbnailCacheLru = new LinkedList<string>();
+			thumbnailCacheLruNodes = new Dictionary<string, LinkedListNode<string>>();
+			thumbnailUseCount = new Dictionary<Texture2D, int>();
+			thumbnailEvicted = new HashSet<Texture2D>();
+			pendingThumbnailCallbacks = new Dictionary<string, List<ImageLoaderCallback>>();
 			textureUseCount = new Dictionary<Texture2D, int>();
 			queuedImages = new PriorityQueue<QueuedImage>((a, b) => {
                 int p = a.priority - b.priority;

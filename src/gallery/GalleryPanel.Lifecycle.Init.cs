@@ -189,15 +189,15 @@ namespace VPB
             fpsRT.anchoredPosition = new Vector2(-120, 0);
             fpsRT.sizeDelta = new Vector2(100, 40);
 
-            titleSearchInput = CreateSearchInput(titleBarGO, 300f, (val) => {
+            titleSearchInput = CreateSearchInput(titleBarGO, 240f, (val) => {
                 SetNameFilter(val);
             });
             RectTransform titleSearchRT = titleSearchInput.GetComponent<RectTransform>();
             titleSearchRT.anchorMin = new Vector2(0.5f, 0.5f);
             titleSearchRT.anchorMax = new Vector2(0.5f, 0.5f);
             titleSearchRT.pivot = new Vector2(0.5f, 0.5f);
-            titleSearchRT.anchoredPosition = new Vector2(0, 0);
-            titleSearchRT.sizeDelta = new Vector2(300, 40);
+            titleSearchRT.anchoredPosition = new Vector2(-40, 0);
+            titleSearchRT.sizeDelta = new Vector2(240, 40);
 
             // File Sort Button
             GameObject fileSortBtn = UI.CreateUIButton(titleBarGO, 40, 40, "Az↑", 16, 0, 0, AnchorPresets.middleCenter, null);
@@ -207,7 +207,7 @@ namespace VPB
             fileSortRT.anchorMin = new Vector2(0.5f, 0.5f);
             fileSortRT.anchorMax = new Vector2(0.5f, 0.5f);
             fileSortRT.pivot = new Vector2(0.5f, 0.5f);
-            fileSortRT.anchoredPosition = new Vector2(175, 0); // To the right of search
+            fileSortRT.anchoredPosition = new Vector2(135, 0); // To the right of search
             
             fileSortBtnText = fileSortBtn.GetComponentInChildren<Text>();
             
@@ -228,15 +228,47 @@ namespace VPB
             ratingSortToggleRT.anchorMin = new Vector2(0.5f, 0.5f);
             ratingSortToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
             ratingSortToggleRT.pivot = new Vector2(0.5f, 0.5f);
-            ratingSortToggleRT.anchoredPosition = new Vector2(220, 0);
+            ratingSortToggleRT.anchoredPosition = new Vector2(180, 0);
             Button ratingSortToggleButton = ratingSortToggleBtn.GetComponent<Button>();
             ratingSortToggleButton.onClick.RemoveAllListeners();
             ratingSortToggleButton.onClick.AddListener(ToggleRatingSort);
             AddTooltip(ratingSortToggleBtn, "Show Only Rated Items");
             SyncRatingSortToggleState();
 
+            // Refresh Button (to the right of Star)
+            GameObject refreshBtn = UI.CreateUIButton(titleBarGO, 90, 40, "Refresh", 16, 0, 0, AnchorPresets.middleCenter, null);
+            refreshBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            refreshBtn.GetComponentInChildren<Text>().color = Color.white;
+            RectTransform refreshRT = refreshBtn.GetComponent<RectTransform>();
+            refreshRT.anchorMin = new Vector2(0.5f, 0.5f);
+            refreshRT.anchorMax = new Vector2(0.5f, 0.5f);
+            refreshRT.pivot = new Vector2(0.5f, 0.5f);
+            refreshRT.anchoredPosition = new Vector2(255, 0);
+
+            Button refreshButton = refreshBtn.GetComponent<Button>();
+            refreshButton.onClick.RemoveAllListeners();
+            refreshButton.onClick.AddListener(() => {
+                try
+                {
+                    if (!IsHubMode) ShowTemporaryStatus("Refreshing packages...", 1.5f);
+                    FileManager.Refresh(false, false, false);
+                    creatorsCached = false;
+                    categoriesCached = false;
+                    tagsCached = false;
+                    currentPage = 0;
+                    RefreshFiles(true);
+                    UpdateTabs();
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("[VPB] Refresh packages failed: " + ex);
+                    ShowTemporaryStatus("Refresh failed. See log.", 2f);
+                }
+            });
+            AddTooltip(refreshBtn, "Refresh Packages");
+
             // Filter Presets Button
-            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 160, 45, "Filter Presets", 20, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
+            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 130, 45, "Filter Presets", 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
             qfToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             quickFiltersToggleBtnText = qfToggleBtn.GetComponentInChildren<Text>();
             quickFiltersToggleBtnText.color = Color.white;
@@ -354,6 +386,39 @@ namespace VPB
                 AddRightClickDelegate(rightSortBtn, () => {
                     if (rightActiveContent.HasValue) ToggleSortDirection(rightActiveContent.Value.ToString(), rightSortBtnText);
                 });
+
+                // Right Refresh Button (to the right of Sort, still left of Search)
+                rightRefreshBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "⟳", 18, 0, 0, AnchorPresets.topRight, null);
+                rightRefreshBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+                rightRefreshBtn.GetComponentInChildren<Text>().color = Color.white;
+                RectTransform rrRT = rightRefreshBtn.GetComponent<RectTransform>();
+                rrRT.anchorMin = new Vector2(1, 1);
+                rrRT.anchorMax = new Vector2(1, 1);
+                rrRT.pivot = new Vector2(1, 1);
+                rrRT.anchoredPosition = new Vector2(-145, -55); // Between Sort and Search
+
+                rightRefreshBtnText = rightRefreshBtn.GetComponentInChildren<Text>();
+                Button rightRefreshButton = rightRefreshBtn.GetComponent<Button>();
+                rightRefreshButton.onClick.RemoveAllListeners();
+                rightRefreshButton.onClick.AddListener(() => {
+                    try
+                    {
+                        if (!IsHubMode) ShowTemporaryStatus("Refreshing packages...", 1.5f);
+                        FileManager.Refresh(false, false, false);
+                        creatorsCached = false;
+                        categoriesCached = false;
+                        tagsCached = false;
+                        currentPage = 0;
+                        RefreshFiles(true);
+                        UpdateTabs();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Refresh packages failed: " + ex);
+                        ShowTemporaryStatus("Refresh failed. See log.", 2f);
+                    }
+                });
+                AddTooltip(rightRefreshBtn, "Refresh Packages");
 
                 rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
@@ -637,6 +702,142 @@ namespace VPB
                 rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
+
+                rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Save", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
+                    try
+                    {
+                        ToggleSaveSubmenuFromSideButtons();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Save (Right) exception: " + ex);
+                    }
+                });
+                rightSaveBtnGO.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.2f, 1f);
+                rightSaveBtnGO.GetComponentInChildren<Text>().color = Color.white;
+                rightSideButtons.Add(rightSaveBtnGO.GetComponent<RectTransform>());
+                rightSaveBtnGO.SetActive(false);
+
+                try
+                {
+                    EventTrigger et = rightSaveBtnGO.GetComponent<EventTrigger>();
+                    if (et == null) et = rightSaveBtnGO.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            saveSubmenuParentHoverCount++;
+                            saveSubmenuParentHovered = true;
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                            if (!saveSubmenuOpen) ToggleSaveSubmenuFromSideButtons();
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+
+                    var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    exitEntry.callback.AddListener((data) => {
+                        try
+                        {
+                            saveSubmenuParentHoverCount--;
+                            if (saveSubmenuParentHoverCount < 0) saveSubmenuParentHoverCount = 0;
+                            saveSubmenuParentHovered = saveSubmenuParentHoverCount > 0;
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(exitEntry);
+                }
+                catch { }
+
+                try
+                {
+                    rightSaveSubmenuPanelGO = new GameObject("RightSaveSubmenuPanel");
+                    rightSaveSubmenuPanelGO.transform.SetParent(rightSideContainer.transform, false);
+                    RectTransform prt = rightSaveSubmenuPanelGO.AddComponent<RectTransform>();
+                    prt.anchorMin = new Vector2(0.5f, 0.5f);
+                    prt.anchorMax = new Vector2(0.5f, 0.5f);
+                    prt.pivot = new Vector2(0.5f, 0.5f);
+                    prt.sizeDelta = new Vector2(btnWidth * 1.6f, btnHeight);
+                    prt.anchoredPosition = Vector2.zero;
+
+                    AddHoverDelegate(rightSaveSubmenuPanelGO);
+
+                    Image pimg = rightSaveSubmenuPanelGO.AddComponent<Image>();
+                    pimg.color = new Color(0, 0, 0, 0.01f);
+                    pimg.raycastTarget = true;
+
+                    EventTrigger pet = rightSaveSubmenuPanelGO.AddComponent<EventTrigger>();
+                    var pe = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    pe.callback.AddListener((data) => {
+                        try
+                        {
+                            saveSubmenuOptionsHoverCount++;
+                            saveSubmenuOptionsHovered = true;
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(pe);
+
+                    var px = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    px.callback.AddListener((data) => {
+                        try
+                        {
+                            saveSubmenuOptionsHoverCount--;
+                            if (saveSubmenuOptionsHoverCount < 0) saveSubmenuOptionsHoverCount = 0;
+                            saveSubmenuOptionsHovered = saveSubmenuOptionsHoverCount > 0;
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(px);
+
+                    rightSaveSubmenuPanelGO.SetActive(false);
+                }
+                catch { }
+
+                for (int i = 0; i < SaveSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(rightSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                    rightSideButtons.Add(b.GetComponent<RectTransform>());
+                    rightSaveSubmenuButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                saveSubmenuOptionsHoverCount++;
+                                saveSubmenuOptionsHovered = true;
+                                saveSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                saveSubmenuOptionsHoverCount--;
+                                if (saveSubmenuOptionsHoverCount < 0) saveSubmenuOptionsHoverCount = 0;
+                                saveSubmenuOptionsHovered = saveSubmenuOptionsHoverCount > 0;
+                                saveSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
 
                 // Scene Context (Right)
                 rightRemoveAtomBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nAtom", 18, 0, 0, AnchorPresets.centre, () => {
@@ -1316,6 +1517,142 @@ namespace VPB
                 leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
+
+                leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Save", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
+                    try
+                    {
+                        ToggleSaveSubmenuFromSideButtons();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Save (Left) exception: " + ex);
+                    }
+                });
+                leftSaveBtnGO.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.2f, 1f);
+                leftSaveBtnGO.GetComponentInChildren<Text>().color = Color.white;
+                leftSideButtons.Add(leftSaveBtnGO.GetComponent<RectTransform>());
+                leftSaveBtnGO.SetActive(false);
+
+                try
+                {
+                    EventTrigger et = leftSaveBtnGO.GetComponent<EventTrigger>();
+                    if (et == null) et = leftSaveBtnGO.AddComponent<EventTrigger>();
+                    var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    entry.callback.AddListener((data) => {
+                        try
+                        {
+                            saveSubmenuParentHoverCount++;
+                            saveSubmenuParentHovered = true;
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                            if (!saveSubmenuOpen) ToggleSaveSubmenuFromSideButtons();
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(entry);
+
+                    var exitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    exitEntry.callback.AddListener((data) => {
+                        try
+                        {
+                            saveSubmenuParentHoverCount--;
+                            if (saveSubmenuParentHoverCount < 0) saveSubmenuParentHoverCount = 0;
+                            saveSubmenuParentHovered = saveSubmenuParentHoverCount > 0;
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    et.triggers.Add(exitEntry);
+                }
+                catch { }
+
+                try
+                {
+                    leftSaveSubmenuPanelGO = new GameObject("LeftSaveSubmenuPanel");
+                    leftSaveSubmenuPanelGO.transform.SetParent(leftSideContainer.transform, false);
+                    RectTransform prt = leftSaveSubmenuPanelGO.AddComponent<RectTransform>();
+                    prt.anchorMin = new Vector2(0.5f, 0.5f);
+                    prt.anchorMax = new Vector2(0.5f, 0.5f);
+                    prt.pivot = new Vector2(0.5f, 0.5f);
+                    prt.sizeDelta = new Vector2(btnWidth * 1.6f, btnHeight);
+                    prt.anchoredPosition = Vector2.zero;
+
+                    AddHoverDelegate(leftSaveSubmenuPanelGO);
+
+                    Image pimg = leftSaveSubmenuPanelGO.AddComponent<Image>();
+                    pimg.color = new Color(0, 0, 0, 0.01f);
+                    pimg.raycastTarget = true;
+
+                    EventTrigger pet = leftSaveSubmenuPanelGO.AddComponent<EventTrigger>();
+                    var pe = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                    pe.callback.AddListener((data) => {
+                        try
+                        {
+                            saveSubmenuOptionsHoverCount++;
+                            saveSubmenuOptionsHovered = true;
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(pe);
+
+                    var px = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                    px.callback.AddListener((data) => {
+                        try
+                        {
+                            saveSubmenuOptionsHoverCount--;
+                            if (saveSubmenuOptionsHoverCount < 0) saveSubmenuOptionsHoverCount = 0;
+                            saveSubmenuOptionsHovered = saveSubmenuOptionsHoverCount > 0;
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+                        catch { }
+                    });
+                    pet.triggers.Add(px);
+
+                    leftSaveSubmenuPanelGO.SetActive(false);
+                }
+                catch { }
+
+                for (int i = 0; i < SaveSubmenuMaxButtons; i++)
+                {
+                    GameObject b = UI.CreateUIButton(leftSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
+                    b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
+                    leftSideButtons.Add(b.GetComponent<RectTransform>());
+                    leftSaveSubmenuButtons.Add(b);
+                    b.SetActive(false);
+                    AddHoverDelegate(b);
+
+                    try
+                    {
+                        EventTrigger etb = b.GetComponent<EventTrigger>();
+                        if (etb == null) etb = b.AddComponent<EventTrigger>();
+
+                        var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+                        be.callback.AddListener((data) => {
+                            try
+                            {
+                                saveSubmenuOptionsHoverCount++;
+                                saveSubmenuOptionsHovered = true;
+                                saveSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(be);
+
+                        var bx = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+                        bx.callback.AddListener((data) => {
+                            try
+                            {
+                                saveSubmenuOptionsHoverCount--;
+                                if (saveSubmenuOptionsHoverCount < 0) saveSubmenuOptionsHoverCount = 0;
+                                saveSubmenuOptionsHovered = saveSubmenuOptionsHoverCount > 0;
+                                saveSubmenuLastHoverTime = Time.unscaledTime;
+                            }
+                            catch { }
+                        });
+                        etb.triggers.Add(bx);
+                    }
+                    catch { }
+                }
 
                 // Scene Context (Left)
                 leftRemoveAtomBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nAtom", 18, 0, 0, AnchorPresets.centre, () => {

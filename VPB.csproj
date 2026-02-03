@@ -385,6 +385,7 @@
     <Compile Include="src\hook\FileManagement\FileEntryStream.cs" />
     <Compile Include="src\hook\FileManagement\FileEntryStreamReader.cs" />
     <Compile Include="src\hook\FileManagement\FileManager.cs" />
+    <Compile Include="src\hook\FileManagement\FileStat.cs" />
     <Compile Include="src\hook\FileManagement\SystemDirectoryEntry.cs" />
     <Compile Include="src\hook\FileManagement\SystemFileEntry.cs" />
     <Compile Include="src\hook\FileManagement\SystemFileEntryStream.cs" />

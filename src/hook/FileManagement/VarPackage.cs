@@ -1052,11 +1052,23 @@ namespace VPB
 					try
 					{
 						metaEntry = null;
-						FileInfo fileInfo = new FileInfo(Path);
-						LastWriteTime = fileInfo.LastWriteTime;
-						CreationTime = fileInfo.CreationTime;
-						Size = fileInfo.Length;
-						lastWriteUtcTicks = fileInfo.LastWriteTimeUtc.Ticks;
+						DateTime creationTime;
+						DateTime lastWriteTime;
+						long size;
+						if (FileStat.TryGetFileStat(Path, out creationTime, out lastWriteTime, out size))
+						{
+							LastWriteTime = lastWriteTime;
+							CreationTime = creationTime;
+							Size = size;
+						}
+						else
+						{
+							FileInfo fileInfo = new FileInfo(Path);
+							LastWriteTime = fileInfo.LastWriteTime;
+							CreationTime = fileInfo.CreationTime;
+							Size = fileInfo.Length;
+						}
+						lastWriteUtcTicks = LastWriteTime.ToUniversalTime().Ticks;
 						SerializableVarPackage vp = VarPackageMgr.singleton.TryGetCacheValidated(this.Uid, Size, lastWriteUtcTicks);
 						if (vp != null && vp.FileEntryNames != null)
 						{

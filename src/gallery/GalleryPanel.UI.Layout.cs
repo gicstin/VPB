@@ -21,6 +21,34 @@ namespace VPB
 
             if (contentScrollRT == null) return;
 
+            try
+            {
+                if (titleSearchInput != null)
+                {
+                    RectTransform bgRT = backgroundBoxGO != null ? backgroundBoxGO.GetComponent<RectTransform>() : null;
+                    RectTransform searchRT = titleSearchInput.GetComponent<RectTransform>();
+                    if (bgRT != null && searchRT != null)
+                    {
+                        float w = bgRT.rect.width;
+
+                        // Keep some safety space for the left title area and the right-side FPS display,
+                        // plus buttons to the right of search.
+                        float reservedLeft = 320f;
+                        float reservedRight = 240f;
+                        float reservedButtonsRightOfSearch = 190f;
+
+                        float available = w - reservedLeft - reservedRight - reservedButtonsRightOfSearch;
+                        float target = Mathf.Clamp(available, 100f, 240f);
+
+                        if (Mathf.Abs(searchRT.sizeDelta.x - target) > 0.5f)
+                        {
+                            searchRT.sizeDelta = new Vector2(target, searchRT.sizeDelta.y);
+                        }
+                    }
+                }
+            }
+            catch { }
+
             // Ensure UI reflects persisted replace mode even if the panel was recreated/re-shown.
             UpdateReplaceButtonState();
             
@@ -77,6 +105,7 @@ namespace VPB
                 rightOffset = -230;
 
                 if (rightSortBtn != null) rightSortBtn.SetActive(true);
+                if (rightRefreshBtn != null) rightRefreshBtn.SetActive(true);
 
                 if (rightSearchInput != null) 
                 {
@@ -105,6 +134,7 @@ namespace VPB
                 if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
                 if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
                 if (rightSortBtn != null) rightSortBtn.SetActive(false);
+                if (rightRefreshBtn != null) rightRefreshBtn.SetActive(false);
                 
                 // Ensure sub controls are hidden if main panel is closed
                 if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
@@ -708,6 +738,114 @@ namespace VPB
                         }
                     }
                 }
+
+                if (saveSubmenuOpen)
+                {
+                    float xPad = 80f;
+
+                    RectTransform leftBaseRT = leftSaveBtnGO != null ? leftSaveBtnGO.GetComponent<RectTransform>() : null;
+                    RectTransform rightBaseRT = rightSaveBtnGO != null ? rightSaveBtnGO.GetComponent<RectTransform>() : null;
+
+                    int visibleCount = 0;
+                    for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
+                    {
+                        GameObject go = leftSaveSubmenuButtons[i];
+                        if (go != null && go.activeSelf) visibleCount++;
+                    }
+                    if (visibleCount == 0)
+                    {
+                        for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = rightSaveSubmenuButtons[i];
+                            if (go != null && go.activeSelf) visibleCount++;
+                        }
+                    }
+                    float yStart = -(visibleCount - 1) * 0.5f * spacing;
+
+                    if (leftBaseRT != null)
+                    {
+                        float baseY = leftBaseRT.anchoredPosition.y;
+                        for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = leftSaveSubmenuButtons[i];
+                            if (go == null || !go.activeSelf) continue;
+                            RectTransform rt = go.GetComponent<RectTransform>();
+                            if (rt == null) continue;
+                            float w = rt.sizeDelta.x;
+                            rt.anchoredPosition = new Vector2(-(w * 0.5f) - xPad, baseY + yStart + spacing * i);
+                        }
+
+                        try
+                        {
+                            if (leftSaveSubmenuPanelGO != null)
+                            {
+                                RectTransform prt = leftSaveSubmenuPanelGO.GetComponent<RectTransform>();
+                                if (prt != null)
+                                {
+                                    float panelW = 0f;
+                                    float panelH = 0f;
+                                    try
+                                    {
+                                        GameObject sample = leftSaveSubmenuButtons.FirstOrDefault(g => g != null && g.activeSelf);
+                                        if (sample == null) sample = rightSaveSubmenuButtons.FirstOrDefault(g => g != null && g.activeSelf);
+                                        RectTransform srt = sample != null ? sample.GetComponent<RectTransform>() : null;
+                                        panelW = srt != null ? srt.sizeDelta.x : 200f;
+                                        panelH = srt != null ? srt.sizeDelta.y : spacing;
+                                    }
+                                    catch { panelW = 200f; panelH = spacing; }
+
+                                    panelH = Mathf.Max(panelH, visibleCount * spacing);
+                                    prt.sizeDelta = new Vector2(panelW, panelH);
+                                    prt.anchoredPosition = new Vector2(-(panelW * 0.5f) - xPad, baseY);
+                                    leftSaveSubmenuPanelGO.transform.SetAsFirstSibling();
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (rightBaseRT != null)
+                    {
+                        float baseY = rightBaseRT.anchoredPosition.y;
+                        for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
+                        {
+                            GameObject go = rightSaveSubmenuButtons[i];
+                            if (go == null || !go.activeSelf) continue;
+                            RectTransform rt = go.GetComponent<RectTransform>();
+                            if (rt == null) continue;
+                            float w = rt.sizeDelta.x;
+                            rt.anchoredPosition = new Vector2((w * 0.5f) + xPad, baseY + yStart + spacing * i);
+                        }
+
+                        try
+                        {
+                            if (rightSaveSubmenuPanelGO != null)
+                            {
+                                RectTransform prt = rightSaveSubmenuPanelGO.GetComponent<RectTransform>();
+                                if (prt != null)
+                                {
+                                    float panelW = 0f;
+                                    float panelH = 0f;
+                                    try
+                                    {
+                                        GameObject sample = rightSaveSubmenuButtons.FirstOrDefault(g => g != null && g.activeSelf);
+                                        if (sample == null) sample = leftSaveSubmenuButtons.FirstOrDefault(g => g != null && g.activeSelf);
+                                        RectTransform srt = sample != null ? sample.GetComponent<RectTransform>() : null;
+                                        panelW = srt != null ? srt.sizeDelta.x : 200f;
+                                        panelH = srt != null ? srt.sizeDelta.y : spacing;
+                                    }
+                                    catch { panelW = 200f; panelH = spacing; }
+
+                                    panelH = Mathf.Max(panelH, visibleCount * spacing);
+                                    prt.sizeDelta = new Vector2(panelW, panelH);
+                                    prt.anchoredPosition = new Vector2((panelW * 0.5f) + xPad, baseY);
+                                    rightSaveSubmenuPanelGO.transform.SetAsFirstSibling();
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
             }
             catch { }
         }
@@ -727,6 +865,7 @@ namespace VPB
             int idxHub = 12;
             int idxUndo = 13;
             int idxRedo = 16;
+            int idxSave = -1;
             try
             {
                 List<RectTransform> refList = rightSideButtons;
@@ -778,6 +917,13 @@ namespace VPB
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == redoGo);
                         if (i >= 0) idxRedo = i;
                     }
+
+                    GameObject saveGo = rightSaveBtnGO != null ? rightSaveBtnGO : leftSaveBtnGO;
+                    if (saveGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == saveGo);
+                        if (i >= 0) idxSave = i;
+                    }
                 }
             }
             catch { }
@@ -796,6 +942,7 @@ namespace VPB
                 new SideButtonLayoutEntry(9, 0, 1), // Target
                 new SideButtonLayoutEntry(10, 0, 0), // Apply Mode
                 new SideButtonLayoutEntry(11, 0, 0), // Replace
+                new SideButtonLayoutEntry(idxSave, 0, 0), // Save
                 new SideButtonLayoutEntry(idxRemoveClothing, 0, 1), // Remove Clothing (context)
                 new SideButtonLayoutEntry(idxRemoveAtom, 0, isScene ? 1 : 0), // Remove Atom (scene)
                 new SideButtonLayoutEntry(idxRemoveHair, 0, isHair ? 1 : 0), // Remove Hair (context)
@@ -934,6 +1081,7 @@ namespace VPB
             atomSubmenuOpen = !atomSubmenuOpen;
             if (atomSubmenuOpen)
             {
+                CloseOtherSubmenus("Atom");
                 PopulateAtomSubmenuButtons();
             }
             else
@@ -1324,6 +1472,7 @@ namespace VPB
             hairSubmenuOpen = !hairSubmenuOpen;
             if (hairSubmenuOpen)
             {
+                CloseOtherSubmenus("Hair");
                 ClearHairPreview();
                 PopulateHairSubmenuButtons(target);
             }
@@ -1485,6 +1634,7 @@ namespace VPB
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool showSave = !IsHubMode;
 
             if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(isClothing);
             if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(isClothing);
@@ -1492,6 +1642,8 @@ namespace VPB
             if (leftRemoveAllHairBtn != null) leftRemoveAllHairBtn.SetActive(isHair);
             if (rightRemoveAtomBtn != null) rightRemoveAtomBtn.SetActive(isScene);
             if (leftRemoveAtomBtn != null) leftRemoveAtomBtn.SetActive(isScene);
+            if (rightSaveBtnGO != null) rightSaveBtnGO.SetActive(showSave);
+            if (leftSaveBtnGO != null) leftSaveBtnGO.SetActive(showSave);
 
             // Update arrow indicators immediately (not only after submenu hover).
             if (isClothing)
@@ -1638,6 +1790,12 @@ namespace VPB
             {
                 atomSubmenuOpen = false;
                 SetAtomSubmenuButtonsVisible(false);
+            }
+
+            if (!showSave && saveSubmenuOpen)
+            {
+                saveSubmenuOpen = false;
+                CloseSaveSubmenuUI();
             }
 
             UpdateSideButtonPositions();

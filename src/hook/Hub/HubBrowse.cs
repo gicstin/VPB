@@ -33,6 +33,8 @@ namespace VPB
 
         public delegate void PreShowCallback();
 
+        public delegate void OnHideCallback();
+
         public class DownloadRequest
         {
             public string url;
@@ -113,6 +115,8 @@ namespace VPB
         protected bool _isShowing;
 
         public PreShowCallback preShowCallbacks;
+
+        public OnHideCallback onHideCallbacks;
 
         protected bool _hasBeenRefreshed;
 
@@ -681,6 +685,10 @@ namespace VPB
             if (hubBrowseUI != null)
             {
                 hubBrowseUI.gameObject.SetActive(false);
+            }
+            if (onHideCallbacks != null)
+            {
+                onHideCallbacks();
             }
             if (items == null)
             {

@@ -1367,6 +1367,23 @@ namespace VPB
             m_HubBrowse.InitUI();
             m_HubBrowse.HubEnabled = true;
             m_HubBrowse.WebBrowserEnabled = true;
+            
+            // Register callback to refresh gallery when hub browser is closed
+            m_HubBrowse.onHideCallbacks = () =>
+            {
+                // Refresh all gallery panels to show any newly downloaded content
+                if (Gallery.singleton != null)
+                {
+                    foreach (var panel in Gallery.singleton.Panels)
+                    {
+                        if (panel != null && panel.IsVisible)
+                        {
+                            panel.RefreshFiles();
+                        }
+                    }
+                }
+            };
+            
             // Close button
 
             var close = Tools.GetChild(newgo.transform, "CloseButton");
@@ -1942,6 +1959,48 @@ namespace VPB
 
             // Refresh favorite and AutoInstall state.
             MessageKit.post(MessageDef.FileManagerRefresh);
+        }
+
+        public void ShowSaveFileBrowser(string title, string fileFormat, string path, string defaultFileNameNoExt, Action<string> onSelected, bool inGame = false)
+        {
+            if (SuperController.singleton == null) return;
+
+            if (m_FileBrowser == null)
+            {
+                try { CreateFileBrowser(); }
+                catch { }
+            }
+            if (m_FileBrowser == null) return;
+
+            SuperController.singleton.ActivateWorldUI();
+            try { m_HubBrowse?.Hide(); }
+            catch { }
+
+            m_FileBrowser.Hide();
+
+            m_FileBrowser.SetTextEntry(true);
+            m_FileBrowser.keepOpen = false;
+            m_FileBrowser.hideExtension = true;
+            m_FileBrowser.selectOnClick = false;
+            m_FileBrowser.SetTitle("<color=green>" + title + "</color>");
+
+            FileBrowserCallback cb = (selectedPath) =>
+            {
+                try { onSelected?.Invoke(selectedPath); }
+                catch { }
+            };
+
+            m_FileBrowser.Show(fileFormat, path, cb, true, inGame);
+
+            try
+            {
+                if (m_FileBrowser.fileEntryField != null)
+                {
+                    m_FileBrowser.fileEntryField.text = defaultFileNameNoExt ?? string.Empty;
+                    m_FileBrowser.ActivateFileNameField();
+                }
+            }
+            catch { }
         }
         void OnGUI()
         {
