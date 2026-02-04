@@ -48,21 +48,16 @@ namespace VPB
             bool showRightSide = !fixedMode && !isCollapsed && (mode == "Both" || mode == "Right");
 
             if (leftClearCreatorBtn != null) leftClearCreatorBtn.SetActive(showLeftSide && !string.IsNullOrEmpty(currentCreator));
-            if (leftClearStatusBtn != null) leftClearStatusBtn.SetActive(showLeftSide && !string.IsNullOrEmpty(currentStatus));
             if (rightClearCreatorBtn != null) rightClearCreatorBtn.SetActive(showRightSide && !string.IsNullOrEmpty(currentCreator));
-            if (rightClearStatusBtn != null) rightClearStatusBtn.SetActive(showRightSide && !string.IsNullOrEmpty(currentStatus));
 
             if (leftClearCreatorBtn != null && leftClearCreatorBtn.activeSelf) UpdateClearButtonPosition(false, ContentType.Creator);
-            if (leftClearStatusBtn != null && leftClearStatusBtn.activeSelf) UpdateClearButtonPosition(false, ContentType.Status);
             if (rightClearCreatorBtn != null && rightClearCreatorBtn.activeSelf) UpdateClearButtonPosition(true, ContentType.Creator);
-            if (rightClearStatusBtn != null && rightClearStatusBtn.activeSelf) UpdateClearButtonPosition(true, ContentType.Status);
         }
 
         private void UpdateClearButtonPosition(bool isRight, ContentType type)
         {
             GameObject btn = null;
             if (type == ContentType.Creator) btn = isRight ? rightClearCreatorBtn : leftClearCreatorBtn;
-            else if (type == ContentType.Status) btn = isRight ? rightClearStatusBtn : leftClearStatusBtn;
             if (btn == null) return;
 
             // Find the button for this content type
@@ -76,10 +71,8 @@ namespace VPB
             // 2: Follow
             // 3: Clone
             // 4: Category
-            // 5: ActiveItems
-            // 6: Creator
-            // 7: Status
-            // 8: Target
+            // 5: Creator
+            // 6: Target
             // 9: Apply Mode
             // 10: Replace
             // 11: Hub
@@ -91,8 +84,7 @@ namespace VPB
             int targetIndex = -1;
             switch(type)
             {
-                case ContentType.Creator: targetIndex = 6; break;
-                case ContentType.Status: targetIndex = 7; break;
+                case ContentType.Creator: targetIndex = 5; break;
             }
 
             if (targetIndex >= 0)

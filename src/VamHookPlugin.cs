@@ -1305,6 +1305,44 @@ namespace VPB
         HubBrowse m_HubBrowse;
         FileManager m_FileManager;
         FileBrowser m_FileBrowser;
+		Dictionary<GalleryPanel, bool> m_GalleryPanelsVisibleBeforeHub;
+
+		void CaptureAndHideGalleryForHub()
+		{
+			if (m_GalleryPanelsVisibleBeforeHub != null) return;
+			if (Gallery.singleton == null) return;
+			if (Gallery.singleton.Panels == null) return;
+			m_GalleryPanelsVisibleBeforeHub = new Dictionary<GalleryPanel, bool>();
+			foreach (var p in Gallery.singleton.Panels)
+			{
+				if (p == null) continue;
+				bool wasVisible = false;
+				try { wasVisible = p.IsVisible; } catch { wasVisible = false; }
+				if (!m_GalleryPanelsVisibleBeforeHub.ContainsKey(p)) m_GalleryPanelsVisibleBeforeHub.Add(p, wasVisible);
+				if (wasVisible)
+				{
+					try { p.Hide(); } catch { }
+				}
+			}
+		}
+
+		void RestoreGalleryAfterHub()
+		{
+			var restore = m_GalleryPanelsVisibleBeforeHub;
+			m_GalleryPanelsVisibleBeforeHub = null;
+			if (restore == null) return;
+			foreach (var kv in restore)
+			{
+				var p = kv.Key;
+				if (p == null) continue;
+				if (!kv.Value) continue;
+				try
+				{
+					p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
+				}
+				catch { }
+			}
+		}
 	
         void CreateHubBrowse()
         {
@@ -1368,21 +1406,29 @@ namespace VPB
             m_HubBrowse.HubEnabled = true;
             m_HubBrowse.WebBrowserEnabled = true;
             
-            // Register callback to refresh gallery when hub browser is closed
-            m_HubBrowse.onHideCallbacks = () =>
-            {
-                // Refresh all gallery panels to show any newly downloaded content
-                if (Gallery.singleton != null)
-                {
-                    foreach (var panel in Gallery.singleton.Panels)
-                    {
-                        if (panel != null && panel.IsVisible)
-                        {
-                            panel.RefreshFiles();
-                        }
-                    }
-                }
-            };
+			var prevPreShow = m_HubBrowse.preShowCallbacks;
+			m_HubBrowse.preShowCallbacks = () =>
+			{
+				try { prevPreShow?.Invoke(); } catch { }
+				CaptureAndHideGalleryForHub();
+			};
+
+			var prevOnHide = m_HubBrowse.onHideCallbacks;
+			m_HubBrowse.onHideCallbacks = () =>
+			{
+				RestoreGalleryAfterHub();
+				try { prevOnHide?.Invoke(); } catch { }
+				if (Gallery.singleton != null)
+				{
+					foreach (var panel in Gallery.singleton.Panels)
+					{
+						if (panel != null && panel.IsVisible)
+						{
+							try { panel.RefreshFiles(); } catch { }
+						}
+					}
+				}
+			};
             
             // Close button
 

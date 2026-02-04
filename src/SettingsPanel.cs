@@ -13,6 +13,8 @@ namespace VPB
         private GameObject backgroundBoxGO;
         private RectTransform settingsPaneRT;
         private GameObject settingsScrollContent;
+
+        private const float SettingsPaneDockOffsetX = 180f;
         
         private bool isSettingsOpen = false;
         private bool settingsOnRight = true;
@@ -56,11 +58,9 @@ namespace VPB
 
         private bool pendingDragDropReplaceMode;
         private bool backupDragDropReplaceMode;
-
+        
         private bool pendingIsDevMode;
         private bool backupIsDevMode;
-
-        private bool pendingEnableZstdCompression;
 
         private GameObject tooltipGO;
         private Text tooltipText;
@@ -138,22 +138,20 @@ namespace VPB
             pendingIsDevMode = VPBConfig.Instance.IsDevMode;
             backupIsDevMode = VPBConfig.Instance.IsDevMode;
 
-            pendingEnableZstdCompression = Settings.Instance.EnableZstdCompression.Value;
-
             RectTransform rt = settingsPaneRT;
             if (onRight)
             {
                 rt.anchorMin = new Vector2(1, 0.5f);
                 rt.anchorMax = new Vector2(1, 0.5f);
                 rt.pivot = new Vector2(0, 0.5f);
-                rt.anchoredPosition = new Vector2(130, 0); 
+                rt.anchoredPosition = new Vector2(SettingsPaneDockOffsetX, 0); 
             }
             else
             {
                 rt.anchorMin = new Vector2(0, 0.5f);
                 rt.anchorMax = new Vector2(0, 0.5f);
                 rt.pivot = new Vector2(1, 0.5f);
-                rt.anchoredPosition = new Vector2(-130, 0); 
+                rt.anchoredPosition = new Vector2(-SettingsPaneDockOffsetX, 0); 
             }
 
             RefreshUI();
@@ -185,7 +183,7 @@ namespace VPB
 
         private void CreatePane()
         {
-            settingsPaneGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0.15f, 0.15f, 0.15f, 0.95f), AnchorPresets.middleRight, 500, 750, new Vector2(130, 0));
+            settingsPaneGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0.15f, 0.15f, 0.15f, 0.95f), AnchorPresets.middleRight, 500, 750, new Vector2(SettingsPaneDockOffsetX, 0));
             settingsPaneRT = settingsPaneGO.GetComponent<RectTransform>();
             
             // Header
@@ -237,7 +235,7 @@ namespace VPB
                 VPBConfig.Instance._followEyeHeight = pendingFollowEyeHeight;
                 VPBConfig.Instance.ReorientStartAngle = pendingReorientStartAngle;
                 VPBConfig.Instance.MovementThreshold = pendingMovementThreshold;
-                // VPBConfig.Instance.EnableCurvature = pendingEnableCurvature;
+                VPBConfig.Instance.EnableCurvature = pendingEnableCurvature;
                 VPBConfig.Instance.CurvatureIntensity = pendingCurvatureIntensity;
                 VPBConfig.Instance.EnableGalleryFade = pendingEnableGalleryFade;
                 VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
@@ -302,8 +300,6 @@ namespace VPB
                 VPBConfig.Instance.TriggerChange();
             }, "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque.");
 
-            // Curvature settings are currently disabled.
-
             // Side Button Gaps
             CreateToggleSetting("Side Button Gaps", pendingEnableButtonGaps, (val) => {
                 pendingEnableButtonGaps = val;
@@ -327,8 +323,6 @@ namespace VPB
 
             // CATEGORY: Interaction
             //CreateHeader("Interaction");
-
-            // Drag & drop replace mode setting is currently disabled.
 
             if (!isFixed)
             {
@@ -381,12 +375,6 @@ namespace VPB
                     pendingIsDevMode = val;
                 }, "Enables developer-only features and debug tools. Requires restart to fully hide/show some elements.");
             }
-
-            CreateHeader("Texture Cache");
-            CreateToggleSetting("Use Zstd Cache", pendingEnableZstdCompression, (val) => {
-                pendingEnableZstdCompression = val;
-                Settings.Instance.EnableZstdCompression.Value = val;
-            }, "Enable loading from and saving to Zstd-compressed texture cache (.zvamcache).");
         }
 
         private void CreateHeader(string title)
@@ -745,7 +733,7 @@ namespace VPB
                 // Reset to standard side-docked position
                 settingsPaneRT.anchorMin = new Vector2(settingsOnRight ? 1 : 0, 0.5f);
                 settingsPaneRT.anchorMax = new Vector2(settingsOnRight ? 1 : 0, 0.5f);
-                settingsPaneRT.anchoredPosition3D = new Vector3(settingsOnRight ? 130 : -130, 0, 0);
+                settingsPaneRT.anchoredPosition3D = new Vector3(settingsOnRight ? SettingsPaneDockOffsetX : -SettingsPaneDockOffsetX, 0, 0);
                 settingsPaneRT.localRotation = Quaternion.identity;
                 return;
             }
@@ -781,7 +769,7 @@ namespace VPB
             // The settings pane pivot is middle (0.5, 0.5). 
             float halfWidth = settingsPaneRT.rect.width * 0.5f;
             // Overlap slightly with the main panel (as it was originally)
-            float overlap = 100f; 
+            float overlap = 20f; 
             
             // Direction of the wing (perpendicular to the radius at the edge)
             // We want the direction to point AWAY from the center on both sides.

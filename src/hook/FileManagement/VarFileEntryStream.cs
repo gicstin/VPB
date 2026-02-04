@@ -14,18 +14,12 @@ namespace VPB
 			{
 				throw new Exception("Could not get ZipFile for package " + entry.Package.Uid);
 			}
-			ZipEntry entry2 = zipFile.GetEntry(entry.InternalPath);
-			if (entry2 == null)
+			ZipEntry zipEntry = zipFile.GetEntry(entry.InternalPath);
+			if (zipEntry == null)
 			{
-				Dispose();
 				throw new Exception("Could not find entry " + entry.InternalPath + " in zip file " + entry.Package.Path);
 			}
-			base.Stream = zipFile.GetInputStream(entry2);
-		}
-
-		public override void Dispose()
-		{
-			base.Dispose();
+			base.Stream = zipFile.GetInputStream(zipEntry);
 		}
 	}
 

@@ -489,14 +489,17 @@ namespace VPB
                                 Debug.LogError("GalleryThumbnailCache: Incomplete read for " + key);
                                 return false;
                             }
-                            
-                            uint calculatedCrc = CalculateCRC32(data, 0, entry.Length);
-                            if (calculatedCrc != entry.DataCRC32)
+
+                            if (entry.DataCRC32 != 0)
                             {
-                                ByteArrayPool.Return(data);
-                                data = null;
-                                Debug.LogError("GalleryThumbnailCache: CRC mismatch for " + key + " (expected " + entry.DataCRC32 + ", got " + calculatedCrc + ")");
-                                return false;
+                                uint calculatedCrc = CalculateCRC32(data, 0, entry.Length);
+                                if (calculatedCrc != entry.DataCRC32)
+                                {
+                                    ByteArrayPool.Return(data);
+                                    data = null;
+                                    Debug.LogError("GalleryThumbnailCache: CRC mismatch for " + key + " (expected " + entry.DataCRC32 + ", got " + calculatedCrc + ")");
+                                    return false;
+                                }
                             }
                             
                             width = entry.Width;

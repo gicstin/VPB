@@ -29,7 +29,7 @@ namespace VPB
             }
             LogUtil.Log("Hook DownloadComplete "+ str);
             // Move into the repository directory, then link it back
-            VPB.FileManager.Refresh();
+            VPB.FileManager.Refresh(true, false, false);
         }
 
     }

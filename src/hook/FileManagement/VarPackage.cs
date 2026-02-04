@@ -255,7 +255,7 @@ namespace VPB
 		List<long> cachedFileEntrySizes;
 		Dictionary<string, int> cachedInternalPathToIndex;
 		readonly object cachedEntriesLock = new object();
-		List<VarFileEntry> fileEntries;
+		volatile List<VarFileEntry> fileEntries;
 		private const int CodePageUtf8 = 65001;
 		private const int CodePageGbk = 936;
 		private const int CodePageSystemDefault = 0;
@@ -611,6 +611,7 @@ namespace VPB
 			get { return false; }
 		}
 
+		readonly object m_ZipFileLock = new object();
 		ZipFile m_ZipFile;
 		public ZipFile ZipFile
 		{
@@ -618,28 +619,34 @@ namespace VPB
 			{
 				if (m_ZipFile == null)
 				{
-					int cp = GetZipNameCodePageForVar(Path);
-					if (cp == CodePageSystemDefault)
+					lock (m_ZipFileLock)
 					{
-						FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
-						m_ZipFile = new ZipFile(file);
-						m_ZipFile.IsStreamOwner = true;
-					}
-					else
-					{
-						lock (ZipDefaultCodePageLock)
+						if (m_ZipFile == null)
 						{
-							int prev = ZipConstants.DefaultCodePage;
-							try
+							int cp = GetZipNameCodePageForVar(Path);
+							if (cp == CodePageSystemDefault)
 							{
-								ZipConstants.DefaultCodePage = cp;
 								FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
 								m_ZipFile = new ZipFile(file);
 								m_ZipFile.IsStreamOwner = true;
 							}
-							finally
+							else
 							{
-								ZipConstants.DefaultCodePage = prev;
+								lock (ZipDefaultCodePageLock)
+								{
+									int prev = ZipConstants.DefaultCodePage;
+									try
+									{
+										ZipConstants.DefaultCodePage = cp;
+										FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
+										m_ZipFile = new ZipFile(file);
+										m_ZipFile.IsStreamOwner = true;
+									}
+									finally
+									{
+										ZipConstants.DefaultCodePage = prev;
+									}
+								}
 							}
 						}
 					}
@@ -1028,9 +1035,62 @@ namespace VPB
 		public void SyncJSONCache()
 		{
 		}
+		void InvalidateScanState()
+		{
+			Scaned = false;
+			invalid = false;
+			IsCorruptedArchive = false;
+			MissingDependenciesChecked = false;
+			metaEntry = null;
+			try
+			{
+				lock (m_ZipFileLock)
+				{
+					if (m_ZipFile != null)
+					{
+						m_ZipFile.Close();
+						m_ZipFile = null;
+					}
+				}
+			}
+			catch { }
+			lock (cachedEntriesLock)
+			{
+				fileEntries = null;
+				cachedFileEntryNames = null;
+				cachedFileEntryLastWriteTimeUtcTicks = null;
+				cachedFileEntrySizes = null;
+				cachedInternalPathToIndex = null;
+			}
+			ClothingFileEntries = null;
+			HairFileEntries = null;
+			ClothingFileEntryNames = null;
+			ClothingTags = null;
+			HairFileEntryNames = null;
+			HairTags = null;
+			RecursivePackageDependencies = null;
+		}
 		public void Scan()
 		{
-			if (Scaned) return;
+			if (Scaned)
+			{
+				try
+				{
+					DateTime creationTime;
+					DateTime lastWriteTime;
+					long size;
+					if (FileStat.TryGetFileStat(Path, out creationTime, out lastWriteTime, out size))
+					{
+						long prevTicks = 0;
+						try { prevTicks = LastWriteTime.ToUniversalTime().Ticks; } catch { }
+						long newTicks = 0;
+						try { newTicks = lastWriteTime.ToUniversalTime().Ticks; } catch { }
+						if (size == Size && newTicks == prevTicks) return;
+					}
+				}
+				catch { }
+				InvalidateScanState();
+			}
 
 			{
 				if (IsCorruptedArchive)
@@ -1079,11 +1139,14 @@ namespace VPB
 								return;
 							}
 							// Fast path: keep cached lists and defer VarFileEntry object creation
-							fileEntries = null;
-							cachedFileEntryNames = vp.FileEntryNames;
-							cachedFileEntryLastWriteTimeUtcTicks = vp.FileEntryLastWriteTimeUtcTicks;
-							cachedFileEntrySizes = vp.FileEntrySizes;
-							cachedInternalPathToIndex = null;
+							lock (cachedEntriesLock)
+							{
+								fileEntries = null;
+								cachedFileEntryNames = vp.FileEntryNames;
+								cachedFileEntryLastWriteTimeUtcTicks = vp.FileEntryLastWriteTimeUtcTicks;
+								cachedFileEntrySizes = vp.FileEntrySizes;
+								cachedInternalPathToIndex = null;
+							}
 							this.ClothingFileEntryNames = vp.ClothingFileEntryNames;
 							this.ClothingTags = vp.ClothingTags;
 							this.HairFileEntryNames = vp.HairFileEntryNames;
@@ -1541,6 +1604,13 @@ namespace VPB
 			if (VarPackageMgr.singleton != null)
 			{
 				VarPackageMgr.singleton.SetCache(this.Uid, svp);
+			}
+			lock (cachedEntriesLock)
+			{
+				cachedFileEntryNames = svp.FileEntryNames;
+				cachedFileEntryLastWriteTimeUtcTicks = svp.FileEntryLastWriteTimeUtcTicks;
+				cachedFileEntrySizes = svp.FileEntrySizes;
+				cachedInternalPathToIndex = null;
 			}
 		}
 

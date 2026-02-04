@@ -251,13 +251,13 @@ namespace VPB
                 try
                 {
                     if (!IsHubMode) ShowTemporaryStatus("Refreshing packages...", 1.5f);
-                    FileManager.Refresh(false, false, false);
+                    try { MVR.FileManagement.FileManager.Refresh(); } catch { }
+                    FileManager.Refresh(true, false, false);
                     creatorsCached = false;
                     categoriesCached = false;
                     tagsCached = false;
                     currentPage = 0;
-                    RefreshFiles(true);
-                    UpdateTabs();
+                    refreshOnNextShow = true;
                 }
                 catch (Exception ex)
                 {
@@ -404,13 +404,13 @@ namespace VPB
                     try
                     {
                         if (!IsHubMode) ShowTemporaryStatus("Refreshing packages...", 1.5f);
-                        FileManager.Refresh(false, false, false);
+                        try { MVR.FileManagement.FileManager.Refresh(); } catch { }
+                        FileManager.Refresh(true, false, false);
                         creatorsCached = false;
                         categoriesCached = false;
                         tagsCached = false;
                         currentPage = 0;
-                        RefreshFiles(true);
-                        UpdateTabs();
+                        refreshOnNextShow = true;
                     }
                     catch (Exception ex)
                     {
@@ -593,24 +593,12 @@ namespace VPB
                 sideButtonGroups.Add(rightClearCreatorBtn.AddComponent<CanvasGroup>());
                 rightClearCreatorBtn.SetActive(false);
 
-                rightClearStatusBtn = UI.CreateUIButton(backgroundBoxGO, 40, 40, "X", 24, 0, 0, AnchorPresets.middleRight, () => {
-                    currentStatus = "";
-                    currentPage = 0;
-                    RefreshFiles();
-                    UpdateTabs();
-                    UpdateSideButtonsVisibility();
-                });
-                rightClearStatusBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.5f, 1f);
-                rightClearStatusBtn.GetComponentInChildren<Text>().color = Color.white;
-                sideButtonGroups.Add(rightClearStatusBtn.AddComponent<CanvasGroup>());
-                rightClearStatusBtn.SetActive(false);
-
                 // Right Toggle Buttons
                 int btnFontSize = 20;
                 float btnWidth = 120;
                 float btnHeight = 50;
                 float spacing = 60f;
-                float groupGap = 20f;
+                float groupGap = 10f;
                 float startY = 320f;
 
                 // Fixed/Floating (Topmost)
@@ -654,16 +642,6 @@ namespace VPB
                 rightCategoryBtnText = rightCatBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightCatBtn.GetComponent<RectTransform>());
                 AddRightClickDelegate(rightCatBtn, () => ToggleRight(ContentType.Category));
-
-                // Active Items (Purple)
-                GameObject rightActiveItemsBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Active", btnFontSize, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => {
-                    if (isFixedLocally) ToggleLeft(ContentType.ActiveItems); else ToggleRight(ContentType.ActiveItems);
-                });
-                rightActiveItemsBtnImage = rightActiveItemsBtn.GetComponent<Image>();
-                rightActiveItemsBtnImage.color = ColorActiveItems;
-                rightActiveItemsBtnText = rightActiveItemsBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightActiveItemsBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(rightActiveItemsBtn, () => ToggleRight(ContentType.ActiveItems));
                 
                 // Creator (Green)
                 GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
@@ -674,14 +652,6 @@ namespace VPB
                 rightCreatorBtnText = rightCreatorBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightCreatorBtn.GetComponent<RectTransform>());
                 AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
-
-                // Status (Blue)
-                GameObject rightStatusBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => {
-                    if (isFixedLocally) ToggleLeft(ContentType.Status); else ToggleRight(ContentType.Status);
-                });
-                rightStatusBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.5f, 1f); // Darker Blue
-                rightSideButtons.Add(rightStatusBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(rightStatusBtn, () => ToggleRight(ContentType.Status));
 
                 // Target (Dropdown-like)
                 GameObject rightTargetBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Target: None", 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
@@ -1423,18 +1393,6 @@ namespace VPB
                 sideButtonGroups.Add(leftClearCreatorBtn.AddComponent<CanvasGroup>());
                 leftClearCreatorBtn.SetActive(false);
 
-                leftClearStatusBtn = UI.CreateUIButton(backgroundBoxGO, 40, 40, "X", 24, 0, 0, AnchorPresets.middleLeft, () => {
-                    currentStatus = "";
-                    currentPage = 0;
-                    RefreshFiles();
-                    UpdateTabs();
-                    UpdateSideButtonsVisibility();
-                });
-                leftClearStatusBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.5f, 1f);
-                leftClearStatusBtn.GetComponentInChildren<Text>().color = Color.white;
-                sideButtonGroups.Add(leftClearStatusBtn.AddComponent<CanvasGroup>());
-                leftClearStatusBtn.SetActive(false);
-
                 // Left Toggle Buttons
                 // Fixed/Floating (Topmost)
                 GameObject leftDesktopBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Floating", btnFontSize, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
@@ -1475,14 +1433,6 @@ namespace VPB
                 leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftCatBtn.GetComponent<RectTransform>());
                 AddRightClickDelegate(leftCatBtn, () => ToggleRight(ContentType.Category));
-
-                // Active Items (Purple)
-                GameObject leftActiveItemsBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Active", btnFontSize, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.ActiveItems));
-                leftActiveItemsBtnImage = leftActiveItemsBtn.GetComponent<Image>();
-                leftActiveItemsBtnImage.color = ColorActiveItems;
-                leftActiveItemsBtnText = leftActiveItemsBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftActiveItemsBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(leftActiveItemsBtn, () => ToggleRight(ContentType.ActiveItems));
                 
                 // Creator (Green)
                 GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
@@ -1491,12 +1441,6 @@ namespace VPB
                 leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftCreatorBtn.GetComponent<RectTransform>());
                 AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
-
-                // Status (Blue)
-                GameObject leftStatusBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Status", btnFontSize, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Status));
-                leftStatusBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.5f, 1f); // Darker Blue
-                leftSideButtons.Add(leftStatusBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(leftStatusBtn, () => ToggleRight(ContentType.Status));
 
                 // Target (Dropdown-like)
                 GameObject leftTargetBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Target: None", 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));

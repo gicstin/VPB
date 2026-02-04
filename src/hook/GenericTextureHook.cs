@@ -334,7 +334,9 @@ namespace VPB
                 long expected = -1;
                 try { expected = ExpectedRawDataSize(w, h, fmt); } catch { }
 
-                LogUtil.Log("Texture2D_LoadRawTextureData" +
+                string key = "LoadRawTextureData:" + (string.IsNullOrEmpty(path) ? (texName ?? "(none)") : path);
+                LogUtil.LogTextureTrace(key,
+                    "Texture2D_LoadRawTextureData" +
                     " | mgr=" + (hasMgr ? "1" : "0") +
                     " | tex='" + (texName ?? "") + "'" +
                     " | " + w + "x" + h + " " + fmt +
@@ -390,7 +392,7 @@ namespace VPB
         public static void WWW_Ctor_Postfix(WWW __instance, string url)
         {
             if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                LogUtil.Log("WWW Ctor: " + url);
+                LogUtil.LogTextureTrace("WWW.Ctor:" + (url ?? ""), "WWW Ctor: " + url);
         }
 
         public static void WWW_texture_Postfix(WWW __instance, Texture2D __result)
@@ -398,7 +400,7 @@ namespace VPB
             if (__instance == null || __result == null) return;
             string url = __instance.url;
             if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                LogUtil.Log("WWW.texture accessed: " + url);
+                LogUtil.LogTextureTrace("WWW.texture:" + (url ?? ""), "WWW.texture accessed: " + url);
             
             if (string.IsNullOrEmpty(url)) return;
             
@@ -422,7 +424,7 @@ namespace VPB
                  if (ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi))
                  {
                      if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                         LogUtil.Log("Captured WWW texture: " + path);
+                         LogUtil.LogTextureTrace("WWW.Captured:" + (path ?? ""), "Captured WWW texture: " + path);
                  }
             }
         }
@@ -434,7 +436,7 @@ namespace VPB
                 if (string.IsNullOrEmpty(__0)) return;
                 
                 if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                    LogUtil.Log("File_ReadAllBytes: " + __0);
+                    LogUtil.LogTextureTrace("File_ReadAllBytes:" + __0, "File_ReadAllBytes: " + __0);
 
                 if (__0.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || 
                     __0.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
@@ -498,7 +500,7 @@ namespace VPB
         public static bool Texture2D_LoadImage_Prefix(Texture2D __instance, byte[] data, bool markNonReadable, ref bool __result, out string __state)
         {
             if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                LogUtil.Log("Texture2D_LoadImage_Prefix " + (__instance != null ? __instance.name : "null"));
+                LogUtil.LogTextureTrace("LoadImage_Prefix:" + (__instance != null ? __instance.name : "null"), "Texture2D_LoadImage_Prefix " + (__instance != null ? __instance.name : "null"));
             
             string path = _lastReadImagePath;
             _lastReadImagePath = null; // Consume context
@@ -553,7 +555,7 @@ namespace VPB
         public static void Texture2D_LoadImage_Postfix(Texture2D __instance, string __state)
         {
             if (!string.IsNullOrEmpty(__state) && Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                LogUtil.Log("Texture2D_LoadImage_Postfix " + __state);
+                LogUtil.LogTextureTrace("LoadImage_Postfix:" + __state, "Texture2D_LoadImage_Postfix " + __state);
             // Unity 2018 LoadImage can return void in some versions/overloads, or bool. 
             // Harmony handles void by not providing __result, or we check if it succeeded.
             // But if the signature returns bool, we should respect it.
@@ -572,7 +574,7 @@ namespace VPB
                 if (ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi))
                 {
                      if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                         LogUtil.Log("Texture2D_LoadImage_Postfix Enqueued: " + __state);
+                         LogUtil.LogTextureTrace("LoadImage_Enqueued:" + __state, "Texture2D_LoadImage_Postfix Enqueued: " + __state);
                 }
                 else
                 {
@@ -584,7 +586,7 @@ namespace VPB
         public static bool Texture2D_LoadImage_Prefix_Simple(Texture2D __instance, byte[] data, out string __state)
         {
             if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                LogUtil.Log("Texture2D_LoadImage_Prefix_Simple");
+                LogUtil.LogTextureTrace("LoadImage_Prefix_Simple", "Texture2D_LoadImage_Prefix_Simple");
             // In simple version (no bool return ref), we just pass dummy ref
             bool dummy = false;
             return Texture2D_LoadImage_Prefix(__instance, data, false, ref dummy, out __state);
@@ -598,14 +600,14 @@ namespace VPB
         public static bool ImageConversion_LoadImage_Prefix(Texture2D tex, byte[] data, bool markNonReadable, ref bool __result, out string __state)
         {
             if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                LogUtil.Log("ImageConversion_LoadImage_Prefix");
+                LogUtil.LogTextureTrace("ImageConversion_LoadImage_Prefix", "ImageConversion_LoadImage_Prefix");
             return Texture2D_LoadImage_Prefix(tex, data, markNonReadable, ref __result, out __state);
         }
 
         public static void ImageConversion_LoadImage_Postfix(Texture2D tex, bool __result, string __state)
         {
             if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                LogUtil.Log("ImageConversion_LoadImage_Postfix success=" + __result);
+                LogUtil.LogTextureTrace("ImageConversion_LoadImage_Postfix:" + (__state ?? ""), "ImageConversion_LoadImage_Postfix success=" + __result);
             Texture2D_LoadImage_Postfix(tex, __state);
         }
 
@@ -642,7 +644,8 @@ namespace VPB
 
                     if (File.Exists(realCacheFile))
                     {
-                        if (Settings.Instance.TextureLogLevel.Value >= 2) LogUtil.Log("Cache HIT: " + realCacheFile + " for " + path);
+                        if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                            LogUtil.LogTextureTrace("ZstdCacheHit:" + realCacheFile, "Cache HIT: " + realCacheFile + " for " + path);
                         byte[] fileBytes = File.ReadAllBytes(realCacheFile);
                         byte[] bytes = null;
                         
@@ -675,7 +678,8 @@ namespace VPB
                                 long expected = ExpectedRawDataSize(targetW, targetH, tf);
                                 if (expected > 0 && bytes.Length != (int)expected)
                                 {
-                                    LogUtil.LogWarning("Cache raw data size mismatch for ", path);
+                                    if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                                        LogUtil.LogWarning("Cache raw data size mismatch for ", path);
                                     return false;
                                 }
 
@@ -688,7 +692,7 @@ namespace VPB
                                 tex.Apply(false, !markNonReadable);
 
                                 if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
-                                    LogUtil.Log("Successfully loaded from cache: " + path);
+                                    LogUtil.LogTextureTrace("ZstdCacheLoaded:" + path, "Successfully loaded from cache: " + path);
 
                                 return true;
                             }
@@ -716,16 +720,17 @@ namespace VPB
 
         public static void UnityWebRequest_Get_Postfix(object __result, string uri)
         {
-             LogUtil.Log("UnityWebRequest.Get: " + uri);
+             if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
+                 LogUtil.LogTextureTrace("UnityWebRequest.Get:" + (uri ?? ""), "UnityWebRequest.Get: " + uri);
         }
 
         public static void DownloadHandlerTexture_texture_Postfix(object __instance, Texture2D __result)
         {
              // We can't easily get the URL here without extra tracking.
              // Just log for now to see if it's used.
-             if (__result != null)
+             if (__result != null && Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
              {
-                LogUtil.Log("DownloadHandlerTexture.texture accessed: " + __result.name);
+                LogUtil.LogTextureTrace("DownloadHandlerTexture.texture:" + (__result.name ?? ""), "DownloadHandlerTexture.texture accessed: " + __result.name);
              }
         }
     }

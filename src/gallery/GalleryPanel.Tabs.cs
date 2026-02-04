@@ -65,15 +65,8 @@ namespace VPB
                 {
                     splitView = true;
                 }
-                else if (leftActiveContent == ContentType.Status)
-                {
-                    if (currentStatus == "Favorites" || currentStatus == "Size")
-                    {
-                        splitView = true;
-                    }
-                }
 
-                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub || leftActiveContent == ContentType.Status) && leftSubTabScrollGO != null)
+                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub) && leftSubTabScrollGO != null)
                 {
                     // Split Layout
                     leftSubTabScrollGO.SetActive(true);
@@ -106,11 +99,6 @@ namespace VPB
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     ContentType subType = ContentType.Tags;
                     if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (leftActiveContent == ContentType.Status)
-                    {
-                         if (currentStatus == "Size") subType = ContentType.Size;
-                         else subType = ContentType.Ratings;
-                    }
                     else if (leftActiveContent == ContentType.Category)
                     {
                         string title = titleText != null ? titleText.text : "";
@@ -164,15 +152,8 @@ namespace VPB
                 {
                     splitView = true;
                 }
-                else if (rightActiveContent == ContentType.Status)
-                {
-                    if (currentStatus == "Favorites" || currentStatus == "Size")
-                    {
-                        splitView = true;
-                    }
-                }
 
-                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub || rightActiveContent == ContentType.Status) && rightSubTabScrollGO != null)
+                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub) && rightSubTabScrollGO != null)
                 {
                     // Split Layout
                     rightSubTabScrollGO.SetActive(true);
@@ -217,11 +198,6 @@ namespace VPB
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     ContentType subType = ContentType.Tags;
                     if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (rightActiveContent == ContentType.Status)
-                    {
-                         if (currentStatus == "Size") subType = ContentType.Size;
-                         else subType = ContentType.Ratings;
-                    }
                     else if (rightActiveContent == ContentType.Category)
                     {
                         string title = titleText != null ? titleText.text : "";
@@ -436,40 +412,6 @@ namespace VPB
                     });
                 }
             }
-            else if (contentType == ContentType.Status)
-            {
-                var statusList = new List<string> { "Hidden", "Loaded", "Unloaded", "Autoinstall", "Favorites", "Size" };
-                
-                var sortState = GetSortState("Status");
-                if (sortState.Type == SortType.Name)
-                {
-                    if (sortState.Direction == SortDirection.Ascending) statusList.Sort();
-                    else statusList.Sort((a, b) => b.CompareTo(a));
-                }
-                
-                Color statusColor = new Color(0.3f, 0.5f, 0.7f, 1f); // Blue-ish
-
-                foreach (var status in statusList)
-                {
-                    bool isActive = (currentStatus == status);
-                    
-                    Color btnColor = isActive ? statusColor : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    CreateTabButton(container.transform, status, btnColor, isActive, () => {
-                        if (currentStatus == status) currentStatus = "";
-                        else currentStatus = status;
-                        
-                        currentPage = 0;
-                        RefreshFiles();
-                        UpdateTabs();
-                    }, trackedButtons, () => {
-                        currentStatus = "";
-                        currentPage = 0;
-                        RefreshFiles();
-                        UpdateTabs();
-                    });
-                }
-            }
             else if (contentType == ContentType.Ratings)
             {
                 var ratingsList = new List<string> { "All Ratings", "5 Stars", "4 Stars", "3 Stars", "2 Stars", "1 Star", "No Ratings" };
@@ -617,25 +559,6 @@ namespace VPB
             else if (contentType == ContentType.HubCreators)
             {
                  UpdateHubCreators(container, trackedButtons, isLeft);
-            }
-            else if (contentType == ContentType.ActiveItems)
-            {
-                var categories = new List<string> { "All", "Atoms", "Clothing", "Hair", "Plugins", "Pose", "Appearance", "Audio" };
-                
-                foreach (var cat in categories)
-                {
-                    bool isActive = (currentActiveItemCategory == cat) || (string.IsNullOrEmpty(currentActiveItemCategory) && cat == "All");
-                    Color btnColor = isActive ? ColorActiveItems : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    CreateTabButton(container.transform, cat, btnColor, isActive, () => {
-                        if (cat == "All") currentActiveItemCategory = "";
-                        else currentActiveItemCategory = cat;
-                        
-                        currentPage = 0;
-                        RefreshFiles();
-                        UpdateTabs();
-                    }, trackedButtons);
-                }
             }
             else if (contentType == ContentType.Tags)
             {

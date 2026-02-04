@@ -13,7 +13,6 @@ namespace VPB
         public string CategoryPath;
         public string SearchText;
         public string Creator;
-        public string Status;
         public List<string> Tags = new List<string>();
         public SortState SortState;
         
@@ -30,7 +29,6 @@ namespace VPB
             node["CategoryPath"] = CategoryPath;
             node["SearchText"] = SearchText;
             node["Creator"] = Creator;
-            node["Status"] = Status;
             
             var tagsArr = new JSONArray();
             foreach (var t in Tags) tagsArr.Add(t);
@@ -58,7 +56,6 @@ namespace VPB
             entry.CategoryPath = node["CategoryPath"] ?? "";
             entry.SearchText = node["SearchText"] ?? "";
             entry.Creator = node["Creator"] ?? "";
-            entry.Status = node["Status"] ?? "";
 
             var tagsArr = node["Tags"].AsArray;
             if (tagsArr != null)

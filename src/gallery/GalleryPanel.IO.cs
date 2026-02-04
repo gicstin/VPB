@@ -564,49 +564,7 @@ namespace VPB
                 }
             }
 
-            // Status Filter
-            if (!string.IsNullOrEmpty(currentStatus))
-            {
-                if (currentStatus == "Hidden") { if (!entry.IsHidden()) return false; }
-                else if (currentStatus == "Loaded") { if (!entry.IsInstalled()) return false; }
-                else if (currentStatus == "Unloaded") { if (entry.IsInstalled()) return false; }
-                else if (currentStatus == "Autoinstall") { if (!entry.IsAutoInstall()) return false; }
-                else if (currentStatus == "Favorites")
-                {
-                    int rating = RatingsManager.Instance.GetRating(entry);
-                    if (string.IsNullOrEmpty(currentRatingFilter) || currentRatingFilter == "All Ratings")
-                    {
-                        if (rating <= 0) return false;
-                    }
-                    else
-                    {
-                        if (currentRatingFilter == "5 Stars") { if (rating != 5) return false; }
-                        else if (currentRatingFilter == "4 Stars") { if (rating != 4) return false; }
-                        else if (currentRatingFilter == "3 Stars") { if (rating != 3) return false; }
-                        else if (currentRatingFilter == "2 Stars") { if (rating != 2) return false; }
-                        else if (currentRatingFilter == "1 Star") { if (rating != 1) return false; }
-                        else if (currentRatingFilter == "No Ratings") { if (rating != 0) return false; }
-                    }
-                }
-                else if (currentStatus == "Size")
-                {
-                    if (string.IsNullOrEmpty(currentSizeFilter) || currentSizeFilter == "All Sizes")
-                    {
-                        if (entry.Size <= 0) return false;
-                    }
-                    else
-                    {
-                        long size = entry.Size;
-                        long mb = 1024 * 1024;
-                        if (currentSizeFilter == "Tiny (< 10MB)") { if (size >= 10 * mb) return false; }
-                        else if (currentSizeFilter == "Small (10-100MB)") { if (size < 10 * mb || size >= 100 * mb) return false; }
-                        else if (currentSizeFilter == "Medium (100-500MB)") { if (size < 100 * mb || size >= 500 * mb) return false; }
-                        else if (currentSizeFilter == "Large (500MB-1GB)") { if (size < 500 * mb || size >= 1024 * mb) return false; }
-                        else if (currentSizeFilter == "Very Large (> 1GB)") { if (size < 1024 * mb) return false; }
-                    }
-                }
-            }
-
+            // Rating/Size filters
             if (!string.IsNullOrEmpty(currentRatingFilter))
             {
                 // Rating filter when status is NOT set (or even if it is, as an additional filter)
@@ -766,69 +724,7 @@ namespace VPB
             
             yieldWatch.Start();
 
-            if (leftActiveContent == ContentType.ActiveItems || rightActiveContent == ContentType.ActiveItems)
-            {
-                List<FileEntry> activeEntries = GetActiveSceneEntries();
-                foreach (var entry in activeEntries)
-                {
-                    if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
-                    {
-                        yield return null;
-                        yieldWatch.Reset();
-                        yieldWatch.Start();
-                    }
-
-                    bool baseOk = PassesFilters(entry, true);
-                    if (!baseOk) continue;
-
-                    int pcPose = 1;
-                    bool needPc = wantsPoseCounts || (posePeopleFilter != PosePeopleFilter.All);
-                    if (needPc)
-                    {
-                        bool isJsonPose = false;
-                        try { isJsonPose = (entry.Path != null && entry.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)); } catch { isJsonPose = false; }
-                        if (isJsonPose)
-                        {
-                            int known;
-                            if (TryGetKnownPosePeopleCount(entry, out known))
-                            {
-                                pcPose = known;
-                            }
-                            else
-                            {
-                                // Unknown: enqueue for background indexing, assume single for now.
-                                EnqueuePosePeopleIndex(entry);
-                                pcPose = 1;
-                            }
-                        }
-                        else
-                        {
-                            pcPose = 1;
-                        }
-                        if (wantsPoseCounts)
-                        {
-                            if (pcPose >= 2) posePeopleFacetCountDual++;
-                            else posePeopleFacetCountSingle++;
-                        }
-
-                        if (posePeopleFilter == PosePeopleFilter.Single && pcPose >= 2) continue;
-                        if (posePeopleFilter == PosePeopleFilter.Dual && pcPose < 2) continue;
-                    }
-
-                    // Check name filter if set
-                    if (hasNameFilter)
-                    {
-                        if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
-                            continue;
-                    }
-                    if (isRatingSortToggleEnabled)
-                    {
-                        if (RatingsManager.Instance.GetRating(entry) <= 0) continue;
-                    }
-                    files.Add(entry);
-                }
-            }
-            else if (FileManager.PackagesByUid != null)
+            if (FileManager.PackagesByUid != null)
             {
                 string localLoadingGroupId = currentLoadingGroupId;
 

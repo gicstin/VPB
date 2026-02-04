@@ -28,7 +28,6 @@ namespace VPB
             entry.CategoryPath = currentPath;
             entry.SearchText = nameFilter;
             entry.Creator = currentCreator;
-            entry.Status = currentStatus;
             entry.Tags = activeTags.ToList();
             
             var sort = GetSortState("Files");
@@ -67,9 +66,6 @@ namespace VPB
 
             // 3. Restore Creator
             currentCreator = entry.Creator ?? "";
-            
-            // 3b. Restore Status
-            currentStatus = entry.Status ?? "";
 
             // 4. Restore Tags
             activeTags.Clear();

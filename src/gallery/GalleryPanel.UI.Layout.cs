@@ -81,9 +81,6 @@ namespace VPB
                     {
                         ph.text = type.ToString() + "...";
                     }
-                    
-                    // Hide search input for Status for now
-                    if (type == ContentType.Status) leftSearchInput.gameObject.SetActive(false);
                 }
             }
             else if (leftTabScrollGO != null)
@@ -123,9 +120,6 @@ namespace VPB
                     {
                         ph.text = type.ToString() + "...";
                     }
-
-                    // Hide search input for Status for now
-                    if (type == ContentType.Status) rightSearchInput.gameObject.SetActive(false);
                 }
             }
             else if (rightTabScrollGO != null)
@@ -387,7 +381,7 @@ namespace VPB
         {
             if (backgroundBoxGO == null) return;
             float spacing = 60f;
-            float groupGap = VPBConfig.Instance.EnableButtonGaps ? 20f : 0f;
+            float groupGap = VPBConfig.Instance.EnableButtonGaps ? 10f : 0f;
             float stackHeight = GetSideButtonsStackHeight(spacing, groupGap);
             float topY = stackHeight * 0.5f;
 
@@ -858,6 +852,15 @@ namespace VPB
             bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
 
+            int idxSettings = -1;
+            int idxFloating = -1;
+            int idxClone = -1;
+            int idxFollow = -1;
+            int idxCategory = -1;
+            int idxCreator = -1;
+            int idxTarget = -1;
+            int idxApplyMode = -1;
+            int idxReplace = -1;
             int idxRandom = 4;
             int idxRemoveHair = 15;
             int idxRemoveClothing = 14;
@@ -872,6 +875,35 @@ namespace VPB
                 if (refList == null || refList.Count == 0) refList = leftSideButtons;
                 if (refList != null)
                 {
+                    int FindIndexByTextRef(Text t)
+                    {
+                        if (t == null) return -1;
+                        return refList.FindIndex(rt => rt != null && rt.GetComponentInChildren<Text>() == t);
+                    }
+
+                    int FindIndexByExactLabel(string label)
+                    {
+                        if (string.IsNullOrEmpty(label)) return -1;
+                        return refList.FindIndex(rt => {
+                            if (rt == null) return false;
+                            Text tx = rt.GetComponentInChildren<Text>();
+                            if (tx == null) return false;
+                            return string.Equals(tx.text, label, StringComparison.Ordinal);
+                        });
+                    }
+
+                    idxCategory = FindIndexByTextRef(rightCategoryBtnText != null ? rightCategoryBtnText : leftCategoryBtnText);
+                    idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
+                    idxTarget = FindIndexByTextRef(rightTargetBtnText != null ? rightTargetBtnText : leftTargetBtnText);
+                    idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);
+                    idxReplace = FindIndexByTextRef(rightReplaceBtnText != null ? rightReplaceBtnText : leftReplaceBtnText);
+                    idxFloating = FindIndexByTextRef(rightDesktopModeBtnText != null ? rightDesktopModeBtnText : leftDesktopModeBtnText);
+                    idxFollow = FindIndexByTextRef(rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText);
+
+                    // Settings and Clone don't currently have stored Text refs.
+                    idxSettings = FindIndexByExactLabel("Settings");
+                    idxClone = FindIndexByExactLabel("Clone");
+
                     if (rightLoadRandomBtn != null)
                     {
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == rightLoadRandomBtn);
@@ -930,27 +962,30 @@ namespace VPB
 
             var layout = new List<SideButtonLayoutEntry>()
             {
-                new SideButtonLayoutEntry(0, 0, 0),
-                new SideButtonLayoutEntry(1, 0, 0),
-                new SideButtonLayoutEntry(2, 0, 1),
-                new SideButtonLayoutEntry(3, 0, 0),
-                new SideButtonLayoutEntry(5, 0, 1), // Category
-                new SideButtonLayoutEntry(6, 0, 0), // ActiveItems
-                new SideButtonLayoutEntry(7, 0, 0), // Creator
-                new SideButtonLayoutEntry(8, 0, 0), // Status
+                new SideButtonLayoutEntry(idxSettings, 0, 0), // Settings
+
+                new SideButtonLayoutEntry(idxFloating, 0, 2), // Floating
+                new SideButtonLayoutEntry(idxClone, 0, 0), // Clone
+                new SideButtonLayoutEntry(idxFollow, 0, 0), // Follow
+
+                new SideButtonLayoutEntry(idxCategory, 0, 2), // Category
+                new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
                 new SideButtonLayoutEntry(idxHub, 0, 0), // Hub
-                new SideButtonLayoutEntry(9, 0, 1), // Target
-                new SideButtonLayoutEntry(10, 0, 0), // Apply Mode
-                new SideButtonLayoutEntry(11, 0, 0), // Replace
-                new SideButtonLayoutEntry(idxSave, 0, 0), // Save
-                new SideButtonLayoutEntry(idxRemoveClothing, 0, 1), // Remove Clothing (context)
-                new SideButtonLayoutEntry(idxRemoveAtom, 0, isScene ? 1 : 0), // Remove Atom (scene)
-                new SideButtonLayoutEntry(idxRemoveHair, 0, isHair ? 1 : 0), // Remove Hair (context)
+
+                new SideButtonLayoutEntry(idxSave, 0, 2), // Save
+
+                new SideButtonLayoutEntry(idxTarget, 0, 0), // Target
+                new SideButtonLayoutEntry(idxApplyMode, 0, 0), // Apply Mode
+                new SideButtonLayoutEntry(idxReplace, 0, 0), // Replace
+
+                new SideButtonLayoutEntry(idxRemoveClothing, 0, 0), // Remove Clothing (context)
+                new SideButtonLayoutEntry(idxRemoveAtom, 0, 0), // Remove Atom (scene)
+                new SideButtonLayoutEntry(idxRemoveHair, 0, 0), // Remove Hair (context)
             };
 
-            layout.Add(new SideButtonLayoutEntry(idxRandom, 0, 1)); // Random
-            layout.Add(new SideButtonLayoutEntry(idxUndo, 0, (isClothing || isHair || isScene) ? 1 : 0)); // Undo
-            layout.Add(new SideButtonLayoutEntry(idxRedo, 0, (isClothing || isHair || isScene) ? 0 : 0)); // Redo
+            layout.Add(new SideButtonLayoutEntry(idxRandom, 0, 2)); // Random
+            layout.Add(new SideButtonLayoutEntry(idxUndo, 0, 0)); // Undo
+            layout.Add(new SideButtonLayoutEntry(idxRedo, 0, 0)); // Redo
             return layout.ToArray();
         }
 
@@ -1806,9 +1841,25 @@ namespace VPB
             SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
             if (layout == null || layout.Length <= 1) return 0f;
 
+            int visibleCount = 0;
             int gapUnits = 0;
-            for (int i = 1; i < layout.Length; i++) gapUnits += layout[i].gapTier;
-            return (layout.Length - 1) * spacing + gapUnits * gap;
+            bool firstVisible = true;
+            for (int i = 0; i < layout.Length; i++)
+            {
+                RectTransform rt = (layout[i].buttonIndex >= 0 && layout[i].buttonIndex < rightSideButtons.Count) ? rightSideButtons[layout[i].buttonIndex] : null;
+                if (rt == null && leftSideButtons != null)
+                {
+                    rt = (layout[i].buttonIndex >= 0 && layout[i].buttonIndex < leftSideButtons.Count) ? leftSideButtons[layout[i].buttonIndex] : null;
+                }
+                if (rt == null || !rt.gameObject.activeSelf) continue;
+
+                visibleCount++;
+                if (!firstVisible) gapUnits += layout[i].gapTier;
+                firstVisible = false;
+            }
+
+            if (visibleCount <= 1) return 0f;
+            return (visibleCount - 1) * spacing + gapUnits * gap;
         }
 
         private void UpdateListPositions(List<RectTransform> buttons, float startY, float spacing, float gap)

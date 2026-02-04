@@ -159,6 +159,7 @@ namespace VPB
             AddPresetOption("Save Hair Preset...", "HairPresets");
             AddPresetOption("Save Skin Preset...", "SkinPresets");
             AddPresetOption("Save Morph Preset...", "MorphPresets");
+            AddPresetOption("Save General Preset...", "Preset");
             AddPresetOption("Save Animation Preset...", "AnimationPresets");
             AddPresetOption("Save Plugin Preset...", "PluginPresets");
             AddPresetOption("Save Breast Phys Preset...", "FemaleBreastPhysicsPresets");
@@ -238,6 +239,7 @@ namespace VPB
                 saveSubmenuLastHoverTime = Time.unscaledTime;
                 PopulateSaveSubmenuButtons();
                 SetSaveSubmenuButtonsVisible(true);
+                PositionSaveSubmenuButtons();
             }
             else
             {
@@ -245,6 +247,84 @@ namespace VPB
             }
 
             UpdateSideButtonPositions();
+        }
+
+        private void PositionSaveSubmenuButtons()
+        {
+            try
+            {
+                float btnHeight = 50f;
+                float spacing = 60f;
+
+                // Position right side submenu buttons
+                if (rightSaveBtnGO != null && rightSaveBtnGO.activeInHierarchy)
+                {
+                    RectTransform saveBtnRT = rightSaveBtnGO.GetComponent<RectTransform>();
+                    float startX = saveBtnRT.anchoredPosition.x + 110f; // To the right of Save button
+                    float startY = saveBtnRT.anchoredPosition.y;
+
+                    for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
+                    {
+                        GameObject btn = rightSaveSubmenuButtons[i];
+                        if (btn == null || !btn.activeSelf) continue;
+                        RectTransform rt = btn.GetComponent<RectTransform>();
+                        if (rt != null)
+                        {
+                            rt.anchoredPosition = new Vector2(startX, startY - (i + 1) * spacing);
+                        }
+                    }
+
+                    // Position the submenu panel
+                    if (rightSaveSubmenuPanelGO != null)
+                    {
+                        RectTransform panelRT = rightSaveSubmenuPanelGO.GetComponent<RectTransform>();
+                        if (panelRT != null)
+                        {
+                            int activeCount = 0;
+                            for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
+                                if (rightSaveSubmenuButtons[i] != null && rightSaveSubmenuButtons[i].activeSelf) activeCount++;
+                            
+                            panelRT.anchoredPosition = new Vector2(startX, startY - (activeCount * spacing) / 2f + spacing / 2f);
+                            panelRT.sizeDelta = new Vector2(200f, activeCount * spacing);
+                        }
+                    }
+                }
+
+                // Position left side submenu buttons
+                if (leftSaveBtnGO != null && leftSaveBtnGO.activeInHierarchy)
+                {
+                    RectTransform saveBtnRT = leftSaveBtnGO.GetComponent<RectTransform>();
+                    float startX = saveBtnRT.anchoredPosition.x - 110f; // To the left of Save button
+                    float startY = saveBtnRT.anchoredPosition.y;
+
+                    for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
+                    {
+                        GameObject btn = leftSaveSubmenuButtons[i];
+                        if (btn == null || !btn.activeSelf) continue;
+                        RectTransform rt = btn.GetComponent<RectTransform>();
+                        if (rt != null)
+                        {
+                            rt.anchoredPosition = new Vector2(startX, startY - (i + 1) * spacing);
+                        }
+                    }
+
+                    // Position the submenu panel
+                    if (leftSaveSubmenuPanelGO != null)
+                    {
+                        RectTransform panelRT = leftSaveSubmenuPanelGO.GetComponent<RectTransform>();
+                        if (panelRT != null)
+                        {
+                            int activeCount = 0;
+                            for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
+                                if (leftSaveSubmenuButtons[i] != null && leftSaveSubmenuButtons[i].activeSelf) activeCount++;
+                            
+                            panelRT.anchoredPosition = new Vector2(startX, startY - (activeCount * spacing) / 2f + spacing / 2f);
+                            panelRT.sizeDelta = new Vector2(200f, activeCount * spacing);
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         private void CloseSaveSubmenuUI()
@@ -358,6 +438,9 @@ namespace VPB
                     break;
                 case "MorphPresets":
                     rootFolder = "Custom\\Atom\\Person\\Morphs";
+                    break;
+                case "Preset":
+                    rootFolder = "Custom\\Atom\\Person\\General";
                     break;
                 case "AnimationPresets":
                     rootFolder = "Custom\\Atom\\Person\\AnimationPresets";
@@ -1580,11 +1663,6 @@ namespace VPB
             
             UpdateLayout();
             UpdateTabs();
-
-            if (leftActiveContent == ContentType.ActiveItems || rightActiveContent == ContentType.ActiveItems)
-            {
-                RefreshFiles();
-            }
         }
 
         private void ToggleLeft(ContentType type)
@@ -1602,11 +1680,6 @@ namespace VPB
             
             UpdateLayout();
             UpdateTabs();
-
-            if (leftActiveContent == ContentType.ActiveItems || rightActiveContent == ContentType.ActiveItems)
-            {
-                RefreshFiles();
-            }
         }
 
         private void UpdateReplaceButtonState()

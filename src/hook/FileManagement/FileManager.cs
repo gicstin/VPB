@@ -35,6 +35,7 @@ namespace VPB
         bool m_RefreshPendingClean = false;
         bool m_RefreshPendingRemoveOldVersion = false;
 
+        protected static readonly object packagesLock = new object();
         protected static Dictionary<string, VarPackage> packagesByUid;
         public static Dictionary<string, VarPackage> PackagesByUid
         {
@@ -193,15 +194,20 @@ namespace VPB
                     if (!packagesByUid.ContainsKey(text))
                     {
                         VarPackageGroup value;
-                        if (!packageGroups.TryGetValue(shortName, out value))
+                        lock (packagesLock)
                         {
-                            value = new VarPackageGroup(shortName);
-                            packageGroups.Add(shortName, value);
+                            if (!packageGroups.TryGetValue(shortName, out value))
+                            {
+                                value = new VarPackageGroup(shortName);
+                                packageGroups.Add(shortName, value);
+                            }
                         }
                         VarPackage varPackage = new VarPackage(text, cleanPath, value, text2, text3, version);
-                        packagesByUid.Add(text, varPackage);
-
-                        packagesByPath.Add(varPackage.Path, varPackage);
+                        lock (packagesLock)
+                        {
+                            packagesByUid.Add(text, varPackage);
+                            packagesByPath.Add(varPackage.Path, varPackage);
+                        }
                         value.AddPackage(varPackage);
 
                         // Disabling a var package means creating a "disable" file in the same path
@@ -209,11 +215,14 @@ namespace VPB
                         {
                             if (varPackage.FileEntries != null)
                             {
-                                foreach (VarFileEntry fileEntry in varPackage.FileEntries)
+                                lock (packagesLock)
                                 {
-                                    allVarFileEntries.Add(fileEntry);
-                                    uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
-                                    pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
+                                    foreach (VarFileEntry fileEntry in varPackage.FileEntries)
+                                    {
+                                        allVarFileEntries.Add(fileEntry);
+                                        uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
+                                        pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
+                                    }
                                 }
                             }
                         }
@@ -228,7 +237,10 @@ namespace VPB
                         {
                             if (!packagesByPath.ContainsKey(cleanPath))
                             {
-                                packagesByPath.Add(cleanPath, existing);
+                                lock (packagesLock)
+                                {
+                                    packagesByPath.Add(cleanPath, existing);
+                                }
                             }
                             return existing;
                         }
@@ -242,7 +254,10 @@ namespace VPB
                             LogUtil.LogWarning("Duplicate package uid " + text + " points to same file via different path. Existing: " + existing.Path + " New: " + cleanPath + ". Skipping duplicate registration");
                             if (!packagesByPath.ContainsKey(cleanPath))
                             {
-                                packagesByPath.Add(cleanPath, existing);
+                                lock (packagesLock)
+                                {
+                                    packagesByPath.Add(cleanPath, existing);
+                                }
                             }
                             return existing;
                         }
@@ -442,15 +457,18 @@ namespace VPB
                 {
                     vp.Group.RemovePackage(vp);
                 }
-                packagesByUid.Remove(vp.Uid);
-                packagesByPath.Remove(vp.Path);
-                if (vp.FileEntries != null)
+                lock (packagesLock)
                 {
-                    foreach (VarFileEntry fileEntry in vp.FileEntries)
+                    packagesByUid.Remove(vp.Uid);
+                    packagesByPath.Remove(vp.Path);
+                    if (vp.FileEntries != null)
                     {
-                        allVarFileEntries.Remove(fileEntry);
-                        uidToVarFileEntry.Remove(fileEntry.Uid);
-                        pathToVarFileEntry.Remove(fileEntry.Path);
+                        foreach (VarFileEntry fileEntry in vp.FileEntries)
+                        {
+                            allVarFileEntries.Remove(fileEntry);
+                            uidToVarFileEntry.Remove(fileEntry.Uid);
+                            pathToVarFileEntry.Remove(fileEntry.Path);
+                        }
                     }
                 }
                 vp.Dispose();
@@ -469,38 +487,41 @@ namespace VPB
 
         protected static void ClearAll()
         {
-            foreach (VarPackage value in packagesByUid.Values)
+            lock (packagesLock)
             {
-                value.Dispose();
-            }
-            if (packagesByUid != null)
-            {
-                packagesByUid.Clear();
-            }
-            if (packagesByPath != null)
-            {
-                packagesByPath.Clear();
-            }
-            if (packageGroups != null)
-            {
-                packageGroups.Clear();
-            }
-            if (allVarFileEntries != null)
-            {
-                allVarFileEntries.Clear();
-            }
-            if (uidToVarFileEntry != null)
-            {
-                uidToVarFileEntry.Clear();
-            }
-            if (pathToVarFileEntry != null)
-            {
-                pathToVarFileEntry.Clear();
-            }
+                foreach (VarPackage value in packagesByUid.Values)
+                {
+                    value.Dispose();
+                }
+                if (packagesByUid != null)
+                {
+                    packagesByUid.Clear();
+                }
+                if (packagesByPath != null)
+                {
+                    packagesByPath.Clear();
+                }
+                if (packageGroups != null)
+                {
+                    packageGroups.Clear();
+                }
+                if (allVarFileEntries != null)
+                {
+                    allVarFileEntries.Clear();
+                }
+                if (uidToVarFileEntry != null)
+                {
+                    uidToVarFileEntry.Clear();
+                }
+                if (pathToVarFileEntry != null)
+                {
+                    pathToVarFileEntry.Clear();
+                }
 
-            if (internalPathToUidPath != null)
-            {
-                internalPathToUidPath.Clear();
+                if (internalPathToUidPath != null)
+                {
+                    internalPathToUidPath.Clear();
+                }
             }
         }
 
@@ -673,7 +694,12 @@ namespace VPB
                     }
 
                     HashSet<VarPackage> removeSet = new HashSet<VarPackage>();
-                    foreach (VarPackage value3 in packagesByUid.Values)
+                    VarPackage[] packagesSnapshot;
+                    lock (packagesLock)
+                    {
+                        packagesSnapshot = packagesByUid.Values.ToArray();
+                    }
+                    foreach (VarPackage value3 in packagesSnapshot)
                     {
                         if (!hashSet.Contains(value3.Path))
                         {
@@ -684,17 +710,20 @@ namespace VPB
                     if (removeOldVersion)
                     {
                         HashSet<string> referenced = GetReferencedPackage();
-                        foreach (var item in packageGroups)
+                        lock (packagesLock)
                         {
-                            var group = item.Value;
-                            foreach (var item2 in group.Packages)
+                            foreach (var item in packageGroups)
                             {
-                                if (item2.Version != group.NewestVersion)
+                                var group = item.Value;
+                                foreach (var item2 in group.Packages)
                                 {
-                                    if (!referenced.Contains(item2.Uid))
+                                    if (item2.Version != group.NewestVersion)
                                     {
-                                        removeSet.Add(item2);
-                                        oldVersion.Add(item2.Path);
+                                        if (!referenced.Contains(item2.Uid))
+                                        {
+                                            removeSet.Add(item2);
+                                            oldVersion.Add(item2.Path);
+                                        }
                                     }
                                 }
                             }
@@ -730,13 +759,17 @@ namespace VPB
                 if (init || flag || clean || removeOldVersion)
                 {
                     StartScan(init, flag, clean, true);
-                    lastPackageRefreshTime = DateTime.Now;
                 }
 
                 s_InstalledCount = 0;
-                foreach (var item in packagesByUid)
+                VarPackage[] installedSnapshot;
+                lock (packagesLock)
                 {
-                    if (item.Value.IsInstalled())
+                    installedSnapshot = packagesByUid.Values.ToArray();
+                }
+                foreach (var pkg in installedSnapshot)
+                {
+                    if (pkg.IsInstalled())
                     {
                         s_InstalledCount++;
                     }
@@ -787,9 +820,13 @@ namespace VPB
 			{
 				if (packagesByUid != null)
 				{
-					foreach (var item in packagesByUid)
+					VarPackage[] scanSnapshot;
+					lock (packagesLock)
 					{
-						VarPackage pkg = item.Value;
+						scanSnapshot = packagesByUid.Values.ToArray();
+					}
+					foreach (var pkg in scanSnapshot)
+					{
 						if (pkg == null) continue;
 						pkg.Scan();
 						if (pkg.invalid)
@@ -818,6 +855,7 @@ namespace VPB
 			{
 				if (flag && onRefreshHandlers != null) onRefreshHandlers();
 			}
+			lastPackageRefreshTime = DateTime.Now;
 			MessageKit.post(MessageDef.FileManagerRefresh);
 			m_StartScanCo = null;
 		}
@@ -935,7 +973,12 @@ namespace VPB
 			List<string> ret = new List<string>();
 			if (packagesByUid != null)
 			{
-				foreach (VarPackage value4 in packagesByUid.Values)
+				VarPackage[] snapshot;
+				lock (packagesLock)
+				{
+					snapshot = packagesByUid.Values.ToArray();
+				}
+				foreach (VarPackage value4 in snapshot)
 				{
 					if (value4 != null) ret.Add(value4.Path);
 				}
@@ -948,7 +991,12 @@ namespace VPB
 			HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			if (packagesByUid != null)
 			{
-				foreach (var item in packagesByUid)
+				KeyValuePair<string, VarPackage>[] snapshot;
+				lock (packagesLock)
+				{
+					snapshot = packagesByUid.ToArray();
+				}
+				foreach (var item in snapshot)
 				{
 					VarPackage vp = item.Value;
 					if (vp != null && vp.RecursivePackageDependencies != null)

@@ -398,11 +398,21 @@ namespace VPB
                 if (outline == null)
                 {
                     outline = targetGraphic.gameObject.AddComponent<Outline>();
-                    outline.enabled = false;
                 }
                 outline.effectDistance = new Vector2(borderSize, -borderSize);
                 outline.effectColor = hoverColor;
+                outline.enabled = false;
             }
+        }
+
+        void OnEnable()
+        {
+            if (outline != null) outline.enabled = isSelected;
+        }
+
+        void OnDisable()
+        {
+            if (outline != null) outline.enabled = false;
         }
 
         public void OnPointerEnter(PointerEventData eventData)

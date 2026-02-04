@@ -210,10 +210,11 @@ namespace VPB
             if (cam != null)
             {
                 Vector3 dir = position - cam.transform.position;
-                if (dir.magnitude > 2.0f)
+                if (dir.sqrMagnitude < 0.0001f)
                 {
-                    position = cam.transform.position + dir.normalized * 2.0f;
+                    dir = cam.transform.forward;
                 }
+                position = cam.transform.position + dir.normalized * 2.0f;
             }
 
             transform.position = position;

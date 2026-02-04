@@ -441,6 +441,7 @@ namespace VPB
             creatorsCached = false;
             tagsCached = false;
             categoriesCached = false;
+			try { if (IsVisible) UpdateTabs(); } catch { }
             return true;
         }
     }

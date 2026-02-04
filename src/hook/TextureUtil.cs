@@ -147,7 +147,10 @@ namespace VPB
             var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
             if (fileEntry == null)
             {
-                if (Settings.Instance.TextureLogLevel.Value >= 2) LogUtil.LogWarning("[VPB] GetZstdCachePath: No FileEntry for " + imgPath);
+                if (Settings.Instance.TextureLogLevel.Value >= 2)
+                {
+                    LogUtil.LogTextureTrace("GetZstdCachePath_NoFileEntry:" + imgPath, "[VPB] GetZstdCachePath: No FileEntry for " + imgPath);
+                }
                 return null;
             }
 
@@ -173,7 +176,7 @@ namespace VPB
             {
                 // Only log if it doesn't exist to avoid spamming successful hits (which are logged by the caller)
                 if (!System.IO.File.Exists(finalPath))
-                    LogUtil.Log("[VPB] Cache MISS lookup: " + System.IO.Path.GetFileName(finalPath) + " for " + System.IO.Path.GetFileName(imgPath));
+                    LogUtil.LogTextureTrace("ZstdCacheMiss:" + finalPath, "[VPB] Cache MISS lookup: " + System.IO.Path.GetFileName(finalPath) + " for " + System.IO.Path.GetFileName(imgPath));
             }
 
             return finalPath;

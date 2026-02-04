@@ -1121,6 +1121,22 @@ namespace VPB
 			immediateTextureCache.Clear();
 		}
 
+		public void PurgeAllThumbnails()
+		{
+			if (thumbnailCache != null)
+			{
+				foreach (Texture2D t in thumbnailCache.Values)
+				{
+					if (t != null) UnityEngine.Object.Destroy(t);
+				}
+				thumbnailCache.Clear();
+			}
+			if (thumbnailCacheLru != null) thumbnailCacheLru.Clear();
+			if (thumbnailCacheLruNodes != null) thumbnailCacheLruNodes.Clear();
+			if (thumbnailUseCount != null) thumbnailUseCount.Clear();
+			if (thumbnailEvicted != null) thumbnailEvicted.Clear();
+		}
+
 		public void RegisterThumbnailUse(Texture2D tex)
 		{
 			if (tex == null) return;
@@ -1144,7 +1160,11 @@ namespace VPB
 			thumbnailUseCount.Remove(tex);
 			if (thumbnailEvicted != null && thumbnailEvicted.Remove(tex))
 			{
-				UnityEngine.Object.Destroy(tex);
+				try
+				{
+					if (tex != null) UnityEngine.Object.Destroy(tex);
+				}
+				catch { }
 			}
 		}
 
@@ -1629,6 +1649,7 @@ namespace VPB
 			}
 			PurgeAllTextures();
 			PurgeAllImmediateTextures();
+			PurgeAllThumbnails();
 		}
 
 		protected void OnApplicationQuit()

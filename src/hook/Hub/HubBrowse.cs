@@ -1727,7 +1727,7 @@ namespace VPB
                     yield return BinaryGetRequest(request,request.url, request.startedCallback, request.successCallback, request.errorCallback, request.progressCallback, hubCookies);
                     if (downloadQueue.Count == 0)
                     {
-                        VPB.FileManager.Refresh();
+                        VPB.FileManager.Refresh(true, false, false);
                     }
                 }
                 else
