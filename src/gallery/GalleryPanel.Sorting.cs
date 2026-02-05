@@ -93,6 +93,7 @@ namespace VPB
             {
                 currentPage = 0;
                 RefreshFiles();
+                if (IsPackageManagerUIVisible()) UpdatePackageManagerSort(context);
             }
             else UpdateTabs();
         }
@@ -115,6 +116,7 @@ namespace VPB
             {
                 currentPage = 0;
                 RefreshFiles();
+                if (IsPackageManagerUIVisible()) UpdatePackageManagerSort(context);
             }
             else UpdateTabs();
         }

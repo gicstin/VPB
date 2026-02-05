@@ -209,6 +209,13 @@ namespace VPB
             csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
+            // Add a flexible spacer to the content so it doesn't leave huge empty gaps if there are few items
+            GameObject spacer = new GameObject("BottomSpacer");
+            spacer.transform.SetParent(contentGO.transform, false);
+            LayoutElement le = spacer.AddComponent<LayoutElement>();
+            le.preferredHeight = 0;
+            le.flexibleHeight = 10000; // Large flexible height to consume any extra space in the parent
+            
             GameObject scrollbarGO = CreateScrollBar(scrollableContentGO, scrollBarWidth, verticalSize, Scrollbar.Direction.BottomToTop);
             
             ScrollRect scrollRect = scrollableContentGO.AddComponent<ScrollRect>();

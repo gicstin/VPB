@@ -13,6 +13,32 @@ namespace VPB
     public partial class GalleryPanel : MonoBehaviour
     {
         public string CurrentCategoryTitle => currentCategoryTitle;
+        public GalleryLayoutMode LayoutMode => layoutMode;
+
+        public void SetLayoutMode(GalleryLayoutMode mode)
+        {
+            if (layoutMode == mode && IsPackageManagerUIVisible() == (mode == GalleryLayoutMode.PackageManager)) return;
+            layoutMode = mode;
+            
+            if (layoutMode == GalleryLayoutMode.PackageManager)
+            {
+                 ShowPackageManagerUI();
+            }
+            else
+            {
+                 HidePackageManagerUI();
+                 if (scrollRect != null) scrollRect.gameObject.SetActive(true);
+            }
+
+            // Purge buttons as templates changed
+            foreach (var go in fileButtonPool) if (go != null) Destroy(go);
+            fileButtonPool.Clear();
+            foreach (var go in activeButtons) if (go != null) Destroy(go);
+            activeButtons.Clear();
+
+            UpdateFooterLayoutState();
+            UpdateLayout();
+        }
 
         public Atom SelectedTargetAtom
         {

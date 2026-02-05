@@ -225,6 +225,13 @@ namespace VPB
             if (f == nameFilter) return;
             nameFilter = f;
             nameFilterLower = string.IsNullOrEmpty(f) ? "" : f.ToLowerInvariant();
+            
+            if (layoutMode == GalleryLayoutMode.PackageManager)
+            {
+                UpdatePackageManagerFilter(nameFilter);
+                return;
+            }
+
             currentPage = 0;
             RefreshFiles();
         }

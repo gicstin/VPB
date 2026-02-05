@@ -347,6 +347,7 @@
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.Update.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PackageManager.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.Sorting.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />

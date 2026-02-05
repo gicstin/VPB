@@ -503,7 +503,7 @@ namespace VPB
         public float minWidth => -1;
         public float preferredWidth => -1;
         public float flexibleWidth => -1;
-        public float minHeight => -1;
+        public float minHeight => preferredHeight;
         public float preferredHeight 
         {
             get {
@@ -577,7 +577,14 @@ namespace VPB
                 }
                 if (n < 1) n = 1;
                 float actualCardWidth = (usableWidth - (n - 1) * spacing) / n;
-                grid.cellSize = new Vector2(actualCardWidth, actualCardWidth * 1.618f);
+                float h = actualCardWidth * 1.618f;
+                // Ensure minimum height for info and rating when scaling down
+                // Also ensure it's not too tall when wide (single column)
+                float minH = actualCardWidth + 100f;
+                if (h < minH) h = minH;
+                if (h > actualCardWidth + 120f) h = actualCardWidth + 120f;
+                
+                grid.cellSize = new Vector2(actualCardWidth, h);
                 return;
             }
 
@@ -635,25 +642,28 @@ namespace VPB
         {
             if (rt == null || infoLE == null || nameLE == null) return;
             float w = rt.rect.width;
-            if (w <= 0) return;
+            float h = rt.rect.height;
+            if (w <= 0 || h <= 0) return;
             if (Mathf.Abs(w - lastWidth) < 0.1f) return;
             lastWidth = w;
 
-            float remaining = w * 0.618f;
-            float desiredInfo = remaining - ratingHeight;
+            // Thumbnail is square, but respects card padding/spacing.
+            // In CreateNewVerticalCardGO, mainVLG has padding (5,5,5,0).
+            // So thumbnail width is w - 10.
+            float thumbSize = w - 10f;
+            
+            // Space remaining after the square thumbnail and top padding/spacing (5 padding + 2 spacing)
+            float infoAreaStart = thumbSize + 7f; 
+            float remaining = h - infoAreaStart;
+            float desiredInfo = remaining - ratingHeight - 2f; // 2f buffer
             desiredInfo = Mathf.Clamp(desiredInfo, minInfoHeight, maxInfoHeight);
 
-            infoLE.minHeight = 0;
+            infoLE.minHeight = desiredInfo;
             infoLE.preferredHeight = desiredInfo;
             infoLE.flexibleHeight = 0;
 
             bool showDate = desiredInfo >= hideDateBelowInfoHeight;
-            if (dateLE != null)
-            {
-                dateLE.minHeight = showDate ? dateHeight : 0f;
-                dateLE.preferredHeight = showDate ? dateHeight : 0f;
-                dateLE.flexibleHeight = 0f;
-            }
+            
             if (dateCG != null)
             {
                 dateCG.alpha = showDate ? 1f : 0f;
@@ -671,12 +681,21 @@ namespace VPB
                     dateLE.preferredHeight = dateHeight;
                     dateLE.flexibleHeight = 0;
                 }
-                if (nameText != null) nameText.fontSize = 20;
+                if (nameText != null) 
+                {
+                    nameText.fontSize = w > 300 ? 24 : 20;
+                    nameText.lineSpacing = 0.9f;
+                }
             }
             else
             {
                 nameLE.minHeight = 24;
                 nameLE.preferredHeight = desiredInfo;
+                if (dateLE != null)
+                {
+                    dateLE.minHeight = 0;
+                    dateLE.preferredHeight = 0;
+                }
                 if (nameText != null) nameText.fontSize = 18;
             }
         }

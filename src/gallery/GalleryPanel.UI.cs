@@ -253,7 +253,6 @@ namespace VPB
         {
             try
             {
-                float btnHeight = 50f;
                 float spacing = 60f;
 
                 // Position right side submenu buttons
@@ -774,10 +773,23 @@ namespace VPB
 
         private void ToggleLayoutMode()
         {
-            layoutMode = (layoutMode == GalleryLayoutMode.Grid) ? GalleryLayoutMode.VerticalCard : GalleryLayoutMode.Grid;
+            if (layoutMode == GalleryLayoutMode.Grid) layoutMode = GalleryLayoutMode.VerticalCard;
+            else if (layoutMode == GalleryLayoutMode.VerticalCard) layoutMode = GalleryLayoutMode.PackageManager;
+            else layoutMode = GalleryLayoutMode.Grid;
             
+            // Handle UI Visibility
+            if (layoutMode == GalleryLayoutMode.PackageManager)
+            {
+                 ShowPackageManagerUI();
+            }
+            else
+            {
+                 HidePackageManagerUI();
+                 if (scrollRect != null) scrollRect.gameObject.SetActive(true);
+            }
+
             // Immediately update grid component
-            if (contentGO != null)
+            if (contentGO != null && layoutMode != GalleryLayoutMode.PackageManager)
             {
                 UIGridAdaptive adaptive = contentGO.GetComponent<UIGridAdaptive>();
                 if (adaptive != null)
@@ -796,19 +808,30 @@ namespace VPB
             activeButtons.Clear();
 
             UpdateFooterLayoutState();
-            RefreshFiles(true); // Force full refresh
+            if (layoutMode != GalleryLayoutMode.PackageManager)
+            {
+                RefreshFiles(true); // Force full refresh
+            }
         }
 
         private void UpdateFooterLayoutState()
         {
             Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
             Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color pmColor = new Color(0.6f, 0.4f, 0.1f, 1f);
 
             if (footerLayoutBtnImage != null)
-                footerLayoutBtnImage.color = (layoutMode == GalleryLayoutMode.VerticalCard) ? activeColor : inactiveColor;
+            {
+                if (layoutMode == GalleryLayoutMode.PackageManager) footerLayoutBtnImage.color = pmColor;
+                else if (layoutMode == GalleryLayoutMode.VerticalCard) footerLayoutBtnImage.color = activeColor;
+                else footerLayoutBtnImage.color = inactiveColor;
+            }
             
             if (footerLayoutBtnText != null)
-                footerLayoutBtnText.text = (layoutMode == GalleryLayoutMode.VerticalCard) ? "≡" : "▤";
+            {
+                if (layoutMode == GalleryLayoutMode.PackageManager) footerLayoutBtnText.text = "PM";
+                else footerLayoutBtnText.text = (layoutMode == GalleryLayoutMode.VerticalCard) ? "≡" : "▤";
+            }
         }
 
         private void ToggleFixedHeightMode()

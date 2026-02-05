@@ -46,10 +46,13 @@ namespace VPB
             public float LastTypeWidth;
             public GUIContent TruncatedNameContent;
             public GUIContent TruncatedTypeContent;
+            public bool IsInAddonList;
+            public string ThumbnailPath;
         }
         private bool m_ShowPackageManagerWindow = false;
         private System.Collections.Generic.List<PackageManagerItem> m_AddonList = new System.Collections.Generic.List<PackageManagerItem>();
         private System.Collections.Generic.List<PackageManagerItem> m_AllList = new System.Collections.Generic.List<PackageManagerItem>();
+        private System.Collections.Generic.List<PackageManagerItem> m_UnifiedList = new System.Collections.Generic.List<PackageManagerItem>();
         private string m_PkgMgrFilter = "";
         private string m_PkgMgrFilterLower = "";
         private string[] m_PkgMgrFilterTermsLower = new string[0];
@@ -98,6 +101,7 @@ namespace VPB
         }
         private System.Collections.Generic.List<PackageManagerVisibleRow> m_AddonVisibleRows = new System.Collections.Generic.List<PackageManagerVisibleRow>();
         private System.Collections.Generic.List<PackageManagerVisibleRow> m_AllVisibleRows = new System.Collections.Generic.List<PackageManagerVisibleRow>();
+        private System.Collections.Generic.List<PackageManagerVisibleRow> m_UnifiedVisibleRows = new System.Collections.Generic.List<PackageManagerVisibleRow>();
         private bool m_PkgMgrIndicesDirty = true;
         private int m_PkgMgrSelectedCount = 0;
         private int m_PkgMgrTargetGroupCount = 0;
@@ -130,6 +134,26 @@ namespace VPB
         {
             RefreshVisibleRows(m_AddonList, m_AddonVisibleRows);
             RefreshVisibleRows(m_AllList, m_AllVisibleRows);
+
+            // Build Unified List
+            m_UnifiedList.Clear();
+            var loadedUids = new System.Collections.Generic.HashSet<string>();
+            for(int i=0; i<m_AddonList.Count; i++)
+            {
+                var item = m_AddonList[i];
+                item.IsInAddonList = true;
+                m_UnifiedList.Add(item);
+                if (!string.IsNullOrEmpty(item.Uid)) loadedUids.Add(item.Uid);
+            }
+            for(int i=0; i<m_AllList.Count; i++)
+            {
+                var item = m_AllList[i];
+                if (!string.IsNullOrEmpty(item.Uid) && loadedUids.Contains(item.Uid)) continue;
+                item.IsInAddonList = false;
+                m_UnifiedList.Add(item);
+            }
+            RefreshVisibleRows(m_UnifiedList, m_UnifiedVisibleRows);
+
             m_PkgMgrIndicesDirty = false;
         }
 
@@ -158,7 +182,7 @@ namespace VPB
             return m_ScanPkgMgrCo != null || m_PkgMgrIsolateCo != null;
         }
 
-        private void SetPkgMgrFilter(string filter)
+        public void SetPkgMgrFilter(string filter)
         {
             string newPkgMgrFilter = filter ?? "";
             if (newPkgMgrFilter != m_PkgMgrFilter)
@@ -169,6 +193,63 @@ namespace VPB
                 m_PkgMgrIndicesDirty = true;
                 UpdatePkgMgrHighlights();
             }
+        }
+
+        public void SetPkgMgrCreatorFilter(string creator)
+        {
+            creator = creator ?? "";
+            if (creator != m_PkgMgrCreatorFilter)
+            {
+                m_PkgMgrCreatorFilter = creator;
+                m_PkgMgrIndicesDirty = true;
+            }
+        }
+
+        public void ClearPkgMgrCategoryFilters()
+        {
+            if (m_PkgMgrCategoryInclusive.Count > 0 || m_PkgMgrCategoryExclusive.Count > 0)
+            {
+                m_PkgMgrCategoryInclusive.Clear();
+                m_PkgMgrCategoryExclusive.Clear();
+                m_PkgMgrIndicesDirty = true;
+            }
+        }
+
+        public void SetPkgMgrSortField(string field)
+        {
+            field = field ?? "Name";
+            if (field != m_PkgMgrSortField)
+            {
+                m_PkgMgrSortField = field;
+                if (Settings.Instance != null && Settings.Instance.PackageManagerSortField != null)
+                {
+                    Settings.Instance.PackageManagerSortField.Value = m_PkgMgrSortField;
+                }
+                SortPackageManagerList();
+            }
+        }
+
+        public void SetPkgMgrSortDirection(bool ascending)
+        {
+            if (ascending != m_PkgMgrSortAscending)
+            {
+                m_PkgMgrSortAscending = ascending;
+                if (Settings.Instance != null && Settings.Instance.PackageManagerSortAscending != null)
+                {
+                    Settings.Instance.PackageManagerSortAscending.Value = m_PkgMgrSortAscending;
+                }
+                SortPackageManagerList();
+            }
+        }
+
+        public void SetPkgMgrCategoryFilterByType(string categoryType)
+        {
+            ClearPkgMgrCategoryFilters();
+            if (!string.IsNullOrEmpty(categoryType) && categoryType != "All")
+            {
+                m_PkgMgrCategoryInclusive.Add(categoryType);
+            }
+            m_PkgMgrIndicesDirty = true;
         }
 
         private void TogglePackageManagerUI()
@@ -2963,6 +3044,57 @@ namespace VPB
                     }
                 }
             }
+        }
+
+        private string GetItemThumbnailPath(PackageManagerItem item)
+        {
+            if (item == null) return "";
+            if (item.ThumbnailPath != null) return item.ThumbnailPath;
+
+            string imgPath = "";
+            
+            string scenePath = GetFirstScenePath(item.Uid);
+            if (!string.IsNullOrEmpty(scenePath))
+            {
+                string sceneImg = Path.ChangeExtension(scenePath, ".jpg");
+                if (FileManager.FileExists(sceneImg)) imgPath = sceneImg;
+                else
+                {
+                    sceneImg = Path.ChangeExtension(scenePath, ".png");
+                    if (FileManager.FileExists(sceneImg)) imgPath = sceneImg;
+                }
+            }
+
+            if (string.IsNullOrEmpty(imgPath))
+            {
+                string testJpg = Path.ChangeExtension(item.Path, ".jpg");
+                if (FileManager.FileExists(testJpg)) imgPath = testJpg;
+                else
+                {
+                    string testPng = Path.ChangeExtension(item.Path, ".png");
+                    if (FileManager.FileExists(testPng)) imgPath = testPng;
+                }
+            }
+
+            if (string.IsNullOrEmpty(imgPath))
+            {
+                VarPackage pkg = FileManager.GetPackage(item.Uid, false);
+                if (pkg != null && pkg.FileEntries != null)
+                {
+                    foreach (var entry in pkg.FileEntries)
+                    {
+                        string internalPath = entry.InternalPath.ToLowerInvariant();
+                        if (internalPath.EndsWith(".jpg") || internalPath.EndsWith(".png") || internalPath.EndsWith(".jpeg"))
+                        {
+                            imgPath = item.Uid + ":/" + entry.InternalPath;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            item.ThumbnailPath = imgPath;
+            return imgPath;
         }
 
         private System.Collections.IEnumerator ScanDirectoryCo(string path, System.Collections.Generic.List<PackageManagerItem> list, System.Collections.Generic.HashSet<string> protectedPackages, System.Collections.Generic.HashSet<string> types, System.Collections.Generic.HashSet<string> latestUids, System.Diagnostics.Stopwatch sw, System.Collections.Generic.Dictionary<string, int> categoryCounts)

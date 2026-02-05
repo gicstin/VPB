@@ -641,6 +641,12 @@ namespace VPB
 
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false)
         {
+            if (layoutMode == GalleryLayoutMode.PackageManager)
+            {
+                UpdatePackageManagerZoom();
+                return;
+            }
+            
             if (IsHubMode)
             {
                 RefreshHubItems();

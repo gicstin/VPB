@@ -364,6 +364,7 @@ namespace VPB
                             try { VPBConfig.Instance.Save(); } catch { }
                         }
                         UpdateTabs();
+                        if (IsPackageManagerUIVisible()) UpdatePackageManagerCategoryByName(c.name);
                     }, trackedButtons, () => {
                         currentPath = "";
                         currentPaths = null;
@@ -372,6 +373,7 @@ namespace VPB
                         currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
+                        if (IsPackageManagerUIVisible()) UpdatePackageManagerCategoryByName("");
                     });
                 }
             }
@@ -401,7 +403,8 @@ namespace VPB
                         tagsCached = false;
                         currentPage = 0;
                         RefreshFiles();
-                        UpdateTabs(); 
+                        UpdateTabs();
+                        if (IsPackageManagerUIVisible()) UpdatePackageManagerCreatorFilter(currentCreator);
                     }, trackedButtons, () => {
                         currentCreator = "";
                         categoriesCached = false;
@@ -409,6 +412,7 @@ namespace VPB
                         currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
+                        if (IsPackageManagerUIVisible()) UpdatePackageManagerCreatorFilter(currentCreator);
                     });
                 }
             }
