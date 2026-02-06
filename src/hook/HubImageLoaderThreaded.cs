@@ -481,8 +481,8 @@ namespace VPB
                     }
                     else if (FileManager.FileExists(imgPath))
                     {
-                        string vpbCachePath = GetVPBCachePath();
-                        string diskCachePath = GetDiskCachePath();
+                        string vpbCachePath = isThumbnail ? null : GetVPBCachePath();
+                        string diskCachePath = isThumbnail ? null : GetDiskCachePath();
 
                         if (vpbCachePath != null && File.Exists(vpbCachePath))
                         {
@@ -563,51 +563,61 @@ namespace VPB
                 if (webRequest != null) { webRequest.Dispose(); webRequestData = null; webRequest = null; }
                 if (hadError || finished) return;
 
-                bool canCompress = compress && width > 0 && height > 0 && IsPowerOfTwo((uint)width) && IsPowerOfTwo((uint)height);
-                CreateTexture();
-                if (tex == null) { hadError = true; return; }
-
-                if (preprocessed)
+                ImageLoadingMgr.currentProcessingPath = imgPath;
+                ImageLoadingMgr.currentProcessingIsThumbnail = isThumbnail;
+                try
                 {
-                    try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogError($"[VPB] Hub LoadRawTextureData failed (preprocessed) for {imgPath}: {ex.Message}");
-                        UnityEngine.Object.Destroy(tex);
-                        tex = null;
-                        CreateTexture();
-                        if (tex != null) try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); } catch { }
-                    }
-                    tex.Apply(false);
-                    if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
-                    {
-                        try { tex.Compress(true); } catch { canCompress = false; }
-                    }
-                }
-                else
-                {
-                    try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); tex.Apply(); if (canCompress) tex.Compress(true); }
-                    catch (Exception ex) { LogUtil.LogError($"[VPB] Hub LoadRawTextureData failed for {imgPath}: {ex.Message}"); }
+                    bool canCompress = compress && width > 0 && height > 0 && IsPowerOfTwo((uint)width) && IsPowerOfTwo((uint)height);
+                    CreateTexture();
+                    if (tex == null) { hadError = true; return; }
 
-                    if (MVR.FileManagement.CacheManager.CachingEnabled && !loadedFromCache)
+                    if (preprocessed)
                     {
-                        string text = ((!Regex.IsMatch(imgPath, "^http")) ? GetDiskCachePath() : GetWebCachePath());
-                        if (text != null && !FileManager.FileExists(text))
+                        try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); }
+                        catch (Exception ex)
                         {
-                            try
-                            {
-                                JSONClass jSONClass = new JSONClass();
-                                jSONClass["type"] = "image";
-                                jSONClass["width"] = tex.width.ToString();
-                                jSONClass["height"] = tex.height.ToString();
-                                jSONClass["format"] = tex.format.ToString();
-                                byte[] rawTextureData2 = tex.GetRawTextureData();
-                                File.WriteAllText(text + "meta", jSONClass.ToString(string.Empty));
-                                File.WriteAllBytes(text, rawTextureData2);
-                            }
-                            catch (Exception ex) { LogUtil.LogError("Exception during Hub caching " + ex); }
+                            LogUtil.LogError($"[VPB] Hub LoadRawTextureData failed (preprocessed) for {imgPath}: {ex.Message}");
+                            UnityEngine.Object.Destroy(tex);
+                            tex = null;
+                            CreateTexture();
+                            if (tex != null) try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); } catch { }
+                        }
+                        tex.Apply(false);
+                        if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
+                        {
+                            try { tex.Compress(true); } catch { canCompress = false; }
                         }
                     }
+                    else
+                    {
+                        try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); tex.Apply(); if (canCompress) tex.Compress(true); }
+                        catch (Exception ex) { LogUtil.LogError($"[VPB] Hub LoadRawTextureData failed for {imgPath}: {ex.Message}"); }
+
+                        if (MVR.FileManagement.CacheManager.CachingEnabled && !loadedFromCache)
+                        {
+                            string text = ((!Regex.IsMatch(imgPath, "^http")) ? GetDiskCachePath() : GetWebCachePath());
+                            if (text != null && !FileManager.FileExists(text))
+                            {
+                                try
+                                {
+                                    JSONClass jSONClass = new JSONClass();
+                                    jSONClass["type"] = "image";
+                                    jSONClass["width"] = tex.width.ToString();
+                                    jSONClass["height"] = tex.height.ToString();
+                                    jSONClass["format"] = tex.format.ToString();
+                                    byte[] rawTextureData2 = tex.GetRawTextureData();
+                                    File.WriteAllText(text + "meta", jSONClass.ToString(string.Empty));
+                                    File.WriteAllBytes(text, rawTextureData2);
+                                }
+                                catch (Exception ex) { LogUtil.LogError("Exception during Hub caching " + ex); }
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    ImageLoadingMgr.currentProcessingPath = null;
+                    ImageLoadingMgr.currentProcessingIsThumbnail = false;
                 }
                 if (raw != null) { ByteArrayPool.Return(raw); raw = null; }
                 finished = true;

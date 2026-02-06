@@ -38,7 +38,7 @@ namespace VPB
         private ReaderWriterLockSlim cacheLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
         private int cacheFormatVersion = 0;
 
-        private Dictionary<string, CacheEntry> index = new Dictionary<string, CacheEntry>();
+        private Dictionary<string, CacheEntry> index = new Dictionary<string, CacheEntry>(StringComparer.OrdinalIgnoreCase);
 
         private struct CacheEntry
         {
@@ -415,6 +415,12 @@ namespace VPB
             Debug.Log("GalleryThumbnailCache: Migration to V2 complete.");
         }
 
+        public bool IsPackagePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            return path.Contains(":/") || path.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+        }
+
         public string GetCacheKey(string path)
         {
             if (string.IsNullOrEmpty(path)) return path;
@@ -435,9 +441,7 @@ namespace VPB
                 if (pkgPath.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || pkgPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 {
                     string pkgName = Path.GetFileName(pkgPath);
-                    string root = pkgPath.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase) ? "AllPackages" :
-                                  (pkgPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ? "AddonPackages" : "Packages");
-                    return "VAR:/" + root + "/" + pkgName + ":/" + internalPath;
+                    return "VAR:/" + pkgName + ":/" + internalPath;
                 }
             }
             // Also handle the package file itself being the target (e.g. for scene gallery)
@@ -446,8 +450,7 @@ namespace VPB
                 if (normalizedPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) || 
                     normalizedPath.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
                 {
-                    string root = normalizedPath.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase) ? "AllPackages" : "AddonPackages";
-                    return "VAR:/" + root + "/" + Path.GetFileName(normalizedPath);
+                    return "VAR:/" + Path.GetFileName(normalizedPath);
                 }
             }
 
@@ -456,6 +459,7 @@ namespace VPB
 
         public bool TryGetThumbnail(string path, long fileLastWriteTime, out byte[] data, out int width, out int height, out TextureFormat format)
         {
+            if (IsPackagePath(path)) fileLastWriteTime = 0;
             string key = GetCacheKey(path);
             data = null;
             width = 0;
@@ -528,6 +532,7 @@ namespace VPB
 
         public void SaveThumbnail(string path, byte[] data, int dataLength, int width, int height, TextureFormat format, long lastWriteTime)
         {
+            if (IsPackagePath(path)) lastWriteTime = 0;
             if (fileStream == null || width <= 0 || height <= 0) return;
             
             int expected = GetExpectedRawDataSize(width, height, (int)format);

@@ -1586,11 +1586,8 @@ namespace VPB
 
         private void PrevPage()
         {
-            if (currentPage > 0)
-            {
-                currentPage--;
-                RefreshFiles(false, true);
-            }
+            currentPage = Mathf.Max(0, currentPage - 1);
+            RefreshFiles(false, true);
         }
 
         private void Prev10Page()
@@ -1664,11 +1661,31 @@ namespace VPB
         {
             if (paginationText != null)
             {
-                int page = currentPage + 1;
+                int totalItems = Mathf.Max(0, lastTotalItems);
                 int totalPages = Mathf.Max(1, lastTotalPages);
-                int total = Mathf.Max(0, lastTotalItems);
-                paginationText.text = $"{page} / {totalPages} ({total})";
+                int page = Mathf.Clamp(currentPage + 1, 1, totalPages);
+                
+                paginationText.text = $"{page} / {totalPages} ({totalItems})";
             }
+
+            // Update button interactable states based on current page
+            if (paginationPrevBtn != null) 
+                paginationPrevBtn.GetComponent<Button>().interactable = (currentPage > 0);
+            
+            if (paginationPrev10Btn != null)
+                paginationPrev10Btn.GetComponent<Button>().interactable = (currentPage > 0);
+            
+            if (paginationFirstBtn != null)
+                paginationFirstBtn.GetComponent<Button>().interactable = (currentPage > 0);
+
+            if (paginationNextBtn != null) 
+                paginationNextBtn.GetComponent<Button>().interactable = (currentPage < lastTotalPages - 1);
+
+            if (paginationNext10Btn != null)
+                paginationNext10Btn.GetComponent<Button>().interactable = (currentPage < lastTotalPages - 1);
+
+            if (paginationLastBtn != null)
+                paginationLastBtn.GetComponent<Button>().interactable = (currentPage < lastTotalPages - 1);
         }
 
         private void ToggleRight(ContentType type)

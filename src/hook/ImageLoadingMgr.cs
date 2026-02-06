@@ -16,34 +16,228 @@ namespace VPB
     {
         public static ImageLoadingMgr singleton;
         public static string currentProcessingPath;
+        public static bool currentProcessingIsThumbnail;
         
         private void Awake()
         {
             singleton = this;
         }
 
-        Dictionary<string, Texture2D> cache = new Dictionary<string, Texture2D>();
+        Dictionary<string, Texture2D> textureCache = new Dictionary<string, Texture2D>();
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
+        
+        private class MetadataEntry
+        {
+            public int Width;
+            public int Height;
+            public TextureFormat Format;
+            public bool IsDownscaled;
+        }
+        
+        private class CachedDecompressed
+        {
+            public byte[] Data;
+            public LinkedListNode<string> LRUNode;
+        }
+        
+        private Dictionary<string, MetadataEntry> metadataCache = new Dictionary<string, MetadataEntry>();
+        private readonly object metadataCacheLock = new object();
+        
+        private Dictionary<string, CachedDecompressed> decompressedCache = new Dictionary<string, CachedDecompressed>();
+        private LinkedList<string> lruOrder = new LinkedList<string>();
+        private readonly object decompressedCacheLock = new object();
+        
+        private Dictionary<string, string> cachePathMap = new Dictionary<string, string>();
+        private readonly object cachePathMapLock = new object();
+        
+        private const int MaxMemoryCacheBytes = 512 * 1024 * 1024;
+        private long currentMemoryUsage = 0;
 
         private static string GetDownscaledKey(string cacheKey)
         {
             return "ILM:" + (cacheKey ?? string.Empty);
         }
 
+        private string GetCachePath(ImageLoaderThreaded.QueuedImage qi)
+        {
+            string pathKey = qi.imgPath + "|" + qi.compress + "|" + qi.linear + "|" + qi.isNormalMap + "|" + qi.createAlphaFromGrayscale + "|" + qi.createNormalFromBump + "|" + qi.invert + "|" + (qi.setSize ? qi.width : 0) + "|" + (qi.setSize ? qi.height : 0) + "|" + qi.bumpStrength;
+
+            lock (cachePathMapLock)
+            {
+                if (cachePathMap.TryGetValue(pathKey, out var cached))
+                {
+                    if (cached != null && File.Exists(cached)) return cached;
+                    cachePathMap.Remove(pathKey);
+                }
+            }
+
+            string vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength);
+
+            if (vpbCachePath != null && !File.Exists(vpbCachePath) && qi.setSize)
+            {
+                string vpbCachePathDefault = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength);
+                if (File.Exists(vpbCachePathDefault))
+                {
+                    vpbCachePath = vpbCachePathDefault;
+                }
+            }
+
+            if (vpbCachePath != null && File.Exists(vpbCachePath))
+            {
+                lock (cachePathMapLock)
+                {
+                    cachePathMap[pathKey] = vpbCachePath;
+                }
+                return vpbCachePath;
+            }
+
+            return null;
+        }
+
         public void ClearCache()
         {
             TextureUtil.UnmarkDownscaledActiveByPrefix("ILM:");
-            cache.Clear();
+            lock (metadataCacheLock)
+            {
+                metadataCache.Clear();
+            }
+            lock (decompressedCacheLock)
+            {
+                decompressedCache.Clear();
+                lruOrder.Clear();
+                currentMemoryUsage = 0;
+            }
+            lock (cachePathMapLock)
+            {
+                cachePathMap.Clear();
+            }
+            textureCache.Clear();
+        }
+        
+        private MetadataEntry FastLoadMetadata(string cachePath)
+        {
+            lock (metadataCacheLock)
+            {
+                if (metadataCache.TryGetValue(cachePath, out var cached))
+                {
+                    return cached;
+                }
+            }
+
+            try
+            {
+                string metaPath = cachePath + "meta";
+                
+                byte[] metaBytes;
+                try { metaBytes = File.ReadAllBytes(metaPath); }
+                catch { return null; }
+                
+                var metaJson = JSON.Parse(System.Text.Encoding.UTF8.GetString(metaBytes));
+                
+                int w = metaJson["width"].AsInt;
+                int h = metaJson["height"].AsInt;
+                TextureFormat fmt = TextureFormat.RGBA32;
+                try { fmt = (TextureFormat)Enum.Parse(typeof(TextureFormat), metaJson["format"].Value); } catch { }
+                
+                bool isDown = false;
+                try { isDown = metaJson["downscaled"].AsBool; } catch { }
+
+                var entry = new MetadataEntry
+                {
+                    Width = w,
+                    Height = h,
+                    Format = fmt,
+                    IsDownscaled = isDown
+                };
+
+                lock (metadataCacheLock)
+                {
+                    metadataCache[cachePath] = entry;
+                }
+
+                return entry;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("FastLoadMetadata failed: " + ex.Message);
+                return null;
+            }
+        }
+
+        private byte[] FastGetDecompressed(string cachePath)
+        {
+            lock (decompressedCacheLock)
+            {
+                if (decompressedCache.TryGetValue(cachePath, out var cached))
+                {
+                    if (cached.LRUNode != null)
+                    {
+                        lruOrder.Remove(cached.LRUNode);
+                        cached.LRUNode = lruOrder.AddFirst(cachePath);
+                    }
+                    return cached.Data;
+                }
+            }
+
+            try
+            {
+                byte[] compressedData;
+                try { compressedData = File.ReadAllBytes(cachePath); }
+                catch { return null; }
+                
+                byte[] decompressedData = ZstdCompressor.Decompress(compressedData);
+                
+                if (decompressedData == null || decompressedData.Length == 0)
+                    return null;
+
+                lock (decompressedCacheLock)
+                {
+                    if (decompressedCache.ContainsKey(cachePath))
+                    {
+                        return decompressedCache[cachePath].Data;
+                    }
+
+                    while (currentMemoryUsage + decompressedData.Length > MaxMemoryCacheBytes)
+                    {
+                        EvictLRU();
+                    }
+
+                    var node = lruOrder.AddFirst(cachePath);
+                    decompressedCache[cachePath] = new CachedDecompressed { Data = decompressedData, LRUNode = node };
+                    currentMemoryUsage += decompressedData.Length;
+                }
+
+                return decompressedData;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("FastGetDecompressed failed: " + ex.Message);
+                return null;
+            }
+        }
+
+        private void EvictLRU()
+        {
+            if (lruOrder.Count == 0) return;
+
+            var lruKey = lruOrder.Last.Value;
+            lruOrder.RemoveLast();
+            
+            if (decompressedCache.TryGetValue(lruKey, out var entry))
+            {
+                currentMemoryUsage -= entry.Data?.Length ?? 0;
+                decompressedCache.Remove(lruKey);
+            }
         }
 
         public Texture2D GetTextureFromCache(string path)
         {
-            if (cache.TryGetValue(path, out var tex))
+            if (textureCache.TryGetValue(path, out var tex))
             {
                 if (tex != null) return tex;
                 TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
-                cache.Remove(path);
+                textureCache.Remove(path);
             }
             return null;
         }
@@ -52,7 +246,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(path) || tex == null) return;
             TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
-            cache[path] = tex;
+            textureCache[path] = tex;
         }
 
         public void DoCallback(ImageLoaderThreaded.QueuedImage qi)
@@ -90,40 +284,12 @@ namespace VPB
             
             LogUtil.MarkImageActivity();
 
-            // Skip textures that are considered thumbnails (<= threshold)
             int threshold = Settings.Instance.ThumbnailThreshold.Value;
             if (qi.setSize && qi.width > 0 && qi.width <= threshold && qi.height > 0 && qi.height <= threshold)
-            {
                 return false;
-            }
 
-            // Check native cache meta if resolution is not already known to skip thumbnails
-            try
-            {
-                string nativePath = TextureUtil.GetNativeCachePath(qi.imgPath);
-                if (nativePath != null)
-                {
-                    string nativeMetaPath = nativePath + "meta";
-                    if (File.Exists(nativeMetaPath))
-                    {
-                        var meta = JSON.Parse(File.ReadAllText(nativeMetaPath));
-                        if (meta != null)
-                        {
-                            int w = meta["width"].AsInt;
-                            int h = meta["height"].AsInt;
-                            bool isThumb = meta["isThumbnail"].AsBool;
-                            if (isThumb || (w > 0 && w <= threshold && h > 0 && h <= threshold))
-                            {
-                                return false;
-                            }
-                        }
-                    }
-                }
-            }
-            catch { }
-
-            // Check memory cache first
             string cacheKey = qi.imgPath + (qi.linear ? "_L" : "");
+            
             var cacheTexture = GetTextureFromCache(cacheKey);
             if (cacheTexture != null)
             {
@@ -132,7 +298,6 @@ namespace VPB
                 return true;
             }
 
-            // Check if already inflight
             if (inflightKeys.Contains(cacheKey))
             {
                 if (!inflightWaiters.TryGetValue(cacheKey, out var waiters))
@@ -144,60 +309,53 @@ namespace VPB
                 return true;
             }
 
-            // Check for .zvamcache in VPB_Cache
-            string vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength);
-            if (vpbCachePath != null && !File.Exists(vpbCachePath) && qi.setSize)
-            {
-                // Fallback to full size Zstd cache
-                vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength);
-            }
-
-            if (vpbCachePath != null && File.Exists(vpbCachePath))
+            string vpbCachePath = GetCachePath(qi);
+            if (vpbCachePath != null)
             {
                 inflightKeys.Add(cacheKey);
-                try
-                {
-                    string metaPath = vpbCachePath + "meta";
-                    if (File.Exists(metaPath))
-                    {
-                        var metaJson = JSON.Parse(File.ReadAllText(metaPath));
-                        int width = metaJson["width"].AsInt;
-                        int height = metaJson["height"].AsInt;
-                        TextureFormat format = (TextureFormat)Enum.Parse(typeof(TextureFormat), metaJson["format"].Value);
-                        bool isDownscaled = false;
-                        try { isDownscaled = metaJson["downscaled"].AsBool; } catch { isDownscaled = false; }
-
-                        byte[] compressed = File.ReadAllBytes(vpbCachePath);
-                        byte[] decompressed = ZstdCompressor.Decompress(compressed);
-
-                        Texture2D tex = new Texture2D(width, height, format, false, qi.linear);
-                        tex.LoadRawTextureData(decompressed);
-                        tex.Apply();
-                        qi.tex = tex;
-
-                        RegisterTexture(cacheKey, tex);
-                        if (isDownscaled) TextureUtil.MarkDownscaledActive(GetDownscaledKey(cacheKey));
-                        
-                        // Resolve others waiting for this same key
-                        ResolveInflight(cacheKey, tex);
-                        
-                        Messager.singleton.StartCoroutine(DelayDoCallback(qi));
-                        return true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("Failed to load from Zstd cache " + vpbCachePath + ": " + ex.Message);
-                }
-                finally
-                {
-                    inflightKeys.Remove(cacheKey);
-                }
+                ThreadPool.QueueUserWorkItem((state) => LoadAndDecompress(cacheKey, vpbCachePath, qi));
+                return true;
             }
 
-            // Not in Zstd cache, let VaM handle it but track it so we can suppress duplicates
             inflightKeys.Add(cacheKey);
             return false;
+        }
+
+        private void LoadAndDecompress(string cacheKey, string cachePath, ImageLoaderThreaded.QueuedImage qi)
+        {
+            try
+            {
+                var meta = FastLoadMetadata(cachePath);
+                if (meta == null)
+                {
+                    inflightKeys.Remove(cacheKey);
+                    return;
+                }
+
+                byte[] decompressedData = FastGetDecompressed(cachePath);
+                if (decompressedData == null)
+                {
+                    inflightKeys.Remove(cacheKey);
+                    return;
+                }
+
+                Texture2D tex = new Texture2D(meta.Width, meta.Height, meta.Format, false, qi.linear);
+                tex.LoadRawTextureData(decompressedData);
+                tex.Apply(false, true);
+                qi.tex = tex;
+
+                RegisterTexture(cacheKey, tex);
+                if (meta.IsDownscaled) 
+                    TextureUtil.MarkDownscaledActive(GetDownscaledKey(cacheKey));
+                
+                ResolveInflight(cacheKey, tex);
+                Messager.singleton.StartCoroutine(DelayDoCallback(qi));
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("LoadAndDecompress failed for " + cachePath + ": " + ex.Message);
+                inflightKeys.Remove(cacheKey);
+            }
         }
 
         public void ResolveInflightForQueuedImage(ImageLoaderThreaded.QueuedImage qi)

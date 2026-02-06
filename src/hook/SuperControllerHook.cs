@@ -427,6 +427,7 @@ namespace VPB
             LogUtil.MarkImageActivity();
 
             ImageLoadingMgr.currentProcessingPath = qi.imgPath;
+            ImageLoadingMgr.currentProcessingIsThumbnail = qi.isThumbnail;
 
             if (!Settings.Instance.EnableZstdCompression.Value) return;
 
@@ -444,6 +445,7 @@ namespace VPB
         public static void PostProcessImageImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
             ImageLoadingMgr.currentProcessingPath = null;
+            ImageLoadingMgr.currentProcessingIsThumbnail = false;
 
             if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
             if (!Settings.Instance.EnableZstdCompression.Value) return;
@@ -456,11 +458,13 @@ namespace VPB
             LogUtil.MarkImageActivity();
 
             ImageLoadingMgr.currentProcessingPath = qi.imgPath;
+            ImageLoadingMgr.currentProcessingIsThumbnail = qi.isThumbnail;
         }
 
         public static void PostProcessImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage __0)
         {
             ImageLoadingMgr.currentProcessingPath = null;
+            ImageLoadingMgr.currentProcessingIsThumbnail = false;
         }
 
         [HarmonyPrefix]

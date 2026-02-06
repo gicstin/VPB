@@ -601,6 +601,12 @@ namespace VPB
 
         private void RefreshPkgMgrUGUIListInternal()
         {
+            if (GalleryPanel.BenchmarkStartTime > 0)
+            {
+                float now = Time.realtimeSinceStartup;
+                UnityEngine.Debug.Log("[Benchmark] RefreshPkgMgrUGUIListInternal called at " + now + " (+" + (now - GalleryPanel.BenchmarkStartTime).ToString("F3") + "s)");
+            }
+
             ScrollRect sr = m_PkgMgrUGUIUnifiedScroll;
             RectTransform viewport = m_PkgMgrUGUIUnifiedViewport;
             RectTransform content = m_PkgMgrUGUIUnifiedContent;
@@ -772,7 +778,7 @@ namespace VPB
                     else
                     {
                         row.SizeText.gameObject.SetActive(true);
-                        row.SizeText.text = string.Format("{0}   Deps: {1}", FormatSize(item.Size), item.DependencyCount);
+                        row.SizeText.text = string.Format("{0}   Deps: {1}", FormatSize(item.Size), item.DependencyCount < 0 ? "?" : item.DependencyCount.ToString());
                         float sizeFontSize = Mathf.Lerp(16, 24, (m_PkgMgrUGUIRowHeight - 60f) / 140f);
                         row.SizeText.fontSize = Mathf.RoundToInt(sizeFontSize);
                         

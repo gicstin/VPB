@@ -1052,24 +1052,6 @@ namespace VPB
             
             UpdatePaginationText();
 
-            if (paginationPrevBtn != null) 
-                paginationPrevBtn.GetComponent<Button>().interactable = (currentPage > 0);
-
-            if (paginationPrev10Btn != null)
-                paginationPrev10Btn.GetComponent<Button>().interactable = (currentPage > 0);
-            
-            if (paginationNextBtn != null) 
-                paginationNextBtn.GetComponent<Button>().interactable = (currentPage < totalPages - 1);
-
-            if (paginationNext10Btn != null)
-                paginationNext10Btn.GetComponent<Button>().interactable = (currentPage < totalPages - 1);
-
-            if (paginationFirstBtn != null)
-                paginationFirstBtn.GetComponent<Button>().interactable = (currentPage > 0);
-            
-            if (paginationLastBtn != null)
-                paginationLastBtn.GetComponent<Button>().interactable = (currentPage < totalPages - 1);
-
             int startIndex = currentPage * itemsPerPage;
             int endIndex = Mathf.Min(startIndex + itemsPerPage, totalFiles);
             lastShownCount = Mathf.Max(0, endIndex - startIndex);

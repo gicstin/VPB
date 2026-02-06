@@ -129,9 +129,24 @@ namespace VPB
         private string m_PkgMgrLastOperationDetails = "";
         private System.Collections.Generic.List<PackageManagerUndoOperation> m_PkgMgrUndoStack = new System.Collections.Generic.List<PackageManagerUndoOperation>();
         private const int PkgMgrMaxUndoSteps = 10;
+        private System.Collections.Generic.Queue<PackageManagerItem> m_PkgMgrAnalysisQueue = new System.Collections.Generic.Queue<PackageManagerItem>();
+        private Coroutine m_PkgMgrAnalysisCo;
+
+        private class PackageCachedInfo
+        {
+             public string Type;
+             public string Description;
+             public long Size;
+             public DateTime LastWriteTime;
+        }
+        private static System.Collections.Generic.Dictionary<string, PackageCachedInfo> m_PackageCache = new System.Collections.Generic.Dictionary<string, PackageCachedInfo>();
 
         private void RefreshVisibleIndices()
         {
+            if (GalleryPanel.BenchmarkStartTime > 0)
+            {
+                 UnityEngine.Debug.Log("[Benchmark] RefreshVisibleIndices at " + Time.realtimeSinceStartup + " (+" + (Time.realtimeSinceStartup - GalleryPanel.BenchmarkStartTime).ToString("F3") + "s)");
+            }
             RefreshVisibleRows(m_AddonList, m_AddonVisibleRows);
             RefreshVisibleRows(m_AllList, m_AllVisibleRows);
 
@@ -155,6 +170,105 @@ namespace VPB
             RefreshVisibleRows(m_UnifiedList, m_UnifiedVisibleRows);
 
             m_PkgMgrIndicesDirty = false;
+        }
+
+        private System.Collections.IEnumerator ProcessAnalysisQueue()
+        {
+            var wait = new WaitForSeconds(0.1f);
+            while (true)
+            {
+                if (m_PkgMgrAnalysisQueue.Count > 0)
+                {
+                    float startTime = Time.realtimeSinceStartup;
+                    bool anyUpdated = false;
+
+                    while (m_PkgMgrAnalysisQueue.Count > 0)
+                    {
+                        if (Time.realtimeSinceStartup - startTime > 0.016f) 
+                        {
+                            if (anyUpdated) m_PkgMgrIndicesDirty = true;
+                            yield return null;
+                            startTime = Time.realtimeSinceStartup;
+                            anyUpdated = false;
+                        }
+
+                        var item = m_PkgMgrAnalysisQueue.Dequeue();
+                        if (item == null) continue;
+
+                        try
+                        {
+                            // 1. Fetch Metadata (Type, Description) if not yet known
+                            if (item.Type == "Unknown")
+                            {
+                                string type = DeterminePackageType(item.Uid);
+                                string description = "";
+                                VarPackage pkg = FileManager.GetPackage(item.Uid, false);
+                                if (pkg != null && !string.IsNullOrEmpty(pkg.Description)) description = pkg.Description;
+
+                                item.Type = type;
+                                item.Description = description;
+                                item.TypeContent = new GUIContent(type, item.Path);
+                                
+                                // Update Cache
+                                var cached = new PackageCachedInfo { 
+                                    Type = type, 
+                                    Description = description,
+                                    Size = item.Size,
+                                    LastWriteTime = item.LastWriteTime
+                                };
+                                if (m_PackageCache.ContainsKey(item.Uid)) m_PackageCache[item.Uid] = cached;
+                                else m_PackageCache.Add(item.Uid, cached);
+
+                                // Update categories (might be late, but better than never)
+                                if (!m_PkgMgrCategories.Contains(type)) m_PkgMgrCategories.Add(type);
+                                if (!m_PkgMgrCategoryCounts.ContainsKey(type)) m_PkgMgrCategoryCounts[type] = 0;
+                                m_PkgMgrCategoryCounts[type]++;
+                            }
+
+                            // 2. Fetch Dependencies
+                            var deepDeps = FileManager.GetDependenciesDeep(item.Uid, 2);
+                            item.AllDependencies = deepDeps;
+                            item.DependencyCount = deepDeps.Count;
+
+                            int loadedDepCount = 0;
+                            List<string> unloadedDeps = new List<string>();
+                            List<string> notFoundDeps = new List<string>();
+                            foreach (var dep in deepDeps)
+                            {
+                                var resolved = FileManager.ResolveDependency(dep);
+                                if (resolved == null) notFoundDeps.Add(dep);
+                                else if (resolved.Path.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) unloadedDeps.Add(dep);
+                                else loadedDepCount++;
+                            }
+
+                            item.LoadedDependencyCount = loadedDepCount;
+                            item.UnloadedDependencies = unloadedDeps;
+                            item.NotFoundDependencies = notFoundDeps;
+                            
+                            List<string> missingDeps = new List<string>(unloadedDeps.Count + notFoundDeps.Count);
+                            missingDeps.AddRange(unloadedDeps);
+                            missingDeps.AddRange(notFoundDeps);
+                            item.MissingDependencies = missingDeps;
+
+                            UpdatePkgMgrItemCache(item);
+                            anyUpdated = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("Error analyzing package " + item.Uid + ": " + ex.Message);
+                        }
+                    }
+                    if (anyUpdated) m_PkgMgrIndicesDirty = true;
+                    
+                    if (GalleryPanel.BenchmarkStartTime > 0 && m_PkgMgrAnalysisQueue.Count == 0)
+                    {
+                        float now = Time.realtimeSinceStartup;
+                        UnityEngine.Debug.Log("[Benchmark] ProcessAnalysisQueue FINISHED at " + now + " (+" + (now - GalleryPanel.BenchmarkStartTime).ToString("F3") + "s)");
+                        GalleryPanel.BenchmarkStartTime = 0;
+                    }
+                }
+                yield return wait;
+            }
         }
 
         private class PackageManagerUndoOperation
@@ -2753,6 +2867,7 @@ namespace VPB
         {
             if (m_ScanPkgMgrCo != null) StopCoroutine(m_ScanPkgMgrCo);
             m_ScanPkgMgrCo = StartCoroutine(ScanPackageManagerPackagesCo());
+            if (m_PkgMgrAnalysisCo == null) m_PkgMgrAnalysisCo = StartCoroutine(ProcessAnalysisQueue());
         }
 
         private System.Collections.IEnumerator ScanPackageManagerPackagesCo()
@@ -2865,6 +2980,10 @@ namespace VPB
             
             SortPackageManagerList();
             UpdatePkgMgrHighlights();
+            if (GalleryPanel.BenchmarkStartTime > 0)
+            {
+                 UnityEngine.Debug.Log("[Benchmark] ScanPackageManagerPackagesCo FINISHED (List Populated) at " + Time.realtimeSinceStartup + " (+" + (Time.realtimeSinceStartup - GalleryPanel.BenchmarkStartTime).ToString("F3") + "s)");
+            }
             m_PkgMgrIndicesDirty = true;
             m_ScanPkgMgrCo = null;
         }
@@ -3033,9 +3152,17 @@ namespace VPB
                                 
                                 if (!res.loadedFromGalleryCache)
                                 {
-                                    long writeTime = item.LastWriteTime.ToFileTime();
-                                    FileEntry fe = FileManager.GetFileEntry(res.imgPath);
-                                    if (fe != null) writeTime = fe.LastWriteTime.ToFileTime();
+                                    long writeTime = 0;
+                                    if (GalleryThumbnailCache.Instance.IsPackagePath(res.imgPath))
+                                    {
+                                        writeTime = 0;
+                                    }
+                                    else
+                                    {
+                                        writeTime = item.LastWriteTime.ToFileTime();
+                                        FileEntry fe = FileManager.GetFileEntry(res.imgPath);
+                                        if (fe != null) writeTime = fe.LastWriteTime.ToFileTime();
+                                    }
                                     StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(res.imgPath, res.tex, writeTime));
                                 }
                             }
@@ -3130,41 +3257,28 @@ namespace VPB
 
                 string name = Path.GetFileNameWithoutExtension(itemPath);
                 bool isProtected = protectedPackages.Contains(name);
-                string type = DeterminePackageType(name);
                 bool isLocked = m_LockedPackages.Contains(name);
                 bool isAutoLoad = m_AutoLoadPackages.Contains(name);
                 bool isLatest = latestUids.Contains(name);
                 DateTime lwt = file.CreationTime;
+                
+                string type = "Unknown";
+                string description = "";
+                bool needsAnalysis = true;
 
-                var deepDeps = FileManager.GetDependenciesDeep(name, 2);
-                int depCount = deepDeps.Count;
-                int loadedDepCount = 0;
-                List<string> unloadedDeps = new List<string>();
-                List<string> notFoundDeps = new List<string>();
-                foreach (var dep in deepDeps)
+                PackageCachedInfo cached;
+                if (m_PackageCache.TryGetValue(name, out cached))
                 {
-                    var resolved = FileManager.ResolveDependency(dep);
-                    if (resolved == null)
+                    if (cached.LastWriteTime == lwt && cached.Size == file.Length)
                     {
-                        notFoundDeps.Add(dep);
-                    }
-                    else if (resolved.Path.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
-                    {
-                        unloadedDeps.Add(dep);
-                    }
-                    else
-                    {
-                        loadedDepCount++;
+                        type = cached.Type;
+                        description = cached.Description;
+                        needsAnalysis = false;
                     }
                 }
 
-                List<string> missingDeps = new List<string>(unloadedDeps.Count + notFoundDeps.Count);
-                missingDeps.AddRange(unloadedDeps);
-                missingDeps.AddRange(notFoundDeps);
-
-                string description = "";
-                VarPackage pkg = FileManager.GetPackage(name, false);
-                if (pkg != null && !string.IsNullOrEmpty(pkg.Description)) description = pkg.Description;
+                // If not cached, we skip DeterminePackageType and GetPackage(Description) to avoid disk I/O / Zip open
+                // They will be populated by the analysis queue
 
                 var item = new PackageManagerItem {
                     Uid = name,
@@ -3175,12 +3289,12 @@ namespace VPB
                     LastWriteTime = lwt,
                     AgeString = FormatAge(lwt, now),
                     Description = description,
-                    AllDependencies = deepDeps,
-                    DependencyCount = depCount,
-                    LoadedDependencyCount = loadedDepCount,
-                    MissingDependencies = missingDeps,
-                    UnloadedDependencies = unloadedDeps,
-                    NotFoundDependencies = notFoundDeps,
+                    AllDependencies = null,
+                    DependencyCount = -1,
+                    LoadedDependencyCount = 0,
+                    MissingDependencies = null,
+                    UnloadedDependencies = null,
+                    NotFoundDependencies = null,
                     StatusPrefix = (isLocked ? "(L) " : "") + (isAutoLoad ? "(AL) " : "") + (isProtected ? "(A) " : "") + (!isLatest ? "(O) " : ""),
                     TypeContent = new GUIContent(type, relativePath),
                     SizeContent = new GUIContent(FormatSize(file.Length), file.Length.ToString("N0") + " bytes"),
@@ -3191,10 +3305,13 @@ namespace VPB
                     IsLatest = isLatest,
                     GroupId = FileManager.PackageIDToPackageGroupID(name)
                 };
+                
+                // Add to analysis queue (always, to check deps, but if cached metadata we can skip that part)
+                m_PkgMgrAnalysisQueue.Enqueue(item);
                 UpdatePkgMgrItemCache(item);
                 list.Add(item);
 
-                if (!string.IsNullOrEmpty(type)) 
+                if (type != "Unknown") 
                 {
                     types.Add(type);
                     if (!categoryCounts.ContainsKey(type)) categoryCounts[type] = 0;

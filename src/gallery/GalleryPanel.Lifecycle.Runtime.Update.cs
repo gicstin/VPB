@@ -657,6 +657,17 @@ namespace VPB
                     if (pointerDotGO.activeSelf) pointerDotGO.SetActive(false);
                 }
             }
+
+            // Package Manager Auto-Update (e.g. while scanning)
+            if (layoutMode == GalleryLayoutMode.PackageManager && IsPackageManagerUIVisible())
+            {
+                packageManagerUpdateTimer += Time.unscaledDeltaTime;
+                if (packageManagerUpdateTimer >= 1.0f) // Update once per second
+                {
+                    packageManagerUpdateTimer = 0f;
+                    UpdatePackageManagerPage();
+                }
+            }
         }
 
         public void TriggerCurvatureRefresh()

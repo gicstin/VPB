@@ -31,17 +31,55 @@ namespace VPB
                  VamHookPlugin.singleton?.EmbedPackageManager(packageManagerContainer.GetComponent<RectTransform>());
              }
              
-             // Sync filters
-             UpdatePackageManagerFilter(nameFilter);
-             UpdatePackageManagerCreatorFilter(currentCreator);
-             UpdatePackageManagerCategoryFilter();
-             UpdatePackageManagerSort("Files");
-             UpdatePackageManagerCategoryByName(currentCategoryTitle);
-             UpdatePackageManagerZoom();
+             // Optim: Set filters directly without triggering multiple refreshes
+             if (VamHookPlugin.singleton != null)
+             {
+                 VamHookPlugin.singleton.SetPkgMgrFilter(nameFilter);
+                 VamHookPlugin.singleton.SetPkgMgrCreatorFilter(currentCreator);
+                 VamHookPlugin.singleton.ClearPkgMgrCategoryFilters();
+                 
+                 var sortState = GetSortState("Files");
+                 if (sortState != null)
+                 {
+                    string sortField = "Name";
+                    switch (sortState.Type)
+                    {
+                        case SortType.Date: sortField = "Age"; break;
+                        case SortType.Size: sortField = "Size"; break;
+                        case SortType.Rating: sortField = "Name"; break;
+                        default: sortField = "Name"; break;
+                    }
+                    VamHookPlugin.singleton.SetPkgMgrSortField(sortField);
+                    VamHookPlugin.singleton.SetPkgMgrSortDirection(sortState.Direction == SortDirection.Ascending);
+                 }
+                 
+                 if (string.IsNullOrEmpty(currentCategoryTitle))
+                 {
+                    VamHookPlugin.singleton.SetPkgMgrCategoryFilterByType("All");
+                 }
+                 else if (categories != null)
+                 {
+                    var cat = categories.Find(c => c.name == currentCategoryTitle);
+                    if (!string.IsNullOrEmpty(cat.name))
+                    {
+                        string pmType = cat.name;
+                        if (string.Equals(pmType, "Scenes", System.StringComparison.OrdinalIgnoreCase)) pmType = "Scene";
+                        else if (string.Equals(pmType, "SubScenes", System.StringComparison.OrdinalIgnoreCase)) pmType = "SubScene";
+                        else if (string.Equals(pmType, "Scripts", System.StringComparison.OrdinalIgnoreCase)) pmType = "Script";
+
+                        VamHookPlugin.singleton.SetPkgMgrCategoryFilterByType(pmType);
+                    }
+                 }
+                 
+                 float rowHeight = 400f / Mathf.Max(1, gridColumnCount);
+                 VamHookPlugin.singleton.SetPkgMgrZoom(rowHeight);
+             }
 
              packageManagerContainer.SetActive(true);
              VamHookPlugin.singleton?.SetPackageManagerVisible(true);
              
+             currentPage = 0;
+             UpdatePackageManagerPage();
              UpdateLayout();
         }
 
@@ -150,9 +188,9 @@ namespace VPB
             lastTotalPages = totalPages;
             
             // Prevent current page from exceeding total pages
-            if (currentPage >= totalPages && totalPages > 0)
+            if (currentPage >= totalPages)
             {
-                 currentPage = totalPages - 1;
+                 currentPage = Mathf.Max(0, totalPages - 1);
                  VamHookPlugin.singleton.SetPkgMgrPage(currentPage, itemsPerPage);
             }
             

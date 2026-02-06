@@ -535,6 +535,7 @@ namespace VPB
         private int lastTotalPages = 1;
         private int lastShownCount = 0;
         private int gridColumnCount = 4;
+        private float packageManagerUpdateTimer = 0f;
 
         // Apply Mode
         public ApplyMode ItemApplyMode = ApplyMode.DoubleClick;

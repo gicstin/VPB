@@ -403,13 +403,30 @@ namespace VPB
 						bool loadedFromGalleryCache = false;
 						if (isThumbnail)
 						{
-							FileEntry fe = FileManager.GetFileEntry(imgPath);
-							if (fe != null)
+                            long lastWriteTime = 0;
+                            bool foundTime = false;
+                            
+                            if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
+                            {
+                                lastWriteTime = 0;
+                                foundTime = true;
+                            }
+                            else
+                            {
+                                FileEntry fe = FileManager.GetFileEntry(imgPath);
+                                if (fe != null)
+                                {
+                                    lastWriteTime = fe.LastWriteTime.ToFileTime();
+                                    foundTime = true;
+                                }
+                            }
+
+							if (foundTime)
 							{
 								int w, h;
 								TextureFormat fmt;
 								byte[] data;
-								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, fe.LastWriteTime.ToFileTime(), out data, out w, out h, out fmt))
+								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, lastWriteTime, out data, out w, out h, out fmt))
 								{
 									raw = data;
 									width = w;
@@ -423,8 +440,8 @@ namespace VPB
 							}
 						}
 
-						string vpbCachePath = GetVPBCachePath();
-						string diskCachePath = GetDiskCachePath();
+						string vpbCachePath = isThumbnail ? null : GetVPBCachePath();
+						string diskCachePath = isThumbnail ? null : GetDiskCachePath();
 
 						if (!loadedFromGalleryCache && vpbCachePath != null && File.Exists(vpbCachePath))
 						{
@@ -750,7 +767,7 @@ namespace VPB
 					return;
 				}
 
-				bool canCompress = compress && width > 0 && height > 0 && IsPowerOfTwo((uint)width) && IsPowerOfTwo((uint)height);
+				bool canCompress = compress && !loadedFromGalleryCache && width > 0 && height > 0 && IsPowerOfTwo((uint)width) && IsPowerOfTwo((uint)height);
 				CreateTexture();
                 if (tex == null)
                 {
@@ -827,14 +844,30 @@ namespace VPB
                          {
                              if (FileManager.FileExists(imgPath))
                              {
-                                 FileEntry fe = FileManager.GetFileEntry(imgPath);
-                                 if (fe != null)
+                                 long lastWriteTime = 0;
+                                 bool foundTime = false;
+                                 if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
+                                 {
+                                     lastWriteTime = 0;
+                                     foundTime = true;
+                                 }
+                                 else
+                                 {
+                                     FileEntry fe = FileManager.GetFileEntry(imgPath);
+                                     if (fe != null)
+                                     {
+                                         lastWriteTime = fe.LastWriteTime.ToFileTime();
+                                         foundTime = true;
+                                     }
+                                 }
+
+                                 if (foundTime)
                                  {
                                      // Only save to thumbnail cache if it's reasonably small
                                      if (tex.width <= 512 && tex.height <= 512)
                                      {
                                          byte[] rawTextureData2 = tex.GetRawTextureData();
-                                         GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, fe.LastWriteTime.ToFileTime());
+                                         GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, lastWriteTime);
                                          savedToGalleryCache = true;
                                          loadedFromGalleryCache = true;
                                      }

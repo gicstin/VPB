@@ -15,9 +15,18 @@ namespace VPB
         public string CurrentCategoryTitle => currentCategoryTitle;
         public GalleryLayoutMode LayoutMode => layoutMode;
 
+        public static float BenchmarkStartTime = 0f;
+
         public void SetLayoutMode(GalleryLayoutMode mode)
         {
             if (layoutMode == mode && IsPackageManagerUIVisible() == (mode == GalleryLayoutMode.PackageManager)) return;
+            
+            if (mode == GalleryLayoutMode.PackageManager)
+            {
+                 BenchmarkStartTime = Time.realtimeSinceStartup;
+                 UnityEngine.Debug.Log("[Benchmark] Starting Switch to PM Mode at " + BenchmarkStartTime);
+            }
+
             layoutMode = mode;
             
             if (layoutMode == GalleryLayoutMode.PackageManager)

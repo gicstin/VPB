@@ -139,6 +139,7 @@ namespace VPB
             CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
             qi.imgPath = imgPath;
             qi.isThumbnail = true;
+            qi.compress = false;
             qi.priority = 10; 
             qi.groupId = currentLoadingGroupId;
             qi.callback = (res) => {
@@ -162,11 +163,20 @@ namespace VPB
                         UpdateAspectRatio(target, res.tex);
                     }
 
-                    long imgTime = file.LastWriteTime.ToFileTime();
-                    if (imgPath != file.Path)
+                    long imgTime = 0;
+                    if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
+                    {
+                        imgTime = 0;
+                    }
+                    else if (imgPath == file.Path)
+                    {
+                        imgTime = file.LastWriteTime.ToFileTime();
+                    }
+                    else
                     {
                         FileEntry fe = FileManager.GetFileEntry(imgPath);
                         if (fe != null) imgTime = fe.LastWriteTime.ToFileTime();
+                        else imgTime = file.LastWriteTime.ToFileTime();
                     }
 
                     if (!res.loadedFromGalleryCache)
