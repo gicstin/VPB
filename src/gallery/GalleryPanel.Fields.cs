@@ -150,6 +150,7 @@ namespace VPB
         private GameObject leftSaveSubmenuPanelGO;
 
         private bool saveSubmenuOpen = false;
+        private bool saveSubmenuMoreVisible = false;
         private List<GameObject> rightSaveSubmenuButtons = new List<GameObject>();
         private List<GameObject> leftSaveSubmenuButtons = new List<GameObject>();
 
@@ -158,7 +159,7 @@ namespace VPB
         private int saveSubmenuParentHoverCount = 0;
         private int saveSubmenuOptionsHoverCount = 0;
         private float saveSubmenuLastHoverTime = 0f;
-        private const float SaveSubmenuAutoHideDelay = 1.0f;
+        private const float SaveSubmenuAutoHideDelay = 1.5f;
 
         private GameObject rightRemoveHairSubmenuGapPanelGO;
         private GameObject leftRemoveHairSubmenuGapPanelGO;
@@ -234,7 +235,7 @@ namespace VPB
         private const int ClothingSubmenuMaxButtons = 30;
         private const int AtomSubmenuMaxButtons = 20;
 
-        private const int SaveSubmenuMaxButtons = 12;
+        private const int SaveSubmenuMaxButtons = 14;
         
         private Text leftSortBtnText;
         private Text rightSortBtnText;

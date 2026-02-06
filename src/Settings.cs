@@ -67,12 +67,6 @@ namespace VPB
         public ConfigEntry<bool> ForceLatestDependencies;
         public ConfigEntry<string> ForceLatestDependencyPackageGroups;
         public ConfigEntry<string> ForceLatestDependencyIgnorePackageGroups;
-        public ConfigEntry<Rect> PackageManagerWindowRect;
-        public ConfigEntry<string> PackageManagerSortField;
-        public ConfigEntry<bool> PackageManagerSortAscending;
-        public ConfigEntry<float> PackageManagerSplitRatio;
-        public ConfigEntry<bool> PackageManagerShowPreview;
-        public ConfigEntry<bool> UseUGUIPackageManager;
 
         internal static void Init(ConfigFile config)
         {
@@ -112,13 +106,6 @@ namespace VPB
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
             ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");
             ForceLatestDependencyIgnorePackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyIgnorePackageGroups", "", "Comma/space separated list of package groups (Author.Package) to ignore (do not force) even when ForceLatestDependencies is enabled.");
-
-            PackageManagerWindowRect = config.Bind<Rect>("PackageManager", "WindowRect", new Rect(100, 100, 1000, 600), "Package Manager window position and size.");
-            PackageManagerSortField = config.Bind<string>("PackageManager", "SortField", "Name", "Package Manager sort field.");
-            PackageManagerSortAscending = config.Bind<bool>("PackageManager", "SortAscending", true, "Package Manager sort ascending.");
-            PackageManagerSplitRatio = config.Bind<float>("PackageManager", "SplitRatio", 0.66f, "Package Manager table split ratio (0.1 to 0.9).");
-            PackageManagerShowPreview = config.Bind<bool>("PackageManager", "ShowPreview", true, "Show the Package Manager details/preview pane.");
-            UseUGUIPackageManager = config.Bind<bool>("PackageManager", "UseUGUI", false, "Use uGUI-based Package Manager overlay (experimental).");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 1, "0=off, 1=summary only, 2=verbose per-texture trace.");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");

@@ -72,6 +72,7 @@ namespace VPB
             public string Label;
             public Action Action;
             public bool Enabled;
+            public bool AutoClose = true;
         }
 
         private void SetSaveSubmenuButtonsVisible(bool visible)
@@ -81,13 +82,16 @@ namespace VPB
                 if (rightSaveSubmenuPanelGO != null) rightSaveSubmenuPanelGO.SetActive(visible);
                 if (leftSaveSubmenuPanelGO != null) leftSaveSubmenuPanelGO.SetActive(visible);
 
-                for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
+                if (!visible)
                 {
-                    if (rightSaveSubmenuButtons[i] != null) rightSaveSubmenuButtons[i].SetActive(visible);
-                }
-                for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
-                {
-                    if (leftSaveSubmenuButtons[i] != null) leftSaveSubmenuButtons[i].SetActive(visible);
+                    for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
+                    {
+                        if (rightSaveSubmenuButtons[i] != null) rightSaveSubmenuButtons[i].SetActive(false);
+                    }
+                    for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
+                    {
+                        if (leftSaveSubmenuButtons[i] != null) leftSaveSubmenuButtons[i].SetActive(false);
+                    }
                 }
             }
             catch { }
@@ -133,13 +137,6 @@ namespace VPB
 
             if (IsHubMode) return options;
 
-            options.Add(new SaveMenuOption
-            {
-                Label = "Save Scene...",
-                Enabled = SuperController.singleton != null,
-                Action = () => SaveSceneFromGallery()
-            });
-
             Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
             bool hasTarget = target != null && target.type == "Person";
 
@@ -153,9 +150,31 @@ namespace VPB
                 });
             }
 
+            // Primary items (top of the list)
+            options.Add(new SaveMenuOption
+            {
+                Label = "Save Scene...",
+                Enabled = SuperController.singleton != null,
+                Action = () => SaveSceneFromGallery()
+            });
             AddPresetOption("Save Appearance Preset...", "AppearancePresets");
-            AddPresetOption("Save Pose Preset...", "PosePresets");
             AddPresetOption("Save Clothing Preset...", "ClothingPresets");
+            AddPresetOption("Save Pose Preset...", "PosePresets");
+
+            // Expansion item
+            options.Add(new SaveMenuOption
+            {
+                Label = "More Options >",
+                Enabled = true,
+                AutoClose = false,
+                Action = () => {
+                    saveSubmenuMoreVisible = !saveSubmenuMoreVisible;
+                    PopulateSaveSubmenuButtons();
+                    PositionSaveSubmenuButtons();
+                }
+            });
+
+            // Secondary items
             AddPresetOption("Save Hair Preset...", "HairPresets");
             AddPresetOption("Save Skin Preset...", "SkinPresets");
             AddPresetOption("Save Morph Preset...", "MorphPresets");
@@ -197,6 +216,7 @@ namespace VPB
                     {
                         btn.onClick.RemoveAllListeners();
                         btn.interactable = option != null && option.Enabled;
+
                         if (option != null && option.Enabled)
                         {
                             btn.onClick.AddListener(() => {
@@ -206,9 +226,12 @@ namespace VPB
                                 }
                                 finally
                                 {
-                                    saveSubmenuOpen = false;
-                                    CloseSaveSubmenuUI();
-                                    UpdateSideButtonPositions();
+                                    if (option != null && option.AutoClose)
+                                    {
+                                        saveSubmenuOpen = false;
+                                        CloseSaveSubmenuUI();
+                                        UpdateSideButtonPositions();
+                                    }
                                 }
                             });
                         }
@@ -222,7 +245,12 @@ namespace VPB
                             : new Color(0.15f, 0.15f, 0.15f, 0.7f);
                     }
 
-                    btnGO.SetActive(i < count);
+                    // Visibility logic: Primary items (0-3) and "More Options" (4) always shown.
+                    // Secondary items (i > 4) only shown if saveSubmenuMoreVisible is true.
+                    bool visible = (i < count);
+                    if (i > 4 && !saveSubmenuMoreVisible) visible = false;
+
+                    btnGO.SetActive(visible);
                 }
 
                 if (i < rightSaveSubmenuButtons.Count) Configure(rightSaveSubmenuButtons[i]);
@@ -254,6 +282,8 @@ namespace VPB
             try
             {
                 float spacing = 60f;
+                float columnSpacing = 210f;
+                float btnWidth = 200f; // Width of a single button
 
                 // Position right side submenu buttons
                 if (rightSaveBtnGO != null && rightSaveBtnGO.activeInHierarchy)
@@ -262,6 +292,9 @@ namespace VPB
                     float startX = saveBtnRT.anchoredPosition.x + 110f; // To the right of Save button
                     float startY = saveBtnRT.anchoredPosition.y;
 
+                    int activeInPrimary = 0;
+                    int activeInSecondary = 0;
+
                     for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
                     {
                         GameObject btn = rightSaveSubmenuButtons[i];
@@ -269,22 +302,31 @@ namespace VPB
                         RectTransform rt = btn.GetComponent<RectTransform>();
                         if (rt != null)
                         {
-                            rt.anchoredPosition = new Vector2(startX, startY - (i + 1) * spacing);
+                            if (i <= 4) // Primary items (0-3) and "More Options >" (4)
+                            {
+                                rt.anchoredPosition = new Vector2(startX, startY - (activeInPrimary + 1) * spacing);
+                                activeInPrimary++;
+                            }
+                            else // Secondary items (5+)
+                            {
+                                rt.anchoredPosition = new Vector2(startX + columnSpacing, startY - (activeInSecondary + 1) * spacing);
+                                activeInSecondary++;
+                            }
                         }
                     }
 
-                    // Position the submenu panel
+                    // Position the submenu panel to cover both columns
                     if (rightSaveSubmenuPanelGO != null)
                     {
                         RectTransform panelRT = rightSaveSubmenuPanelGO.GetComponent<RectTransform>();
                         if (panelRT != null)
                         {
-                            int activeCount = 0;
-                            for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
-                                if (rightSaveSubmenuButtons[i] != null && rightSaveSubmenuButtons[i].activeSelf) activeCount++;
+                            int rows = Mathf.Max(activeInPrimary, activeInSecondary);
+                            float width = activeInSecondary > 0 ? (columnSpacing + btnWidth) : btnWidth;
+                            float xPos = activeInSecondary > 0 ? (startX + columnSpacing / 2f) : startX;
                             
-                            panelRT.anchoredPosition = new Vector2(startX, startY - (activeCount * spacing) / 2f + spacing / 2f);
-                            panelRT.sizeDelta = new Vector2(200f, activeCount * spacing);
+                            panelRT.anchoredPosition = new Vector2(xPos, startY - (rows + 1) * spacing / 2f);
+                            panelRT.sizeDelta = new Vector2(width, rows * spacing);
                         }
                     }
                 }
@@ -296,6 +338,9 @@ namespace VPB
                     float startX = saveBtnRT.anchoredPosition.x - 110f; // To the left of Save button
                     float startY = saveBtnRT.anchoredPosition.y;
 
+                    int activeInPrimary = 0;
+                    int activeInSecondary = 0;
+
                     for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
                     {
                         GameObject btn = leftSaveSubmenuButtons[i];
@@ -303,22 +348,31 @@ namespace VPB
                         RectTransform rt = btn.GetComponent<RectTransform>();
                         if (rt != null)
                         {
-                            rt.anchoredPosition = new Vector2(startX, startY - (i + 1) * spacing);
+                            if (i <= 4) // Primary items (0-3) and "More Options >" (4)
+                            {
+                                rt.anchoredPosition = new Vector2(startX, startY - (activeInPrimary + 1) * spacing);
+                                activeInPrimary++;
+                            }
+                            else // Secondary items (5+)
+                            {
+                                rt.anchoredPosition = new Vector2(startX - columnSpacing, startY - (activeInSecondary + 1) * spacing);
+                                activeInSecondary++;
+                            }
                         }
                     }
 
-                    // Position the submenu panel
+                    // Position the submenu panel to cover both columns
                     if (leftSaveSubmenuPanelGO != null)
                     {
                         RectTransform panelRT = leftSaveSubmenuPanelGO.GetComponent<RectTransform>();
                         if (panelRT != null)
                         {
-                            int activeCount = 0;
-                            for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
-                                if (leftSaveSubmenuButtons[i] != null && leftSaveSubmenuButtons[i].activeSelf) activeCount++;
+                            int rows = Mathf.Max(activeInPrimary, activeInSecondary);
+                            float width = activeInSecondary > 0 ? (columnSpacing + btnWidth) : btnWidth;
+                            float xPos = activeInSecondary > 0 ? (startX - columnSpacing / 2f) : startX;
                             
-                            panelRT.anchoredPosition = new Vector2(startX, startY - (activeCount * spacing) / 2f + spacing / 2f);
-                            panelRT.sizeDelta = new Vector2(200f, activeCount * spacing);
+                            panelRT.anchoredPosition = new Vector2(xPos, startY - (rows + 1) * spacing / 2f);
+                            panelRT.sizeDelta = new Vector2(width, rows * spacing);
                         }
                     }
                 }
@@ -331,6 +385,7 @@ namespace VPB
             try
             {
                 saveSubmenuOpen = false;
+                saveSubmenuMoreVisible = false;
                 saveSubmenuParentHovered = false;
                 saveSubmenuOptionsHovered = false;
                 saveSubmenuParentHoverCount = 0;

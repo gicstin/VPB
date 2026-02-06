@@ -11,7 +11,6 @@ namespace VPB
     {
         private GameObject m_PkgMgrUGUIRoot;
         private GameObject m_PkgMgrUGUIPanel;
-        private InputField m_PkgMgrUGUIFilterInput;
         private ScrollRect m_PkgMgrUGUIUnifiedScroll;
         private RectTransform m_PkgMgrUGUIUnifiedContent;
         private RectTransform m_PkgMgrUGUIUnifiedViewport;
@@ -33,6 +32,7 @@ namespace VPB
         private Text m_PkgMgrUGUIAutoLoadBtnText;
         private GameObject m_PkgMgrUGUIIsolateBtn;
         private Text m_PkgMgrUGUIIsolateBtnText;
+        private string m_PkgMgrUGUILastStatusMsg = "";
         private PackageManagerItem m_PkgMgrUGUILastSelectedItem;
         private int m_PkgMgrUGUILastVisibleUnifiedCount = -1;
         private int m_PkgMgrUGUIShiftAnchorVisibleIndex = -1;
@@ -89,11 +89,6 @@ namespace VPB
             }
         }
 
-        private bool IsPackageManagerUGUIVisible()
-        {
-            return m_PkgMgrUGUIRoot != null && m_PkgMgrUGUIRoot.activeSelf;
-        }
-
         private void EnsurePkgMgrEventSystem()
         {
             if (FindObjectOfType<EventSystem>() != null) return;
@@ -102,22 +97,12 @@ namespace VPB
             esGo.AddComponent<StandaloneInputModule>();
         }
 
-        private bool m_PkgMgrIsEmbedded = false;
-
         public void EmbedPackageManager(RectTransform parent)
         {
             EnsurePkgMgrEventSystem();
 
-            if (m_PkgMgrUGUIRoot != null && m_PkgMgrUGUIRoot.GetComponent<Canvas>() != null)
-            {
-                Destroy(m_PkgMgrUGUIRoot);
-                m_PkgMgrUGUIRoot = null;
-                m_PkgMgrUGUIPanel = null;
-            }
-
             if (m_PkgMgrUGUIRoot == null)
             {
-                m_PkgMgrIsEmbedded = true;
                 ScanPackageManagerPackages();
                 m_PkgMgrIndicesDirty = true;
 
@@ -143,80 +128,13 @@ namespace VPB
             if (m_PkgMgrUGUIRoot != null) m_PkgMgrUGUIRoot.SetActive(visible);
         }
 
-        private void EnsurePkgMgrUGUI()
-        {
-            if (m_PkgMgrUGUIRoot != null) return;
-
-            EnsurePkgMgrEventSystem();
-
-            m_PkgMgrUGUIRoot = new GameObject("VPB_PackageManagerUGUI");
-            var canvas = m_PkgMgrUGUIRoot.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 2000;
-            m_PkgMgrUGUIRoot.AddComponent<GraphicRaycaster>();
-
-            var scaler = m_PkgMgrUGUIRoot.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
-
-            var rootRt = m_PkgMgrUGUIRoot.GetComponent<RectTransform>();
-            if (rootRt != null)
-            {
-                rootRt.anchorMin = Vector2.zero;
-                rootRt.anchorMax = Vector2.one;
-                rootRt.sizeDelta = Vector2.zero;
-            }
-
-            var blocker = UI.AddChildGOImage(m_PkgMgrUGUIRoot, new Color(0f, 0f, 0f, 0.35f), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
-            blocker.name = "Blocker";
-
-            m_PkgMgrUGUIPanel = UI.AddChildGOImage(m_PkgMgrUGUIRoot, new Color(0.12f, 0.12f, 0.12f, 0.97f), AnchorPresets.middleCenter, 1200, 700, Vector2.zero);
-            m_PkgMgrUGUIPanel.name = "Panel";
-
-            var titleGo = new GameObject("Title");
-            titleGo.transform.SetParent(m_PkgMgrUGUIPanel.transform, false);
-            var titleText = titleGo.AddComponent<Text>();
-            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.text = "Package Manager";
-            titleText.fontSize = 30;
-            titleText.color = Color.white;
-            titleText.alignment = TextAnchor.MiddleLeft;
-            var titleRt = titleGo.GetComponent<RectTransform>();
-            titleRt.anchorMin = new Vector2(0, 1);
-            titleRt.anchorMax = new Vector2(1, 1);
-            titleRt.pivot = new Vector2(0.5f, 1);
-            titleRt.sizeDelta = new Vector2(-120, 60);
-            titleRt.anchoredPosition = new Vector2(60, -10);
-
-            var closeBtn = UI.CreateUIButton(m_PkgMgrUGUIPanel, 50, 50, "X", 26, -10, -10, AnchorPresets.topRight, ClosePackageManagerUGUI);
-            closeBtn.name = "CloseButton";
-
-            var filterGo = UI.CreateTextInput(m_PkgMgrUGUIPanel, 520, 42, "Filter...", 20, 20, -80, AnchorPresets.topLeft, null);
-            filterGo.name = "FilterInput";
-            m_PkgMgrUGUIFilterInput = filterGo.GetComponent<InputField>();
-            if (m_PkgMgrUGUIFilterInput != null)
-            {
-                m_PkgMgrUGUIFilterInput.text = m_PkgMgrFilter ?? "";
-                m_PkgMgrUGUIFilterInput.onValueChanged.AddListener((val) => { SetPkgMgrFilter(val); });
-                m_PkgMgrUGUIFilterInput.onEndEdit.AddListener((val) => { SetPkgMgrFilter(val); });
-            }
-
-            CreatePkgMgrUGUILists();
-
-            var updater = m_PkgMgrUGUIRoot.AddComponent<PackageManagerUGUIUpdater>();
-            updater.plugin = this;
-
-            m_PkgMgrUGUIRoot.SetActive(false);
-        }
-
         private void CreatePkgMgrUGUILists()
         {
             if (m_PkgMgrUGUIPanel == null) return;
 
             float actionBarH = 50f;
-            float bottomMargin = 20f;
-            float topMargin = m_PkgMgrIsEmbedded ? 10f : 60f;
+            float bottomMargin = 60f;
+            float topMargin = 10f;
             float sideMargin = 20f;
 
             // Actions Bar
@@ -492,7 +410,7 @@ namespace VPB
 
         private void UpdatePkgMgrUGUI()
         {
-            if (!IsPackageManagerUGUIVisible()) return;
+            if (m_PkgMgrUGUIRoot == null || !m_PkgMgrUGUIRoot.activeSelf) return;
             bool needsRefresh = false;
 
             if (m_PkgMgrIndicesDirty)
@@ -531,6 +449,23 @@ namespace VPB
             if (needsRefresh)
             {
                 RefreshPkgMgrUGUIList();
+                if (OnPkgMgrListChanged != null) OnPkgMgrListChanged();
+            }
+
+            string currentStatus = "";
+            if (IsPackageManagerBusy())
+            {
+                currentStatus = (string.IsNullOrEmpty(m_PkgMgrStatusMessage) ? "Working..." : m_PkgMgrStatusMessage);
+            }
+            else if (m_PkgMgrStatusTimer > Time.realtimeSinceStartup)
+            {
+                currentStatus = m_PkgMgrStatusMessage;
+            }
+            
+            if (m_PkgMgrUGUILastStatusMsg != currentStatus)
+            {
+                m_PkgMgrUGUILastStatusMsg = currentStatus;
+                if (OnPkgMgrStatusChanged != null) OnPkgMgrStatusChanged(currentStatus);
             }
         }
 
@@ -846,20 +781,6 @@ namespace VPB
             }
         }
 
-        private void OpenPackageManagerUGUI()
-        {
-            m_ShowPackageManagerWindow = false;
-            ScanPackageManagerPackages();
-            EnsurePkgMgrUGUI();
-            if (m_PkgMgrUGUIFilterInput != null) m_PkgMgrUGUIFilterInput.text = m_PkgMgrFilter ?? "";
-            m_PkgMgrUGUIRoot.SetActive(true);
-
-            m_PkgMgrUGUILastSelectedItem = null;
-            m_PkgMgrUGUILastVisibleUnifiedCount = -1;
-            m_PkgMgrUGUIShiftAnchorVisibleIndex = -1;
-            RefreshPkgMgrUGUIList();
-        }
-
         public void OnPkgMgrRowPointerDown(int rowPoolIndex, PointerEventData eventData)
         {
             var pool = m_PkgMgrUGUIUnifiedPool;
@@ -932,9 +853,6 @@ namespace VPB
 
         public void HandlePkgMgrUGUIKeyboard()
         {
-            if (!IsPackageManagerUGUIVisible()) return;
-            if (m_PkgMgrUGUIFilterInput != null && m_PkgMgrUGUIFilterInput.isFocused) return;
-
             var visibleRows = m_UnifiedVisibleRows;
 
             if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) && Input.GetKeyDown(KeyCode.A))
@@ -1076,9 +994,5 @@ namespace VPB
             }
         }
 
-        private void ClosePackageManagerUGUI()
-        {
-            if (m_PkgMgrUGUIRoot != null) m_PkgMgrUGUIRoot.SetActive(false);
-        }
     }
 }

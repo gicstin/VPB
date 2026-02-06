@@ -1238,12 +1238,6 @@ namespace VPB
         {
             m_Inited = true;
 
-            m_PackageManagerWindowRect = Settings.Instance.PackageManagerWindowRect.Value;
-            m_PkgMgrSortField = Settings.Instance.PackageManagerSortField.Value;
-            m_PkgMgrSortAscending = Settings.Instance.PackageManagerSortAscending.Value;
-            m_PkgMgrSplitRatio = Settings.Instance.PackageManagerSplitRatio.Value;
-            m_PkgMgrShowPreview = Settings.Instance.PackageManagerShowPreview.Value;
-
             if (m_FileManager == null)
             {
                 var child = Tools.AddChild(this.gameObject);
@@ -1960,20 +1954,7 @@ namespace VPB
 						GUILayout.Label("Opens a window to review and confirm removal.", m_StyleInfoCardText);
 					});
 
-                    // ========== PACKAGE MANAGER ==========
-                    if (GUILayout.Button("Package Manager", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
-                    {
-                        bool forceUGUI = (Event.current != null) && (Event.current.control || Event.current.command);
-                        if (forceUGUI)
-                        {
-                            if (IsPackageManagerUGUIVisible()) ClosePackageManagerUGUI();
-                            else OpenPackageManagerUGUI();
-                        }
-                        else
-                        {
-                            TogglePackageManagerUI();
-                        }
-                    }
+
 
                     // ========== HUB BROWSE ==========
                     DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Create Gallery", m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
@@ -2332,16 +2313,6 @@ namespace VPB
                     GUI.backgroundColor = prevBackgroundColor;
                     GUI.enabled = prevEnabled;
 
-                    if (m_ShowPackageManagerWindow)
-                    {
-                        m_PackageManagerWindowRect = GUILayout.Window(1, m_PackageManagerWindowRect, DrawPackageManagerWindow, "", m_StyleWindow);
-                        GUI.BringWindowToFront(1);
-                    }
-                    if (m_ShowDesktopContextMenu)
-                    {
-                        m_DesktopContextMenuRect = GUILayout.Window(100, m_DesktopContextMenuRect, DrawDesktopContextMenu, "", m_StyleContextMenu);
-                        GUI.BringWindowToFront(100);
-                    }
                     if (m_ShowRemoveWindow)
                     {
                         m_RemoveWindowRect = GUILayout.Window(2, m_RemoveWindowRect, DrawRemoveWindow, "", m_StyleWindow);

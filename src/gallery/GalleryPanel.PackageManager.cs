@@ -76,7 +76,12 @@ namespace VPB
              }
 
              packageManagerContainer.SetActive(true);
-             VamHookPlugin.singleton?.SetPackageManagerVisible(true);
+             if (VamHookPlugin.singleton != null)
+             {
+                 VamHookPlugin.singleton.SetPackageManagerVisible(true);
+                 VamHookPlugin.singleton.OnPkgMgrListChanged = UpdatePackageManagerPage;
+                 VamHookPlugin.singleton.OnPkgMgrStatusChanged = SetStatus;
+             }
              
              currentPage = 0;
              UpdatePackageManagerPage();
@@ -86,7 +91,12 @@ namespace VPB
         private void HidePackageManagerUI()
         {
              if (packageManagerContainer != null) packageManagerContainer.SetActive(false);
-             VamHookPlugin.singleton?.SetPackageManagerVisible(false);
+             if (VamHookPlugin.singleton != null)
+             {
+                 VamHookPlugin.singleton.SetPackageManagerVisible(false);
+                 VamHookPlugin.singleton.OnPkgMgrListChanged = null;
+                 VamHookPlugin.singleton.OnPkgMgrStatusChanged = null;
+             }
         }
         
         // Called when search input changes

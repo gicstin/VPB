@@ -681,7 +681,7 @@ namespace VPB
 		public string Path
 		{
 			get;
-			protected set;
+			set;
 		}
 		public bool IsInstalled()
         {

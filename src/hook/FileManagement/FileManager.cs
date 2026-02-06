@@ -46,6 +46,26 @@ namespace VPB
             }
         }
 
+        public static void UpdatePackagePath(string uid, string oldPath, string newPath)
+        {
+            lock (packagesLock)
+            {
+                if (packagesByUid != null && packagesByUid.TryGetValue(uid, out var pkg))
+                {
+                    pkg.Path = newPath;
+                }
+
+                if (packagesByPath != null)
+                {
+                    if (packagesByPath.TryGetValue(oldPath, out var pkg2))
+                    {
+                        packagesByPath.Remove(oldPath);
+                        packagesByPath[newPath] = pkg2;
+                    }
+                }
+            }
+        }
+
         protected static Dictionary<string, VarPackage> packagesByPath;
 
         protected static Dictionary<string, VarPackageGroup> packageGroups;

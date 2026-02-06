@@ -398,6 +398,8 @@ namespace VPB
             UpdateListPositions(rightSideButtons, topY, spacing, groupGap);
             UpdateListPositions(leftSideButtons, topY, spacing, groupGap);
 
+            if (saveSubmenuOpen) PositionSaveSubmenuButtons();
+
             try
             {
                 string title = currentCategoryTitle ?? "";

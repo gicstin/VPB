@@ -290,14 +290,10 @@ namespace VPB
             bool hasMgr = ImageLoadingMgr.singleton != null;
             string texName = __instance != null ? __instance.name : null;
             string path = null;
-            string pathSource = null;
 
             if (data != null)
             {
-                if (_dataToPath.TryGetValue(data, out path) && !string.IsNullOrEmpty(path))
-                {
-                    pathSource = "data";
-                }
+                _dataToPath.TryGetValue(data, out path);
             }
 
             if (string.IsNullOrEmpty(path))
@@ -307,7 +303,6 @@ namespace VPB
                 if (!string.IsNullOrEmpty(cur))
                 {
                     path = cur;
-                    pathSource = "current";
                 }
             }
 
@@ -317,7 +312,6 @@ namespace VPB
                 if (n.IndexOf(':') >= 0 || n.IndexOf('/') >= 0 || n.IndexOf('\\') >= 0)
                 {
                     path = n;
-                    pathSource = "name";
                 }
             }
 

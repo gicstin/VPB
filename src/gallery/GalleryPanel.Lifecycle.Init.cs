@@ -771,7 +771,6 @@ namespace VPB
                 {
                     GameObject b = UI.CreateUIButton(rightSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
                     b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
-                    rightSideButtons.Add(b.GetComponent<RectTransform>());
                     rightSaveSubmenuButtons.Add(b);
                     b.SetActive(false);
                     AddHoverDelegate(b);
@@ -781,6 +780,7 @@ namespace VPB
                         EventTrigger etb = b.GetComponent<EventTrigger>();
                         if (etb == null) etb = b.AddComponent<EventTrigger>();
 
+                        int buttonIndex = i; // local copy for closure
                         var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
                         be.callback.AddListener((data) => {
                             try
@@ -788,6 +788,13 @@ namespace VPB
                                 saveSubmenuOptionsHoverCount++;
                                 saveSubmenuOptionsHovered = true;
                                 saveSubmenuLastHoverTime = Time.unscaledTime;
+
+                                if (buttonIndex == 4 && !saveSubmenuMoreVisible && saveSubmenuOpen)
+                                {
+                                    saveSubmenuMoreVisible = true;
+                                    PopulateSaveSubmenuButtons();
+                                    PositionSaveSubmenuButtons();
+                                }
                             }
                             catch { }
                         });
@@ -1560,7 +1567,6 @@ namespace VPB
                 {
                     GameObject b = UI.CreateUIButton(leftSideContainer, btnWidth * 1.6f, btnHeight, "", 16, 0, 0, AnchorPresets.centre, null);
                     b.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.2f, 1f);
-                    leftSideButtons.Add(b.GetComponent<RectTransform>());
                     leftSaveSubmenuButtons.Add(b);
                     b.SetActive(false);
                     AddHoverDelegate(b);
@@ -1570,6 +1576,7 @@ namespace VPB
                         EventTrigger etb = b.GetComponent<EventTrigger>();
                         if (etb == null) etb = b.AddComponent<EventTrigger>();
 
+                        int buttonIndex = i; // local copy for closure
                         var be = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
                         be.callback.AddListener((data) => {
                             try
@@ -1577,6 +1584,13 @@ namespace VPB
                                 saveSubmenuOptionsHoverCount++;
                                 saveSubmenuOptionsHovered = true;
                                 saveSubmenuLastHoverTime = Time.unscaledTime;
+
+                                if (buttonIndex == 4 && !saveSubmenuMoreVisible && saveSubmenuOpen)
+                                {
+                                    saveSubmenuMoreVisible = true;
+                                    PopulateSaveSubmenuButtons();
+                                    PositionSaveSubmenuButtons();
+                                }
                             }
                             catch { }
                         });
