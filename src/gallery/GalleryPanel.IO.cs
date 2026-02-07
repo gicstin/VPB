@@ -685,10 +685,9 @@ namespace VPB
                 if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
                 if (recyclingGrid != null)
                 {
-                    bool isVertical = (layoutMode == GalleryLayoutMode.VerticalCard);
-                    float minSize = isVertical ? 260f : 200f;
+                    float minSize = 200f;
                     recyclingGrid.SetGridConfig(100, 100, 10f, 10f, gridColumnCount);
-                    recyclingGrid.SetAdaptiveConfig(true, minSize, gridColumnCount, isVertical);
+                    recyclingGrid.SetAdaptiveConfig(true, minSize, gridColumnCount, false);
                     recyclingGrid.SetItemCount(0); // Clear initially
                 }
             }
@@ -1056,13 +1055,12 @@ namespace VPB
                 };
                 
                 // Use Adaptive Config
-                bool isVertical = (layoutMode == GalleryLayoutMode.VerticalCard);
-                float minSize = isVertical ? 260f : 200f;
+                float minSize = 200f;
                 int cols = gridColumnCount;
                 
                 // Initialize spacing and adaptive config
                 recyclingGrid.SetGridConfig(100, 100, 10f, 10f, cols);
-                recyclingGrid.SetAdaptiveConfig(true, minSize, cols, isVertical);
+                recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false);
                 recyclingGrid.SetItemCount(currentFilteredFiles.Count);
             }
             

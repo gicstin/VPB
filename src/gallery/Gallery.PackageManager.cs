@@ -50,6 +50,9 @@ namespace VPB
             public Text TypeText;
             public Text NameText;
             public Text SizeText;
+            public RatingHandler RatingHandler;
+            public Text StarIconText;
+            public GameObject RatingSelector;
             public int BoundVisibleIndex = -1;
             public string LoadedThumbnailPath;
         }
@@ -378,6 +381,68 @@ namespace VPB
             sizeRT.offsetMin = new Vector2(0, 5);
             sizeRT.offsetMax = new Vector2(-10, 25);
 
+            // Rating System
+            GameObject ratingGO = new GameObject("Rating");
+            ratingGO.transform.SetParent(rowGO.transform, false);
+            RectTransform ratingRT = ratingGO.AddComponent<RectTransform>();
+            ratingRT.anchorMin = new Vector2(1, 1);
+            ratingRT.anchorMax = new Vector2(1, 1);
+            ratingRT.pivot = new Vector2(1, 1);
+            ratingRT.sizeDelta = new Vector2(40, 40);
+            ratingRT.anchoredPosition = new Vector2(-5, -5);
+
+            GameObject starBtnGO = UI.CreateUIButton(ratingGO, 40, 40, "★", 24, 0, 0, AnchorPresets.centre, null);
+            starBtnGO.name = "Star";
+            starBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
+            Text starIconText = starBtnGO.GetComponentInChildren<Text>();
+
+            GameObject selectorGO = new GameObject("RatingSelector");
+            selectorGO.transform.SetParent(rowGO.transform, false);
+            RectTransform selectorRT = selectorGO.AddComponent<RectTransform>();
+            selectorRT.anchorMin = new Vector2(1, 1);
+            selectorRT.anchorMax = new Vector2(1, 1);
+            selectorRT.pivot = new Vector2(1, 1);
+            selectorRT.sizeDelta = new Vector2(250, 45);
+            selectorRT.anchoredPosition = new Vector2(-50, -2);
+
+            CanvasGroup selectorCG = selectorGO.AddComponent<CanvasGroup>();
+            selectorCG.alpha = 0f;
+            selectorCG.interactable = false;
+            selectorCG.blocksRaycasts = false;
+
+            Image selectorBg = selectorGO.AddComponent<Image>();
+            selectorBg.color = new Color(0.05f, 0.05f, 0.05f, 0.95f);
+
+            HorizontalLayoutGroup selectorHLG = selectorGO.AddComponent<HorizontalLayoutGroup>();
+            selectorHLG.childAlignment = TextAnchor.MiddleLeft;
+            selectorHLG.childControlHeight = true;
+            selectorHLG.childControlWidth = true;
+            selectorHLG.childForceExpandWidth = true;
+            selectorHLG.childForceExpandHeight = false;
+            selectorHLG.spacing = 1;
+
+            RatingHandler ratingHandler = rowGO.AddComponent<RatingHandler>();
+            for (int i = 0; i <= 5; i++)
+            {
+                int ratingValue = i;
+                string label = i == 0 ? "X" : i.ToString();
+                GameObject optBtnGO = UI.CreateUIButton(selectorGO, 40, 40, label, 16, 0, 0, AnchorPresets.centre, () => ratingHandler.SetRating(ratingValue));
+                optBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
+                optBtnGO.GetComponent<Image>().color = RatingHandler.RatingColors[i];
+                if (i == 0) optBtnGO.GetComponentInChildren<Text>().color = Color.red;
+                else optBtnGO.GetComponentInChildren<Text>().color = Color.black;
+
+                LayoutElement optLE = optBtnGO.AddComponent<LayoutElement>();
+                optLE.minWidth = 0;
+                optLE.flexibleWidth = 1;
+                optLE.preferredHeight = 40;
+                optLE.minHeight = 40;
+                optLE.flexibleHeight = 0;
+            }
+
+            Button starBtn = starBtnGO.GetComponent<Button>();
+            starBtn.onClick.AddListener(() => ratingHandler.ToggleSelector());
+
             PkgMgrUGUIRow row = new PkgMgrUGUIRow
             {
                 Root = rowGO,
@@ -388,6 +453,9 @@ namespace VPB
                 TypeText = typeText,
                 NameText = nameText,
                 SizeText = sizeText,
+                RatingHandler = ratingHandler,
+                StarIconText = starIconText,
+                RatingSelector = selectorGO,
                 BoundVisibleIndex = -1,
             };
 
@@ -677,14 +745,14 @@ namespace VPB
                     if (m_PkgMgrUGUIRowHeight < 60)
                     {
                         nrt.offsetMin = new Vector2(thumbSize + 20, 0);
-                        nrt.offsetMax = new Vector2(-10, 0);
+                        nrt.offsetMax = new Vector2(-60, 0);
                         nrt.sizeDelta = new Vector2(0, m_PkgMgrUGUIRowHeight);
                         row.NameText.alignment = TextAnchor.MiddleLeft;
                     }
                     else
                     {
                         nrt.offsetMin = new Vector2(thumbSize + 20, 0);
-                        nrt.offsetMax = new Vector2(-10, -5);
+                        nrt.offsetMax = new Vector2(-60, -5);
                         nrt.sizeDelta = new Vector2(0, m_PkgMgrUGUIRowHeight * 0.5f);
                         row.NameText.alignment = TextAnchor.UpperLeft;
                     }
@@ -707,6 +775,11 @@ namespace VPB
                         trt.offsetMin = new Vector2(thumbSize + 20, 5);
                         trt.offsetMax = new Vector2(0, m_PkgMgrUGUIRowHeight * 0.4f + 5);
                     }
+                }
+
+                if (row.RatingHandler != null)
+                {
+                    row.RatingHandler.Init(item.Uid, row.StarIconText, row.RatingSelector);
                 }
 
                 if (row.SizeText != null)
@@ -791,6 +864,17 @@ namespace VPB
             var pool = m_PkgMgrUGUIUnifiedPool;
             if (rowPoolIndex < 0 || rowPoolIndex >= pool.Count) return;
             var row = pool[rowPoolIndex];
+
+            // If we clicked the star or selector, don't trigger selection logic which refreshes the list
+            if (eventData.pointerCurrentRaycast.gameObject != null)
+            {
+                var go = eventData.pointerCurrentRaycast.gameObject;
+                if (go.name == "Star" || go.transform.IsChildOf(row.RatingSelector.transform))
+                {
+                    return;
+                }
+            }
+
             int visibleIdx = row.BoundVisibleIndex;
             if (visibleIdx < 0) return;
 

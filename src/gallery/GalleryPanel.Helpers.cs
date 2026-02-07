@@ -55,6 +55,7 @@ namespace VPB
     public class RatingHandler : MonoBehaviour
     {
         private FileEntry entry;
+        private string uid;
         private Text starIconText;
         private GameObject selectorGO;
         private CanvasGroup selectorCG;
@@ -72,17 +73,37 @@ namespace VPB
 
         public void Init(FileEntry e, Text s, GameObject selector)
         {
+            bool sameUid = (uid == e?.Uid);
             entry = e;
+            uid = e?.Uid;
             starIconText = s;
             selectorGO = selector;
             if (selectorGO != null)
             {
                 selectorCG = selectorGO.GetComponent<CanvasGroup>();
                 if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
-                SetSelectorVisible(false);
+                if (!sameUid) SetSelectorVisible(false);
             }
             
-            currentRating = RatingsManager.Instance.GetRating(entry);
+            currentRating = RatingsManager.Instance.GetRating(uid);
+            UpdateDisplay();
+        }
+
+        public void Init(string id, Text s, GameObject selector)
+        {
+            bool sameUid = (uid == id);
+            entry = null;
+            uid = id;
+            starIconText = s;
+            selectorGO = selector;
+            if (selectorGO != null)
+            {
+                selectorCG = selectorGO.GetComponent<CanvasGroup>();
+                if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
+                if (!sameUid) SetSelectorVisible(false);
+            }
+
+            currentRating = RatingsManager.Instance.GetRating(uid);
             UpdateDisplay();
         }
 
@@ -112,7 +133,8 @@ namespace VPB
         public void SetRating(int rating)
         {
             currentRating = rating;
-            RatingsManager.Instance.SetRating(entry, rating);
+            if (entry != null) RatingsManager.Instance.SetRating(entry, rating);
+            else RatingsManager.Instance.SetRating(uid, rating);
             UpdateDisplay();
             SetSelectorVisible(false);
         }

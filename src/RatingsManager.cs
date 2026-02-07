@@ -447,9 +447,15 @@ namespace VPB
         public int GetRating(FileEntry entry)
         {
             if (entry == null) return 0;
+            return GetRating(entry.Uid);
+        }
+
+        public int GetRating(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return 0;
             lock (lockObj)
             {
-                if (ratings.TryGetValue(entry.Uid, out int r)) return r;
+                if (ratings.TryGetValue(uid, out int r)) return r;
             }
             return 0;
         }
@@ -457,21 +463,26 @@ namespace VPB
         public void SetRating(FileEntry entry, int rating)
         {
             if (entry == null) return;
+            SetRating(entry.Uid, rating);
+            TrySyncLegacyFavFile(entry, rating);
+        }
+
+        public void SetRating(string uid, int rating)
+        {
+            if (string.IsNullOrEmpty(uid)) return;
             rating = Mathf.Clamp(rating, 0, 5);
 
             lock (lockObj)
             {
                 int current = 0;
-                ratings.TryGetValue(entry.Uid, out current);
+                ratings.TryGetValue(uid, out current);
                 if (current == rating) return;
 
-                if (rating > 0) ratings[entry.Uid] = rating;
-                else ratings.Remove(entry.Uid);
+                if (rating > 0) ratings[uid] = rating;
+                else ratings.Remove(uid);
             }
 
             Save();
-
-            TrySyncLegacyFavFile(entry, rating);
         }
 
         private void TrySyncLegacyFavFile(FileEntry entry, int rating)

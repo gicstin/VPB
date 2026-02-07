@@ -886,7 +886,6 @@ namespace VPB
         private void ToggleLayoutMode()
         {
             if (layoutMode == GalleryLayoutMode.Grid) layoutMode = GalleryLayoutMode.PackageManager;
-            else if (layoutMode == GalleryLayoutMode.PackageManager) layoutMode = GalleryLayoutMode.VerticalCard;
             else layoutMode = GalleryLayoutMode.Grid;
             
             // Handle UI Visibility
@@ -906,10 +905,9 @@ namespace VPB
                 RecyclingGridView rgv = contentGO.GetComponent<RecyclingGridView>();
                 if (rgv != null)
                 {
-                    bool isVertical = (layoutMode == GalleryLayoutMode.VerticalCard);
-                    float minSize = isVertical ? 260f : 200f;
+                    float minSize = 200f;
                     int cols = gridColumnCount;
-                    rgv.SetAdaptiveConfig(true, minSize, cols, isVertical);
+                    rgv.SetAdaptiveConfig(true, minSize, cols, false);
                 }
             }
 
@@ -930,21 +928,19 @@ namespace VPB
 
         private void UpdateFooterLayoutState()
         {
-            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
             Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
             Color pmColor = new Color(0.6f, 0.4f, 0.1f, 1f);
 
             if (footerLayoutBtnImage != null)
             {
                 if (layoutMode == GalleryLayoutMode.PackageManager) footerLayoutBtnImage.color = pmColor;
-                else if (layoutMode == GalleryLayoutMode.VerticalCard) footerLayoutBtnImage.color = activeColor;
                 else footerLayoutBtnImage.color = inactiveColor;
             }
             
             if (footerLayoutBtnText != null)
             {
                 if (layoutMode == GalleryLayoutMode.PackageManager) footerLayoutBtnText.text = "PM";
-                else footerLayoutBtnText.text = (layoutMode == GalleryLayoutMode.VerticalCard) ? "≡" : "▤";
+                else footerLayoutBtnText.text = "▤";
             }
         }
 

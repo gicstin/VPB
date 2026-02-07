@@ -2201,10 +2201,9 @@ UpdateDesktopModeButton();
             recyclingGrid.content = contentGO.GetComponent<RectTransform>();
             
             // Set initial adaptive config
-            bool isVertical = (layoutMode == GalleryLayoutMode.VerticalCard);
-            float minSize = isVertical ? 260f : 200f;
+            float minSize = 200f;
             recyclingGrid.SetGridConfig(100, 100, 10f, 10f, gridColumnCount);
-            recyclingGrid.SetAdaptiveConfig(true, minSize, gridColumnCount, isVertical);
+            recyclingGrid.SetAdaptiveConfig(true, minSize, gridColumnCount, false);
 
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();

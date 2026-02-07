@@ -472,51 +472,6 @@ namespace VPB
                     actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
                 });
             }
-            
-            if (layoutMode == GalleryLayoutMode.VerticalCard)
-            {
-                BindHubVerticalCard(btnGO, item);
-            }
-        }
-
-        private void BindHubVerticalCard(GameObject btnGO, GalleryHubItem item)
-        {
-            // Name
-            Transform nameTr = btnGO.transform.Find("Info/Name");
-            if (nameTr != null)
-            {
-                Text t = nameTr.GetComponent<Text>();
-                t.text = item.Title;
-            }
-
-            // Date & Size (Hub items might not have date/size in this simple struct, but let's check)
-            Transform dateSizeTr = btnGO.transform.Find("Info/DateSize");
-            if (dateSizeTr != null)
-            {
-                Text t = dateSizeTr.GetComponent<Text>();
-                t.text = item.Creator; // Show creator here for Hub items
-            }
-
-            // Tags
-            Transform tagsTr = btnGO.transform.Find("Info/Tags");
-            if (tagsTr != null)
-            {
-                Text t = tagsTr.GetComponent<Text>();
-                t.text = "Hub Item";
-            }
-
-            // Stars (Hub rating)
-            Transform starBtnTr = btnGO.transform.Find("Rating/Star");
-            if (starBtnTr != null)
-            {
-                Text s = starBtnTr.GetComponentInChildren<Text>();
-                int rating = Mathf.RoundToInt(item.Rating);
-                if (s != null) s.color = RatingHandler.RatingColors[Mathf.Clamp(rating, 0, 5)];
-                
-                // Hide selector for Hub items for now
-                Transform selectorTr = starBtnTr.Find("RatingSelector");
-                if (selectorTr != null) selectorTr.gameObject.SetActive(false);
-            }
         }
     }
 }

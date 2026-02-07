@@ -525,12 +525,10 @@ namespace VPB
         public float minSize = 200f;
         public float maxSize = 260f;
         public float spacing = 10f;
-        public bool isVerticalCard = false;
         public int forcedColumnCount = 0;
         
         private RectTransform rt;
         private float lastWidth = -1f;
-        private bool lastIsVerticalCard = false;
         private int lastForcedColumnCount = -1;
 
         void Awake()
@@ -554,10 +552,9 @@ namespace VPB
             if (rt == null || grid == null) return;
             float width = rt.rect.width;
             if (width <= 0) return;
-            if (Mathf.Abs(width - lastWidth) < 0.1f && isVerticalCard == lastIsVerticalCard && forcedColumnCount == lastForcedColumnCount && grid.cellSize.x > 0) return;
+            if (Mathf.Abs(width - lastWidth) < 0.1f && forcedColumnCount == lastForcedColumnCount && grid.cellSize.x > 0) return;
             
             lastWidth = width;
-            lastIsVerticalCard = isVerticalCard;
             lastForcedColumnCount = forcedColumnCount;
 
             float usableWidth = width - grid.padding.left - grid.padding.right;
@@ -565,28 +562,6 @@ namespace VPB
             
             int forcedCols = forcedColumnCount;
             if (forcedCols < 0) forcedCols = 0;
-
-            if (isVerticalCard)
-            {
-                int n = forcedCols > 0 ? forcedCols : 0;
-                if (n <= 0)
-                {
-                    float cardWidth = minSize > 0 ? minSize : 260f;
-                    n = Mathf.FloorToInt((usableWidth + spacing) / (cardWidth + spacing));
-                    if (n < 1) n = 1;
-                }
-                if (n < 1) n = 1;
-                float actualCardWidth = (usableWidth - (n - 1) * spacing) / n;
-                float h = actualCardWidth * 1.618f;
-                // Ensure minimum height for info and rating when scaling down
-                // Also ensure it's not too tall when wide (single column)
-                float minH = actualCardWidth + 100f;
-                if (h < minH) h = minH;
-                if (h > actualCardWidth + 120f) h = actualCardWidth + 120f;
-                
-                grid.cellSize = new Vector2(actualCardWidth, h);
-                return;
-            }
 
             int colCount = forcedCols > 0 ? forcedCols : 0;
             if (colCount <= 0)
@@ -598,106 +573,6 @@ namespace VPB
             
             float cellSize = (usableWidth - (colCount - 1) * spacing) / colCount;
             grid.cellSize = new Vector2(cellSize, cellSize);
-        }
-    }
-
-    public class VerticalCardInfoSizer : MonoBehaviour
-    {
-        public LayoutElement infoLE;
-        public LayoutElement nameLE;
-        public Text nameText;
-        public LayoutElement dateLE;
-        public GameObject dateGO;
-        public float ratingHeight = 45f;
-        public float maxInfoHeight = 85f;
-        public float minInfoHeight = 30f;
-        public float hideDateBelowInfoHeight = 55f;
-        public float dateHeight = 22f;
-
-        private RectTransform rt;
-        private float lastWidth = -1f;
-        private CanvasGroup dateCG;
-
-        void Awake()
-        {
-            rt = GetComponent<RectTransform>();
-            if (dateGO != null)
-            {
-                dateCG = dateGO.GetComponent<CanvasGroup>();
-                if (dateCG == null) dateCG = dateGO.AddComponent<CanvasGroup>();
-            }
-        }
-
-        void OnEnable()
-        {
-            UpdateLayout();
-        }
-
-        void OnRectTransformDimensionsChange()
-        {
-            UpdateLayout();
-        }
-
-        private void UpdateLayout()
-        {
-            if (rt == null || infoLE == null || nameLE == null) return;
-            float w = rt.rect.width;
-            float h = rt.rect.height;
-            if (w <= 0 || h <= 0) return;
-            if (Mathf.Abs(w - lastWidth) < 0.1f) return;
-            lastWidth = w;
-
-            // Thumbnail is square, but respects card padding/spacing.
-            // In CreateNewVerticalCardGO, mainVLG has padding (5,5,5,0).
-            // So thumbnail width is w - 10.
-            float thumbSize = w - 10f;
-            
-            // Space remaining after the square thumbnail and top padding/spacing (5 padding + 2 spacing)
-            float infoAreaStart = thumbSize + 7f; 
-            float remaining = h - infoAreaStart;
-            float desiredInfo = remaining - ratingHeight - 2f; // 2f buffer
-            desiredInfo = Mathf.Clamp(desiredInfo, minInfoHeight, maxInfoHeight);
-
-            infoLE.minHeight = desiredInfo;
-            infoLE.preferredHeight = desiredInfo;
-            infoLE.flexibleHeight = 0;
-
-            bool showDate = desiredInfo >= hideDateBelowInfoHeight;
-            
-            if (dateCG != null)
-            {
-                dateCG.alpha = showDate ? 1f : 0f;
-                dateCG.interactable = false;
-                dateCG.blocksRaycasts = false;
-            }
-
-            if (showDate)
-            {
-                nameLE.minHeight = 42;
-                nameLE.preferredHeight = 42;
-                if (dateLE != null)
-                {
-                    dateLE.minHeight = dateHeight;
-                    dateLE.preferredHeight = dateHeight;
-                    dateLE.flexibleHeight = 0;
-                }
-                if (nameText != null) 
-                {
-                    nameText.fontSize = w > 300 ? 24 : 20;
-                    nameText.lineSpacing = 0.9f;
-                }
-            }
-            else
-            {
-                nameLE.minHeight = 24;
-                nameLE.preferredHeight = desiredInfo;
-                if (dateLE != null)
-                {
-                    dateLE.minHeight = 0;
-                    dateLE.preferredHeight = 0;
-                }
-                if (nameText != null) nameText.fontSize = 18;
-            }
         }
     }
 
@@ -951,7 +826,6 @@ namespace VPB
         public bool isAdaptive = false;
         public float minCellSize = 200f;
         public int fixedColumns = 0;
-        public bool isVerticalCard = false;
         private float lastRectWidth = -1f;
         private int lastFixedColumns = -1;
 
@@ -1035,14 +909,6 @@ namespace VPB
             if (cellWidth < 10f) cellWidth = 10f; // Sanity check
 
             float cellHeight = cellWidth;
-            
-            if (isVerticalCard)
-            {
-                cellHeight = cellWidth * 1.618f;
-                float minH = cellWidth + 100f;
-                if (cellHeight < minH) cellHeight = minH;
-                if (cellHeight > cellWidth + 120f) cellHeight = cellWidth + 120f;
-            }
 
             // Internal update of config members
             itemWidth = cellWidth;
@@ -1053,12 +919,11 @@ namespace VPB
             Refresh();
         }
 
-        public void SetAdaptiveConfig(bool adaptive, float minSize, int fixedCols, bool verticalCard)
+        public void SetAdaptiveConfig(bool adaptive, float minSize, int fixedCols, bool unused)
         {
             isAdaptive = adaptive;
             minCellSize = minSize;
             fixedColumns = fixedCols;
-            isVerticalCard = verticalCard;
             
             // Force immediate recalculation
             lastRectWidth = -1f; 
