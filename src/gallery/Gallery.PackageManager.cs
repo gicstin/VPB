@@ -283,9 +283,14 @@ namespace VPB
             scrollRect.viewport = viewportRT;
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
-            scrollRect.verticalScrollbar = scrollbarGO.GetComponent<Scrollbar>();
+            scrollRect.verticalScrollbar = null; // Decouple for manual sync
             scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
+
+            var sync = scrollbarGO.AddComponent<ScrollbarSync>();
+            sync.scrollRect = scrollRect;
+            sync.scrollbar = scrollbarGO.GetComponent<Scrollbar>();
+            sync.minSizePixels = 30f;
 
             return root;
         }

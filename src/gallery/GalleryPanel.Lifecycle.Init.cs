@@ -2186,26 +2186,25 @@ UpdateDesktopModeButton();
             
             contentGO = scrollRect.content.gameObject;
             CreateLoadingOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
-            // Remove VerticalLayoutGroup added by CreateVScrollableContent since we want GridLayoutGroup
-            var oldVlg = contentGO.GetComponent<VerticalLayoutGroup>();
-            if (oldVlg != null) DestroyImmediate(oldVlg);
 
-            GridLayoutGroup glg = contentGO.AddComponent<GridLayoutGroup>();
-            glg.spacing = new Vector2(10, 10);
-            glg.padding = new RectOffset(10, 10, 10, 10);
-            glg.startAxis = GridLayoutGroup.Axis.Horizontal;
-            glg.startCorner = GridLayoutGroup.Corner.UpperLeft;
-            glg.constraint = GridLayoutGroup.Constraint.Flexible;
+            // Clean up legacy layout components that interfere with virtualization
+            var legacyGLG = contentGO.GetComponent<GridLayoutGroup>();
+            if (legacyGLG != null) DestroyImmediate(legacyGLG);
+            var legacyCSF = contentGO.GetComponent<ContentSizeFitter>();
+            if (legacyCSF != null) DestroyImmediate(legacyCSF);
+            var legacyVLG = contentGO.GetComponent<VerticalLayoutGroup>();
+            if (legacyVLG != null) DestroyImmediate(legacyVLG);
 
-            UIGridAdaptive adaptive = contentGO.AddComponent<UIGridAdaptive>();
-            adaptive.grid = glg;
-            adaptive.minSize = 180f;
-            adaptive.maxSize = 250f;
-            adaptive.spacing = 10f;
-            adaptive.forcedColumnCount = gridColumnCount;
-
-            ContentSizeFitter csf = contentGO.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            // Initialize RecyclingGridView immediately instead of legacy layout components
+            recyclingGrid = contentGO.AddComponent<RecyclingGridView>();
+            recyclingGrid.scrollRect = scrollRect;
+            recyclingGrid.content = contentGO.GetComponent<RectTransform>();
+            
+            // Set initial adaptive config
+            bool isVertical = (layoutMode == GalleryLayoutMode.VerticalCard);
+            float minSize = isVertical ? 260f : 200f;
+            recyclingGrid.SetGridConfig(100, 100, 10f, 10f, gridColumnCount);
+            recyclingGrid.SetAdaptiveConfig(true, minSize, gridColumnCount, isVertical);
 
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();

@@ -708,7 +708,7 @@ namespace VPB
             gridSizeMinusBtn = UI.CreateUIButton(rightSection, 40, 40, "-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
             gridSizePlusBtn = UI.CreateUIButton(rightSection, 40, 40, "+", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(-1));
             
-            footerLayoutBtn = UI.CreateUIButton(rightSection, 40, 40, "≡", 20, 0, 0, AnchorPresets.middleCenter, ToggleLayoutMode);
+            footerLayoutBtn = UI.CreateUIButton(rightSection, 40, 40, "▤", 20, 0, 0, AnchorPresets.middleCenter, ToggleLayoutMode);
             footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
             footerLayoutBtnText = footerLayoutBtn.GetComponentInChildren<Text>();
 
@@ -811,6 +811,63 @@ namespace VPB
             UpdatePaginationText();
         }
 
+        public void UpdatePaginationText()
+        {
+            if (paginationText == null) return;
+
+            if (layoutMode == GalleryLayoutMode.PackageManager)
+            {
+                int totalItems = Mathf.Max(0, lastTotalItems);
+                int totalPages = Mathf.Max(1, lastTotalPages);
+                int page = Mathf.Clamp(currentPage + 1, 1, totalPages);
+
+                paginationText.text = $"{page} / {totalPages} ({totalItems})";
+
+                bool canGoPrev = (currentPage > 0);
+                bool canGoNext = (currentPage < lastTotalPages - 1);
+
+                if (paginationPrevBtn != null) paginationPrevBtn.GetComponent<Button>().interactable = canGoPrev;
+                if (paginationPrev10Btn != null) paginationPrev10Btn.GetComponent<Button>().interactable = canGoPrev;
+                if (paginationFirstBtn != null) paginationFirstBtn.GetComponent<Button>().interactable = canGoPrev;
+
+                if (paginationNextBtn != null) paginationNextBtn.GetComponent<Button>().interactable = canGoNext;
+                if (paginationNext10Btn != null) paginationNext10Btn.GetComponent<Button>().interactable = canGoNext;
+                if (paginationLastBtn != null) paginationLastBtn.GetComponent<Button>().interactable = canGoNext;
+
+                if (paginationFirstBtn != null) paginationFirstBtn.SetActive(true);
+                if (paginationPrev10Btn != null) paginationPrev10Btn.SetActive(true);
+                if (paginationPrevBtn != null) paginationPrevBtn.SetActive(true);
+                if (paginationNextBtn != null) paginationNextBtn.SetActive(true);
+                if (paginationNext10Btn != null) paginationNext10Btn.SetActive(true);
+                if (paginationLastBtn != null) paginationLastBtn.SetActive(true);
+            }
+            else
+            {
+                // With RecyclingGridView, we no longer have "pages".
+                // Just show total count.
+                if (currentFilteredFiles != null)
+                {
+                    int total = currentFilteredFiles.Count;
+                    int selected = selectedFiles.Count;
+                    if (selected > 0)
+                        paginationText.text = $"{selected} / {total} Items";
+                    else
+                        paginationText.text = $"{total} Items";
+                }
+                else
+                {
+                    paginationText.text = "0 Items";
+                }
+
+                if (paginationFirstBtn != null) paginationFirstBtn.SetActive(false);
+                if (paginationPrev10Btn != null) paginationPrev10Btn.SetActive(false);
+                if (paginationPrevBtn != null) paginationPrevBtn.SetActive(false);
+                if (paginationNextBtn != null) paginationNextBtn.SetActive(false);
+                if (paginationNext10Btn != null) paginationNext10Btn.SetActive(false);
+                if (paginationLastBtn != null) paginationLastBtn.SetActive(false);
+            }
+        }
+
         private void UpdateFooterContextActions()
         {
             // Default to hidden
@@ -828,8 +885,8 @@ namespace VPB
 
         private void ToggleLayoutMode()
         {
-            if (layoutMode == GalleryLayoutMode.Grid) layoutMode = GalleryLayoutMode.VerticalCard;
-            else if (layoutMode == GalleryLayoutMode.VerticalCard) layoutMode = GalleryLayoutMode.PackageManager;
+            if (layoutMode == GalleryLayoutMode.Grid) layoutMode = GalleryLayoutMode.PackageManager;
+            else if (layoutMode == GalleryLayoutMode.PackageManager) layoutMode = GalleryLayoutMode.VerticalCard;
             else layoutMode = GalleryLayoutMode.Grid;
             
             // Handle UI Visibility
@@ -846,12 +903,13 @@ namespace VPB
             // Immediately update grid component
             if (contentGO != null && layoutMode != GalleryLayoutMode.PackageManager)
             {
-                UIGridAdaptive adaptive = contentGO.GetComponent<UIGridAdaptive>();
-                if (adaptive != null)
+                RecyclingGridView rgv = contentGO.GetComponent<RecyclingGridView>();
+                if (rgv != null)
                 {
-                    adaptive.isVerticalCard = (layoutMode == GalleryLayoutMode.VerticalCard);
-                    adaptive.forcedColumnCount = gridColumnCount;
-                    adaptive.UpdateGrid();
+                    bool isVertical = (layoutMode == GalleryLayoutMode.VerticalCard);
+                    float minSize = isVertical ? 260f : 200f;
+                    int cols = gridColumnCount;
+                    rgv.SetAdaptiveConfig(true, minSize, cols, isVertical);
                 }
             }
 
@@ -863,6 +921,7 @@ namespace VPB
             activeButtons.Clear();
 
             UpdateFooterLayoutState();
+            UpdateLayout();
             if (layoutMode != GalleryLayoutMode.PackageManager)
             {
                 RefreshFiles(true); // Force full refresh
@@ -1702,45 +1761,13 @@ namespace VPB
             gridColumnCount = Mathf.Clamp(gridColumnCount + delta, 1, 12);
             if (contentGO != null)
             {
-                UIGridAdaptive adaptive = contentGO.GetComponent<UIGridAdaptive>();
-                if (adaptive != null)
+                RecyclingGridView rgv = contentGO.GetComponent<RecyclingGridView>();
+                if (rgv != null)
                 {
-                    adaptive.forcedColumnCount = gridColumnCount;
-                    adaptive.UpdateGrid();
+                    rgv.fixedColumns = gridColumnCount;
+                    // No need to RefreshFiles, rgv handles column changes via its Update/RecalculateLayout
                 }
             }
-            RefreshFiles(true);
-        }
-
-        private void UpdatePaginationText()
-        {
-            if (paginationText != null)
-            {
-                int totalItems = Mathf.Max(0, lastTotalItems);
-                int totalPages = Mathf.Max(1, lastTotalPages);
-                int page = Mathf.Clamp(currentPage + 1, 1, totalPages);
-                
-                paginationText.text = $"{page} / {totalPages} ({totalItems})";
-            }
-
-            // Update button interactable states based on current page
-            if (paginationPrevBtn != null) 
-                paginationPrevBtn.GetComponent<Button>().interactable = (currentPage > 0);
-            
-            if (paginationPrev10Btn != null)
-                paginationPrev10Btn.GetComponent<Button>().interactable = (currentPage > 0);
-            
-            if (paginationFirstBtn != null)
-                paginationFirstBtn.GetComponent<Button>().interactable = (currentPage > 0);
-
-            if (paginationNextBtn != null) 
-                paginationNextBtn.GetComponent<Button>().interactable = (currentPage < lastTotalPages - 1);
-
-            if (paginationNext10Btn != null)
-                paginationNext10Btn.GetComponent<Button>().interactable = (currentPage < lastTotalPages - 1);
-
-            if (paginationLastBtn != null)
-                paginationLastBtn.GetComponent<Button>().interactable = (currentPage < lastTotalPages - 1);
         }
 
         private void ToggleRight(ContentType type)

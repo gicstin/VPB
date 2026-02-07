@@ -1137,7 +1137,6 @@ namespace VPB
             if (!m_Inited)
             {
                 Init();
-                m_Inited = true;
             }
             if (!m_UIInited)
             {
@@ -1236,8 +1235,6 @@ namespace VPB
         bool m_QuickMenuButtonInited = false;
         void Init()
         {
-            m_Inited = true;
-
             if (m_FileManager == null)
             {
                 var child = Tools.AddChild(this.gameObject);
@@ -1275,6 +1272,7 @@ namespace VPB
             }
             initSw.Stop();
             LogUtil.Log("VPB Init end in " + initSw.ElapsedMilliseconds + "ms");
+            m_Inited = true;
         }
         void CreateFileBrowser()
         {

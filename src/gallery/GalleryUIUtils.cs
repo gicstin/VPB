@@ -217,14 +217,23 @@ namespace VPB
             le.flexibleHeight = 10000; // Large flexible height to consume any extra space in the parent
             
             GameObject scrollbarGO = CreateScrollBar(scrollableContentGO, scrollBarWidth, verticalSize, Scrollbar.Direction.BottomToTop);
-            
+            Scrollbar scrollbar = scrollbarGO.GetComponent<Scrollbar>();
+
             ScrollRect scrollRect = scrollableContentGO.AddComponent<ScrollRect>();
             scrollRect.content = contentRT;
             scrollRect.viewport = viewportRT;
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
-            scrollRect.verticalScrollbar = scrollbarGO.GetComponent<Scrollbar>();
+            // IMPORTANT: Do NOT assign scrollRect.verticalScrollbar directly, as it triggers Unity's 
+            // internal auto-sizing which causes 1px flickering with large content heights.
+            // We use ScrollbarSync instead to handle synchronization manually.
+            scrollRect.verticalScrollbar = null; 
             scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+
+            ScrollbarSync sync = scrollbarGO.AddComponent<ScrollbarSync>();
+            sync.scrollRect = scrollRect;
+            sync.scrollbar = scrollbar;
+            sync.minSizePixels = 30f;
 
             return scrollableContentGO;
         }
@@ -244,6 +253,14 @@ namespace VPB
 
             Scrollbar scrollbar = scrollbarGO.AddComponent<Scrollbar>();
             scrollbar.direction = direction;
+            scrollbar.interactable = true;
+            scrollbar.navigation = new Navigation { mode = Navigation.Mode.None };
+            scrollbar.transition = Selectable.Transition.None;
+
+            // Ensure the scrollbar is not blocked by a parent CanvasGroup
+            CanvasGroup cg = scrollbarGO.AddComponent<CanvasGroup>();
+            cg.blocksRaycasts = true;
+            cg.interactable = true;
 
             GameObject slidingArea = new GameObject("Sliding Area");
             slidingArea.transform.SetParent(scrollbarGO.transform, false);
@@ -261,6 +278,11 @@ namespace VPB
 
             scrollbar.handleRect = handleRT;
             scrollbar.targetGraphic = handleImg;
+
+            // Add BoxCollider to ensure reliable hit detection even if parent is curved (handled by CylindricalGraphicRaycaster part 1)
+            var bc = scrollbarGO.AddComponent<BoxCollider>();
+            bc.size = new Vector3(width, height > 0 ? height : 800f, 1f);
+            bc.center = new Vector3(-width / 2, 0, 0); // Pivot is (1, 0.5)
 
             return scrollbarGO;
         }

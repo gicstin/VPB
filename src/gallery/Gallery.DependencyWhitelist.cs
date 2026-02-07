@@ -68,29 +68,6 @@ namespace VPB
             }
         }
 
-        private class DepWhitelistMinScrollbarThumb : MonoBehaviour
-        {
-            public Scrollbar Scrollbar;
-            public float MinSize = 0.02f;
-
-            void OnEnable()
-            {
-                Canvas.willRenderCanvases -= Clamp;
-                Canvas.willRenderCanvases += Clamp;
-            }
-
-            void OnDisable()
-            {
-                Canvas.willRenderCanvases -= Clamp;
-            }
-
-            private void Clamp()
-            {
-                if (Scrollbar == null) return;
-                if (Scrollbar.size < MinSize) Scrollbar.size = MinSize;
-            }
-        }
-
         private bool IsDependencyWhitelistUGUIVisible()
         {
             return m_DepWhitelistUGUIRoot != null && m_DepWhitelistUGUIRoot.activeSelf;
@@ -426,18 +403,18 @@ namespace VPB
                 sbRT.sizeDelta = new Vector2(15f, 0);
             }
 
-            // Prevent thumb from becoming unusably small on huge lists.
-            var minThumb = scrollbarGO.AddComponent<DepWhitelistMinScrollbarThumb>();
-            minThumb.Scrollbar = scrollbarGO.GetComponent<Scrollbar>();
-            minThumb.MinSize = 0.02f;
-
             var scrollRect = parent.AddComponent<ScrollRect>();
             scrollRect.content = contentRT;
             scrollRect.viewport = viewportRT;
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
-            scrollRect.verticalScrollbar = scrollbarGO.GetComponent<Scrollbar>();
+            scrollRect.verticalScrollbar = null; // Decouple for manual sync
             scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+
+            var sync = scrollbarGO.AddComponent<ScrollbarSync>();
+            sync.scrollRect = scrollRect;
+            sync.scrollbar = scrollbarGO.GetComponent<Scrollbar>();
+            sync.minSizePixels = 30f;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
 
             m_DepWhitelistUGUIScroll = scrollRect;

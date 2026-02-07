@@ -867,6 +867,9 @@ namespace VPB
 				}
 			}
 
+			// Update time BEFORE calling handlers so handlers (and any UI code they trigger) see the latest time
+			lastPackageRefreshTime = DateTime.Now;
+
 			if (init)
 			{
 				if (onRefreshHandlers != null) onRefreshHandlers();
@@ -875,7 +878,6 @@ namespace VPB
 			{
 				if (flag && onRefreshHandlers != null) onRefreshHandlers();
 			}
-			lastPackageRefreshTime = DateTime.Now;
 			MessageKit.post(MessageDef.FileManagerRefresh);
 			m_StartScanCo = null;
 		}

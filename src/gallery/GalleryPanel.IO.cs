@@ -11,6 +11,9 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private List<FileEntry> currentFilteredFiles = new List<FileEntry>();
+        private RecyclingGridView recyclingGrid;
+
         private bool TryGetKnownPosePeopleCount(FileEntry entry, out int peopleCount)
         {
             peopleCount = 1;
@@ -675,18 +678,21 @@ namespace VPB
                 CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
             }
             currentLoadingGroupId = Guid.NewGuid().ToString();
-            
+
+            // Configure grid immediately so it has correct dimensions even while loading
             if (contentGO != null)
             {
-                UIGridAdaptive adaptive = contentGO.GetComponent<UIGridAdaptive>();
-                if (adaptive != null)
+                if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
+                if (recyclingGrid != null)
                 {
-                    adaptive.isVerticalCard = (layoutMode == GalleryLayoutMode.VerticalCard);
-                    adaptive.forcedColumnCount = gridColumnCount;
-                    adaptive.UpdateGrid();
+                    bool isVertical = (layoutMode == GalleryLayoutMode.VerticalCard);
+                    float minSize = isVertical ? 260f : 200f;
+                    recyclingGrid.SetGridConfig(100, 100, 10f, 10f, gridColumnCount);
+                    recyclingGrid.SetAdaptiveConfig(true, minSize, gridColumnCount, isVertical);
+                    recyclingGrid.SetItemCount(0); // Clear initially
                 }
             }
-
+            
             List<FileEntry> files = new List<FileEntry>();
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             bool hasNameFilter = !string.IsNullOrEmpty(nameFilterLower);
@@ -1024,88 +1030,62 @@ namespace VPB
             // Cache the filtered list for selection operations (Select All, counts, etc)
             lastFilteredFiles.Clear();
             lastFilteredFiles.AddRange(files);
+            
+            // Promote to class member for RecyclingGridView
+            currentFilteredFiles.Clear();
+            currentFilteredFiles.AddRange(files);
 
-            // NOW clear the old buttons, just before we are ready to show new ones.
-            foreach (var btn in activeButtons)
+            // Setup Recycling Grid
+            if (contentGO != null)
             {
-                btn.SetActive(false);
-                if (btn.name.StartsWith("NavButton_"))
-                {
-                    navButtonPool.Push(btn);
-                }
-                else
-                {
-                    fileButtonPool.Push(btn);
-                }
+                // RecyclingGridView is already initialized in Init.cs, but ensure we have it
+                if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
+                if (recyclingGrid == null) recyclingGrid = contentGO.AddComponent<RecyclingGridView>();
+                
+                // Ensure correct component references
+                recyclingGrid.scrollRect = this.scrollRect;
+                recyclingGrid.content = contentGO.GetComponent<RectTransform>();
+
+                // Setup Callbacks
+                recyclingGrid.onCreateItem = () => CreateNewFileButtonGO();
+                recyclingGrid.onBindItem = (go, index) => {
+                    if (index >= 0 && index < currentFilteredFiles.Count)
+                    {
+                        BindFileButton(go, currentFilteredFiles[index]);
+                    }
+                };
+                
+                // Use Adaptive Config
+                bool isVertical = (layoutMode == GalleryLayoutMode.VerticalCard);
+                float minSize = isVertical ? 260f : 200f;
+                int cols = gridColumnCount;
+                
+                // Initialize spacing and adaptive config
+                recyclingGrid.SetGridConfig(100, 100, 10f, 10f, cols);
+                recyclingGrid.SetAdaptiveConfig(true, minSize, cols, isVertical);
+                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+            }
+            
+            // We still need to clear activeButtons if they were used outside recycling grid, 
+            // but RecyclingGridView manages its own pool now.
+            // However, we should clean up any old buttons that might be hanging around from before the switch.
+            foreach (var btn in activeButtons) 
+            {
+                if (btn != null) Destroy(btn);
             }
             activeButtons.Clear();
             fileButtonImages.Clear();
 
-            int totalFiles = files.Count;
-            int totalPages = Mathf.CeilToInt((float)totalFiles / itemsPerPage);
-            if (totalPages == 0) totalPages = 1;
-            lastTotalItems = totalFiles;
-            lastTotalPages = totalPages;
-            
-            if (currentPage >= totalPages) currentPage = totalPages - 1;
-            if (currentPage < 0) currentPage = 0;
-            
             UpdatePaginationText();
 
-            int startIndex = currentPage * itemsPerPage;
-            int endIndex = Mathf.Min(startIndex + itemsPerPage, totalFiles);
-            lastShownCount = Mathf.Max(0, endIndex - startIndex);
-
-            lastPageFiles.Clear();
-            for (int i = startIndex; i < endIndex; i++) lastPageFiles.Add(files[i]);
-            UpdatePaginationText();
-
-            if (currentPage > 0)
-            {
-                GameObject prevBtn = InjectButton("Previous\nPage", PrevPage);
-                prevBtn.transform.SetAsFirstSibling();
-            }
-
-            int createdCount = 0;
-            int firstBatchSize = 32;
-            yieldWatch.Reset();
-            yieldWatch.Start();
-
-            for (int i = startIndex; i < endIndex; i++)
-            {
-                try
-                {
-                    CreateFileButton(files[i]);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError("[VPB] Error creating button for " + files[i].Name + ": " + ex.ToString());
-                }
-
-                createdCount++;
-
-                if (createdCount > firstBatchSize)
-                {
-                     if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
-                     {
-                         yield return null;
-                         yieldWatch.Reset();
-                         yieldWatch.Start();
-                     }
-                }
-            }
-
-            if (currentPage < totalPages - 1)
-            {
-                GameObject nextBtn = InjectButton("Next\nPage", NextPage);
-                nextBtn.transform.SetAsLastSibling();
-            }
-            
+            // Recycling Grid handles scroll reset implicitly on Refresh if needed, 
+            // but we can enforce it.
             if (scrollRect != null && !keepScroll)
             {
                 scrollRect.verticalNormalizedPosition = scrollToBottom ? 0f : 1f;
             }
 
+            UpdateLayout();
             HideLoadingOverlay();
             refreshCoroutine = null;
             if (isPoseCategory)

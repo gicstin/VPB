@@ -85,6 +85,7 @@ namespace VPB
 			public bool processed;
 
 			public bool preprocessed;
+			public volatile bool working;
 			public bool loadedFromGalleryCache;
 			public bool loadedFromCache;
 			public bool loadedFromDownscaledCache;
@@ -960,19 +961,6 @@ namespace VPB
             return pool.Get();
         }
 
-		protected class ImageLoaderTaskInfo
-		{
-			public string name;
-
-			public AutoResetEvent resetEvent;
-
-			public Thread thread;
-
-			public volatile bool working;
-
-			public volatile bool kill;
-		}
-
 		public static VPB.CustomImageLoaderThreaded singleton;
 
 		public GameObject progressHUD;
@@ -981,9 +969,8 @@ namespace VPB
 
 		public Text progressText;
 
-		protected ImageLoaderTaskInfo imageLoaderTask;
-
-		protected bool _threadsRunning;
+        protected int runningTasks;
+        protected const int MaxConcurrentTasks = 4;
 
 		protected Dictionary<string, Texture2D> thumbnailCache;
 		private const int ThumbnailCacheMaxItems = 512;
@@ -1013,58 +1000,9 @@ namespace VPB
 
 		protected AsyncFlag loadFlag;
 
-		protected void MTTask(object info)
-		{
-			ImageLoaderTaskInfo imageLoaderTaskInfo = (ImageLoaderTaskInfo)info;
-			while (_threadsRunning)
-			{
-				try
-				{
-					imageLoaderTaskInfo.resetEvent.WaitOne(-1, true);
-					if (imageLoaderTaskInfo.kill)
-					{
-						break;
-					}
-					ProcessImageQueueThreaded();
-				}
-				catch (Exception ex)
-				{
-					LogUtil.LogError("ImageLoaderThread Error: " + ex);
-				}
-				finally
-				{
-					imageLoaderTaskInfo.working = false;
-				}
-			}
-		}
-
-		protected void StopThreads()
-		{
-			_threadsRunning = false;
-			if (imageLoaderTask != null)
-			{
-				imageLoaderTask.kill = true;
-				imageLoaderTask.resetEvent.Set();
-				while (imageLoaderTask.thread.IsAlive)
-				{
-				}
-				imageLoaderTask = null;
-			}
-		}
-
-		protected void StartThreads()
-		{
-			if (!_threadsRunning)
-			{
-				_threadsRunning = true;
-				imageLoaderTask = new ImageLoaderTaskInfo();
-				imageLoaderTask.name = "ImageLoaderTask";
-				imageLoaderTask.resetEvent = new AutoResetEvent(false);
-				imageLoaderTask.thread = new Thread(MTTask);
-				imageLoaderTask.thread.Priority = System.Threading.ThreadPriority.Normal;
-				imageLoaderTask.thread.Start(imageLoaderTask);
-			}
-		}
+        // MTTask removed
+        // StopThreads removed
+        // StartThreads removed
 
 		public bool RegisterTextureUse(Texture2D tex)
 		{
@@ -1652,30 +1590,79 @@ namespace VPB
 
 		protected virtual void Update()
 		{
-			StartThreads();
-			if (!imageLoaderTask.working)
+			PostProcessImageQueue();
+            
+            if (queuedImages != null && queuedImages.Count > 0)
 			{
-				PostProcessImageQueue();
-				if (queuedImages != null && queuedImages.Count > 0)
-				{
-					PreprocessImageQueue();
+                // Dispatch loop
+                while (runningTasks < MaxConcurrentTasks)
+                {
+                    if (queuedImages.Count == 0) break;
                     
                     QueuedImage head = queuedImages.Peek();
-                    if (head != null && !head.processed && !head.cancel && (head.webRequestDone || head.webRequest == null))
+                    // Process cancelled/processed items immediately in PostProcess via loop continuation or they get cleaned up
+                    if (head.processed || head.cancel) 
                     {
-					    imageLoaderTask.working = true;
-					    imageLoaderTask.resetEvent.Set();
+                        // If head is finished, we can't do anything here, PostProcess handles it.
+                        // But if PostProcess didn't clear it (e.g. maxPerFrame limit), we might be stuck.
+                        // However, PostProcess clears processed/cancelled items.
+                        // If we are here, head is NOT processed/cancelled?
+                        // Wait, Peek() returns the highest priority. If it's processed, it should be dequeued by PostProcess.
+                        // If PostProcess hit its limit, we might still see it.
+                        // So we should check if we can dispatch something else? 
+                        // No, PriorityQueue doesn't support random access.
+                        // So we must wait for PostProcess to clear it.
+                        break; 
                     }
-				}
+                    
+                    if (head.working)
+                    {
+                        // Already being processed by a task
+                        break; 
+                    }
+
+                    // Check if ready for processing (web request done or local file)
+                    PreprocessImageQueue(); // This might set processed=true or working flags?
+                    // PreprocessImageQueue peeks internally. 
+                    
+                    // Re-peek after preprocess
+                    head = queuedImages.Peek();
+                    if (head == null || head.processed || head.cancel || head.working) break;
+                    
+                    if (head.webRequest != null && !head.webRequestDone) break; // Waiting for web request
+
+                    // Dispatch!
+                    head.working = true;
+                    runningTasks++;
+                    ThreadPool.QueueUserWorkItem((state) => {
+                        try
+                        {
+                            head.Process();
+                        }
+                        catch(Exception ex)
+                        {
+                            head.hadError = true;
+                            head.errorText = ex.Message;
+                        }
+                        finally
+                        {
+                            head.processed = true;
+                            head.working = false;
+                            // Safe decrement? runningTasks is mainly accessed on MainThread update loop, 
+                            // but here we are on background thread.
+                            // We should probably not modify runningTasks here if we want thread safety.
+                            // Better: runningTasks is decremented in Update by counting? 
+                            // No, simpler: Use Interlocked.Decrement
+                            System.Threading.Interlocked.Decrement(ref runningTasks);
+                        }
+                    });
+                }
 			}
 		}
 
 		public virtual void OnDestroy()
 		{
-			if (Application.isPlaying)
-			{
-				StopThreads();
-			}
+            // StopThreads removed
 			if (loadFlag != null)
 			{
 				loadFlag.Raise();
@@ -1687,10 +1674,7 @@ namespace VPB
 
 		protected void OnApplicationQuit()
 		{
-			if (Application.isPlaying)
-			{
-				StopThreads();
-			}
+            // StopThreads removed
 		}
 
 		protected virtual void Awake()

@@ -1013,7 +1013,7 @@ namespace VPB
             activeButtons.Add(btnGO);
         }
 
-        private GameObject CreateNewFileButtonGO()
+        public GameObject CreateNewFileButtonGO()
         {
             if (layoutMode == GalleryLayoutMode.VerticalCard)
                 return CreateNewVerticalCardGO();
@@ -1103,7 +1103,7 @@ namespace VPB
             return btnGO;
         }
 
-        private void BindFileButton(GameObject btnGO, FileEntry file)
+        public void BindFileButton(GameObject btnGO, FileEntry file)
         {
             btnGO.name = "FileButton_" + file.Name;
             

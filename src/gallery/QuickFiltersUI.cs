@@ -113,6 +113,23 @@ namespace VPB
             
             scrollRect.viewport = vpRT;
 
+            // Scrollbar
+            GameObject scrollbarGO = UI.CreateScrollBar(containerGO, 12f, 0f, Scrollbar.Direction.BottomToTop);
+            Scrollbar scrollbar = scrollbarGO.GetComponent<Scrollbar>();
+            
+            RectTransform sbRT = scrollbarGO.GetComponent<RectTransform>();
+            sbRT.anchorMin = new Vector2(1, 0);
+            sbRT.anchorMax = new Vector2(1, 1);
+            sbRT.pivot = new Vector2(1, 0.5f);
+            sbRT.sizeDelta = new Vector2(12f, 0);
+
+            scrollRect.verticalScrollbar = null; // Decouple
+            
+            ScrollbarSync sync = scrollbarGO.AddComponent<ScrollbarSync>();
+            sync.scrollRect = scrollRect;
+            sync.scrollbar = scrollbar;
+            sync.minSizePixels = 20f;
+
             // Content
             scrollContentGO = new GameObject("Content");
             scrollContentGO.transform.SetParent(viewport.transform, false);

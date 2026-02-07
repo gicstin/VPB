@@ -16,6 +16,11 @@ namespace VPB
     public partial class GalleryPanel : MonoBehaviour
 {        public void UpdateLayout()
         {
+            if (backgroundBoxGO != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(backgroundBoxGO.GetComponent<RectTransform>());
+            }
+            Canvas.ForceUpdateCanvases();
             if (!creatorsCached) CacheCreators();
             if (!categoriesCached) CacheCategoryCounts();
 
@@ -211,6 +216,7 @@ namespace VPB
 
             UpdateButtonStates();
             if (actionsPanel != null) actionsPanel.UpdateUI();
+            UpdateFooterLayoutState();
         }
 
         private void UpdateButtonStates()
@@ -238,7 +244,9 @@ namespace VPB
                                      g.transform.IsChildOf(actionsPanel.actionsPaneGO.transform);
 
                 // Also skip side panes (tabs, search, sort) to avoid clipping artifacts on large widths
-                bool isSidePaneChild = (leftTabScrollGO != null && g.transform.IsChildOf(leftTabScrollGO.transform)) ||
+                // Also skip the main scrollbar to ensure reliable dragging/hit detection
+                bool isScrollbar = g.transform.name == "Scrollbar" || g.transform.name == "Handle" || g.transform.name == "Sliding Area";
+                bool isSidePaneChild = isScrollbar || (leftTabScrollGO != null && g.transform.IsChildOf(leftTabScrollGO.transform)) ||
                                      (rightTabScrollGO != null && g.transform.IsChildOf(rightTabScrollGO.transform)) ||
                                      (leftSubTabScrollGO != null && g.transform.IsChildOf(leftSubTabScrollGO.transform)) ||
                                      (rightSubTabScrollGO != null && g.transform.IsChildOf(rightSubTabScrollGO.transform)) ||

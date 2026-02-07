@@ -515,7 +515,7 @@ namespace VPB
 
         // Pagination
         private int currentPage = 0;
-        private int itemsPerPage = 100;
+        // itemsPerPage removed
         private Text paginationText;
         private RectTransform paginationRT;
         private Text hoverPathText;
@@ -534,7 +534,7 @@ namespace VPB
         private GameObject gridSizePlusBtn;
         private int lastTotalItems = 0;
         private int lastTotalPages = 1;
-        private int lastShownCount = 0;
+        // lastShownCount removed
         private int gridColumnCount = 4;
         private float packageManagerUpdateTimer = 0f;
 
@@ -592,7 +592,7 @@ namespace VPB
         // Sorting
         private Dictionary<string, SortState> contentSortStates = new Dictionary<string, SortState>();
 
-        private GalleryLayoutMode layoutMode = GalleryLayoutMode.VerticalCard;
+        private GalleryLayoutMode layoutMode = GalleryLayoutMode.Grid;
         private GameObject footerLayoutBtn;
         private Text footerLayoutBtnText;
         private Image footerLayoutBtnImage;

@@ -130,6 +130,7 @@ namespace VPB
             }
             
             UpdateTabs();
+            UpdateLayout();
 
             // Position it in front of the user if in VR, ONLY ONCE
             if (!hasBeenPositioned)

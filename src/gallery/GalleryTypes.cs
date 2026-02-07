@@ -7,7 +7,7 @@ namespace VPB
     public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource }
     public enum ApplyMode { SingleClick, DoubleClick }
     public enum TabSide { Hidden, Left, Right }
-    public enum GalleryLayoutMode { Grid, VerticalCard, PackageManager }
+    public enum GalleryLayoutMode { Grid, PackageManager, VerticalCard }
     
     public struct CreatorCacheEntry 
     { 
