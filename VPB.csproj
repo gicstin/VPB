@@ -319,7 +319,6 @@
     <Compile Include="src\unity-object-pool\PoolManager.cs" />
     <Compile Include="src\unity-object-pool\Singleton.cs" />
     <Compile Include="src\VamHookPlugin.cs" />
-    <Compile Include="src\VamHookPlugin.PackageManager.cs" />
     <Compile Include="src\VamHookPlugin.Settings.cs" />
     <Compile Include="src\VamHookPlugin.QuickMenu.cs" />
     <Compile Include="src\VamHookPlugin.State.cs" />
@@ -327,7 +326,6 @@
     <Compile Include="src\gallery\Gallery.cs" />
     <Compile Include="src\gallery\GalleryActionsPanel.cs" />
     <Compile Include="src\gallery\GalleryActionTabBase.cs" />
-    <Compile Include="src\gallery\Gallery.PackageManager.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\tabs\GalleryPrimaryActionTab.cs" />
@@ -347,7 +345,6 @@
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.Update.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
-    <Compile Include="src\gallery\GalleryPanel.PackageManager.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.Sorting.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />

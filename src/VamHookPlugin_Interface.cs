@@ -373,26 +373,8 @@ namespace VPB
 
         public void UninstallAll()
         {
-            ScanPackageManagerPackages();
-            OpenPackageManagerGallery();
-        }
-        public void OpenPackageManagerGallery()
-        {
-            if (Gallery.singleton != null)
-            {
-                // Ensure Gallery is open to "All" category (.var files)
-                ShowGallery("All", "var", "");
-
-                // Set layout to Package Manager
-                foreach (var p in Gallery.singleton.Panels)
-                {
-                    if (p.IsVisible)
-                    {
-                        p.SetLayoutMode(GalleryLayoutMode.PackageManager);
-                        break;
-                    }
-                }
-            }
+            // ScanPackageManagerPackages(); // Removed
+            // OpenPackageManagerGallery(); // Removed
         }
         public void OpenHubBrowse()
         {

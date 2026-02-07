@@ -673,7 +673,7 @@ namespace VPB
             paginationFirstBtn = UI.CreateUIButton(centerSection, 40, 40, "|<", 18, 0, 0, AnchorPresets.middleCenter, FirstPage);
             paginationPrev10Btn = UI.CreateUIButton(centerSection, 40, 40, "<<", 18, 0, 0, AnchorPresets.middleCenter, Prev10Page);
             paginationPrevBtn = UI.CreateUIButton(centerSection, 40, 40, "<", 20, 0, 0, AnchorPresets.middleCenter, PrevPage);
-            
+
             GameObject textGO = new GameObject("PageText");
             textGO.transform.SetParent(centerSection.transform, false);
             paginationText = textGO.AddComponent<Text>();
@@ -681,7 +681,7 @@ namespace VPB
             paginationText.fontSize = 18;
             paginationText.color = Color.white;
             paginationText.alignment = TextAnchor.MiddleCenter;
-            paginationText.text = "1 / 1";
+            paginationText.text = "0 Items";
             paginationText.horizontalOverflow = HorizontalWrapMode.Overflow;
             paginationText.verticalOverflow = VerticalWrapMode.Overflow;
             RectTransform textRT = textGO.GetComponent<RectTransform>();
@@ -738,7 +738,7 @@ namespace VPB
             footerRemoveAllHairBtnText = footerRemoveAllHairBtn.GetComponentInChildren<Text>();
             AddTooltip(footerRemoveAllHairBtn, "Remove All Hair from Target");
 
-            // Hover support
+            // Hover support for pagination (Hub mode)
             AddHoverDelegate(paginationFirstBtn);
             AddTooltip(paginationFirstBtn, "First Page");
             AddHoverDelegate(paginationPrev10Btn);
@@ -751,6 +751,7 @@ namespace VPB
             AddTooltip(paginationNext10Btn, "Forward 10 Pages");
             AddHoverDelegate(paginationLastBtn);
             AddTooltip(paginationLastBtn, "Last Page");
+
             AddHoverDelegate(selectAllBtn);
             AddTooltip(selectAllBtn, "Select All");
             AddHoverDelegate(clearSelectionBtn);
@@ -815,31 +816,46 @@ namespace VPB
         {
             if (paginationText == null) return;
 
-            if (layoutMode == GalleryLayoutMode.PackageManager)
+            if (IsHubMode)
             {
-                int totalItems = Mathf.Max(0, lastTotalItems);
-                int totalPages = Mathf.Max(1, lastTotalPages);
-                int page = Mathf.Clamp(currentPage + 1, 1, totalPages);
-
-                paginationText.text = $"{page} / {totalPages} ({totalItems})";
+                // Hub still uses pagination (server-side)
+                paginationText.text = "Page " + (currentPage + 1);
 
                 bool canGoPrev = (currentPage > 0);
-                bool canGoNext = (currentPage < lastTotalPages - 1);
+                // For Hub we assume Next is always possible unless we implement total count
+                bool canGoNext = true;
 
-                if (paginationPrevBtn != null) paginationPrevBtn.GetComponent<Button>().interactable = canGoPrev;
-                if (paginationPrev10Btn != null) paginationPrev10Btn.GetComponent<Button>().interactable = canGoPrev;
-                if (paginationFirstBtn != null) paginationFirstBtn.GetComponent<Button>().interactable = canGoPrev;
+                if (paginationPrevBtn != null) 
+                {
+                    paginationPrevBtn.SetActive(true);
+                    paginationPrevBtn.GetComponent<Button>().interactable = canGoPrev;
+                }
+                if (paginationPrev10Btn != null) 
+                {
+                    paginationPrev10Btn.SetActive(true);
+                    paginationPrev10Btn.GetComponent<Button>().interactable = canGoPrev;
+                }
+                if (paginationFirstBtn != null) 
+                {
+                    paginationFirstBtn.SetActive(true);
+                    paginationFirstBtn.GetComponent<Button>().interactable = canGoPrev;
+                }
 
-                if (paginationNextBtn != null) paginationNextBtn.GetComponent<Button>().interactable = canGoNext;
-                if (paginationNext10Btn != null) paginationNext10Btn.GetComponent<Button>().interactable = canGoNext;
-                if (paginationLastBtn != null) paginationLastBtn.GetComponent<Button>().interactable = canGoNext;
-
-                if (paginationFirstBtn != null) paginationFirstBtn.SetActive(true);
-                if (paginationPrev10Btn != null) paginationPrev10Btn.SetActive(true);
-                if (paginationPrevBtn != null) paginationPrevBtn.SetActive(true);
-                if (paginationNextBtn != null) paginationNextBtn.SetActive(true);
-                if (paginationNext10Btn != null) paginationNext10Btn.SetActive(true);
-                if (paginationLastBtn != null) paginationLastBtn.SetActive(true);
+                if (paginationNextBtn != null) 
+                {
+                    paginationNextBtn.SetActive(true);
+                    paginationNextBtn.GetComponent<Button>().interactable = canGoNext;
+                }
+                if (paginationNext10Btn != null) 
+                {
+                    paginationNext10Btn.SetActive(true);
+                    paginationNext10Btn.GetComponent<Button>().interactable = canGoNext;
+                }
+                if (paginationLastBtn != null) 
+                {
+                    paginationLastBtn.SetActive(true);
+                    paginationLastBtn.GetComponent<Button>().interactable = canGoNext;
+                }
             }
             else
             {
@@ -885,29 +901,31 @@ namespace VPB
 
         private void ToggleLayoutMode()
         {
-            if (layoutMode == GalleryLayoutMode.Grid) layoutMode = GalleryLayoutMode.PackageManager;
+            if (layoutMode == GalleryLayoutMode.Grid) layoutMode = GalleryLayoutMode.List;
             else layoutMode = GalleryLayoutMode.Grid;
             
-            // Handle UI Visibility
-            if (layoutMode == GalleryLayoutMode.PackageManager)
-            {
-                 ShowPackageManagerUI();
-            }
-            else
-            {
-                 HidePackageManagerUI();
-                 if (scrollRect != null) scrollRect.gameObject.SetActive(true);
-            }
+            if (scrollRect != null) scrollRect.gameObject.SetActive(true);
 
             // Immediately update grid component
-            if (contentGO != null && layoutMode != GalleryLayoutMode.PackageManager)
+            if (contentGO != null)
             {
                 RecyclingGridView rgv = contentGO.GetComponent<RecyclingGridView>();
                 if (rgv != null)
                 {
-                    float minSize = 200f;
-                    int cols = gridColumnCount;
-                    rgv.SetAdaptiveConfig(true, minSize, cols, false);
+                    if (layoutMode == GalleryLayoutMode.List)
+                    {
+                        // List mode: 1 column
+                        rgv.SetGridConfig(100f, listRowHeight, 5f, 5f, 1);
+                        rgv.SetAdaptiveConfig(true, 0f, 1, true);
+                    }
+                    else
+                    {
+                        // Grid mode
+                        float minSize = 200f;
+                        int cols = gridColumnCount;
+                        rgv.SetGridConfig(100f, 100f, 10f, 10f, cols);
+                        rgv.SetAdaptiveConfig(true, minSize, cols, false);
+                    }
                 }
             }
 
@@ -920,27 +938,24 @@ namespace VPB
 
             UpdateFooterLayoutState();
             UpdateLayout();
-            if (layoutMode != GalleryLayoutMode.PackageManager)
-            {
-                RefreshFiles(true); // Force full refresh
-            }
+            
+            // Refresh from existing data, don't trigger a new scan
+            RefreshFiles(true); 
         }
 
         private void UpdateFooterLayoutState()
         {
+            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
             Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            Color pmColor = new Color(0.6f, 0.4f, 0.1f, 1f);
 
             if (footerLayoutBtnImage != null)
             {
-                if (layoutMode == GalleryLayoutMode.PackageManager) footerLayoutBtnImage.color = pmColor;
-                else footerLayoutBtnImage.color = inactiveColor;
+                footerLayoutBtnImage.color = (layoutMode == GalleryLayoutMode.List) ? activeColor : inactiveColor;
             }
             
             if (footerLayoutBtnText != null)
             {
-                if (layoutMode == GalleryLayoutMode.PackageManager) footerLayoutBtnText.text = "PM";
-                else footerLayoutBtnText.text = "▤";
+                footerLayoutBtnText.text = (layoutMode == GalleryLayoutMode.List) ? "≡" : "▤";
             }
         }
 
@@ -1754,10 +1769,49 @@ namespace VPB
 
         private void AdjustGridColumns(int delta)
         {
+            RecyclingGridView rgvState = null;
+            if (contentGO != null) rgvState = contentGO.GetComponent<RecyclingGridView>();
+
+            bool isListLike = (layoutMode == GalleryLayoutMode.List);
+            if (!isListLike && rgvState != null)
+            {
+                // Defensive: if the grid is currently configured as a 1-column fixed-height list,
+                // treat +/- as zoom even if layoutMode is temporarily out of sync.
+                if (rgvState.useFixedHeight) isListLike = true;
+            }
+
+            if (isListLike)
+            {
+                try
+                {
+                    UnityEngine.Debug.Log("[VPB] List zoom: layoutMode=" + layoutMode + " fixedColumns=" + (rgvState != null ? rgvState.fixedColumns.ToString() : "null") + " fixedHeight=" + (rgvState != null ? rgvState.useFixedHeight.ToString() : "null") + " delta=" + delta);
+                }
+                catch { }
+
+                // List/Table zoom: +/- changes thumbnail size + row height, NOT columns.
+                // delta: +1 => "-" button (zoom out / smaller), -1 => "+" button (zoom in / larger)
+                float step = 15f;
+                listRowHeight = Mathf.Clamp(listRowHeight - (delta * step), 80f, 400f);
+                listThumbSize = listRowHeight; // Keep square 1:1 based on height
+
+                if (contentGO != null)
+                {
+                    RecyclingGridView rgv = rgvState != null ? rgvState : contentGO.GetComponent<RecyclingGridView>();
+                    if (rgv != null)
+                    {
+                        rgv.fixedColumns = 1;
+                        rgv.SetGridConfig(100f, listRowHeight, 5f, 5f, 1);
+                        rgv.SetAdaptiveConfig(true, 0f, 1, true);
+                        rgv.Refresh();
+                    }
+                }
+                return;
+            }
+
             gridColumnCount = Mathf.Clamp(gridColumnCount + delta, 1, 12);
             if (contentGO != null)
             {
-                RecyclingGridView rgv = contentGO.GetComponent<RecyclingGridView>();
+                RecyclingGridView rgv = rgvState != null ? rgvState : contentGO.GetComponent<RecyclingGridView>();
                 if (rgv != null)
                 {
                     rgv.fixedColumns = gridColumnCount;

@@ -19,25 +19,18 @@ namespace VPB
 
         public void SetLayoutMode(GalleryLayoutMode mode)
         {
-            if (layoutMode == mode && IsPackageManagerUIVisible() == (mode == GalleryLayoutMode.PackageManager)) return;
+            if (layoutMode == mode) return;
             
-            if (mode == GalleryLayoutMode.PackageManager)
+            if (mode == GalleryLayoutMode.List)
             {
                  BenchmarkStartTime = Time.realtimeSinceStartup;
-                 UnityEngine.Debug.Log("[Benchmark] Starting Switch to PM Mode at " + BenchmarkStartTime);
+                 UnityEngine.Debug.Log("[Benchmark] Starting Switch to List Mode at " + BenchmarkStartTime);
             }
 
             layoutMode = mode;
             
-            if (layoutMode == GalleryLayoutMode.PackageManager)
-            {
-                 ShowPackageManagerUI();
-            }
-            else
-            {
-                 HidePackageManagerUI();
-                 if (scrollRect != null) scrollRect.gameObject.SetActive(true);
-            }
+            // ALWAYS use internal UI now
+            if (scrollRect != null) scrollRect.gameObject.SetActive(true);
 
             // Purge buttons as templates changed
             foreach (var go in fileButtonPool) if (go != null) Destroy(go);

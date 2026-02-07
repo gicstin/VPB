@@ -9,6 +9,34 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+
+        private static string FormatBytesForList(long bytes)
+        {
+            if (bytes < 0) bytes = 0;
+            string[] suffix = { "B", "KB", "MB", "GB", "TB" };
+            double d = bytes;
+            int i = 0;
+            while (d >= 1024.0 && i < suffix.Length - 1)
+            {
+                d /= 1024.0;
+                i++;
+            }
+            if (i == 0) return bytes.ToString() + " " + suffix[i];
+            return d.ToString("0.0") + " " + suffix[i];
+        }
+
+        private static int GetDepsCountForList(FileEntry file)
+        {
+            try
+            {
+                if (file is VarFileEntry vfe && vfe.Package != null && vfe.Package.RecursivePackageDependencies != null)
+                {
+                    return vfe.Package.RecursivePackageDependencies.Count;
+                }
+            }
+            catch { }
+            return -1;
+        }
         private float CurrentBottomOffset
         {
             get
@@ -364,16 +392,13 @@ namespace VPB
                             try { VPBConfig.Instance.Save(); } catch { }
                         }
                         UpdateTabs();
-                        if (IsPackageManagerUIVisible()) UpdatePackageManagerCategoryByName(c.name);
                     }, trackedButtons, () => {
                         currentPath = "";
                         currentPaths = null;
                         currentExtension = "";
                         if (titleText != null) titleText.text = "All Categories";
-                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
-                        if (IsPackageManagerUIVisible()) UpdatePackageManagerCategoryByName("");
                     });
                 }
             }
@@ -401,18 +426,14 @@ namespace VPB
                         else currentCreator = cName;
                         categoriesCached = false;
                         tagsCached = false;
-                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
-                        if (IsPackageManagerUIVisible()) UpdatePackageManagerCreatorFilter(currentCreator);
                     }, trackedButtons, () => {
                         currentCreator = "";
                         categoriesCached = false;
                         tagsCached = false;
-                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
-                        if (IsPackageManagerUIVisible()) UpdatePackageManagerCreatorFilter(currentCreator);
                     });
                 }
             }
@@ -431,7 +452,6 @@ namespace VPB
                         if (currentRatingFilter == rating) currentRatingFilter = "";
                         else currentRatingFilter = rating;
                         
-                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
                     }, trackedButtons);
@@ -464,7 +484,6 @@ namespace VPB
 
                     CreateTabButton(container.transform, label, btnColor, isActive, () => {
                         currentAppearanceSourceFilter = key;
-                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
                     }, trackedButtons);
@@ -500,8 +519,7 @@ namespace VPB
                                 else appearanceSubfilter |= flag;
                             }
                             tagsCached = false;
-                            currentPage = 0;
-                            RefreshFiles();
+                                RefreshFiles();
                             UpdateTabs();
                         }, trackedButtons);
                     }
@@ -522,7 +540,6 @@ namespace VPB
                         if (currentSizeFilter == size) currentSizeFilter = "";
                         else currentSizeFilter = size;
                         
-                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
                     }, trackedButtons);
@@ -542,7 +559,6 @@ namespace VPB
                         if (filter == "All Scenes") currentSceneSourceFilter = "";
                         else currentSceneSourceFilter = filter;
                         
-                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
                     }, trackedButtons);
@@ -613,8 +629,7 @@ namespace VPB
                                     else clothingSubfilter |= flag;
                                 }
                                 tagsCached = false;
-                                currentPage = 0;
-                                RefreshFiles();
+                                        RefreshFiles();
                                 UpdateTabs();
                             }, trackedButtons);
                         }
@@ -656,8 +671,7 @@ namespace VPB
                                     else appearanceSubfilter |= flag;
                                 }
                                 tagsCached = false;
-                                currentPage = 0;
-                                RefreshFiles();
+                                        RefreshFiles();
                                 UpdateTabs();
                             }, trackedButtons);
                         }
@@ -676,15 +690,13 @@ namespace VPB
 
                             CreateTabButton(container.transform, "Single (" + posePeopleFacetCountSingle + ")", isSingleActive ? active : inactive, isSingleActive, () => {
                                 posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Single) ? PosePeopleFilter.All : PosePeopleFilter.Single;
-                                currentPage = 0;
-                                RefreshFiles();
+                                        RefreshFiles();
                                 UpdateTabs();
                             }, trackedButtons);
 
                             CreateTabButton(container.transform, "Dual (" + posePeopleFacetCountDual + ")", isDualActive ? active : inactive, isDualActive, () => {
                                 posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Dual) ? PosePeopleFilter.All : PosePeopleFilter.Dual;
-                                currentPage = 0;
-                                RefreshFiles();
+                                        RefreshFiles();
                                 UpdateTabs();
                             }, trackedButtons);
                         }
@@ -737,7 +749,6 @@ namespace VPB
                         if (activeTags.Contains(tag)) activeTags.Remove(tag);
                         else activeTags.Add(tag);
                         
-                        currentPage = 0;
                         RefreshFiles();
                         UpdateTabs();
                     }, trackedButtons);
@@ -1019,7 +1030,7 @@ namespace VPB
             btnGO.transform.SetParent(contentGO.transform, false);
             
             Image img = btnGO.AddComponent<Image>();
-            img.color = Color.gray;
+            img.color = new Color(0.2f, 0.2f, 0.2f, 0.5f);
 
             // Add Hover Border
             btnGO.AddComponent<UIHoverBorder>();
@@ -1090,6 +1101,144 @@ namespace VPB
             UIHoverReveal hover = btnGO.AddComponent<UIHoverReveal>();
             hover.card = cardGO;
             hover.panel = this;
+
+            // List Row (Table mode)
+            GameObject listRowGO = new GameObject("ListRow");
+            listRowGO.transform.SetParent(btnGO.transform, false);
+            listRowGO.SetActive(false);
+            RectTransform listRowRT = listRowGO.AddComponent<RectTransform>();
+            listRowRT.anchorMin = new Vector2(0, 0);
+            listRowRT.anchorMax = new Vector2(1, 1);
+            listRowRT.pivot = new Vector2(0, 0.5f);
+            listRowRT.offsetMin = new Vector2(60, 0);
+            listRowRT.offsetMax = new Vector2(-260, 0);
+
+            VerticalLayoutGroup listVLG = listRowGO.AddComponent<VerticalLayoutGroup>();
+            listVLG.childAlignment = TextAnchor.MiddleLeft;
+            listVLG.childControlHeight = true;
+            listVLG.childControlWidth = true;
+            listVLG.childForceExpandHeight = false;
+            listVLG.childForceExpandWidth = true;
+            listVLG.spacing = 2f;
+            listVLG.padding = new RectOffset(5, 5, 5, 5);
+
+            // Name
+            GameObject listNameGO = new GameObject("Name");
+            listNameGO.transform.SetParent(listRowGO.transform, false);
+            Text listNameText = listNameGO.AddComponent<Text>();
+            listNameText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            listNameText.fontSize = 24;
+            listNameText.fontStyle = FontStyle.Bold;
+            listNameText.color = Color.white;
+            listNameText.alignment = TextAnchor.LowerLeft;
+            listNameText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            listNameText.verticalOverflow = VerticalWrapMode.Truncate;
+            listNameText.raycastTarget = false;
+            LayoutElement listNameLE = listNameGO.AddComponent<LayoutElement>();
+            listNameLE.flexibleWidth = 1;
+            listNameLE.minHeight = 32;
+
+            // Details Row
+            GameObject detailsRowGO = new GameObject("Details");
+            detailsRowGO.transform.SetParent(listRowGO.transform, false);
+            HorizontalLayoutGroup detailsHLG = detailsRowGO.AddComponent<HorizontalLayoutGroup>();
+            detailsHLG.childAlignment = TextAnchor.MiddleLeft;
+            detailsHLG.childControlHeight = true;
+            detailsHLG.childControlWidth = true;
+            detailsHLG.childForceExpandHeight = false;
+            detailsHLG.childForceExpandWidth = false;
+            detailsHLG.spacing = 20f;
+            detailsHLG.padding = new RectOffset(0, 0, 0, 0);
+            LayoutElement detailsLE = detailsRowGO.AddComponent<LayoutElement>();
+            detailsLE.flexibleWidth = 1;
+            detailsLE.minHeight = 24;
+
+            // Helper to create detail text
+            GameObject CreateDetailText(string name, string placeholder, float width)
+            {
+                GameObject go = new GameObject(name);
+                go.transform.SetParent(detailsRowGO.transform, false);
+                Text t = go.AddComponent<Text>();
+                t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                t.fontSize = 18;
+                t.color = new Color(0.75f, 0.75f, 0.75f, 1f);
+                t.alignment = TextAnchor.MiddleLeft;
+                t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                t.verticalOverflow = VerticalWrapMode.Truncate;
+                t.raycastTarget = false;
+                t.text = placeholder;
+                LayoutElement le = go.AddComponent<LayoutElement>();
+                le.preferredWidth = width;
+                le.minWidth = width * 0.5f;
+                return go;
+            }
+
+            CreateDetailText("Size", "Size", 100);
+            CreateDetailText("Date", "Date", 120);
+            CreateDetailText("Deps", "Deps", 100);
+
+            // Rating (Positioned at bottom right, independent of Details row)
+            GameObject ratingGO = new GameObject("Rating");
+            ratingGO.transform.SetParent(btnGO.transform, false);
+            RectTransform ratingRT = ratingGO.AddComponent<RectTransform>();
+            ratingRT.anchorMin = new Vector2(1, 0); // Bottom Right
+            ratingRT.anchorMax = new Vector2(1, 0);
+            ratingRT.pivot = new Vector2(1, 0);
+            ratingRT.sizeDelta = new Vector2(40, 40);
+            ratingRT.anchoredPosition = new Vector2(-2, 2); // Moved to corner
+
+            GameObject starBtnGO = UI.CreateUIButton(ratingGO, 32, 32, "★", 20, 0, 0, AnchorPresets.middleCenter, null);
+            starBtnGO.name = "Star";
+            starBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
+            Text starIconText = starBtnGO.GetComponentInChildren<Text>();
+
+            GameObject selectorGO = new GameObject("RatingSelector");
+            selectorGO.transform.SetParent(btnGO.transform, false);
+            RectTransform selectorRT = selectorGO.AddComponent<RectTransform>();
+            // Left of Star (Star is 40px wide at -2, so -42 left edge. Gap 5px -> -47)
+            selectorRT.anchorMin = new Vector2(1, 0);
+            selectorRT.anchorMax = new Vector2(1, 0);
+            selectorRT.pivot = new Vector2(1, 0);
+            selectorRT.sizeDelta = new Vector2(250, 40);
+            selectorRT.anchoredPosition = new Vector2(-47, 2);
+
+            CanvasGroup selectorCG = selectorGO.AddComponent<CanvasGroup>();
+            selectorCG.alpha = 0f;
+            selectorCG.interactable = false;
+            selectorCG.blocksRaycasts = false;
+
+            Image selectorBg = selectorGO.AddComponent<Image>();
+            selectorBg.color = new Color(0.05f, 0.05f, 0.05f, 0.95f);
+
+            HorizontalLayoutGroup selectorHLG = selectorGO.AddComponent<HorizontalLayoutGroup>();
+            selectorHLG.childAlignment = TextAnchor.MiddleLeft;
+            selectorHLG.childControlHeight = true;
+            selectorHLG.childControlWidth = true;
+            selectorHLG.childForceExpandWidth = true;
+            selectorHLG.childForceExpandHeight = false;
+            selectorHLG.spacing = 1;
+
+            RatingHandler ratingHandler = btnGO.AddComponent<RatingHandler>();
+            for (int i = 0; i <= 5; i++)
+            {
+                int ratingValue = i;
+                string label = i == 0 ? "X" : i.ToString();
+                GameObject optBtnGO = UI.CreateUIButton(selectorGO, 40, 40, label, 16, 0, 0, AnchorPresets.middleCenter, () => ratingHandler.SetRating(ratingValue));
+                optBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
+                optBtnGO.GetComponent<Image>().color = RatingHandler.RatingColors[i];
+                if (i == 0) optBtnGO.GetComponentInChildren<Text>().color = Color.red;
+                else optBtnGO.GetComponentInChildren<Text>().color = Color.black;
+
+                LayoutElement optLE = optBtnGO.AddComponent<LayoutElement>();
+                optLE.minWidth = 0;
+                optLE.flexibleWidth = 1;
+                optLE.preferredHeight = 40;
+                optLE.minHeight = 40;
+                optLE.flexibleHeight = 0;
+            }
+
+            Button starBtn = starBtnGO.GetComponent<Button>();
+            starBtn.onClick.AddListener(() => ratingHandler.ToggleSelector());
             
             // Drag Logic
             UIDraggableItem draggable = btnGO.AddComponent<UIDraggableItem>();
@@ -1100,22 +1249,29 @@ namespace VPB
             return btnGO;
         }
 
-        public void BindFileButton(GameObject btnGO, FileEntry file)
+        public void UpdateFileButtonVisuals(GameObject btnGO, FileEntry file)
         {
-            btnGO.name = "FileButton_" + file.Name;
+            if (btnGO == null || file == null) return;
             
-            // Image - Cached lookup or fast fetch
+            // Image
             Image img = btnGO.GetComponent<Image>();
             bool isSelected = (!string.IsNullOrEmpty(file.Path) && selectedFilePaths.Contains(file.Path));
             
-            img.color = Color.gray;
+            // Semi-translucent for List mode to match gallery style
+            if (layoutMode == GalleryLayoutMode.List)
+            {
+                if (isSelected) img.color = new Color(0.6f, 0.5f, 0.0f, 0.7f);
+                else img.color = new Color(0f, 0f, 0f, 0.4f);
+            }
+            else
+            {
+                if (isSelected) img.color = new Color(0.7f, 0.7f, 0.2f, 1f);
+                else img.color = Color.gray;
+            }
 
             // Handle Selection Outline
-            // Optimize: Get components only once if possible, but pooling makes this tricky without a custom component wrapper
-            // We could add a "FileButtonView" component to cache these references on creation
-            
-            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
             Outline outline = btnGO.GetComponent<Outline>();
+            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
             
             if (outline != null)
             {
@@ -1136,9 +1292,18 @@ namespace VPB
                     hoverBorder.borderSize = isSelected ? 4f : 2f;
                 }
             }
+        }
+
+        public void BindFileButton(GameObject btnGO, FileEntry file)
+        {
+            btnGO.name = "FileButton_" + file.Name;
             
             // Update mapping
+            Image img = btnGO.GetComponent<Image>();
             fileButtonImages[file.Path] = img;
+
+            // Update Visuals
+            UpdateFileButtonVisuals(btnGO, file);
 
             // Button
             Button btn = btnGO.GetComponent<Button>();
@@ -1156,6 +1321,56 @@ namespace VPB
             if (rightClick == null) rightClick = btnGO.AddComponent<UIRightClickDelegate>();
             rightClick.OnRightClick = () => OnFileRightClick(file);
 
+            bool isListMode = (layoutMode == GalleryLayoutMode.List);
+
+            // List Row + Rating selector visibility (List/Table mode)
+            Transform listRowTr = btnGO.transform.Find("ListRow");
+            if (listRowTr != null)
+            {
+                listRowTr.gameObject.SetActive(isListMode);
+                if (isListMode)
+                {
+                    RectTransform listRowRT = listRowTr as RectTransform;
+                    if (listRowRT != null)
+                    {
+                        float leftPad = listThumbSize + 15f;
+                        listRowRT.offsetMin = new Vector2(leftPad, 0);
+                        // Use full width
+                        listRowRT.offsetMax = new Vector2(0, 0);
+                    }
+                }
+            }
+
+            Transform selectorTr = btnGO.transform.Find("RatingSelector");
+            if (selectorTr != null)
+            {
+                selectorTr.gameObject.SetActive(isListMode);
+                if (!isListMode)
+                {
+                    RatingHandler rh = btnGO.GetComponent<RatingHandler>();
+                    if (rh != null) rh.CloseSelector();
+                }
+            }
+
+            // Card Container (Hidden in List mode, Visible in Grid mode? No, Card is for VerticalCard mode which is removed or mapped to Grid if we had it)
+            // Wait, Grid mode uses the old style overlay? Or does Grid mode use Card? 
+            // In the previous code, Grid mode had "Card" active only if VerticalCard.
+            // layoutMode == GalleryLayoutMode.Grid means standard grid which usually has hover reveal or overlay.
+            // Let's check CreateNewFileButtonGO. CardGO is hidden by default.
+            
+            Transform cardTr = btnGO.transform.Find("Card");
+            if (cardTr != null)
+            {
+                // In the new 2-mode system, Grid usually implies the simple thumbnail + optional overlay.
+                // If we want "Grid" to look like cards, we set this true.
+                // But typically Grid = just thumbnail with hover name.
+                // VerticalCard was the one with persistent text below.
+                // Since we only have Grid and List, let's assume Grid means "Thumbnail Grid".
+                
+                // So Card is hidden in both Grid (standard) and List.
+                cardTr.gameObject.SetActive(false);
+            }
+
             // Thumbnail
             Transform thumbTr = btnGO.transform.Find("Thumbnail");
             if (thumbTr == null) thumbTr = btnGO.transform.Find("ThumbContainer/Thumbnail");
@@ -1163,6 +1378,28 @@ namespace VPB
             if (thumbTr != null)
             {
                 if (!thumbTr.gameObject.activeSelf) thumbTr.gameObject.SetActive(true);
+                RectTransform thumbRT = thumbTr as RectTransform;
+                
+                if (isListMode)
+                {
+                    // Full height square on left
+                    thumbRT.anchorMin = new Vector2(0, 0);
+                    thumbRT.anchorMax = new Vector2(0, 1);
+                    thumbRT.pivot = new Vector2(0, 0.5f);
+                    thumbRT.offsetMin = new Vector2(0, 0);
+                    thumbRT.offsetMax = new Vector2(listThumbSize, 0);
+                }
+                else
+                {
+                    // Full thumb (Grid)
+                    thumbRT.anchorMin = Vector2.zero;
+                    thumbRT.anchorMax = Vector2.one;
+                    thumbRT.pivot = new Vector2(0.5f, 0.5f);
+                    thumbRT.anchoredPosition = Vector2.zero;
+                    thumbRT.offsetMin = new Vector2(3, 3);
+                    thumbRT.offsetMax = new Vector2(-3, -3);
+                }
+
                 RawImage thumbImg = thumbTr.GetComponent<RawImage>();
                 thumbImg.texture = null; // Clear prev
                 thumbImg.color = new Color(0, 0, 0, 0); // Transparent until loaded
@@ -1195,6 +1432,84 @@ namespace VPB
                     {
                         labelText.text = nameStr;
                     }
+                }
+            }
+
+            // Rating Visibility (Only for List Mode)
+            Transform ratingTr = btnGO.transform.Find("Rating");
+            if (ratingTr != null)
+            {
+                ratingTr.gameObject.SetActive(isListMode);
+            }
+
+            // List Row Bind
+            if (isListMode)
+            {
+                if (listRowTr != null && !listRowTr.gameObject.activeSelf) listRowTr.gameObject.SetActive(true);
+
+                Transform nameTr = btnGO.transform.Find("ListRow/Name");
+                if (nameTr != null)
+                {
+                    Text t = nameTr.GetComponent<Text>();
+                    if (t != null)
+                    {
+                        if (file is VarFileEntry vfe && vfe.Package != null)
+                        {
+                            string ext = System.IO.Path.GetExtension(file.Name);
+                            t.text = $"{vfe.Package.Uid}.var ({ext})";
+                        }
+                        else
+                        {
+                            t.text = file.Name;
+                        }
+                    }
+                }
+
+                Transform depsTr = btnGO.transform.Find("ListRow/Details/Deps");
+                if (depsTr != null)
+                {
+                    Text t = depsTr.GetComponent<Text>();
+                    if (t != null)
+                    {
+                        int deps = GetDepsCountForList(file);
+                        t.text = deps >= 0 ? ("Deps: " + deps.ToString()) : "";
+                    }
+                }
+
+                Transform sizeTr = btnGO.transform.Find("ListRow/Details/Size");
+                if (sizeTr != null)
+                {
+                    Text t = sizeTr.GetComponent<Text>();
+                    if (t != null) t.text = FormatBytesForList(file.Size);
+                }
+
+                Transform dateTr = btnGO.transform.Find("ListRow/Details/Date");
+                if (dateTr != null)
+                {
+                    Text t = dateTr.GetComponent<Text>();
+                    if (t != null)
+                    {
+                        try { t.text = file.LastWriteTime.ToString("yyyy-MM-dd"); }
+                        catch { t.text = ""; }
+                    }
+                }
+
+                Text starText = null;
+                Transform starBtnTr = btnGO.transform.Find("Rating/Star");
+                if (starBtnTr != null) starText = starBtnTr.GetComponentInChildren<Text>();
+                
+                // Fallback for old layout if needed (though we rebuild buttons)
+                if (starText == null)
+                {
+                     Transform oldStar = btnGO.transform.Find("ListRow/Details/Rating/Star");
+                     if (oldStar != null) starText = oldStar.GetComponentInChildren<Text>();
+                }
+
+                Transform selector2Tr = btnGO.transform.Find("RatingSelector");
+                RatingHandler rh = btnGO.GetComponent<RatingHandler>();
+                if (rh != null && selector2Tr != null && starText != null)
+                {
+                    rh.Init(file, starText, selector2Tr.gameObject);
                 }
             }
             

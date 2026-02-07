@@ -482,13 +482,13 @@ namespace VPB
         
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (card) card.SetActive(true);
+            if (card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid) card.SetActive(true);
             if (panel != null && file != null) panel.SetHoverPath(file);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (card) card.SetActive(false);
+            if (card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid) card.SetActive(false);
             if (panel != null) panel.RestoreSelectedHoverPath();
         }
     }
@@ -826,6 +826,8 @@ namespace VPB
         public bool isAdaptive = false;
         public float minCellSize = 200f;
         public int fixedColumns = 0;
+        public float targetAspectRatio = 1.0f;
+        public bool useFixedHeight = false;
         private float lastRectWidth = -1f;
         private int lastFixedColumns = -1;
 
@@ -908,7 +910,16 @@ namespace VPB
             float cellWidth = (usableWidth - (cols - 1) * spacingX) / cols;
             if (cellWidth < 10f) cellWidth = 10f; // Sanity check
 
-            float cellHeight = cellWidth;
+            float cellHeight;
+            if (useFixedHeight)
+            {
+                cellHeight = itemHeight;
+            }
+            else
+            {
+                if (targetAspectRatio <= 0.01f) targetAspectRatio = 1.0f;
+                cellHeight = cellWidth / targetAspectRatio;
+            }
 
             // Internal update of config members
             itemWidth = cellWidth;
@@ -919,11 +930,12 @@ namespace VPB
             Refresh();
         }
 
-        public void SetAdaptiveConfig(bool adaptive, float minSize, int fixedCols, bool unused)
+        public void SetAdaptiveConfig(bool adaptive, float minSize, int fixedCols, bool fixedHeight)
         {
             isAdaptive = adaptive;
             minCellSize = minSize;
             fixedColumns = fixedCols;
+            useFixedHeight = fixedHeight;
             
             // Force immediate recalculation
             lastRectWidth = -1f; 
@@ -934,6 +946,9 @@ namespace VPB
         {
             itemWidth = width;
             itemHeight = height;
+            if (height > 0) targetAspectRatio = width / height;
+            else targetAspectRatio = 1.0f;
+
             spacingX = spaceX;
             spacingY = spaceY;
             fixedColumns = columns; // Set this as the fixed target

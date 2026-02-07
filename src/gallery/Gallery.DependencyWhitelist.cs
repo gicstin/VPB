@@ -179,7 +179,12 @@ namespace VPB
         {
             if (m_DepWhitelistUGUIRoot != null) return;
 
-            EnsurePkgMgrEventSystem();
+            if (FindObjectOfType<EventSystem>() == null)
+            {
+                var esGo = new GameObject("VPB_EventSystem");
+                esGo.AddComponent<EventSystem>();
+                esGo.AddComponent<StandaloneInputModule>();
+            }
 
             m_DepWhitelistUGUIRoot = new GameObject("VPB_DependencyWhitelistUGUI");
             var canvas = m_DepWhitelistUGUIRoot.AddComponent<Canvas>();

@@ -256,7 +256,6 @@ namespace VPB
                     creatorsCached = false;
                     categoriesCached = false;
                     tagsCached = false;
-                    currentPage = 0;
                     refreshOnNextShow = true;
                 }
                 catch (Exception ex)
@@ -346,7 +345,6 @@ namespace VPB
                     activeTags.Clear();
                     currentSceneSourceFilter = "";
                     currentAppearanceSourceFilter = "";
-                    currentPage = 0;
                     RefreshFiles();
                     UpdateTabs();
                 });
@@ -409,8 +407,7 @@ namespace VPB
                         creatorsCached = false;
                         categoriesCached = false;
                         tagsCached = false;
-                        currentPage = 0;
-                        refreshOnNextShow = true;
+                            refreshOnNextShow = true;
                     }
                     catch (Exception ex)
                     {
@@ -429,8 +426,7 @@ namespace VPB
                         currentCreator = "";
                         categoriesCached = false;
                         tagsCached = false;
-                        currentPage = 0;
-                        RefreshFiles();
+                            RefreshFiles();
                         UpdateTabs();
                     }
                 });
@@ -503,7 +499,6 @@ namespace VPB
                     activeTags.Clear();
                     currentSceneSourceFilter = "";
                     currentAppearanceSourceFilter = "";
-                    currentPage = 0;
                     RefreshFiles();
                     UpdateTabs();
                 });
@@ -553,8 +548,7 @@ namespace VPB
                         currentCreator = "";
                         categoriesCached = false;
                         tagsCached = false;
-                        currentPage = 0;
-                        RefreshFiles();
+                            RefreshFiles();
                         UpdateTabs();
                     }
                 });
@@ -583,7 +577,6 @@ namespace VPB
                     currentCreator = "";
                     categoriesCached = false;
                     tagsCached = false;
-                    currentPage = 0;
                     RefreshFiles();
                     UpdateTabs();
                     UpdateSideButtonsVisibility();
@@ -1390,7 +1383,6 @@ namespace VPB
                     currentCreator = "";
                     categoriesCached = false;
                     tagsCached = false;
-                    currentPage = 0;
                     RefreshFiles();
                     UpdateTabs();
                     UpdateSideButtonsVisibility();

@@ -89,7 +89,6 @@ namespace VPB
                 activeTags.Clear();
                 currentSceneSourceFilter = "";
                 currentAppearanceSourceFilter = "";
-                currentPage = 0;
             }
             else if (packagesChanged)
             {
@@ -227,13 +226,6 @@ namespace VPB
             nameFilter = f;
             nameFilterLower = string.IsNullOrEmpty(f) ? "" : f.ToLowerInvariant();
             
-            if (layoutMode == GalleryLayoutMode.PackageManager)
-            {
-                UpdatePackageManagerFilter(nameFilter);
-                return;
-            }
-
-            currentPage = 0;
             RefreshFiles();
         }
 
@@ -302,7 +294,7 @@ namespace VPB
             bool selectionChanged = false;
 
             // Update selection set (Ctrl toggle / Shift range / single)
-            if (shift && lastPageFiles != null && lastPageFiles.Count > 0)
+            if (shift && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
             {
                 string anchorPath = selectionAnchorPath;
                 if (string.IsNullOrEmpty(anchorPath)) anchorPath = selectedPath;
@@ -310,9 +302,9 @@ namespace VPB
 
                 int anchorIndex = -1;
                 int clickIndex = -1;
-                for (int i = 0; i < lastPageFiles.Count; i++)
+                for (int i = 0; i < currentFilteredFiles.Count; i++)
                 {
-                    var f = lastPageFiles[i];
+                    var f = currentFilteredFiles[i];
                     if (f == null || string.IsNullOrEmpty(f.Path)) continue;
                     if (anchorIndex < 0 && string.Equals(f.Path, anchorPath, StringComparison.OrdinalIgnoreCase)) anchorIndex = i;
                     if (clickIndex < 0 && string.Equals(f.Path, file.Path, StringComparison.OrdinalIgnoreCase)) clickIndex = i;
@@ -336,7 +328,7 @@ namespace VPB
 
                     for (int i = lo; i <= hi; i++)
                     {
-                        var f = lastPageFiles[i];
+                        var f = currentFilteredFiles[i];
                         if (f == null || string.IsNullOrEmpty(f.Path)) continue;
                         if (selectedFilePaths.Add(f.Path))
                         {
@@ -405,7 +397,7 @@ namespace VPB
                     bool success = actionsPanel.ExecuteAutoAction();
                     if (!success)
                     {
-                        // actionsPanel.Open();
+                        // No auto action available
                     }
                 }
                 else if (isScene)
@@ -417,21 +409,46 @@ namespace VPB
 
         private void RefreshSelectionVisuals()
         {
-            foreach (var btn in activeButtons)
+            // Iterate over active buttons in the recycling grid content
+            if (recyclingGrid != null && recyclingGrid.content != null)
             {
-                if (btn == null) continue;
-                
-                if (btn.name.StartsWith("FileButton_"))
+                foreach (Transform child in recyclingGrid.content)
                 {
-                    var diag = btn.GetComponent<UIDraggableItem>();
-                    if (diag != null && diag.FileEntry != null)
+                    if (!child.gameObject.activeSelf) continue;
+                    GameObject btn = child.gameObject;
+                    
+                    if (btn.name.StartsWith("FileButton_"))
                     {
-                        BindFileButton(btn, diag.FileEntry);
+                        var diag = btn.GetComponent<UIDraggableItem>();
+                        if (diag != null && diag.FileEntry != null)
+                        {
+                            UpdateFileButtonVisuals(btn, diag.FileEntry);
+                        }
                     }
+                    
+                    var ratingHandler = btn.GetComponent<RatingHandler>();
+                    if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
-                
-                var ratingHandler = btn.GetComponent<RatingHandler>();
-                if (ratingHandler != null) ratingHandler.CloseSelector();
+            }
+            // Fallback for non-recycled items (if any legacy usage remains)
+            else 
+            {
+                foreach (var btn in activeButtons)
+                {
+                    if (btn == null) continue;
+                    
+                    if (btn.name.StartsWith("FileButton_"))
+                    {
+                        var diag = btn.GetComponent<UIDraggableItem>();
+                        if (diag != null && diag.FileEntry != null)
+                        {
+                            UpdateFileButtonVisuals(btn, diag.FileEntry);
+                        }
+                    }
+                    
+                    var ratingHandler = btn.GetComponent<RatingHandler>();
+                    if (ratingHandler != null) ratingHandler.CloseSelector();
+                }
             }
         }
 

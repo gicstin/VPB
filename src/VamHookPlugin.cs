@@ -1045,7 +1045,6 @@ namespace VPB
             {
                 m_PendingAutoLoadRefresh = false;
                 Refresh();
-                ScanPackageManagerPackages();
             }
 
             float unscaledDt = Time.unscaledDeltaTime;
@@ -2968,93 +2967,6 @@ namespace VPB
             }
         }
         
-        private void SetGroupChecked(string packageId, bool newState)
-        {
-            string groupId = FileManager.PackageIDToPackageGroupID(packageId);
-            int count = 0;
-            foreach (var item in m_AddonList)
-            {
-                if (FileManager.PackageIDToPackageGroupID(item.Uid).Equals(groupId, StringComparison.OrdinalIgnoreCase))
-                {
-                    item.Checked = newState;
-                    count++;
-                }
-            }
-            foreach (var item in m_AllList)
-            {
-                if (FileManager.PackageIDToPackageGroupID(item.Uid).Equals(groupId, StringComparison.OrdinalIgnoreCase))
-                {
-                    item.Checked = newState;
-                    count++;
-                }
-            }
-            m_PkgMgrStatusMessage = string.Format("{0} {1} items in group {2}", newState ? "Selected" : "Unselected", count, groupId);
-            m_PkgMgrStatusTimer = Time.realtimeSinceStartup + 3f;
-        }
-
-        private void CopyGroupNames(string packageId)
-        {
-            string groupId = FileManager.PackageIDToPackageGroupID(packageId);
-            System.Collections.Generic.List<string> names = new System.Collections.Generic.List<string>();
-            foreach (var item in m_AddonList)
-            {
-                if (FileManager.PackageIDToPackageGroupID(item.Uid).Equals(groupId, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!names.Contains(item.Uid)) names.Add(item.Uid);
-                }
-            }
-            foreach (var item in m_AllList)
-            {
-                if (FileManager.PackageIDToPackageGroupID(item.Uid).Equals(groupId, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!names.Contains(item.Uid)) names.Add(item.Uid);
-                }
-            }
-            if (names.Count > 0)
-            {
-                GUIUtility.systemCopyBuffer = string.Join("\n", names.ToArray());
-                m_PkgMgrStatusMessage = string.Format("Copied {0} group names to clipboard.", names.Count);
-                m_PkgMgrStatusTimer = Time.realtimeSinceStartup + 3f;
-            }
-        }
-
-        private void CopyGroupDependenciesDeep(string packageId)
-        {
-            string groupId = FileManager.PackageIDToPackageGroupID(packageId);
-            System.Collections.Generic.HashSet<string> allDeps = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            
-            System.Collections.Generic.List<string> uids = new System.Collections.Generic.List<string>();
-            foreach (var item in m_AddonList)
-            {
-                if (FileManager.PackageIDToPackageGroupID(item.Uid).Equals(groupId, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!uids.Contains(item.Uid)) uids.Add(item.Uid);
-                }
-            }
-            foreach (var item in m_AllList)
-            {
-                if (FileManager.PackageIDToPackageGroupID(item.Uid).Equals(groupId, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!uids.Contains(item.Uid)) uids.Add(item.Uid);
-                }
-            }
-
-            foreach (var uid in uids)
-            {
-                var deps = FileManager.GetDependenciesDeep(uid, 2);
-                foreach (var dep in deps) allDeps.Add(dep);
-            }
-
-            if (allDeps.Count > 0)
-            {
-                string[] depArray = new string[allDeps.Count];
-                allDeps.CopyTo(depArray);
-                GUIUtility.systemCopyBuffer = string.Join("\n", depArray);
-                m_PkgMgrStatusMessage = string.Format("Copied {0} unique deep dependencies for group to clipboard.", allDeps.Count);
-                m_PkgMgrStatusTimer = Time.realtimeSinceStartup + 3f;
-            }
-        }
-
         public class ButtonHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
         {
             public UIDynamicButton targetButton;

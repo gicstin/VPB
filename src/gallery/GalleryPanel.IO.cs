@@ -644,12 +644,6 @@ namespace VPB
 
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false)
         {
-            if (layoutMode == GalleryLayoutMode.PackageManager)
-            {
-                UpdatePackageManagerZoom();
-                return;
-            }
-            
             if (IsHubMode)
             {
                 RefreshHubItems();
@@ -671,7 +665,6 @@ namespace VPB
             // Reset pose facet counts for this refresh
             posePeopleFacetCountSingle = 0;
             posePeopleFacetCountDual = 0;
-            // posePeopleFacetUnknownCount removed (unused)
             
             if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
             {
@@ -685,9 +678,17 @@ namespace VPB
                 if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
                 if (recyclingGrid != null)
                 {
-                    float minSize = 200f;
-                    recyclingGrid.SetGridConfig(100, 100, 10f, 10f, gridColumnCount);
-                    recyclingGrid.SetAdaptiveConfig(true, minSize, gridColumnCount, false);
+                    if (layoutMode == GalleryLayoutMode.List)
+                    {
+                        recyclingGrid.SetGridConfig(100f, listRowHeight, 5f, 5f, 1);
+                        recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true);
+                    }
+                    else
+                    {
+                        // Grid mode
+                        recyclingGrid.SetGridConfig(100f, 100f, 10f, 10f, gridColumnCount);
+                        recyclingGrid.SetAdaptiveConfig(true, 200f, gridColumnCount, false);
+                    }
                     recyclingGrid.SetItemCount(0); // Clear initially
                 }
             }
@@ -1059,14 +1060,23 @@ namespace VPB
                 int cols = gridColumnCount;
                 
                 // Initialize spacing and adaptive config
-                recyclingGrid.SetGridConfig(100, 100, 10f, 10f, cols);
-                recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false);
+                if (layoutMode == GalleryLayoutMode.List)
+                {
+                    // List/Table mode: ALWAYS 1 column; +/- controls row height/thumb size.
+                    recyclingGrid.fixedColumns = 1;
+                    recyclingGrid.SetGridConfig(100f, listRowHeight, 5f, 5f, 1);
+                    recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true);
+                }
+                else
+                {
+                    recyclingGrid.SetGridConfig(100, 100, 10f, 10f, cols);
+                    recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false);
+                }
                 recyclingGrid.SetItemCount(currentFilteredFiles.Count);
             }
             
             // We still need to clear activeButtons if they were used outside recycling grid, 
             // but RecyclingGridView manages its own pool now.
-            // However, we should clean up any old buttons that might be hanging around from before the switch.
             foreach (var btn in activeButtons) 
             {
                 if (btn != null) Destroy(btn);

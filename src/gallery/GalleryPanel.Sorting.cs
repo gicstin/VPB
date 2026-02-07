@@ -21,7 +21,6 @@ namespace VPB
                 UpdateSortButtonText(fileSortBtnText, restore);
                 SyncRatingSortToggleState();
 
-                currentPage = 0;
                 RefreshFiles();
                 return;
             }
@@ -35,7 +34,6 @@ namespace VPB
             UpdateSortButtonText(fileSortBtnText, state);
             SyncRatingSortToggleState();
 
-            currentPage = 0;
             RefreshFiles();
         }
 
@@ -91,9 +89,7 @@ namespace VPB
             
             if (context == "Files") 
             {
-                currentPage = 0;
                 RefreshFiles();
-                if (IsPackageManagerUIVisible()) UpdatePackageManagerSort(context);
             }
             else UpdateTabs();
         }
@@ -114,9 +110,7 @@ namespace VPB
             
             if (context == "Files") 
             {
-                currentPage = 0;
                 RefreshFiles();
-                if (IsPackageManagerUIVisible()) UpdatePackageManagerSort(context);
             }
             else UpdateTabs();
         }

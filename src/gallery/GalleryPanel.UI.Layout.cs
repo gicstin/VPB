@@ -205,15 +205,6 @@ namespace VPB
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yShift);
             }
 
-            if (packageManagerContainer != null)
-            {
-                RectTransform rt = packageManagerContainer.GetComponent<RectTransform>();
-                // Match horizontal offsets with contentScrollRT (dynamic side panels)
-                // Use bottomOffset (60) to align with grid view, clearing the footer
-                rt.offsetMin = new Vector2(leftOffset, bottomOffset);
-                rt.offsetMax = new Vector2(rightOffset, topOffset);
-            }
-
             UpdateButtonStates();
             if (actionsPanel != null) actionsPanel.UpdateUI();
             UpdateFooterLayoutState();

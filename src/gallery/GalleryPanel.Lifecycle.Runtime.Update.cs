@@ -13,56 +13,7 @@ namespace VPB
         {
             if (canvas != null && VPBConfig.Instance != null)
             {
-                try
-                {
-                    if (false && Input.GetKeyDown(KeyCode.F3))
-                    {
-                        FileEntry fe = null;
-                        try
-                        {
-                            if (selectedFiles != null && selectedFiles.Count > 0) fe = selectedFiles[0];
-                        }
-                        catch { }
-
-                        string pkgPath = "";
-                        try
-                        {
-                            // If selecting a file inside a VAR, the path looks like: <varPath>:/<internalPath>
-                            // e.g. AllPackages/foo.bar.1.var:/Saves/scene/x.json
-                            if (fe is VarFileEntry vfe && vfe.Package != null)
-                            {
-                                pkgPath = vfe.Package.Path;
-                            }
-                            else
-                            {
-                                string p = fe != null ? (fe.Path ?? "") : "";
-                                int idx = !string.IsNullOrEmpty(p) ? p.IndexOf(":/", StringComparison.Ordinal) : -1;
-                                if (idx > 0) pkgPath = p.Substring(0, idx);
-                                else pkgPath = p;
-                            }
-                        }
-                        catch { }
-
-                        string selectedPath = fe != null ? (fe.Path ?? "") : "";
-                        string selectedLower = selectedPath.ToLowerInvariant();
-
-                        if (!string.IsNullOrEmpty(selectedLower) && selectedLower.EndsWith(".json"))
-                        {
-                            ShowTemporaryStatus("Caching scene textures...", 2f);
-                            NativeTextureOnDemandCache.TryBuildSceneCacheOnDemand(this, selectedPath);
-                        }
-                        else if (!string.IsNullOrEmpty(pkgPath) && pkgPath.ToLowerInvariant().EndsWith(".var"))
-                        {
-                            ShowTemporaryStatus("Building texture cache...", 2f);
-                            NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, pkgPath);
-                        }
-                        else
-                        {
-                            ShowTemporaryStatus("Select a .var package or scene .json first", 2f);
-                        }
-                    }
-                }
-                catch { }
+                HandleKeyboardInput();
 
                 try
                 {
@@ -657,17 +608,6 @@ namespace VPB
                     if (pointerDotGO.activeSelf) pointerDotGO.SetActive(false);
                 }
             }
-
-            // Package Manager Auto-Update (e.g. while scanning)
-            if (layoutMode == GalleryLayoutMode.PackageManager && IsPackageManagerUIVisible())
-            {
-                packageManagerUpdateTimer += Time.unscaledDeltaTime;
-                if (packageManagerUpdateTimer >= 1.0f) // Update once per second
-                {
-                    packageManagerUpdateTimer = 0f;
-                    UpdatePackageManagerPage();
-                }
-            }
         }
 
         public void TriggerCurvatureRefresh()
@@ -688,6 +628,140 @@ namespace VPB
                 canvas.transform.position = cam.position + cam.forward * 1.5f;
                 canvas.transform.rotation = Quaternion.LookRotation(canvas.transform.position - cam.position, Vector3.up);
                 offsetsInitialized = false; // Reset follow offsets
+            }
+        }
+
+        private void HandleKeyboardInput()
+        {
+            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
+            {
+                if (EventSystem.current.currentSelectedGameObject.GetComponent<InputField>() != null) return;
+            }
+
+            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            bool a = Input.GetKeyDown(KeyCode.A);
+
+            if (ctrl && a)
+            {
+                // Select All
+                if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
+                
+                selectedFiles.Clear();
+                selectedFilePaths.Clear();
+                foreach (var f in currentFilteredFiles)
+                {
+                    selectedFiles.Add(f);
+                    selectedFilePaths.Add(f.Path);
+                }
+                
+                RefreshSelectionVisuals();
+                UpdatePaginationText();
+                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
+                return;
+            }
+
+            int move = 0;
+            if (Input.GetKeyDown(KeyCode.UpArrow)) move = -1;
+            else if (Input.GetKeyDown(KeyCode.DownArrow)) move = 1;
+
+            int moveH = 0;
+            if (Input.GetKeyDown(KeyCode.LeftArrow)) moveH = -1;
+            else if (Input.GetKeyDown(KeyCode.RightArrow)) moveH = 1;
+
+            if (move == 0 && moveH == 0) return;
+            
+            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
+
+            // Find current index in currentFilteredFiles (visible page)
+            int currentIndex = -1;
+            
+            // Prefer anchor path if available for navigation continuity
+            string navPath = !string.IsNullOrEmpty(selectionAnchorPath) ? selectionAnchorPath : selectedPath;
+            
+            if (!string.IsNullOrEmpty(navPath))
+            {
+                currentIndex = currentFilteredFiles.FindIndex(f => f.Path == navPath);
+            }
+
+            if (currentIndex < 0) 
+            {
+                currentIndex = 0;
+            }
+
+            int newIndex = currentIndex;
+
+            if (layoutMode == GalleryLayoutMode.List)
+            {
+                newIndex += move; 
+                // Ignore horizontal in list mode for now
+            }
+            else // Grid
+            {
+                 int cols = gridColumnCount;
+                 if (cols < 1) cols = 4; // Fallback
+
+                 if (move != 0) newIndex += move * cols;
+                 if (moveH != 0) newIndex += moveH;
+            }
+
+            // Clamp
+            if (newIndex < 0) newIndex = 0;
+            if (newIndex >= currentFilteredFiles.Count) newIndex = currentFilteredFiles.Count - 1;
+
+            if (newIndex != currentIndex || (selectedFiles.Count == 0))
+            {
+                FileEntry newFile = currentFilteredFiles[newIndex];
+                
+                if (shift)
+                {
+                    // Range Select
+                    string anchor = selectionAnchorPath;
+                    int anchorIndex = -1;
+                    if (!string.IsNullOrEmpty(anchor)) anchorIndex = currentFilteredFiles.FindIndex(f => f.Path == anchor);
+                    
+                    if (anchorIndex < 0) anchorIndex = currentIndex; 
+
+                    int lo = Mathf.Min(anchorIndex, newIndex);
+                    int hi = Mathf.Max(anchorIndex, newIndex);
+
+                    if (!ctrl)
+                    {
+                        selectedFiles.Clear();
+                        selectedFilePaths.Clear();
+                    }
+
+                    for (int i = lo; i <= hi; i++)
+                    {
+                        var f = currentFilteredFiles[i];
+                        if (selectedFilePaths.Add(f.Path))
+                        {
+                            selectedFiles.Add(f);
+                        }
+                    }
+                }
+                else
+                {
+                    // Single Select (or Toggle with Ctrl)
+                    if (!ctrl)
+                    {
+                        selectedFiles.Clear();
+                        selectedFilePaths.Clear();
+                    }
+                    
+                    if (selectedFilePaths.Add(newFile.Path))
+                    {
+                        selectedFiles.Add(newFile);
+                    }
+                    selectionAnchorPath = newFile.Path; // Move anchor
+                }
+
+                selectedPath = newFile.Path;
+                selectedHubItem = null;
+                SetHoverPath(newFile);
+                RefreshSelectionVisuals();
+                UpdatePaginationText();
+                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
             }
         }
     }

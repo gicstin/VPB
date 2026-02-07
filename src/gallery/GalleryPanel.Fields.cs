@@ -515,7 +515,6 @@ namespace VPB
 
         // Pagination
         private int currentPage = 0;
-        // itemsPerPage removed
         private Text paginationText;
         private RectTransform paginationRT;
         private Text hoverPathText;
@@ -536,7 +535,9 @@ namespace VPB
         private int lastTotalPages = 1;
         // lastShownCount removed
         private int gridColumnCount = 4;
-        private float packageManagerUpdateTimer = 0f;
+
+        private float listThumbSize = 100f;
+        private float listRowHeight = 100f;
 
         // Apply Mode
         public ApplyMode ItemApplyMode = ApplyMode.DoubleClick;
@@ -554,7 +555,7 @@ namespace VPB
         public List<FileEntry> selectedFiles = new List<FileEntry>();
         private HashSet<string> selectedFilePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private string selectionAnchorPath = null;
-        private List<FileEntry> lastPageFiles = new List<FileEntry>();
+
         private List<FileEntry> lastFilteredFiles = new List<FileEntry>();
         public FileEntry selectedFile
         {
@@ -592,7 +593,7 @@ namespace VPB
         // Sorting
         private Dictionary<string, SortState> contentSortStates = new Dictionary<string, SortState>();
 
-        private GalleryLayoutMode layoutMode = GalleryLayoutMode.Grid;
+        public GalleryLayoutMode layoutMode = GalleryLayoutMode.Grid;
         private GameObject footerLayoutBtn;
         private Text footerLayoutBtnText;
         private Image footerLayoutBtnImage;
