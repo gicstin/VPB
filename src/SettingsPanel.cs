@@ -41,6 +41,9 @@ namespace VPB
         private float pendingMovementThreshold;
         private float backupMovementThreshold;
 
+        private float pendingBringToFrontDistance;
+        private float backupBringToFrontDistance;
+
         private bool pendingEnableCurvature;
         private bool backupEnableCurvature;
 
@@ -61,6 +64,9 @@ namespace VPB
         
         private bool pendingIsDevMode;
         private bool backupIsDevMode;
+
+        private bool pendingEnableAutoFixedGallery;
+        private bool backupEnableAutoFixedGallery;
 
         private GameObject tooltipGO;
         private Text tooltipText;
@@ -117,6 +123,9 @@ namespace VPB
             pendingMovementThreshold = VPBConfig.Instance.MovementThreshold;
             backupMovementThreshold = VPBConfig.Instance.MovementThreshold;
 
+            pendingBringToFrontDistance = VPBConfig.Instance.BringToFrontDistance;
+            backupBringToFrontDistance = VPBConfig.Instance.BringToFrontDistance;
+
             pendingEnableCurvature = VPBConfig.Instance.EnableCurvature;
             backupEnableCurvature = VPBConfig.Instance.EnableCurvature;
 
@@ -137,6 +146,9 @@ namespace VPB
 
             pendingIsDevMode = VPBConfig.Instance.IsDevMode;
             backupIsDevMode = VPBConfig.Instance.IsDevMode;
+
+            pendingEnableAutoFixedGallery = VPBConfig.Instance.EnableAutoFixedGallery;
+            backupEnableAutoFixedGallery = VPBConfig.Instance.EnableAutoFixedGallery;
 
             RectTransform rt = settingsPaneRT;
             if (onRight)
@@ -171,6 +183,7 @@ namespace VPB
             VPBConfig.Instance.FollowEyeHeight = backupFollowEyeHeight;
             VPBConfig.Instance.ReorientStartAngle = backupReorientStartAngle;
             VPBConfig.Instance.MovementThreshold = backupMovementThreshold;
+            VPBConfig.Instance.BringToFrontDistance = backupBringToFrontDistance;
             VPBConfig.Instance.EnableCurvature = backupEnableCurvature;
             VPBConfig.Instance.CurvatureIntensity = backupCurvatureIntensity;
             VPBConfig.Instance.EnableGalleryFade = backupEnableGalleryFade;
@@ -178,6 +191,7 @@ namespace VPB
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
+            VPBConfig.Instance.EnableAutoFixedGallery = backupEnableAutoFixedGallery;
             VPBConfig.Instance.TriggerChange();
         }
 
@@ -235,6 +249,7 @@ namespace VPB
                 VPBConfig.Instance._followEyeHeight = pendingFollowEyeHeight;
                 VPBConfig.Instance.ReorientStartAngle = pendingReorientStartAngle;
                 VPBConfig.Instance.MovementThreshold = pendingMovementThreshold;
+                VPBConfig.Instance.BringToFrontDistance = pendingBringToFrontDistance;
                 VPBConfig.Instance.EnableCurvature = pendingEnableCurvature;
                 VPBConfig.Instance.CurvatureIntensity = pendingCurvatureIntensity;
                 VPBConfig.Instance.EnableGalleryFade = pendingEnableGalleryFade;
@@ -242,6 +257,7 @@ namespace VPB
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
                 VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
                 VPBConfig.Instance.IsDevMode = pendingIsDevMode;
+                VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
                 VPBConfig.Instance.Save();
                 
                 isSettingsOpen = false;
@@ -366,6 +382,29 @@ namespace VPB
                     VPBConfig.Instance.MovementThreshold = val;
                     VPBConfig.Instance.TriggerChange();
                 }, "The distance you must move before the panel updates its position. Higher values provide more stable 'discrete' updates.");
+
+                // Bring to Front Distance
+                CreateSliderSetting("Bring Front Dist", pendingBringToFrontDistance, 0.5f, 2.5f, (val) => {
+                    pendingBringToFrontDistance = val;
+                    VPBConfig.Instance.BringToFrontDistance = val;
+                }, "The distance (in meters) from your view where panels will appear when using 'Bring to Front'.");
+            }
+
+            // CATEGORY: Desktop
+            CreateHeader("Desktop");
+            CreateToggleSetting("Startup Gallery (Fixed)", pendingEnableAutoFixedGallery, (val) => {
+                pendingEnableAutoFixedGallery = val;
+                VPBConfig.Instance.EnableAutoFixedGallery = val;
+                VPBConfig.Instance.TriggerChange();
+            }, "When enabled, a pinned (Fixed) gallery pane with Autohide enabled will be automatically created on the right side of the screen when the plugin starts.");
+
+            if (isFixed)
+            {
+                // Bring to Front Distance (for Fixed Mode too, as requested)
+                CreateSliderSetting("Bring Front Dist", pendingBringToFrontDistance, 0.5f, 2.5f, (val) => {
+                    pendingBringToFrontDistance = val;
+                    VPBConfig.Instance.BringToFrontDistance = val;
+                }, "The distance (in meters) from your view where panels will appear when using 'Bring to Front'.");
             }
 
             if (VPBConfig.Instance.IsDevMode)

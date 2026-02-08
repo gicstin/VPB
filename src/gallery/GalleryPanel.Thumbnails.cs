@@ -103,6 +103,9 @@ namespace VPB
 
             if (string.IsNullOrEmpty(imgPath)) return;
 
+            // Debug Log
+            // LogUtil.Log($"[VPB] LoadThumbnail requested for {file.Name} (GroupId: {currentLoadingGroupId})");
+
             if (CustomImageLoaderThreaded.singleton == null) return;
 
             string expectedTag = currentLoadingGroupId + "|" + imgPath;

@@ -207,26 +207,35 @@ namespace VPB
             PushPage(title, options); // Initial page
             
             Camera cam = Camera.main;
-            if (cam != null)
+            if (cam == null && SuperController.singleton != null && SuperController.singleton.centerCameraTarget != null)
+                cam = SuperController.singleton.centerCameraTarget.GetComponent<Camera>();
+
+            Transform camTrans = cam != null ? cam.transform : null;
+            if (camTrans == null && SuperController.singleton != null && SuperController.singleton.centerCameraTarget != null)
+                camTrans = SuperController.singleton.centerCameraTarget.transform;
+
+            if (camTrans != null)
             {
-                Vector3 dir = position - cam.transform.position;
+                float dist = 2.0f;
+                if (VPBConfig.Instance != null) dist = VPBConfig.Instance.BringToFrontDistance;
+
+                Vector3 dir = position - camTrans.position;
                 if (dir.sqrMagnitude < 0.0001f)
                 {
-                    dir = cam.transform.forward;
+                    dir = camTrans.forward;
                 }
-                position = cam.transform.position + dir.normalized * 2.0f;
+                position = camTrans.position + dir.normalized * dist;
             }
 
             transform.position = position;
             if (canvasGO != null) canvasGO.SetActive(true);
             
-            // Face camera
-            if (cam != null)
+            // Face camera directly
+            if (camTrans != null)
             {
-                Vector3 lookPos = transform.position - cam.transform.position;
-                lookPos.y = 0; // Keep vertical? Or face directly?
+                Vector3 lookPos = transform.position - camTrans.position;
                 if (lookPos != Vector3.zero)
-                    transform.rotation = Quaternion.LookRotation(lookPos);
+                    transform.rotation = Quaternion.LookRotation(lookPos, Vector3.up);
             }
             
             // Ensure main object is active

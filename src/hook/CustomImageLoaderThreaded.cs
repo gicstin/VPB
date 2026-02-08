@@ -28,6 +28,7 @@ namespace VPB
                 linear = false;
                 processed = false;
                 preprocessed = false;
+                decodedFromFastPath = false;
                 loadedFromGalleryCache = false;
                 loadedFromCache = false;
                 cancel = false;
@@ -89,6 +90,7 @@ namespace VPB
 			public bool loadedFromGalleryCache;
 			public bool loadedFromCache;
 			public bool loadedFromDownscaledCache;
+            public bool decodedFromFastPath;
 			public bool cancel;
 
 			public bool finished;
@@ -586,6 +588,24 @@ namespace VPB
                             height = targetHeight;
                         }
 
+                        // Fast path: if no resizing and no transforms, use texture directly
+                        bool sizeMatch = (targetWidth == origWidth && targetHeight == origHeight);
+                        bool noTransforms = !isNormalMap && !invert && !createAlphaFromGrayscale && !createNormalFromBump;
+                        
+                        if (sizeMatch && noTransforms)
+                        {
+                            tex = tempTex;
+                            textureFormat = tex.format;
+                            width = tex.width;
+                            height = tex.height;
+                            decodedFromFastPath = true;
+                            
+                            ByteArrayPool.Return(raw);
+                            raw = null;
+                            needsDecoding = false;
+                            return;
+                        }
+
                         Texture2D outputTex = tempTex;
                         bool destroyedTemp = false;
 
@@ -769,12 +789,16 @@ namespace VPB
 				}
 
 				bool canCompress = compress && !loadedFromGalleryCache && width > 0 && height > 0 && IsPowerOfTwo((uint)width) && IsPowerOfTwo((uint)height);
-				CreateTexture();
-                if (tex == null)
+				
+                if (!decodedFromFastPath)
                 {
-                    LogUtil.LogError("Failed to create texture in Finish() for " + imgPath);
-                    hadError = true;
-                    return;
+    				CreateTexture();
+                    if (tex == null)
+                    {
+                        LogUtil.LogError("Failed to create texture in Finish() for " + imgPath);
+                        hadError = true;
+                        return;
+                    }
                 }
 
 				if (preprocessed)
@@ -802,6 +826,14 @@ namespace VPB
 						try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
 					}
 				}
+                else if (decodedFromFastPath)
+                {
+                    tex.Apply(createMipMaps, !canCompress);
+                    if (canCompress && tex.format != TextureFormat.DXT1 && tex.format != TextureFormat.DXT5)
+                    {
+                        try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
+                    }
+                }
 				else if (tex.format == TextureFormat.DXT1 || tex.format == TextureFormat.DXT5)
 				{
                     try
@@ -970,7 +1002,7 @@ namespace VPB
 		public Text progressText;
 
         protected int runningTasks;
-        protected const int MaxConcurrentTasks = 4;
+        protected const int MaxConcurrentTasks = 16;
 
 		protected Dictionary<string, Texture2D> thumbnailCache;
 		private const int ThumbnailCacheMaxItems = 512;
@@ -1291,6 +1323,8 @@ namespace VPB
 			}
 		}
 
+		protected List<QueuedImage> dispatchedImages = new List<QueuedImage>();
+
 		public void CancelGroup(string groupId)
 		{
 			if (string.IsNullOrEmpty(groupId)) return;
@@ -1304,6 +1338,14 @@ namespace VPB
 					}
 				}
 			}
+            // Also cancel dispatched items
+            if (dispatchedImages != null)
+            {
+                foreach(var qi in dispatchedImages)
+                {
+                    if (qi.groupId == groupId) qi.cancel = true;
+                }
+            }
 		}
 
 		public void QueueImage(QueuedImage qi)
@@ -1321,6 +1363,7 @@ namespace VPB
 		public void QueueThumbnail(QueuedImage qi)
 		{
 			if (qi == null) return;
+            // LogUtil.Log("[VPB-Debug] QueueThumbnail: " + qi.imgPath);
 			qi.isThumbnail = true;
 			if (!string.IsNullOrEmpty(qi.imgPath))
 			{
@@ -1331,6 +1374,29 @@ namespace VPB
 					if (pendingThumbnailCallbacks.TryGetValue(qi.imgPath, out list))
 					{
 						if (qi.callback != null) list.Add(qi.callback);
+                        
+                        // Promote the existing request to top of queue
+                        // Find it in queuedImages
+                        if (queuedImages != null && queuedImages.data != null)
+                        {
+                            QueuedImage existing = null;
+                            for (int i = 0; i < queuedImages.data.Count; i++)
+                            {
+                                if (queuedImages.data[i].imgPath == qi.imgPath)
+                                {
+                                    existing = queuedImages.data[i];
+                                    break;
+                                }
+                            }
+
+                            if (existing != null)
+                            {
+                                queuedImages.Remove(existing);
+                                existing.insertionIndex = ++_insertionOrderCounter;
+                                queuedImages.Enqueue(existing);
+                            }
+                        }
+
 						pool.Return(qi);
 						return;
 					}
@@ -1378,92 +1444,103 @@ namespace VPB
 
 		protected void PostProcessImageQueue()
 		{
-            int maxPerFrame = 20;
-			while (queuedImages != null && queuedImages.Count > 0 && maxPerFrame > 0)
-			{
-                maxPerFrame--;
-				QueuedImage value = queuedImages.Peek();
-				if (value.processed || value.cancel)
-				{
-					queuedImages.Dequeue();
+            // Limit processing time to avoid UI freezes (target 8ms budget)
+            System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+            long maxTicks = 8 * 10000; // 8ms
+
+            // 1. Process dispatched (in-flight) images that are done
+            for (int i = dispatchedImages.Count - 1; i >= 0; i--)
+            {
+                if (sw.ElapsedTicks > maxTicks) break;
+
+                QueuedImage value = dispatchedImages[i];
+                if (value.processed || value.cancel)
+                {
+                    dispatchedImages.RemoveAt(i);
+                    
                     if (value.cancel)
                     {
-						if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
-						{
-							lock (pendingThumbnailLock)
-							{
-								if (pendingThumbnailCallbacks != null) pendingThumbnailCallbacks.Remove(value.imgPath);
-							}
-						}
+                        if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
+                        {
+                            lock (pendingThumbnailLock)
+                            {
+                                if (pendingThumbnailCallbacks != null) pendingThumbnailCallbacks.Remove(value.imgPath);
+                            }
+                        }
                         pool.Return(value);
                         continue;
                     }
 
-					if (!value.isThumbnail)
-					{
-						progress++;
-						numRealQueuedImages--;
-						
-						// Log stats every 50 images so we can see it working during heavy loads
-						if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
-						{
-							LogUtil.Log(ByteArrayPool.GetStatus());
-						}
+                    if (!value.isThumbnail)
+                    {
+                        progress++;
+                        numRealQueuedImages--;
+                        
+                        if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
+                        {
+                            LogUtil.Log(ByteArrayPool.GetStatus());
+                        }
 
-						if (numRealQueuedImages == 0)
-						{
-							progress = 0;
-							progressMax = 0;
-							if (progressHUD != null)
-							{
-								progressHUD.SetActive(false);
-							}
-							if(ByteArrayPool.TotalRented > 0)
-								LogUtil.Log(ByteArrayPool.GetStatus());
-						}
-						else
-						{
-							if (progressHUD != null)
-							{
-								progressHUD.SetActive(true);
-							}
-							if (progressSlider != null)
-							{
-								progressSlider.maxValue = progressMax;
-								progressSlider.value = progress;
-							}
-						}
-					}
-					value.Finish();
-					if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
-					{
-						if (value.isThumbnail)
-						{
-							if (value.tex != null) CacheThumbnail(value.imgPath, value.tex);
-						}
-						else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
-						{
-							textureCache.Add(value.cacheSignature, value.tex);
-							textureTrackedCache.Add(value.tex, true);
-							if (value.loadedFromDownscaledCache) TextureUtil.MarkDownscaledActive("CIL:" + value.cacheSignature);
-						}
-					}
-					value.DoCallback();
+                        if (numRealQueuedImages == 0)
+                        {
+                            progress = 0;
+                            progressMax = 0;
+                            if (progressHUD != null) progressHUD.SetActive(false);
+                            if(ByteArrayPool.TotalRented > 0) LogUtil.Log(ByteArrayPool.GetStatus());
+                        }
+                        else
+                        {
+                            if (progressHUD != null) progressHUD.SetActive(true);
+                            if (progressSlider != null)
+                            {
+                                progressSlider.maxValue = progressMax;
+                                progressSlider.value = progress;
+                            }
+                        }
+                    }
+
+                    value.Finish();
+                    
+                    if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
+                    {
+                        if (value.isThumbnail)
+                        {
+                            if (value.tex != null) CacheThumbnail(value.imgPath, value.tex);
+                        }
+                        else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
+                        {
+                            textureCache.Add(value.cacheSignature, value.tex);
+                            textureTrackedCache.Add(value.tex, true);
+                            if (value.loadedFromDownscaledCache) TextureUtil.MarkDownscaledActive("CIL:" + value.cacheSignature);
+                        }
+                    }
+                    value.DoCallback();
                     if (value.imgPath != null && value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath);
-					pool.Return(value);
-				}
+                    // else if (value.isThumbnail) LogUtil.Log("[VPB-Debug] Finished: " + value.imgPath);
+                    pool.Return(value);
+                }
+            }
+
+            // 2. Cleanup canceled items from the pending queue (Peek only)
+            // We can't easily iterate the PriorityQueue, but we can peek the top.
+            while (queuedImages != null && queuedImages.Count > 0)
+            {
+                if (queuedImages.Peek().cancel)
+                {
+                    QueuedImage qi = queuedImages.Dequeue();
+                    pool.Return(qi);
+                }
                 else
                 {
                     break;
                 }
-			}
+            }
 
 			if (numRealQueuedImages != 0)
 			{
 				if (loadFlag == null)
 				{
 					loadFlag = new AsyncFlag("ImageLoader");
-					//SuperController.singleton.SetLoadingIconFlag(loadFlag);
 				}
 			}
 			else if (loadFlag != null)
@@ -1588,77 +1665,99 @@ namespace VPB
 			}
 		}
 
-		protected virtual void Update()
+		protected void Update()
 		{
 			PostProcessImageQueue();
             
-            if (queuedImages != null && queuedImages.Count > 0)
-			{
-                // Dispatch loop
-                while (runningTasks < MaxConcurrentTasks)
+            // Dispatch pending dispatched items (web requests that just finished)
+            for(int i=0; i<dispatchedImages.Count; i++)
+            {
+                if (runningTasks >= MaxConcurrentTasks) break;
+                
+                QueuedImage qi = dispatchedImages[i];
+                if (!qi.working && !qi.processed && !qi.cancel)
                 {
-                    if (queuedImages.Count == 0) break;
-                    
+                    // Check conditions
+                    if (qi.webRequest != null && !qi.webRequestDone) continue;
+
+                    // Execute
+                    StartWorker(qi);
+                }
+            }
+
+            // Dispatch new items from queue
+            // Backpressure: if we have too many items pending decode (in dispatchedImages), stop dispatching to avoid memory exhaustion
+            // and pipeline stalling.
+			if (queuedImages != null && queuedImages.Count > 0)
+			{
+                while (runningTasks < MaxConcurrentTasks && dispatchedImages.Count < 200 && queuedImages.Count > 0)
+                {
                     QueuedImage head = queuedImages.Peek();
-                    // Process cancelled/processed items immediately in PostProcess via loop continuation or they get cleaned up
-                    if (head.processed || head.cancel) 
-                    {
-                        // If head is finished, we can't do anything here, PostProcess handles it.
-                        // But if PostProcess didn't clear it (e.g. maxPerFrame limit), we might be stuck.
-                        // However, PostProcess clears processed/cancelled items.
-                        // If we are here, head is NOT processed/cancelled?
-                        // Wait, Peek() returns the highest priority. If it's processed, it should be dequeued by PostProcess.
-                        // If PostProcess hit its limit, we might still see it.
-                        // So we should check if we can dispatch something else? 
-                        // No, PriorityQueue doesn't support random access.
-                        // So we must wait for PostProcess to clear it.
-                        break; 
-                    }
+                    if (head == null) break;
+
+                    // Perform pre-checks (cache, web)
+                    PreprocessImageQueue(); 
                     
-                    if (head.working)
+                    // Preprocess might have set processed=true or initialized web request
+                    // We must dequeue it to move it to dispatched list
+                    head = queuedImages.Dequeue();
+                    dispatchedImages.Add(head);
+
+                    if (head.processed || head.cancel) continue; // Will be handled by PostProcess
+
+                    if (head.webRequest != null && !head.webRequestDone)
                     {
-                        // Already being processed by a task
-                        break; 
+                        // Waiting for web, do not start worker yet
+                        continue; 
                     }
 
-                    // Check if ready for processing (web request done or local file)
-                    PreprocessImageQueue(); // This might set processed=true or working flags?
-                    // PreprocessImageQueue peeks internally. 
-                    
-                    // Re-peek after preprocess
-                    head = queuedImages.Peek();
-                    if (head == null || head.processed || head.cancel || head.working) break;
-                    
-                    if (head.webRequest != null && !head.webRequestDone) break; // Waiting for web request
-
-                    // Dispatch!
-                    head.working = true;
-                    runningTasks++;
-                    ThreadPool.QueueUserWorkItem((state) => {
-                        try
-                        {
-                            head.Process();
-                        }
-                        catch(Exception ex)
-                        {
-                            head.hadError = true;
-                            head.errorText = ex.Message;
-                        }
-                        finally
-                        {
-                            head.processed = true;
-                            head.working = false;
-                            // Safe decrement? runningTasks is mainly accessed on MainThread update loop, 
-                            // but here we are on background thread.
-                            // We should probably not modify runningTasks here if we want thread safety.
-                            // Better: runningTasks is decremented in Update by counting? 
-                            // No, simpler: Use Interlocked.Decrement
-                            System.Threading.Interlocked.Decrement(ref runningTasks);
-                        }
-                    });
+                    StartWorker(head);
                 }
 			}
 		}
+
+        private void StartWorker(QueuedImage head)
+        {
+            // if (head.isThumbnail) LogUtil.Log("[VPB-Debug] StartWorker: " + head.imgPath);
+            head.working = true;
+            System.Threading.Interlocked.Increment(ref runningTasks);
+            bool success = false;
+            try
+            {
+                success = ThreadPool.QueueUserWorkItem((state) => {
+                    try
+                    {
+                        head.Process();
+                    }
+                    catch(Exception ex)
+                    {
+                        head.hadError = true;
+                        head.errorText = ex.Message;
+                    }
+                    finally
+                    {
+                        head.processed = true;
+                        head.working = false;
+                        System.Threading.Interlocked.Decrement(ref runningTasks);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] [Loader] ThreadPool.QueueUserWorkItem Exception: " + ex.Message);
+                success = false;
+            }
+            
+            if (!success)
+            {
+                // Failed to queue worker (Thread pool exhausted?)
+                // Revert state so it can be picked up again
+                System.Threading.Interlocked.Decrement(ref runningTasks);
+                head.working = false;
+                // Note: It remains in dispatchedImages, so Update loop will try to start it again next frame.
+                // LogUtil.LogWarning("[VPB] [Loader] Failed to queue worker for " + head.imgPath); // Reduce log noise
+            }
+        }
 
 		public virtual void OnDestroy()
 		{
@@ -1694,7 +1793,9 @@ namespace VPB
 			queuedImages = new PriorityQueue<QueuedImage>((a, b) => {
                 int p = a.priority - b.priority;
                 if (p != 0) return p;
-                return a.insertionIndex.CompareTo(b.insertionIndex);
+                // Use LIFO for insertion index (newer items first)
+                // This ensures that when scrolling, the most recently visible items are loaded first
+                return b.insertionIndex.CompareTo(a.insertionIndex);
             });
 		}
 
@@ -1709,6 +1810,41 @@ namespace VPB
             {
                 this.data = new List<T>();
                 this.comparison = comparison;
+            }
+
+            public void Remove(T item)
+            {
+                data.Remove(item);
+                // Re-heapify is expensive, but for correctness we should do it.
+                // Or just rebuild the heap.
+                // Simple approach: data.Remove is O(N).
+                // Rebuilding heap: O(N).
+                // Just calling Sort() is O(N log N) but our structure is heap, not sorted list.
+                // Actually, if we remove an item, we can just rebuild the heap from scratch or let it be.
+                // Wait, if we remove an item, the heap property might be broken?
+                // data.Remove fills the gap by shifting elements.
+                // This breaks the heap structure indices.
+                // We must rebuild.
+                int count = data.Count;
+                for (int i = count / 2; i >= 0; i--)
+                {
+                    HeapifyDown(i);
+                }
+            }
+
+            private void HeapifyDown(int pi)
+            {
+                int li = data.Count - 1;
+                while (true)
+                {
+                    int ci = pi * 2 + 1;
+                    if (ci > li) break;
+                    int rc = ci + 1;
+                    if (rc <= li && comparison(data[rc], data[ci]) < 0) ci = rc;
+                    if (comparison(data[pi], data[ci]) <= 0) break;
+                    T tmp = data[pi]; data[pi] = data[ci]; data[ci] = tmp;
+                    pi = ci;
+                }
             }
 
             public void Enqueue(T item)
@@ -1732,17 +1868,8 @@ namespace VPB
                 data.RemoveAt(li);
 
                 --li;
-                int pi = 0;
-                while (true)
-                {
-                    int ci = pi * 2 + 1;
-                    if (ci > li) break;
-                    int rc = ci + 1;
-                    if (rc <= li && comparison(data[rc], data[ci]) < 0) ci = rc;
-                    if (comparison(data[pi], data[ci]) <= 0) break;
-                    T tmp = data[pi]; data[pi] = data[ci]; data[ci] = tmp;
-                    pi = ci;
-                }
+                if (li >= 0) HeapifyDown(0);
+                
                 return frontItem;
             }
 

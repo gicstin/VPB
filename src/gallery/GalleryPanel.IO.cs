@@ -680,14 +680,14 @@ namespace VPB
                 {
                     if (layoutMode == GalleryLayoutMode.List)
                     {
-                        recyclingGrid.SetGridConfig(100f, listRowHeight, 5f, 5f, 1);
+                        recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
                         recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true);
                     }
                     else
                     {
                         // Grid mode
-                        recyclingGrid.SetGridConfig(100f, 100f, 10f, 10f, gridColumnCount);
-                        recyclingGrid.SetAdaptiveConfig(true, 200f, gridColumnCount, false);
+                        recyclingGrid.SetGridConfig(100f, 100f, 10f, 10f, GridColumnCount);
+                        recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false);
                     }
                     recyclingGrid.SetItemCount(0); // Clear initially
                 }
@@ -1057,14 +1057,14 @@ namespace VPB
                 
                 // Use Adaptive Config
                 float minSize = 200f;
-                int cols = gridColumnCount;
+                int cols = GridColumnCount;
                 
                 // Initialize spacing and adaptive config
                 if (layoutMode == GalleryLayoutMode.List)
                 {
                     // List/Table mode: ALWAYS 1 column; +/- controls row height/thumb size.
                     recyclingGrid.fixedColumns = 1;
-                    recyclingGrid.SetGridConfig(100f, listRowHeight, 5f, 5f, 1);
+                    recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
                     recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true);
                 }
                 else

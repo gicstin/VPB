@@ -717,9 +717,6 @@ namespace VPB
             // Explicitly initialize ZstdNet native library early
             try { ExternMethods.Initialize(); } catch { }
 
-            // Initialize Gallery
-            gameObject.AddComponent<Gallery>();
-
             LogUtil.SetLogSource(Logger);
 
             try
@@ -903,6 +900,17 @@ namespace VPB
             });
 
             AutoLoadALPackages();
+            
+            // Auto-create gallery pane on startup if enabled
+            if (VPBConfig.Instance != null && VPBConfig.Instance.EnableAutoFixedGallery)
+            {
+                if (!m_Inited) { Init(); m_Inited = true; }
+                if (Gallery.singleton != null && Gallery.singleton.PanelCount == 0)
+                {
+                    if (!m_GalleryCatsInited) InitGalleryCategories();
+                    Gallery.singleton.CreatePane();
+                }
+            }
         }
         
         void AutoLoadALPackages()
@@ -1566,6 +1574,8 @@ namespace VPB
                 Vector2 bringFrontPos = createPos + step * 2f;
                 Vector2 closeAllPos = createPos + step * 3f;
 
+                bool initialShouldShow = Gallery.singleton != null && Gallery.singleton.PanelCount > 0;
+
                 // Button 1.5: Close All
                 {
                     Transform btnTrMid = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
@@ -1601,7 +1611,7 @@ namespace VPB
                             hover.targetButton = uiBtn;
                             uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
                         }
-                        m_CloseAllButtonGO.SetActive(false);
+                        m_CloseAllButtonGO.SetActive(initialShouldShow);
                     }
                 }
 
@@ -1640,7 +1650,7 @@ namespace VPB
                             hover.targetButton = uiBtn;
                             uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
                         }
-                        m_BringFrontButtonGO.SetActive(false);
+                        m_BringFrontButtonGO.SetActive(initialShouldShow);
                     }
                 }
 
@@ -1685,7 +1695,7 @@ namespace VPB
                             hover.targetButton = uiBtn;
                             uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
                         }
-                        m_ShowHideButtonGO.SetActive(false);
+                        m_ShowHideButtonGO.SetActive(initialShouldShow);
                     }
                 }
                 

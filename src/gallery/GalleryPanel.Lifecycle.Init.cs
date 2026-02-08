@@ -20,13 +20,30 @@ namespace VPB
                 bool isVR = false;
                 try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
 
-                isFixedLocally = !isVR && VPBConfig.Instance.DesktopFixedMode && (Gallery.singleton == null || Gallery.singleton.PanelCount == 0);
+                isFixedLocally = !isVR && (VPBConfig.Instance.DesktopFixedMode || VPBConfig.Instance.EnableAutoFixedGallery) && (Gallery.singleton == null || Gallery.singleton.PanelCount == 0);
                 
+                if (isFixedLocally && VPBConfig.Instance.DesktopFixedAutoCollapse)
+                {
+                    isCollapsed = true;
+                }
+
                 // Fixed panes should start with side tab lists collapsed
                 if (isFixedLocally)
                 {
                     leftActiveContent = null;
                     rightActiveContent = null;
+                }
+
+                try 
+                {
+                    if (!string.IsNullOrEmpty(VPBConfig.Instance.ApplyMode)) {
+                        LogUtil.Log("[GalleryPanel.Init] Loading ApplyMode from VPBConfig: " + VPBConfig.Instance.ApplyMode);
+                        ItemApplyMode = (ApplyMode)Enum.Parse(typeof(ApplyMode), VPBConfig.Instance.ApplyMode);
+                        LogUtil.Log("[GalleryPanel.Init] ItemApplyMode now set to: " + ItemApplyMode);
+                    }
+                }
+                catch (System.Exception ex) { 
+                    LogUtil.LogError("[GalleryPanel.Init] Error loading ApplyMode: " + ex.Message);
                 }
 
                 VPBConfig.Instance.ConfigChanged += UpdateSideButtonPositions;
@@ -72,11 +89,11 @@ namespace VPB
 
             if (Application.isPlaying)
             {
-                canvas.renderMode = RenderMode.WorldSpace;
+                canvas.renderMode = isFixedLocally ? RenderMode.ScreenSpaceOverlay : RenderMode.WorldSpace;
                 canvas.worldCamera = Camera.main;
                 canvas.sortingOrder = -10000;
                 // Position will be set in Show()
-                canvas.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+                canvas.transform.localScale = isFixedLocally ? Vector3.one : new Vector3(0.001f, 0.001f, 0.001f);
                 canvasGO.layer = 5; // UI layer
             }
             else
@@ -100,6 +117,25 @@ namespace VPB
             
             // AddHoverDelegate
             AddHoverDelegate(backgroundBoxGO);
+
+            if (isFixedLocally)
+            {
+                RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                float leftRatio = VPBConfig.Instance.DesktopCustomWidth;
+                float bottomAnchor = (VPBConfig.Instance.DesktopFixedHeightMode == 1) ? VPBConfig.Instance.DesktopCustomHeight : 0f;
+
+                bgRT.anchorMin = new Vector2(leftRatio, bottomAnchor);
+                bgRT.anchorMax = new Vector2(1, 1);
+                bgRT.offsetMin = Vector2.zero;
+                bgRT.offsetMax = Vector2.zero;
+
+                if (isCollapsed)
+                {
+                    // Use a safe default width if layout hasn't run yet
+                    float w = bgRT.rect.width > 0 ? bgRT.rect.width : 1200f;
+                    bgRT.anchoredPosition = new Vector2(w, 0);
+                }
+            }
             
             // Collapse Trigger Area (Right edge) - 60% height, centered, 60px wide, chamfered corners
             collapseTriggerGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchRight, 60, 0, Vector2.zero, 100f);
@@ -125,7 +161,20 @@ namespace VPB
             ctHover.OnHoverChange += (enter) => {
                 isHoveringTrigger = enter;
             };
-            collapseTriggerGO.SetActive(false); // Hidden by default, only used in fixed mode
+            collapseTriggerGO.SetActive(isFixedLocally && VPBConfig.Instance.DesktopFixedAutoCollapse);
+            if (isFixedLocally)
+            {
+                Image img = collapseTriggerGO.GetComponent<Image>();
+                if (img != null)
+                {
+                    img.color = isCollapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
+                    img.raycastTarget = isCollapsed;
+                }
+                if (collapseHandleText != null)
+                {
+                    collapseHandleText.gameObject.SetActive(isCollapsed);
+                }
+            }
             
             dragger = backgroundBoxGO.AddComponent<UIDraggable>();
             dragger.target = canvasGO.transform;
@@ -691,7 +740,6 @@ namespace VPB
                         {
                             saveSubmenuParentHoverCount++;
                             saveSubmenuParentHovered = true;
-                            saveSubmenuLastHoverTime = Time.unscaledTime;
                             if (!saveSubmenuOpen) ToggleSaveSubmenuFromSideButtons();
                         }
                         catch { }
@@ -705,7 +753,6 @@ namespace VPB
                             saveSubmenuParentHoverCount--;
                             if (saveSubmenuParentHoverCount < 0) saveSubmenuParentHoverCount = 0;
                             saveSubmenuParentHovered = saveSubmenuParentHoverCount > 0;
-                            saveSubmenuLastHoverTime = Time.unscaledTime;
                         }
                         catch { }
                     });
@@ -737,7 +784,6 @@ namespace VPB
                         {
                             saveSubmenuOptionsHoverCount++;
                             saveSubmenuOptionsHovered = true;
-                            saveSubmenuLastHoverTime = Time.unscaledTime;
                         }
                         catch { }
                     });
@@ -750,7 +796,6 @@ namespace VPB
                             saveSubmenuOptionsHoverCount--;
                             if (saveSubmenuOptionsHoverCount < 0) saveSubmenuOptionsHoverCount = 0;
                             saveSubmenuOptionsHovered = saveSubmenuOptionsHoverCount > 0;
-                            saveSubmenuLastHoverTime = Time.unscaledTime;
                         }
                         catch { }
                     });
@@ -780,14 +825,6 @@ namespace VPB
                             {
                                 saveSubmenuOptionsHoverCount++;
                                 saveSubmenuOptionsHovered = true;
-                                saveSubmenuLastHoverTime = Time.unscaledTime;
-
-                                if (buttonIndex == 4 && !saveSubmenuMoreVisible && saveSubmenuOpen)
-                                {
-                                    saveSubmenuMoreVisible = true;
-                                    PopulateSaveSubmenuButtons();
-                                    PositionSaveSubmenuButtons();
-                                }
                             }
                             catch { }
                         });
@@ -800,7 +837,6 @@ namespace VPB
                                 saveSubmenuOptionsHoverCount--;
                                 if (saveSubmenuOptionsHoverCount < 0) saveSubmenuOptionsHoverCount = 0;
                                 saveSubmenuOptionsHovered = saveSubmenuOptionsHoverCount > 0;
-                                saveSubmenuLastHoverTime = Time.unscaledTime;
                             }
                             catch { }
                         });
@@ -1486,7 +1522,6 @@ namespace VPB
                         {
                             saveSubmenuParentHoverCount++;
                             saveSubmenuParentHovered = true;
-                            saveSubmenuLastHoverTime = Time.unscaledTime;
                             if (!saveSubmenuOpen) ToggleSaveSubmenuFromSideButtons();
                         }
                         catch { }
@@ -1500,7 +1535,6 @@ namespace VPB
                             saveSubmenuParentHoverCount--;
                             if (saveSubmenuParentHoverCount < 0) saveSubmenuParentHoverCount = 0;
                             saveSubmenuParentHovered = saveSubmenuParentHoverCount > 0;
-                            saveSubmenuLastHoverTime = Time.unscaledTime;
                         }
                         catch { }
                     });
@@ -1532,7 +1566,6 @@ namespace VPB
                         {
                             saveSubmenuOptionsHoverCount++;
                             saveSubmenuOptionsHovered = true;
-                            saveSubmenuLastHoverTime = Time.unscaledTime;
                         }
                         catch { }
                     });
@@ -1545,7 +1578,6 @@ namespace VPB
                             saveSubmenuOptionsHoverCount--;
                             if (saveSubmenuOptionsHoverCount < 0) saveSubmenuOptionsHoverCount = 0;
                             saveSubmenuOptionsHovered = saveSubmenuOptionsHoverCount > 0;
-                            saveSubmenuLastHoverTime = Time.unscaledTime;
                         }
                         catch { }
                     });
@@ -1575,14 +1607,6 @@ namespace VPB
                             {
                                 saveSubmenuOptionsHoverCount++;
                                 saveSubmenuOptionsHovered = true;
-                                saveSubmenuLastHoverTime = Time.unscaledTime;
-
-                                if (buttonIndex == 4 && !saveSubmenuMoreVisible && saveSubmenuOpen)
-                                {
-                                    saveSubmenuMoreVisible = true;
-                                    PopulateSaveSubmenuButtons();
-                                    PositionSaveSubmenuButtons();
-                                }
                             }
                             catch { }
                         });
@@ -1595,7 +1619,6 @@ namespace VPB
                                 saveSubmenuOptionsHoverCount--;
                                 if (saveSubmenuOptionsHoverCount < 0) saveSubmenuOptionsHoverCount = 0;
                                 saveSubmenuOptionsHovered = saveSubmenuOptionsHoverCount > 0;
-                                saveSubmenuLastHoverTime = Time.unscaledTime;
                             }
                             catch { }
                         });
@@ -2173,7 +2196,10 @@ UpdateDesktopModeButton();
             lastScrollTime = Time.unscaledTime;
             if (scrollRect != null)
             {
-                scrollRect.onValueChanged.AddListener((v) => { lastScrollTime = Time.unscaledTime; });
+                scrollRect.onValueChanged.AddListener((v) => { 
+                    lastScrollTime = Time.unscaledTime;
+                    // LogUtil.Log("Scroll changed: " + v.y);
+                });
             }
             
             contentGO = scrollRect.content.gameObject;

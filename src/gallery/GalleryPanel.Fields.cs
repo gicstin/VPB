@@ -150,7 +150,6 @@ namespace VPB
         private GameObject leftSaveSubmenuPanelGO;
 
         private bool saveSubmenuOpen = false;
-        private bool saveSubmenuMoreVisible = false;
         private List<GameObject> rightSaveSubmenuButtons = new List<GameObject>();
         private List<GameObject> leftSaveSubmenuButtons = new List<GameObject>();
 
@@ -159,6 +158,7 @@ namespace VPB
         private int saveSubmenuParentHoverCount = 0;
         private int saveSubmenuOptionsHoverCount = 0;
         private float saveSubmenuLastHoverTime = 0f;
+        private float saveSubmenuLastOptionsHoverTime = 0f;
         private const float SaveSubmenuAutoHideDelay = 1.5f;
 
         private GameObject rightRemoveHairSubmenuGapPanelGO;
@@ -531,16 +531,66 @@ namespace VPB
         private GameObject clearSelectionBtn;
         private GameObject gridSizeMinusBtn;
         private GameObject gridSizePlusBtn;
-        private int lastTotalItems = 0;
+        // lastTotalItems removed
         private int lastTotalPages = 1;
         // lastShownCount removed
-        private int gridColumnCount = 4;
+        public int GridColumnCount
+        {
+            get { return VPBConfig.Instance != null ? VPBConfig.Instance.GridColumnCount : 4; }
+            set {
+                if (VPBConfig.Instance != null) {
+                    VPBConfig.Instance.GridColumnCount = value;
+                    VPBConfig.Instance.TriggerChange();
+                    try { VPBConfig.Instance.Save(); } catch { }
+                }
+            }
+        }
+        private int gridColumnCount = 4; // Legacy field for local caching during scroll if needed
 
-        private float listThumbSize = 100f;
-        private float listRowHeight = 100f;
+        private float listThumbSize => ListRowHeight;
+        public float ListRowHeight
+        {
+            get { return VPBConfig.Instance != null ? VPBConfig.Instance.ListRowHeight : 100f; }
+            set {
+                if (VPBConfig.Instance != null) {
+                    VPBConfig.Instance.ListRowHeight = value;
+                    VPBConfig.Instance.TriggerChange();
+                    try { VPBConfig.Instance.Save(); } catch { }
+                }
+            }
+        }
 
         // Apply Mode
-        public ApplyMode ItemApplyMode = ApplyMode.DoubleClick;
+        public ApplyMode ItemApplyMode
+        {
+            get { 
+                if (VPBConfig.Instance != null) {
+                    ApplyMode mode = (ApplyMode)Enum.Parse(typeof(ApplyMode), VPBConfig.Instance.ApplyMode);
+                    LogUtil.Log("[GalleryPanel] ItemApplyMode GET: " + mode + " (from VPBConfig: " + VPBConfig.Instance.ApplyMode + ")");
+                    return mode;
+                }
+                LogUtil.Log("[GalleryPanel] ItemApplyMode GET: DoubleClick (VPBConfig is null)");
+                return ApplyMode.DoubleClick;
+            }
+            set { 
+                LogUtil.Log("[GalleryPanel] ItemApplyMode SET to: " + value);
+                if (VPBConfig.Instance != null) {
+                    if (string.Equals(VPBConfig.Instance.ApplyMode, value.ToString(), System.StringComparison.Ordinal)) {
+                        LogUtil.Log("[GalleryPanel] ItemApplyMode already " + value + ", skipping save");
+                        return;
+                    }
+                    LogUtil.Log("[GalleryPanel] ItemApplyMode saving to VPBConfig: " + value + " (was: " + VPBConfig.Instance.ApplyMode + ")");
+                    VPBConfig.Instance.ApplyMode = value.ToString();
+                    VPBConfig.Instance.TriggerChange();
+                    try { 
+                        VPBConfig.Instance.Save();
+                        LogUtil.Log("[GalleryPanel] ItemApplyMode saved successfully");
+                    } catch (System.Exception ex) { 
+                        LogUtil.LogError("[GalleryPanel] ItemApplyMode save failed: " + ex.Message);
+                    }
+                }
+            }
+        }
         private Text rightApplyModeBtnText;
         private Image rightApplyModeBtnImage;
         private Text leftApplyModeBtnText;

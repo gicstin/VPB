@@ -287,6 +287,7 @@ namespace VPB
             GameObject go = new GameObject("GalleryPanel_New");
             GalleryPanel p = go.AddComponent<GalleryPanel>();
             p.Init(); // Undocked
+            
             p.SetCategories(categories);
 
             // Position relative to viewer
@@ -385,7 +386,10 @@ namespace VPB
 
             if (camTrans == null) return;
 
-            Vector3 basePos = camTrans.position + camTrans.forward * 2.0f;
+            float dist = 2.0f;
+            if (VPBConfig.Instance != null) dist = VPBConfig.Instance.BringToFrontDistance;
+
+            Vector3 basePos = camTrans.position + camTrans.forward * dist;
             Vector3 right = camTrans.right;
 
             int count = panels.Count;
@@ -404,6 +408,21 @@ namespace VPB
 
                 try { p.ResetFollowOffsets(); } catch { }
             }
+
+            // Bring Context Menu to front if it is active
+            try
+            {
+                if (ContextMenuPanel.Instance != null && ContextMenuPanel.Instance.gameObject.activeSelf)
+                {
+                    if (ContextMenuPanel.Instance.transform.Find("Canvas") != null && ContextMenuPanel.Instance.transform.Find("Canvas").gameObject.activeSelf)
+                    {
+                        Vector3 contextPos = basePos + right * (start + panels.Count * spacing);
+                        ContextMenuPanel.Instance.transform.position = contextPos;
+                        ContextMenuPanel.Instance.transform.rotation = Quaternion.LookRotation(contextPos - camTrans.position, Vector3.up);
+                    }
+                }
+            }
+            catch { }
         }
     }
 }

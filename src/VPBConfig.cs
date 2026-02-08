@@ -89,6 +89,7 @@ namespace VPB
             get { return _followEyeHeight; }
             set { _followEyeHeight = value; }
         }
+        public float BringToFrontDistance = 1.5f;
         public float ReorientStartAngle = 20f;
         public float MovementThreshold = 0.1f;
         public bool EnableCurvature = false;
@@ -97,12 +98,16 @@ namespace VPB
         public bool EnableGalleryTranslucency = false;
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
+        public string ApplyMode = "DoubleClick";
         public string LastGalleryCategory = "";
         public bool DesktopFixedMode = false;
         public bool DesktopFixedAutoCollapse = true;
         public int DesktopFixedHeightMode = 0; // 0: Full, 1: Custom
         public float DesktopCustomHeight = 0.5f;
         public float DesktopCustomWidth = 1.618f / 2.618f;
+        public bool EnableAutoFixedGallery = true;
+        public float ListRowHeight = 100f;
+        public int GridColumnCount = 4;
         public bool IsLoadingScene { get; private set; }
 
         private bool? _isDevMode;
@@ -157,12 +162,14 @@ namespace VPB
 
         public void Load()
         {
+            LogUtil.Log("[VPBConfig.Load] Starting Load() from: " + ConfigPath);
             // Reset to defaults before loading
             EnableButtonGaps = true;
             ShowSideButtons = "Both";
             _followAngle = "Both";
             _followDistance = "VR";
             _followEyeHeight = "VR";
+            BringToFrontDistance = 1.5f;
             ReorientStartAngle = 20f;
             MovementThreshold = 0.1f;
             EnableCurvature = false;
@@ -171,12 +178,16 @@ namespace VPB
             EnableGalleryTranslucency = false;
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
+            ApplyMode = "DoubleClick";
             LastGalleryCategory = "";
             DesktopFixedMode = false;
             DesktopFixedAutoCollapse = true;
             DesktopFixedHeightMode = 0;
             DesktopCustomHeight = 0.5f;
             DesktopCustomWidth = 1.618f / 2.618f;
+            EnableAutoFixedGallery = true;
+            ListRowHeight = 100f;
+            GridColumnCount = 4;
 
             try
             {
@@ -221,6 +232,7 @@ namespace VPB
                                 _followEyeHeight = val;
                         }
                         
+                        if (node["BringToFrontDistance"] != null) BringToFrontDistance = node["BringToFrontDistance"].AsFloat;
                         if (node["ReorientStartAngle"] != null) ReorientStartAngle = node["ReorientStartAngle"].AsFloat;
                         if (node["MovementThreshold"] != null) MovementThreshold = node["MovementThreshold"].AsFloat;
                         // if (node["EnableCurvature"] != null) EnableCurvature = node["EnableCurvature"].AsBool;
@@ -230,18 +242,22 @@ namespace VPB
                         if (node["EnableGalleryTranslucency"] != null) EnableGalleryTranslucency = node["EnableGalleryTranslucency"].AsBool;
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
+                        if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
                         if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                         if (node["DesktopFixedHeightMode"] != null) DesktopFixedHeightMode = node["DesktopFixedHeightMode"].AsInt;
                         if (node["DesktopCustomHeight"] != null) DesktopCustomHeight = node["DesktopCustomHeight"].AsFloat;
                         if (node["DesktopCustomWidth"] != null) DesktopCustomWidth = node["DesktopCustomWidth"].AsFloat;
+                        if (node["EnableAutoFixedGallery"] != null) EnableAutoFixedGallery = node["EnableAutoFixedGallery"].AsBool;
+                        if (node["ListRowHeight"] != null) ListRowHeight = node["ListRowHeight"].AsFloat;
+                        if (node["GridColumnCount"] != null) GridColumnCount = node["GridColumnCount"].AsInt;
                     }
 
                     try
                     {
                         if (Settings.Instance != null && Settings.Instance.LogVerboseUi != null && Settings.Instance.LogVerboseUi.Value)
-                            LogUtil.Log("[VPBConfig] Loaded cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode);
+                            LogUtil.Log("[VPBConfig] Loaded cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | ApplyMode=" + ApplyMode);
                     }
                     catch { }
 
@@ -257,6 +273,10 @@ namespace VPB
                     }
                     catch { }
                 }
+                else
+                {
+                    LogUtil.LogWarning("[VPBConfig.Load] Config file DOES NOT EXIST at: " + ConfigPath);
+                }
             }
             catch (Exception ex)
             {
@@ -271,10 +291,11 @@ namespace VPB
                 string prevLogged = s_LastLoggedSavedGalleryCategory;
                 JSONClass node = new JSONClass();
                 node["EnableButtonGaps"].AsBool = EnableButtonGaps;
-                node["ShowSideButtons"].Value = ShowSideButtons;
-                node["FollowAngle"].Value = _followAngle;
-                node["FollowDistance"].Value = _followDistance;
-                node["FollowEyeHeight"].Value = _followEyeHeight;
+                node["ShowSideButtons"] = ShowSideButtons;
+                node["FollowAngle"] = _followAngle;
+                node["FollowDistance"] = _followDistance;
+                node["FollowEyeHeight"] = _followEyeHeight;
+                node["BringToFrontDistance"].AsFloat = BringToFrontDistance;
                 node["ReorientStartAngle"].AsFloat = ReorientStartAngle;
                 node["MovementThreshold"].AsFloat = MovementThreshold;
                 node["EnableCurvature"].AsBool = EnableCurvature;
@@ -283,18 +304,23 @@ namespace VPB
                 node["EnableGalleryTranslucency"].AsBool = EnableGalleryTranslucency;
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
-                node["LastGalleryCategory"].Value = LastGalleryCategory;
+                node["ApplyMode"] = ApplyMode;
+                node["LastGalleryCategory"] = LastGalleryCategory;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
                 node["DesktopFixedHeightMode"].AsInt = DesktopFixedHeightMode;
                 node["DesktopCustomHeight"].AsFloat = DesktopCustomHeight;
                 node["DesktopCustomWidth"].AsFloat = DesktopCustomWidth;
-                File.WriteAllText(ConfigPath, node.ToString());
+                node["EnableAutoFixedGallery"].AsBool = EnableAutoFixedGallery;
+                node["ListRowHeight"].AsFloat = ListRowHeight;
+                node["GridColumnCount"].AsInt = GridColumnCount;
+                string jsonOutput = node.ToString();
+                File.WriteAllText(ConfigPath, jsonOutput);
 
                 try
                 {
                     if (Settings.Instance != null && Settings.Instance.LogVerboseUi != null && Settings.Instance.LogVerboseUi.Value)
-                        LogUtil.Log("[VPBConfig] Saved cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode);
+                        LogUtil.Log("[VPBConfig] Saved cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | ApplyMode=" + ApplyMode);
                 }
                 catch { }
 

@@ -150,7 +150,7 @@ namespace VPB
                 });
             }
 
-            // Primary items (top of the list)
+            // Scene and core presets at the bottom
             options.Add(new SaveMenuOption
             {
                 Label = "Save Scene...",
@@ -159,30 +159,17 @@ namespace VPB
             });
             AddPresetOption("Save Appearance Preset...", "AppearancePresets");
             AddPresetOption("Save Clothing Preset...", "ClothingPresets");
+            AddPresetOption("Save Hair Preset...", "HairPresets");
             AddPresetOption("Save Pose Preset...", "PosePresets");
 
-            // Expansion item
-            options.Add(new SaveMenuOption
-            {
-                Label = "More Options >",
-                Enabled = true,
-                AutoClose = false,
-                Action = () => {
-                    saveSubmenuMoreVisible = !saveSubmenuMoreVisible;
-                    PopulateSaveSubmenuButtons();
-                    PositionSaveSubmenuButtons();
-                }
-            });
-
-            // Secondary items
-            AddPresetOption("Save Hair Preset...", "HairPresets");
-            AddPresetOption("Save Skin Preset...", "SkinPresets");
-            AddPresetOption("Save Morph Preset...", "MorphPresets");
-            AddPresetOption("Save General Preset...", "Preset");
-            AddPresetOption("Save Animation Preset...", "AnimationPresets");
-            AddPresetOption("Save Plugin Preset...", "PluginPresets");
-            AddPresetOption("Save Breast Phys Preset...", "FemaleBreastPhysicsPresets");
+            // Secondary presets above the core ones
             AddPresetOption("Save Glute Phys Preset...", "FemaleGlutePhysicsPresets");
+            AddPresetOption("Save Breast Phys Preset...", "FemaleBreastPhysicsPresets");
+            AddPresetOption("Save Plugin Preset...", "PluginPresets");
+            AddPresetOption("Save Animation Preset...", "AnimationPresets");
+            AddPresetOption("Save General Preset...", "Preset");
+            AddPresetOption("Save Morph Preset...", "MorphPresets");
+            AddPresetOption("Save Skin Preset...", "SkinPresets");
 
             return options;
         }
@@ -245,12 +232,7 @@ namespace VPB
                             : new Color(0.15f, 0.15f, 0.15f, 0.7f);
                     }
 
-                    // Visibility logic: Primary items (0-3) and "More Options" (4) always shown.
-                    // Secondary items (i > 4) only shown if saveSubmenuMoreVisible is true.
-                    bool visible = (i < count);
-                    if (i > 4 && !saveSubmenuMoreVisible) visible = false;
-
-                    btnGO.SetActive(visible);
+                    btnGO.SetActive(option != null);
                 }
 
                 if (i < rightSaveSubmenuButtons.Count) Configure(rightSaveSubmenuButtons[i]);
@@ -265,6 +247,7 @@ namespace VPB
             {
                 CloseOtherSubmenus("Save");
                 saveSubmenuLastHoverTime = Time.unscaledTime;
+                saveSubmenuLastOptionsHoverTime = Time.unscaledTime;
                 PopulateSaveSubmenuButtons();
                 SetSaveSubmenuButtonsVisible(true);
                 PositionSaveSubmenuButtons();
@@ -282,7 +265,6 @@ namespace VPB
             try
             {
                 float spacing = 60f;
-                float columnSpacing = 210f;
                 float btnWidth = 200f; // Width of a single button
 
                 // Position right side submenu buttons
@@ -292,9 +274,7 @@ namespace VPB
                     float startX = saveBtnRT.anchoredPosition.x + 110f; // To the right of Save button
                     float startY = saveBtnRT.anchoredPosition.y;
 
-                    int activeInPrimary = 0;
-                    int activeInSecondary = 0;
-
+                    int maxActiveIndex = -1;
                     for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
                     {
                         GameObject btn = rightSaveSubmenuButtons[i];
@@ -302,31 +282,22 @@ namespace VPB
                         RectTransform rt = btn.GetComponent<RectTransform>();
                         if (rt != null)
                         {
-                            if (i <= 4) // Primary items (0-3) and "More Options >" (4)
-                            {
-                                rt.anchoredPosition = new Vector2(startX, startY - (activeInPrimary + 1) * spacing);
-                                activeInPrimary++;
-                            }
-                            else // Secondary items (5+)
-                            {
-                                rt.anchoredPosition = new Vector2(startX + columnSpacing, startY - (activeInSecondary + 1) * spacing);
-                                activeInSecondary++;
-                            }
+                            // Use fixed index i to prevent "jumping" when the list expands/contracts
+                            rt.anchoredPosition = new Vector2(startX, startY + (i + 1) * spacing);
+                            maxActiveIndex = i;
                         }
                     }
 
-                    // Position the submenu panel to cover both columns
+                    // Position the submenu panel
                     if (rightSaveSubmenuPanelGO != null)
                     {
                         RectTransform panelRT = rightSaveSubmenuPanelGO.GetComponent<RectTransform>();
                         if (panelRT != null)
                         {
-                            int rows = Mathf.Max(activeInPrimary, activeInSecondary);
-                            float width = activeInSecondary > 0 ? (columnSpacing + btnWidth) : btnWidth;
-                            float xPos = activeInSecondary > 0 ? (startX + columnSpacing / 2f) : startX;
-                            
-                            panelRT.anchoredPosition = new Vector2(xPos, startY - (rows + 1) * spacing / 2f);
-                            panelRT.sizeDelta = new Vector2(width, rows * spacing);
+                            // Anchor to bottom so it grows UP without moving the bottom edge
+                            panelRT.pivot = new Vector2(0.5f, 0f);
+                            panelRT.anchoredPosition = new Vector2(startX, startY + spacing / 2f);
+                            panelRT.sizeDelta = new Vector2(btnWidth, (maxActiveIndex + 1) * spacing);
                         }
                     }
                 }
@@ -338,9 +309,7 @@ namespace VPB
                     float startX = saveBtnRT.anchoredPosition.x - 110f; // To the left of Save button
                     float startY = saveBtnRT.anchoredPosition.y;
 
-                    int activeInPrimary = 0;
-                    int activeInSecondary = 0;
-
+                    int maxActiveIndex = -1;
                     for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
                     {
                         GameObject btn = leftSaveSubmenuButtons[i];
@@ -348,31 +317,22 @@ namespace VPB
                         RectTransform rt = btn.GetComponent<RectTransform>();
                         if (rt != null)
                         {
-                            if (i <= 4) // Primary items (0-3) and "More Options >" (4)
-                            {
-                                rt.anchoredPosition = new Vector2(startX, startY - (activeInPrimary + 1) * spacing);
-                                activeInPrimary++;
-                            }
-                            else // Secondary items (5+)
-                            {
-                                rt.anchoredPosition = new Vector2(startX - columnSpacing, startY - (activeInSecondary + 1) * spacing);
-                                activeInSecondary++;
-                            }
+                            // Use fixed index i to prevent "jumping" when the list expands/contracts
+                            rt.anchoredPosition = new Vector2(startX, startY + (i + 1) * spacing);
+                            maxActiveIndex = i;
                         }
                     }
 
-                    // Position the submenu panel to cover both columns
+                    // Position the submenu panel
                     if (leftSaveSubmenuPanelGO != null)
                     {
                         RectTransform panelRT = leftSaveSubmenuPanelGO.GetComponent<RectTransform>();
                         if (panelRT != null)
                         {
-                            int rows = Mathf.Max(activeInPrimary, activeInSecondary);
-                            float width = activeInSecondary > 0 ? (columnSpacing + btnWidth) : btnWidth;
-                            float xPos = activeInSecondary > 0 ? (startX - columnSpacing / 2f) : startX;
-                            
-                            panelRT.anchoredPosition = new Vector2(xPos, startY - (rows + 1) * spacing / 2f);
-                            panelRT.sizeDelta = new Vector2(width, rows * spacing);
+                            // Anchor to bottom so it grows UP without moving the bottom edge
+                            panelRT.pivot = new Vector2(0.5f, 0f);
+                            panelRT.anchoredPosition = new Vector2(startX, startY + spacing / 2f);
+                            panelRT.sizeDelta = new Vector2(btnWidth, (maxActiveIndex + 1) * spacing);
                         }
                     }
                 }
@@ -385,7 +345,6 @@ namespace VPB
             try
             {
                 saveSubmenuOpen = false;
-                saveSubmenuMoreVisible = false;
                 saveSubmenuParentHovered = false;
                 saveSubmenuOptionsHovered = false;
                 saveSubmenuParentHoverCount = 0;
@@ -915,14 +874,14 @@ namespace VPB
                     if (layoutMode == GalleryLayoutMode.List)
                     {
                         // List mode: 1 column
-                        rgv.SetGridConfig(100f, listRowHeight, 5f, 5f, 1);
+                        rgv.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
                         rgv.SetAdaptiveConfig(true, 0f, 1, true);
                     }
                     else
                     {
                         // Grid mode
                         float minSize = 200f;
-                        int cols = gridColumnCount;
+                        int cols = GridColumnCount;
                         rgv.SetGridConfig(100f, 100f, 10f, 10f, cols);
                         rgv.SetAdaptiveConfig(true, minSize, cols, false);
                     }
@@ -1791,8 +1750,7 @@ namespace VPB
                 // List/Table zoom: +/- changes thumbnail size + row height, NOT columns.
                 // delta: +1 => "-" button (zoom out / smaller), -1 => "+" button (zoom in / larger)
                 float step = 15f;
-                listRowHeight = Mathf.Clamp(listRowHeight - (delta * step), 80f, 400f);
-                listThumbSize = listRowHeight; // Keep square 1:1 based on height
+                ListRowHeight = Mathf.Clamp(ListRowHeight - (delta * step), 80f, 400f);
 
                 if (contentGO != null)
                 {
@@ -1800,7 +1758,7 @@ namespace VPB
                     if (rgv != null)
                     {
                         rgv.fixedColumns = 1;
-                        rgv.SetGridConfig(100f, listRowHeight, 5f, 5f, 1);
+                        rgv.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
                         rgv.SetAdaptiveConfig(true, 0f, 1, true);
                         rgv.Refresh();
                     }
@@ -1808,13 +1766,13 @@ namespace VPB
                 return;
             }
 
-            gridColumnCount = Mathf.Clamp(gridColumnCount + delta, 1, 12);
+            GridColumnCount = Mathf.Clamp(GridColumnCount + delta, 1, 12);
             if (contentGO != null)
             {
                 RecyclingGridView rgv = rgvState != null ? rgvState : contentGO.GetComponent<RecyclingGridView>();
                 if (rgv != null)
                 {
-                    rgv.fixedColumns = gridColumnCount;
+                    rgv.fixedColumns = GridColumnCount;
                     // No need to RefreshFiles, rgv handles column changes via its Update/RecalculateLayout
                 }
             }
@@ -1886,7 +1844,10 @@ namespace VPB
 
         private void ToggleApplyMode()
         {
-            ItemApplyMode = (ItemApplyMode == ApplyMode.SingleClick) ? ApplyMode.DoubleClick : ApplyMode.SingleClick;
+            ApplyMode oldMode = ItemApplyMode;
+            ApplyMode newMode = (oldMode == ApplyMode.SingleClick) ? ApplyMode.DoubleClick : ApplyMode.SingleClick;
+            LogUtil.Log("[GalleryPanel] ToggleApplyMode: " + oldMode + " -> " + newMode);
+            ItemApplyMode = newMode;
             UpdateApplyModeButtonState();
         }
 

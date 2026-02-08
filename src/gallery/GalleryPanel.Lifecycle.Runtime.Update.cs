@@ -19,8 +19,17 @@ namespace VPB
                 {
                     if (saveSubmenuOpen)
                     {
-                        bool hovered = saveSubmenuParentHovered || saveSubmenuOptionsHovered;
-                        if (!hovered)
+                        if (saveSubmenuOptionsHovered)
+                        {
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                            saveSubmenuLastOptionsHoverTime = Time.unscaledTime;
+                        }
+                        else if (saveSubmenuParentHovered)
+                        {
+                            saveSubmenuLastHoverTime = Time.unscaledTime;
+                        }
+
+                        if (!saveSubmenuParentHovered && !saveSubmenuOptionsHovered)
                         {
                             if (Time.unscaledTime - saveSubmenuLastHoverTime >= SaveSubmenuAutoHideDelay)
                             {
@@ -28,10 +37,6 @@ namespace VPB
                                 CloseSaveSubmenuUI();
                                 UpdateSideButtonPositions();
                             }
-                        }
-                        else
-                        {
-                            saveSubmenuLastHoverTime = Time.unscaledTime;
                         }
                     }
                 }
