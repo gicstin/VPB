@@ -644,6 +644,13 @@ namespace VPB
 
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false)
         {
+            // Check if gallery auto-refresh is suppressed (during scene/preset loading)
+            if (Gallery.IsSuppressed())
+            {
+                LogUtil.Log("[VPB] GalleryPanel.RefreshFiles: SKIPPED (suppressed)");
+                return;
+            }
+            
             if (IsHubMode)
             {
                 RefreshHubItems();

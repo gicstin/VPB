@@ -12,6 +12,33 @@ namespace VPB
         public static Gallery singleton;
 
         private DateTime lastObservedPackageRefreshTime = DateTime.MinValue;
+        
+        // Suppress auto-refresh when gallery is loading content (to preserve scroll position and state)
+        private static bool suppressAutoRefresh = false;
+        private static readonly object suppressLock = new object();
+        public static void SuppressAutoRefresh(bool suppress) 
+        { 
+            lock (suppressLock) 
+            { 
+                suppressAutoRefresh = suppress; 
+                if (suppress)
+                {
+                    LogUtil.Log("[VPB] Gallery auto-refresh SUPPRESSED");
+                }
+                else
+                {
+                    LogUtil.Log("[VPB] Gallery auto-refresh ENABLED");
+                }
+            } 
+        }
+        
+        public static bool IsSuppressed()
+        {
+            lock (suppressLock)
+            {
+                return suppressAutoRefresh;
+            }
+        }
 
         public struct Category
         {
@@ -59,6 +86,14 @@ namespace VPB
 
         private void OnFileManagerRefresh()
         {
+            if (IsSuppressed())
+            {
+                LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (suppressed)");
+                return;
+            }
+            
+            LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
+
             DateTime refreshTime = DateTime.MinValue;
             try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
 

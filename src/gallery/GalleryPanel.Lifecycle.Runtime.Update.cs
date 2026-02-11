@@ -333,6 +333,26 @@ namespace VPB
                             customHandle.gameObject.SetActive(shouldShow);
                     }
 
+                    // Show/Hide generic resize handles based on mode
+                    Transform handleBL = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.bottomLeft);
+                    if (handleBL != null)
+                    {
+                        bool shouldShow = !isFixedLocally;
+                        if (handleBL.gameObject.activeSelf != shouldShow) handleBL.gameObject.SetActive(shouldShow);
+                    }
+                    Transform handleBR = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.bottomRight);
+                    if (handleBR != null)
+                    {
+                        bool shouldShow = !isFixedLocally;
+                        if (handleBR.gameObject.activeSelf != shouldShow) handleBR.gameObject.SetActive(shouldShow);
+                    }
+                    Transform handleTL = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.topLeft);
+                    if (handleTL != null)
+                    {
+                        bool shouldShow = !isFixedLocally;
+                        if (handleTL.gameObject.activeSelf != shouldShow) handleTL.gameObject.SetActive(shouldShow);
+                    }
+
                     if (bgRT.anchorMin.y != bottomAnchor || bgRT.anchorMin.x != leftRatio)
                     {
                         bgRT.anchorMin = new Vector2(leftRatio, bottomAnchor);

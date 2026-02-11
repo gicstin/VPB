@@ -143,6 +143,8 @@ namespace VPB
 
         public static string GetZstdCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth = 0, int targetHeight = 0, float bumpStrength = 1f)
         {
+            if (string.IsNullOrEmpty(imgPath) || imgPath == "NULL") return null;
+            
             string cacheDir = VamHookPlugin.GetCacheDir();
             var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
             if (fileEntry == null)
@@ -184,6 +186,8 @@ namespace VPB
 
         public static string GetNativeCachePath(string imgPath)
         {
+            if (string.IsNullOrEmpty(imgPath) || imgPath == "NULL") return null;
+            
             var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
             string textureCacheDir = MVR.FileManagement.CacheManager.GetTextureCacheDir();
             if (fileEntry != null && textureCacheDir != null)

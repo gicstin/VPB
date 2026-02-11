@@ -170,10 +170,33 @@ namespace VPB
             }
 
             string presetJson = preset.ToString();
-            if (FileButton.EnsureInstalledByText(presetJson))
+            // Suppress gallery auto-refresh to preserve scroll position and state
+            // Must activate BEFORE EnsureInstalledByText since it may trigger FileManager.Refresh internally
+            // NOTE: Suppression is disabled after a delay via coroutine to allow preset loading to complete
+            try
             {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
+                Gallery.SuppressAutoRefresh(true);
+                
+                if (FileButton.EnsureInstalledByText(presetJson))
+                {
+                    MVR.FileManagement.FileManager.Refresh();
+                    FileManager.Refresh();
+                }
+                
+                // Start coroutine to disable suppression after preset import completes
+                if (Messager.singleton != null)
+                {
+                    Messager.singleton.StartCoroutine(UI.DisableSuppressionAfterDelay(2f));
+                }
+                else
+                {
+                    Gallery.SuppressAutoRefresh(false);
+                }
+            }
+            catch (Exception refreshEx)
+            {
+                LogUtil.LogError($"[VPB] FileManager refresh error during preset import: {refreshEx.Message}");
+                Gallery.SuppressAutoRefresh(false);
             }
 
             bool appliedViaPresetManager = false;

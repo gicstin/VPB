@@ -1713,8 +1713,16 @@ namespace VPB
 			// On Windows, File.Move across volumes falls back to copy+delete, which can expose a partially-copied
 			// file at the final path. VaM may read it immediately and throw ZipException (wrong local header).
 			string dir = System.IO.Path.GetDirectoryName(linkvar);
-			if (!Directory.Exists(dir))
-				Directory.CreateDirectory(dir);
+			try
+			{
+				if (!Directory.Exists(dir))
+					Directory.CreateDirectory(dir);
+			}
+			catch (Exception ex)
+			{
+				LogUtil.LogError($"InstallSelf: Failed to create directory {dir}: {ex.Message}");
+				return false;
+			}
 
 			string sourcePath = this.Path;
 			string tempTarget = linkvar + ".installing";
@@ -1724,6 +1732,12 @@ namespace VPB
 				File.Copy(sourcePath, tempTarget, false);
 				File.Move(tempTarget, linkvar);
 				File.Delete(sourcePath);
+			}
+			catch (Exception ex)
+			{
+				LogUtil.LogError($"InstallSelf: Failed to install {Uid} from {sourcePath} to {linkvar}: {ex.Message}");
+				try { if (File.Exists(tempTarget)) File.Delete(tempTarget); } catch { }
+				return false;
 			}
 			finally
 			{

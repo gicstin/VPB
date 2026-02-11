@@ -98,24 +98,29 @@ namespace VPB
             cacheLock.EnterWriteLock();
             try
             {
-                try
-                {
-                    fileStream = new FileStream(cacheFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, 65536, FileOptions.RandomAccess);
-                    writer = new BinaryWriter(fileStream);
-                    reader = new BinaryReader(fileStream);
-
-                    BuildIndex();
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError("GalleryThumbnailCache: Failed to initialize cache: " + ex.Message);
-                    if (fileStream != null) fileStream.Dispose();
-                    fileStream = null;
-                }
+                InitializeInternal();
             }
             finally
             {
                 cacheLock.ExitWriteLock();
+            }
+        }
+
+        private void InitializeInternal()
+        {
+            try
+            {
+                fileStream = new FileStream(cacheFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, 65536, FileOptions.RandomAccess);
+                writer = new BinaryWriter(fileStream);
+                reader = new BinaryReader(fileStream);
+
+                BuildIndex();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("GalleryThumbnailCache: Failed to initialize cache: " + ex.Message);
+                if (fileStream != null) fileStream.Dispose();
+                fileStream = null;
             }
         }
 
@@ -370,7 +375,6 @@ namespace VPB
 
                         uint crc32 = CalculateCRC32(data, 0, entry.Length);
 
-                        long entryStart = tempFs.Position;
                         byte[] pathBytes = Encoding.UTF8.GetBytes(key);
                         tempWriter.Write(pathBytes.Length);
                         tempWriter.Write(pathBytes);
@@ -380,8 +384,7 @@ namespace VPB
                         tempWriter.Write(entry.Format);
                         tempWriter.Write(entry.Length);
                         tempWriter.Write(crc32);
-                        tempWriter.Write((ushort)0);
-
+                        
                         long dataOffset = tempFs.Position;
                         tempWriter.Write(data, 0, entry.Length);
 
@@ -407,10 +410,10 @@ namespace VPB
                 cacheFormatVersion = CACHE_VERSION;
             }
 
-            Close();
+            CloseInternal();
             File.Delete(cacheFilePath);
             File.Move(tempPath, cacheFilePath);
-            Initialize();
+            InitializeInternal();
 
             Debug.Log("GalleryThumbnailCache: Migration to V2 complete.");
         }
@@ -811,10 +814,10 @@ namespace VPB
                         index = newIndex;
                     }
 
-                    Close();
+                    CloseInternal();
                     File.Delete(cacheFilePath);
                     File.Move(tempPath, cacheFilePath);
-                    Initialize();
+                    InitializeInternal();
 
                     Debug.Log("GalleryThumbnailCache: Cache cleaning complete.");
                 }
@@ -834,15 +837,20 @@ namespace VPB
             cacheLock.EnterWriteLock();
             try
             {
-                if (writer != null) writer.Close();
-                if (reader != null) reader.Close();
-                if (fileStream != null) fileStream.Dispose();
-                fileStream = null;
+                CloseInternal();
             }
             finally
             {
                 cacheLock.ExitWriteLock();
             }
+        }
+
+        private void CloseInternal()
+        {
+            if (writer != null) writer.Close();
+            if (reader != null) reader.Close();
+            if (fileStream != null) fileStream.Dispose();
+            fileStream = null;
         }
 
         ~GalleryThumbnailCache()

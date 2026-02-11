@@ -121,7 +121,25 @@ namespace VPB
             canvas.gameObject.SetActive(true);
             
             // Only refresh if params changed OR if we are empty (first run) OR explicit refresh needed
-            if (paramsChanged || activeButtons.Count == 0 || packagesChanged)
+            // BUT skip if gallery refresh is suppressed (loading content from gallery)
+            bool shouldRefresh = paramsChanged || activeButtons.Count == 0 || packagesChanged;
+            
+            try
+            {
+                if (shouldRefresh && Gallery.IsSuppressed())
+                {
+                    LogUtil.Log("[VPB] GalleryPanel.Show: Skipping RefreshFiles (suppressed)");
+                    // Update timestamp to prevent refresh on next show
+                    lastAppliedPackageRefreshTime = pkgRefreshTime;
+                    shouldRefresh = false;
+                }
+            }
+            catch (Exception suppressEx)
+            {
+                LogUtil.LogError($"[VPB] Error checking suppress state: {suppressEx.Message}");
+            }
+            
+            if (shouldRefresh)
             {
                 RefreshFiles(!paramsChanged);
                 refreshOnNextShow = false;

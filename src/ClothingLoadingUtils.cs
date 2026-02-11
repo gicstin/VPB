@@ -162,10 +162,13 @@ namespace VPB
         {
             if (atom == null) yield break;
 
-            // Conservative settle: give VaM a few frames for load/skin/physics init.
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
+            // Conservative settle: give VaM more frames for load/skin/physics/collider init.
+            // Clothing items need extra time to properly attach colliders and physics to the body.
+            for (int i = 0; i < 5; i++)
+            {
+                yield return new WaitForEndOfFrame();
+            }
+            yield return new WaitForSeconds(0.1f);
 
             // Best-effort refresh hooks. These are intentionally minimal and guarded:
             // only call if an action exists on the storable.
@@ -206,6 +209,17 @@ namespace VPB
                         {
                             TryInvokeAction(s, actionNames[a]);
                         }
+                    }
+                    
+                    // Try to refresh the main DAZClothingItem storable as well
+                    JSONStorable mainStorable = null;
+                    try { mainStorable = atom.GetStorableByID(inferredBaseId); } catch { }
+                    if (mainStorable != null)
+                    {
+                        // Force a physics reset if available
+                        TryInvokeAction(mainStorable, "ReInitPhysics");
+                        TryInvokeAction(mainStorable, "ReInit");
+                        TryInvokeAction(mainStorable, "ForceUpdate");
                     }
                 }
 
@@ -556,6 +570,11 @@ namespace VPB
             string lookupName = !string.IsNullOrEmpty(inferredBaseId) ? inferredBaseId : itemName;
             LogUtil.Log($"[DragDropDebug] Waiting for item preset storable. isClothing={isClothing}, itemName={itemName}, inferredBaseId={inferredBaseId}, itemUid={itemUid}, creator={creator}, presetPath={normalizedPath}");
 
+            // Give the clothing item a few frames to initialize after being activated
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+
             DateTime startDelayTime = DateTime.Now;
             while ((DateTime.Now - startDelayTime).TotalSeconds < 10)
             {
@@ -607,24 +626,14 @@ namespace VPB
 
                     LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
 
-                    try
-                    {
-                        FileManager.PushLoadDirFromFilePath(normalizedPath);
-                    }
-                    catch { }
+                    // NOTE: For item presets (.vap), BA does NOT call SetLastRestoredData.
+                    // SetLastRestoredData is only used for full presets (.vam files).
+                    // Item presets are applied directly to already-loaded clothing items.
+                    pm.LoadPresetFromJSON(presetJSON, false);
 
-                    try
-                    {
-                        pm.LoadPresetFromJSON(presetJSON, false);
-                    }
-                    finally
-                    {
-                        try
-                        {
-                            FileManager.PopLoadDir();
-                        }
-                        catch { }
-                    }
+                    // Give extra frames for the preset to fully apply before any fixup
+                    yield return new WaitForEndOfFrame();
+                    yield return new WaitForEndOfFrame();
 
                     // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
                     SchedulePostApplyFixup(atom, inferredBaseId);
@@ -817,6 +826,9 @@ namespace VPB
                                         }
                                     }
 
+                                    // CRITICAL: SetLastRestoredData must be called before LoadPresetFromJSON
+                                    // to ensure physics, collisions, and all storable data are properly restored
+                                    atom.SetLastRestoredData(vamJSON, true, true);
                                     pm.LoadPresetFromJSON(vamJSON, false);
                                     itemUid = UI.NormalizePath(vamPath);
                                 }

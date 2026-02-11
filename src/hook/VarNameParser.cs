@@ -10,42 +10,43 @@ namespace VPB
     /// </summary>
     class VarNameParser
     {
-        static StringBuilder s_TempBuilder = new StringBuilder();
-        static HashSet<string> s_TempResult = new HashSet<string>();
         public static HashSet<string> Parse(string text)
         {
-            s_TempResult.Clear();
-            if (string.IsNullOrEmpty(text)) return s_TempResult;
-            Parse(text, s_TempResult);
-            return s_TempResult;
+            var result = new HashSet<string>();
+            if (string.IsNullOrEmpty(text)) return result;
+            Parse(text, result);
+            return result;
         }
 
         public static void Parse(string text, HashSet<string> results)
         {
             if (string.IsNullOrEmpty(text)) return;
             
+            // Use local StringBuilder instead of static s_TempBuilder
+            StringBuilder builder = new StringBuilder();
+
             //(creater).(varname).(version):
             for (int i = 0; i < text.Length - 5;)
             {
                 // Clear
-                s_TempBuilder.Length = 0;
-                int createrLen = ReadString(s_TempBuilder, text, ref i, 5);
+                builder.Length = 0;
+                int createrLen = ReadString(builder, text, ref i, 5);
                 if (createrLen > 0)
                 {
-                    if (ReadDot(s_TempBuilder, text, ref i))
+                    if (ReadDot(builder, text, ref i))
                     {
-                        int varNameLen = ReadString(s_TempBuilder, text, ref i, 3);
+                        int varNameLen = ReadString(builder, text, ref i, 3);
                         if (varNameLen > 0)
                         {
-                            if (ReadDot(s_TempBuilder, text, ref i))
+                            if (ReadDot(builder, text, ref i))
                             {
                                 // versionId or latest
-                                int versionLen = ReadVersion(s_TempBuilder, text, ref i, 1);
+                                int versionLen = ReadVersion(builder, text, ref i, 1);
                                 if (versionLen > 0)
                                 {
                                     if (ReadColon(text, ref i))
                                     {
-                                        string uid = s_TempBuilder.ToString();// string.Format("{0}.{1}.{2}", creater, varName, version);
+                                        string uid = builder.ToString();// string.Format("{0}.{1}.{2}", creater, varName, version);
                                         results.Add(uid);
                                     }
                                 }

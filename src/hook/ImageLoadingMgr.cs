@@ -26,6 +26,16 @@ namespace VPB
         Dictionary<string, Texture2D> textureCache = new Dictionary<string, Texture2D>();
         Dictionary<string, List<ImageLoaderThreaded.QueuedImage>> inflightWaiters = new Dictionary<string, List<ImageLoaderThreaded.QueuedImage>>();
         HashSet<string> inflightKeys = new HashSet<string>();
+        private readonly object textureCacheLock = new object();
+        private readonly object inflightLock = new object();
+        
+        private class DecompressedData
+        {
+            public string CacheKey;
+            public byte[] Data;
+            public MetadataEntry Meta;
+            public ImageLoaderThreaded.QueuedImage OriginalQI;
+        }
         
         private class MetadataEntry
         {
@@ -112,7 +122,15 @@ namespace VPB
             {
                 cachePathMap.Clear();
             }
-            textureCache.Clear();
+            lock (textureCacheLock)
+            {
+                textureCache.Clear();
+            }
+            lock (inflightLock)
+            {
+                inflightKeys.Clear();
+                inflightWaiters.Clear();
+            }
         }
         
         private MetadataEntry FastLoadMetadata(string cachePath)
@@ -233,20 +251,26 @@ namespace VPB
 
         public Texture2D GetTextureFromCache(string path)
         {
-            if (textureCache.TryGetValue(path, out var tex))
+            lock (textureCacheLock)
             {
-                if (tex != null) return tex;
-                TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
-                textureCache.Remove(path);
+                if (textureCache.TryGetValue(path, out var tex))
+                {
+                    if (tex != null) return tex;
+                    TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
+                    textureCache.Remove(path);
+                }
+                return null;
             }
-            return null;
         }
 
         void RegisterTexture(string path, Texture2D tex)
         {
             if (string.IsNullOrEmpty(path) || tex == null) return;
             TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(path));
-            textureCache[path] = tex;
+            lock (textureCacheLock)
+            {
+                textureCache[path] = tex;
+            }
         }
 
         public void DoCallback(ImageLoaderThreaded.QueuedImage qi)
@@ -280,7 +304,7 @@ namespace VPB
 
         public bool Request(ImageLoaderThreaded.QueuedImage qi)
         {
-            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return false;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return false;
             
             LogUtil.MarkImageActivity();
 
@@ -294,73 +318,159 @@ namespace VPB
             if (cacheTexture != null)
             {
                 qi.tex = cacheTexture;
-                Messager.singleton.StartCoroutine(DelayDoCallback(qi));
-                return true;
-            }
-
-            if (inflightKeys.Contains(cacheKey))
-            {
-                if (!inflightWaiters.TryGetValue(cacheKey, out var waiters))
+                if (Messager.singleton != null)
                 {
-                    waiters = new List<ImageLoaderThreaded.QueuedImage>();
-                    inflightWaiters[cacheKey] = waiters;
+                    Messager.singleton.StartCoroutine(DelayDoCallback(qi));
                 }
-                waiters.Add(qi);
+                else
+                {
+                    DoCallback(qi);
+                }
                 return true;
             }
 
-            string vpbCachePath = GetCachePath(qi);
-            if (vpbCachePath != null)
+            lock (inflightLock)
             {
-                inflightKeys.Add(cacheKey);
-                ThreadPool.QueueUserWorkItem((state) => LoadAndDecompress(cacheKey, vpbCachePath, qi));
-                return true;
-            }
+                if (inflightKeys.Contains(cacheKey))
+                {
+                    if (!inflightWaiters.TryGetValue(cacheKey, out var waiters))
+                    {
+                        waiters = new List<ImageLoaderThreaded.QueuedImage>();
+                        inflightWaiters[cacheKey] = waiters;
+                    }
+                    waiters.Add(qi);
+                    return true;
+                }
 
-            inflightKeys.Add(cacheKey);
-            return false;
+                string vpbCachePath = GetCachePath(qi);
+                if (vpbCachePath != null)
+                {
+                    inflightKeys.Add(cacheKey);
+                    ThreadPool.QueueUserWorkItem((state) => LoadAndDecompressBackground(cacheKey, vpbCachePath, qi));
+                    return true;
+                }
+
+                return false;
+            }
         }
 
-        private void LoadAndDecompress(string cacheKey, string cachePath, ImageLoaderThreaded.QueuedImage qi)
+        private void LoadAndDecompressBackground(string cacheKey, string cachePath, ImageLoaderThreaded.QueuedImage qi)
         {
             try
             {
                 var meta = FastLoadMetadata(cachePath);
                 if (meta == null)
                 {
-                    inflightKeys.Remove(cacheKey);
+                    lock (inflightLock)
+                    {
+                        inflightKeys.Remove(cacheKey);
+                    }
                     return;
                 }
 
                 byte[] decompressedData = FastGetDecompressed(cachePath);
                 if (decompressedData == null)
                 {
-                    inflightKeys.Remove(cacheKey);
+                    lock (inflightLock)
+                    {
+                        inflightKeys.Remove(cacheKey);
+                    }
                     return;
                 }
 
-                Texture2D tex = new Texture2D(meta.Width, meta.Height, meta.Format, false, qi.linear);
-                tex.LoadRawTextureData(decompressedData);
-                tex.Apply(false, true);
-                qi.tex = tex;
+                if (meta.Width <= 0 || meta.Height <= 0)
+                {
+                    LogUtil.LogError($"LoadAndDecompress: Invalid texture dimensions {meta.Width}x{meta.Height} for {cachePath}");
+                    lock (inflightLock)
+                    {
+                        inflightKeys.Remove(cacheKey);
+                    }
+                    return;
+                }
 
-                RegisterTexture(cacheKey, tex);
-                if (meta.IsDownscaled) 
-                    TextureUtil.MarkDownscaledActive(GetDownscaledKey(cacheKey));
-                
-                ResolveInflight(cacheKey, tex);
-                Messager.singleton.StartCoroutine(DelayDoCallback(qi));
+                int expectedSize = TextureUtil.GetExpectedRawDataSize(meta.Width, meta.Height, meta.Format);
+                if (expectedSize > 0 && decompressedData.Length < expectedSize)
+                {
+                    LogUtil.LogError($"LoadAndDecompress: Decompressed data size mismatch. Expected {expectedSize}, got {decompressedData.Length} for {cachePath}");
+                    lock (inflightLock)
+                    {
+                        inflightKeys.Remove(cacheKey);
+                    }
+                    return;
+                }
+
+                var decompressed = new DecompressedData
+                {
+                    CacheKey = cacheKey,
+                    Data = decompressedData,
+                    Meta = meta,
+                    OriginalQI = qi
+                };
+
+                if (Messager.singleton != null)
+                {
+                    Messager.singleton.StartCoroutine(CreateTextureOnMainThread(decompressed));
+                }
+                else
+                {
+                    CreateTexture(decompressed);
+                }
             }
             catch (Exception ex)
             {
-                LogUtil.LogError("LoadAndDecompress failed for " + cachePath + ": " + ex.Message);
-                inflightKeys.Remove(cacheKey);
+                LogUtil.LogError("LoadAndDecompressBackground failed for " + cachePath + ": " + ex.Message);
+                lock (inflightLock)
+                {
+                    inflightKeys.Remove(cacheKey);
+                }
+            }
+        }
+
+        private IEnumerator CreateTextureOnMainThread(DecompressedData data)
+        {
+            yield return waitForEndOfFrame;
+            CreateTexture(data);
+        }
+
+        private void CreateTexture(DecompressedData data)
+        {
+            try
+            {
+                Texture2D tex = new Texture2D(data.Meta.Width, data.Meta.Height, data.Meta.Format, false, data.OriginalQI.linear);
+                TextureUtil.SafeLoadRawTextureData(tex, data.Data, data.Meta.Width, data.Meta.Height, data.Meta.Format);
+                tex.Apply(false, true);
+                data.OriginalQI.tex = tex;
+
+                RegisterTexture(data.CacheKey, tex);
+                if (data.Meta.IsDownscaled) 
+                    TextureUtil.MarkDownscaledActive(GetDownscaledKey(data.CacheKey));
+                
+                ResolveInflight(data.CacheKey, tex);
+                if (Messager.singleton != null)
+                {
+                    Messager.singleton.StartCoroutine(DelayDoCallback(data.OriginalQI));
+                }
+                else
+                {
+                    DoCallback(data.OriginalQI);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("CreateTexture failed for " + data.CacheKey + ": " + ex.Message);
+            }
+            finally
+            {
+                lock (inflightLock)
+                {
+                    inflightKeys.Remove(data.CacheKey);
+                }
             }
         }
 
         public void ResolveInflightForQueuedImage(ImageLoaderThreaded.QueuedImage qi)
         {
-            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
             string cacheKey = qi.imgPath + (qi.linear ? "_L" : "");
             
             if (qi.tex != null)
@@ -369,19 +479,37 @@ namespace VPB
             }
 
             ResolveInflight(cacheKey, qi.tex);
-            inflightKeys.Remove(cacheKey);
+            lock (inflightLock)
+            {
+                inflightKeys.Remove(cacheKey);
+            }
         }
 
         private void ResolveInflight(string cacheKey, Texture2D tex)
         {
-            if (inflightWaiters.TryGetValue(cacheKey, out var waiters))
+            List<ImageLoaderThreaded.QueuedImage> waiters = null;
+            lock (inflightLock)
+            {
+                if (inflightWaiters.TryGetValue(cacheKey, out waiters))
+                {
+                    inflightWaiters.Remove(cacheKey);
+                }
+            }
+
+            if (waiters != null)
             {
                 foreach (var w in waiters)
                 {
                     w.tex = tex;
-                    Messager.singleton.StartCoroutine(DelayDoCallback(w));
+                    if (Messager.singleton != null)
+                    {
+                        Messager.singleton.StartCoroutine(DelayDoCallback(w));
+                    }
+                    else
+                    {
+                        DoCallback(w);
+                    }
                 }
-                inflightWaiters.Remove(cacheKey);
             }
         }
 

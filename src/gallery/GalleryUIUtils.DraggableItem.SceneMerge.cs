@@ -119,10 +119,33 @@ namespace VPB
                 JSONNode root = UI.LoadJSONWithFallback(path, this.FileEntry);
                 if (root == null || root["atoms"] == null) return;
 
-                if (FileButton.EnsureInstalledByText(root.ToString()))
+                // Suppress gallery auto-refresh to preserve scroll position and state
+                // Must activate BEFORE EnsureInstalledByText since it may trigger FileManager.Refresh internally
+                // NOTE: Suppression is disabled after a delay via coroutine to allow merging to complete
+                try
                 {
-                    MVR.FileManagement.FileManager.Refresh();
-                    FileManager.Refresh();
+                    Gallery.SuppressAutoRefresh(true);
+                    
+                    if (FileButton.EnsureInstalledByText(root.ToString()))
+                    {
+                        MVR.FileManagement.FileManager.Refresh();
+                        FileManager.Refresh();
+                    }
+                    
+                    // Start coroutine to disable suppression after scene merge completes
+                    if (Messager.singleton != null)
+                    {
+                        Messager.singleton.StartCoroutine(UI.DisableSuppressionAfterDelay(2f));
+                    }
+                    else
+                    {
+                        Gallery.SuppressAutoRefresh(false);
+                    }
+                }
+                catch (Exception refreshEx)
+                {
+                    LogUtil.LogError($"[VPB] FileManager refresh error during scene merge: {refreshEx.Message}");
+                    Gallery.SuppressAutoRefresh(false);
                 }
 
                 JSONNode sourceAtom = null;

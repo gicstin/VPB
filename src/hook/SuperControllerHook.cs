@@ -423,7 +423,7 @@ namespace VPB
         [HarmonyPatch(typeof(ImageLoaderThreaded), "ProcessImageImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static void PreProcessImageImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (string.IsNullOrEmpty(qi.imgPath)) return;
+            if (string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
             LogUtil.MarkImageActivity();
 
             ImageLoadingMgr.currentProcessingPath = qi.imgPath;
@@ -447,14 +447,14 @@ namespace VPB
             ImageLoadingMgr.currentProcessingPath = null;
             ImageLoadingMgr.currentProcessingIsThumbnail = false;
 
-            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
             if (!Settings.Instance.EnableZstdCompression.Value) return;
         }
 
         public static void PreProcessImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage __0)
         {
             var qi = __0;
-            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
             LogUtil.MarkImageActivity();
 
             ImageLoadingMgr.currentProcessingPath = qi.imgPath;
@@ -471,7 +471,7 @@ namespace VPB
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnail", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static bool PreQueueThumbnail(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return true;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return true;
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
@@ -531,7 +531,7 @@ namespace VPB
 
         private static void LogImageRequestDetails(string kind, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
 
             string imgPath = qi.imgPath;
             string nativeCachePath = null;
@@ -561,7 +561,7 @@ namespace VPB
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueThumbnailImmediate", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static bool PreQueueThumbnailImmediate(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return true;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return true;
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
@@ -615,7 +615,7 @@ namespace VPB
         [HarmonyPatch(typeof(ImageLoaderThreaded), "QueueImage", new Type[] { typeof(ImageLoaderThreaded.QueuedImage) })]
         public static bool PreQueueImage(ImageLoaderThreaded __instance, ImageLoaderThreaded.QueuedImage qi)
         {
-            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return true;
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return true;
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
@@ -662,7 +662,7 @@ namespace VPB
         [HarmonyPatch(typeof(ImageLoaderThreaded.QueuedImage), "Finish")]
         public static void PostFinish_QueuedImage(ImageLoaderThreaded.QueuedImage __instance)
         {
-            if (string.IsNullOrEmpty(__instance.imgPath)) return;
+            if (string.IsNullOrEmpty(__instance.imgPath) || __instance.imgPath == "NULL") return;
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();

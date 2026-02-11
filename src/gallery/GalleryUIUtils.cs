@@ -17,6 +17,37 @@ namespace VPB
     {
         private static float _lastLoadSceneStartTime = -9999f;
 
+        private static IEnumerator DisableSuppressionAfterSceneLoad()
+        {
+            LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Waiting for scene to finish loading...");
+            
+            // Wait for scene to start loading
+            yield return new WaitForSeconds(0.5f);
+            
+            // Wait until scene loading is complete
+            float timeout = 60f; // Max 60 seconds
+            float elapsed = 0f;
+            while (LogUtil.IsSceneLoading() && elapsed < timeout)
+            {
+                yield return new WaitForSeconds(0.5f);
+                elapsed += 0.5f;
+            }
+            
+            // Wait a bit more to ensure all post-load refreshes complete
+            yield return new WaitForSeconds(1.0f);
+            
+            LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Scene load complete, disabling suppression");
+            Gallery.SuppressAutoRefresh(false);
+        }
+
+        public static IEnumerator DisableSuppressionAfterDelay(float delay)
+        {
+            LogUtil.Log($"[VPB] DisableSuppressionAfterDelay: Waiting {delay}s before disabling suppression...");
+            yield return new WaitForSeconds(delay);
+            LogUtil.Log("[VPB] DisableSuppressionAfterDelay: Delay complete, disabling suppression");
+            Gallery.SuppressAutoRefresh(false);
+        }
+
         public static bool EnsureInstalled(FileEntry entry)
         {
             if (entry == null) return false;
@@ -50,20 +81,39 @@ namespace VPB
                 string path = entry.Uid;
                 LogUtil.Log($"[VPB] UI.LoadSceneFile started for: {path}");
                 
-                bool installed = EnsureInstalled(entry);
-                LogUtil.Log($"[VPB] UI.EnsureInstalled (with dependency scan) depsChanged: {installed}");
-                if (!installed)
+                bool installed = false;
+                
+                // Suppress gallery auto-refresh to preserve scroll position and state
+                // Must activate BEFORE EnsureInstalled since it may trigger FileManager.Refresh internally
+                // NOTE: Suppression is NOT disabled in a finally block because sc.Load() is async
+                // Instead, a coroutine will disable it after scene loading completes
+                try
                 {
-                    LogUtil.Log("[VPB] UI.EnsureInstalled: depsChanged=false means no packages were moved; missing deps (if any) are logged above by EnsureInstalled.");
-                }
-
-                if (installed)
-                {
-                    LogUtil.Log("[VPB] Refreshing FileManagers...");
-                    if (MVR.FileManagement.FileManager.singleton != null)
-                        MVR.FileManagement.FileManager.Refresh();
+                    Gallery.SuppressAutoRefresh(true);
                     
-                    FileManager.Refresh();
+                    installed = EnsureInstalled(entry);
+                    LogUtil.Log($"[VPB] UI.EnsureInstalled (with dependency scan) depsChanged: {installed}");
+                    if (!installed)
+                    {
+                        LogUtil.Log("[VPB] UI.EnsureInstalled: depsChanged=false means no packages were moved; missing deps (if any) are logged above by EnsureInstalled.");
+                    }
+
+                    if (installed)
+                    {
+                        LogUtil.Log("[VPB] Refreshing FileManagers...");
+                        
+                        if (MVR.FileManagement.FileManager.singleton != null)
+                            MVR.FileManagement.FileManager.Refresh();
+                        
+                        FileManager.Refresh();
+                    }
+                }
+                catch (Exception installEx)
+                {
+                    LogUtil.LogError($"[VPB] EnsureInstalled or FileManager refresh error: {installEx.Message}");
+                    // On error, disable suppression immediately since we won't be loading
+                    Gallery.SuppressAutoRefresh(false);
+                    return;
                 }
 
                 string normalizedPath = UI.NormalizePath(path);
@@ -85,12 +135,23 @@ namespace VPB
                 SuperController sc = SuperController.singleton;
                 if (sc != null)
                 {
+                    // Start coroutine to disable suppression after scene load completes
+                    if (Messager.singleton != null)
+                    {
+                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad());
+                    }
+                    else
+                    {
+                        LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start coroutine to disable suppression");
+                    }
+                    
                     LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
                     sc.Load(normalizedPath);
                 }
                 else
                 {
                     LogUtil.LogError("[VPB] SuperController.singleton is null!");
+                    Gallery.SuppressAutoRefresh(false);
                 }
             }
             catch (Exception ex)
