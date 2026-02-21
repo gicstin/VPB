@@ -177,9 +177,6 @@ namespace VPB
                 "Refresh",
                 "Rebuild",
                 "Resync",
-                "Reset",
-                "ResetSimulation",
-                "ResetSim",
                 "RebuildColliders",
                 "RefreshColliders",
             };
@@ -209,17 +206,6 @@ namespace VPB
                         {
                             TryInvokeAction(s, actionNames[a]);
                         }
-                    }
-                    
-                    // Try to refresh the main DAZClothingItem storable as well
-                    JSONStorable mainStorable = null;
-                    try { mainStorable = atom.GetStorableByID(inferredBaseId); } catch { }
-                    if (mainStorable != null)
-                    {
-                        // Force a physics reset if available
-                        TryInvokeAction(mainStorable, "ReInitPhysics");
-                        TryInvokeAction(mainStorable, "ReInit");
-                        TryInvokeAction(mainStorable, "ForceUpdate");
                     }
                 }
 
@@ -295,11 +281,7 @@ namespace VPB
 
             if (idx >= 0 && idx + 2 < parts.Length)
             {
-                int creatorIdx = idx + 2;
-                if (creatorIdx >= 0 && creatorIdx < parts.Length)
-                {
-                    creator = parts[creatorIdx] ?? "";
-                }
+                creator = parts[idx + 2] ?? "";
             }
         }
 
@@ -355,7 +337,7 @@ namespace VPB
             return null;
         }
 
-        private static void FixupUnprefixedCustomPathsInVarPreset(JSONNode node, string presetPackageName, ref bool modified)
+        private static void FixupUnprefixedCustomPathsInVarPreset(JSONNode node, string presetPackageName)
         {
             if (node == null || string.IsNullOrEmpty(presetPackageName)) return;
 
@@ -364,7 +346,7 @@ namespace VPB
             {
                 foreach (KeyValuePair<string, JSONNode> kvp in obj)
                 {
-                    FixupUnprefixedCustomPathsInVarPreset(kvp.Value, presetPackageName, ref modified);
+                    FixupUnprefixedCustomPathsInVarPreset(kvp.Value, presetPackageName);
                 }
                 return;
             }
@@ -374,7 +356,7 @@ namespace VPB
             {
                 for (int i = 0; i < arr.Count; i++)
                 {
-                    FixupUnprefixedCustomPathsInVarPreset(arr[i], presetPackageName, ref modified);
+                    FixupUnprefixedCustomPathsInVarPreset(arr[i], presetPackageName);
                 }
                 return;
             }
@@ -391,7 +373,6 @@ namespace VPB
             if (FileManagerSecure.FileExists(normalizedCandidate))
             {
                 node.Value = candidate;
-                modified = true;
             }
         }
 
@@ -430,8 +411,7 @@ namespace VPB
                     presetJSON = (parsed != null) ? parsed.AsObject : presetJSON;
                 }
 
-                bool fixedCustomPaths = false;
-                FixupUnprefixedCustomPathsInVarPreset(presetJSON, presetPackageName, ref fixedCustomPaths);
+                FixupUnprefixedCustomPathsInVarPreset(presetJSON, presetPackageName);
             }
 
             return presetJSON;
@@ -626,14 +606,24 @@ namespace VPB
 
                     LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
 
-                    // NOTE: For item presets (.vap), BA does NOT call SetLastRestoredData.
-                    // SetLastRestoredData is only used for full presets (.vam files).
-                    // Item presets are applied directly to already-loaded clothing items.
-                    pm.LoadPresetFromJSON(presetJSON, false);
+                    try
+                    {
+                        FileManager.PushLoadDirFromFilePath(normalizedPath);
+                    }
+                    catch { }
 
-                    // Give extra frames for the preset to fully apply before any fixup
-                    yield return new WaitForEndOfFrame();
-                    yield return new WaitForEndOfFrame();
+                    try
+                    {
+                        pm.LoadPresetFromJSON(presetJSON, false);
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            FileManager.PopLoadDir();
+                        }
+                        catch { }
+                    }
 
                     // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
                     SchedulePostApplyFixup(atom, inferredBaseId);
@@ -657,8 +647,6 @@ namespace VPB
             }
 
             string normalizedPath = UI.NormalizePath(path);
-            string creator;
-            TryGetCreatorFromPresetPath(path, isClothing, out creator);
 
             string itemName = "";
             string packageName = "";
@@ -826,10 +814,25 @@ namespace VPB
                                         }
                                     }
 
-                                    // CRITICAL: SetLastRestoredData must be called before LoadPresetFromJSON
-                                    // to ensure physics, collisions, and all storable data are properly restored
-                                    atom.SetLastRestoredData(vamJSON, true, true);
-                                    pm.LoadPresetFromJSON(vamJSON, false);
+                                    try
+                                    {
+                                        FileManager.PushLoadDirFromFilePath(normalizedVam);
+                                    }
+                                    catch { }
+
+                                    try
+                                    {
+                                        pm.LoadPresetFromJSON(vamJSON, false);
+                                    }
+                                    finally
+                                    {
+                                        try
+                                        {
+                                            FileManager.PopLoadDir();
+                                        }
+                                        catch { }
+                                    }
+
                                     itemUid = UI.NormalizePath(vamPath);
                                 }
                                 else

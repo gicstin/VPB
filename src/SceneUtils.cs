@@ -554,17 +554,6 @@ namespace VPB
                     }
                 }
             }
-
-            yield return new WaitForEndOfFrame();
-
-            try
-            {
-                ResetAllSimClothing(atom);
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("[VPB] ResetAllSimClothing error: " + ex.Message);
-            }
         }
 
         static IEnumerator PostSceneLoadFixupCoroutine(int serial)
@@ -576,81 +565,8 @@ namespace VPB
             yield return new WaitForEndOfFrame();
 
             if (serial != sceneLoadSerial) yield break;
-
-            var sc = SuperController.singleton;
-            if (sc == null) yield break;
-
-            try
-            {
-                var atoms = sc.GetAtoms();
-                for (int i = 0; i < atoms.Count; i++)
-                {
-                    var a = atoms[i];
-                    if (a != null && a.type == "Person")
-                    {
-                        ResetAllSimClothing(a);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("[VPB] PostSceneLoadFixup error: " + ex.Message);
-            }
         }
 
-        static void ResetAllSimClothing(Atom atom)
-        {
-            if (atom == null) return;
 
-            List<string> ids;
-            try { ids = atom.GetStorableIDs(); }
-            catch { return; }
-            if (ids == null) return;
-
-            for (int i = 0; i < ids.Count; i++)
-            {
-                string receiverName = ids[i];
-                JSONStorable receiver = null;
-                try { receiver = atom.GetStorableByID(receiverName); }
-                catch { }
-
-                if (receiver == null) continue;
-
-                string storeId = receiver.storeId;
-                if (string.IsNullOrEmpty(storeId) || storeId.Length < 3) continue;
-                if (!storeId.EndsWith("Sim", StringComparison.Ordinal)) continue;
-
-                try
-                {
-                    var colors = receiver.GetColorParamNames();
-                    if (colors != null && colors.Contains("rootColor")) continue;
-
-                    bool hasSimEnabled = false;
-                    try
-                    {
-                        var boolNames = receiver.GetBoolParamNames();
-                        hasSimEnabled = (boolNames != null && boolNames.Contains("simEnabled"));
-                    }
-                    catch { }
-
-                    if (!hasSimEnabled) continue;
-
-                    JSONStorableBool simEnabledBool = null;
-                    try { simEnabledBool = receiver.GetBoolJSONParam("simEnabled"); } catch { }
-                    if (simEnabledBool != null && simEnabledBool.val)
-                    {
-                        try
-                        {
-                            if (receiver.GetActionNames() != null && receiver.GetActionNames().Contains("Reset"))
-                            {
-                                receiver.CallAction("Reset");
-                            }
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-            }
-        }
     }
 }

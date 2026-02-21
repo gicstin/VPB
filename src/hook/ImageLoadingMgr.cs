@@ -293,6 +293,8 @@ namespace VPB
                 LogUtil.LogError("DoCallback "+qi.imgPath+" "+ex.ToString());
             }
         }
+        
+
 
         WaitForEndOfFrame waitForEndOfFrame = new WaitForEndOfFrame();
         IEnumerator DelayDoCallback(ImageLoaderThreaded.QueuedImage qi)
@@ -436,9 +438,20 @@ namespace VPB
         {
             try
             {
+                string path = data.OriginalQI.imgPath ?? "";
+                string pathLower = path.ToLowerInvariant();
+                bool isSimTexture = pathLower.Contains("phys") || pathLower.Contains("/sim.") || pathLower.Contains("\\sim.");
+                
                 Texture2D tex = new Texture2D(data.Meta.Width, data.Meta.Height, data.Meta.Format, false, data.OriginalQI.linear);
                 TextureUtil.SafeLoadRawTextureData(tex, data.Data, data.Meta.Width, data.Meta.Height, data.Meta.Format);
-                tex.Apply(false, true);
+                
+                tex.Apply(false, !isSimTexture);
+                
+                if (isSimTexture)
+                {
+                    LogUtil.Log($"[VPB SIM] Created READABLE sim texture from cache: {path}");
+                }
+                
                 data.OriginalQI.tex = tex;
 
                 RegisterTexture(data.CacheKey, tex);
