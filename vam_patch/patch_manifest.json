@@ -60,10 +60,6 @@
     "IsDirectory": false
   },
   {
-    "RelativePath": "doorstop_config.ini",
-    "IsDirectory": false
-  },
-  {
     "RelativePath": "BepInEx/plugins",
     "IsDirectory": true
   },
