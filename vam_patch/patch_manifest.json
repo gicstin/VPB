@@ -52,6 +52,10 @@
     "IsDirectory": false
   },
   {
+    "RelativePath": "doorstop_config.ini",
+    "IsDirectory": false
+  },
+  {
     "RelativePath": "changelog.txt",
     "IsDirectory": false
   },
