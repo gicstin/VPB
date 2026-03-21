@@ -439,8 +439,7 @@ namespace VPB
             try
             {
                 string path = data.OriginalQI.imgPath ?? "";
-                string pathLower = path.ToLowerInvariant();
-                bool isSimTexture = pathLower.Contains("phys") || pathLower.Contains("/sim.") || pathLower.Contains("\\sim.");
+                bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(path);
                 
                 Texture2D tex = new Texture2D(data.Meta.Width, data.Meta.Height, data.Meta.Format, false, data.OriginalQI.linear);
                 TextureUtil.SafeLoadRawTextureData(tex, data.Data, data.Meta.Width, data.Meta.Height, data.Meta.Format);

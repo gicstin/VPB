@@ -106,6 +106,23 @@ namespace VPB
             return priority;
         }
 
+        internal static bool IsSimulationTexturePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string lower = path.ToLowerInvariant();
+
+            if (lower.Contains("phys")) return true;
+            if (lower.Contains("simulation")) return true;
+
+            int lastSlash = lower.LastIndexOfAny(new char[] { '/', '\\' });
+            string filename = lastSlash >= 0 ? lower.Substring(lastSlash + 1) : lower;
+            int lastDot = filename.LastIndexOf('.');
+            if (lastDot > 0) filename = filename.Substring(0, lastDot);
+            if (filename.Contains("sim")) return true;
+
+            return false;
+        }
+
         static int CalculateImagePriority(string path)
         {
             if (string.IsNullOrEmpty(path)) return 1000;
@@ -431,6 +448,8 @@ namespace VPB
 
             if (!Settings.Instance.EnableZstdCompression.Value) return;
 
+            if (IsSimulationTexturePath(qi.imgPath)) return;
+
             if (ImageLoadingMgr.singleton.Request(qi))
             {
                 // Skip the original logic
@@ -633,6 +652,8 @@ namespace VPB
             if (!Settings.Instance.EnableZstdCompression.Value) return true;
 
             if (ImageLoadingMgr.singleton == null) return true;
+
+            if (IsSimulationTexturePath(qi.imgPath)) return true;
 
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;

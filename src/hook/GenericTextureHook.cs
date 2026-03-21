@@ -560,6 +560,8 @@ namespace VPB
         {
             if (Settings.Instance == null || !Settings.Instance.EnableZstdCompression.Value) return false;
 
+            if (SuperControllerHook.IsSimulationTexturePath(path)) return false;
+
             try
             {
                 var qi = new ImageLoaderThreaded.QueuedImage();
@@ -632,7 +634,7 @@ namespace VPB
                                 }
 
                                 tex.LoadRawTextureData(bytes);
-                                tex.Apply(false, !markNonReadable);
+                                tex.Apply(false, markNonReadable);
 
                                 return true;
                             }
