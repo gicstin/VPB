@@ -9,11 +9,153 @@ using UnityEngine;
 using HarmonyLib;
 using Prime31.MessageKit;
 using GPUTools.Hair.Scripts.Settings;
+using SimpleJSON;
 
 namespace VPB
 {
     public class SuperControllerHook
     {
+        // Registry of confirmed simulation texture paths extracted from preset files
+        private static HashSet<string> simTextureRegistry = new HashSet<string>();
+        private static readonly object registryLock = new object();
+
+        /// <summary>
+        /// Registers a texture path as a simulation texture based on preset parsing
+        /// </summary>
+        public static void RegisterSimTexture(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            string normalized = path.ToLowerInvariant();
+            lock (registryLock)
+            {
+                simTextureRegistry.Add(normalized);
+            }
+        }
+
+        /// <summary>
+        /// Clears the sim texture registry when loading a new scene
+        /// </summary>
+        public static void ClearSimTextureRegistry()
+        {
+            lock (registryLock)
+            {
+                simTextureRegistry.Clear();
+            }
+        }
+
+        /// <summary>
+        /// Parses a clothing preset (.vaj/.vap) to find sim-enabled textures
+        /// </summary>
+        public static void ParsePresetForSimTextures(string presetPath)
+        {
+            if (string.IsNullOrEmpty(presetPath)) return;
+            
+            try
+            {
+                JSONNode root = SuperController.singleton.LoadJSON(presetPath);
+                if (root == null) return;
+
+                // Recursively search for simEnabled entries with texture URLs
+                ParseNodeForSimTexturesRecursive(root, presetPath);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning($"[VPB SIM] Failed to parse preset for sim textures: {presetPath} - {ex.Message}");
+            }
+        }
+
+        private static void ParseNodeForSimTexturesRecursive(JSONNode node, string presetPath)
+        {
+            if (node == null) return;
+
+            var obj = node.AsObject;
+            if (obj != null)
+            {
+                foreach (KeyValuePair<string, JSONNode> kv in obj)
+                {
+                    string key = kv.Key;
+                    JSONNode value = kv.Value;
+
+                    // Check if this entry has simEnabled="true"
+                    if (key.Equals("simEnabled", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string valStr = value.Value?.ToLowerInvariant();
+                        if (valStr == "true" || valStr == "1")
+                        {
+                            // Look for texture URL in the parent or sibling nodes
+                            // The structure is typically: { "id": "...", "simEnabled": "true", "textureUrl": "..." }
+                            // Or: { "id": "...Sim", "simEnabled": "true", ... }
+                            
+                            // Try to find a texture URL in the same object
+                            string textureUrl = FindTextureUrlInObject(obj);
+                            if (!string.IsNullOrEmpty(textureUrl))
+                            {
+                                RegisterSimTexture(textureUrl);
+                                LogUtil.Log($"[VPB SIM] Registered sim texture from preset: {textureUrl}");
+                            }
+                        }
+                    }
+
+                    // Recurse into child nodes
+                    ParseNodeForSimTexturesRecursive(value, presetPath);
+                }
+            }
+
+            var arr = node.AsArray;
+            if (arr != null)
+            {
+                for (int i = 0; i < arr.Count; i++)
+                {
+                    ParseNodeForSimTexturesRecursive(arr[i], presetPath);
+                }
+            }
+        }
+
+        private static string FindTextureUrlInObject(JSONClass obj)
+        {
+            if (obj == null) return null;
+
+            // Common keys for texture URLs in clothing presets
+            string[] urlKeys = new[] { "url", "Url", "textureUrl", "TextureUrl", 
+                                       "diffuseUrl", "normalUrl", "specularUrl", "glossUrl" };
+
+            foreach (var key in urlKeys)
+            {
+                if (obj[key] != null)
+                {
+                    string val = obj[key].Value;
+                    if (!string.IsNullOrEmpty(val) && (val.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || 
+                                                        val.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return val;
+                    }
+                }
+            }
+
+            // Also check "id" field which often contains the texture reference
+            if (obj["id"] != null)
+            {
+                string id = obj["id"].Value;
+                // If id ends with "Sim" and there's a nearby texture reference
+                if (id.EndsWith("Sim", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Try to find any URL field
+                    foreach (KeyValuePair<string, JSONNode> kv in obj)
+                    {
+                        if (kv.Key.IndexOf("Url", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            kv.Key.IndexOf("url", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            string val = kv.Value?.Value;
+                            if (!string.IsNullOrEmpty(val) && (val.EndsWith(".png") || val.EndsWith(".jpg")))
+                                return val;
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private static bool IsPluginsAlwaysEnabledSettingOn()
         {
             try
@@ -111,14 +253,35 @@ namespace VPB
             if (string.IsNullOrEmpty(path)) return false;
             string lower = path.ToLowerInvariant();
 
+            // First check the registry of confirmed sim textures from preset parsing
+            lock (registryLock)
+            {
+                if (simTextureRegistry.Contains(lower))
+                    return true;
+            }
+
+            // Fall back to heuristic detection
             if (lower.Contains("phys")) return true;
             if (lower.Contains("simulation")) return true;
 
             int lastSlash = lower.LastIndexOfAny(new char[] { '/', '\\' });
             string filename = lastSlash >= 0 ? lower.Substring(lastSlash + 1) : lower;
             int lastDot = filename.LastIndexOf('.');
+            string ext = lastDot > 0 ? filename.Substring(lastDot) : "";
             if (lastDot > 0) filename = filename.Substring(0, lastDot);
+            
             if (filename.Contains("sim")) return true;
+            
+            // Clothing sim textures often have short names like rbn1.png, psim1.png, bsim1.png
+            // Detect: in clothing path + short filename (<=8 chars) + ends with digit
+            if (lower.Contains("/clothing/") && filename.Length <= 8)
+            {
+                if (filename.Length > 0 && char.IsDigit(filename[filename.Length - 1]))
+                {
+                    LogUtil.Log($"[VPB SIM] Detected clothing sim texture by heuristic: {path}");
+                    return true;
+                }
+            }
 
             return false;
         }
@@ -127,6 +290,8 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(path)) return 1000;
             string p = path;
+
+            if (IsSimulationTexturePath(p)) return -1;
 
             if (Has(p, "/hair/") || Has(p, "/hairstyles/") || Has(p, "/textures/hair") || Has(p, "hair_") || Has(p, "scalp") || Has(p, "strand") || Has(p, "hairtex")) return 0;
 
@@ -351,6 +516,9 @@ namespace VPB
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
             try
             {
+                // Clear sim texture registry for new scene
+                ClearSimTextureRegistry();
+
                 try
                 {
                     SceneLoadingUtils.NotifySceneLoadStarting(saveName, loadMerge);
@@ -447,8 +615,6 @@ namespace VPB
             ImageLoadingMgr.currentProcessingIsThumbnail = qi.isThumbnail;
 
             if (!Settings.Instance.EnableZstdCompression.Value) return;
-
-            if (IsSimulationTexturePath(qi.imgPath)) return;
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
@@ -653,8 +819,6 @@ namespace VPB
 
             if (ImageLoadingMgr.singleton == null) return true;
 
-            if (IsSimulationTexturePath(qi.imgPath)) return true;
-
             if (qi.imgPath.EndsWith(".jpg")) qi.textureFormat = TextureFormat.RGB24;
             if (qi.imgPath.EndsWith(".png")) qi.textureFormat = TextureFormat.RGBA32;
 
@@ -696,6 +860,49 @@ namespace VPB
             // Ignore hub browse
             if (__instance.tex != null)
             {
+                // Fix up simulation textures that were loaded as non-readable by VaM's native loader
+                if (IsSimulationTexturePath(__instance.imgPath))
+                {
+                    try
+                    {
+                        // Force re-apply with isReadable=true by recreating the texture
+                        // We need to get the raw data and recreate with proper settings
+                        var tex = __instance.tex;
+                        if (tex != null && tex.format != TextureFormat.RGBA32 && tex.format != TextureFormat.RGB24)
+                        {
+                            // Texture is compressed (DXT), we need to decompress to make it readable
+                            // This is expensive but necessary for sim textures
+                            LogUtil.Log($"[VPB SIM] PostFinish: Fixing up non-readable sim texture: {__instance.imgPath}");
+                            
+                            // Create a temporary readable copy by rendering to a RenderTexture
+                            RenderTexture rt = RenderTexture.GetTemporary(tex.width, tex.height, 0, RenderTextureFormat.ARGB32);
+                            Graphics.Blit(tex, rt);
+                            
+                            RenderTexture.active = rt;
+                            Texture2D readableTex = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false, __instance.linear);
+                            readableTex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
+                            readableTex.Apply(false, false); // Keep it readable!
+                            RenderTexture.active = null;
+                            RenderTexture.ReleaseTemporary(rt);
+                            
+                            UnityEngine.Object.Destroy(tex);
+                            __instance.tex = readableTex;
+                            
+                            LogUtil.Log($"[VPB SIM] PostFinish: Fixed sim texture to be readable: {__instance.imgPath}");
+                        }
+                        else if (tex != null)
+                        {
+                            // Already uncompressed, just re-apply with readable flag
+                            tex.Apply(false, false);
+                            LogUtil.Log($"[VPB SIM] PostFinish: Applied readable flag to sim texture: {__instance.imgPath}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError($"[VPB SIM] PostFinish: Failed to fix up sim texture {__instance.imgPath}: {ex.Message}");
+                    }
+                }
+
                 if (ImageLoadingMgr.singleton != null)
                 {
                     ImageLoadingMgr.singleton.ResolveInflightForQueuedImage(__instance);

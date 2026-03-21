@@ -209,7 +209,7 @@ namespace VPB
 
 			protected string GetVPBCachePath()
 			{
-                return TextureUtil.GetZstdCachePath(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, setSize ? width : 0, setSize ? height : 0, bumpStrength);
+                return TextureUtil.GetZstdCachePath(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, setSize ? width : 0, setSize ? height : 0, bumpStrength, SuperControllerHook.IsSimulationTexturePath(imgPath));
 			}
 
 			protected string GetDiskCachePath()
@@ -820,7 +820,9 @@ namespace VPB
                             catch (Exception ex2) { LogUtil.LogError($"[VPB] LoadRawTextureData retry failed for {imgPath}: {ex2.Message}"); }
                         }
 					}
-					tex.Apply(false);
+					bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
+					tex.Apply(false, !isSimTexture);
+					if (isSimTexture) LogUtil.Log($"[VPB SIM] CustomLoader: Applied READABLE sim texture: {imgPath}");
 					if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
 					{
 						try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
@@ -828,7 +830,9 @@ namespace VPB
 				}
                 else if (decodedFromFastPath)
                 {
-                    tex.Apply(createMipMaps, !canCompress);
+					bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
+                    tex.Apply(createMipMaps, !canCompress && !isSimTexture);
+					if (isSimTexture) LogUtil.Log($"[VPB SIM] CustomLoader (FastPath): Applied READABLE sim texture: {imgPath}");
                     if (canCompress && tex.format != TextureFormat.DXT1 && tex.format != TextureFormat.DXT5)
                     {
                         try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
@@ -840,14 +844,16 @@ namespace VPB
                     {
 					    Texture2D texture2D = new Texture2D(width, height, textureFormat, createMipMaps, linear);
 					    TextureUtil.SafeLoadRawTextureData(texture2D, raw, width, height, textureFormat);
-					    texture2D.Apply();
+					    texture2D.Apply(false, false);
 					    if (canCompress)
 					    {
 						    try { texture2D.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed (dxt) " + ex + " path=" + imgPath); canCompress = false; }
 					    }
 					    byte[] rawTextureData = texture2D.GetRawTextureData();
 					    tex.LoadRawTextureData(rawTextureData);
-					    tex.Apply();
+						bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
+					    tex.Apply(false, !isSimTexture);
+						if (isSimTexture) LogUtil.Log($"[VPB SIM] CustomLoader (DXT Fallback): Applied READABLE sim texture: {imgPath}");
 					    UnityEngine.Object.Destroy(texture2D);
                     }
                     catch (Exception ex)
@@ -860,7 +866,9 @@ namespace VPB
                     try
                     {
 					    TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat);
-					    tex.Apply();
+						bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
+					    tex.Apply(false, !isSimTexture);
+						if (isSimTexture) LogUtil.Log($"[VPB SIM] CustomLoader (Standard): Applied READABLE sim texture: {imgPath}");
 					    if (canCompress)
 					    {
 						    try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }

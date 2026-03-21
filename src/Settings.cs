@@ -20,6 +20,7 @@ namespace VPB
         public ConfigEntry<string> CreateGalleryKey;
         public ConfigEntry<string> HubKey;
         public ConfigEntry<string> ClearConsoleKey;
+        public ConfigEntry<string> BoneViewKey;
         public ConfigEntry<float> UIScale;
         public ConfigEntry<Vector2> UIPosition;
         public ConfigEntry<bool> MiniMode;
@@ -79,6 +80,7 @@ namespace VPB
             CreateGalleryKey = config.Bind<string>("UI", "CreateGalleryKey", "Ctrl+N", "Shortcut key for Create Gallery Pane.");
             HubKey = config.Bind<string>("UI", "HubKey", "Ctrl+H", "Shortcut key for Open Hub Browser.");
             ClearConsoleKey = config.Bind<string>("UI", "ClearConsoleKey", "F2", "Shortcut key to clear the BepInEx console output.");
+            BoneViewKey = config.Bind<string>("UI", "BoneViewKey", "F9", "Shortcut key to toggle Bone View mode (draws skeleton over characters).");
             UIScale = config.Bind<float>("UI", "Scale", 1.5f, "Set UI Scale.");
             UIPosition = config.Bind<Vector2>("UI", "Position", Vector2.zero, "Set UI Position.");
             MiniMode = config.Bind<bool>("UI", "MiniMode", false, "Set Mini Mode.");

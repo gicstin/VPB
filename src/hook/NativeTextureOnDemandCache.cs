@@ -743,6 +743,7 @@ namespace VPB
                                 createAlphaFromGrayscale = false,
                                 createNormalFromBump = false,
                                 invert = false,
+                                isReadable = false,
                                 bumpStrength = 1f
                             }
                         };
@@ -1030,6 +1031,7 @@ namespace VPB
             public bool createAlphaFromGrayscale;
             public bool createNormalFromBump;
             public bool invert;
+            public bool isReadable;
             public float bumpStrength;
         }
 
@@ -1438,6 +1440,13 @@ namespace VPB
                 flags.compress = false;
             }
 
+            if (SuperControllerHook.IsSimulationTexturePath(internalPath))
+            {
+                flags.linear = true;
+                flags.compress = false;
+                flags.isReadable = true;
+            }
+
             if (!flags.linear)
             {
                 bool looksLikeSpecSuffix = l.EndsWith("_s.jpg") || l.EndsWith("-s.jpg") || l.EndsWith(" s.jpg")
@@ -1462,6 +1471,7 @@ namespace VPB
                 createAlphaFromGrayscale = false,
                 createNormalFromBump = false,
                 invert = false,
+                isReadable = false,
                 bumpStrength = 1f
             };
 
@@ -1603,7 +1613,7 @@ namespace VPB
                                 TextureFlags flags;
                                 if (!TryGetFlagsFromVapKey(key, out flags))
                                 {
-                                    flags = new TextureFlags { compress = true, linear = false, isNormalMap = false, createAlphaFromGrayscale = false, createNormalFromBump = false, invert = false, bumpStrength = 1f };
+                                    flags = new TextureFlags { compress = true, linear = false, isNormalMap = false, createAlphaFromGrayscale = false, createNormalFromBump = false, invert = false, isReadable = false, bumpStrength = 1f };
                                 }
                                 ApplyPathHeuristics(internalPath, ref flags);
 
@@ -1695,6 +1705,7 @@ namespace VPB
 
             string sig = string.Empty;
             if (targetWidth > 0 && targetHeight > 0) sig += targetWidth + "_" + targetHeight;
+            if (flags.isReadable) sig += "_R";
             if (flags.compress) sig += "_C";
             if (flags.linear) sig += "_L";
             if (flags.isNormalMap) sig += "_N";
@@ -1732,6 +1743,7 @@ namespace VPB
                                 createAlphaFromGrayscale = false,
                                 createNormalFromBump = false,
                                 invert = false,
+                                isReadable = false,
                                 bumpStrength = 1f
                             }
                         };
@@ -1798,7 +1810,7 @@ namespace VPB
                     {
                         try
                         {
-                            zstdPath = TextureUtil.GetZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength);
+                            zstdPath = TextureUtil.GetZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
                         }
                         catch { zstdPath = null; }
                     }
@@ -1819,7 +1831,7 @@ namespace VPB
 
                             try
                             {
-                                zstdPath = TextureUtil.GetZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength);
+                                zstdPath = TextureUtil.GetZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
                             }
                             catch { zstdPath = null; }
                         }
@@ -2046,6 +2058,7 @@ namespace VPB
                             meta["width"] = w.ToString();
                             meta["height"] = h.ToString();
                             meta["format"] = tf.ToString();
+                            if (flags.isReadable) meta["isReadable"] = "true";
 
                             AtomicWriteAllText(cachePath + "meta", meta.ToString(string.Empty));
                             AtomicWriteAllBytes(cachePath, payload);

@@ -570,7 +570,8 @@ namespace VPB
                 qi.compress = true;
                 qi.linear = false; 
 
-                string baseZstdPath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength);
+                bool isSim = SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
+                string baseZstdPath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength, isSim);
                 if (string.IsNullOrEmpty(baseZstdPath)) return false;
 
                 string metaPath = baseZstdPath + "meta";
@@ -634,7 +635,13 @@ namespace VPB
                                 }
 
                                 tex.LoadRawTextureData(bytes);
-                                tex.Apply(false, markNonReadable);
+                                bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(path);
+                                tex.Apply(false, markNonReadable && !isSimTexture);
+
+                                if (isSimTexture)
+                                {
+                                    LogUtil.Log($"[VPB SIM] GenericHook: Applied READABLE sim texture: {path}");
+                                }
 
                                 return true;
                             }

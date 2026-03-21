@@ -136,7 +136,7 @@ namespace VPB
 
             protected string GetVPBCachePath()
             {
-                return TextureUtil.GetZstdCachePath(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, setSize ? width : 0, setSize ? height : 0, bumpStrength);
+                return TextureUtil.GetZstdCachePath(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, setSize ? width : 0, setSize ? height : 0, bumpStrength, SuperControllerHook.IsSimulationTexturePath(imgPath));
             }
 
             protected string GetDiskCachePath()
@@ -582,7 +582,9 @@ namespace VPB
                             CreateTexture();
                             if (tex != null) try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); } catch { }
                         }
-                        tex.Apply(false);
+                        bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
+                        tex.Apply(false, !isSimTexture);
+                        if (isSimTexture) LogUtil.Log($"[VPB SIM] HubLoader: Applied READABLE sim texture: {imgPath}");
                         if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
                         {
                             try { tex.Compress(true); } catch { canCompress = false; }
@@ -590,7 +592,14 @@ namespace VPB
                     }
                     else
                     {
-                        try { TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); tex.Apply(); if (canCompress) tex.Compress(true); }
+                        try 
+                        { 
+                            TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); 
+                            bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
+                            tex.Apply(false, !isSimTexture); 
+                            if (isSimTexture) LogUtil.Log($"[VPB SIM] HubLoader (Standard): Applied READABLE sim texture: {imgPath}");
+                            if (canCompress) tex.Compress(true); 
+                        }
                         catch (Exception ex) { LogUtil.LogError($"[VPB] Hub LoadRawTextureData failed for {imgPath}: {ex.Message}"); }
 
                         if (MVR.FileManagement.CacheManager.CachingEnabled && !loadedFromCache)

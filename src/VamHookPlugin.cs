@@ -111,6 +111,7 @@ namespace VPB
         private KeyUtil CreateGalleryKey;
         private KeyUtil HubKey;
         private KeyUtil ClearConsoleKey;
+        private KeyUtil BoneViewKey;
         private Vector2 UIPosition;
         private bool MiniMode;
         
@@ -806,6 +807,7 @@ namespace VPB
             CreateGalleryKey = KeyUtil.Parse(Settings.Instance.CreateGalleryKey.Value);
             HubKey = KeyUtil.Parse(Settings.Instance.HubKey.Value);
             ClearConsoleKey = KeyUtil.Parse(Settings.Instance.ClearConsoleKey.Value);
+            BoneViewKey = KeyUtil.Parse(Settings.Instance.BoneViewKey.Value);
             m_UIScale = Settings.Instance.UIScale.Value;
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
@@ -1115,6 +1117,10 @@ namespace VPB
             if (ClearConsoleKey != null && ClearConsoleKey.TestKeyDown())
             {
                 TryClearConsole();
+            }
+            if (BoneViewKey != null && BoneViewKey.TestKeyDown())
+            {
+                BoneViewMode.Toggle();
             }
             OnDemandTextureCacheHook.Update();
             // Hotkeys

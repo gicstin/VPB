@@ -43,6 +43,7 @@ namespace VPB
             public int Height;
             public TextureFormat Format;
             public bool IsDownscaled;
+            public bool IsReadable;
         }
         
         private class CachedDecompressed
@@ -82,11 +83,11 @@ namespace VPB
                 }
             }
 
-            string vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength);
+                    string vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength, SuperControllerHook.IsSimulationTexturePath(qi.imgPath));
 
             if (vpbCachePath != null && !File.Exists(vpbCachePath) && qi.setSize)
             {
-                string vpbCachePathDefault = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength);
+                string vpbCachePathDefault = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength, SuperControllerHook.IsSimulationTexturePath(qi.imgPath));
                 if (File.Exists(vpbCachePathDefault))
                 {
                     vpbCachePath = vpbCachePathDefault;
@@ -161,12 +162,25 @@ namespace VPB
                 bool isDown = false;
                 try { isDown = metaJson["downscaled"].AsBool; } catch { }
 
+                bool isRead = false;
+                try 
+                { 
+                    if (metaJson["isReadable"] != null)
+                    {
+                        isRead = metaJson["isReadable"].AsBool; 
+                    }
+                } 
+                catch { }
+
+                LogUtil.Log($"[VPB SIM] FastLoadMetadata: path='{cachePath}', width={w}, height={h}, format={fmt}, isReadable={isRead}");
+
                 var entry = new MetadataEntry
                 {
                     Width = w,
                     Height = h,
                     Format = fmt,
-                    IsDownscaled = isDown
+                    IsDownscaled = isDown,
+                    IsReadable = isRead
                 };
 
                 lock (metadataCacheLock)
@@ -310,6 +324,8 @@ namespace VPB
             
             LogUtil.MarkImageActivity();
 
+            if (Settings.Instance == null || Settings.Instance.ThumbnailThreshold == null) return false;
+
             int threshold = Settings.Instance.ThumbnailThreshold.Value;
             if (qi.setSize && qi.width > 0 && qi.width <= threshold && qi.height > 0 && qi.height <= threshold)
                 return false;
@@ -439,8 +455,14 @@ namespace VPB
             try
             {
                 string path = data.OriginalQI.imgPath ?? "";
-                bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(path);
+                bool isSimTexturePath = SuperControllerHook.IsSimulationTexturePath(path);
+                bool isSimTexture = data.Meta.IsReadable || isSimTexturePath;
                 
+                if (isSimTexturePath || data.Meta.IsReadable)
+                {
+                    LogUtil.Log($"[VPB SIM] CreateTexture: path='{path}', isSimPath={isSimTexturePath}, metaIsReadable={data.Meta.IsReadable}, finalIsSim={isSimTexture}");
+                }
+
                 Texture2D tex = new Texture2D(data.Meta.Width, data.Meta.Height, data.Meta.Format, false, data.OriginalQI.linear);
                 TextureUtil.SafeLoadRawTextureData(tex, data.Data, data.Meta.Width, data.Meta.Height, data.Meta.Format);
                 

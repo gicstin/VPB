@@ -141,7 +141,7 @@ namespace VPB
             return sb.ToString();
         }
 
-        public static string GetZstdCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth = 0, int targetHeight = 0, float bumpStrength = 1f)
+        public static string GetZstdCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth = 0, int targetHeight = 0, float bumpStrength = 1f, bool isReadable = false)
         {
             if (string.IsNullOrEmpty(imgPath) || imgPath == "NULL") return null;
             
@@ -165,6 +165,7 @@ namespace VPB
 
             string sig = "";
             if (targetWidth > 0 && targetHeight > 0) sig += $"{targetWidth}_{targetHeight}";
+            if (isReadable) sig += "_R";
             if (compress) sig += "_C";
             if (linear) sig += "_L";
             if (isNormalMap) sig += "_N";
