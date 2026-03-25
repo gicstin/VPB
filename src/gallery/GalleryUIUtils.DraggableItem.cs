@@ -28,6 +28,7 @@ namespace VPB
         private Image ghostBorder;
         private Text ghostText; // Added text component
         private Renderer ghostRenderer;
+        private RawImage ghostImg; // 8b — cached reference to ghost's RawImage for late texture update
         private GameObject groundIndicator;
         private Vector3 lastGroundPoint;
         private bool hasGroundPoint;
@@ -185,6 +186,21 @@ namespace VPB
                      Panel.SetStatus(msg);
                 }
             }
+        }
+
+        private void Update()
+        {
+            if (isDraggingItem && (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape)))
+                CancelDrag();
+        }
+
+        private void CancelDrag()
+        {
+            isDraggingItem = false;
+            DestroyGhost();
+            DestroyGroundIndicator();
+            dragCam = null;
+            if (Panel != null) Panel.SetStatus("");
         }
 
         public void OnEndDrag(PointerEventData eventData)

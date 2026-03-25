@@ -1246,6 +1246,10 @@ namespace VPB
              if (cam == null) return;
 
              ghostRenderer = null;
+             ghostImg = null;
+
+             // 8b — resolve thumbnail texture; fall back to memory cache if async load is still pending
+             Texture ghostTex = GetGhostTexture();
 
              bool fixedMode = false;
              try { fixedMode = (Panel != null && Panel.isFixedLocally); } catch { }
@@ -1264,10 +1268,16 @@ namespace VPB
                      ghostRenderer = ghostObject.GetComponent<Renderer>();
                      if (ghostRenderer != null)
                      {
-                         Material m = new Material(Shader.Find("Unlit/Transparent"));
-                         if (ThumbnailImage != null) m.mainTexture = ThumbnailImage.texture;
-                         m.color = new Color(1f, 1f, 1f, 0.9f);
+                         // 8b — use Sprites/Default (always available, unlit, alpha-blended)
+                         Shader ghostShader = Shader.Find("Sprites/Default");
+                         if (ghostShader == null) ghostShader = Shader.Find("Unlit/Transparent");
+                         Material m = new Material(ghostShader);
+                         m.mainTexture = ghostTex;
+                         // hide the quad until we have a real texture to avoid a white flash
+                         m.color = ghostTex != null ? new Color(1f, 1f, 1f, 0.9f) : Color.clear;
                          ghostRenderer.material = m;
+                         ghostRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                         ghostRenderer.receiveShadows = false;
                      }
                  }
                  catch { }
@@ -1277,21 +1287,21 @@ namespace VPB
              else
              {
                  ghostObject = new GameObject("DragGhost");
-                 
+
                  Canvas rootCanvas = GetComponentInParent<Canvas>();
                  if (rootCanvas == null && Panel != null) rootCanvas = Panel.canvas;
-                 
-                 if (rootCanvas != null) 
+
+                 if (rootCanvas != null)
                  {
                      ghostObject.transform.SetParent(rootCanvas.transform, false);
                      ghostObject.layer = rootCanvas.gameObject.layer;
                      ghostObject.transform.localScale = Vector3.one;
                  }
-                 
+
                  ghostBorder = ghostObject.AddComponent<Image>();
                  ghostBorder.raycastTarget = false;
                  ghostBorder.color = new Color(1, 1, 1, 0.2f);
-                 
+
                  GameObject textGO = new GameObject("ActionText");
                  textGO.transform.SetParent(ghostObject.transform, false);
                  ghostText = textGO.AddComponent<Text>();
@@ -1301,7 +1311,7 @@ namespace VPB
                  ghostText.alignment = TextAnchor.UpperCenter;
                  ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
                  ghostText.verticalOverflow = VerticalWrapMode.Overflow;
-                 
+
                  textGO.AddComponent<Outline>().effectColor = Color.black;
 
                  RectTransform textRT = textGO.GetComponent<RectTransform>();
@@ -1316,17 +1326,16 @@ namespace VPB
                  contentGO.layer = ghostObject.layer;
                  RawImage img = contentGO.AddComponent<RawImage>();
                  img.raycastTarget = false;
-                 img.color = new Color(1, 1, 1, 0.7f);
-                 if (ThumbnailImage != null)
-                 {
-                     img.texture = ThumbnailImage.texture;
-                 }
-                 
+                 // 8b — hide until we have a real texture; coroutine restores color when it arrives
+                 img.color = ghostTex != null ? new Color(1f, 1f, 1f, 0.7f) : Color.clear;
+                 img.texture = ghostTex;
+                 ghostImg = img; // 8b — store for late texture update
+
                  RectTransform rt = ghostObject.GetComponent<RectTransform>();
                  if (rt == null) rt = ghostObject.AddComponent<RectTransform>();
-                 rt.sizeDelta = new Vector2(80, 80); 
+                 rt.sizeDelta = new Vector2(80, 80);
                  rt.pivot = new Vector2(0.5f, 0.5f);
-                 
+
                  RectTransform contentRT = contentGO.GetComponent<RectTransform>();
                  if (contentRT == null) contentRT = contentGO.AddComponent<RectTransform>();
                  contentRT.anchorMin = Vector2.zero;
@@ -1334,10 +1343,73 @@ namespace VPB
                  contentRT.offsetMin = new Vector2(5, 5);
                  contentRT.offsetMax = new Vector2(-5, -5);
              }
-             
+
+             // 8b — if texture was unavailable at drag start, poll until ThumbnailImage loads it
+             if (ghostTex == null) StartCoroutine(UpdateGhostTextureFromThumbnail());
+
              planeDistance = Vector3.Dot(transform.position - cam.transform.position, cam.transform.forward);
-             
+
              UpdateGhost(eventData, null, planeDistance);
+        }
+
+        // 8b — returns the best available thumbnail texture at drag start
+        private Texture GetGhostTexture()
+        {
+            if (ThumbnailImage != null && ThumbnailImage.texture != null)
+                return ThumbnailImage.texture;
+
+            // Thumbnail may not have loaded yet — check the memory cache directly
+            if (CustomImageLoaderThreaded.singleton != null && FileEntry != null)
+            {
+                string imgPath = GetThumbnailImgPath();
+                if (!string.IsNullOrEmpty(imgPath))
+                {
+                    Texture2D cached = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath);
+                    if (cached != null) return cached;
+                }
+            }
+            return null;
+        }
+
+        // 8b — resolves the thumbnail image path for a FileEntry (mirrors GalleryPanel.Thumbnails.cs logic)
+        private string GetThumbnailImgPath()
+        {
+            if (FileEntry == null) return null;
+            string lowerPath = FileEntry.Path.ToLowerInvariant();
+            if (lowerPath.EndsWith(".jpg") || lowerPath.EndsWith(".png"))
+                return FileEntry.Path;
+            string testJpg = Path.ChangeExtension(FileEntry.Path, ".jpg");
+            if (FileManager.FileExists(testJpg)) return testJpg;
+            string testPng = Path.ChangeExtension(FileEntry.Path, ".png");
+            if (FileManager.FileExists(testPng)) return testPng;
+            return null;
+        }
+
+        // 8b — coroutine: watches ThumbnailImage until its texture arrives, then pushes it to the ghost
+        private IEnumerator UpdateGhostTextureFromThumbnail()
+        {
+            float elapsed = 0f;
+            const float timeout = 10f;
+            while (elapsed < timeout && ghostObject != null)
+            {
+                Texture tex = GetGhostTexture();
+                if (tex != null)
+                {
+                    if (ghostImg != null)
+                    {
+                        ghostImg.texture = tex;
+                        ghostImg.color = new Color(1f, 1f, 1f, 0.7f);
+                    }
+                    if (ghostRenderer != null && ghostRenderer.material != null)
+                    {
+                        ghostRenderer.material.mainTexture = tex;
+                        ghostRenderer.material.color = new Color(1f, 1f, 1f, 0.9f);
+                    }
+                    yield break;
+                }
+                yield return null;
+                elapsed += Time.deltaTime;
+            }
         }
         
         private void UpdateGhost(PointerEventData eventData, Atom atom, float distance)
