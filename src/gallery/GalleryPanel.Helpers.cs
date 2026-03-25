@@ -119,20 +119,10 @@ namespace VPB
 
         public void ToggleSelector()
         {
-            // Grid mode: selector GO is inactive — use as a simple favorite toggle instead
-            if (selectorGO == null || !selectorGO.activeSelf)
-            {
-                ToggleFavorite();
-                return;
-            }
+            if (selectorGO == null) return;
             if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
             bool nextState = selectorCG == null || selectorCG.alpha <= 0.01f;
             SetSelectorVisible(nextState);
-        }
-
-        public void ToggleFavorite()
-        {
-            SetRating(currentRating > 0 ? 0 : 5);
         }
 
         public void CloseSelector()

@@ -1177,15 +1177,15 @@ namespace VPB
             CreateDetailText("Date", "Date", 120);
             CreateDetailText("Deps", "Deps", 100);
 
-            // Rating (Positioned at bottom right, independent of Details row)
+            // Rating (Top-right corner)
             GameObject ratingGO = new GameObject("Rating");
             ratingGO.transform.SetParent(btnGO.transform, false);
             RectTransform ratingRT = ratingGO.AddComponent<RectTransform>();
-            ratingRT.anchorMin = new Vector2(1, 0); // Bottom Right
-            ratingRT.anchorMax = new Vector2(1, 0);
-            ratingRT.pivot = new Vector2(1, 0);
+            ratingRT.anchorMin = new Vector2(1, 1); // Top Right
+            ratingRT.anchorMax = new Vector2(1, 1);
+            ratingRT.pivot = new Vector2(1, 1);
             ratingRT.sizeDelta = new Vector2(40, 40);
-            ratingRT.anchoredPosition = new Vector2(-2, 2); // Moved to corner
+            ratingRT.anchoredPosition = new Vector2(-2, -2);
 
             GameObject starBtnGO = UI.CreateUIButton(ratingGO, 32, 32, "★", 20, 0, 0, AnchorPresets.middleCenter, null);
             starBtnGO.name = "Star";
@@ -1195,12 +1195,12 @@ namespace VPB
             GameObject selectorGO = new GameObject("RatingSelector");
             selectorGO.transform.SetParent(btnGO.transform, false);
             RectTransform selectorRT = selectorGO.AddComponent<RectTransform>();
-            // Left of Star (Star is 40px wide at -2, so -42 left edge. Gap 5px -> -47)
-            selectorRT.anchorMin = new Vector2(1, 0);
-            selectorRT.anchorMax = new Vector2(1, 0);
-            selectorRT.pivot = new Vector2(1, 0);
-            selectorRT.sizeDelta = new Vector2(250, 40);
-            selectorRT.anchoredPosition = new Vector2(-47, 2);
+            // 2-row × 3-col grid: [X][1][2] / [3][4][5] — expands left from top-right corner
+            selectorRT.anchorMin = new Vector2(1, 1);
+            selectorRT.anchorMax = new Vector2(1, 1);
+            selectorRT.pivot = new Vector2(1, 1);
+            selectorRT.sizeDelta = new Vector2(122, 78);
+            selectorRT.anchoredPosition = new Vector2(-47, -2);
 
             CanvasGroup selectorCG = selectorGO.AddComponent<CanvasGroup>();
             selectorCG.alpha = 0f;
@@ -1210,31 +1210,24 @@ namespace VPB
             Image selectorBg = selectorGO.AddComponent<Image>();
             selectorBg.color = new Color(0.05f, 0.05f, 0.05f, 0.95f);
 
-            HorizontalLayoutGroup selectorHLG = selectorGO.AddComponent<HorizontalLayoutGroup>();
-            selectorHLG.childAlignment = TextAnchor.MiddleLeft;
-            selectorHLG.childControlHeight = true;
-            selectorHLG.childControlWidth = true;
-            selectorHLG.childForceExpandWidth = true;
-            selectorHLG.childForceExpandHeight = false;
-            selectorHLG.spacing = 1;
+            GridLayoutGroup selectorGrid = selectorGO.AddComponent<GridLayoutGroup>();
+            selectorGrid.cellSize = new Vector2(38, 36);
+            selectorGrid.spacing = new Vector2(2, 2);
+            selectorGrid.padding = new RectOffset(1, 1, 1, 1);
+            selectorGrid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            selectorGrid.constraintCount = 3;
+            selectorGrid.childAlignment = TextAnchor.UpperLeft;
 
             RatingHandler ratingHandler = btnGO.AddComponent<RatingHandler>();
             for (int i = 0; i <= 5; i++)
             {
                 int ratingValue = i;
                 string label = i == 0 ? "X" : i.ToString();
-                GameObject optBtnGO = UI.CreateUIButton(selectorGO, 40, 40, label, 16, 0, 0, AnchorPresets.middleCenter, () => ratingHandler.SetRating(ratingValue));
+                GameObject optBtnGO = UI.CreateUIButton(selectorGO, 38, 36, label, 14, 0, 0, AnchorPresets.middleCenter, () => ratingHandler.SetRating(ratingValue));
                 optBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
                 optBtnGO.GetComponent<Image>().color = RatingHandler.RatingColors[i];
                 if (i == 0) optBtnGO.GetComponentInChildren<Text>().color = Color.red;
                 else optBtnGO.GetComponentInChildren<Text>().color = Color.black;
-
-                LayoutElement optLE = optBtnGO.AddComponent<LayoutElement>();
-                optLE.minWidth = 0;
-                optLE.flexibleWidth = 1;
-                optLE.preferredHeight = 40;
-                optLE.minHeight = 40;
-                optLE.flexibleHeight = 0;
             }
 
             Button starBtn = starBtnGO.GetComponent<Button>();
@@ -1344,12 +1337,9 @@ namespace VPB
             Transform selectorTr = btnGO.transform.Find("RatingSelector");
             if (selectorTr != null)
             {
-                selectorTr.gameObject.SetActive(isListMode);
-                if (!isListMode)
-                {
-                    RatingHandler rh = btnGO.GetComponent<RatingHandler>();
-                    if (rh != null) rh.CloseSelector();
-                }
+                selectorTr.gameObject.SetActive(true);
+                RatingHandler rh = btnGO.GetComponent<RatingHandler>();
+                if (rh != null) rh.CloseSelector();
             }
 
             // Card Container (Hidden in List mode, Visible in Grid mode? No, Card is for VerticalCard mode which is removed or mapped to Grid if we had it)
