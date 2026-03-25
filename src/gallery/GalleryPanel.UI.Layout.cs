@@ -427,7 +427,10 @@ namespace VPB
                             if (go != null && go.activeSelf) visibleCount++;
                         }
                     }
-                    float yStart = -(visibleCount - 1) * 0.5f * spacing;
+                    // 5a — anchor on first layout; reuse on removal resyncs to prevent jump
+                    if (float.IsNaN(_hairSubmenuAnchorYStart))
+                        _hairSubmenuAnchorYStart = -(visibleCount - 1) * 0.5f * spacing;
+                    float yStart = _hairSubmenuAnchorYStart;
 
                     if (leftBaseRT != null)
                     {
@@ -536,7 +539,10 @@ namespace VPB
                             if (go != null && go.activeSelf) visibleCount++;
                         }
                     }
-                    float yStart = -(visibleCount - 1) * 0.5f * spacing;
+                    // 5a — anchor on first layout; reuse on removal resyncs to prevent jump
+                    if (float.IsNaN(_clothingSubmenuAnchorYStart))
+                        _clothingSubmenuAnchorYStart = -(visibleCount - 1) * 0.5f * spacing;
+                    float yStart = _clothingSubmenuAnchorYStart;
 
                     if (leftBaseRT != null)
                     {
@@ -1085,7 +1091,13 @@ namespace VPB
                     if (btnGO == null) return;
                     Button btn = btnGO.GetComponent<Button>();
                     Text t = btnGO.GetComponentInChildren<Text>();
-                    if (t != null) t.text = label ?? "";
+                    if (t != null)
+                    {
+                        t.text = label ?? "";
+                        t.resizeTextForBestFit = true;
+                        t.resizeTextMinSize = 8;
+                        t.resizeTextMaxSize = 16;
+                    }
                     if (btn != null)
                     {
                         btn.onClick.RemoveAllListeners();
@@ -1396,7 +1408,13 @@ namespace VPB
                     if (btnGO == null) return;
                     Button btn = btnGO.GetComponent<Button>();
                     Text t = btnGO.GetComponentInChildren<Text>();
-                    if (t != null) t.text = label ?? "";
+                    if (t != null)
+                    {
+                        t.text = label ?? "";
+                        t.resizeTextForBestFit = true;
+                        t.resizeTextMinSize = 8;
+                        t.resizeTextMaxSize = 16;
+                    }
 
                     if (btn != null) btn.transition = Selectable.Transition.None;
 
@@ -1540,6 +1558,7 @@ namespace VPB
                 hairSubmenuParentHoverCount = 0;
                 hairSubmenuOptionsHoverCount = 0;
                 hairSubmenuLastOptionCount = 0;
+                _hairSubmenuAnchorYStart = float.NaN; // 5a — reset so next open re-centers fresh
                 SetHairSubmenuButtonsVisible(false);
             }
             catch { }

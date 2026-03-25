@@ -1236,7 +1236,13 @@ namespace VPB
                     if (btnGO == null) return;
                     Button btn = btnGO.GetComponent<Button>();
                     Text t = btnGO.GetComponentInChildren<Text>();
-                    if (t != null) t.text = label ?? "";
+                    if (t != null)
+                    {
+                        t.text = label ?? "";
+                        t.resizeTextForBestFit = true;
+                        t.resizeTextMinSize = 8;
+                        t.resizeTextMaxSize = 16;
+                    }
 
                     if (btn != null) btn.transition = Selectable.Transition.None;
 
@@ -1388,6 +1394,7 @@ namespace VPB
                 clothingSubmenuParentHoverCount = 0;
                 clothingSubmenuOptionsHoverCount = 0;
                 clothingSubmenuLastOptionCount = 0;
+                _clothingSubmenuAnchorYStart = float.NaN; // 5a — reset so next open re-centers fresh
                 SetClothingSubmenuButtonsVisible(false);
                 UpdateRemoveClothingButtonLabels(0);
             }

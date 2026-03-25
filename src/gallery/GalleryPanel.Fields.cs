@@ -206,6 +206,10 @@ namespace VPB
         private float clothingSubmenuLastSyncTime = 0f;
         private const float ClothingSubmenuSyncInterval = 0.5f;
 
+        // 5a — anchor yStart captured on first submenu open; reused on removal resyncs to prevent button jump
+        private float _clothingSubmenuAnchorYStart = float.NaN;
+        private float _hairSubmenuAnchorYStart = float.NaN;
+
         private float clothingLabelLastCheckTime = 0f;
         private string clothingLabelLastAtomUid = null;
         private bool clothingLabelLastHasOptions = false;

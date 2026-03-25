@@ -1435,11 +1435,11 @@ namespace VPB
                 }
             }
 
-            // Rating Visibility (Only for List Mode)
+            // Rating always visible — grid uses it as a compact favorite toggle
             Transform ratingTr = btnGO.transform.Find("Rating");
             if (ratingTr != null)
             {
-                ratingTr.gameObject.SetActive(isListMode);
+                ratingTr.gameObject.SetActive(true);
             }
 
             // List Row Bind
@@ -1494,15 +1494,18 @@ namespace VPB
                     }
                 }
 
+            }
+
+            // Init RatingHandler in both list and grid mode
+            {
                 Text starText = null;
                 Transform starBtnTr = btnGO.transform.Find("Rating/Star");
                 if (starBtnTr != null) starText = starBtnTr.GetComponentInChildren<Text>();
-                
-                // Fallback for old layout if needed (though we rebuild buttons)
+
                 if (starText == null)
                 {
-                     Transform oldStar = btnGO.transform.Find("ListRow/Details/Rating/Star");
-                     if (oldStar != null) starText = oldStar.GetComponentInChildren<Text>();
+                    Transform oldStar = btnGO.transform.Find("ListRow/Details/Rating/Star");
+                    if (oldStar != null) starText = oldStar.GetComponentInChildren<Text>();
                 }
 
                 Transform selector2Tr = btnGO.transform.Find("RatingSelector");
