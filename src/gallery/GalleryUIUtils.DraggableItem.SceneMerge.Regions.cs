@@ -395,6 +395,9 @@ namespace VPB
                 ghostBorder = null;
                 ghostRenderer = null;
             }
+            // 8c — tear down the input-blocking overlay and clear the static drag flag
+            DestroyDragOverlay();
+            IsDragging = false;
         }
 
         private bool IsAmbiguousDrop(Atom atom, FileEntry entry)

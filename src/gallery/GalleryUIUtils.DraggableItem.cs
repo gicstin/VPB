@@ -35,6 +35,10 @@ namespace VPB
         private float planeDistance;
         private Camera dragCam;
 
+        // 8c — drag overlay: blocks pointer events on side panels while dragging
+        private GameObject _dragOverlay;
+        public static bool IsDragging = false;
+
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
         private static string _lastAppearanceClothingMode = "keep";
 
@@ -122,6 +126,10 @@ namespace VPB
             if (dragCam == null) dragCam = Camera.main;
 
             isDraggingItem = true;
+            IsDragging = true;
+
+            // 8c — create overlay BEFORE ghost so ghost is parented after it (renders on top)
+            CreateDragOverlay();
             CreateGhost(eventData);
 
             string msg;
@@ -130,6 +138,37 @@ namespace VPB
             if (Panel != null) Panel.SetStatus(msg);
             
             UpdateGhost(eventData, atom, dist);
+        }
+
+        // 8c — full-screen transparent overlay that absorbs pointer events to side panels during drag
+        private void CreateDragOverlay()
+        {
+            Canvas rootCanvas = GetComponentInParent<Canvas>();
+            if (rootCanvas == null && Panel != null) rootCanvas = Panel.canvas;
+            if (rootCanvas == null) return;
+
+            _dragOverlay = new GameObject("DragInputBlocker");
+            _dragOverlay.layer = rootCanvas.gameObject.layer;
+
+            RectTransform rt = _dragOverlay.AddComponent<RectTransform>();
+            rt.SetParent(rootCanvas.transform, false);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+
+            Image img = _dragOverlay.AddComponent<Image>();
+            img.color = Color.clear;
+            img.raycastTarget = true;
+        }
+
+        private void DestroyDragOverlay()
+        {
+            if (_dragOverlay != null)
+            {
+                Destroy(_dragOverlay);
+                _dragOverlay = null;
+            }
         }
 
         public void OnDrag(PointerEventData eventData)
