@@ -679,6 +679,15 @@ namespace VPB
             }
             currentLoadingGroupId = Guid.NewGuid().ToString();
 
+            // Determine scroll target before clearing the grid.
+            // Auto-refresh (keepScroll=true, content already loaded): read the live position now,
+            //   before SetItemCount(0) zeroes the content height and the ScrollRect clamps to top.
+            // Category change or first load: use _pendingScrollRestore set by Show()
+            //   (either a persisted position from the cache, or 1f for top).
+            float savedScrollNormalizedPos = (keepScroll && hasLoadedContent && scrollRect != null)
+                ? scrollRect.verticalNormalizedPosition
+                : _pendingScrollRestore;
+
             // Configure grid immediately so it has correct dimensions even while loading
             if (contentGO != null)
             {
@@ -1093,15 +1102,17 @@ namespace VPB
 
             UpdatePaginationText();
 
-            // Recycling Grid handles scroll reset implicitly on Refresh if needed, 
-            // but we can enforce it.
-            if (scrollRect != null && !keepScroll)
+            // Apply scroll position. scrollToBottom (pagination) always wins; otherwise use the
+            // pre-computed target (auto-refresh preserves live pos, category change uses cached pos).
+            if (scrollRect != null)
             {
-                scrollRect.verticalNormalizedPosition = scrollToBottom ? 0f : 1f;
+                scrollRect.verticalNormalizedPosition = scrollToBottom ? 0f : savedScrollNormalizedPos;
+                if (recyclingGrid != null) recyclingGrid.Refresh();
             }
 
             UpdateLayout();
             HideLoadingOverlay();
+            hasLoadedContent = true;
             refreshCoroutine = null;
             if (isPoseCategory)
             {

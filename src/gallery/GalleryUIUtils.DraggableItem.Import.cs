@@ -180,7 +180,7 @@ namespace VPB
                 if (FileButton.EnsureInstalledByText(presetJson))
                 {
                     MVR.FileManagement.FileManager.Refresh();
-                    FileManager.Refresh();
+                    FileManager.NotifyInstalled();
                 }
                 
                 // Start coroutine to disable suppression after preset import completes

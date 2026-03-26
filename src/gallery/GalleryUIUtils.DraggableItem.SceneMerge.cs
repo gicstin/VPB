@@ -129,7 +129,7 @@ namespace VPB
                     if (FileButton.EnsureInstalledByText(root.ToString()))
                     {
                         MVR.FileManagement.FileManager.Refresh();
-                        FileManager.Refresh();
+                        FileManager.NotifyInstalled();
                     }
                     
                     // Start coroutine to disable suppression after scene merge completes
@@ -459,7 +459,7 @@ namespace VPB
             if (installed)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
+                FileManager.NotifyInstalled();
             }
 
             string normalizedPath = UI.NormalizePath(path);

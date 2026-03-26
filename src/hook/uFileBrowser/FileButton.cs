@@ -274,7 +274,7 @@ namespace VPB
             if (dirty)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                VPB.FileManager.Refresh();
+                VPB.FileManager.NotifyInstalled();
             }
         }
 
@@ -338,8 +338,7 @@ namespace VPB
             if (flag)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                // Refresh this as well; this will raise events.
-                VPB.FileManager.Refresh();
+                VPB.FileManager.NotifyInstalled();
             }
         }
 

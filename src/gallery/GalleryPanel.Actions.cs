@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -73,6 +75,10 @@ namespace VPB
             var sw = System.Diagnostics.Stopwatch.StartNew();
             if (canvas == null) Init();
 
+            // Lazy-load per-category scroll cache; capture key for the category we may be leaving.
+            if (!_scrollCacheLoaded) LoadCategoryScrollCache();
+            string _prevCategoryKey = MakeCategoryScrollKey(currentCategoryTitle, currentPath);
+
             DateTime pkgRefreshTime = DateTime.MinValue;
             try { pkgRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
             bool packagesChanged = refreshOnNextShow || (pkgRefreshTime > lastAppliedPackageRefreshTime);
@@ -96,6 +102,15 @@ namespace VPB
                 tagsCached = false;
                 categoriesCached = false;
             }
+
+            // Save scroll for the category we're leaving; prime the restore target for the new one.
+            if (paramsChanged && hasLoadedContent && scrollRect != null)
+            {
+                categoryScrollPositions[_prevCategoryKey] = scrollRect.verticalNormalizedPosition;
+                SaveCategoryScrollCache();
+            }
+            _pendingScrollRestore = categoryScrollPositions.TryGetValue(MakeCategoryScrollKey(title, path), out float _sp) ? _sp : 1f;
+
             currentExtension = extension;
             currentPath = path;
             
@@ -120,9 +135,9 @@ namespace VPB
 
             canvas.gameObject.SetActive(true);
             
-            // Only refresh if params changed OR if we are empty (first run) OR explicit refresh needed
+            // Only refresh if params changed OR if we have never loaded (first run) OR explicit refresh needed
             // BUT skip if gallery refresh is suppressed (loading content from gallery)
-            bool shouldRefresh = paramsChanged || activeButtons.Count == 0 || packagesChanged;
+            bool shouldRefresh = paramsChanged || !hasLoadedContent || packagesChanged;
             
             try
             {
@@ -178,9 +193,52 @@ namespace VPB
         {
             if (canvas != null)
                 canvas.gameObject.SetActive(false);
-            
+
             hoverCount = 0;
             actionsPanel?.Hide();
+        }
+
+        private static string MakeCategoryScrollKey(string title, string path)
+            => (title ?? "") + "|" + (path ?? "");
+
+        private string ScrollCachePath
+        {
+            get
+            {
+                string baseDir = Directory.GetCurrentDirectory();
+                return Path.Combine(Path.Combine(Path.Combine(Path.Combine(baseDir, "Saves"), "PluginData"), "VPB"), "gallery_scroll.json");
+            }
+        }
+
+        private void LoadCategoryScrollCache()
+        {
+            _scrollCacheLoaded = true;
+            try
+            {
+                string p = ScrollCachePath;
+                if (!File.Exists(p)) return;
+                JSONNode root = JSON.Parse(File.ReadAllText(p));
+                if (root == null) return;
+                categoryScrollPositions.Clear();
+                foreach (KeyValuePair<string, JSONNode> kvp in root.AsObject)
+                    categoryScrollPositions[kvp.Key] = kvp.Value.AsFloat;
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] ScrollCache load: " + ex.Message); }
+        }
+
+        private void SaveCategoryScrollCache()
+        {
+            try
+            {
+                string p = ScrollCachePath;
+                string dir = Path.GetDirectoryName(p);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                JSONClass root = new JSONClass();
+                foreach (var kvp in categoryScrollPositions)
+                    root[kvp.Key].AsFloat = kvp.Value;
+                File.WriteAllText(p, root.ToString());
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] ScrollCache save: " + ex.Message); }
         }
 
         public void SetHoverPath(FileEntry file)

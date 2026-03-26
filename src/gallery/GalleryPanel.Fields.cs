@@ -52,6 +52,10 @@ namespace VPB
         public bool IsVisible => canvas != null && canvas.gameObject.activeSelf;
         
         private bool refreshOnNextShow;
+        private bool hasLoadedContent = false;
+        private Dictionary<string, float> categoryScrollPositions = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        private float _pendingScrollRestore = 1f;
+        private bool _scrollCacheLoaded = false;
         private DateTime lastAppliedPackageRefreshTime = DateTime.MinValue;
         
         // Configuration

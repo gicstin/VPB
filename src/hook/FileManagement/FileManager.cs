@@ -584,6 +584,42 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Lightweight post-install/uninstall sync. Skips the full filesystem scan and does NOT
+        /// signal observers. Safe to call after InstallSelf/UninstallSelf because those methods
+        /// already update VarPackage.Path in-place, so PackagesByUid is already accurate.
+        /// Resync packagesByPath and recount s_InstalledCount (read via OnGUI — no event needed).
+        /// lastPackageRefreshTime is intentionally NOT updated so the gallery does not see a
+        /// spurious change and trigger a RefreshFiles: the file list is identical before and after
+        /// a path-only move (AllPackages ↔ AddonPackages).
+        /// </summary>
+        public static void NotifyInstalled()
+        {
+            lock (packagesLock)
+            {
+                if (packagesByUid != null && packagesByPath != null)
+                {
+                    packagesByPath.Clear();
+                    foreach (var pkg in packagesByUid.Values)
+                    {
+                        if (pkg != null && !string.IsNullOrEmpty(pkg.Path))
+                            packagesByPath[pkg.Path] = pkg;
+                    }
+                }
+
+                s_InstalledCount = 0;
+                if (packagesByUid != null)
+                {
+                    foreach (var pkg in packagesByUid.Values)
+                    {
+                        if (pkg != null && pkg.IsInstalled())
+                            s_InstalledCount++;
+                    }
+                }
+            }
+            // No lastPackageRefreshTime update, no MessageKit.post — gallery content is unchanged.
+        }
+
         public static void Refresh(bool init = false, bool clean = false, bool removeOldVersion = false)
         {
             if (singleton != null)
