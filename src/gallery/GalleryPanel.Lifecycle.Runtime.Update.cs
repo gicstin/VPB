@@ -240,17 +240,6 @@ namespace VPB
                 }
                 catch { }
 
-                if (isLoadingOverlayVisible && loadingBarFillRT != null)
-                {
-                    loadingBarAnimT += Time.deltaTime;
-                    float barWidth = (loadingBarContainerRT != null ? loadingBarContainerRT.rect.width : 420f);
-                    float fillWidth = loadingBarFillRT.sizeDelta.x;
-                    float travel = Mathf.Max(0f, (barWidth - fillWidth) * 0.5f);
-                    float t = Mathf.PingPong(loadingBarAnimT * 1.2f, 1f);
-                    float x = Mathf.Lerp(-travel, travel, t);
-                    loadingBarFillRT.anchoredPosition = new Vector2(x, 0f);
-                }
-
                 if (thumbnailCacheCoroutine == null && pendingThumbnailCacheJobs != null && pendingThumbnailCacheJobs.Count > 0)
                 {
                     if (Time.unscaledTime - lastScrollTime > 0.25f)

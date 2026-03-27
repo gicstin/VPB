@@ -112,6 +112,7 @@ namespace VPB
         private KeyUtil HubKey;
         private KeyUtil ClearConsoleKey;
         private KeyUtil BoneViewKey;
+        private KeyUtil ToggleFixedGalleryKey;
         private Vector2 UIPosition;
         private bool MiniMode;
         
@@ -808,6 +809,7 @@ namespace VPB
             HubKey = KeyUtil.Parse(Settings.Instance.HubKey.Value);
             ClearConsoleKey = KeyUtil.Parse(Settings.Instance.ClearConsoleKey.Value);
             BoneViewKey = KeyUtil.Parse(Settings.Instance.BoneViewKey.Value);
+            ToggleFixedGalleryKey = KeyUtil.Parse(Settings.Instance.ToggleFixedGalleryKey.Value);
             m_UIScale = Settings.Instance.UIScale.Value;
             UIPosition = Settings.Instance.UIPosition.Value;
             MiniMode = Settings.Instance.MiniMode.Value;
@@ -1121,6 +1123,25 @@ namespace VPB
             if (BoneViewKey != null && BoneViewKey.TestKeyDown())
             {
                 BoneViewMode.Toggle();
+            }
+            if (ToggleFixedGalleryKey != null && ToggleFixedGalleryKey.TestKeyDown())
+            {
+                if (Gallery.singleton != null)
+                {
+                    var panels = Gallery.singleton.Panels;
+                    if (panels != null && panels.Count > 0)
+                    {
+                        // Toggle the first fixed panel found
+                        foreach (var panel in panels)
+                        {
+                            if (panel != null && panel.isFixedLocally)
+                            {
+                                panel.SetCollapsed(!panel.IsCollapsed);
+                                break;
+                            }
+                        }
+                    }
+                }
             }
             OnDemandTextureCacheHook.Update();
             // Hotkeys

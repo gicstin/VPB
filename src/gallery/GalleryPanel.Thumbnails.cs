@@ -143,7 +143,7 @@ namespace VPB
             qi.imgPath = imgPath;
             qi.isThumbnail = true;
             qi.compress = false;
-            qi.priority = 10; 
+            qi.priority = _nextThumbPriority;
             qi.groupId = currentLoadingGroupId;
             qi.callback = (res) => {
                 if (res != null && res.tex != null)

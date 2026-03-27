@@ -1411,16 +1411,11 @@ namespace VPB
                 Text labelText = labelTr.GetComponent<Text>();
                 if (labelText != null)
                 {
-                    string nameStr = file.Name;
+                    labelText.text = file.Name;
+                    // Add tooltip showing full package path if available
                     if (file is VarFileEntry vfe && vfe.Package != null)
                     {
-                        // Optimization: Use cached UID/Extension if available or fast path
-                        string ext = System.IO.Path.GetExtension(nameStr);
-                        labelText.text = $"{vfe.Package.Uid}.var ({ext})";
-                    }
-                    else
-                    {
-                        labelText.text = nameStr;
+                        AddTooltip(labelTr.gameObject, $"Package: {vfe.Package.Uid}.var");
                     }
                 }
             }
@@ -1443,14 +1438,11 @@ namespace VPB
                     Text t = nameTr.GetComponent<Text>();
                     if (t != null)
                     {
+                        t.text = file.Name;
+                        // Add tooltip showing full package path if available
                         if (file is VarFileEntry vfe && vfe.Package != null)
                         {
-                            string ext = System.IO.Path.GetExtension(file.Name);
-                            t.text = $"{vfe.Package.Uid}.var ({ext})";
-                        }
-                        else
-                        {
-                            t.text = file.Name;
+                            AddTooltip(nameTr.gameObject, $"Package: {vfe.Package.Uid}.var");
                         }
                     }
                 }

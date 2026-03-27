@@ -1621,6 +1621,8 @@ namespace VPB
             UpdateLayout();
         }
 
+        public bool IsCollapsed => isCollapsed;
+
         public void SetCollapsed(bool collapsed)
         {
             if (isCollapsed == collapsed) return;
@@ -1779,6 +1781,8 @@ namespace VPB
                 RecyclingGridView rgv = rgvState != null ? rgvState : contentGO.GetComponent<RecyclingGridView>();
                 if (rgv != null)
                 {
+                    // Preserve the center item so RecalculateLayout restores it after the column change.
+                    rgv.preserveCenterItemIndex = rgv.GetCenterItemIndex();
                     rgv.fixedColumns = GridColumnCount;
                     // No need to RefreshFiles, rgv handles column changes via its Update/RecalculateLayout
                 }

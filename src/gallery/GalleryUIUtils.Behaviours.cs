@@ -831,6 +831,9 @@ namespace VPB
         private float lastRectWidth = -1f;
         private int lastFixedColumns = -1;
 
+        // Set before a column-count change to restore the same center item after RecalculateLayout.
+        public int preserveCenterItemIndex = -1;
+
         private bool _needsVisibleUpdate = false;
         private bool _needsLayoutUpdate = true; // Start with true to ensure initial layout
 
@@ -925,9 +928,16 @@ namespace VPB
             itemWidth = cellWidth;
             itemHeight = cellHeight;
             colCount = Mathf.Max(1, cols);
-            
+
+            // Consume the preserved index before any height/scroll changes.
+            int centerIdx = preserveCenterItemIndex;
+            preserveCenterItemIndex = -1;
+
             UpdateContentHeight();
             Refresh();
+
+            if (centerIdx >= 0)
+                ScrollToCenterItem(centerIdx);
         }
 
         public void SetAdaptiveConfig(bool adaptive, float minSize, int fixedCols, bool fixedHeight)
@@ -984,6 +994,36 @@ namespace VPB
         public void Refresh()
         {
             RecycleAll();
+            UpdateVisibleItems();
+        }
+
+        /// <summary>Returns the index of the item whose row is closest to the viewport center.</summary>
+        public int GetCenterItemIndex()
+        {
+            if (content == null || viewport == null || itemsCount == 0) return 0;
+            float effectiveItemHeight = itemHeight + spacingY;
+            if (effectiveItemHeight <= 0.1f) return 0;
+            float centerY = content.anchoredPosition.y + viewport.rect.height * 0.5f;
+            int centerRow = Mathf.FloorToInt(centerY / effectiveItemHeight);
+            centerRow = Mathf.Clamp(centerRow, 0, Mathf.Max(0, rowCount - 1));
+            return Mathf.Clamp(centerRow * colCount, 0, itemsCount - 1);
+        }
+
+        /// <summary>Scrolls so that the row containing <paramref name="index"/> is centered in the viewport.</summary>
+        public void ScrollToCenterItem(int index)
+        {
+            if (content == null || viewport == null || itemsCount == 0 || index < 0) return;
+            index = Mathf.Min(index, itemsCount - 1);
+            float effectiveItemHeight = itemHeight + spacingY;
+            int row = index / Mathf.Max(1, colCount);
+            float rowCenterY = row * effectiveItemHeight + spacingY + itemHeight * 0.5f;
+            float targetScrollY = rowCenterY - viewport.rect.height * 0.5f;
+            float maxScrollY = content.sizeDelta.y - viewport.rect.height;
+            targetScrollY = Mathf.Clamp(targetScrollY, 0f, Mathf.Max(0f, maxScrollY));
+            if (_scrollRect != null)
+                _scrollRect.verticalNormalizedPosition = maxScrollY > 0f
+                    ? 1f - targetScrollY / maxScrollY
+                    : 1f;
             UpdateVisibleItems();
         }
 

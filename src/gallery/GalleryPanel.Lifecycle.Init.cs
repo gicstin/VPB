@@ -248,26 +248,45 @@ namespace VPB
             titleSearchRT.anchoredPosition = new Vector2(-40, 0);
             titleSearchRT.sizeDelta = new Vector2(240, 40);
 
-            // File Sort Button
-            GameObject fileSortBtn = UI.CreateUIButton(titleBarGO, 40, 40, "Az↑", 16, 0, 0, AnchorPresets.middleCenter, null);
-            fileSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
-            fileSortBtn.GetComponentInChildren<Text>().color = Color.white;
-            RectTransform fileSortRT = fileSortBtn.GetComponent<RectTransform>();
-            fileSortRT.anchorMin = new Vector2(0.5f, 0.5f);
-            fileSortRT.anchorMax = new Vector2(0.5f, 0.5f);
-            fileSortRT.pivot = new Vector2(0.5f, 0.5f);
-            fileSortRT.anchoredPosition = new Vector2(135, 0); // To the right of search
-            
-            fileSortBtnText = fileSortBtn.GetComponentInChildren<Text>();
-            
-            Button fileSortButton = fileSortBtn.GetComponent<Button>();
-            fileSortButton.onClick.RemoveAllListeners();
-            fileSortButton.onClick.AddListener(() => CycleSort("Files", fileSortBtnText));
-            
-            AddRightClickDelegate(fileSortBtn, () => ToggleSortDirection("Files", fileSortBtnText));
-            
+            // File Sort Type Button
+            GameObject fileSortTypeBtn = UI.CreateUIButton(titleBarGO, 35, 40, "Az", 16, 0, 0, AnchorPresets.middleCenter, null);
+            fileSortTypeBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            fileSortTypeBtn.GetComponentInChildren<Text>().color = Color.white;
+            RectTransform fileSortTypeRT = fileSortTypeBtn.GetComponent<RectTransform>();
+            fileSortTypeRT.anchorMin = new Vector2(0.5f, 0.5f);
+            fileSortTypeRT.anchorMax = new Vector2(0.5f, 0.5f);
+            fileSortTypeRT.pivot = new Vector2(0.5f, 0.5f);
+            fileSortTypeRT.anchoredPosition = new Vector2(120, 0); // To the right of search
+
+            fileSortTypeText = fileSortTypeBtn.GetComponentInChildren<Text>();
+
+            Button fileSortTypeButton = fileSortTypeBtn.GetComponent<Button>();
+            fileSortTypeButton.onClick.RemoveAllListeners();
+            fileSortTypeButton.onClick.AddListener(() => CycleSort("Files", fileSortTypeText, fileSortDirText));
+            AddTooltip(fileSortTypeBtn, "Cycle sort field (Az→Dt→Sz→Rt)");
+
+            // File Sort Direction Button
+            GameObject fileSortDirBtn = UI.CreateUIButton(titleBarGO, 35, 40, "↑", 16, 0, 0, AnchorPresets.middleCenter, null);
+            fileSortDirBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            fileSortDirBtn.GetComponentInChildren<Text>().color = Color.white;
+            RectTransform fileSortDirRT = fileSortDirBtn.GetComponent<RectTransform>();
+            fileSortDirRT.anchorMin = new Vector2(0.5f, 0.5f);
+            fileSortDirRT.anchorMax = new Vector2(0.5f, 0.5f);
+            fileSortDirRT.pivot = new Vector2(0.5f, 0.5f);
+            fileSortDirRT.anchoredPosition = new Vector2(150, 0); // To the right of type button
+
+            fileSortDirText = fileSortDirBtn.GetComponentInChildren<Text>();
+
+            Button fileSortDirButton = fileSortDirBtn.GetComponent<Button>();
+            fileSortDirButton.onClick.RemoveAllListeners();
+            fileSortDirButton.onClick.AddListener(() => ToggleSortDirection("Files", fileSortTypeText, fileSortDirText));
+            AddTooltip(fileSortDirBtn, "Toggle sort direction (↑/↓)");
+
+            // Keep fileSortBtnText for compatibility with existing code
+            fileSortBtnText = fileSortTypeText;
+
             // Init File Sort State
-            UpdateSortButtonText(fileSortBtnText, GetSortState("Files"));
+            UpdateSortButtonText(fileSortTypeText, fileSortDirText, GetSortState("Files"));
 
             ratingSortToggleBtn = UI.CreateUIButton(titleBarGO, 40, 40, "★", 18, 0, 0, AnchorPresets.middleCenter, null);
             ratingSortToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);

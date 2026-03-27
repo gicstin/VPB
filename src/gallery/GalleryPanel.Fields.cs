@@ -24,6 +24,7 @@ namespace VPB
         private float lastScrollTime;
         private Queue<ThumbnailCacheJob> pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
         private Coroutine thumbnailCacheCoroutine;
+        private int _nextThumbPriority = 10;
         private Text titleText;
         private Text fpsText;
 
@@ -291,6 +292,12 @@ namespace VPB
         // Tagging
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Negative filters (exclusions) - used by Issue 7 exclusion filter feature
+#pragma warning disable CS0414
+        private string excludedCreator = "";
+        private HashSet<string> excludedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+#pragma warning restore CS0414
 
         [Flags]
         private enum ClothingSubfilter
@@ -665,6 +672,8 @@ namespace VPB
         private Image footerAutoHideBtnImage;
         
         private Text fileSortBtnText; // NEW
+        private Text fileSortTypeText; // Sort Type button text (Az/Dt/Sz/Rt)
+        private Text fileSortDirText; // Sort Direction button text (↑/↓)
         private Text quickFiltersToggleBtnText; // NEW
         private GameObject ratingSortToggleBtn;
         private Text ratingSortToggleBtnText;

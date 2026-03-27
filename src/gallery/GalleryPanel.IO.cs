@@ -659,7 +659,6 @@ namespace VPB
             if (thumbnailCacheCoroutine != null) StopCoroutine(thumbnailCacheCoroutine);
             thumbnailCacheCoroutine = null;
             if (pendingThumbnailCacheJobs != null) pendingThumbnailCacheJobs.Clear();
-            ShowLoadingOverlay("Loading...");
             if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
@@ -680,12 +679,18 @@ namespace VPB
             currentLoadingGroupId = Guid.NewGuid().ToString();
 
             // Determine scroll target before clearing the grid.
-            // Auto-refresh (keepScroll=true, content already loaded): read the live position now,
+            // Auto-refresh (keepScroll=true, content already loaded): capture the center item index now,
             //   before SetItemCount(0) zeroes the content height and the ScrollRect clamps to top.
+            //   Using an item index (not a normalized float) keeps the same row visible even when the
+            //   column count or content height changes (e.g. side panel open/close).
             // Category change or first load: use _pendingScrollRestore set by Show()
             //   (either a persisted position from the cache, or 1f for top).
-            float savedScrollNormalizedPos = (keepScroll && hasLoadedContent && scrollRect != null)
-                ? scrollRect.verticalNormalizedPosition
+            bool useCenterItemRestore = keepScroll && hasLoadedContent;
+            int savedCenterItemIndex = (useCenterItemRestore && recyclingGrid != null)
+                ? recyclingGrid.GetCenterItemIndex()
+                : -1;
+            float savedScrollNormalizedPos = useCenterItemRestore
+                ? (scrollRect != null ? scrollRect.verticalNormalizedPosition : 1f)
                 : _pendingScrollRestore;
 
             // Configure grid immediately so it has correct dimensions even while loading
@@ -1067,6 +1072,9 @@ namespace VPB
                 recyclingGrid.onBindItem = (go, index) => {
                     if (index >= 0 && index < currentFilteredFiles.Count)
                     {
+                        int centerIdx = recyclingGrid != null ? recyclingGrid.GetCenterItemIndex() : 0;
+                        int dist = Mathf.Abs(index - centerIdx);
+                        _nextThumbPriority = Mathf.Max(10, 100 - dist * 3);
                         BindFileButton(go, currentFilteredFiles[index]);
                     }
                 };
@@ -1102,12 +1110,26 @@ namespace VPB
 
             UpdatePaginationText();
 
-            // Apply scroll position. scrollToBottom (pagination) always wins; otherwise use the
-            // pre-computed target (auto-refresh preserves live pos, category change uses cached pos).
+            // Apply scroll position. scrollToBottom (pagination) always wins.
+            // For keepScroll (auto-refresh / layout change): restore via item index so the same row stays
+            // centered even if the column count or content height changed.
+            // For category change / first load: fall back to the saved normalised position.
             if (scrollRect != null)
             {
-                scrollRect.verticalNormalizedPosition = scrollToBottom ? 0f : savedScrollNormalizedPos;
-                if (recyclingGrid != null) recyclingGrid.Refresh();
+                if (scrollToBottom)
+                {
+                    scrollRect.verticalNormalizedPosition = 0f;
+                    if (recyclingGrid != null) recyclingGrid.Refresh();
+                }
+                else if (savedCenterItemIndex >= 0 && recyclingGrid != null)
+                {
+                    recyclingGrid.ScrollToCenterItem(savedCenterItemIndex);
+                }
+                else
+                {
+                    scrollRect.verticalNormalizedPosition = savedScrollNormalizedPos;
+                    if (recyclingGrid != null) recyclingGrid.Refresh();
+                }
             }
 
             UpdateLayout();
