@@ -19,8 +19,6 @@ namespace VPB
         private GameObject loadingOverlayGO;
         private RectTransform loadingBarContainerRT;
         private RectTransform loadingBarFillRT;
-        private bool isLoadingOverlayVisible;
-        private float loadingBarAnimT;
         private float lastScrollTime;
         private Queue<ThumbnailCacheJob> pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
         private Coroutine thumbnailCacheCoroutine;
