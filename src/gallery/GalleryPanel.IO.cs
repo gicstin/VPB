@@ -663,6 +663,213 @@ namespace VPB
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
 
+        /// <summary>
+        /// Incrementally updates the gallery when only a subset of packages changed.
+        /// Removes entries from <paramref name="removed"/> packages and inserts entries from
+        /// <paramref name="added"/> packages that pass the current filters, then re-sorts and
+        /// restores the scroll position using a UID anchor so the viewport doesn't jump.
+        ///
+        /// Falls back to a full <see cref="RefreshFiles"/> when the gallery hasn't loaded yet
+        /// or the delta lists are null/empty (which shouldn't normally happen, but is safe).
+        /// </summary>
+        public void ApplyPackageDelta(List<VarPackage> added, List<VarPackage> removed)
+        {
+            if (Gallery.IsSuppressed()) return;
+            if (IsHubMode) return;
+
+            // If we have never loaded, the scan just completed and we have a full PackagesByUid
+            // for the first time – do a clean initial load now.
+            if (!hasLoadedContent || recyclingGrid == null || scrollRect == null)
+            {
+                RefreshFiles(false);
+                return;
+            }
+
+            // If neither list has entries the package set didn't change at all.
+            // Just sync the timestamp so future notifications aren't treated as "new" and return
+            // without touching the grid – this is the key guard that prevents a spurious full
+            // refresh (and scroll-to-top) when the initial scan finds no package delta.
+            bool hasRemovals  = removed != null && removed.Count > 0;
+            bool hasAdditions = added   != null && added.Count   > 0;
+            if (!hasRemovals && !hasAdditions)
+            {
+                lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
+                refreshOnNextShow = false;
+                return;
+            }
+
+            // If the refresh coroutine is still running (shouldn't normally happen after the
+            // !init||flag gate, but be defensive) cancel it so we work on a stable list.
+            if (refreshCoroutine != null)
+            {
+                StopCoroutine(refreshCoroutine);
+                refreshCoroutine = null;
+            }
+
+            // ── Scroll anchor ─────────────────────────────────────────────────────────────
+            // Save the UID of the item currently centred in the viewport so we can scroll
+            // back to it after the list is modified (indices shift when items are inserted or
+            // removed before the anchor position).
+            string anchorUid = null;
+            int centerIdx = recyclingGrid.GetCenterItemIndex();
+            if (centerIdx >= 0 && centerIdx < currentFilteredFiles.Count)
+                anchorUid = currentFilteredFiles[centerIdx]?.Uid;
+
+            bool changed = false;
+
+            // ── Remove ────────────────────────────────────────────────────────────────────
+            if (removed != null && removed.Count > 0)
+            {
+                var removedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var pkg in removed) if (pkg != null) removedUids.Add(pkg.Uid);
+
+                int before = currentFilteredFiles.Count;
+                for (int i = currentFilteredFiles.Count - 1; i >= 0; i--)
+                {
+                    var vfe = currentFilteredFiles[i] as VarFileEntry;
+                    if (vfe?.Package != null && removedUids.Contains(vfe.Package.Uid))
+                        currentFilteredFiles.RemoveAt(i);
+                }
+                for (int i = lastFilteredFiles.Count - 1; i >= 0; i--)
+                {
+                    var vfe = lastFilteredFiles[i] as VarFileEntry;
+                    if (vfe?.Package != null && removedUids.Contains(vfe.Package.Uid))
+                        lastFilteredFiles.RemoveAt(i);
+                }
+                if (currentFilteredFiles.Count != before) changed = true;
+            }
+
+            // ── Add ───────────────────────────────────────────────────────────────────────
+            if (added != null && added.Count > 0)
+            {
+                string[] extensions = string.IsNullOrEmpty(currentExtension)
+                    ? new string[0]
+                    : currentExtension.Split('|');
+                bool hasExt = extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
+                bool hasNameFilt = !string.IsNullOrEmpty(nameFilterLower);
+
+                var newEntries = new List<FileEntry>();
+                foreach (var pkg in added)
+                {
+                    if (pkg == null) continue;
+
+                    // Package-level creator filter
+                    if (!string.IsNullOrEmpty(currentCreator) &&
+                        (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator)) continue;
+
+                    List<string> names; List<long> ticks; List<long> sizes;
+                    if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) continue;
+
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        string ip = names[i];
+
+                        // Extension filter
+                        if (hasExt)
+                        {
+                            string entryExt = System.IO.Path.GetExtension(ip);
+                            if (string.IsNullOrEmpty(entryExt)) continue;
+                            entryExt = entryExt.Substring(1);
+                            bool extMatch = false;
+                            for (int e = 0; e < extensions.Length; e++)
+                                if (string.Equals(entryExt, extensions[e], StringComparison.OrdinalIgnoreCase)) { extMatch = true; break; }
+                            if (!extMatch) continue;
+                        }
+
+                        // Path prefix filter (mirrors RefreshFilesRoutine ThreadPool worker logic)
+                        bool pathOk = true;
+                        if (currentPaths != null && currentPaths.Count > 0)
+                        {
+                            pathOk = false;
+                            for (int p = 0; p < currentPaths.Count; p++)
+                            {
+                                string pref = currentPaths[p];
+                                if (ip.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (string.Equals(pref, "Saves/Person", StringComparison.OrdinalIgnoreCase) ||
+                                        string.Equals(pref, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        if (ip.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase)) continue;
+                                    }
+                                    pathOk = true;
+                                    break;
+                                }
+                            }
+                        }
+                        else if (!string.IsNullOrEmpty(currentPath))
+                        {
+                            pathOk = false;
+                            if (ip.StartsWith(currentPath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (string.Equals(currentPath, "Saves/Person", StringComparison.OrdinalIgnoreCase) ||
+                                    string.Equals(currentPath, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (!ip.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                                        pathOk = true;
+                                }
+                                else pathOk = true;
+                            }
+                        }
+                        if (!pathOk) continue;
+
+                        // Name filter
+                        if (hasNameFilt &&
+                            pkg.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0 &&
+                            ip.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                        var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
+
+                        // Full filter check (clothing/appearance subfilters, tags, rating, size, scene source …)
+                        if (!PassesFilters(entry, true)) continue;
+
+                        newEntries.Add(entry);
+                    }
+                }
+
+                if (newEntries.Count > 0)
+                {
+                    currentFilteredFiles.AddRange(newEntries);
+                    lastFilteredFiles.AddRange(newEntries);
+
+                    var sortState = GetSortState("Files");
+                    GallerySortManager.Instance.SortFiles(currentFilteredFiles, sortState);
+                    GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState);
+
+                    changed = true;
+                }
+            }
+
+            if (!changed)
+            {
+                // Nothing actually changed – keep gallery exactly as-is.
+                lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
+                refreshOnNextShow = false;
+                return;
+            }
+
+            // ── Update grid ───────────────────────────────────────────────────────────────
+            recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+
+            // ── Restore scroll via UID anchor ─────────────────────────────────────────────
+            if (anchorUid != null)
+            {
+                int newIdx = -1;
+                for (int i = 0; i < currentFilteredFiles.Count; i++)
+                {
+                    if (string.Equals(currentFilteredFiles[i]?.Uid, anchorUid, StringComparison.OrdinalIgnoreCase))
+                    { newIdx = i; break; }
+                }
+                if (newIdx >= 0) recyclingGrid.ScrollToCenterItem(newIdx);
+            }
+
+            UpdatePaginationText();
+            lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
+            refreshOnNextShow = false;
+            creatorsCached = false;
+            tagsCached = false;
+            categoriesCached = false;
+        }
+
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
         {
             yield return null; // Allow UI to render first
@@ -689,7 +896,11 @@ namespace VPB
             int savedCenterItemIndex = (useCenterItemRestore && recyclingGrid != null)
                 ? recyclingGrid.GetCenterItemIndex()
                 : -1;
-            float savedScrollNormalizedPos = useCenterItemRestore
+            // Use keepScroll (not useCenterItemRestore) so that if keepScroll=true but hasLoadedContent
+            // is still false (e.g. package scan completed while the initial load coroutine was mid-run
+            // and got cancelled before reaching hasLoadedContent=true), we still capture the current
+            // scroll position rather than falling back to _pendingScrollRestore (which defaults to 1f/top).
+            float savedScrollNormalizedPos = keepScroll
                 ? (scrollRect != null ? scrollRect.verticalNormalizedPosition : 1f)
                 : _pendingScrollRestore;
 

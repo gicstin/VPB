@@ -120,16 +120,26 @@ namespace VPB
                     DateTime refreshTime = DateTime.MinValue;
                     try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
+                    // Snapshot the delta lists so all panels see the same set of changes.
+                    List<VarPackage> added = null;
+                    List<VarPackage> removed = null;
+                    try
+                    {
+                        added  = new List<VarPackage>(FileManager.lastAddedPackages);
+                        removed = new List<VarPackage>(FileManager.lastRemovedPackages);
+                    }
+                    catch { }
+
                     foreach (var p in panels)
                     {
                         if (p == null) continue;
                         if (p.IsHubMode) continue;
 
-						bool changed = false;
-						try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
+                        bool changed = false;
+                        try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
 
-						if (!p.IsVisible) continue;
-						if (changed) p.RefreshFiles(true);
+                        if (!p.IsVisible) continue;
+                        if (changed) p.ApplyPackageDelta(added, removed);
                     }
 
                     if (!autoRefreshPending) break;

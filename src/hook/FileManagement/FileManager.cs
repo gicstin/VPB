@@ -109,6 +109,11 @@ namespace VPB
             protected set;
         }
 
+        // Packages added/removed in the most recent scan — consumed by the gallery for incremental updates.
+        // Written on the main thread inside RefreshCo; read on the main thread inside AutoRefreshAfterPackageScan.
+        public static readonly List<VarPackage> lastAddedPackages = new List<VarPackage>();
+        public static readonly List<VarPackage> lastRemovedPackages = new List<VarPackage>();
+
         public static string CurrentLoadDir
         {
             get
@@ -801,6 +806,21 @@ namespace VPB
                         foreach (var item in oldVersion)
                         {
                             RemoveToInvalid(item, "OldVersion");
+                        }
+                    }
+
+                    // Capture delta so the gallery can do an incremental update instead of a full rebuild.
+                    lastRemovedPackages.Clear();
+                    lastRemovedPackages.AddRange(removeSet);
+
+                    lastAddedPackages.Clear();
+                    lock (packagesLock)
+                    {
+                        foreach (string addedPath in addSet)
+                        {
+                            VarPackage pkg;
+                            if (packagesByPath.TryGetValue(addedPath, out pkg) && pkg != null)
+                                lastAddedPackages.Add(pkg);
                         }
                     }
                 }

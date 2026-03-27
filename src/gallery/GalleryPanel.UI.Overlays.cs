@@ -67,21 +67,16 @@ namespace VPB
 
             SetLayerRecursive(loadingOverlayGO, parentGO.layer);
             loadingOverlayGO.SetActive(false);
-            isLoadingOverlayVisible = false;
-            loadingBarAnimT = 0f;
         }
 
         private void ShowLoadingOverlay(string message)
         {
             if (loadingOverlayGO == null) return;
-            loadingBarAnimT = 0f;
-            isLoadingOverlayVisible = true;
             loadingOverlayGO.SetActive(true);
         }
 
         private void HideLoadingOverlay()
         {
-            isLoadingOverlayVisible = false;
             if (loadingOverlayGO != null) loadingOverlayGO.SetActive(false);
         }
 

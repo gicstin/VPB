@@ -121,6 +121,8 @@ namespace VPB
                 Debug.LogError("GalleryThumbnailCache: Failed to initialize cache: " + ex.Message);
                 if (fileStream != null) fileStream.Dispose();
                 fileStream = null;
+                writer = null;
+                reader = null;
             }
         }
 
@@ -237,15 +239,8 @@ namespace VPB
                         Format = format,
                         DataCRC32 = 0
                     };
-                    
-                    if (index.ContainsKey(path))
-                    {
-                        index[path] = entry;
-                    }
-                    else
-                    {
-                        index.Add(path, entry);
-                    }
+
+                    index[path] = entry;
                 }
             }
             catch (Exception ex)
@@ -315,15 +310,8 @@ namespace VPB
                         Format = format,
                         DataCRC32 = crc32
                     };
-                    
-                    if (index.ContainsKey(path))
-                    {
-                        index[path] = entry;
-                    }
-                    else
-                    {
-                        index.Add(path, entry);
-                    }
+
+                    index[path] = entry;
                 }
             }
             catch (Exception ex)
@@ -469,11 +457,10 @@ namespace VPB
             height = 0;
             format = TextureFormat.RGBA32;
 
-            if (fileStream == null) return false;
-
             cacheLock.EnterReadLock();
             try
             {
+                if (fileStream == null) return false;
                 if (index.TryGetValue(key, out CacheEntry entry))
                 {
                     if (entry.LastWriteTime == fileLastWriteTime)
@@ -536,8 +523,8 @@ namespace VPB
         public void SaveThumbnail(string path, byte[] data, int dataLength, int width, int height, TextureFormat format, long lastWriteTime)
         {
             if (IsPackagePath(path)) lastWriteTime = 0;
-            if (fileStream == null || width <= 0 || height <= 0) return;
-            
+            if (width <= 0 || height <= 0) return;
+
             int expected = GetExpectedRawDataSize(width, height, (int)format);
             if (expected > 0 && dataLength < expected)
             {
@@ -552,6 +539,7 @@ namespace VPB
             {
                 try
                 {
+                    if (fileStream == null) return;
                     if (cacheFormatVersion == 0)
                     {
                         cacheFormatVersion = CACHE_VERSION;
@@ -593,14 +581,7 @@ namespace VPB
                         DataCRC32 = crc32
                     };
 
-                    if (index.ContainsKey(key))
-                    {
-                        index[key] = entry;
-                    }
-                    else
-                    {
-                        index.Add(key, entry);
-                    }
+                    index[key] = entry;
                 }
                 catch (Exception ex)
                 {
@@ -665,8 +646,6 @@ namespace VPB
 
         public void CleanCache()
         {
-            if (fileStream == null) return;
-
             if (FileManager.PackagesByUid == null || FileManager.PackagesByUid.Count == 0)
             {
                 Debug.LogWarning("GalleryThumbnailCache: Skipping CleanCache because FileManager packages are not loaded yet.");
@@ -678,6 +657,7 @@ namespace VPB
             {
                 try
                 {
+                    if (fileStream == null) return;
                     List<string> keysToRemove = new List<string>();
                     foreach (var kvp in index)
                     {
@@ -847,10 +827,9 @@ namespace VPB
 
         private void CloseInternal()
         {
-            if (writer != null) writer.Close();
-            if (reader != null) reader.Close();
-            if (fileStream != null) fileStream.Dispose();
-            fileStream = null;
+            if (writer != null) { writer.Close(); writer = null; }
+            if (reader != null) { reader.Close(); reader = null; }
+            if (fileStream != null) { fileStream.Dispose(); fileStream = null; }
         }
 
         ~GalleryThumbnailCache()
