@@ -360,6 +360,8 @@ namespace VPB
             string defaultFolder = "Saves/scene";
             string defaultName = "scene_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
 
+            if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
+                SuperController.singleton.ShowMainHUDMonitor();
             SuperController.singleton.GetMediaPathDialog((selectedPath) =>
             {
                 if (string.IsNullOrEmpty(selectedPath)) return;
@@ -407,6 +409,8 @@ namespace VPB
             }
 
             string defaultName = GetDefaultPresetSaveName(target, storableId, rootFolder);
+            if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
+                SuperController.singleton.ShowMainHUDMonitor();
             SuperController.singleton.GetMediaPathDialog((selectedPath) =>
             {
                 SavePresetFileSelected(target, storableId, rootFolder, selectedPath, true);

@@ -147,7 +147,7 @@ namespace VPB
             try
             {
                 string txt = File.ReadAllText(favPath);
-                if (IsNullOrWhiteSpace(txt)) return 1;
+                if (IsNullOrWhiteSpace(txt)) return 1; // VAM native .fav files are empty markers → treat as 1 star
                 if (int.TryParse(txt.Trim(), out int r)) return Mathf.Clamp(r, 1, 5);
             }
             catch { }

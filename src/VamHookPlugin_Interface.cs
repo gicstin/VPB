@@ -59,23 +59,36 @@ namespace VPB
                 if (!m_GalleryCatsInited) InitGalleryCategories();
 
                 string lastPageName = "";
-                string diskLast = "";
-                try { diskLast = VPBConfig.ReadLastGalleryCategoryFromDisk(); } catch { }
-                if (!string.IsNullOrEmpty(diskLast))
+
+                // On first open this session (startup), default to Scenes.
+                // On reopen within session, restore the last used category.
+                bool isFirstOpen = Gallery.singleton.PanelCount == 0;
+                if (!isFirstOpen)
                 {
-                    lastPageName = diskLast;
-                    LogUtil.Log("[Gallery] OpenGallery using disk LastGalleryCategory='" + lastPageName + "'");
+                    string diskLast = "";
+                    try { diskLast = VPBConfig.ReadLastGalleryCategoryFromDisk(); } catch { }
+                    if (!string.IsNullOrEmpty(diskLast))
+                    {
+                        lastPageName = diskLast;
+                        LogUtil.Log("[Gallery] OpenGallery using disk LastGalleryCategory='" + lastPageName + "'");
+                    }
+                    else if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
+                    {
+                        lastPageName = VPBConfig.Instance.LastGalleryCategory;
+                        LogUtil.Log("[Gallery] OpenGallery using memory LastGalleryCategory='" + lastPageName + "'");
+                    }
+                    else
+                    {
+                        lastPageName = (Settings.Instance != null && Settings.Instance.LastGalleryPage != null) ? Settings.Instance.LastGalleryPage.Value : "";
+                        if (!string.IsNullOrEmpty(lastPageName))
+                            LogUtil.Log("[Gallery] OpenGallery using Settings.LastGalleryPage='" + lastPageName + "'");
+                    }
                 }
-                else if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
+
+                if (string.IsNullOrEmpty(lastPageName))
                 {
-                    lastPageName = VPBConfig.Instance.LastGalleryCategory;
-                    LogUtil.Log("[Gallery] OpenGallery using memory LastGalleryCategory='" + lastPageName + "'");
-                }
-                else
-                {
-                    lastPageName = (Settings.Instance != null && Settings.Instance.LastGalleryPage != null) ? Settings.Instance.LastGalleryPage.Value : "";
-                    if (!string.IsNullOrEmpty(lastPageName))
-                        LogUtil.Log("[Gallery] OpenGallery using Settings.LastGalleryPage='" + lastPageName + "'");
+                    lastPageName = "Scenes";
+                    LogUtil.Log("[Gallery] OpenGallery defaulting to Scenes" + (isFirstOpen ? " (startup)" : ""));
                 }
 
                 if (!string.IsNullOrEmpty(lastPageName) && m_GalleryCategories != null)
