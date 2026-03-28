@@ -775,6 +775,19 @@ namespace VPB
             SetLayerRecursive(container, 5);
         }
 
+        private static void AddBorderEdge(GameObject parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta)
+        {
+            GameObject go = new GameObject("E");
+            go.transform.SetParent(parent.transform, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+            rt.pivot = pivot;
+            rt.sizeDelta = sizeDelta;
+            rt.anchoredPosition = Vector2.zero;
+            go.AddComponent<Image>().color = Color.white;
+        }
+
         private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null)
         {
             GameObject btnGO = GetTabButton(parent);
@@ -1219,16 +1232,37 @@ namespace VPB
             selectorGrid.childAlignment = TextAnchor.UpperLeft;
 
             RatingHandler ratingHandler = btnGO.AddComponent<RatingHandler>();
+            Image[] optImages = new Image[6];
+            Text[] optTexts = new Text[6];
+            GameObject[] optBorders = new GameObject[6];
             for (int i = 0; i <= 5; i++)
             {
                 int ratingValue = i;
                 string label = i == 0 ? "X" : i.ToString();
-                GameObject optBtnGO = UI.CreateUIButton(selectorGO, 38, 36, label, 14, 0, 0, AnchorPresets.middleCenter, () => ratingHandler.SetRating(ratingValue));
+                GameObject optBtnGO = UI.CreateUIButton(selectorGO, 38, 36, label, 22, 0, 0, AnchorPresets.middleCenter, () => ratingHandler.SetRating(ratingValue));
                 optBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
-                optBtnGO.GetComponent<Image>().color = RatingHandler.RatingColors[i];
-                if (i == 0) optBtnGO.GetComponentInChildren<Text>().color = Color.red;
-                else optBtnGO.GetComponentInChildren<Text>().color = Color.black;
+                optImages[i] = optBtnGO.GetComponent<Image>();
+                optImages[i].color = RatingHandler.RatingColors[i];
+                optTexts[i] = optBtnGO.GetComponentInChildren<Text>();
+                optTexts[i].color = i == 0 ? Color.red : Color.black;
+
+                // Selection border: 4 white edge images inside the button, rendered before the label
+                GameObject borderGO = new GameObject("SelectionBorder");
+                borderGO.transform.SetParent(optBtnGO.transform, false);
+                borderGO.transform.SetSiblingIndex(0);
+                RectTransform borderRT = borderGO.AddComponent<RectTransform>();
+                borderRT.anchorMin = Vector2.zero;
+                borderRT.anchorMax = Vector2.one;
+                borderRT.offsetMin = Vector2.zero;
+                borderRT.offsetMax = Vector2.zero;
+                AddBorderEdge(borderGO, new Vector2(0,1), new Vector2(1,1), new Vector2(0.5f,1), new Vector2(0,3));
+                AddBorderEdge(borderGO, new Vector2(0,0), new Vector2(1,0), new Vector2(0.5f,0), new Vector2(0,3));
+                AddBorderEdge(borderGO, new Vector2(0,0), new Vector2(0,1), new Vector2(0,0.5f), new Vector2(3,0));
+                AddBorderEdge(borderGO, new Vector2(1,0), new Vector2(1,1), new Vector2(1,0.5f), new Vector2(3,0));
+                borderGO.SetActive(false);
+                optBorders[i] = borderGO;
             }
+            ratingHandler.SetOptionRefs(optImages, optTexts, optBorders);
 
             Button starBtn = starBtnGO.GetComponent<Button>();
             starBtn.onClick.AddListener(() => ratingHandler.ToggleSelector());

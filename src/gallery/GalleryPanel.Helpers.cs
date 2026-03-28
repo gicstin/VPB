@@ -60,6 +60,9 @@ namespace VPB
         private GameObject selectorGO;
         private CanvasGroup selectorCG;
         private int currentRating = 0;
+        private Image[] optionImages;
+        private Text[] optionTexts;
+        private GameObject[] borderGOs;
 
         public static readonly Color[] RatingColors = new Color[]
         {
@@ -139,11 +142,29 @@ namespace VPB
             SetSelectorVisible(false);
         }
 
+        public void SetOptionRefs(Image[] images, Text[] texts, GameObject[] borders)
+        {
+            optionImages = images;
+            optionTexts = texts;
+            borderGOs = borders;
+            UpdateDisplay();
+        }
+
         private void UpdateDisplay()
         {
             if (starIconText != null)
-            {
                 starIconText.color = RatingColors[Mathf.Clamp(currentRating, 0, 5)];
+
+            if (optionImages == null) return;
+            for (int i = 0; i < optionImages.Length && i < 6; i++)
+            {
+                bool selected = (i == currentRating);
+                if (optionImages[i] != null)
+                    optionImages[i].color = RatingColors[i];
+                if (optionTexts != null && i < optionTexts.Length && optionTexts[i] != null)
+                    optionTexts[i].color = i == 0 ? Color.red : Color.black;
+                if (borderGOs != null && i < borderGOs.Length && borderGOs[i] != null)
+                    borderGOs[i].SetActive(selected);
             }
         }
     }
