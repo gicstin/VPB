@@ -13,7 +13,7 @@ using SimpleJSON;
 
 namespace VPB
 {
-    public partial class UIDraggableItem : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+    public partial class UIDraggableItem : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
 {
         public FileEntry FileEntry;
         public Hub.GalleryHubItem HubItem;
@@ -24,6 +24,7 @@ namespace VPB
         private JSONNode _dualPoseNode = null;
         
         private bool isDraggingItem = false;
+        private float _pointerDownTime = -1f;
         private GameObject ghostObject;
         private Image ghostBorder;
         private Text ghostText; // Added text component
@@ -117,10 +118,18 @@ namespace VPB
             }
         }
 
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (eventData.button == PointerEventData.InputButton.Left)
+                _pointerDownTime = Time.unscaledTime;
+        }
+
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) return;
             if (VPBConfig.Instance != null && !VPBConfig.Instance.EnableDragDrop) return;
+            float threshold = VPBConfig.Instance != null ? VPBConfig.Instance.DragHoldThreshold : 0.5f;
+            if (Time.unscaledTime - _pointerDownTime < threshold) return;
 
             _isDualPose = null;
             _dualPoseNode = null;

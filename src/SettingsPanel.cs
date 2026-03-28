@@ -64,6 +64,9 @@ namespace VPB
 
         private bool pendingEnableDragDrop;
         private bool backupEnableDragDrop;
+
+        private float pendingDragHoldThreshold;
+        private float backupDragHoldThreshold;
         
         private bool pendingIsDevMode;
         private bool backupIsDevMode;
@@ -150,6 +153,9 @@ namespace VPB
             pendingEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
             backupEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
 
+            pendingDragHoldThreshold = VPBConfig.Instance.DragHoldThreshold;
+            backupDragHoldThreshold = VPBConfig.Instance.DragHoldThreshold;
+
             pendingIsDevMode = VPBConfig.Instance.IsDevMode;
             backupIsDevMode = VPBConfig.Instance.IsDevMode;
 
@@ -197,6 +203,7 @@ namespace VPB
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
             VPBConfig.Instance.EnableDragDrop = backupEnableDragDrop;
+            VPBConfig.Instance.DragHoldThreshold = backupDragHoldThreshold;
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.EnableAutoFixedGallery = backupEnableAutoFixedGallery;
             VPBConfig.Instance.TriggerChange();
@@ -264,6 +271,7 @@ namespace VPB
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
                 VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
                 VPBConfig.Instance.EnableDragDrop = pendingEnableDragDrop;
+                VPBConfig.Instance.DragHoldThreshold = pendingDragHoldThreshold;
                 VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                 VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
                 VPBConfig.Instance.Save();
@@ -404,6 +412,11 @@ namespace VPB
                 pendingEnableDragDrop = val;
                 VPBConfig.Instance.EnableDragDrop = val;
             }, "When disabled, gallery items can only be applied via click — no drag & drop. Disables the context popup that appears on drag.");
+
+            CreateSliderSetting("Drag Hold Threshold (s)", pendingDragHoldThreshold, 0.1f, 1.0f, (val) => {
+                pendingDragHoldThreshold = val;
+                VPBConfig.Instance.DragHoldThreshold = val;
+            }, "How long (in seconds) the mouse button must be held before a drag is initiated. Increase to reduce accidental drags on quick clicks.");
 
             // CATEGORY: Desktop
             CreateHeader("Desktop");

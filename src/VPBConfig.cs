@@ -99,6 +99,7 @@ namespace VPB
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
         public bool EnableDragDrop = true;
+        public float DragHoldThreshold = 0.5f;
         public string ApplyMode = "DoubleClick";
         public string LastGalleryCategory = "";
         public bool DesktopFixedMode = false;
