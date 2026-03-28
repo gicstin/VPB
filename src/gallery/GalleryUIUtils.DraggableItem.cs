@@ -124,6 +124,15 @@ namespace VPB
                 _pointerDownTime = Time.unscaledTime;
         }
 
+        public bool IsLongPress
+        {
+            get
+            {
+                float threshold = VPBConfig.Instance != null ? VPBConfig.Instance.DragHoldThreshold : 0.5f;
+                return _pointerDownTime >= 0f && (Time.unscaledTime - _pointerDownTime >= threshold);
+            }
+        }
+
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) return;

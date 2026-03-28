@@ -1340,7 +1340,11 @@ namespace VPB
                 // But Unity Events are tricky. Ideally we'd have a single listener that checks a field on the button.
                 // For now, keep it safe but cleaner.
                 btn.onClick.RemoveAllListeners();
-                btn.onClick.AddListener(() => OnFileClick(file));
+                btn.onClick.AddListener(() => {
+                    var dragItem = btnGO.GetComponent<UIDraggableItem>();
+                    if (dragItem != null && dragItem.IsLongPress) return;
+                    OnFileClick(file);
+                });
             }
 
             // Right Click
