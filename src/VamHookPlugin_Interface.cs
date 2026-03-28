@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using HarmonyLib;
 
@@ -340,6 +341,149 @@ namespace VPB
         {
             FileManager.Refresh(true, true, true);
             MVR.FileManagement.FileManager.Refresh();
+        }
+        private static readonly Regex s_PackageUidRegex = new Regex(
+            @"([A-Za-z0-9][A-Za-z0-9_\-]*\.[A-Za-z0-9][A-Za-z0-9_\-]*\.[0-9]+):/",
+            RegexOptions.Compiled);
+
+        private void CollectSceneReferencedPackages(HashSet<string> protectedPackages)
+        {
+            SuperController sc = SuperController.singleton;
+            if (sc == null) { LogUtil.LogWarning("[UnloadAll] SuperController is null, skipping scene scan"); return; }
+            int atomCount = 0, storableCount = 0, matchCount = 0;
+            try
+            {
+                // GetStorableIDs / GetStorableByID are standard VAM Atom API, look them up once
+                System.Reflection.MethodInfo getIds = null;
+                System.Reflection.MethodInfo getStorable = null;
+
+                foreach (Atom atom in sc.GetAtoms())
+                {
+                    if (atom == null) continue;
+                    atomCount++;
+                    try
+                    {
+                        if (getIds == null)
+                        {
+                            getIds = atom.GetType().GetMethod("GetStorableIDs",
+                                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+                            getStorable = atom.GetType().GetMethod("GetStorableByID",
+                                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public,
+                                null, new Type[] { typeof(string) }, null);
+                            LogUtil.Log($"[UnloadAll] GetStorableIDs found={getIds != null}, GetStorableByID found={getStorable != null}");
+                        }
+                        if (getIds == null || getStorable == null) continue;
+
+                        var ids = getIds.Invoke(atom, null) as System.Collections.Generic.List<string>;
+                        if (ids == null) { LogUtil.LogWarning($"[UnloadAll] atom '{atom.uid}': GetStorableIDs returned null"); continue; }
+
+                        foreach (string sid in ids)
+                        {
+                            if (string.IsNullOrEmpty(sid)) continue;
+                            try
+                            {
+                                var storable = getStorable.Invoke(atom, new object[] { sid });
+                                if (storable == null) continue;
+
+                                // Try GetJSON() with no params, then (bool,bool), then (bool,bool,bool)
+                                string jsonStr = null;
+                                foreach (var sig in new[] {
+                                    new Type[0],
+                                    new Type[] { typeof(bool), typeof(bool) },
+                                    new Type[] { typeof(bool), typeof(bool), typeof(bool) }
+                                })
+                                {
+                                    var m2 = storable.GetType().GetMethod("GetJSON",
+                                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public,
+                                        null, sig, null);
+                                    if (m2 == null) continue;
+                                    object[] args = sig.Length == 0 ? null : sig.Length == 2
+                                        ? new object[] { true, true }
+                                        : new object[] { true, true, true };
+                                    var r = m2.Invoke(storable, args);
+                                    if (r != null) { jsonStr = r.ToString(); break; }
+                                }
+                                if (jsonStr == null) continue;
+
+                                storableCount++;
+                                int before = protectedPackages.Count;
+                                foreach (Match m in s_PackageUidRegex.Matches(jsonStr))
+                                    ProtectPackage(m.Groups[1].Value, protectedPackages);
+                                matchCount += (protectedPackages.Count - before);
+                            }
+                            catch { }
+                        }
+                    }
+                    catch (Exception ex) { LogUtil.LogWarning($"[UnloadAll] atom '{atom.uid}': {ex.Message}"); }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[UnloadAll] CollectSceneReferencedPackages: " + ex.Message);
+            }
+            LogUtil.Log($"[UnloadAll] Scene scan: {atomCount} atoms, {storableCount} storables scanned, {matchCount} packages protected");
+        }
+
+        public void UnloadAllPackages()
+        {
+            // Build protected set: AutoInstall packages + their recursive dependencies
+            var protectedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var uid in FileEntry.AutoInstallLookup)
+                ProtectPackage(uid, protectedPackages);
+            LogUtil.Log($"[UnloadAll] After AutoInstall: {protectedPackages.Count} protected");
+
+            // Also protect packages referenced by the currently active scene (hair, clothing, etc.)
+            CollectSceneReferencedPackages(protectedPackages);
+            LogUtil.Log($"[UnloadAll] After scene scan: {protectedPackages.Count} protected total");
+
+            // Uninstall all packages that are installed but not protected
+            bool dirty = false;
+            var packages = FileManager.PackagesByUid;
+            if (packages == null) { LogUtil.LogWarning("[UnloadAll] PackagesByUid is null, aborting"); return; }
+
+            int installedCount = 0, skippedCount = 0, movedCount = 0, deletedDupCount = 0, failedCount = 0;
+            foreach (var kvp in packages)
+            {
+                VarPackage pkg = kvp.Value;
+                if (!pkg.IsInstalled()) continue;
+                installedCount++;
+                if (protectedPackages.Contains(pkg.Uid)) { skippedCount++; continue; }
+
+                LogUtil.Log($"[UnloadAll] Unloading: {pkg.Uid}");
+                string addonPath = pkg.Path;
+                bool moved = pkg.UninstallSelf();
+                if (moved) { movedCount++; dirty = true; continue; }
+
+                // UninstallSelf failed — check if AllPackages already has this file (duplicate)
+                if (addonPath.StartsWith("AddonPackages/"))
+                {
+                    string allPkgPath = "AllPackages" + addonPath.Substring("AddonPackages".Length);
+                    if (File.Exists(allPkgPath))
+                    {
+                        // AllPackages already has it — remove the AddonPackages duplicate
+                        try
+                        {
+                            File.Delete(addonPath);
+                            deletedDupCount++;
+                            dirty = true;
+                            LogUtil.Log($"[UnloadAll] Deleted AddonPackages duplicate: {pkg.Uid}");
+                        }
+                        catch (Exception ex) { failedCount++; LogUtil.LogWarning($"[UnloadAll] Delete duplicate failed {pkg.Uid}: {ex.Message}"); }
+                        continue;
+                    }
+                }
+                failedCount++;
+                LogUtil.LogWarning($"[UnloadAll] UninstallSelf failed for: {pkg.Uid}");
+            }
+            LogUtil.Log($"[UnloadAll] installed={installedCount} skipped={skippedCount} moved={movedCount} deletedDup={deletedDupCount} failed={failedCount}");
+
+            if (dirty)
+            {
+                MVR.FileManagement.FileManager.Refresh();
+                FileManager.Refresh(true);
+                RemoveEmptyFolder("AddonPackages");
+            }
+            LogUtil.Log($"[UnloadAll] Complete. dirty={dirty}");
         }
         //https://stackoverflow.com/questions/2811509/c-sharp-remove-all-empty-subdirectories
         private static void RemoveEmptyFolder(string startLocation)

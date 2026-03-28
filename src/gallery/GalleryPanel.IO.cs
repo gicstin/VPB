@@ -642,6 +642,16 @@ namespace VPB
             return true;
         }
 
+        private IEnumerator RetryRefreshAfterNoCacheDelay()
+        {
+            yield return new WaitForSeconds(3f);
+            if (!Gallery.IsSuppressed() && !IsHubMode)
+            {
+                LogUtil.Log("[VPB] RetryRefreshAfterNoCacheDelay: retrying refresh for packages with missing cache.");
+                RefreshFiles(false);
+            }
+        }
+
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false)
         {
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
@@ -965,8 +975,10 @@ namespace VPB
             // Time-based yielding configuration
             var yieldWatch = new System.Diagnostics.Stopwatch();
             long maxMsPerFrame = 10; // Allow 10ms of work per frame
-            
+
             yieldWatch.Start();
+
+            int[] skippedForNoCache = { 0 };
 
             if (FileManager.PackagesByUid != null)
             {
@@ -995,6 +1007,7 @@ namespace VPB
                             List<long> sizes;
                             if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
                             {
+                                skippedForNoCache[0]++;
                                 continue;
                             }
 
@@ -1347,6 +1360,15 @@ namespace VPB
             HideLoadingOverlay();
             hasLoadedContent = true;
             refreshCoroutine = null;
+
+            // If packages were skipped because their content cache wasn't ready yet
+            // (FileManager scan still in progress), schedule a single retry.
+            if (skippedForNoCache[0] > 0 && !Gallery.IsSuppressed())
+            {
+                LogUtil.Log($"[VPB] RefreshFilesRoutine: {skippedForNoCache[0]} packages had no cache yet; retrying in 3s.");
+                StartCoroutine(RetryRefreshAfterNoCacheDelay());
+            }
+
             if (isPoseCategory)
             {
                 try { UpdateTabs(); } catch { }

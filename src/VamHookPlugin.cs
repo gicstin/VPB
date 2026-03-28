@@ -207,6 +207,8 @@ namespace VPB
         private bool m_ShowPluginsAlwaysEnabledInfo;
         private bool m_ShowRemoveOldDamagedInfo;
         private bool m_ShowGcRefreshInfo;
+        private bool m_UnloadAllConfirmPending = false;
+        private bool m_ShowUnloadAllInfo = false;
         private bool m_PendingGc;
         private bool m_ShowSpaceSaverWindow;
         private string m_AutoOptimizeReport;
@@ -1906,7 +1908,7 @@ namespace VPB
                     {
                         var prevContentColor = GUI.contentColor;
                         GUI.contentColor = new Color(0.2f, 1f, 0.2f); // Green
-                        GUILayout.Label(m_AutoOptimizeReport, m_StyleInfoCardText);
+                        GUILayout.Label(m_AutoOptimizeReport, m_StyleInfoCardTextWrapped);
                         GUI.contentColor = prevContentColor;
                     }
 
@@ -1915,7 +1917,7 @@ namespace VPB
                     {
                         Settings.Instance.AutoOptimizeCache.Value = !Settings.Instance.AutoOptimizeCache.Value;
                     }
-                    GUILayout.Label("Optimize: No Confirmation", m_StyleInfoCardText);
+                    GUILayout.Label("Optimize: No Confirmation", m_StyleInfoCardTextWrapped);
                     GUILayout.EndHorizontal();
 
                     GUILayout.BeginHorizontal();
@@ -1923,7 +1925,7 @@ namespace VPB
                     {
                         Settings.Instance.Downscale8kTo4kBeforeZstdCache.Value = !Settings.Instance.Downscale8kTo4kBeforeZstdCache.Value;
                     }
-                    GUILayout.Label("Downscale 8K->4K (In Scene: " + TextureUtil.GetDownscaledActiveCount() + ")", m_StyleInfoCardText);
+                    GUILayout.Label("Downscale 8K->4K (In Scene: " + TextureUtil.GetDownscaledActiveCount() + ")", m_StyleInfoCardTextWrapped);
                     GUILayout.EndHorizontal();
 
                     if (m_ShowSpaceSaverWindow)
@@ -1964,9 +1966,48 @@ namespace VPB
                     DrawInfoCard(ref m_ShowGcRefreshInfo, "GC & Refresh", () =>
                     {
                         GUILayout.Space(4);
-                        GUILayout.Label("Refresh updates the package list so VPB shows what is currently on disk (new/moved/removed files).", m_StyleInfoCardText);
+                        GUILayout.Label("Refresh updates the package list so VPB shows what is currently on disk (new/moved/removed files).", m_StyleInfoCardTextWrapped);
                         GUILayout.Space(2);
-                        GUILayout.Label("GC tries to free memory after heavy browsing by clearing caches and asking Unity/.NET to clean up.", m_StyleInfoCardText);
+                        GUILayout.Label("GC tries to free memory after heavy browsing by clearing caches and asking Unity/.NET to clean up.", m_StyleInfoCardTextWrapped);
+                    });
+
+                    // ========== UNLOAD ALL PACKAGES ==========
+                    if (!m_UnloadAllConfirmPending)
+                    {
+                        GUILayout.BeginHorizontal();
+                        if (GUILayout.Button("Unload All Packages", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
+                        {
+                            m_UnloadAllConfirmPending = true;
+                        }
+                        if (GUILayout.Button("i", m_StyleButton, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
+                        {
+                            ToggleInfoCard(ref m_ShowUnloadAllInfo);
+                        }
+                        GUILayout.EndHorizontal();
+                    }
+                    else
+                    {
+                        GUILayout.Label("Move ALL non-AutoInstall packages back to AllPackages?", m_StyleInfoCardTextWrapped);
+                        GUILayout.BeginHorizontal();
+                        if (GUILayout.Button("Confirm Unload All", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
+                        {
+                            m_UnloadAllConfirmPending = false;
+                            UnloadAllPackages();
+                        }
+                        if (GUILayout.Button("Cancel", m_StyleButton, GUILayout.Width(60f), GUILayout.Height(buttonHeight)))
+                        {
+                            m_UnloadAllConfirmPending = false;
+                        }
+                        GUILayout.EndHorizontal();
+                    }
+                    DrawInfoCard(ref m_ShowUnloadAllInfo, "Unload All Packages", () =>
+                    {
+                        GUILayout.Space(4);
+                        GUILayout.Label("Moves all installed packages back to AllPackages/, making them uninstalled.", m_StyleInfoCardTextWrapped);
+                        GUILayout.Space(2);
+                        GUILayout.Label("Kept installed: AutoInstall packages and their deps, plus anything referenced by the current scene (hair, clothing, etc.).", m_StyleInfoCardTextWrapped);
+                        GUILayout.Space(2);
+                        GUILayout.Label("Use this to reset your AddonPackages to a minimal state.", m_StyleInfoCardTextWrapped);
                     });
 
                     // ========== REMOVE OLD/DAMAGED ==========
@@ -1983,9 +2024,9 @@ namespace VPB
 					DrawInfoCard(ref m_ShowRemoveOldDamagedInfo, "Remove Old/Damaged", () =>
 					{
 						GUILayout.Space(4);
-						GUILayout.Label("Scan for invalid vars (duplicates, invalid names) and old versions.", m_StyleInfoCardText);
+						GUILayout.Label("Scan for invalid vars (duplicates, invalid names) and old versions.", m_StyleInfoCardTextWrapped);
 						GUILayout.Space(2);
-						GUILayout.Label("Opens a window to review and confirm removal.", m_StyleInfoCardText);
+						GUILayout.Label("Opens a window to review and confirm removal.", m_StyleInfoCardTextWrapped);
 					});
 
 
@@ -2484,13 +2525,13 @@ namespace VPB
             GUILayout.BeginVertical(m_StyleSection);
             GUILayout.Label("About Cache Optimization", m_StyleHeader);
             GUILayout.Space(5);
-            GUILayout.Label("This tool migrates VaM's native texture cache (.vamcache) to a highly optimized Zstandard (Zstd) format.", m_StyleInfoCardText);
-            GUILayout.Label("• Reduces disk usage by up to 80% (Lossless, no quality lost).", m_StyleInfoCardText);
-            GUILayout.Label("• Scenes load faster by reducing disk I/O.", m_StyleInfoCardText);
-            GUILayout.Label("• VPB plugin is required for compressed cache to work.", m_StyleInfoCardText);
-            GUILayout.Label("• Safely archives textures; can be reverted back at any time.", m_StyleInfoCardText);
-            GUILayout.Label("• Optimization speeds up over time as the cache warms.", m_StyleInfoCardText);
-            GUILayout.Label("• You can minimize this window and continue using VaM while it runs in the background.", m_StyleInfoCardText);
+            GUILayout.Label("This tool migrates VaM's native texture cache (.vamcache) to a highly optimized Zstandard (Zstd) format.", m_StyleInfoCardTextWrapped);
+            GUILayout.Label("• Reduces disk usage by up to 80% (Lossless, no quality lost).", m_StyleInfoCardTextWrapped);
+            GUILayout.Label("• Scenes load faster by reducing disk I/O.", m_StyleInfoCardTextWrapped);
+            GUILayout.Label("• VPB plugin is required for compressed cache to work.", m_StyleInfoCardTextWrapped);
+            GUILayout.Label("• Safely archives textures; can be reverted back at any time.", m_StyleInfoCardTextWrapped);
+            GUILayout.Label("• Optimization speeds up over time as the cache warms.", m_StyleInfoCardTextWrapped);
+            GUILayout.Label("• You can minimize this window and continue using VaM while it runs in the background.", m_StyleInfoCardTextWrapped);
             GUILayout.EndVertical();
 
             GUILayout.Space(10);
@@ -2504,7 +2545,7 @@ namespace VPB
                 GUILayout.Space(5);
                 
                 float progress = stats.TotalFiles > 0 ? (float)stats.ProcessedFiles / stats.TotalFiles : 0f;
-                GUILayout.Label(string.Format("Progress: {0}/{1} files ({2:P1})", stats.ProcessedFiles, stats.TotalFiles, progress), m_StyleInfoCardText);
+                GUILayout.Label(string.Format("Progress: {0}/{1} files ({2:P1})", stats.ProcessedFiles, stats.TotalFiles, progress), m_StyleInfoCardTextWrapped);
                 
                 // Progress bar
                 var rect = GUILayoutUtility.GetRect(0f, 20f, GUILayout.ExpandWidth(true));
@@ -2518,12 +2559,12 @@ namespace VPB
                 GUI.color = barPrevColor;
 
                 GUILayout.Space(5);
-                GUILayout.Label("Current: " + stats.CurrentFile, m_StyleInfoCardText);
+                GUILayout.Label("Current: " + stats.CurrentFile, m_StyleInfoCardTextWrapped);
                 
                 if (stats.TotalOriginalSize > stats.TotalCompressedSize) {
                     long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
                     string label = stats.IsDecompression ? "Space Lost: " : "Space Saved: ";
-                    GUILayout.Label(label + FormatBytes(diff), m_StyleInfoCardText);
+                    GUILayout.Label(label + FormatBytes(diff), m_StyleInfoCardTextWrapped);
                 }
 
                 GUILayout.EndVertical();
@@ -2545,15 +2586,15 @@ namespace VPB
                 GUILayout.BeginVertical(m_StyleSection);
                 GUILayout.Label("Operation Report", m_StyleHeader);
                 GUILayout.Space(5);
-                GUILayout.Label("Status: " + stats.CurrentFile + "!", m_StyleInfoCardText);
-                GUILayout.Label("Total Files Processed: " + stats.ProcessedFiles, m_StyleInfoCardText);
+                GUILayout.Label("Status: " + stats.CurrentFile + "!", m_StyleInfoCardTextWrapped);
+                GUILayout.Label("Total Files Processed: " + stats.ProcessedFiles, m_StyleInfoCardTextWrapped);
                 if (stats.SkippedCount > 0)
                 {
-                    GUILayout.Label("Thumbnails Skipped: " + stats.SkippedCount, m_StyleInfoCardText);
+                    GUILayout.Label("Thumbnails Skipped: " + stats.SkippedCount, m_StyleInfoCardTextWrapped);
                 }
-                GUILayout.Label("Total Uncompressed Size: " + FormatBytes(stats.TotalOriginalSize), m_StyleInfoCardText);
-                GUILayout.Label("Total Compressed Size: " + FormatBytes(stats.TotalCompressedSize), m_StyleInfoCardText);
-                GUILayout.Label(string.Format("Time Taken: {0:0.##} seconds", stats.Duration), m_StyleInfoCardText);
+                GUILayout.Label("Total Uncompressed Size: " + FormatBytes(stats.TotalOriginalSize), m_StyleInfoCardTextWrapped);
+                GUILayout.Label("Total Compressed Size: " + FormatBytes(stats.TotalCompressedSize), m_StyleInfoCardTextWrapped);
+                GUILayout.Label(string.Format("Time Taken: {0:0.##} seconds", stats.Duration), m_StyleInfoCardTextWrapped);
                 
                 if (stats.TotalOriginalSize > stats.TotalCompressedSize) {
                     long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
@@ -2575,7 +2616,7 @@ namespace VPB
 
                 if (stats.FailedCount > 0)
                 {
-                    GUILayout.Label("Failed Files: " + stats.FailedCount, m_StyleInfoCardText);
+                    GUILayout.Label("Failed Files: " + stats.FailedCount, m_StyleInfoCardTextWrapped);
                 }
                 
                 if (GUILayout.Button("Close Report", m_StyleButton, GUILayout.Height(30)))
@@ -2589,14 +2630,14 @@ namespace VPB
                 GUILayout.BeginVertical(m_StyleSection);
                 GUILayout.Label("Confirm Compression", m_StyleHeader);
                 GUILayout.Space(5);
-                GUILayout.Label("This will migrate VaM's native texture cache to optimized Zstd format.", m_StyleInfoCardText);
+                GUILayout.Label("This will migrate VaM's native texture cache to optimized Zstd format.", m_StyleInfoCardTextWrapped);
                 GUILayout.Space(5);
-                GUILayout.Label("• Current Cache Size: " + FormatBytes(m_CachedTexturesSize), m_StyleInfoCardText);
+                GUILayout.Label("• Current Cache Size: " + FormatBytes(m_CachedTexturesSize), m_StyleInfoCardTextWrapped);
                 long estimatedSavings = (long)(m_CachedTexturesSize * 0.7f);
                 long estimatedCompressed = m_CachedTexturesSize - estimatedSavings;
-                GUILayout.Label("• Estimated compressed cache = " + FormatBytes(estimatedCompressed) + " (space saved: ~" + FormatBytes(estimatedSavings) + ")", m_StyleInfoCardText);
-                GUILayout.Label("• Compression is lossless; no texture quality will be lost.", m_StyleInfoCardText);
-                GUILayout.Label("• The operation may take several minutes depending on cache size.", m_StyleInfoCardText);
+                GUILayout.Label("• Estimated compressed cache = " + FormatBytes(estimatedCompressed) + " (space saved: ~" + FormatBytes(estimatedSavings) + ")", m_StyleInfoCardTextWrapped);
+                GUILayout.Label("• Compression is lossless; no texture quality will be lost.", m_StyleInfoCardTextWrapped);
+                GUILayout.Label("• The operation may take several minutes depending on cache size.", m_StyleInfoCardTextWrapped);
                 
                 GUILayout.Space(20);
 
@@ -2629,14 +2670,14 @@ namespace VPB
                 GUILayout.BeginVertical(m_StyleSection);
                 GUILayout.Label("Confirm Decompression", m_StyleHeader);
                 GUILayout.Space(5);
-                GUILayout.Label("This will decompress all .zvamcache files back to VaM's native format.", m_StyleInfoCardText);
+                GUILayout.Label("This will decompress all .zvamcache files back to VaM's native format.", m_StyleInfoCardTextWrapped);
                 GUILayout.Space(5);
-                GUILayout.Label("• Current Compressed Size: " + FormatBytes(m_CachedVpbSize), m_StyleInfoCardText);
+                GUILayout.Label("• Current Compressed Size: " + FormatBytes(m_CachedVpbSize), m_StyleInfoCardTextWrapped);
                 long estimatedDecompressed = (long)(m_CachedVpbSize * 4.6f);
                 long extraSpaceNeeded = estimatedDecompressed - m_CachedVpbSize;
-                GUILayout.Label("• Estimated native cache = " + FormatBytes(estimatedDecompressed) + " (extra space needed: ~" + FormatBytes(extraSpaceNeeded) + ")", m_StyleInfoCardText);
-                GUILayout.Label("• This should only be used if you plan to stop using the VPB plugin.", m_StyleInfoCardText);
-                GUILayout.Label("• The operation may take several minutes.", m_StyleInfoCardText);
+                GUILayout.Label("• Estimated native cache = " + FormatBytes(estimatedDecompressed) + " (extra space needed: ~" + FormatBytes(extraSpaceNeeded) + ")", m_StyleInfoCardTextWrapped);
+                GUILayout.Label("• This should only be used if you plan to stop using the VPB plugin.", m_StyleInfoCardTextWrapped);
+                GUILayout.Label("• The operation may take several minutes.", m_StyleInfoCardTextWrapped);
                 
                 GUILayout.Space(20);
 
