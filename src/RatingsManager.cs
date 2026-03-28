@@ -36,7 +36,6 @@ namespace VPB
         private Dictionary<string, int> ratings = new Dictionary<string, int>();
         private readonly object lockObj = new object();
         private bool hasLoadedSuccessfully = false;
-        private bool legacyFavImportComplete = false;
 
         public RatingsManager()
         {
@@ -108,15 +107,15 @@ namespace VPB
 
         private void TryImportLegacyFavRatings()
         {
-            if (legacyFavImportComplete) return;
             if (!hasLoadedSuccessfully) return;
             if (FileManager.PackagesByUid == null || FileManager.PackagesByUid.Count == 0) return;
 
             bool anyAdded = false;
+            string baseDir = Directory.GetCurrentDirectory();
+
+            // 1. VAR package favorites: AddonPackagesFilePrefs\<packageUid>\...\<resource>.<ext>.fav
             try
             {
-                // Native VaM favorites live in AddonPackagesFilePrefs\<packageUid>\...\<resource>.<ext>.fav
-                // and are typically empty marker files.
                 string prefsDir = GetAddonPackagesFilePrefsDir();
                 if (!string.IsNullOrEmpty(prefsDir) && Directory.Exists(prefsDir))
                 {
@@ -128,7 +127,6 @@ namespace VPB
                     {
                         int rating = TryReadLegacyFavRating(favFile);
                         if (rating <= 0) continue;
-
                         if (TryParseLegacyFavToRatingKey(prefsDir, favFile, out string key))
                         {
                             if (TryAddRatingIfMissing(key, rating)) anyAdded = true;
@@ -138,8 +136,48 @@ namespace VPB
             }
             catch { }
 
+            // 2. System file favorites: .fav sits next to the actual file (e.g. Saves/scene/MyScene.json.fav)
+            //    Key = relative path from VAM root with forward slashes, minus the .fav suffix.
+            string[] systemDirs = new string[]
+            {
+                "Saves/scene",
+                "Saves/SubsceneData",
+                "Custom/Atom/Person/Appearance",
+                "Custom/Atom/Person/Clothing",
+                "Custom/Atom/Person/Hair",
+                "Custom/Atom/Person/Pose",
+                "Custom/Atom/Person/Skin",
+                "Custom/Atom/Person/Morphs",
+                "Custom/Atom/Person/General",
+            };
+            foreach (var dir in systemDirs)
+            {
+                try
+                {
+                    string fullDir = Path.Combine(baseDir, dir.Replace('/', Path.DirectorySeparatorChar));
+                    if (!Directory.Exists(fullDir)) continue;
+
+                    string[] favFiles;
+                    try { favFiles = Directory.GetFiles(fullDir, "*.fav", SearchOption.AllDirectories); }
+                    catch { favFiles = new string[0]; }
+
+                    foreach (var favFile in favFiles)
+                    {
+                        int rating = TryReadLegacyFavRating(favFile);
+                        if (rating <= 0) continue;
+
+                        string rel = MakeRelativePath(baseDir, favFile);
+                        if (string.IsNullOrEmpty(rel)) continue;
+                        rel = rel.Replace('\\', '/');
+                        if (!rel.EndsWith(".fav", StringComparison.OrdinalIgnoreCase)) continue;
+                        string key = rel.Substring(0, rel.Length - 4);
+                        if (TryAddRatingIfMissing(key, rating)) anyAdded = true;
+                    }
+                }
+                catch { }
+            }
+
             if (anyAdded) Save();
-            legacyFavImportComplete = true;
         }
 
         private int TryReadLegacyFavRating(string favPath)

@@ -120,6 +120,7 @@ namespace VPB
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) return;
+            if (VPBConfig.Instance != null && !VPBConfig.Instance.EnableDragDrop) return;
 
             _isDualPose = null;
             _dualPoseNode = null;

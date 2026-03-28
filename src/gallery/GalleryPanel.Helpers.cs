@@ -63,12 +63,12 @@ namespace VPB
 
         public static readonly Color[] RatingColors = new Color[]
         {
-            new Color(1f, 1f, 1f, 0.2f),     // 0: Ghost White
-            new Color(0.7f, 0.7f, 0.7f, 1f), // 1: Silver/Gray
-            new Color(0.2f, 0.8f, 0.2f, 1f), // 2: Green
-            new Color(1f, 0.85f, 0f, 1f),   // 3: Gold
-            new Color(1f, 0.5f, 0f, 1f),     // 4: Orange
-            new Color(1f, 0.2f, 0.8f, 1f)    // 5: Magenta/Pink
+            new Color(1f, 1f, 1f, 0.2f),     // 0: Ghost White (unrated)
+            new Color(1f, 0.2f, 0.2f, 1f),   // 1: Red
+            new Color(1f, 0.55f, 0f, 1f),    // 2: Orange
+            new Color(1f, 0.85f, 0f, 1f),    // 3: Gold
+            new Color(0.2f, 0.85f, 0.2f, 1f),// 4: Green
+            new Color(0f, 0.9f, 1f, 1f)      // 5: Cyan
         };
 
         public void Init(FileEntry e, Text s, GameObject selector)

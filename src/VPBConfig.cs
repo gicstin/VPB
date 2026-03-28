@@ -98,6 +98,7 @@ namespace VPB
         public bool EnableGalleryTranslucency = false;
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
+        public bool EnableDragDrop = true;
         public string ApplyMode = "DoubleClick";
         public string LastGalleryCategory = "";
         public bool DesktopFixedMode = false;
@@ -178,6 +179,7 @@ namespace VPB
             EnableGalleryTranslucency = false;
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
+            EnableDragDrop = true;
             ApplyMode = "DoubleClick";
             LastGalleryCategory = "";
             DesktopFixedMode = false;
@@ -242,6 +244,7 @@ namespace VPB
                         if (node["EnableGalleryTranslucency"] != null) EnableGalleryTranslucency = node["EnableGalleryTranslucency"].AsBool;
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
+                        if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
                         if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
@@ -304,6 +307,7 @@ namespace VPB
                 node["EnableGalleryTranslucency"].AsBool = EnableGalleryTranslucency;
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
+                node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["ApplyMode"] = ApplyMode;
                 node["LastGalleryCategory"] = LastGalleryCategory;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;

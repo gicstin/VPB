@@ -61,6 +61,9 @@ namespace VPB
 
         private bool pendingDragDropReplaceMode;
         private bool backupDragDropReplaceMode;
+
+        private bool pendingEnableDragDrop;
+        private bool backupEnableDragDrop;
         
         private bool pendingIsDevMode;
         private bool backupIsDevMode;
@@ -144,6 +147,9 @@ namespace VPB
             pendingDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
             backupDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
 
+            pendingEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
+            backupEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
+
             pendingIsDevMode = VPBConfig.Instance.IsDevMode;
             backupIsDevMode = VPBConfig.Instance.IsDevMode;
 
@@ -190,6 +196,7 @@ namespace VPB
             VPBConfig.Instance.EnableGalleryTranslucency = backupEnableGalleryTranslucency;
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
+            VPBConfig.Instance.EnableDragDrop = backupEnableDragDrop;
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.EnableAutoFixedGallery = backupEnableAutoFixedGallery;
             VPBConfig.Instance.TriggerChange();
@@ -256,6 +263,7 @@ namespace VPB
                 VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
                 VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
+                VPBConfig.Instance.EnableDragDrop = pendingEnableDragDrop;
                 VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                 VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
                 VPBConfig.Instance.Save();
@@ -389,6 +397,13 @@ namespace VPB
                     VPBConfig.Instance.BringToFrontDistance = val;
                 }, "The distance (in meters) from your view where panels will appear when using 'Bring to Front'.");
             }
+
+            // CATEGORY: Interaction
+            CreateHeader("Interaction");
+            CreateToggleSetting("Enable Drag & Drop", pendingEnableDragDrop, (val) => {
+                pendingEnableDragDrop = val;
+                VPBConfig.Instance.EnableDragDrop = val;
+            }, "When disabled, gallery items can only be applied via click — no drag & drop. Disables the context popup that appears on drag.");
 
             // CATEGORY: Desktop
             CreateHeader("Desktop");
