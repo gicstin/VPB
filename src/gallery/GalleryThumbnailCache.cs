@@ -39,6 +39,7 @@ namespace VPB
         private int cacheFormatVersion = 0;
 
         private Dictionary<string, CacheEntry> index = new Dictionary<string, CacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private bool savingDisabled = false;
 
         private struct CacheEntry
         {
@@ -537,9 +538,11 @@ namespace VPB
             cacheLock.EnterWriteLock();
             try
             {
+                long writeStartPos = 0;
                 try
                 {
                     if (fileStream == null) return;
+                    if (savingDisabled) return;
                     if (cacheFormatVersion == 0)
                     {
                         cacheFormatVersion = CACHE_VERSION;
@@ -551,11 +554,11 @@ namespace VPB
                         writer.Flush();
                     }
 
-                    fileStream.Seek(0, SeekOrigin.End);
-                    
+                    writeStartPos = fileStream.Seek(0, SeekOrigin.End);
+
                     byte[] pathBytes = Encoding.UTF8.GetBytes(key);
                     uint crc32 = CalculateCRC32(data, 0, dataLength);
-                    
+
                     writer.Write(pathBytes.Length);
                     writer.Write(pathBytes);
                     writer.Write(lastWriteTime);
@@ -565,7 +568,7 @@ namespace VPB
                     writer.Write(dataLength);
                     writer.Write(crc32);
                     writer.Write((ushort)0);
-                    
+
                     long dataOffset = fileStream.Position;
                     writer.Write(data, 0, dataLength);
                     writer.Flush();
@@ -585,7 +588,18 @@ namespace VPB
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError("GalleryThumbnailCache: Error saving thumbnail: " + ex.Message);
+                    try { fileStream?.SetLength(writeStartPos); } catch { }
+
+                    bool isDiskFull = ex is IOException && ex.Message.Contains("112");
+                    if (isDiskFull)
+                    {
+                        savingDisabled = true;
+                        Debug.LogError("GalleryThumbnailCache: Disk full — thumbnail caching disabled. Free up space on the cache drive and restart. Path: " + cacheFilePath);
+                    }
+                    else
+                    {
+                        Debug.LogError("GalleryThumbnailCache: Error saving thumbnail: " + ex.Message);
+                    }
                 }
             }
             finally

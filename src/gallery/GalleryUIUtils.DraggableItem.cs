@@ -120,7 +120,9 @@ namespace VPB
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            if (eventData.button == PointerEventData.InputButton.Left)
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            if (isVR || eventData.button == PointerEventData.InputButton.Left)
                 _pointerDownTime = Time.unscaledTime;
         }
 
@@ -135,7 +137,9 @@ namespace VPB
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left) return;
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            if (!isVR && eventData.button != PointerEventData.InputButton.Left) return;
             if (VPBConfig.Instance != null && !VPBConfig.Instance.EnableDragDrop) return;
             float threshold = VPBConfig.Instance != null ? VPBConfig.Instance.DragHoldThreshold : 0.5f;
             if (Time.unscaledTime - _pointerDownTime < threshold) return;

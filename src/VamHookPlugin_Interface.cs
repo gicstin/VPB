@@ -464,6 +464,11 @@ namespace VPB
                         try
                         {
                             File.Delete(addonPath);
+                            // Update pkg.Path to reflect the actual file location (AllPackages)
+                            // so InstallSelf works correctly on next load instead of returning false
+                            pkg.CloseZipFile();
+                            pkg.Path = allPkgPath.Replace('\\', '/');
+                            pkg.RelativePath = allPkgPath.Substring("AllPackages/".Length);
                             deletedDupCount++;
                             dirty = true;
                             LogUtil.Log($"[UnloadAll] Deleted AddonPackages duplicate: {pkg.Uid}");
