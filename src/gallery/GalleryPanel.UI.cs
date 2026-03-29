@@ -354,17 +354,45 @@ namespace VPB
             catch { }
         }
 
+        private void BeginSaveMode()
+        {
+            if (_canvasesHiddenForSave != null) return; // already in save mode
+            _canvasesHiddenForSave = new List<Canvas>();
+            if (Gallery.singleton != null)
+            {
+                foreach (var p in Gallery.singleton.Panels)
+                {
+                    if (p != null && p.canvas != null && p.canvas.gameObject.activeSelf)
+                    {
+                        p.canvas.gameObject.SetActive(false);
+                        _canvasesHiddenForSave.Add(p.canvas);
+                    }
+                }
+            }
+        }
+
+        private void EndSaveMode()
+        {
+            _canvasesHiddenForSave = null;
+        }
+
         private void SaveSceneFromGallery()
         {
             if (SuperController.singleton == null) return;
             string defaultFolder = "Saves/scene";
             string defaultName = "scene_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
 
+            BeginSaveMode();
+
             if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
                 SuperController.singleton.ShowMainHUDMonitor();
             SuperController.singleton.GetMediaPathDialog((selectedPath) =>
             {
-                if (string.IsNullOrEmpty(selectedPath)) return;
+                if (string.IsNullOrEmpty(selectedPath))
+                {
+                    EndSaveMode();
+                    return;
+                }
                 string path = selectedPath;
                 if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) path += ".json";
                 try
@@ -376,6 +404,10 @@ namespace VPB
                 {
                     LogUtil.LogError("[VPB] Save Scene failed: " + ex);
                     ShowTemporaryStatus("Save failed. See log.");
+                }
+                finally
+                {
+                    EndSaveMode();
                 }
             }, "json", defaultFolder, false, true, false, null, true);
 
@@ -408,11 +440,18 @@ namespace VPB
                 return;
             }
 
+            BeginSaveMode();
+
             string defaultName = GetDefaultPresetSaveName(target, storableId, rootFolder);
             if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
                 SuperController.singleton.ShowMainHUDMonitor();
             SuperController.singleton.GetMediaPathDialog((selectedPath) =>
             {
+                if (string.IsNullOrEmpty(selectedPath))
+                {
+                    EndSaveMode();
+                    return;
+                }
                 SavePresetFileSelected(target, storableId, rootFolder, selectedPath, true);
             }, "vap", rootFolder, false, true, false, "Preset_", true);
 
@@ -506,12 +545,13 @@ namespace VPB
 
         private void SavePresetFileSelected(Atom target, string storableId, string rootFolder, string fileNamePath, bool useScreenshot)
         {
-            if (string.IsNullOrEmpty(fileNamePath)) return;
-            if (string.IsNullOrEmpty(rootFolder)) return;
+            if (string.IsNullOrEmpty(fileNamePath)) { EndSaveMode(); return; }
+            if (string.IsNullOrEmpty(rootFolder)) { EndSaveMode(); return; }
 
             if (!fileNamePath.StartsWith(rootFolder, StringComparison.OrdinalIgnoreCase))
             {
                 ShowTemporaryStatus("Preset must be saved under: " + rootFolder, 2f);
+                EndSaveMode();
                 return;
             }
 
@@ -531,11 +571,12 @@ namespace VPB
                     SuperController.singleton.Alert("Resource " + path + " already exists. Overwrite?", () =>
                     {
                         SavePresetFinal(target, storableId, path, useScreenshot);
-                    }, () => { });
+                    }, () => { EndSaveMode(); });
                 }
                 catch
                 {
                     ShowTemporaryStatus("Preset already exists.", 2f);
+                    EndSaveMode();
                 }
             }
             else
@@ -546,12 +587,13 @@ namespace VPB
 
         private void SavePresetFinal(Atom target, string storableId, string path, bool useScreenshot)
         {
-            if (target == null) return;
+            if (target == null) { EndSaveMode(); return; }
             JSONStorable presetJS = null;
             try { presetJS = target.GetStorableByID(storableId); } catch { presetJS = null; }
             if (presetJS == null)
             {
                 ShowTemporaryStatus("Preset not available: " + storableId, 2f);
+                EndSaveMode();
                 return;
             }
 
@@ -560,12 +602,17 @@ namespace VPB
             bool loadOnSelectPreState = loadOnSelectJSB != null && loadOnSelectJSB.val;
             if (loadOnSelectJSB != null) loadOnSelectJSB.val = false;
 
+            if (useScreenshot)
+            {
+                StartCoroutine(SavePresetWithScreenshotCoroutine(presetJS, path, loadOnSelectJSB, loadOnSelectPreState));
+                return;
+            }
+
             try
             {
                 JSONStorableUrl presetPathJSON = presetJS.GetUrlJSONParam("presetBrowsePath");
                 if (presetPathJSON != null) presetPathJSON.val = SuperController.singleton.NormalizePath(path);
-                if (useScreenshot) presetJS.CallAction("StorePresetWithScreenshot");
-                else presetJS.CallAction("StorePreset");
+                presetJS.CallAction("StorePreset");
                 ShowTemporaryStatus("Preset saved: " + path, 2f);
             }
             catch (Exception ex)
@@ -576,6 +623,32 @@ namespace VPB
             finally
             {
                 if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
+                EndSaveMode();
+            }
+        }
+
+        private IEnumerator SavePresetWithScreenshotCoroutine(JSONStorable presetJS, string path, JSONStorableBool loadOnSelectJSB, bool loadOnSelectPreState)
+        {
+            // Panels are already hidden by BeginSaveMode(); wait one frame so the
+            // hide is in effect before VAM captures the screenshot.
+            yield return new WaitForEndOfFrame();
+
+            try
+            {
+                JSONStorableUrl presetPathJSON = presetJS.GetUrlJSONParam("presetBrowsePath");
+                if (presetPathJSON != null) presetPathJSON.val = SuperController.singleton.NormalizePath(path);
+                presetJS.CallAction("StorePresetWithScreenshot");
+                ShowTemporaryStatus("Preset saved: " + path, 2f);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Save preset failed: " + ex);
+                ShowTemporaryStatus("Preset save failed. See log.", 2f);
+            }
+            finally
+            {
+                if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
+                EndSaveMode();
             }
         }
         private void CreatePaginationControls()
