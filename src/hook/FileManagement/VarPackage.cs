@@ -1746,11 +1746,25 @@ namespace VPB
 			this.Path = linkvar.Replace('\\', '/');
 			if (this.Path.StartsWith("AddonPackages/"))
 				RelativePath = this.Path.Substring("AddonPackages/".Length);
+			// Close stale ZipFile opened from the old AllPackages path so it reopens cleanly from AddonPackages
+			lock (m_ZipFileLock)
+			{
+				if (m_ZipFile != null) { m_ZipFile.Close(); m_ZipFile = null; }
+			}
 			FileInfo info = new FileInfo(linkvar);
 			if (info != null)
 				info.Refresh();
 			return true;
 		}
+
+		public void CloseZipFile()
+		{
+			lock (m_ZipFileLock)
+			{
+				if (m_ZipFile != null) { m_ZipFile.Close(); m_ZipFile = null; }
+			}
+		}
+
 		public bool UninstallSelf()
         {
 			if (!this.Path.StartsWith("AddonPackages/"))

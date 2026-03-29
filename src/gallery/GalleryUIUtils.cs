@@ -131,33 +131,56 @@ namespace VPB
                 }
 
                 LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
-                
-                SuperController sc = SuperController.singleton;
-                if (sc != null)
+
+                if (Messager.singleton == null)
                 {
-                    // Start coroutine to disable suppression after scene load completes
-                    if (Messager.singleton != null)
-                    {
-                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad());
-                    }
-                    else
-                    {
-                        LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start coroutine to disable suppression");
-                    }
-                    
-                    LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
-                    sc.Load(normalizedPath);
+                    LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start load coroutines");
+                    Gallery.SuppressAutoRefresh(false);
+                }
+                else if (installed)
+                {
+                    // Packages were just moved from AllPackages to AddonPackages.
+                    // Yield one frame so MVR FileManager.Refresh can finish processing
+                    // before LoadInternal runs, preventing atom-list race exceptions.
+                    LogUtil.Log("[VPB] Packages installed; deferring sc.Load by one frame");
+                    Messager.singleton.StartCoroutine(LoadSceneAfterRefresh(normalizedPath));
                 }
                 else
                 {
-                    LogUtil.LogError("[VPB] SuperController.singleton is null!");
-                    Gallery.SuppressAutoRefresh(false);
+                    SuperController sc = SuperController.singleton;
+                    if (sc != null)
+                    {
+                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad());
+                        LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
+                        sc.Load(normalizedPath);
+                    }
+                    else
+                    {
+                        LogUtil.LogError("[VPB] SuperController.singleton is null!");
+                        Gallery.SuppressAutoRefresh(false);
+                    }
                 }
             }
             catch (Exception ex)
             {
                 LogUtil.LogError($"[VPB] UI.LoadSceneFile crash: {ex.Message}\n{ex.StackTrace}");
             }
+        }
+
+        private static IEnumerator LoadSceneAfterRefresh(string normalizedPath)
+        {
+            yield return null; // one frame for MVR refresh operations to settle
+            SuperController sc = SuperController.singleton;
+            if (sc == null)
+            {
+                LogUtil.LogError("[VPB] SuperController.singleton is null in LoadSceneAfterRefresh!");
+                Gallery.SuppressAutoRefresh(false);
+                yield break;
+            }
+            if (Messager.singleton != null)
+                Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad());
+            LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath}) (after install+refresh)");
+            sc.Load(normalizedPath);
         }
 
         public static string NormalizePath(string path)
