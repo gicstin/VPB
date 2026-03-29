@@ -362,21 +362,13 @@ namespace VPB
 
             if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
                 SuperController.singleton.ShowMainHUDMonitor();
+            if (canvas != null) canvas.gameObject.SetActive(false);
             SuperController.singleton.GetMediaPathDialog((selectedPath) =>
             {
-                if (string.IsNullOrEmpty(selectedPath)) return;
+                if (string.IsNullOrEmpty(selectedPath)) { if (canvas != null) canvas.gameObject.SetActive(true); return; }
                 string path = selectedPath;
                 if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) path += ".json";
-                try
-                {
-                    SuperController.singleton.Save(path);
-                    ShowTemporaryStatus("Scene saved: " + path, 2f);
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("[VPB] Save Scene failed: " + ex);
-                    ShowTemporaryStatus("Save failed. See log.");
-                }
+                StartCoroutine(SaveSceneWithHiddenUI(path));
             }, "json", defaultFolder, false, true, false, null, true);
 
             try
@@ -392,6 +384,60 @@ namespace VPB
                 }
             }
             catch { }
+        }
+
+        private IEnumerator SaveSceneWithHiddenUI(string path)
+        {
+            // Canvas is already hidden. Don't touch mainHUD — let VAM manage it for its screenshot cycle.
+            yield return new WaitForEndOfFrame();
+            bool success = false;
+            try
+            {
+                SuperController.singleton.Save(path);
+                success = true;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Save Scene failed: " + ex);
+            }
+            yield return WaitForVAMScreenshot();
+            if (canvas != null) canvas.gameObject.SetActive(true);
+            if (success) ShowTemporaryStatus("Scene saved: " + path, 2f);
+            else ShowTemporaryStatus("Save failed. See log.");
+        }
+
+        // Waits until VAM's internal screenshot coroutine completes by watching the mainHUD state.
+        // VAM hides mainHUD when entering screenshot mode and restores it when done.
+        // Falls back to a brief fixed wait if mainHUD state never changes (alternative screenshot path).
+        private IEnumerator WaitForVAMScreenshot()
+        {
+            var sc = SuperController.singleton;
+            float deadline = Time.unscaledTime + 5f;
+            bool hudWentInactive = false;
+
+            // Wait for mainHUD to go inactive (VAM entering screenshot mode)
+            while (Time.unscaledTime < deadline)
+            {
+                if (sc.mainHUD != null && !sc.mainHUD.gameObject.activeSelf) { hudWentInactive = true; break; }
+                yield return null;
+            }
+
+            if (hudWentInactive)
+            {
+                // Wait for mainHUD to become active again (VAM done with screenshot)
+                while (Time.unscaledTime < deadline)
+                {
+                    if (sc.mainHUD == null || sc.mainHUD.gameObject.activeSelf) break;
+                    yield return null;
+                }
+            }
+            else
+            {
+                // mainHUD never changed — fallback: wait a moment for any internal screenshot to complete
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
+            yield return new WaitForEndOfFrame();
         }
 
         private void SavePresetFromStorable(Atom target, string storableId)
@@ -411,6 +457,7 @@ namespace VPB
             string defaultName = GetDefaultPresetSaveName(target, storableId, rootFolder);
             if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
                 SuperController.singleton.ShowMainHUDMonitor();
+            if (canvas != null) canvas.gameObject.SetActive(false);
             SuperController.singleton.GetMediaPathDialog((selectedPath) =>
             {
                 SavePresetFileSelected(target, storableId, rootFolder, selectedPath, true);
@@ -506,12 +553,13 @@ namespace VPB
 
         private void SavePresetFileSelected(Atom target, string storableId, string rootFolder, string fileNamePath, bool useScreenshot)
         {
-            if (string.IsNullOrEmpty(fileNamePath)) return;
-            if (string.IsNullOrEmpty(rootFolder)) return;
+            if (string.IsNullOrEmpty(fileNamePath)) { if (canvas != null) canvas.gameObject.SetActive(true); return; }
+            if (string.IsNullOrEmpty(rootFolder)) { if (canvas != null) canvas.gameObject.SetActive(true); return; }
 
             if (!fileNamePath.StartsWith(rootFolder, StringComparison.OrdinalIgnoreCase))
             {
                 ShowTemporaryStatus("Preset must be saved under: " + rootFolder, 2f);
+                if (canvas != null) canvas.gameObject.SetActive(true);
                 return;
             }
 
@@ -531,11 +579,12 @@ namespace VPB
                     SuperController.singleton.Alert("Resource " + path + " already exists. Overwrite?", () =>
                     {
                         SavePresetFinal(target, storableId, path, useScreenshot);
-                    }, () => { });
+                    }, () => { if (canvas != null) canvas.gameObject.SetActive(true); });
                 }
                 catch
                 {
                     ShowTemporaryStatus("Preset already exists.", 2f);
+                    if (canvas != null) canvas.gameObject.SetActive(true);
                 }
             }
             else
@@ -560,24 +609,63 @@ namespace VPB
             bool loadOnSelectPreState = loadOnSelectJSB != null && loadOnSelectJSB.val;
             if (loadOnSelectJSB != null) loadOnSelectJSB.val = false;
 
+            if (useScreenshot)
+            {
+                StartCoroutine(SavePresetWithHiddenUI(presetJS, path, loadOnSelectJSB, loadOnSelectPreState));
+            }
+            else
+            {
+                try
+                {
+                    JSONStorableUrl presetPathJSON = presetJS.GetUrlJSONParam("presetBrowsePath");
+                    if (presetPathJSON != null) presetPathJSON.val = SuperController.singleton.NormalizePath(path);
+                    presetJS.CallAction("StorePreset");
+                    ShowTemporaryStatus("Preset saved: " + path, 2f);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("[VPB] Save preset failed: " + ex);
+                    ShowTemporaryStatus("Preset save failed. See log.", 2f);
+                }
+                finally
+                {
+                    if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
+                }
+            }
+        }
+
+        private IEnumerator SavePresetWithHiddenUI(JSONStorable presetJS, string path, JSONStorableBool loadOnSelectJSB, bool loadOnSelectPreState)
+        {
+            // Don't touch mainHUD — let VAM manage it for its screenshot cycle.
+            // Wait one frame for the scene to render cleanly without UI
+            yield return new WaitForEndOfFrame();
+            bool success = false;
+            string errorMsg = null;
             try
             {
                 JSONStorableUrl presetPathJSON = presetJS.GetUrlJSONParam("presetBrowsePath");
                 if (presetPathJSON != null) presetPathJSON.val = SuperController.singleton.NormalizePath(path);
-                if (useScreenshot) presetJS.CallAction("StorePresetWithScreenshot");
-                else presetJS.CallAction("StorePreset");
-                ShowTemporaryStatus("Preset saved: " + path, 2f);
+                presetJS.CallAction("StorePresetWithScreenshot");
+                success = true;
             }
             catch (Exception ex)
             {
-                LogUtil.LogError("[VPB] Save preset failed: " + ex);
-                ShowTemporaryStatus("Preset save failed. See log.", 2f);
+                errorMsg = ex.ToString();
             }
             finally
             {
                 if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
             }
+            yield return WaitForVAMScreenshot();
+            if (canvas != null) canvas.gameObject.SetActive(true);
+            if (success) ShowTemporaryStatus("Preset saved: " + path, 2f);
+            else
+            {
+                LogUtil.LogError("[VPB] Save preset failed: " + errorMsg);
+                ShowTemporaryStatus("Preset save failed. See log.", 2f);
+            }
         }
+
         private void CreatePaginationControls()
         {
             // Pagination Container (Footer Bar)
