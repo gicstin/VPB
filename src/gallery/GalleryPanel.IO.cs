@@ -648,11 +648,17 @@ namespace VPB
             if (!Gallery.IsSuppressed() && !IsHubMode)
             {
                 LogUtil.Log("[VPB] RetryRefreshAfterNoCacheDelay: retrying refresh for packages with missing cache.");
-                RefreshFiles(false);
+                // isRetry=true keeps _cacheRetryPending=true so this retry cannot spawn another retry.
+                RefreshFiles(false, false, isRetry: true);
+            }
+            else
+            {
+                // Refresh was skipped; clear the flag so future user-triggered loads can retry.
+                _cacheRetryPending = false;
             }
         }
 
-        public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false)
+        public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false, bool isRetry = false)
         {
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
@@ -666,6 +672,13 @@ namespace VPB
                 RefreshHubItems();
                 return;
             }
+
+            // Reset the retry guard on user-triggered refreshes so future loads can retry again.
+            // When called from RetryRefreshAfterNoCacheDelay (isRetry=true) we intentionally keep
+            // _cacheRetryPending=true so that the retry run does NOT spawn yet another retry.
+            if (!isRetry)
+                _cacheRetryPending = false;
+
             if (thumbnailCacheCoroutine != null) StopCoroutine(thumbnailCacheCoroutine);
             thumbnailCacheCoroutine = null;
             if (pendingThumbnailCacheJobs != null) pendingThumbnailCacheJobs.Clear();
@@ -1362,10 +1375,13 @@ namespace VPB
             refreshCoroutine = null;
 
             // If packages were skipped because their content cache wasn't ready yet
-            // (FileManager scan still in progress), schedule a single retry.
-            if (skippedForNoCache[0] > 0 && !Gallery.IsSuppressed())
+            // (FileManager scan still in progress), schedule a single retry — but only
+            // if no retry is already pending/running. This prevents an infinite refresh
+            // loop where each retry finds uncached packages and spawns yet another retry.
+            if (skippedForNoCache[0] > 0 && !Gallery.IsSuppressed() && !_cacheRetryPending)
             {
-                LogUtil.Log($"[VPB] RefreshFilesRoutine: {skippedForNoCache[0]} packages had no cache yet; retrying in 3s.");
+                LogUtil.Log($"[VPB] RefreshFilesRoutine: {skippedForNoCache[0]} packages had no cache yet; scheduling one-shot retry in 3s.");
+                _cacheRetryPending = true;
                 StartCoroutine(RetryRefreshAfterNoCacheDelay());
             }
 

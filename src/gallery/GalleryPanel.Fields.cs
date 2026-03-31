@@ -283,6 +283,7 @@ namespace VPB
         private string posePeopleIndexGroupId = "";
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
+        private bool _cacheRetryPending = false;
         
         private string nameFilter = "";
         private string nameFilterLower = "";
