@@ -321,11 +321,10 @@ namespace VPB
             }
         }
 
-        public void CreatePane()
+        public void CreatePane(string forcedInitialCategory = null)
         {
             if (panels.Count >= MaxPanels)
             {
-                // Optionally warn user?
                 return;
             }
 
@@ -341,66 +340,67 @@ namespace VPB
                 Transform cameraTransform = SuperController.singleton.centerCameraTarget.transform;
                 p.canvas.transform.position = cameraTransform.position + cameraTransform.forward * 0.8f;
                 p.canvas.transform.rotation = cameraTransform.rotation;
-                
-                // If Locked rotation setting is checked, we might want to enforce it here, 
-                // but GalleryPanel.Show handles it on first show if !hasBeenPositioned.
-                // However, since we manually position it here, we might want to set hasBeenPositioned?
-                // Actually, GalleryPanel.Init sets hasBeenPositioned = false.
-                // If we position it here, we should probably set a flag or let Show handle it.
-                // If we let Show handle it, Show will position it at 1.5f distance.
-                // If we want 0.8f or "relative to viewer", we can leave it to Show if 1.5f is acceptable.
-                // The user said "relative to viewer". Show's default is relative to viewer (head).
-                // Let's rely on Show for consistency, unless we want to force it.
-                // But Show only positions if !hasBeenPositioned.
-                
-                // Let's trust GalleryPanel.Show to handle initial positioning.
             }
             
-            // Show default category
+            // Show initial category
             if (categories.Count > 0)
             {
                 Gallery.Category initial = categories[0];
-                try
+
+                if (!string.IsNullOrEmpty(forcedInitialCategory))
                 {
-                    string last = VPBConfig.ReadLastGalleryCategoryFromDisk();
-                    if (string.IsNullOrEmpty(last) && VPBConfig.Instance != null)
-                        last = VPBConfig.Instance.LastGalleryCategory;
-
-                    if (!string.IsNullOrEmpty(last))
+                    // Caller specified a category (e.g. "Scenes" on startup) – use it, don't restore last viewed.
+                    for (int i = 0; i < categories.Count; i++)
                     {
-                        // Normalize saved formats:
-                        // - "Category Hair" / "CategoryHair" -> "Hair"
-                        // - "Preset Hair" / "PresetHair" -> "Hair"
-                        // - "Scene" -> "Scenes"
-                        last = last.Trim();
-                        if (last.StartsWith("Category ", StringComparison.OrdinalIgnoreCase))
-                            last = last.Substring("Category ".Length);
-                        else if (last.StartsWith("Category", StringComparison.OrdinalIgnoreCase) && last.Length > "Category".Length)
-                            last = last.Substring("Category".Length);
-
-                        if (last.StartsWith("Preset ", StringComparison.OrdinalIgnoreCase))
-                            last = last.Substring("Preset ".Length);
-                        else if (last.StartsWith("Preset", StringComparison.OrdinalIgnoreCase) && last.Length > "Preset".Length)
-                            last = last.Substring("Preset".Length);
-
-                        last = last.Trim();
-
-                        if (string.Equals(last, "Scene", StringComparison.OrdinalIgnoreCase))
-                            last = "Scenes";
-
-                        for (int i = 0; i < categories.Count; i++)
+                        if (string.Equals(categories[i].name, forcedInitialCategory, StringComparison.OrdinalIgnoreCase))
                         {
-                            if (string.Equals(categories[i].name, last, StringComparison.OrdinalIgnoreCase))
-                            {
-                                initial = categories[i];
-                                break;
-                            }
+                            initial = categories[i];
+                            break;
                         }
-
-                        LogUtil.Log("[Gallery] CreatePane initial category='" + initial.name + "' (saved='" + last + "')");
                     }
+                    LogUtil.Log("[Gallery] CreatePane forced category='" + initial.name + "'");
                 }
-                catch { }
+                else
+                {
+                    // Restore last-viewed category from saved state.
+                    try
+                    {
+                        string last = VPBConfig.ReadLastGalleryCategoryFromDisk();
+                        if (string.IsNullOrEmpty(last) && VPBConfig.Instance != null)
+                            last = VPBConfig.Instance.LastGalleryCategory;
+
+                        if (!string.IsNullOrEmpty(last))
+                        {
+                            last = last.Trim();
+                            if (last.StartsWith("Category ", StringComparison.OrdinalIgnoreCase))
+                                last = last.Substring("Category ".Length);
+                            else if (last.StartsWith("Category", StringComparison.OrdinalIgnoreCase) && last.Length > "Category".Length)
+                                last = last.Substring("Category".Length);
+
+                            if (last.StartsWith("Preset ", StringComparison.OrdinalIgnoreCase))
+                                last = last.Substring("Preset ".Length);
+                            else if (last.StartsWith("Preset", StringComparison.OrdinalIgnoreCase) && last.Length > "Preset".Length)
+                                last = last.Substring("Preset".Length);
+
+                            last = last.Trim();
+
+                            if (string.Equals(last, "Scene", StringComparison.OrdinalIgnoreCase))
+                                last = "Scenes";
+
+                            for (int i = 0; i < categories.Count; i++)
+                            {
+                                if (string.Equals(categories[i].name, last, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    initial = categories[i];
+                                    break;
+                                }
+                            }
+
+                            LogUtil.Log("[Gallery] CreatePane initial category='" + initial.name + "' (saved='" + last + "')");
+                        }
+                    }
+                    catch { }
+                }
 
                 p.Show(initial.name, initial.extension, initial.path);
             }

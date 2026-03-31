@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
@@ -96,15 +96,25 @@ namespace VPB
                 {
                     string rawLastPageName = lastPageName;
 
-                    // Normalize common variants written by legacy callers.
+                    // Normalize common variants written by legacy callers:
+                    // "Category Hair" / "CategoryHair" -> "Hair"
+                    // "Preset Hair" / "PresetHair" -> "Hair"
+                    // "Scene" -> "Scenes"
+                    lastPageName = lastPageName.Trim();
                     if (lastPageName.StartsWith("Category ", StringComparison.OrdinalIgnoreCase))
-                    {
                         lastPageName = lastPageName.Substring("Category ".Length);
-                    }
+                    else if (lastPageName.StartsWith("Category", StringComparison.OrdinalIgnoreCase) && lastPageName.Length > "Category".Length)
+                        lastPageName = lastPageName.Substring("Category".Length);
+
+                    if (lastPageName.StartsWith("Preset ", StringComparison.OrdinalIgnoreCase))
+                        lastPageName = lastPageName.Substring("Preset ".Length);
+                    else if (lastPageName.StartsWith("Preset", StringComparison.OrdinalIgnoreCase) && lastPageName.Length > "Preset".Length)
+                        lastPageName = lastPageName.Substring("Preset".Length);
+
+                    lastPageName = lastPageName.Trim();
+
                     if (string.Equals(lastPageName, "Scene", StringComparison.OrdinalIgnoreCase))
-                    {
                         lastPageName = "Scenes";
-                    }
 
                     LogUtil.Log("[Gallery] OpenGallery restore raw='" + rawLastPageName + "' normalized='" + lastPageName + "'");
 

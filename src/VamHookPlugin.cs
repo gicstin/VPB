@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using HarmonyLib;
 using ICSharpCode.SharpZipLib.Zip;
 using Prime31.MessageKit;
@@ -914,7 +914,7 @@ namespace VPB
                 if (Gallery.singleton != null && Gallery.singleton.PanelCount == 0)
                 {
                     if (!m_GalleryCatsInited) InitGalleryCategories();
-                    Gallery.singleton.CreatePane();
+                    Gallery.singleton.CreatePane("Scenes");
                 }
             }
         }

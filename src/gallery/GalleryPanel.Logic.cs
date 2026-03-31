@@ -751,20 +751,34 @@ namespace VPB
             categories = cats;
             categoriesCached = false;
 
-            // Try to restore last tab if not specified
+            // Try to restore last tab if currentPath is not yet set (e.g. freshly created panels
+            // that were not yet shown via Show()). Panels that already have a category displayed
+            // are left unchanged.
             string lastPageName = null;
             if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
-            {
                 lastPageName = VPBConfig.Instance.LastGalleryCategory;
-            }
             else if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
-            {
                 lastPageName = Settings.Instance.LastGalleryPage.Value;
-            }
 
             if (string.IsNullOrEmpty(currentPath) && !string.IsNullOrEmpty(lastPageName))
             {
-                var cat = categories.FirstOrDefault(c => c.name == lastPageName);
+                // Normalize legacy enum-style names ("CategoryHair" -> "Hair", "PresetHair" -> "Hair")
+                lastPageName = lastPageName.Trim();
+                if (lastPageName.StartsWith("Category ", StringComparison.OrdinalIgnoreCase))
+                    lastPageName = lastPageName.Substring("Category ".Length);
+                else if (lastPageName.StartsWith("Category", StringComparison.OrdinalIgnoreCase) && lastPageName.Length > "Category".Length)
+                    lastPageName = lastPageName.Substring("Category".Length);
+
+                if (lastPageName.StartsWith("Preset ", StringComparison.OrdinalIgnoreCase))
+                    lastPageName = lastPageName.Substring("Preset ".Length);
+                else if (lastPageName.StartsWith("Preset", StringComparison.OrdinalIgnoreCase) && lastPageName.Length > "Preset".Length)
+                    lastPageName = lastPageName.Substring("Preset".Length);
+
+                lastPageName = lastPageName.Trim();
+                if (string.Equals(lastPageName, "Scene", StringComparison.OrdinalIgnoreCase))
+                    lastPageName = "Scenes";
+
+                var cat = categories.FirstOrDefault(c => string.Equals(c.name, lastPageName, StringComparison.OrdinalIgnoreCase));
                 if (!string.IsNullOrEmpty(cat.name))
                 {
                     currentPath = cat.path;
