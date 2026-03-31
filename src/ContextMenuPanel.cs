@@ -47,11 +47,15 @@ namespace VPB
                     GameObject go = new GameObject("VPB_ContextMenu");
                     go.layer = 5;
                     _instance = go.AddComponent<ContextMenuPanel>();
-                    // Don't destroy on load if needed, but for now just keep it simple
                 }
                 return _instance;
             }
         }
+
+        /// <summary>
+        /// Returns the existing instance without creating one. Use this for read-only checks.
+        /// </summary>
+        public static ContextMenuPanel ExistingInstance => _instance;
 
         private GameObject canvasGO;
         private RectTransform panelRT;
@@ -100,6 +104,9 @@ namespace VPB
             
             // Create Header
             CreateHeader(panelGO);
+
+            // Start hidden — canvas must only become visible via Show()
+            canvasGO.SetActive(false);
         }
         
         void OnDestroy()

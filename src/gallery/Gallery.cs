@@ -291,11 +291,11 @@ namespace VPB
         {
             if (panels.Count == 0) 
             {
-                CreatePane();
-                // CreatePane calls Show internally with default category, 
-                // but we might want to override it with the requested path if it's specific?
-                // Actually CreatePane uses 'categories[0]' by default.
-                // If Show() is called with specific params, we should apply them to the new pane.
+                // Create the panel without its internal Show() so we can call Show() exactly
+                // once below with the caller's own title/extension/path.  This avoids the old
+                // double-Show pattern (CreatePane→p.Show + Show again) that caused two content
+                // loads, duplicate thumbnail coroutines and a scroll-position reset on startup.
+                CreatePane(showAfterCreate: false);
                 if (panels.Count > 0)
                     panels[0].Show(title, extension, path);
             }
@@ -321,7 +321,7 @@ namespace VPB
             }
         }
 
-        public void CreatePane(string forcedInitialCategory = null)
+        public void CreatePane(string forcedInitialCategory = null, bool showAfterCreate = true)
         {
             if (panels.Count >= MaxPanels)
             {
@@ -402,7 +402,8 @@ namespace VPB
                     catch { }
                 }
 
-                p.Show(initial.name, initial.extension, initial.path);
+                if (showAfterCreate)
+                    p.Show(initial.name, initial.extension, initial.path);
             }
         }
 
@@ -454,16 +455,18 @@ namespace VPB
                 try { p.ResetFollowOffsets(); } catch { }
             }
 
-            // Bring Context Menu to front if it is active
+            // Bring Context Menu to front if it is currently open
             try
             {
-                if (ContextMenuPanel.Instance != null && ContextMenuPanel.Instance.gameObject.activeSelf)
+                var ctxMenu = ContextMenuPanel.ExistingInstance;
+                if (ctxMenu != null && ctxMenu.gameObject.activeSelf)
                 {
-                    if (ContextMenuPanel.Instance.transform.Find("Canvas") != null && ContextMenuPanel.Instance.transform.Find("Canvas").gameObject.activeSelf)
+                    Transform ctxCanvas = ctxMenu.transform.Find("Canvas");
+                    if (ctxCanvas != null && ctxCanvas.gameObject.activeSelf)
                     {
                         Vector3 contextPos = basePos + right * (start + panels.Count * spacing);
-                        ContextMenuPanel.Instance.transform.position = contextPos;
-                        ContextMenuPanel.Instance.transform.rotation = Quaternion.LookRotation(contextPos - camTrans.position, Vector3.up);
+                        ctxMenu.transform.position = contextPos;
+                        ctxMenu.transform.rotation = Quaternion.LookRotation(contextPos - camTrans.position, Vector3.up);
                     }
                 }
             }

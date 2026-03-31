@@ -181,6 +181,7 @@ namespace VPB
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
             EnableDragDrop = true;
+            DragHoldThreshold = 0.5f;
             ApplyMode = "DoubleClick";
             LastGalleryCategory = "";
             DesktopFixedMode = false;
@@ -196,7 +197,9 @@ namespace VPB
             {
                 if (File.Exists(ConfigPath))
                 {
-                    string prevLastGalleryCategory = LastGalleryCategory;
+                    // Capture the value from the *previous* load (before defaults were reset above)
+                    // so the log below can detect when the category actually changes between loads.
+                    string prevLastGalleryCategory = s_LastLoggedLoadedGalleryCategory;
                     string json = File.ReadAllText(ConfigPath);
                     JSONNode node = JSON.Parse(json);
                     if (node != null)
@@ -246,6 +249,7 @@ namespace VPB
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
+                        if (node["DragHoldThreshold"] != null) DragHoldThreshold = node["DragHoldThreshold"].AsFloat;
                         if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
                         if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
@@ -267,8 +271,10 @@ namespace VPB
 
                     try
                     {
+                        // Log only when the loaded category differs from what was logged on the previous load.
+                        // prevLastGalleryCategory was captured from s_LastLoggedLoadedGalleryCategory above,
+                        // so a single comparison is sufficient.
                         if (!string.Equals(prevLastGalleryCategory, LastGalleryCategory, StringComparison.OrdinalIgnoreCase) &&
-                            !string.Equals(s_LastLoggedLoadedGalleryCategory, LastGalleryCategory, StringComparison.OrdinalIgnoreCase) &&
                             !string.IsNullOrEmpty(LastGalleryCategory))
                         {
                             s_LastLoggedLoadedGalleryCategory = LastGalleryCategory;
@@ -309,6 +315,7 @@ namespace VPB
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
+                node["DragHoldThreshold"].AsFloat = DragHoldThreshold;
                 node["ApplyMode"] = ApplyMode;
                 node["LastGalleryCategory"] = LastGalleryCategory;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;

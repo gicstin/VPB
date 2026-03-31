@@ -435,6 +435,12 @@ namespace VPB
 
         public static void RemoveToInvalid(string vpath, string subPath = null)
         {
+            if (string.IsNullOrEmpty(vpath))
+            {
+                LogUtil.LogError("[VPB] RemoveToInvalid: called with null/empty path. Skipping.");
+                return;
+            }
+
             if (!Directory.Exists("InvalidPackages"))
                 Directory.CreateDirectory("InvalidPackages");
 
@@ -461,8 +467,15 @@ namespace VPB
                     moveToPath = "InvalidPackages/" + subPath + "/" + vpath.Substring("AddonPackages".Length);
                 }
             }
+
+            if (string.IsNullOrEmpty(moveToPath))
+            {
+                LogUtil.LogError("[VPB] RemoveToInvalid: cannot determine destination for path '" + vpath + "' (expected AllPackages or AddonPackages prefix). Skipping.");
+                return;
+            }
+
             string dir = Path.GetDirectoryName(moveToPath);
-            if (!Directory.Exists(dir))
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
                 Directory.CreateDirectory(dir);
             }
@@ -514,12 +527,12 @@ namespace VPB
         {
             lock (packagesLock)
             {
-                foreach (VarPackage value in packagesByUid.Values)
-                {
-                    value.Dispose();
-                }
                 if (packagesByUid != null)
                 {
+                    foreach (VarPackage value in packagesByUid.Values)
+                    {
+                        value.Dispose();
+                    }
                     packagesByUid.Clear();
                 }
                 if (packagesByPath != null)
@@ -2340,22 +2353,46 @@ namespace VPB
 			return null;
 		}
 
-		public static int FolderContentsCount(string path)
-		{
-			int num = Directory.GetFiles(path).Length;
-			string[] directories = Directory.GetDirectories(path);
-			string[] array = directories;
-			foreach (string path2 in array)
-			{
-				num += FolderContentsCount(path2);
-			}
-			return num;
-		}
+	public static int FolderContentsCount(string path)
+	{
+		return FolderContentsCount(path, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+	}
 
-		public static bool DirectoryExists(string path, bool onlySystemDirectories = false, bool restrictPath = false)
+	private static int FolderContentsCount(string path, HashSet<string> visited)
+	{
+		// Cycle guard: only reparse points (junctions/symlinks) get a file ID;
+		// normal directories cannot form cycles so skipping them is fine.
+		try
 		{
-			return false;
+			string dirId;
+			if (TryGetWindowsFileId(path, out dirId) && !visited.Add(dirId))
+				return 0;
 		}
+		catch { }
+
+		// Count files in this directory, tolerating access-denied or other errors.
+		int num = 0;
+		try { num = Directory.GetFiles(path).Length; } catch { }
+
+		// Recurse into each subdirectory independently so an error in one branch
+		// does not zero-out the count for sibling directories.
+		string[] dirs = null;
+		try { dirs = Directory.GetDirectories(path); } catch { }
+		if (dirs != null)
+		{
+			foreach (string path2 in dirs)
+			{
+				num += FolderContentsCount(path2, visited);
+			}
+		}
+		return num;
+	}
+
+	public static bool DirectoryExists(string path, bool onlySystemDirectories = false, bool restrictPath = false)
+	{
+		if (string.IsNullOrEmpty(path)) return false;
+		return Directory.Exists(path);
+	}
 
 		public static bool IsDirectoryInPackage(string path)
 		{

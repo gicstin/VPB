@@ -579,7 +579,16 @@ namespace VPB
         {
             get { 
                 if (VPBConfig.Instance != null) {
-                    ApplyMode mode = (ApplyMode)Enum.Parse(typeof(ApplyMode), VPBConfig.Instance.ApplyMode);
+                    ApplyMode mode;
+                    try
+                    {
+                        mode = (ApplyMode)Enum.Parse(typeof(ApplyMode), VPBConfig.Instance.ApplyMode);
+                    }
+                    catch
+                    {
+                        LogUtil.LogWarning("[GalleryPanel] ItemApplyMode GET: unrecognized value '" + VPBConfig.Instance.ApplyMode + "', defaulting to DoubleClick");
+                        mode = ApplyMode.DoubleClick;
+                    }
                     LogUtil.Log("[GalleryPanel] ItemApplyMode GET: " + mode + " (from VPBConfig: " + VPBConfig.Instance.ApplyMode + ")");
                     return mode;
                 }
