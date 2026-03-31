@@ -10,6 +10,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Debug token presence
+        run: |
+          if [ -z "${{ secrets.PAT_TOKEN }}" ]; then
+            echo "ERROR: PAT_TOKEN secret is empty or not set!"
+          else
+            echo "PAT_TOKEN secret is set (length: ${#PAT_TOKEN})"
+          fi
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
@@ -41,7 +51,16 @@ jobs:
           git add archive
           git commit -m "Archived VPB.dll at ${{ steps.ts.outputs.stamp }}" || echo "No changes to commit"
 
+      - name: Debug git auth state before push
+        run: |
+          echo "=== Remote URL ==="
+          git remote -v
+          echo "=== Git credential config ==="
+          git config --list | grep -i 'url\|credential\|token' || echo "No credential config found"
+          echo "=== Whoami via API ==="
+          curl -sf -H "Authorization: token ${{ secrets.PAT_TOKEN }}" https://api.github.com/user | python3 -c "import sys,json; d=json.load(sys.stdin); print('Authenticated as:', d.get('login','unknown'))" || echo "API call failed - token may be invalid or missing"
+
       - name: Push changes
-        run: git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/gicstin/VPB.git
+          git push
