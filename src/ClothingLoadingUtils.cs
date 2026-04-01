@@ -380,11 +380,11 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(normalizedPresetPath)) return null;
 
-            JSONNode node = SuperController.singleton.LoadJSON(normalizedPresetPath);
+            JSONNode node = UI.LoadJSONWithFallback(normalizedPresetPath, null);
             JSONClass presetJSON = (node != null) ? node.AsObject : null;
             if (presetJSON == null) return null;
 
-            if (normalizedPresetPath.Contains(":"))
+            if (UI.IsLikelyVarPackageReference(normalizedPresetPath))
             {
                 string presetPackageName = normalizedPresetPath.Substring(0, normalizedPresetPath.IndexOf(':'));
                 string folderFullPath = FileManagerSecure.GetDirectoryName(normalizedPresetPath);
@@ -593,7 +593,7 @@ namespace VPB
                     if (presetNameJSS != null)
                     {
                         string fileNameNoExt = Path.GetFileNameWithoutExtension(normalizedPath);
-                        if (normalizedPath.Contains(":"))
+                        if (UI.IsLikelyVarPackageReference(normalizedPath))
                         {
                             string presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
                             presetNameJSS.val = presetPackageName + ":" + fileNameNoExt + ".vap";
@@ -652,7 +652,7 @@ namespace VPB
             string packageName = "";
             string p = path.Replace('\\', '/');
 
-            if (p.Contains(":"))
+            if (UI.IsLikelyVarPackageReference(p))
             {
                 packageName = p.Substring(0, p.IndexOf(':'));
             }
@@ -786,11 +786,11 @@ namespace VPB
                             if (pm != null)
                             {
                                 string normalizedVam = UI.NormalizePath(vamPath);
-                                JSONNode node = SuperController.singleton.LoadJSON(normalizedVam);
+                                JSONNode node = UI.LoadJSONWithFallback(normalizedVam, null);
                                 JSONClass vamJSON = (node != null) ? node.AsObject : null;
                                 if (vamJSON != null)
                                 {
-                                    if (normalizedVam.Contains(":"))
+                                    if (UI.IsLikelyVarPackageReference(normalizedVam))
                                     {
                                         string pkg = normalizedVam.Substring(0, normalizedVam.IndexOf(':'));
                                         string jsonStr = vamJSON.ToString();

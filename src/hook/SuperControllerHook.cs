@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System;
 using System.IO;
@@ -52,7 +52,7 @@ namespace VPB
             
             try
             {
-                JSONNode root = SuperController.singleton.LoadJSON(presetPath);
+                JSONNode root = UI.LoadJSONWithFallback(presetPath, null);
                 if (root == null) return;
 
                 // Recursively search for simEnabled entries with texture URLs

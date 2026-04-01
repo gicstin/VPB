@@ -433,7 +433,7 @@ namespace VPB
                 {
                     // Prefer using FileManager or SuperController which handles reading better
                     string normalized = UI.NormalizePath(FileEntry.Path);
-                    if (normalized.Contains(":")) // Var
+                    if (UI.IsLikelyVarPackageReference(normalized)) // Var (not Windows C:/)
                     {
                          // Use OpenStreamReader for vars as it handles the archive access
                          using (var reader = FileEntry.OpenStreamReader())
@@ -608,11 +608,11 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(normalizedPresetPath)) return null;
 
-            JSONNode node = SuperController.singleton.LoadJSON(normalizedPresetPath);
+            JSONNode node = UI.LoadJSONWithFallback(normalizedPresetPath, null);
             JSONClass presetJSON = (node != null) ? node.AsObject : null;
             if (presetJSON == null) return null;
 
-            if (normalizedPresetPath.Contains(":"))
+            if (UI.IsLikelyVarPackageReference(normalizedPresetPath))
             {
                 string presetPackageName = normalizedPresetPath.Substring(0, normalizedPresetPath.IndexOf(':'));
                 string folderFullPath = MVR.FileManagementSecure.FileManagerSecure.GetDirectoryName(normalizedPresetPath);
@@ -851,7 +851,7 @@ namespace VPB
                     if (presetNameJSS != null)
                     {
                         string fileNameNoExt = Path.GetFileNameWithoutExtension(normalizedPath);
-                        if (normalizedPath.Contains(":"))
+                        if (UI.IsLikelyVarPackageReference(normalizedPath))
                         {
                             string presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
                             presetNameJSS.val = presetPackageName + ":" + fileNameNoExt + ".vap";

@@ -848,7 +848,9 @@ namespace VPB
 
                                 // Standardizing on JSON loading for all presets to avoid "not compatible with store folder path" errors
                                 // This also ensures that VAR paths and loose files work identically.
-                                JSONClass presetJSON = SuperController.singleton.LoadJSON(normalizedPath).AsObject;
+                                // Use LoadJSONWithFallback so packages with non-standard names (e.g. spaces) can be read via stream.
+                                JSONNode presetNode = UI.LoadJSONWithFallback(normalizedPath, FileEntry);
+                                JSONClass presetJSON = (presetNode != null) ? presetNode.AsObject : null;
                                 if (presetJSON != null)
                                 {
                                     if (FileButton.EnsureInstalledByText(presetJSON.ToString()))

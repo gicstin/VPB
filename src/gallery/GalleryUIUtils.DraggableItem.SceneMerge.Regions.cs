@@ -650,8 +650,7 @@ namespace VPB
             if (string.IsNullOrEmpty(path)) return;
 
             string normalizedPath = UI.NormalizePath(path);
-            JSONNode node = null;
-            try { node = SuperController.singleton.LoadJSON(normalizedPath); } catch { node = null; }
+            JSONNode node = UI.LoadJSONWithFallback(normalizedPath, null);
             if (node == null) return;
 
             JSONClass presetJSON = null;

@@ -215,49 +215,147 @@ namespace VPB
             return normalizedPath;
         }
 
-        public static JSONNode LoadJSONWithFallback(string path, FileEntry entry = null)
+        /// <summary>
+        /// True for VaM package paths (creator.pkg.version:/internal), false for Windows drive paths (C:/...) and http(s) URLs.
+        /// </summary>
+        private static bool LooksLikeVarPackagePath(string p)
         {
-            // Use SuperController.singleton.LoadJSON which is most reliable for VARs and various paths
-            JSONNode root = SuperController.singleton.LoadJSON(path);
-            
-            if (root == null)
+            if (string.IsNullOrEmpty(p)) return false;
+            p = p.Replace('\\', '/');
+            if (p.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || p.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                return false;
+            int i = p.IndexOf(":/", StringComparison.Ordinal);
+            if (i < 0) return false;
+            // Windows: "C:/Users/..." has ':' at index 1 after normalizing slashes
+            if (i == 1 && p.Length > 2 && char.IsLetter(p[0])) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Use instead of raw <c>path.Contains(":")</c> so Windows drives and URLs are not mistaken for VAR references.
+        /// </summary>
+        public static bool IsLikelyVarPackageReference(string path)
+        {
+            return LooksLikeVarPackagePath(path);
+        }
+
+        /// <summary>
+        /// Whether <paramref name="entry"/> refers to the same file as <paramref name="path"/> (any of path / Uid / normalized forms).
+        /// </summary>
+        private static bool FileEntryMatchesPathForJsonLoad(FileEntry entry, string path)
+        {
+            if (entry == null || string.IsNullOrEmpty(path)) return false;
+            string p = path.Replace('\\', '/');
+            string uid = entry.Uid?.Replace('\\', '/');
+            string ep = entry.Path?.Replace('\\', '/');
+            if (string.Equals(uid, p, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(ep, p, StringComparison.OrdinalIgnoreCase)) return true;
+            try
             {
-                LogUtil.LogWarning($"[VPB] SuperController.singleton.LoadJSON returned null for {path}, trying manual read...");
-                string content = null;
-                
-                // If we have an entry, it's the best way to read (handles VAR streams)
-                if (entry != null && (entry.Uid == path || entry.Path == path))
+                string norm = FileManager.NormalizePath(path)?.Replace('\\', '/');
+                if (!string.IsNullOrEmpty(norm))
                 {
-                    using (var reader = entry.OpenStreamReader()) content = reader.ReadToEnd();
-                }
-                else 
-                {
-                    // If no entry, try to find it in the file manager or loose file
-                    string normalized = UI.NormalizePath(path);
-                    if (normalized.Contains(":")) // Likely a VAR path like Creator.Package:/path
-                    {
-                        // We don't have a direct package reader here without entry, 
-                        // but sometimes entry is provided. 
-                    }
-                    else if (File.Exists(path))
-                    {
-                        content = File.ReadAllText(path);
-                    }
-                }
-                
-                if (!string.IsNullOrEmpty(content))
-                {
-                    // Fix SELF:/ paths if we are extracting from a VAR package
-                    if (entry is VarFileEntry varEntry && varEntry.Package != null)
-                    {
-                        string packageUid = varEntry.Package.Uid;
-                        content = content.Replace("SELF:/", packageUid + ":/");
-                        content = content.Replace("SELF:\\", packageUid + ":/");
-                    }
-                    root = JSON.Parse(content);
+                    if (string.Equals(uid, norm, StringComparison.OrdinalIgnoreCase)) return true;
+                    if (string.Equals(ep, norm, StringComparison.OrdinalIgnoreCase)) return true;
                 }
             }
-            return root;
+            catch { }
+            return false;
+        }
+
+        public static JSONNode LoadJSONWithFallback(string path, FileEntry entry = null)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+
+            JSONNode root = null;
+            try
+            {
+                if (SuperController.singleton != null)
+                    root = SuperController.singleton.LoadJSON(path);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning($"[VPB] SuperController.LoadJSON threw for {path}: {ex.Message}");
+                root = null;
+            }
+
+            if (root != null) return root;
+
+            LogUtil.LogWarning($"[VPB] LoadJSONWithFallback: primary load failed for {path}, trying VPB stream/file fallback...");
+            string content = null;
+            FileEntry readEntry = null;
+
+            try
+            {
+                if (entry != null && FileEntryMatchesPathForJsonLoad(entry, path))
+                    readEntry = entry;
+                else
+                {
+                    VarFileEntry vfe = FileManager.GetVarFileEntry(path);
+                    if (vfe == null)
+                    {
+                        try
+                        {
+                            string norm = FileManager.NormalizePath(path);
+                            if (!string.IsNullOrEmpty(norm))
+                                vfe = FileManager.GetVarFileEntry(norm);
+                        }
+                        catch { }
+                    }
+                    readEntry = vfe;
+                }
+
+                if (readEntry != null)
+                {
+                    using (var reader = readEntry.OpenStreamReader())
+                    {
+                        if (reader != null)
+                            content = reader.ReadToEnd();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning($"[VPB] LoadJSONWithFallback stream read failed for {path}: {ex.Message}");
+            }
+
+            // Loose file on disk (not a package-internal path; exclude Windows drive letters)
+            if (string.IsNullOrEmpty(content))
+            {
+                string check = path.Replace('\\', '/');
+                if (!LooksLikeVarPackagePath(check))
+                {
+                    try
+                    {
+                        if (File.Exists(path))
+                            content = File.ReadAllText(path);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogWarning($"[VPB] LoadJSONWithFallback file read failed for {path}: {ex.Message}");
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(content)) return null;
+
+            VarFileEntry varForSelf = readEntry as VarFileEntry;
+            if (varForSelf?.Package != null)
+            {
+                string packageUid = varForSelf.Package.Uid;
+                content = content.Replace("SELF:/", packageUid + ":/");
+                content = content.Replace("SELF:\\", packageUid + ":/");
+            }
+
+            try
+            {
+                return JSON.Parse(content);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] LoadJSONWithFallback: JSON parse failed for {path}: {ex.Message}");
+                return null;
+            }
         }
 
         public static GameObject CreateVScrollableContent(GameObject parentGO, Color backgroundColor, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, float scrollBarWidth = 15f, float spacing = 0f)

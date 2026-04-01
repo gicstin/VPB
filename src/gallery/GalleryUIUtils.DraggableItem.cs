@@ -693,20 +693,32 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadPose: No target atom provided.");
                 return;
             }
-            
+
             string normalizedPath = UI.NormalizePath(FileEntry.Path);
             LogUtil.Log($"[VPB] LoadPose: Applying {FileEntry.Name} to {target.uid} (SuppressRoot: {suppressRoot})");
 
-            JSONNode node = SuperController.singleton.LoadJSON(normalizedPath);
+            // Use LoadJSONWithFallback instead of SuperController.LoadJSON directly:
+            // some .var packages have spaces in their name (e.g. "infiniteya.Pose Pack.1")
+            // which VAM's native LoadJSON cannot resolve from a UID path, but VPB can read
+            // directly from the ZipFile stream via FileEntry.OpenStreamReader().
+            JSONNode node = UI.LoadJSONWithFallback(normalizedPath, FileEntry);
             if (node == null) return;
             JSONClass presetJSON = node.AsObject;
-            
+
             if (FileButton.EnsureInstalledByText(presetJSON.ToString()))
             {
                 MVR.FileManagement.FileManager.Refresh();
                 FileManager.Refresh();
             }
-            
+
+            // Duo pose: has PeopleCount >= 2 with Person1/Person2/atoms fields
+            if (presetJSON["PeopleCount"] != null && presetJSON["PeopleCount"].AsInt >= 2)
+            {
+                LogUtil.Log($"[VPB] LoadPose: Detected duo pose (PeopleCount={presetJSON["PeopleCount"].Value}), delegating to ApplyDualPose.");
+                ApplyDualPose(target, presetJSON);
+                return;
+            }
+
             // Detect if this is a scene file and extract the first Person atom's pose
             if (presetJSON["atoms"] != null)
             {
@@ -721,30 +733,39 @@ namespace VPB
                     return;
                 }
             }
-            
+
+            // Check whether the storables contain a PosePresets entry (standard VaM preset format)
+            // or are raw bone storables (atom-save format). Raw bone storables must be applied via
+            // atom.Restore(); passing them to PresetManager.LoadPresetFromJSON silently does nothing.
+            bool hasPosePresetsStorable = false;
+            JSONArray storablesArr = presetJSON["storables"] as JSONArray;
+            if (storablesArr != null)
+            {
+                for (int i = 0; i < storablesArr.Count; i++)
+                {
+                    JSONClass s = storablesArr[i] as JSONClass;
+                    if (s != null && s["id"].Value == "PosePresets") { hasPosePresetsStorable = true; break; }
+                }
+            }
+
             if (suppressRoot)
             {
-                if (presetJSON["storables"] != null)
+                if (storablesArr != null)
                 {
-                    JSONArray storables = presetJSON["storables"] as JSONArray;
-                    if (storables != null)
+                    for (int i = 0; i < storablesArr.Count; i++)
                     {
-                        for (int i = 0; i < storables.Count; i++)
+                        JSONClass s = storablesArr[i] as JSONClass;
+                        if (s == null) continue;
+
+                        if (s["id"].Value == "control")
                         {
-                            JSONClass s = storables[i] as JSONClass;
-                            if (s == null) continue;
+                            if (s.HasKey("position")) s.Remove("position");
+                            if (s.HasKey("rotation")) s.Remove("rotation");
+                        }
 
-                            if (s["id"].Value == "control")
-                            {
-                                // Clean top-level control storable if it exists
-                                if (s.HasKey("position")) s.Remove("position");
-                                if (s.HasKey("rotation")) s.Remove("rotation");
-                            }
-
-                            if (s["id"].Value == "PosePresets" || s["id"].Value == "control")
-                            {
-                                if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
-                            }
+                        if (s["id"].Value == "PosePresets" || s["id"].Value == "control")
+                        {
+                            if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
                         }
                     }
                 }
@@ -753,7 +774,19 @@ namespace VPB
                     CleanPresets(presetJSON["presets"] as JSONArray);
                 }
             }
-            
+
+            if (!hasPosePresetsStorable && storablesArr != null)
+            {
+                // Raw bone storables format — apply via the native atom restore pipeline
+                LogUtil.Log($"[VPB] LoadPose: No PosePresets storable found; using atom.Restore() for raw storables.");
+                target.PreRestore(true, false);
+                if (!suppressRoot) target.RestoreTransform(presetJSON);
+                target.Restore(presetJSON, true, false, false);
+                target.LateRestore(presetJSON, true, false, false);
+                target.PostRestore(true, false);
+                return;
+            }
+
             JSONStorable presetStorable = target.GetStorableByID("PosePresets");
             if (presetStorable != null)
             {
