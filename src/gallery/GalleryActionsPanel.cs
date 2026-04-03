@@ -215,15 +215,28 @@ namespace VPB
             }
 
             // 1. Prefer selected atom if it's a Person
-            Atom selected = SuperController.singleton.GetSelectedAtom();
-            if (selected != null && selected.type == "Person") return selected;
+            try
+            {
+                Atom selected = SuperController.singleton.GetSelectedAtom();
+                if (selected != null && selected.type == "Person") return selected;
+            }
+            catch { }
 
             // 2. Fallback: Find any Person atom in the scene
-            foreach (Atom a in SuperController.singleton.GetAtoms())
+            try
             {
-                if (a.type == "Person") return a;
+                List<Atom> allAtoms = SuperController.singleton.GetAtoms();
+                if (allAtoms != null)
+                {
+                    foreach (Atom a in allAtoms)
+                    {
+                        if (a == null) continue;
+                        try { if (a.type == "Person") return a; } catch { }
+                    }
+                }
             }
-            
+            catch { }
+
             return null;
         }
 

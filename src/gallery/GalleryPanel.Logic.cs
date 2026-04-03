@@ -48,7 +48,9 @@ namespace VPB
             {
                 if (personAtoms == null || targetDropdownValue < 0 || targetDropdownValue >= personAtoms.Count)
                     return null;
-                return personAtoms[targetDropdownValue];
+                Atom a = personAtoms[targetDropdownValue];
+                if (a == null) return null;
+                try { _ = a.uid; return a; } catch { return null; }
             }
         }
 
@@ -1192,7 +1194,8 @@ namespace VPB
             string currentSelectionUid = null;
             if (targetDropdownValue >= 0 && targetDropdownValue < personAtoms.Count)
             {
-                currentSelectionUid = personAtoms[targetDropdownValue]?.uid;
+                Atom cur = personAtoms[targetDropdownValue];
+                if (cur != null) try { currentSelectionUid = cur.uid; } catch { }
             }
 
             personAtoms.Clear();
@@ -1200,12 +1203,26 @@ namespace VPB
 
             if (SuperController.singleton != null)
             {
-                foreach (Atom a in SuperController.singleton.GetAtoms())
+                List<Atom> allAtoms = null;
+                try { allAtoms = SuperController.singleton.GetAtoms(); } catch { }
+                if (allAtoms != null)
                 {
-                    if (a.type == "Person")
+                    foreach (Atom a in allAtoms)
                     {
-                        personAtoms.Add(a);
-                        targetDropdownOptions.Add(a.uid);
+                        if (a == null) continue;
+                        try
+                        {
+                            if (a.type == "Person")
+                            {
+                                string uid = a.uid;
+                                if (uid != null)
+                                {
+                                    personAtoms.Add(a);
+                                    targetDropdownOptions.Add(uid);
+                                }
+                            }
+                        }
+                        catch { }
                     }
                 }
             }
@@ -1216,43 +1233,46 @@ namespace VPB
                 personAtoms.Add(null);
             }
 
-            // Try to restore selection
+            // Restore previous selection by UID, or default to first
             if (currentSelectionUid != null)
             {
-                int idx = personAtoms.FindIndex(a => a != null && a.uid == currentSelectionUid);
-                if (idx >= 0) targetDropdownValue = idx;
-                else targetDropdownValue = 0;
+                int idx = -1;
+                for (int i = 0; i < personAtoms.Count; i++)
+                {
+                    Atom a = personAtoms[i];
+                    if (a == null) continue;
+                    try { if (a.uid == currentSelectionUid) { idx = i; break; } } catch { }
+                }
+                targetDropdownValue = idx >= 0 ? idx : 0;
             }
             else
             {
-                // Auto-select first person if we are in Clothing/Hair mode and nothing selected
-                string title = titleText != null ? titleText.text : "";
-                bool isClothingOrHair = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                       title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-
-                if (isClothingOrHair && personAtoms.Count > 0 && personAtoms[0] != null)
-                {
-                    targetDropdownValue = 0;
-                }
-                else
-                {
-                    targetDropdownValue = 0;
-                }
+                targetDropdownValue = 0;
             }
-            
+
             UpdateTargetDropdownUI();
         }
 
         public void CycleTarget(bool forward)
         {
-            if (targetDropdownOptions.Count > 0)
-            {
-                if (forward)
-                    targetDropdownValue = (targetDropdownValue + 1) % targetDropdownOptions.Count;
-                else
-                    targetDropdownValue = (targetDropdownValue - 1 + targetDropdownOptions.Count) % targetDropdownOptions.Count;
-                UpdateTargetDropdownUI();
-            }
+            bool wasShowingNone = personAtoms.Count == 1 && personAtoms[0] == null;
+            RefreshTargetDropdown();
+
+            bool hasRealPersons = personAtoms.Count > 0 && personAtoms[0] != null;
+
+            // First click when stale "None" was displayed: just reveal the first person, don't cycle past it
+            if (wasShowingNone && hasRealPersons)
+                return;
+
+            // Nothing to cycle if still None-only
+            if (!hasRealPersons)
+                return;
+
+            if (forward)
+                targetDropdownValue = (targetDropdownValue + 1) % targetDropdownOptions.Count;
+            else
+                targetDropdownValue = (targetDropdownValue - 1 + targetDropdownOptions.Count) % targetDropdownOptions.Count;
+            UpdateTargetDropdownUI();
         }
 
         private void UpdateTargetDropdownUI()

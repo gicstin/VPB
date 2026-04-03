@@ -178,6 +178,7 @@ namespace VPB
         {
             if (!saveSubmenuOpen) SetSaveSubmenuButtonsVisible(false);
 
+            RefreshTargetDropdown();
             var options = BuildSaveMenuOptions();
             int count = Mathf.Min(options.Count, SaveSubmenuMaxButtons);
 
