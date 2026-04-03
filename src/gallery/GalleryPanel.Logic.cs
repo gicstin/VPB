@@ -192,8 +192,9 @@ namespace VPB
 
                     if (match)
                     {
-                        if (!counts.ContainsKey(pkg.Creator)) counts[pkg.Creator] = 0;
-                        counts[pkg.Creator]++;
+                        int cur;
+                        counts.TryGetValue(pkg.Creator, out cur);
+                        counts[pkg.Creator] = cur + 1;
                     }
                 }
             }
@@ -282,15 +283,18 @@ namespace VPB
             HashSet<string> singleWordTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             List<string> multiWordTags = new List<string>();
             char[] separators = new char[] { '/', '\\', '.', '_', '-', ' ' };
+            char[] multiWordSeparators = new char[] { ' ', '_', '-' };
 
             if (hasAnyTagsToCount)
             {
                 foreach (var t in tagsToCount)
                 {
-                    if (t.IndexOfAny(new char[] { ' ', '_', '-' }) >= 0) multiWordTags.Add(t);
+                    if (t.IndexOfAny(multiWordSeparators) >= 0) multiWordTags.Add(t);
                     else singleWordTags.Add(t);
                 }
             }
+
+            HashSet<string> foundTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var pkg in FileManager.PackagesByUid.Values)
             {
@@ -536,9 +540,7 @@ namespace VPB
                     // Appearance split-pane counts (All/Presets/Custom)
                     if (isAppearanceTitle)
                     {
-                        int lastDotAppearance = internalPath.LastIndexOf('.');
-                        string extAppearance = (lastDotAppearance >= 0 && lastDotAppearance < internalPath.Length - 1) ? internalPath.Substring(lastDotAppearance + 1) : "";
-                        if (string.Equals(extAppearance, "vap", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase))
                         {
                             if (internalPath.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase))
                             {
@@ -549,29 +551,27 @@ namespace VPB
                         }
                     }
 
-                    string pathLower = internalPath.ToLowerInvariant();
-                    
                     if (hasAnyTagsToCount)
                     {
                         // 3. Count tags
-                        // Optimization: Tokenize path for single-word tags
-                        string[] tokens = pathLower.Split(separators);
-                        
-                        HashSet<string> foundTags = new HashSet<string>();
+                        // Tokenize path for single-word tags; singleWordTags uses OrdinalIgnoreCase so no lowering needed
+                        string[] tokens = internalPath.Split(separators);
+
+                        foundTags.Clear();
 
                         // Check tokens against single word tags
                         for (int k = 0; k < tokens.Length; k++)
                         {
                             if (singleWordTags.Contains(tokens[k]))
                             {
-                                foundTags.Add(tokens[k]);
+                                foundTags.Add(tokens[k].ToLowerInvariant());
                             }
                         }
 
-                        // Check multi-word tags using Contains
+                        // Check multi-word tags using case-insensitive IndexOf
                         for (int k = 0; k < multiWordTags.Count; k++)
                         {
-                            if (pathLower.Contains(multiWordTags[k]))
+                            if (internalPath.IndexOf(multiWordTags[k], StringComparison.OrdinalIgnoreCase) >= 0)
                             {
                                 foundTags.Add(multiWordTags[k]);
                             }
@@ -581,15 +581,15 @@ namespace VPB
                         var uTags = TagsManager.Instance.GetTags(entry.Uid);
                         foreach (var ut in uTags)
                         {
-                            // Ensure we only count it if it's in our tagsToCount (which it should be now)
                             if (tagsToCount.Contains(ut)) foundTags.Add(ut);
                         }
 
                         // Increment counts
                         foreach (var tag in foundTags)
                         {
-                            if (!tagCounts.ContainsKey(tag)) tagCounts[tag] = 0;
-                            tagCounts[tag]++;
+                            int cur;
+                            tagCounts.TryGetValue(tag, out cur);
+                            tagCounts[tag] = cur + 1;
                         }
                     }
                 }

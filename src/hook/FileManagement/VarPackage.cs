@@ -1364,9 +1364,9 @@ namespace VPB
 					}
 					foreach (var item in FileEntries)
 					{
-						if (tags.ContainsKey(item.InternalPath))
+						string tag;
+						if (tags.TryGetValue(item.InternalPath, out tag))
 						{
-							string tag = tags[item.InternalPath];
 							string[] splits = tag.Split(',');
 
 							if (item.ClothingTags == null)
@@ -1379,12 +1379,14 @@ namespace VPB
 								string t = splits[i].Trim();
 								if(!string.IsNullOrEmpty(t))
 								{
-									lock (TagFilter.ClothingUnknownTagsLock)
+									if (!TagFilter.AllClothingTags.Contains(t))
 									{
-										if (!TagFilter.AllClothingTags.Contains(t) && !TagFilter.ClothingUnknownTags.Contains(t))
+										lock (TagFilter.ClothingUnknownTagsLock)
 										{
-											TagFilter.ClothingUnknownTags.Add(t);
-											//LogUtil.Log("clothing tag " + t);
+											if (!TagFilter.ClothingUnknownTags.Contains(t))
+											{
+												TagFilter.ClothingUnknownTags.Add(t);
+											}
 										}
 									}
 									item.ClothingTags.Add(t);
@@ -1403,9 +1405,9 @@ namespace VPB
 					}
 					foreach (var item in FileEntries)
 					{
-						if (tags.ContainsKey(item.InternalPath))
+						string tag;
+						if (tags.TryGetValue(item.InternalPath, out tag))
 						{
-							string tag = tags[item.InternalPath];
 							string[] splits = tag.Split(',');
 
 							if (item.HairTags == null)
