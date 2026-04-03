@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -9,7 +9,7 @@ namespace VPB
 	[System.Serializable]
 	public class SerializableNames
 	{
-		public string[] Names;
+		public string[] names;
 	}
 
 	public class VarFileEntry : FileEntry

@@ -1272,6 +1272,35 @@ namespace VPB
             draggable.ThumbnailImage = thumbImg;
             draggable.Panel = this;
 
+            // AutoInstall Badge (Top-left corner, opposite the star rating)
+            GameObject aiBadgeGO = new GameObject("AutoInstallBadge");
+            aiBadgeGO.transform.SetParent(btnGO.transform, false);
+            RectTransform aiBadgeRT = aiBadgeGO.AddComponent<RectTransform>();
+            aiBadgeRT.anchorMin = new Vector2(0, 1); // Top Left
+            aiBadgeRT.anchorMax = new Vector2(0, 1);
+            aiBadgeRT.pivot = new Vector2(0, 1);
+            aiBadgeRT.sizeDelta = new Vector2(32, 32);
+            aiBadgeRT.anchoredPosition = new Vector2(6, -6);
+            Image aiBadgeBg = aiBadgeGO.AddComponent<Image>();
+            aiBadgeBg.color = new Color(0f, 0.35f, 1f, 0.85f);
+            aiBadgeBg.raycastTarget = false;
+            GameObject aiBadgeTextGO = new GameObject("Text");
+            aiBadgeTextGO.transform.SetParent(aiBadgeGO.transform, false);
+            Text aiBadgeText = aiBadgeTextGO.AddComponent<Text>();
+            aiBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            aiBadgeText.fontSize = 22;
+            aiBadgeText.fontStyle = FontStyle.Bold;
+            aiBadgeText.color = Color.white;
+            aiBadgeText.alignment = TextAnchor.MiddleCenter;
+            aiBadgeText.text = "A";
+            aiBadgeText.raycastTarget = false;
+            RectTransform aiBadgeTextRT = aiBadgeTextGO.GetComponent<RectTransform>();
+            aiBadgeTextRT.anchorMin = Vector2.zero;
+            aiBadgeTextRT.anchorMax = Vector2.one;
+            aiBadgeTextRT.sizeDelta = Vector2.zero;
+            aiBadgeTextRT.anchoredPosition = Vector2.zero;
+            aiBadgeGO.SetActive(false);
+
             SetLayerRecursive(btnGO, 5);
             return btnGO;
         }
@@ -1463,6 +1492,13 @@ namespace VPB
             if (ratingTr != null)
             {
                 ratingTr.gameObject.SetActive(true);
+            }
+
+            // AutoInstall Badge — show blue "A" for packages flagged as AutoInstall
+            Transform aiBadgeTr = btnGO.transform.Find("AutoInstallBadge");
+            if (aiBadgeTr != null)
+            {
+                aiBadgeTr.gameObject.SetActive(file.IsAutoInstall());
             }
 
             // List Row Bind

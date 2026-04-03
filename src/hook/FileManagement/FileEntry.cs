@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
@@ -97,9 +97,9 @@ namespace VPB
 					{
 						string txt = File.ReadAllText(GlobalInfo.AutoInstallPath);
 						var favorites = JsonUtility.FromJson<SerializableNames>(txt);
-						if (favorites != null && favorites.Names != null)
-						{
-							foreach (var item in favorites.Names)
+					if (favorites != null && favorites.names != null)
+					{
+						foreach (var item in favorites.names)
 							{
 								s_AutoInstallLookup.Add(item);
 							}
@@ -134,7 +134,7 @@ namespace VPB
 			{
 				list.Add(item);
 			}
-			sf.Names = list.ToArray();
+			sf.names = list.ToArray();
 			File.WriteAllText(GlobalInfo.AutoInstallPath, JsonUtility.ToJson(sf));
 		}
 	}
