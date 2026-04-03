@@ -959,10 +959,6 @@ namespace VPB
 			int idx = 0;
 			int allCount = packages.Length;
 			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 100 : 200;
-			int step = uiUpdateStep;
-			int cnt = 0;
-			bool useCache = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache);
-			if (!useCache)
 			{
 				int maxWorkers = Math.Min(8, Math.Max(1, System.Environment.ProcessorCount));
 				int nextIndex = -1;
@@ -1021,32 +1017,6 @@ namespace VPB
 				doneEvent.Close();
 				idx = allCount;
 				MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
-			}
-			else
-			{
-				for (int i = 0; i < packages.Length; i++)
-				{
-					VarPackage pkg = packages[i];
-					if (pkg != null)
-					{
-						pkg.Scan();
-						if (pkg.invalid)
-						{
-							invalid.Add(pkg);
-						}
-					}
-					idx++;
-					if ((idx % uiUpdateStep) == 0 || idx == allCount)
-					{
-						MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
-					}
-					cnt++;
-					if (cnt > step)
-					{
-						yield return null;
-						cnt = 0;
-					}
-				}
 			}
 			indexAllSw.Stop();
 			double indexSeconds = indexAllSw.Elapsed.TotalSeconds;

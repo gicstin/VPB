@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using MVR.FileManagementSecure;
 
 namespace VPB
 {
@@ -16,42 +15,11 @@ namespace VPB
 
             try
             {
-                string p = path.Replace('/', '\\');
-
-                bool exists = false;
-                try
-                {
-                    exists = FileManagerSecure.FileExists(p);
-                }
-                catch
-                {
-                    exists = File.Exists(p);
-                }
-
-                if (!exists) return false;
-
-                try
-                {
-                    creationTime = FileManagerSecure.FileCreationTime(p);
-                    lastWriteTime = FileManagerSecure.FileLastWriteTime(p);
-                }
-                catch
-                {
-                    FileInfo fi = new FileInfo(p);
-                    creationTime = fi.CreationTime;
-                    lastWriteTime = fi.LastWriteTime;
-                }
-
-                try
-                {
-                    FileInfo fi = new FileInfo(p);
-                    size = fi.Length;
-                }
-                catch
-                {
-                    size = 0;
-                }
-
+                FileInfo fi = new FileInfo(path.Replace('/', '\\'));
+                if (!fi.Exists) return false;
+                creationTime = fi.CreationTime;
+                lastWriteTime = fi.LastWriteTime;
+                size = fi.Length;
                 return true;
             }
             catch
