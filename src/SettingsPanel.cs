@@ -62,6 +62,9 @@ namespace VPB
         private bool pendingDragDropReplaceMode;
         private bool backupDragDropReplaceMode;
 
+        private string pendingAppearanceClothingApplyMode;
+        private string backupAppearanceClothingApplyMode;
+
         private bool pendingEnableDragDrop;
         private bool backupEnableDragDrop;
 
@@ -150,6 +153,9 @@ namespace VPB
             pendingDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
             backupDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
 
+            pendingAppearanceClothingApplyMode = NormalizeSettingsAppearanceClothingMode(VPBConfig.Instance.AppearanceClothingApplyMode);
+            backupAppearanceClothingApplyMode = pendingAppearanceClothingApplyMode;
+
             pendingEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
             backupEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
 
@@ -202,11 +208,13 @@ namespace VPB
             VPBConfig.Instance.EnableGalleryTranslucency = backupEnableGalleryTranslucency;
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
+            VPBConfig.Instance.AppearanceClothingApplyMode = backupAppearanceClothingApplyMode;
             VPBConfig.Instance.EnableDragDrop = backupEnableDragDrop;
             VPBConfig.Instance.DragHoldThreshold = backupDragHoldThreshold;
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.EnableAutoFixedGallery = backupEnableAutoFixedGallery;
             VPBConfig.Instance.TriggerChange();
+            if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
         }
 
         private void CreatePane()
@@ -270,11 +278,13 @@ namespace VPB
                 VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
                 VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
+                VPBConfig.Instance.AppearanceClothingApplyMode = pendingAppearanceClothingApplyMode;
                 VPBConfig.Instance.EnableDragDrop = pendingEnableDragDrop;
                 VPBConfig.Instance.DragHoldThreshold = pendingDragHoldThreshold;
                 VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                 VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
                 VPBConfig.Instance.Save();
+                if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
                 
                 isSettingsOpen = false;
                 if (settingsPaneGO != null) settingsPaneGO.SetActive(false);
@@ -418,6 +428,15 @@ namespace VPB
                 VPBConfig.Instance.DragHoldThreshold = val;
             }, "How long (in seconds) the mouse button must be held before a drag is initiated. Increase to reduce accidental drags on quick clicks.");
 
+            string[] appearanceClothingOptions = { "replace", "keep", "clothingonly" };
+            string[] appearanceClothingLabels = { "Preset outfit", "Keep body clothes", "Clothes only" };
+            CreateCycleSetting("Appearance clothing", pendingAppearanceClothingApplyMode, appearanceClothingOptions, appearanceClothingLabels, (val) => {
+                pendingAppearanceClothingApplyMode = val;
+                VPBConfig.Instance.AppearanceClothingApplyMode = val;
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
+            }, "Preset outfit: full appearance. Keep body clothes: face/body/hair from preset, keep your garments. Clothes only: keep current person; apply only garment clothing from the preset (not hair or makeup-type items).");
+
             // CATEGORY: Desktop
             CreateHeader("Desktop");
             CreateToggleSetting("Startup Gallery (Fixed)", pendingEnableAutoFixedGallery, (val) => {
@@ -442,6 +461,15 @@ namespace VPB
                     pendingIsDevMode = val;
                 }, "Enables developer-only features and debug tools. Requires restart to fully hide/show some elements.");
             }
+        }
+
+        private static string NormalizeSettingsAppearanceClothingMode(string m)
+        {
+            if (string.IsNullOrEmpty(m)) return "replace";
+            string t = m.Trim().ToLowerInvariant();
+            if (t == "keep") return "keep";
+            if (t == "clothingonly") return "clothingonly";
+            return "replace";
         }
 
         private void CreateHeader(string title)

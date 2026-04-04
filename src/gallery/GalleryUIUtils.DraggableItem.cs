@@ -337,7 +337,7 @@ namespace VPB
                         // apply to that person (instead of spawning a new person).
                         if (itemType == ItemType.Appearance && atom.type == "Person")
                         {
-                            ApplyClothingToAtom(atom, FileEntry.Uid, "replace");
+                            ApplyClothingToAtom(atom, FileEntry.Uid, null);
                         }
                         else if (IsAmbiguousDrop(atom, FileEntry))
                         {
@@ -682,7 +682,8 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadAppearance: No target atom provided.");
                 return;
             }
-            LogUtil.Log($"[VPB] LoadAppearance: Applying {FileEntry.Name} to {target.uid} (Mode: {mode ?? "default"})");
+            string cfgAppearanceClothing = VPBConfig.Instance != null ? VPBConfig.Instance.AppearanceClothingApplyMode : "replace";
+            LogUtil.Log($"[VPB] LoadAppearance: Applying {FileEntry.Name} to {target.uid} (explicitMode: {mode ?? "<resolve>"}, AppearanceClothingCfg={cfgAppearanceClothing})");
             ApplyClothingToAtom(target, FileEntry.Uid, mode);
         }
 

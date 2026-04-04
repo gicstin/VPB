@@ -70,6 +70,34 @@ namespace VPB
                 }
             }
         }
+
+        public string AppearanceClothingApplyMode
+        {
+            get { return VPBConfig.Instance != null ? VPBConfig.Instance.AppearanceClothingApplyMode : "replace"; }
+            set
+            {
+                if (VPBConfig.Instance != null)
+                {
+                    VPBConfig.Instance.AppearanceClothingApplyMode = value;
+                    VPBConfig.Instance.TriggerChange();
+                    try { VPBConfig.Instance.Save(); } catch { }
+                }
+            }
+        }
+
+        public bool KeepClothingWhenApplyingAppearance
+        {
+            get { return VPBConfig.Instance != null && VPBConfig.Instance.KeepClothingWhenApplyingAppearance; }
+            set
+            {
+                if (VPBConfig.Instance != null)
+                {
+                    VPBConfig.Instance.KeepClothingWhenApplyingAppearance = value;
+                    VPBConfig.Instance.TriggerChange();
+                    try { VPBConfig.Instance.Save(); } catch { }
+                }
+            }
+        }
         // private Toggle addToggle;
         // private Toggle replaceToggle;
         public Gallery.Category? UndockedCategory; // Removed
@@ -115,6 +143,11 @@ namespace VPB
         private Image rightReplaceBtnImage;
         private Text leftReplaceBtnText;
         private Image leftReplaceBtnImage;
+
+        private Text rightKeepClothingBtnText;
+        private Image rightKeepClothingBtnImage;
+        private Text leftKeepClothingBtnText;
+        private Image leftKeepClothingBtnImage;
 
         private GameObject rightUndoBtnGO;
         private GameObject leftUndoBtnGO;

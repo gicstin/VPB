@@ -1913,10 +1913,55 @@ namespace VPB
             if (leftReplaceBtnImage != null) leftReplaceBtnImage.color = color;
         }
 
+        public void RefreshAppearanceClothingSideButton()
+        {
+            UpdateKeepClothingButtonState();
+        }
+
+        private void UpdateKeepClothingButtonState()
+        {
+            string m = AppearanceClothingApplyMode ?? "replace";
+            string text;
+            Color color;
+            if (string.Equals(m, "keep", StringComparison.OrdinalIgnoreCase))
+            {
+                text = "Clothes: Keep";
+                color = new Color(0.15f, 0.35f, 0.55f, 1f);
+            }
+            else if (string.Equals(m, "clothingonly", StringComparison.OrdinalIgnoreCase))
+            {
+                text = "Clothes: Only";
+                color = new Color(0.15f, 0.45f, 0.28f, 1f);
+            }
+            else
+            {
+                text = "Clothes: Preset";
+                color = new Color(0.35f, 0.3f, 0.2f, 1f);
+            }
+
+            if (rightKeepClothingBtnText != null) rightKeepClothingBtnText.text = text;
+            if (rightKeepClothingBtnImage != null) rightKeepClothingBtnImage.color = color;
+
+            if (leftKeepClothingBtnText != null) leftKeepClothingBtnText.text = text;
+            if (leftKeepClothingBtnImage != null) leftKeepClothingBtnImage.color = color;
+        }
+
         private void ToggleReplaceMode()
         {
             DragDropReplaceMode = !DragDropReplaceMode;
             UpdateReplaceButtonState();
+        }
+
+        private void ToggleKeepClothingMode()
+        {
+            string m = AppearanceClothingApplyMode ?? "replace";
+            if (string.Equals(m, "replace", StringComparison.OrdinalIgnoreCase))
+                AppearanceClothingApplyMode = "keep";
+            else if (string.Equals(m, "keep", StringComparison.OrdinalIgnoreCase))
+                AppearanceClothingApplyMode = "clothingonly";
+            else
+                AppearanceClothingApplyMode = "replace";
+            UpdateKeepClothingButtonState();
         }
 
         private void UpdateApplyModeButtonState()

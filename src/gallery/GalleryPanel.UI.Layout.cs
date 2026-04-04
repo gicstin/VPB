@@ -54,8 +54,9 @@ namespace VPB
             }
             catch { }
 
-            // Ensure UI reflects persisted replace mode even if the panel was recreated/re-shown.
+            // Ensure UI reflects persisted replace / appearance outfit mode even if the panel was recreated/re-shown.
             UpdateReplaceButtonState();
+            UpdateKeepClothingButtonState();
             
             float leftOffset = 20;
             float rightOffset = -20;
@@ -876,6 +877,7 @@ namespace VPB
             int idxCreator = -1;
             int idxTarget = -1;
             int idxApplyMode = -1;
+            int idxKeepOutfit = -1;
             int idxReplace = -1;
             int idxRandom = 4;
             int idxRemoveHair = 15;
@@ -912,6 +914,7 @@ namespace VPB
                     idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
                     idxTarget = FindIndexByTextRef(rightTargetBtnText != null ? rightTargetBtnText : leftTargetBtnText);
                     idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);
+                    idxKeepOutfit = FindIndexByTextRef(rightKeepClothingBtnText != null ? rightKeepClothingBtnText : leftKeepClothingBtnText);
                     idxReplace = FindIndexByTextRef(rightReplaceBtnText != null ? rightReplaceBtnText : leftReplaceBtnText);
                     idxFloating = FindIndexByTextRef(rightDesktopModeBtnText != null ? rightDesktopModeBtnText : leftDesktopModeBtnText);
                     idxFollow = FindIndexByTextRef(rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText);
@@ -992,6 +995,7 @@ namespace VPB
 
                 new SideButtonLayoutEntry(idxTarget, 0, 0), // Target
                 new SideButtonLayoutEntry(idxApplyMode, 0, 0), // Apply Mode
+                new SideButtonLayoutEntry(idxKeepOutfit, 0, 0), // Keep body clothes vs preset
                 new SideButtonLayoutEntry(idxReplace, 0, 0), // Replace
 
                 new SideButtonLayoutEntry(idxRemoveClothing, 0, 0), // Remove Clothing (context)

@@ -473,6 +473,27 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Copies the preset file's host .var from AllPackages to AddonPackages (if applicable) without scanning file contents for dependency VARs.
+        /// Used for appearance "clothes only", where dependency install runs on garment-filtered JSON only (not the full .vap text).
+        /// </summary>
+        public static bool InstallHostPackageRecursive(FileEntry entry)
+        {
+            if (entry == null) return false;
+            try
+            {
+                if (entry is VarFileEntry varEntry && varEntry.Package != null)
+                    return varEntry.Package.InstallRecursive();
+                if (entry is SystemFileEntry sysEntry && sysEntry.package != null)
+                    return sysEntry.package.InstallRecursive();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] InstallHostPackageRecursive error: {ex.Message}");
+            }
+            return false;
+        }
+
         public static bool EnsureInstalled(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;

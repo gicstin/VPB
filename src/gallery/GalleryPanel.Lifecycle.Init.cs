@@ -728,13 +728,19 @@ namespace VPB
                 rightApplyModeBtnText = rightApplyModeBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightApplyModeBtn.GetComponent<RectTransform>());
 
+                // Appearance outfit: keep current vs load from preset (Right)
+                GameObject rightKeepClothingBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Clothes: Preset", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                rightKeepClothingBtnImage = rightKeepClothingBtn.GetComponent<Image>();
+                rightKeepClothingBtnText = rightKeepClothingBtn.GetComponentInChildren<Text>();
+                rightSideButtons.Add(rightKeepClothingBtn.GetComponent<RectTransform>());
+
                 // Replace Toggle (Right)
-                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                 rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
 
-                rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Save", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
+                rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Save", btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
                     try
                     {
                         ToggleSaveSubmenuFromSideButtons();
@@ -1510,13 +1516,19 @@ namespace VPB
                 leftApplyModeBtnText = leftApplyModeBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftApplyModeBtn.GetComponent<RectTransform>());
 
+                // Appearance outfit: keep current vs load from preset (Left)
+                GameObject leftKeepClothingBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Clothes: Preset", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                leftKeepClothingBtnImage = leftKeepClothingBtn.GetComponent<Image>();
+                leftKeepClothingBtnText = leftKeepClothingBtn.GetComponentInChildren<Text>();
+                leftSideButtons.Add(leftKeepClothingBtn.GetComponent<RectTransform>());
+
                 // Replace Toggle (Left)
-                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                 leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
 
-                leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Save", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
+                leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Save", btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
                     try
                     {
                         ToggleSaveSubmenuFromSideButtons();
@@ -2299,6 +2311,7 @@ UpdateDesktopModeButton();
             UpdateLayout();
             UpdateFollowButtonState();
             UpdateReplaceButtonState();
+            UpdateKeepClothingButtonState();
             UpdateApplyModeButtonState();
         }
     }

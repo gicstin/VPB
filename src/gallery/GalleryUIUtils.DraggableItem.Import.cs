@@ -34,6 +34,7 @@ namespace VPB
         {
             if (clothingMode == "replace") return "Replace Clothing";
             if (clothingMode == "merge") return "Merge Clothing";
+            if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase)) return "Clothes Only (keep person)";
             return "Keep Existing Clothing";
         }
 
@@ -41,6 +42,14 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(clothingMode)) clothingMode = "keep";
             _lastAppearanceClothingMode = clothingMode;
+            if (VPBConfig.Instance != null)
+            {
+                if (clothingMode == "keep") VPBConfig.Instance.AppearanceClothingApplyMode = "keep";
+                else if (clothingMode == "replace") VPBConfig.Instance.AppearanceClothingApplyMode = "replace";
+                else if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
+                    VPBConfig.Instance.AppearanceClothingApplyMode = "clothingonly";
+                try { VPBConfig.Instance.Save(); } catch { }
+            }
             action(clothingMode);
         }
 
@@ -63,6 +72,10 @@ namespace VPB
 
             options.Add(new ContextMenuPanel.Option("Merge Clothing", () => {
                 ApplyAppearanceMode("merge", handler);
+            }));
+
+            options.Add(new ContextMenuPanel.Option("Clothes Only (keep person)", () => {
+                ApplyAppearanceMode("clothingonly", handler);
             }));
         }
 
@@ -169,6 +182,11 @@ namespace VPB
                 if (include) storables.Add(snode.AsObject);
             }
 
+            if (category == "Appearance" && string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
+                FilterAppearancePresetToGarmentClothingOnly(preset);
+
+            if (preset["storables"] != null) storables = preset["storables"].AsArray;
+
             string presetJson = preset.ToString();
             // Suppress gallery auto-refresh to preserve scroll position and state
             // Must activate BEFORE EnsureInstalledByText since it may trigger FileManager.Refresh internally
@@ -203,7 +221,7 @@ namespace VPB
 
             if (category == "Appearance" && storables.Count > 0)
             {
-                preset["setUnlistedParamsToDefault"].AsBool = true;
+                preset["setUnlistedParamsToDefault"].AsBool = !string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase);
 
                 JSONStorable presetStorable = targetAtom.GetStorableByID("AppearancePresets");
                 MeshVR.PresetManager presetManager = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
@@ -227,14 +245,27 @@ namespace VPB
                                 }
                             }
                         }
+                        else if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
+                        {
+                            ClearAtomGeometryGarmentClothingBools(targetAtom);
+                        }
 
                         targetAtom.SetLastRestoredData(preset, true, true);
-                        LogUtil.Log($"[Import] Applying Appearance preset via PresetManager.LoadPresetFromJSON ({storables.Count} storables)");
-                        
+
                         try
                         {
                             if (!string.IsNullOrEmpty(path)) MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(path));
-                            presetManager.LoadPresetFromJSON(preset, false);
+                            if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
+                            {
+                                LogUtil.Log($"[Import] Appearance clothes-only: direct RestoreFromJSON ({storables.Count} storables in preset)");
+                                ApplyAppearanceClothingOnlyStorablesDirect(targetAtom, preset);
+                            }
+                            else
+                            {
+                                LogUtil.Log($"[Import] Applying Appearance preset via PresetManager.LoadPresetFromJSON ({storables.Count} storables)");
+                                bool mergeAppearance = string.Equals(clothingMode, "merge", StringComparison.OrdinalIgnoreCase);
+                                presetManager.LoadPresetFromJSON(preset, mergeAppearance);
+                            }
                         }
                         finally
                         {
@@ -276,6 +307,10 @@ namespace VPB
                         }
                     }
                 }
+                else if (category == "Appearance" && string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
+                {
+                    ClearAtomGeometryGarmentClothingBools(targetAtom);
+                }
 
                 foreach (JSONNode snode in storables)
                 {
@@ -292,6 +327,11 @@ namespace VPB
                     }
                 }
                 LogUtil.Log($"[Import] Direct restoration complete: {directApplied} applied, {directSkipped} skipped.");
+            }
+
+            if (category == "Appearance" && appliedViaPresetManager && targetAtom != null && targetAtom.type == "Person")
+            {
+                try { SceneLoadingUtils.SchedulePostPersonApplyFixup(targetAtom); } catch { }
             }
 
             ContextMenuPanel.Instance.Hide();

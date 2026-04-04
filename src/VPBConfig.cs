@@ -98,6 +98,27 @@ namespace VPB
         public bool EnableGalleryTranslucency = false;
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
+        /// <summary>How gallery applies an appearance .vap: replace (full), keep (keep body garments), clothingOnly (garment outfit from preset only).</summary>
+        private string _appearanceClothingApplyMode = "replace";
+        public string AppearanceClothingApplyMode
+        {
+            get { return string.IsNullOrEmpty(_appearanceClothingApplyMode) ? "replace" : _appearanceClothingApplyMode; }
+            set
+            {
+                if (string.IsNullOrEmpty(value)) { _appearanceClothingApplyMode = "replace"; return; }
+                string v = value.Trim().ToLowerInvariant();
+                if (v == "keep" || v == "replace" || v == "clothingonly")
+                    _appearanceClothingApplyMode = v;
+                else
+                    _appearanceClothingApplyMode = "replace";
+            }
+        }
+        /// <summary>True when <see cref="AppearanceClothingApplyMode"/> is keep. Setting false forces replace; true forces keep.</summary>
+        public bool KeepClothingWhenApplyingAppearance
+        {
+            get { return string.Equals(AppearanceClothingApplyMode, "keep", StringComparison.OrdinalIgnoreCase); }
+            set { AppearanceClothingApplyMode = value ? "keep" : "replace"; }
+        }
         public bool EnableDragDrop = true;
         public float DragHoldThreshold = 0.5f;
         public string ApplyMode = "DoubleClick";
@@ -180,6 +201,7 @@ namespace VPB
             EnableGalleryTranslucency = false;
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
+            AppearanceClothingApplyMode = "replace";
             EnableDragDrop = true;
             DragHoldThreshold = 0.5f;
             ApplyMode = "DoubleClick";
@@ -248,6 +270,10 @@ namespace VPB
                         if (node["EnableGalleryTranslucency"] != null) EnableGalleryTranslucency = node["EnableGalleryTranslucency"].AsBool;
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
+                        if (node["AppearanceClothingApplyMode"] != null)
+                            AppearanceClothingApplyMode = node["AppearanceClothingApplyMode"].Value;
+                        else if (node["KeepClothingWhenApplyingAppearance"] != null)
+                            AppearanceClothingApplyMode = node["KeepClothingWhenApplyingAppearance"].AsBool ? "keep" : "replace";
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["DragHoldThreshold"] != null) DragHoldThreshold = node["DragHoldThreshold"].AsFloat;
                         if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
@@ -265,7 +291,7 @@ namespace VPB
                     try
                     {
                         if (Settings.Instance != null && Settings.Instance.LogVerboseUi != null && Settings.Instance.LogVerboseUi.Value)
-                            LogUtil.Log("[VPBConfig] Loaded cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | ApplyMode=" + ApplyMode);
+                            LogUtil.Log("[VPBConfig] Loaded cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | AppearanceClothing=" + AppearanceClothingApplyMode + " | ApplyMode=" + ApplyMode);
                     }
                     catch { }
 
@@ -314,6 +340,8 @@ namespace VPB
                 node["EnableGalleryTranslucency"].AsBool = EnableGalleryTranslucency;
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
+                node["AppearanceClothingApplyMode"] = AppearanceClothingApplyMode;
+                node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["DragHoldThreshold"].AsFloat = DragHoldThreshold;
                 node["ApplyMode"] = ApplyMode;
@@ -332,7 +360,7 @@ namespace VPB
                 try
                 {
                     if (Settings.Instance != null && Settings.Instance.LogVerboseUi != null && Settings.Instance.LogVerboseUi.Value)
-                        LogUtil.Log("[VPBConfig] Saved cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | ApplyMode=" + ApplyMode);
+                        LogUtil.Log("[VPBConfig] Saved cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | AppearanceClothing=" + AppearanceClothingApplyMode + " | ApplyMode=" + ApplyMode);
                 }
                 catch { }
 
