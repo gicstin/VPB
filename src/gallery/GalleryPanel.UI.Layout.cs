@@ -144,7 +144,7 @@ namespace VPB
             float paneScale = VPBConfig.Instance.InnerPaneScale;
             float bottomOffset = 60 * paneScale; // Overlay status bar on top of grid
             float topOffset = -65f * paneScale;
-            float tabTopOffset = -95f * paneScale;
+            float tabTopOffset = TabScrollTopOffset(); // clears fixed sort/search row (pos -55, height 35*s)
 
             contentScrollRT.offsetMin = new Vector2(leftOffset, bottomOffset);
             contentScrollRT.offsetMax = new Vector2(rightOffset, topOffset);
@@ -402,6 +402,7 @@ namespace VPB
                 try { action(s); } catch { }
             }
             UpdateLayout();
+            UpdateTabs();
         }
 
         public void ApplySideButtonScale()

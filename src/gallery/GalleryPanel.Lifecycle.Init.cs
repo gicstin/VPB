@@ -359,8 +359,8 @@ namespace VPB
                 rightTabRT.anchorMin = new Vector2(1, 0);
                 rightTabRT.anchorMax = new Vector2(1, 1);
                 rightTabRT.offsetMin = new Vector2(-tabAreaWidth - 10, 68); 
-                rightTabRT.offsetMax = new Vector2(-10, -95); 
-                
+                rightTabRT.offsetMax = new Vector2(-10, -95);
+
                 rightTabContainerGO = rightTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
                 rightTabContainerGO.GetComponent<VerticalLayoutGroup>().spacing = 2;
                 rightTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
@@ -504,7 +504,7 @@ namespace VPB
                 leftTabRT.anchorMax = new Vector2(0, 1);
                 leftTabRT.offsetMin = new Vector2(10, 70);
                 leftTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -95);
-                
+
                 leftTabContainerGO = leftTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
                 leftTabContainerGO.GetComponent<VerticalLayoutGroup>().spacing = 2;
                 leftTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);

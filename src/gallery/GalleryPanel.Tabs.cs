@@ -52,8 +52,14 @@ namespace VPB
 
         private float SideTabBottomMargin => isFixedLocally ? CurrentBottomOffset + 8f : 5f;
         private float SideTabDefaultBottomOffset => isFixedLocally ? CurrentBottomOffset + 8f : 68f;
+        // Top inset for main tab scroll: clears the sort button + search row (anchored at y=-55, height=35*scale)
+        private float TabScrollTopOffset()
+        {
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            return -(55f + 35f * s + 5f);
+        }
 
-        private void UpdateTabs()
+        internal void UpdateTabs()
         {
             if (titleText != null)
             {
@@ -114,7 +120,8 @@ namespace VPB
                     leftRT.anchorMin = new Vector2(0, 0.5f);
                     leftRT.anchorMax = new Vector2(0, 1);
                     leftRT.offsetMin = new Vector2(10, SideTabBottomMargin); // Add gap at bottom
-                    
+                    leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
+
                     RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                     subRT.anchorMin = new Vector2(0, 0);
                     subRT.anchorMax = new Vector2(0, 0.5f);
@@ -154,6 +161,7 @@ namespace VPB
                     leftRT.anchorMin = new Vector2(0, 0);
                     leftRT.anchorMax = new Vector2(0, 1);
                     leftRT.offsetMin = new Vector2(10, SideTabDefaultBottomOffset); // Restore default
+                    leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
 
                     UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                 }
@@ -213,7 +221,8 @@ namespace VPB
                     rightRT.anchorMin = new Vector2(1, 0.5f);
                     rightRT.anchorMax = new Vector2(1, 1);
                     rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabBottomMargin); // Add gap at bottom
-                    
+                    rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
+
                     RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                     subRT.anchorMin = new Vector2(1, 0);
                     subRT.anchorMax = new Vector2(1, 0.5f);
@@ -253,6 +262,7 @@ namespace VPB
                     rightRT.anchorMin = new Vector2(1, 0);
                     rightRT.anchorMax = new Vector2(1, 1);
                     rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabDefaultBottomOffset); // Restore default
+                    rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
 
                     UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                 }
@@ -288,13 +298,14 @@ namespace VPB
                 RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
                 leftRT.anchorMin = new Vector2(0, 0.5f);
                 leftRT.anchorMax = new Vector2(0, 1);
-                leftRT.offsetMin = new Vector2(10, SideTabBottomMargin); 
-                
+                leftRT.offsetMin = new Vector2(10, SideTabBottomMargin);
+                leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
+
                 RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                 subRT.anchorMin = new Vector2(0, 0);
                 subRT.anchorMax = new Vector2(0, 0.5f);
-                subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); 
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105); 
+                subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55);
+                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105);
 
                 UpdateTabs(ContentType.Hub, leftTabContainerGO, leftActiveTabButtons, true);
                 UpdateTabs(ContentType.HubTags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
@@ -332,13 +343,14 @@ namespace VPB
                 RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
                 rightRT.anchorMin = new Vector2(1, 0.7f);
                 rightRT.anchorMax = new Vector2(1, 1);
-                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabBottomMargin); 
+                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabBottomMargin);
+                rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
 
                 RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                 subRT.anchorMin = new Vector2(1, 0);
                 subRT.anchorMax = new Vector2(1, 0.7f);
                 subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55);
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105); 
+                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105);
 
                 UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
                 UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);
@@ -377,6 +389,7 @@ namespace VPB
                     if (categoryCounts.ContainsKey(c.name)) count = categoryCounts[c.name];
                     
                     if (count == 0 && !isActive) continue;
+                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsHiddenCategory(c.name) && !isActive) continue;
 
                     string label = c.name + " (" + count + ")";
 
@@ -821,18 +834,20 @@ namespace VPB
             Image img = btnGO.GetComponent<Image>();
             img.color = color;
             
+            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+
             Text txt = btnGO.GetComponentInChildren<Text>();
             txt.text = label;
-            txt.fontSize = 18;
+            txt.fontSize = Mathf.RoundToInt(18 * s);
             txt.color = Color.white;
-            
+
             // Ensure LayoutElement
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
             if (le == null) le = btnGO.AddComponent<LayoutElement>();
-            le.minWidth = 140;
-            le.preferredWidth = 170;
-            le.minHeight = 35;
-            le.preferredHeight = 35;
+            le.minWidth = 140f * s;
+            le.preferredWidth = 170f * s;
+            le.minHeight = 35f * s;
+            le.preferredHeight = 35f * s;
             le.flexibleWidth = 1;
 
             if (targetList != null) targetList.Add(btnGO);

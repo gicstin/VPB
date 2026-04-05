@@ -86,6 +86,9 @@ namespace VPB
         private bool pendingEnableAutoFixedGallery;
         private bool backupEnableAutoFixedGallery;
 
+        private HashSet<string> pendingHiddenCategories;
+        private HashSet<string> backupHiddenCategories;
+
         private GameObject tooltipGO;
         private Text tooltipText;
         private Text settingsTitleText;
@@ -189,6 +192,9 @@ namespace VPB
             pendingEnableAutoFixedGallery = VPBConfig.Instance.EnableAutoFixedGallery;
             backupEnableAutoFixedGallery = VPBConfig.Instance.EnableAutoFixedGallery;
 
+            pendingHiddenCategories = new HashSet<string>(VPBConfig.Instance.HiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
+            backupHiddenCategories  = new HashSet<string>(pendingHiddenCategories, StringComparer.OrdinalIgnoreCase);
+
             RectTransform rt = settingsPaneRT;
             if (onRight)
             {
@@ -257,6 +263,8 @@ namespace VPB
             VPBConfig.Instance.DragHoldThreshold = backupDragHoldThreshold;
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.EnableAutoFixedGallery = backupEnableAutoFixedGallery;
+            VPBConfig.Instance.HiddenCategories = new HashSet<string>(backupHiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
+            pendingHiddenCategories = new HashSet<string>(backupHiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
             VPBConfig.Instance.TriggerChange();
             if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
         }
@@ -533,6 +541,25 @@ namespace VPB
                     pendingBringToFrontDistance = val;
                     VPBConfig.Instance.BringToFrontDistance = val;
                 }, VPBTranslation.T("settings.tip.bring_front_dist", "The distance (in meters) from your view where panels will appear when using 'Bring to Front'."));
+            }
+
+            // CATEGORY: Gallery Categories
+            CreateHeader(VPBTranslation.T("settings.header.gallery_categories", "Gallery Categories"));
+            var knownHideable = new[] {
+                "Person", "Person BreastPhysics", "Person General",
+                "Person GlutePhysics", "Person Morphs", "Person Textures", "SubScenes"
+            };
+            foreach (var catName in knownHideable)
+            {
+                string cn = catName;
+                bool isHidden = pendingHiddenCategories != null && pendingHiddenCategories.Contains(cn);
+                CreateToggleSetting(VPBTranslation.T("settings.hide_category." + cn.Replace(" ", "_").ToLowerInvariant(), "Hide: " + cn), isHidden, (val) => {
+                    if (val) pendingHiddenCategories.Add(cn);
+                    else     pendingHiddenCategories.Remove(cn);
+                    VPBConfig.Instance.HiddenCategories = new HashSet<string>(pendingHiddenCategories, StringComparer.OrdinalIgnoreCase);
+                    VPBConfig.Instance.TriggerChange();
+                    if (parentPanel != null) parentPanel.UpdateTabs();
+                }, VPBTranslation.T("settings.tip.hide_category", "Hide this category from the Categories tab list. The category is still accessible via search."));
             }
 
             if (VPBConfig.Instance.IsDevMode)

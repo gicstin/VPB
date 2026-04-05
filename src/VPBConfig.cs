@@ -137,6 +137,17 @@ namespace VPB
         public float InnerPaneScale = 1.0f;
         /// <summary>UI language id: en, zh_cn, etc. Matches vpb_translations/&lt;id&gt;.json. Empty string means auto-detect on first run.</summary>
         public string UiLocale = "";
+        /// <summary>Category names hidden from the Categories tab list.</summary>
+        public HashSet<string> HiddenCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Person", "Person BreastPhysics", "Person General",
+            "Person GlutePhysics", "Person Morphs", "Person Textures"
+        };
+
+        public bool IsHiddenCategory(string name)
+        {
+            return HiddenCategories != null && HiddenCategories.Contains(name);
+        }
         public bool IsLoadingScene { get; private set; }
 
         private bool? _isDevMode;
@@ -295,7 +306,18 @@ namespace VPB
                         if (node["EnableAutoFixedGallery"] != null) EnableAutoFixedGallery = node["EnableAutoFixedGallery"].AsBool;
                         if (node["ListRowHeight"] != null) ListRowHeight = node["ListRowHeight"].AsFloat;
                         if (node["GridColumnCount"] != null) GridColumnCount = node["GridColumnCount"].AsInt;
+                        if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
+                        if (node["InnerPaneScale"] != null) InnerPaneScale = node["InnerPaneScale"].AsFloat;
                         if (node["UiLocale"] != null) UiLocale = node["UiLocale"].Value;
+                        if (node["HiddenCategories"] != null)
+                        {
+                            HiddenCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var part in node["HiddenCategories"].Value.Split(','))
+                            {
+                                string t = part.Trim();
+                                if (!string.IsNullOrEmpty(t)) HiddenCategories.Add(t);
+                            }
+                        }
                     }
 
                     try
@@ -365,7 +387,10 @@ namespace VPB
                 node["EnableAutoFixedGallery"].AsBool = EnableAutoFixedGallery;
                 node["ListRowHeight"].AsFloat = ListRowHeight;
                 node["GridColumnCount"].AsInt = GridColumnCount;
+                node["SideButtonScale"].AsFloat = SideButtonScale;
+                node["InnerPaneScale"].AsFloat = InnerPaneScale;
                 node["UiLocale"] = UiLocale ?? "en";
+                node["HiddenCategories"] = string.Join(",", new List<string>(HiddenCategories ?? new HashSet<string>()).ToArray());
                 string jsonOutput = node.ToString();
                 File.WriteAllText(ConfigPath, jsonOutput);
 
