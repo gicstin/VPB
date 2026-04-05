@@ -86,6 +86,12 @@ namespace VPB
 
         private void OnFileManagerRefresh()
         {
+            if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryManualRefreshOnly)
+            {
+                LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
+                return;
+            }
+
             if (IsSuppressed())
             {
                 LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (suppressed)");

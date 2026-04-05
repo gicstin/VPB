@@ -96,6 +96,8 @@ namespace VPB
         public float CurvatureIntensity = 1.0f;
         public bool EnableGalleryFade = true;
         public bool EnableGalleryTranslucency = false;
+        /// <summary>When true, package scans do not update the gallery until the user uses Refresh.</summary>
+        public bool GalleryManualRefreshOnly = true;
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
         /// <summary>How gallery applies an appearance .vap: replace (full), keep (keep body garments), clothingOnly (garment outfit from preset only).</summary>
@@ -203,6 +205,7 @@ namespace VPB
             CurvatureIntensity = 1.0f;
             EnableGalleryFade = true;
             EnableGalleryTranslucency = false;
+            GalleryManualRefreshOnly = true;
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
             AppearanceClothingApplyMode = "replace";
@@ -273,6 +276,7 @@ namespace VPB
                         if (node["CurvatureIntensity"] != null) CurvatureIntensity = node["CurvatureIntensity"].AsFloat;
                         if (node["EnableGalleryFade"] != null) EnableGalleryFade = node["EnableGalleryFade"].AsBool;
                         if (node["EnableGalleryTranslucency"] != null) EnableGalleryTranslucency = node["EnableGalleryTranslucency"].AsBool;
+                        if (node["GalleryManualRefreshOnly"] != null) GalleryManualRefreshOnly = node["GalleryManualRefreshOnly"].AsBool;
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
                         if (node["AppearanceClothingApplyMode"] != null)
@@ -344,6 +348,7 @@ namespace VPB
                 node["CurvatureIntensity"].AsFloat = CurvatureIntensity;
                 node["EnableGalleryFade"].AsBool = EnableGalleryFade;
                 node["EnableGalleryTranslucency"].AsBool = EnableGalleryTranslucency;
+                node["GalleryManualRefreshOnly"].AsBool = GalleryManualRefreshOnly;
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
                 node["AppearanceClothingApplyMode"] = AppearanceClothingApplyMode;

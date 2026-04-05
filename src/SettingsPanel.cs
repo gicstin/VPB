@@ -56,6 +56,9 @@ namespace VPB
         private bool pendingEnableGalleryTranslucency;
         private bool backupEnableGalleryTranslucency;
 
+        private bool pendingGalleryManualRefreshOnly;
+        private bool backupGalleryManualRefreshOnly;
+
         private float pendingGalleryOpacity;
         private float backupGalleryOpacity;
 
@@ -156,6 +159,9 @@ namespace VPB
             pendingEnableGalleryTranslucency = VPBConfig.Instance.EnableGalleryTranslucency;
             backupEnableGalleryTranslucency = VPBConfig.Instance.EnableGalleryTranslucency;
 
+            pendingGalleryManualRefreshOnly = VPBConfig.Instance.GalleryManualRefreshOnly;
+            backupGalleryManualRefreshOnly = VPBConfig.Instance.GalleryManualRefreshOnly;
+
             pendingGalleryOpacity = VPBConfig.Instance.GalleryOpacity;
             backupGalleryOpacity = VPBConfig.Instance.GalleryOpacity;
 
@@ -239,6 +245,7 @@ namespace VPB
             VPBConfig.Instance.CurvatureIntensity = backupCurvatureIntensity;
             VPBConfig.Instance.EnableGalleryFade = backupEnableGalleryFade;
             VPBConfig.Instance.EnableGalleryTranslucency = backupEnableGalleryTranslucency;
+            VPBConfig.Instance.GalleryManualRefreshOnly = backupGalleryManualRefreshOnly;
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.SideButtonScale = backupSideButtonScale;
             if (parentPanel != null) parentPanel.ApplySideButtonScale();
@@ -315,6 +322,7 @@ namespace VPB
                 VPBConfig.Instance.CurvatureIntensity = pendingCurvatureIntensity;
                 VPBConfig.Instance.EnableGalleryFade = pendingEnableGalleryFade;
                 VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
+                VPBConfig.Instance.GalleryManualRefreshOnly = pendingGalleryManualRefreshOnly;
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
                 VPBConfig.Instance.SideButtonScale = pendingSideButtonScale;
                 VPBConfig.Instance.InnerPaneScale = pendingInnerPaneScale;
@@ -377,6 +385,12 @@ namespace VPB
                 VPBConfig.Instance.EnableGalleryTranslucency = val;
                 VPBConfig.Instance.TriggerChange();
             }, VPBTranslation.T("settings.tip.gallery_translucency", "Makes the entire gallery pane translucent."));
+
+            CreateToggleSetting(VPBTranslation.T("settings.gallery_manual_refresh_only", "Manual gallery refresh only"), pendingGalleryManualRefreshOnly, (val) => {
+                pendingGalleryManualRefreshOnly = val;
+                VPBConfig.Instance.GalleryManualRefreshOnly = val;
+                VPBConfig.Instance.TriggerChange();
+            }, VPBTranslation.T("settings.tip.gallery_manual_refresh_only", "When enabled, package scans do not update the file grid until you press Refresh in the gallery. Reduces scroll jumps and load when the package index changes often."));
 
             CreateSliderSetting(VPBTranslation.T("settings.gallery_opacity", "Gallery Opacity"), pendingGalleryOpacity, 0.1f, 1.0f, (val) => {
                 pendingGalleryOpacity = val;

@@ -94,6 +94,8 @@
   "settings.tip.side_button_fade": "未懸停在側欄上時淡出側欄按鈕。",
   "settings.gallery_translucency": "圖庫半透明",
   "settings.tip.gallery_translucency": "使整個圖庫面板半透明。",
+  "settings.gallery_manual_refresh_only": "圖庫僅手動重新整理",
+  "settings.tip.gallery_manual_refresh_only": "啟用後，套件掃描不會自動更新檔案列表，需按下圖庫中的「重新整理」才會更新。可減少索引頻繁變動時的捲動跳動與負載。",
   "settings.gallery_opacity": "圖庫不透明度",
   "settings.tip.gallery_opacity": "啟用半透明時圖庫的不透明度。0.1 = 10% 可見，1.0 = 不透明。",
   "settings.side_button_scale": "側欄按鈕大小",

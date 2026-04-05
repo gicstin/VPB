@@ -94,6 +94,8 @@
   "settings.tip.side_button_fade": "未悬停在侧栏上时淡出侧栏按钮。",
   "settings.gallery_translucency": "图库半透明",
   "settings.tip.gallery_translucency": "使整个图库面板半透明。",
+  "settings.gallery_manual_refresh_only": "图库仅手动刷新",
+  "settings.tip.gallery_manual_refresh_only": "启用后，包扫描不会自动更新文件列表，需点击图库中的“刷新”才更新。可减少索引频繁变化时的滚动跳动和负载。",
   "settings.gallery_opacity": "图库不透明度",
   "settings.tip.gallery_opacity": "启用半透明时图库的不透明度。0.1 = 10% 可见，1.0 = 不透明。",
   "settings.side_button_scale": "侧栏按钮大小",

@@ -318,23 +318,7 @@ namespace VPB
 
             Button refreshButton = refreshBtn.GetComponent<Button>();
             refreshButton.onClick.RemoveAllListeners();
-            refreshButton.onClick.AddListener(() => {
-                try
-                {
-                    if (!IsHubMode) ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
-                    try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-                    FileManager.Refresh(true, false, false);
-                    creatorsCached = false;
-                    categoriesCached = false;
-                    tagsCached = false;
-                    refreshOnNextShow = true;
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("[VPB] Refresh packages failed: " + ex);
-                    ShowTemporaryStatus(VPBTranslation.T("gallery.status.refresh_failed", "Refresh failed. See log."), 2f);
-                }
-            });
+            refreshButton.onClick.AddListener(() => { UserRequestedPackageRefresh(); });
             titleBarRefreshBtnText = refreshBtn.GetComponentInChildren<Text>();
             VPBUiFont.ApplyTo(titleBarRefreshBtnText);
             AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
@@ -490,23 +474,7 @@ namespace VPB
                 { var rt = rrRT; var t = rightRefreshBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(18*s); }); }
                 Button rightRefreshButton = rightRefreshBtn.GetComponent<Button>();
                 rightRefreshButton.onClick.RemoveAllListeners();
-                rightRefreshButton.onClick.AddListener(() => {
-                    try
-                    {
-                        if (!IsHubMode) ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
-                        try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-                        FileManager.Refresh(true, false, false);
-                        creatorsCached = false;
-                        categoriesCached = false;
-                        tagsCached = false;
-                            refreshOnNextShow = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogError("[VPB] Refresh packages failed: " + ex);
-                        ShowTemporaryStatus(VPBTranslation.T("gallery.status.refresh_failed", "Refresh failed. See log."), 2f);
-                    }
-                });
+                rightRefreshButton.onClick.AddListener(() => { UserRequestedPackageRefresh(); });
                 AddTooltip(rightRefreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
 
                 rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {

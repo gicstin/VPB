@@ -1370,6 +1370,18 @@ namespace VPB
             }
 
             UpdateLayout();
+            // Layout rebuild can clamp ScrollRect and undo the position we just set.
+            if (scrollRect != null && !scrollToBottom)
+            {
+                if (savedCenterItemIndex >= 0 && recyclingGrid != null)
+                    recyclingGrid.ScrollToCenterItem(savedCenterItemIndex);
+                else
+                {
+                    scrollRect.verticalNormalizedPosition = savedScrollNormalizedPos;
+                    if (recyclingGrid != null) recyclingGrid.Refresh();
+                }
+            }
+
             HideLoadingOverlay();
             hasLoadedContent = true;
             refreshCoroutine = null;

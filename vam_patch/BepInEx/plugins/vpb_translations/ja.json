@@ -94,6 +94,8 @@
   "settings.tip.side_button_fade": "サイドバーにマウスがないとき、サイドボタンを薄く表示します。",
   "settings.gallery_translucency": "ギャラリーを半透明に",
   "settings.tip.gallery_translucency": "ギャラリーパネル全体を半透明にします。",
+  "settings.gallery_manual_refresh_only": "ギャラリーを手動更新のみに",
+  "settings.tip.gallery_manual_refresh_only": "有効にすると、パッケージのスキャンがファイル一覧を更新しなくなります。ギャラリーの「更新」を押すまで反映されません。インデックスが頻繁に変わるときのスクロールずれや負荷を抑えます。",
   "settings.gallery_opacity": "ギャラリー不透明度",
   "settings.tip.gallery_opacity": "半透明時の不透明度。0.1 = 10% 表示、1.0 = 不透明。",
   "settings.side_button_scale": "サイドボタンのサイズ",

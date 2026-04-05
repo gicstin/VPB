@@ -70,6 +70,33 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Title-bar / side Refresh: rescan packages and reload the grid while preserving scroll when possible.
+        /// Needed when <see cref="VPBConfig.GalleryManualRefreshOnly"/> blocks automatic file-manager updates.
+        /// </summary>
+        public void UserRequestedPackageRefresh()
+        {
+            try
+            {
+                if (!IsHubMode)
+                    ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
+                try { MVR.FileManagement.FileManager.Refresh(); } catch { }
+                FileManager.Refresh(true, false, false);
+                creatorsCached = false;
+                categoriesCached = false;
+                tagsCached = false;
+                refreshOnNextShow = true;
+                RefreshFiles(true);
+                refreshOnNextShow = false;
+                try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Refresh packages failed: " + ex);
+                ShowTemporaryStatus(VPBTranslation.T("gallery.status.refresh_failed", "Refresh failed. See log."), 2f);
+            }
+        }
+
         public void Show(string title, string extension, string path)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -81,7 +108,9 @@ namespace VPB
 
             DateTime pkgRefreshTime = DateTime.MinValue;
             try { pkgRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
-            bool packagesChanged = refreshOnNextShow || (pkgRefreshTime > lastAppliedPackageRefreshTime);
+            bool packagesChanged = refreshOnNextShow;
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryManualRefreshOnly)
+                packagesChanged = packagesChanged || (pkgRefreshTime > lastAppliedPackageRefreshTime);
 
             titleText.text = title;
             currentCategoryTitle = title;
