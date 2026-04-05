@@ -473,7 +473,7 @@ namespace VPB
             /// Merged back into <see cref="BodyGeometryJson"/> during the body restore so that VaM's
             /// <c>setMissingToDefault=true</c> does not reset the newly-applied clothing to off.
             /// </summary>
-            public Dictionary<string, bool> ClothingBoolsFromPreset;
+            public Dictionary<string, bool> ClothingBoolsFromPreset = null;
         }
 
         private static readonly HashSet<string> GarmentClothingRegionTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

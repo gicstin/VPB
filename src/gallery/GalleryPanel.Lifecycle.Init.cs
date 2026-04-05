@@ -729,10 +729,11 @@ namespace VPB
                 rightSideButtons.Add(rightApplyModeBtn.GetComponent<RectTransform>());
 
                 // Appearance outfit: keep current vs load from preset (Right)
-                GameObject rightKeepClothingBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Clothes: Preset", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
-                rightKeepClothingBtnImage = rightKeepClothingBtn.GetComponent<Image>();
-                rightKeepClothingBtnText = rightKeepClothingBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightKeepClothingBtn.GetComponent<RectTransform>());
+                rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Clothes: Preset", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                rightKeepClothingBtnImage = rightKeepClothingBtnGO.GetComponent<Image>();
+                rightKeepClothingBtnText = rightKeepClothingBtnGO.GetComponentInChildren<Text>();
+                rightSideButtons.Add(rightKeepClothingBtnGO.GetComponent<RectTransform>());
+                rightKeepClothingBtnGO.SetActive(false);
 
                 // Replace Toggle (Right)
                 GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
@@ -1517,10 +1518,11 @@ namespace VPB
                 leftSideButtons.Add(leftApplyModeBtn.GetComponent<RectTransform>());
 
                 // Appearance outfit: keep current vs load from preset (Left)
-                GameObject leftKeepClothingBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Clothes: Preset", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
-                leftKeepClothingBtnImage = leftKeepClothingBtn.GetComponent<Image>();
-                leftKeepClothingBtnText = leftKeepClothingBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftKeepClothingBtn.GetComponent<RectTransform>());
+                leftKeepClothingBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Clothes: Preset", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                leftKeepClothingBtnImage = leftKeepClothingBtnGO.GetComponent<Image>();
+                leftKeepClothingBtnText = leftKeepClothingBtnGO.GetComponentInChildren<Text>();
+                leftSideButtons.Add(leftKeepClothingBtnGO.GetComponent<RectTransform>());
+                leftKeepClothingBtnGO.SetActive(false);
 
                 // Replace Toggle (Left)
                 GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);

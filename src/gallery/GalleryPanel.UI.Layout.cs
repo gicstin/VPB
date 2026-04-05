@@ -1702,8 +1702,11 @@ namespace VPB
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
             bool showSave = !IsHubMode;
 
+            if (rightKeepClothingBtnGO != null) rightKeepClothingBtnGO.SetActive(isAppearance);
+            if (leftKeepClothingBtnGO != null) leftKeepClothingBtnGO.SetActive(isAppearance);
             if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(isClothing);
             if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(isClothing);
             if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(isHair);

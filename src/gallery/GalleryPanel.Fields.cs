@@ -144,8 +144,10 @@ namespace VPB
         private Text leftReplaceBtnText;
         private Image leftReplaceBtnImage;
 
+        private GameObject rightKeepClothingBtnGO;
         private Text rightKeepClothingBtnText;
         private Image rightKeepClothingBtnImage;
+        private GameObject leftKeepClothingBtnGO;
         private Text leftKeepClothingBtnText;
         private Image leftKeepClothingBtnImage;
 
