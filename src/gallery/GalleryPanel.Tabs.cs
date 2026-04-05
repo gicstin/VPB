@@ -1208,12 +1208,12 @@ namespace VPB
             GameObject selectorGO = new GameObject("RatingSelector");
             selectorGO.transform.SetParent(btnGO.transform, false);
             RectTransform selectorRT = selectorGO.AddComponent<RectTransform>();
-            // 2-row × 3-col grid: [X][1][2] / [3][4][5] — expands left from top-right corner
+            // 3-row × 2-col grid: [X][1] / [2][3] / [4][5] — drops below star icon, aligns to right edge
             selectorRT.anchorMin = new Vector2(1, 1);
             selectorRT.anchorMax = new Vector2(1, 1);
             selectorRT.pivot = new Vector2(1, 1);
-            selectorRT.sizeDelta = new Vector2(122, 78);
-            selectorRT.anchoredPosition = new Vector2(-47, -2);
+            selectorRT.sizeDelta = new Vector2(80, 114);
+            selectorRT.anchoredPosition = new Vector2(-2, -44);
 
             CanvasGroup selectorCG = selectorGO.AddComponent<CanvasGroup>();
             selectorCG.alpha = 0f;
@@ -1228,7 +1228,7 @@ namespace VPB
             selectorGrid.spacing = new Vector2(2, 2);
             selectorGrid.padding = new RectOffset(1, 1, 1, 1);
             selectorGrid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            selectorGrid.constraintCount = 3;
+            selectorGrid.constraintCount = 2;
             selectorGrid.childAlignment = TextAnchor.UpperLeft;
 
             RatingHandler ratingHandler = btnGO.AddComponent<RatingHandler>();
