@@ -38,7 +38,7 @@ namespace VPB
             trackedButtons.Clear();
 
             // Separator
-            CreateTabButton(container.transform, "--- CATEGORIES ---", Color.black, false, null, trackedButtons);
+            CreateTabButton(container.transform, VPBTranslation.T("gallery.hub.categories_header", "--- CATEGORIES ---"), Color.black, false, null, trackedButtons);
 
             GalleryHubController.Instance.GetInfo((info) => {
                  bool stillActive = IsHubMode;
@@ -55,13 +55,13 @@ namespace VPB
                     CreateTabButton(container.transform, cat, btnColor, isActive, () => {
                         currentHubCategory = cat;
                         currentPage = 0;
-                        if (titleText != null) titleText.text = "HUB: " + cat;
+                        if (titleText != null) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + cat;
                         RefreshHubItems();
                         UpdateTabs(); 
                     }, trackedButtons, () => {
                         currentHubCategory = "All";
                         currentPage = 0;
-                        if (titleText != null) titleText.text = "HUB: All";
+                        if (titleText != null) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + VPBTranslation.T("gallery.hub.all", "All");
                         RefreshHubItems();
                         UpdateTabs(); 
                     });
@@ -82,7 +82,7 @@ namespace VPB
             trackedButtons.Clear();
 
             // Separator
-            CreateTabButton(container.transform, "--- PAY TYPE ---", Color.black, false, null, trackedButtons);
+            CreateTabButton(container.transform, VPBTranslation.T("gallery.hub.pay_type_header", "--- PAY TYPE ---"), Color.black, false, null, trackedButtons);
 
             GalleryHubController.Instance.GetInfo((info) => {
                  bool stillActive = IsHubMode;
@@ -119,7 +119,7 @@ namespace VPB
             trackedButtons.Clear();
 
             // Separator
-            CreateTabButton(container.transform, "--- CREATORS ---", Color.black, false, null, trackedButtons);
+            CreateTabButton(container.transform, VPBTranslation.T("gallery.hub.creators_header", "--- CREATORS ---"), Color.black, false, null, trackedButtons);
 
             GalleryHubController.Instance.GetInfo((info) => {
                  bool stillActive = IsHubMode;
@@ -148,7 +148,7 @@ namespace VPB
                  
                  if (hubCreatorPage > 0)
                  {
-                     CreateTabButton(container.transform, "<< Prev Creators", new Color(0.8f, 0.8f, 0.2f), false, () => {
+                     CreateTabButton(container.transform, VPBTranslation.T("gallery.hub.prev_creators", "<< Prev Creators"), new Color(0.8f, 0.8f, 0.2f), false, () => {
                          hubCreatorPage--;
                          UpdateTabs();
                      }, trackedButtons);
@@ -175,7 +175,7 @@ namespace VPB
 
                  if (hubCreatorPage < totalCreatorPages - 1)
                  {
-                     CreateTabButton(container.transform, "Next Creators >>", new Color(0.8f, 0.8f, 0.2f), false, () => {
+                     CreateTabButton(container.transform, VPBTranslation.T("gallery.hub.next_creators", "Next Creators >>"), new Color(0.8f, 0.8f, 0.2f), false, () => {
                          hubCreatorPage++;
                          UpdateTabs();
                      }, trackedButtons);
@@ -209,10 +209,10 @@ namespace VPB
             trackedButtons.Clear();
 
             // Separator
-            CreateTabButton(container.transform, "--- TAGS ---", Color.black, false, null, trackedButtons);
+            CreateTabButton(container.transform, VPBTranslation.T("gallery.hub.tags_header", "--- TAGS ---"), Color.black, false, null, trackedButtons);
 
             // Create loading button
-            CreateTabButton(container.transform, "Loading Tags...", Color.gray, false, null, trackedButtons);
+            CreateTabButton(container.transform, VPBTranslation.T("gallery.hub.loading_tags", "Loading Tags..."), Color.gray, false, null, trackedButtons);
 
              GalleryHubController.Instance.GetTags((tags) => {
                  bool stillActive = isLeft ? (leftActiveContent == ContentType.Hub) : (rightActiveContent == ContentType.Hub);
@@ -244,7 +244,7 @@ namespace VPB
                  // Prev Button
                  if (hubTagPage > 0)
                  {
-                     CreateTabButton(container.transform, "<< Prev Page", new Color(0.8f, 0.8f, 0.2f), false, () => {
+                     CreateTabButton(container.transform, VPBTranslation.T("gallery.hub.prev_page", "<< Prev Page"), new Color(0.8f, 0.8f, 0.2f), false, () => {
                          hubTagPage--;
                          UpdateTabs();
                      }, trackedButtons);
@@ -253,7 +253,7 @@ namespace VPB
                  // Page Info
                  if (totalPages > 1)
                  {
-                     CreateTabButton(container.transform, $"Page {hubTagPage + 1}/{totalPages}", Color.gray, false, null, trackedButtons);
+                     CreateTabButton(container.transform, string.Format(VPBTranslation.T("gallery.hub.page_info", "Page {0}/{1}"), hubTagPage + 1, totalPages), Color.gray, false, null, trackedButtons);
                  }
                  
                  var pageTags = displayTags.Skip(hubTagPage * HubTagsPerPage).Take(HubTagsPerPage);
@@ -276,7 +276,7 @@ namespace VPB
                  // Next Button
                  if (hubTagPage < totalPages - 1)
                  {
-                     CreateTabButton(container.transform, "Next Page >>", new Color(0.8f, 0.8f, 0.2f), false, () => {
+                     CreateTabButton(container.transform, VPBTranslation.T("gallery.hub.next_page", "Next Page >>"), new Color(0.8f, 0.8f, 0.2f), false, () => {
                          hubTagPage++;
                          UpdateTabs();
                      }, trackedButtons);
@@ -291,7 +291,7 @@ namespace VPB
                     if (currentHubTags.Count > 0)
                     {
                         clearBtn.SetActive(true);
-                        if (clearBtnText != null) clearBtnText.text = "Clear Tags (" + currentHubTags.Count + ")";
+                        if (clearBtnText != null) clearBtnText.text = string.Format(VPBTranslation.T("gallery.hub.clear_tags_count", "Clear Tags ({0})"), currentHubTags.Count);
                     }
                     else
                     {
@@ -332,7 +332,7 @@ namespace VPB
             fileButtonImages.Clear();
 
             // Show loading...
-            if (paginationText != null) paginationText.text = "Loading Hub...";
+            if (paginationText != null) paginationText.text = VPBTranslation.T("gallery.hub.loading", "Loading Hub...");
 
             List<GalleryHubItem> items = null;
             string error = null;
@@ -367,8 +367,8 @@ namespace VPB
              // To support pagination properly, Controller needs to return total pages/count. 
              // For now, let's just display what we got.
 
-            if (paginationText != null) 
-                paginationText.text = "Page " + (currentPage + 1);
+            if (paginationText != null)
+                paginationText.text = string.Format(VPBTranslation.T("gallery.page", "Page {0}"), currentPage + 1);
 
             // Pagination Controls logic
             if (paginationPrevBtn != null) 

@@ -718,7 +718,7 @@ namespace VPB
             paginationText.fontSize = 18;
             paginationText.color = Color.white;
             paginationText.alignment = TextAnchor.MiddleCenter;
-            paginationText.text = "0 Items";
+            paginationText.text = VPBTranslation.T("gallery.items.zero", "0 Items");
             paginationText.horizontalOverflow = HorizontalWrapMode.Overflow;
             paginationText.verticalOverflow = VerticalWrapMode.Overflow;
             RectTransform textRT = textGO.GetComponent<RectTransform>();
@@ -856,7 +856,7 @@ namespace VPB
             if (IsHubMode)
             {
                 // Hub still uses pagination (server-side)
-                paginationText.text = "Page " + (currentPage + 1);
+                paginationText.text = string.Format(VPBTranslation.T("gallery.page", "Page {0}"), currentPage + 1);
 
                 bool canGoPrev = (currentPage > 0);
                 // For Hub we assume Next is always possible unless we implement total count
@@ -903,13 +903,13 @@ namespace VPB
                     int total = currentFilteredFiles.Count;
                     int selected = selectedFiles.Count;
                     if (selected > 0)
-                        paginationText.text = $"{selected} / {total} Items";
+                        paginationText.text = string.Format(VPBTranslation.T("gallery.items.selected", "{0} / {1} Items"), selected, total);
                     else
-                        paginationText.text = $"{total} Items";
+                        paginationText.text = string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
                 }
                 else
                 {
-                    paginationText.text = "0 Items";
+                    paginationText.text = VPBTranslation.T("gallery.items.zero", "0 Items");
                 }
 
                 if (paginationFirstBtn != null) paginationFirstBtn.SetActive(false);

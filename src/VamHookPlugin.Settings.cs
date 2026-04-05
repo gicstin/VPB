@@ -41,7 +41,7 @@ namespace VPB
                     || parsedCreateGalleryKey.IsSame(parsedHubKey) || parsedCreateGalleryKey.IsSame(parsedClearConsoleKey)
                     || parsedHubKey.IsSame(parsedClearConsoleKey))
                 {
-                    m_SettingsError = "Duplicate hotkeys are not allowed.";
+                    m_SettingsError = VPBTranslation.T("hook.settings.error.duplicate_hotkeys", "Duplicate hotkeys are not allowed.");
                     return;
                 }
 
@@ -125,7 +125,7 @@ namespace VPB
             }
             catch
             {
-                m_SettingsError = "Invalid setting. Example hotkey: Ctrl+Shift+V";
+                m_SettingsError = VPBTranslation.T("hook.settings.error.invalid_hotkey", "Invalid setting. Example hotkey: Ctrl+Shift+V");
             }
         }
 
@@ -197,34 +197,34 @@ namespace VPB
         private void DrawSettingsPage(float buttonHeight)
         {
             GUILayout.BeginVertical(m_StyleSection);
-            GUILayout.Label("Settings", m_StyleHeader);
+            GUILayout.Label(VPBTranslation.T("hook.settings.title", "Settings"), m_StyleHeader);
             GUILayout.Space(6);
 
-            GUILayout.Label("Hook Settings", m_StyleHeader);
+            GUILayout.Label(VPBTranslation.T("hook.settings.header.hook", "Hook Settings"), m_StyleHeader);
             GUILayout.Space(4);
 
-            m_SettingsUiKeyDraft = DrawHotkeyField("Show/Hide VPB", "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
-            m_SettingsHubKeyDraft = DrawHotkeyField("Open Hub Browser", "HubKeyField", m_SettingsHubKeyDraft ?? "", buttonHeight);
-            m_SettingsClearConsoleKeyDraft = DrawHotkeyField("Clear Console", "ClearConsoleKeyField", m_SettingsClearConsoleKeyDraft ?? "", buttonHeight);
+            m_SettingsUiKeyDraft = DrawHotkeyField(VPBTranslation.T("hook.settings.key.ui", "Show/Hide VPB"), "UIKeyField", m_SettingsUiKeyDraft ?? "", buttonHeight);
+            m_SettingsHubKeyDraft = DrawHotkeyField(VPBTranslation.T("hook.settings.key.hub", "Open Hub Browser"), "HubKeyField", m_SettingsHubKeyDraft ?? "", buttonHeight);
+            m_SettingsClearConsoleKeyDraft = DrawHotkeyField(VPBTranslation.T("hook.settings.key.clear_console", "Clear Console"), "ClearConsoleKeyField", m_SettingsClearConsoleKeyDraft ?? "", buttonHeight);
 
             GUILayout.Space(6);
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Visibility", GUILayout.Width(100));
+            GUILayout.Label(VPBTranslation.T("hook.settings.visibility", "Visibility"), GUILayout.Width(100));
             float visibilityValue = 1.0f - m_SettingsUiTransparencyValueDraft;
             visibilityValue = GUILayout.HorizontalSlider(visibilityValue, 0.0f, 1.0f);
             m_SettingsUiTransparencyValueDraft = 1.0f - visibilityValue;
             GUILayout.Space(10);
             GUILayout.Label((visibilityValue * 100).ToString("F0") + "%", GUILayout.Width(35));
             GUILayout.EndHorizontal();
-            GUILayout.Label("Adjust visibility when idle (100% = Opaque, 0% = Invisible).");
+            GUILayout.Label(VPBTranslation.T("hook.settings.visibility_hint", "Adjust visibility when idle (100% = Opaque, 0% = Invisible)."));
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(m_SettingsPluginsAlwaysEnabledDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
             {
                 m_SettingsPluginsAlwaysEnabledDraft = !m_SettingsPluginsAlwaysEnabledDraft;
             }
-            GUILayout.Label("Plugins always enabled");
+            GUILayout.Label(VPBTranslation.T("hook.settings.plugins_always_enabled", "Plugins always enabled"));
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
             {
@@ -232,12 +232,12 @@ namespace VPB
             }
             GUILayout.EndHorizontal();
 
-            DrawInfoCard(ref m_ShowPluginsAlwaysEnabledInfo, "Plugins always enabled", () =>
+            DrawInfoCard(ref m_ShowPluginsAlwaysEnabledInfo, VPBTranslation.T("hook.settings.plugins_always_enabled", "Plugins always enabled"), () =>
             {
                 GUILayout.Space(4);
-                GUILayout.Label("When this is ON, plugins are treated as always enabled.", m_StyleInfoCardText);
+                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_1", "When this is ON, plugins are treated as always enabled."), m_StyleInfoCardText);
                 GUILayout.Space(2);
-                GUILayout.Label("Tip: Leave this OFF if you want VaM to respect per-package/per-scene plugin enable state.", m_StyleInfoCardText);
+                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_2", "Tip: Leave this OFF if you want VaM to respect per-package/per-scene plugin enable state."), m_StyleInfoCardText);
             });
 
             GUILayout.BeginHorizontal();
@@ -245,7 +245,7 @@ namespace VPB
             {
                 m_SettingsLoadDependenciesWithPackageDraft = !m_SettingsLoadDependenciesWithPackageDraft;
             }
-            GUILayout.Label("Load dependencies when loading a package");
+            GUILayout.Label(VPBTranslation.T("hook.settings.load_deps", "Load dependencies when loading a package"));
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
@@ -253,9 +253,9 @@ namespace VPB
             {
                 m_SettingsForceLatestDependenciesDraft = !m_SettingsForceLatestDependenciesDraft;
             }
-            GUILayout.Label("Force latest dependency versions");
+            GUILayout.Label(VPBTranslation.T("hook.settings.force_latest", "Force latest dependency versions"));
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Whitelist", m_StyleButtonSmall, GUILayout.Width(110f), GUILayout.Height(buttonHeight)))
+            if (GUILayout.Button(VPBTranslation.T("hook.settings.whitelist", "Whitelist"), m_StyleButtonSmall, GUILayout.Width(110f), GUILayout.Height(buttonHeight)))
             {
                 OpenDependencyWhitelistUGUI();
             }
@@ -265,15 +265,15 @@ namespace VPB
 
             GUILayout.Space(10);
 
-            GUILayout.Label("Gallery Pane Settings", m_StyleHeader);
+            GUILayout.Label(VPBTranslation.T("hook.settings.header.gallery", "Gallery Pane Settings"), m_StyleHeader);
             GUILayout.Space(4);
 
-            m_SettingsGalleryKeyDraft = DrawHotkeyField("Show/Hide Panes", "GalleryKeyField", m_SettingsGalleryKeyDraft ?? "", buttonHeight);
-            m_SettingsCreateGalleryKeyDraft = DrawHotkeyField("Create Gallery Pane", "CreateGalleryKeyField", m_SettingsCreateGalleryKeyDraft ?? "", buttonHeight);
+            m_SettingsGalleryKeyDraft = DrawHotkeyField(VPBTranslation.T("hook.settings.key.gallery", "Show/Hide Panes"), "GalleryKeyField", m_SettingsGalleryKeyDraft ?? "", buttonHeight);
+            m_SettingsCreateGalleryKeyDraft = DrawHotkeyField(VPBTranslation.T("hook.settings.key.create_gallery", "Create Gallery Pane"), "CreateGalleryKeyField", m_SettingsCreateGalleryKeyDraft ?? "", buttonHeight);
 
             GUILayout.Space(6);
 
-            if (GUILayout.Button("Adjust Position", m_StyleButton, GUILayout.Height(buttonHeight)))
+            if (GUILayout.Button(VPBTranslation.T("hook.settings.adjust_position", "Adjust Position"), m_StyleButton, GUILayout.Height(buttonHeight)))
             {
                 OpenQuickMenuPositionWindow();
             }
@@ -288,11 +288,11 @@ namespace VPB
 
             GUILayout.Space(10);
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Cancel", m_StyleButton, GUILayout.Height(buttonHeight)))
+            if (GUILayout.Button(VPBTranslation.T("hook.cancel", "Cancel"), m_StyleButton, GUILayout.Height(buttonHeight)))
             {
                 CloseSettings();
             }
-            if (GUILayout.Button("Save", m_StyleButtonPrimary, GUILayout.Height(buttonHeight)))
+            if (GUILayout.Button(VPBTranslation.T("hook.save", "Save"), m_StyleButtonPrimary, GUILayout.Height(buttonHeight)))
             {
                 SaveSettings();
             }

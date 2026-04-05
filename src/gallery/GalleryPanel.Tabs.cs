@@ -274,7 +274,7 @@ namespace VPB
                 {
                     leftSearchInput.gameObject.SetActive(true);
                     // For now, no separate search for categories on left, but let's clear it
-                    if (leftSearchInput.placeholder is Text ph) ph.text = "Categories...";
+                    if (leftSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.categories", "Categories...");
                 }
 
                 // Left Search Bottom (Tags)
@@ -282,7 +282,7 @@ namespace VPB
                 {
                     leftSubSearchInput.gameObject.SetActive(true);
                     if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
-                    if (leftSubSearchInput.placeholder is Text ph) ph.text = "Search Tags...";
+                    if (leftSubSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.tags", "Search Tags...");
                 }
 
                 RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
@@ -314,7 +314,7 @@ namespace VPB
                 {
                     rightSubSearchInput.gameObject.SetActive(true);
                     if (rightSubSearchInput.text != creatorFilter) rightSubSearchInput.text = creatorFilter;
-                    if (rightSubSearchInput.placeholder is Text ph) ph.text = "Search Creators...";
+                    if (rightSubSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.creators", "Search Creators...");
                     
                     // Adjust anchor for 70/30 split
                     RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
@@ -396,7 +396,7 @@ namespace VPB
                         currentPath = "";
                         currentPaths = null;
                         currentExtension = "";
-                        if (titleText != null) titleText.text = "All Categories";
+                        if (titleText != null) titleText.text = VPBTranslation.T("gallery.title.all_categories", "All Categories");
                         RefreshFiles();
                         UpdateTabs();
                     });
@@ -688,13 +688,13 @@ namespace VPB
                             bool isSingleActive = (posePeopleFilter == PosePeopleFilter.Single);
                             bool isDualActive = (posePeopleFilter == PosePeopleFilter.Dual);
 
-                            CreateTabButton(container.transform, "Single (" + posePeopleFacetCountSingle + ")", isSingleActive ? active : inactive, isSingleActive, () => {
+                            CreateTabButton(container.transform, string.Format(VPBTranslation.T("gallery.pose.single_count", "Single ({0})"), posePeopleFacetCountSingle), isSingleActive ? active : inactive, isSingleActive, () => {
                                 posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Single) ? PosePeopleFilter.All : PosePeopleFilter.Single;
                                         RefreshFiles();
                                 UpdateTabs();
                             }, trackedButtons);
 
-                            CreateTabButton(container.transform, "Dual (" + posePeopleFacetCountDual + ")", isDualActive ? active : inactive, isDualActive, () => {
+                            CreateTabButton(container.transform, string.Format(VPBTranslation.T("gallery.pose.dual_count", "Dual ({0})"), posePeopleFacetCountDual), isDualActive ? active : inactive, isDualActive, () => {
                                 posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Dual) ? PosePeopleFilter.All : PosePeopleFilter.Dual;
                                         RefreshFiles();
                                 UpdateTabs();
@@ -763,7 +763,7 @@ namespace VPB
                     if (activeTags.Count > 0)
                     {
                         clearBtn.SetActive(true);
-                        if (clearBtnText != null) clearBtnText.text = "Clear Selected (" + activeTags.Count + ")";
+                        if (clearBtnText != null) clearBtnText.text = string.Format(VPBTranslation.T("gallery.tags.clear_selected_count", "Clear Selected ({0})"), activeTags.Count);
                     }
                     else
                     {
@@ -867,7 +867,7 @@ namespace VPB
             GameObject placeholder = new GameObject("Placeholder");
             placeholder.transform.SetParent(textArea.transform, false);
             Text placeholderText = placeholder.AddComponent<Text>();
-            placeholderText.text = "Search...";
+            placeholderText.text = VPBTranslation.T("gallery.search.main", "Search...");
             placeholderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             placeholderText.fontSize = 18; // Increased from 14
             placeholderText.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);

@@ -755,6 +755,7 @@ namespace VPB
             LogUtil.MarkPluginAwake();
 
             try { VPBTranslation.InitializeFromConfig(); } catch { }
+            try { SubscribeLocaleChanged(); } catch { }
 
             VdsLauncher.ParseOnce();
 
@@ -976,6 +977,7 @@ namespace VPB
         }
         void OnDestroy()
         {
+            try { UnsubscribeLocaleChanged(); } catch { }
             Settings.Instance.UIPosition.Value = new Vector2((int)m_Rect.x, (int)m_Rect.y);
             Settings.Instance.MiniMode.Value = MiniMode;
 
@@ -1239,7 +1241,7 @@ namespace VPB
                 
                 if (shouldShow && m_ShowHideButton != null)
                 {
-                    m_ShowHideButton.label = "Show/Hide (" + count + ")";
+                    m_ShowHideButton.label = VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide") + " (" + count + ")";
                 }
             }
         }
@@ -1581,7 +1583,8 @@ namespace VPB
                         UIDynamicButton uiBtn = btnTr.GetComponent<UIDynamicButton>();
                         if (uiBtn != null)
                         {
-                            uiBtn.label = "Create Gallery";
+                            m_CreateGalleryButton = uiBtn;
+                            uiBtn.label = VPBTranslation.T("hook.qmbutton.create_gallery", "Create Gallery");
                             if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
                             if (uiBtn.button != null)
                             {
@@ -1626,7 +1629,8 @@ namespace VPB
                         UIDynamicButton uiBtn = btnTrMid.GetComponent<UIDynamicButton>();
                         if (uiBtn != null)
                         {
-                            uiBtn.label = "Close All";
+                            m_CloseAllButton = uiBtn;
+                            uiBtn.label = VPBTranslation.T("hook.qmbutton.close_all", "Close All");
                             if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
                             if (uiBtn.button != null)
                             {
@@ -1665,7 +1669,8 @@ namespace VPB
                         UIDynamicButton uiBtn = btnTrMid2.GetComponent<UIDynamicButton>();
                         if (uiBtn != null)
                         {
-                            uiBtn.label = "Bring Front";
+                            m_BringFrontButton = uiBtn;
+                            uiBtn.label = VPBTranslation.T("hook.qmbutton.bring_front", "Bring Front");
                             if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 22;
                             if (uiBtn.button != null)
                             {
@@ -1706,7 +1711,7 @@ namespace VPB
                         if (uiBtn != null)
                         {
                             m_ShowHideButton = uiBtn;
-                            uiBtn.label = "Show/Hide";
+                            uiBtn.label = VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide");
                             if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
                             if (uiBtn.button != null)
                             {
@@ -1778,6 +1783,10 @@ namespace VPB
             
             GUILayout.FlexibleSpace();
             const float buttonHeight = 22f;
+            if (GUILayout.Button(GetImGuiLocaleShortCode(VPBTranslation.CurrentLocale), m_StyleButtonSmall, GUILayout.Width(40), GUILayout.Height(buttonHeight)))
+            {
+                m_ShowLangWindow = !m_ShowLangWindow;
+            }
             if (GUILayout.Button("+", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
 		        m_UIScale = Mathf.Clamp(m_UIScale + 0.2f, MinUiScale, MaxUiScale);
@@ -1811,7 +1820,7 @@ namespace VPB
             if (MiniMode)
             {
                 // ========== MINI MODE: QUICK ACCESS ==========
-                DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Create Gallery", m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
+                DrawPhiSplitButtons(VPBTranslation.T("hook.hub", "Hub"), m_StyleButton, OpenHubBrowse, VPBTranslation.T("hook.create_gallery", "Create Gallery"), m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
 
                 GUILayout.EndVertical();
                 return;
@@ -1841,7 +1850,7 @@ namespace VPB
                     GUILayout.BeginVertical(m_StyleSection);
                     
                     var stats = ImageLoadingMgr.singleton.CurrentZstdStats;
-                    var btnLabel = m_PendingVamCacheCount > 0 ? string.Format("Compress Cache ({0})", m_PendingVamCacheCount) : "Compress Cache";
+                    var btnLabel = m_PendingVamCacheCount > 0 ? string.Format(VPBTranslation.T("hook.compress_cache_count", "Compress Cache ({0})"), m_PendingVamCacheCount) : VPBTranslation.T("hook.compress_cache", "Compress Cache");
                     var btnRect = GUILayoutUtility.GetRect(new GUIContent(btnLabel), m_StyleButtonPrimary, GUILayout.Height(buttonHeight));
                     
                     if (Event.current.type == EventType.Repaint && btnRect.Contains(Event.current.mousePosition))
@@ -1897,11 +1906,11 @@ namespace VPB
                         if (stats.TotalOriginalSize > stats.TotalCompressedSize)
                         {
                             long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
-                            m_AutoOptimizeReport = "Saved " + FormatBytes(diff);
+                            m_AutoOptimizeReport = string.Format(VPBTranslation.T("hook.saved", "Saved {0}"), FormatBytes(diff));
                         }
                         else
                         {
-                            m_AutoOptimizeReport = "Done!";
+                            m_AutoOptimizeReport = VPBTranslation.T("hook.done", "Done!");
                         }
                         m_AutoOptimizeReportTimer = 5.0f;
                     }
@@ -1919,7 +1928,7 @@ namespace VPB
                     {
                         Settings.Instance.AutoOptimizeCache.Value = !Settings.Instance.AutoOptimizeCache.Value;
                     }
-                    GUILayout.Label("Optimize: No Confirmation", m_StyleInfoCardTextWrapped);
+                    GUILayout.Label(VPBTranslation.T("hook.optimize_no_confirm", "Optimize: No Confirmation"), m_StyleInfoCardTextWrapped);
                     GUILayout.EndHorizontal();
 
                     GUILayout.BeginHorizontal();
@@ -1927,7 +1936,7 @@ namespace VPB
                     {
                         Settings.Instance.Downscale8kTo4kBeforeZstdCache.Value = !Settings.Instance.Downscale8kTo4kBeforeZstdCache.Value;
                     }
-                    GUILayout.Label("Downscale 8K->4K (In Scene: " + TextureUtil.GetDownscaledActiveCount() + ")", m_StyleInfoCardTextWrapped);
+                    GUILayout.Label(string.Format(VPBTranslation.T("hook.downscale_8k_4k", "Downscale 8K->4K (In Scene: {0})"), TextureUtil.GetDownscaledActiveCount()), m_StyleInfoCardTextWrapped);
                     GUILayout.EndHorizontal();
 
                     if (m_ShowSpaceSaverWindow)
@@ -1950,10 +1959,10 @@ namespace VPB
 
                         DrawPhiSplitButtonsInRect(
                             buttonsRect,
-                            "GC",
+                            VPBTranslation.T("hook.gc", "GC"),
                             m_StyleButton,
                             () => { m_PendingGc = true; },
-                            "Refresh",
+                            VPBTranslation.T("hook.refresh", "Refresh"),
                             m_StyleButton,
                             Refresh,
                             1.618f
@@ -1965,19 +1974,19 @@ namespace VPB
                         }
                     
 
-                    DrawInfoCard(ref m_ShowGcRefreshInfo, "GC & Refresh", () =>
+                    DrawInfoCard(ref m_ShowGcRefreshInfo, VPBTranslation.T("hook.gc_refresh.title", "GC & Refresh"), () =>
                     {
                         GUILayout.Space(4);
-                        GUILayout.Label("Refresh updates the package list so VPB shows what is currently on disk (new/moved/removed files).", m_StyleInfoCardTextWrapped);
+                        GUILayout.Label(VPBTranslation.T("hook.gc_refresh.info1", "Refresh updates the package list so VPB shows what is currently on disk (new/moved/removed files)."), m_StyleInfoCardTextWrapped);
                         GUILayout.Space(2);
-                        GUILayout.Label("GC tries to free memory after heavy browsing by clearing caches and asking Unity/.NET to clean up.", m_StyleInfoCardTextWrapped);
+                        GUILayout.Label(VPBTranslation.T("hook.gc_refresh.info2", "GC tries to free memory after heavy browsing by clearing caches and asking Unity/.NET to clean up."), m_StyleInfoCardTextWrapped);
                     });
 
                     // ========== UNLOAD ALL PACKAGES ==========
                     if (!m_UnloadAllConfirmPending)
                     {
                         GUILayout.BeginHorizontal();
-                        if (GUILayout.Button("Unload All Packages", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
+                        if (GUILayout.Button(VPBTranslation.T("hook.unload_all", "Unload All Packages"), m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                         {
                             m_UnloadAllConfirmPending = true;
                         }
@@ -1989,32 +1998,32 @@ namespace VPB
                     }
                     else
                     {
-                        GUILayout.Label("Move ALL non-AutoInstall packages back to AllPackages?", m_StyleInfoCardTextWrapped);
+                        GUILayout.Label(VPBTranslation.T("hook.unload_all.confirm_q", "Move ALL non-AutoInstall packages back to AllPackages?"), m_StyleInfoCardTextWrapped);
                         GUILayout.BeginHorizontal();
-                        if (GUILayout.Button("Confirm Unload All", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
+                        if (GUILayout.Button(VPBTranslation.T("hook.unload_all.confirm_btn", "Confirm Unload All"), m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                         {
                             m_UnloadAllConfirmPending = false;
                             UnloadAllPackages();
                         }
-                        if (GUILayout.Button("Cancel", m_StyleButton, GUILayout.Width(60f), GUILayout.Height(buttonHeight)))
+                        if (GUILayout.Button(VPBTranslation.T("hook.cancel", "Cancel"), m_StyleButton, GUILayout.Width(60f), GUILayout.Height(buttonHeight)))
                         {
                             m_UnloadAllConfirmPending = false;
                         }
                         GUILayout.EndHorizontal();
                     }
-                    DrawInfoCard(ref m_ShowUnloadAllInfo, "Unload All Packages", () =>
+                    DrawInfoCard(ref m_ShowUnloadAllInfo, VPBTranslation.T("hook.unload_all", "Unload All Packages"), () =>
                     {
                         GUILayout.Space(4);
-                        GUILayout.Label("Moves all installed packages back to AllPackages/, making them uninstalled.", m_StyleInfoCardTextWrapped);
+                        GUILayout.Label(VPBTranslation.T("hook.unload_all.info1", "Moves all installed packages back to AllPackages/, making them uninstalled."), m_StyleInfoCardTextWrapped);
                         GUILayout.Space(2);
-                        GUILayout.Label("Kept installed: AutoInstall packages and their deps, plus anything referenced by the current scene (hair, clothing, etc.).", m_StyleInfoCardTextWrapped);
+                        GUILayout.Label(VPBTranslation.T("hook.unload_all.info2", "Kept installed: AutoInstall packages and their deps, plus anything referenced by the current scene (hair, clothing, etc.)."), m_StyleInfoCardTextWrapped);
                         GUILayout.Space(2);
-                        GUILayout.Label("Use this to reset your AddonPackages to a minimal state.", m_StyleInfoCardTextWrapped);
+                        GUILayout.Label(VPBTranslation.T("hook.unload_all.info3", "Use this to reset your AddonPackages to a minimal state."), m_StyleInfoCardTextWrapped);
                     });
 
                     // ========== REMOVE OLD/DAMAGED ==========
                     GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Remove Old/Damaged", m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
+                    if (GUILayout.Button(VPBTranslation.T("hook.remove_old_damaged", "Remove Old/Damaged"), m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
                     {
                         OpenRemoveWindow();
                     }
@@ -2023,18 +2032,18 @@ namespace VPB
 						ToggleInfoCard(ref m_ShowRemoveOldDamagedInfo);
                     }
                     GUILayout.EndHorizontal();
-					DrawInfoCard(ref m_ShowRemoveOldDamagedInfo, "Remove Old/Damaged", () =>
+					DrawInfoCard(ref m_ShowRemoveOldDamagedInfo, VPBTranslation.T("hook.remove_old_damaged", "Remove Old/Damaged"), () =>
 					{
 						GUILayout.Space(4);
-						GUILayout.Label("Scan for invalid vars (duplicates, invalid names) and old versions.", m_StyleInfoCardTextWrapped);
+						GUILayout.Label(VPBTranslation.T("hook.remove_old_damaged.info1", "Scan for invalid vars (duplicates, invalid names) and old versions."), m_StyleInfoCardTextWrapped);
 						GUILayout.Space(2);
-						GUILayout.Label("Opens a window to review and confirm removal.", m_StyleInfoCardTextWrapped);
+						GUILayout.Label(VPBTranslation.T("hook.remove_old_damaged.info2", "Opens a window to review and confirm removal."), m_StyleInfoCardTextWrapped);
 					});
 
 
 
                     // ========== HUB BROWSE ==========
-                    DrawPhiSplitButtons("Hub", m_StyleButton, OpenHubBrowse, "Create Gallery", m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
+                    DrawPhiSplitButtons(VPBTranslation.T("hook.hub", "Hub"), m_StyleButton, OpenHubBrowse, VPBTranslation.T("hook.create_gallery", "Create Gallery"), m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
 
 
 
@@ -2362,7 +2371,7 @@ namespace VPB
                         {
                             GUI.color = new Color(1f, 1f, 1f, m_WindowAlphaState); // Ensure text is transparent
                             double totalLoadSeconds = startupSeconds + (sceneClickSeconds.HasValue ? sceneClickSeconds.Value : 0.0);
-                            var dragText = string.Format("{0:0.0}s | Dragable Area | Toggle: {1}", totalLoadSeconds, UIKey.keyPattern);
+                            var dragText = string.Format(VPBTranslation.T("hook.drag_area_hint", "{0:0.0}s | Dragable Area | Toggle: {1}"), totalLoadSeconds, UIKey.keyPattern);
                             var drawText = dragText;
                             var maxTitleWidth = hintRect.width;
 
@@ -2400,6 +2409,11 @@ namespace VPB
                         ApplyQuickMenuPositionPreview();
                         m_QuickMenuPosWindowRect = GUILayout.Window(3, m_QuickMenuPosWindowRect, DrawQuickMenuPosWindow, "", m_StyleWindow);
                         GUI.BringWindowToFront(3);
+                    }
+                    if (m_ShowLangWindow)
+                    {
+                        m_LangWindowRect = GUILayout.Window(4, m_LangWindowRect, DrawLangWindow, "", m_StyleWindow);
+                        GUI.BringWindowToFront(4);
                     }
                 }
             }

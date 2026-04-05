@@ -322,6 +322,7 @@
     <Compile Include="src\unity-object-pool\PoolManager.cs" />
     <Compile Include="src\unity-object-pool\Singleton.cs" />
     <Compile Include="src\VamHookPlugin.cs" />
+    <Compile Include="src\VamHookPlugin.I18n.cs" />
     <Compile Include="src\VamHookPlugin.Settings.cs" />
     <Compile Include="src\VamHookPlugin.QuickMenu.cs" />
     <Compile Include="src\VamHookPlugin.State.cs" />

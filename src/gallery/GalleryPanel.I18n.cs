@@ -51,6 +51,21 @@ namespace VPB
             }
         }
 
+        // ── Content-type search placeholder ─────────────────────────────────────
+
+        internal static string GetContentTypePlaceholder(ContentType type)
+        {
+            switch (type)
+            {
+                case ContentType.Category:     return VPBTranslation.T("gallery.search.categories", "Categories...");
+                case ContentType.Creator:
+                case ContentType.HubCreators:  return VPBTranslation.T("gallery.search.creators", "Search Creators...");
+                case ContentType.Tags:
+                case ContentType.HubTags:      return VPBTranslation.T("gallery.search.tags", "Search Tags...");
+                default:                       return VPBTranslation.T("gallery.search.main", "Search...");
+            }
+        }
+
         // ── Main UI refresh ─────────────────────────────────────────────────────
 
         /// <summary>Update the first Text child of <paramref name="go"/> with a translated string.</summary>
@@ -131,6 +146,13 @@ namespace VPB
 
             // Undo / Redo labels include the stack count – delegate to the dedicated updater
             try { UpdateUndoRedoButtonLabels(); } catch { }
+
+            // Main search bar placeholder
+            if (titleSearchInput != null && titleSearchInput.placeholder is Text searchPh)
+                searchPh.text = VPBTranslation.T("gallery.search.main", "Search...");
+
+            // Pagination text
+            try { UpdatePaginationText(); } catch { }
 
             // Sync language button label to show the active locale
             if (_langBtnText != null)

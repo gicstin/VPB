@@ -85,7 +85,7 @@ namespace VPB
                     
                     if (leftSearchInput.placeholder is Text ph)
                     {
-                        ph.text = type.ToString() + "...";
+                        ph.text = GetContentTypePlaceholder(type);
                     }
                 }
             }
@@ -124,7 +124,7 @@ namespace VPB
 
                     if (rightSearchInput.placeholder is Text ph)
                     {
-                        ph.text = type.ToString() + "...";
+                        ph.text = GetContentTypePlaceholder(type);
                     }
                 }
             }

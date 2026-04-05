@@ -227,7 +227,7 @@ namespace VPB
             GUILayout.BeginVertical(m_StylePanel);
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label("Quick Menu Positions (Desktop)", m_StyleHeader);
+            GUILayout.Label(VPBTranslation.T("hook.qmpos.title", "Quick Menu Positions (Desktop)"), m_StyleHeader);
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
             {
@@ -244,7 +244,7 @@ namespace VPB
             string createXText = m_QuickMenuPosCreateXText;
             float createY = m_QuickMenuPosCreateY;
             string createYText = m_QuickMenuPosCreateYText;
-            DrawQuickMenuPosRow("Create Gallery", "QmCreate", ref createX, ref createXText, ref createY, ref createYText, xMin, xMax, yMin, yMax);
+            DrawQuickMenuPosRow(VPBTranslation.T("hook.qmpos.create_gallery", "Create Gallery"), "QmCreate", ref createX, ref createXText, ref createY, ref createYText, xMin, xMax, yMin, yMax);
             m_QuickMenuPosCreateX = createX;
             m_QuickMenuPosCreateXText = createXText;
             m_QuickMenuPosCreateY = createY;
@@ -254,7 +254,7 @@ namespace VPB
             {
                 m_QuickMenuPosUseSameCreateInVR = !m_QuickMenuPosUseSameCreateInVR;
             }
-            GUILayout.Label("Use same position in VR mode");
+            GUILayout.Label(VPBTranslation.T("hook.qmpos.same_vr", "Use same position in VR mode"));
             GUILayout.EndHorizontal();
 
             if (!m_QuickMenuPosUseSameCreateInVR)
@@ -264,7 +264,7 @@ namespace VPB
                 string createXVRText = m_QuickMenuPosCreateXVRText;
                 float createYVR = m_QuickMenuPosCreateYVR;
                 string createYVRText = m_QuickMenuPosCreateYVRText;
-                DrawQuickMenuPosRow("Create Gallery (VR)", "QmCreateVR", ref createXVR, ref createXVRText, ref createYVR, ref createYVRText, xMin, xMax, yMin, yMax);
+                DrawQuickMenuPosRow(VPBTranslation.T("hook.qmpos.create_gallery_vr", "Create Gallery (VR)"), "QmCreateVR", ref createXVR, ref createXVRText, ref createYVR, ref createYVRText, xMin, xMax, yMin, yMax);
                 m_QuickMenuPosCreateXVR = createXVR;
                 m_QuickMenuPosCreateXVRText = createXVRText;
                 m_QuickMenuPosCreateYVR = createYVR;
@@ -274,15 +274,15 @@ namespace VPB
             GUILayout.Space(8);
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Cancel", m_StyleButton, GUILayout.Height(26)))
+            if (GUILayout.Button(VPBTranslation.T("hook.cancel", "Cancel"), m_StyleButton, GUILayout.Height(26)))
             {
                 CloseQuickMenuPositionWindow(false);
             }
-            if (GUILayout.Button("Defaults", m_StyleButton, GUILayout.Height(26)))
+            if (GUILayout.Button(VPBTranslation.T("hook.defaults", "Defaults"), m_StyleButton, GUILayout.Height(26)))
             {
                 ResetQuickMenuPositionDefaults();
             }
-            if (GUILayout.Button("Save", m_StyleButtonPrimary, GUILayout.Height(26)))
+            if (GUILayout.Button(VPBTranslation.T("hook.save", "Save"), m_StyleButtonPrimary, GUILayout.Height(26)))
             {
                 CloseQuickMenuPositionWindow(true);
             }
