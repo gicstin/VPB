@@ -550,6 +550,28 @@ namespace VPB
             "torso", "hip", "arms", "hands", "legs", "feet", "neck", "full body"
         };
 
+        private static readonly string[] s_cosmeticKeywords =
+        {
+            "lash", "lashes", "makeup", "shadow", "liner", "eyeliner", "eyeshadow", "eyesdw", "brow",
+            "gloss", "lipstick", "lip_", "lips", "nail", "toenail", "piercing", "earring",
+            "reflection", "eye_reflection", "eyes_reflection", "tears", "tear",
+            "teeth", "head flower", "glasses", "tattoo", "decal", "lash_female", "lash_male",
+            "wetline", "wet_line", "eyelid", "cornea", "sclera", "contact", "overlay",
+            "iris_tex", "eyeball", "pupil"
+        };
+
+        private static readonly string[] s_garmentKeywords =
+        {
+            "pant", "skirt", "short", "shirt", "top", "bra", "dress", "suit", "jacket", "coat",
+            "sock", "shoe", "boot", "heel", "glove", "underwear", "thong", "brief", "jean",
+            "bodysuit", "sweater", "stocking", "lingerie", "bikini", "bottom", "corset", "panty",
+            "winter_clothes", "costume_o", "jean_short", "sandals", "uggs", "baggy",
+            "outfit", "apron", "vest", "legging", "hoodie", "costume", "uniform", "robe", "cloak",
+            "tunic", "kimono", "yukata", "leotard", "catsuit", "jumpsuit", "overalls", "sarong",
+            "tights", "cardigan", "blazer", "necker", "scarf", "belt", "harness", "swimwear",
+            "swimsuit", "idol", "nighty", "nightie", "pajama", "pyjama"
+        };
+
         private static string PackageUidFirstSegment(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return "";
@@ -603,18 +625,9 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(uid)) return false;
             string s = uid.ToLowerInvariant();
-            string[] bad =
+            for (int i = 0; i < s_cosmeticKeywords.Length; i++)
             {
-                "lash", "lashes", "makeup", "shadow", "liner", "eyeliner", "eyeshadow", "eyesdw", "brow",
-                "gloss", "lipstick", "lip_", "lips", "nail", "toenail", "piercing", "earring",
-                "reflection", "eye_reflection", "eyes_reflection", "tears", "tear",
-                "teeth", "head flower", "glasses", "tattoo", "decal", "lash_female", "lash_male",
-                "wetline", "wet_line", "eyelid", "cornea", "sclera", "contact", "overlay",
-                "iris_tex", "eyeball", "pupil"
-            };
-            for (int i = 0; i < bad.Length; i++)
-            {
-                if (s.Contains(bad[i])) return true;
+                if (s.Contains(s_cosmeticKeywords[i])) return true;
             }
             // Check if any package name segment (before first colon) is or starts with "eye"/"eyes".
             // e.g. "Hunting-Succubus.Eye_WetLine_Test.1:..." → segment "eye" → cosmetic.
@@ -636,20 +649,9 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(uid)) return false;
             string s = uid.ToLowerInvariant();
-            string[] good =
+            for (int i = 0; i < s_garmentKeywords.Length; i++)
             {
-                "pant", "skirt", "short", "shirt", "top", "bra", "dress", "suit", "jacket", "coat",
-                "sock", "shoe", "boot", "heel", "glove", "underwear", "thong", "brief", "jean",
-                "bodysuit", "sweater", "stocking", "lingerie", "bikini", "bottom", "corset", "panty",
-                "winter_clothes", "costume_o", "jean_short", "sandals", "uggs", "baggy",
-                "outfit", "apron", "vest", "legging", "hoodie", "costume", "uniform", "robe", "cloak",
-                "tunic", "kimono", "yukata", "leotard", "catsuit", "jumpsuit", "overalls", "sarong",
-                "tights", "cardigan", "blazer", "necker", "scarf", "belt", "harness", "swimwear",
-                "swimsuit", "idol", "nighty", "nightie", "pajama", "pyjama"
-            };
-            for (int i = 0; i < good.Length; i++)
-            {
-                if (s.Contains(good[i])) return true;
+                if (s.Contains(s_garmentKeywords[i])) return true;
             }
             return false;
         }
@@ -1633,8 +1635,13 @@ namespace VPB
 
                     if (itemType == ItemType.Appearance && atom.type == "Person")
                     {
-                        bool ok = PushUndoSnapshotForFullAtomState(atom);
-                        if (!ok)
+                        if (string.Equals(appearanceMode, "clothingOnly", StringComparison.Ordinal))
+                        {
+                            // Scoped snapshot: only captures clothing state, so undo never touches hair
+                            PushUndoSnapshotForClothingOnly(atom);
+                        }
+                        else
+                        if (!PushUndoSnapshotForFullAtomState(atom))
                         {
                             LogUtil.LogWarning("[VPB] Full atom undo snapshot unavailable; falling back to storable snapshot for " + atom.uid);
 

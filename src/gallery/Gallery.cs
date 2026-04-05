@@ -12,6 +12,7 @@ namespace VPB
         public static Gallery singleton;
 
         private DateTime lastObservedPackageRefreshTime = DateTime.MinValue;
+        private bool _hasHadInitialRefresh = false;
         
         // Suppress auto-refresh when gallery is loading content (to preserve scroll position and state)
         private static bool suppressAutoRefresh = false;
@@ -88,8 +89,12 @@ namespace VPB
         {
             if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryManualRefreshOnly)
             {
-                LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
-                return;
+                if (_hasHadInitialRefresh)
+                {
+                    LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
+                    return;
+                }
+                LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh INITIAL (manual refresh only, first-run exemption)");
             }
 
             if (IsSuppressed())
@@ -105,6 +110,8 @@ namespace VPB
 
             if (refreshTime <= lastObservedPackageRefreshTime) return;
             lastObservedPackageRefreshTime = refreshTime;
+
+            _hasHadInitialRefresh = true;
 
             if (autoRefreshCoroutine != null)
             {

@@ -14,141 +14,71 @@ using SimpleJSON;
 namespace VPB
 {
     public partial class UIDraggableItem : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-{        private HashSet<string> GetHairRegions(FileEntry entry)
+{
+        private HashSet<string> GetRegionsImpl(FileEntry entry, string cachePrefix, List<string> regionTagSet, Func<VarFileEntry, List<string>> getVarTags, Func<string, HashSet<string>> heuristicFn)
         {
             if (entry == null) return new HashSet<string>();
-            string cacheKey = "hair:" + entry.Uid;
+            string cacheKey = cachePrefix + entry.Uid;
             if (_globalRegionCache.TryGetValue(cacheKey, out HashSet<string> cached)) return cached;
 
             HashSet<string> regions = new HashSet<string>();
-            
+
             // 1. Try VarFileEntry pre-parsed tags
-            if (entry is VarFileEntry vfe && vfe.HairTags != null && vfe.HairTags.Count > 0)
+            if (entry is VarFileEntry vfe)
             {
-                foreach (var t in vfe.HairTags)
+                List<string> varTags = getVarTags(vfe);
+                if (varTags != null && varTags.Count > 0)
                 {
-                    string lower = t.ToLowerInvariant();
-                    if (TagFilter.HairRegionTags.Contains(lower))
+                    foreach (var t in varTags)
                     {
-                        regions.Add(lower);
+                        string lower = t.ToLowerInvariant();
+                        if (regionTagSet.Contains(lower)) regions.Add(lower);
                     }
                 }
             }
 
-            // 2. If no regions found yet, try reading file content (for loose files or missing cache)
-            if (regions.Count == 0 && entry != null)
+            // 2. Try reading file content (for loose files or missing cache)
+            if (regions.Count == 0)
             {
                 string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
                 if (ext == ".vap" || ext == ".json" || ext == ".vam")
                 {
-                    try 
+                    try
                     {
                         using (var reader = entry.OpenStreamReader())
                         {
-                            string content = reader.ReadToEnd();
-                            JSONNode node = JSON.Parse(content);
+                            JSONNode node = JSON.Parse(reader.ReadToEnd());
                             if (node != null && node["tags"] != null)
                             {
-                                 string tagStr = node["tags"].Value;
-                                 if (!string.IsNullOrEmpty(tagStr))
-                                 {
-                                     var tags = tagStr.Split(',').Select(t => t.Trim().ToLowerInvariant());
-                                     foreach(var t in tags)
-                                     {
-                                         if (TagFilter.HairRegionTags.Contains(t))
-                                         {
-                                             regions.Add(t);
-                                         }
-                                     }
-                                 }
+                                string tagStr = node["tags"].Value;
+                                if (!string.IsNullOrEmpty(tagStr))
+                                {
+                                    foreach (var t in tagStr.Split(',').Select(x => x.Trim().ToLowerInvariant()))
+                                        if (regionTagSet.Contains(t)) regions.Add(t);
+                                }
                             }
                         }
                     }
-                    catch(Exception ex) 
+                    catch (Exception ex)
                     {
                         LogUtil.LogError("Error parsing tags from file " + entry.Path + ": " + ex.Message);
                     }
                 }
             }
 
-            // 3. If still no regions, try filename heuristics
-            if (regions.Count == 0 && entry != null)
-            {
-                string name = Path.GetFileNameWithoutExtension(entry.Path);
-                regions = GetRegionsFromHeuristics(name);
-            }
-            
-            if (entry != null) _globalRegionCache[cacheKey] = regions;
+            // 3. Filename heuristics
+            if (regions.Count == 0)
+                regions = heuristicFn(Path.GetFileNameWithoutExtension(entry.Path));
+
+            _globalRegionCache[cacheKey] = regions;
             return regions;
         }
 
-        private HashSet<string> GetClothingRegions(FileEntry entry)
-        {
-            if (entry == null) return new HashSet<string>();
-            string cacheKey = "clothing:" + entry.Uid;
-            if (_globalRegionCache.TryGetValue(cacheKey, out HashSet<string> cached)) return cached;
-            
-            HashSet<string> regions = new HashSet<string>();
-            
-            // 1. Try VarFileEntry pre-parsed tags
-            if (entry is VarFileEntry vfe && vfe.ClothingTags != null && vfe.ClothingTags.Count > 0)
-            {
-                foreach (var t in vfe.ClothingTags)
-                {
-                    string lower = t.ToLowerInvariant();
-                    if (TagFilter.ClothingRegionTags.Contains(lower))
-                    {
-                        regions.Add(lower);
-                    }
-                }
-            }
+        private HashSet<string> GetHairRegions(FileEntry entry) =>
+            GetRegionsImpl(entry, "hair:", TagFilter.HairRegionTags, vfe => vfe.HairTags, GetRegionsFromHeuristics);
 
-            // 2. Try file content
-            if (regions.Count == 0 && entry != null)
-            {
-                string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
-                if (ext == ".vap" || ext == ".json" || ext == ".vam")
-                {
-                    try 
-                    {
-                        using (var reader = entry.OpenStreamReader())
-                        {
-                            string content = reader.ReadToEnd();
-                            JSONNode node = JSON.Parse(content);
-                            if (node != null && node["tags"] != null)
-                            {
-                                 string tagStr = node["tags"].Value;
-                                 if (!string.IsNullOrEmpty(tagStr))
-                                 {
-                                     var tags = tagStr.Split(',').Select(t => t.Trim().ToLowerInvariant());
-                                     foreach(var t in tags)
-                                     {
-                                         if (TagFilter.ClothingRegionTags.Contains(t))
-                                         {
-                                             regions.Add(t);
-                                         }
-                                     }
-                                 }
-                            }
-                        }
-                    }
-                    catch (Exception) 
-                    {
-                         // ignore
-                    }
-                }
-            }
-            
-            // 3. Heuristics
-            if (regions.Count == 0 && entry != null)
-            {
-                string name = Path.GetFileNameWithoutExtension(entry.Path);
-                regions = GetClothingRegionsFromHeuristics(name);
-            }
-            
-            if (entry != null) _globalRegionCache[cacheKey] = regions;
-            return regions;
-        }
+        private HashSet<string> GetClothingRegions(FileEntry entry) =>
+            GetRegionsImpl(entry, "clothing:", TagFilter.ClothingRegionTags, vfe => vfe.ClothingTags, GetClothingRegionsFromHeuristics);
 
         private static HashSet<string> GetRegionsFromHeuristics(string name)
         {

@@ -93,6 +93,102 @@ namespace VPB
             }
         }
 
+        private static bool IsClothingOnlyStorableId(string sid)
+        {
+            if (string.IsNullOrEmpty(sid)) return false;
+            if (string.Equals(sid, "Clothing", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(sid, "ClothingPresets", StringComparison.OrdinalIgnoreCase)) return true;
+            if (sid.IndexOf("clothingItem", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (sid.StartsWith("wearable", StringComparison.OrdinalIgnoreCase)) return true;
+            if (IsClothingAssetPathInUid(sid)) return true;
+            return false;
+        }
+
+        private void PushUndoSnapshotForClothingOnly(Atom target)
+        {
+            if (Panel == null || target == null) return;
+            try
+            {
+                string atomUid = target.uid;
+
+                // Capture geometry clothing: toggles only (not hair:)
+                Dictionary<string, bool> clothingToggles = null;
+                JSONStorable geo = target.GetStorableByID("geometry");
+                if (geo != null)
+                {
+                    List<string> names = geo.GetBoolParamNames();
+                    if (names != null)
+                    {
+                        clothingToggles = new Dictionary<string, bool>();
+                        foreach (string key in names)
+                        {
+                            if (key.StartsWith("clothing:"))
+                            {
+                                JSONStorableBool b = geo.GetBoolJSONParam(key);
+                                if (b != null) clothingToggles[key] = b.val;
+                            }
+                        }
+                    }
+                }
+
+                // Capture Clothing storable + per-item sub-preset storables
+                List<JSONClass> clothingSnaps = new List<JSONClass>();
+                try
+                {
+                    foreach (var sid in target.GetStorableIDs())
+                    {
+                        if (!IsClothingOnlyStorableId(sid)) continue;
+                        JSONStorable s = null;
+                        try { s = target.GetStorableByID(sid); } catch { }
+                        if (s == null) continue;
+                        JSONClass snap = null;
+                        try { snap = s.GetJSON(); } catch { }
+                        if (snap != null) clothingSnaps.Add(snap);
+                    }
+                }
+                catch { }
+
+                Panel.PushUndo(() =>
+                {
+                    Atom undoAtom = null;
+                    try { undoAtom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { }
+                    if (undoAtom == null) return;
+
+                    if (clothingToggles != null)
+                    {
+                        JSONStorable undoGeo = undoAtom.GetStorableByID("geometry");
+                        if (undoGeo != null)
+                        {
+                            foreach (var kvp in clothingToggles)
+                            {
+                                JSONStorableBool b = undoGeo.GetBoolJSONParam(kvp.Key);
+                                if (b != null) b.val = kvp.Value;
+                            }
+                        }
+                    }
+
+                    for (int i = 0; i < clothingSnaps.Count; i++)
+                    {
+                        JSONClass snap = clothingSnaps[i];
+                        if (snap == null) continue;
+                        string sid = null;
+                        try { sid = snap["id"].Value; } catch { }
+                        if (string.IsNullOrEmpty(sid)) continue;
+                        JSONStorable s = null;
+                        try { s = undoAtom.GetStorableByID(sid); } catch { }
+                        if (s == null) continue;
+                        try { s.RestoreFromJSON(snap); } catch { }
+                    }
+
+                    LogUtil.Log("[VPB] Undo performed on " + atomUid + " (ClothingOnly)");
+                });
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] PushUndoSnapshotForClothingOnly exception: " + ex);
+            }
+        }
+
         private bool PushUndoSnapshotForFullAtomState(Atom atom)
         {
             if (Panel == null || atom == null)
