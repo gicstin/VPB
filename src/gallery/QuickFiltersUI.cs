@@ -181,7 +181,7 @@ namespace VPB
 
         private void CreateSaveButton()
         {
-            GameObject btn = UI.CreateUIButton(scrollContentGO, 240, 50, "Save Preset", 20, 0, 0, AnchorPresets.middleCenter, () => {
+            GameObject btn = UI.CreateUIButton(scrollContentGO, 240, 50, VPBTranslation.T("quickfilters.save_preset", "Save Preset"), 20, 0, 0, AnchorPresets.middleCenter, () => {
                 CaptureCurrentFilter();
                 // Removed SetVisible(false) so list stays open
             });
@@ -252,7 +252,7 @@ namespace VPB
             del.OnHoverChange += (enter) => {
                 if (enter && panel != null) 
                 {
-                    string info = $"Apply '{entry.Name}' (Drag to reorder, Right-click to manage)";
+                    string info = string.Format(VPBTranslation.T("quickfilters.apply_hint", "Apply '{0}' (Drag to reorder, Right-click to manage)"), entry.Name);
                     panel.SetStatus(info);
                 }
                 else if (panel != null) panel.SetStatus(null);
@@ -303,8 +303,8 @@ namespace VPB
         {
             var options = new List<ContextMenuPanel.Option>();
             
-            options.Add(new ContextMenuPanel.Option("Rename", () => {
-                panel.DisplayTextInput("Rename Filter", entry.Name, (string val) => {
+            options.Add(new ContextMenuPanel.Option(VPBTranslation.T("quickfilters.ctx.rename", "Rename"), () => {
+                panel.DisplayTextInput(VPBTranslation.T("quickfilters.rename_title", "Rename Filter"), entry.Name, (string val) => {
                     if (!string.IsNullOrEmpty(val))
                     {
                         QuickFilterSettings.Instance.RenameFilter(entry, val);
@@ -313,22 +313,32 @@ namespace VPB
                 });
             }));
 
-            options.Add(new ContextMenuPanel.Option("Change Color", () => {
-                panel.DisplayColorPicker("Edit Color", entry.ButtonColor, (Color val) => {
+            options.Add(new ContextMenuPanel.Option(VPBTranslation.T("quickfilters.ctx.change_color", "Change Color"), () => {
+                panel.DisplayColorPicker(VPBTranslation.T("quickfilters.edit_color_title", "Edit Color"), entry.ButtonColor, (Color val) => {
                     entry.ButtonColor = val;
                     QuickFilterSettings.Instance.Save();
                     Refresh();
                 });
             }));
 
-            options.Add(new ContextMenuPanel.Option("Delete", () => {
-                panel.DisplayConfirm("Delete Filter", $"Are you sure you want to delete '{entry.Name}'?", () => {
+            options.Add(new ContextMenuPanel.Option(VPBTranslation.T("quickfilters.ctx.delete", "Delete"), () => {
+                panel.DisplayConfirm(VPBTranslation.T("quickfilters.delete_title", "Delete Filter"), string.Format(VPBTranslation.T("quickfilters.delete_confirm", "Are you sure you want to delete '{0}'?"), entry.Name), () => {
                     QuickFilterSettings.Instance.RemoveFilter(entry);
                     Refresh();
                 });
             }));
 
-            ContextMenuPanel.Instance.Show(btn.transform.position, options, "Filter: " + entry.Name);
+            ContextMenuPanel.Instance.Show(btn.transform.position, options, VPBTranslation.T("quickfilters.ctx.header_prefix", "Filter: ") + entry.Name);
+        }
+
+        public void RefreshLocalizedUi()
+        {
+            Refresh();
+            if (containerGO != null)
+            {
+                foreach (Text t in containerGO.GetComponentsInChildren<Text>(true))
+                    VPBUiFont.ApplyTo(t);
+            }
         }
     }
 }

@@ -754,6 +754,8 @@ namespace VPB
 
             LogUtil.MarkPluginAwake();
 
+            try { VPBTranslation.InitializeFromConfig(); } catch { }
+
             VdsLauncher.ParseOnce();
 
             try

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -315,6 +315,8 @@
     <Compile Include="src\Settings.cs" />
     <Compile Include="src\SettingsPanel.cs" />
     <Compile Include="src\VPBConfig.cs" />
+    <Compile Include="src\VPBTranslation.cs" />
+    <Compile Include="src\VPBUiFont.cs" />
     <Compile Include="src\unity-object-pool\ObjectPool.cs" />
     <Compile Include="src\unity-object-pool\ObjectPoolContainer.cs" />
     <Compile Include="src\unity-object-pool\PoolManager.cs" />
@@ -350,6 +352,7 @@
     <Compile Include="src\gallery\GalleryPanel.Sorting.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />
     <Compile Include="src\gallery\GalleryPanel.Thumbnails.cs" />
+    <Compile Include="src\gallery\GalleryPanel.I18n.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Overlays.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Layout.cs" />
@@ -458,7 +461,20 @@
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\scripts\VPB.dll"
-copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB.dll"</PostBuildEvent>
+    <!-- DLL + vpb_translations + vpb_fonts: same PostBuildEvent so copies always run with the DLL (AfterTargets=PostBuildEvent is unreliable across MSBuild/VS). Robocopy: exit 0-7 = success. -->
+    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\plugins\VPB.dll"
+copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB.dll"
+if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations\" (
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations" "$(VaMPath)\BepInEx\plugins\vpb_translations" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+)
+if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts\" (
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts" "$(VaMPath)\BepInEx\plugins\vpb_fonts" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+)</PostBuildEvent>
   </PropertyGroup>
 </Project>

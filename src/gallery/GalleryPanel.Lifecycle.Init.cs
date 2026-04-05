@@ -147,7 +147,7 @@ namespace VPB
             GameObject ctTextGO = new GameObject("Text");
             ctTextGO.transform.SetParent(collapseTriggerGO.transform, false);
             collapseHandleText = ctTextGO.AddComponent<Text>();
-            collapseHandleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            VPBUiFont.ApplyTo(collapseHandleText);
             collapseHandleText.text = "<";
             collapseHandleText.fontSize = 30;
             collapseHandleText.color = new Color(1, 1, 1, 0.5f);
@@ -213,7 +213,7 @@ namespace VPB
             GameObject titleGO = new GameObject("Title");
             titleGO.transform.SetParent(titleBarGO.transform, false);
             titleText = titleGO.AddComponent<Text>();
-            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            VPBUiFont.ApplyTo(titleText);
             titleText.fontSize = 28;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.MiddleLeft;
@@ -221,13 +221,13 @@ namespace VPB
             titleRT.anchorMin = new Vector2(0, 0.5f);
             titleRT.anchorMax = new Vector2(0, 0.5f);
             titleRT.pivot = new Vector2(0, 0.5f);
-            titleRT.anchoredPosition = new Vector2(15, 0);
+            titleRT.anchoredPosition = new Vector2(60, 10);
             titleRT.sizeDelta = new Vector2(300, 40);
 
             GameObject fpsGO = new GameObject("FPS");
             fpsGO.transform.SetParent(titleBarGO.transform, false);
             fpsText = fpsGO.AddComponent<Text>();
-            fpsText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            VPBUiFont.ApplyTo(fpsText);
             fpsText.fontSize = 20;
             fpsText.color = Color.white;
             fpsText.alignment = TextAnchor.MiddleRight;
@@ -235,8 +235,10 @@ namespace VPB
             fpsRT.anchorMin = new Vector2(1, 0.5f);
             fpsRT.anchorMax = new Vector2(1, 0.5f);
             fpsRT.pivot = new Vector2(1, 0.5f);
-            fpsRT.anchoredPosition = new Vector2(-120, 0);
+            fpsRT.anchoredPosition = new Vector2(-112, 0);
             fpsRT.sizeDelta = new Vector2(100, 40);
+
+            SetupLanguageSwitcher(titleBarGO);
 
             titleSearchInput = CreateSearchInput(titleBarGO, 240f, (val) => {
                 SetNameFilter(val);
@@ -249,38 +251,38 @@ namespace VPB
             titleSearchRT.sizeDelta = new Vector2(240, 40);
 
             // File Sort Type Button
-            GameObject fileSortTypeBtn = UI.CreateUIButton(titleBarGO, 35, 40, "Az", 16, 0, 0, AnchorPresets.middleCenter, null);
+            GameObject fileSortTypeBtn = UI.CreateUIButton(titleBarGO, 35, 40, VPBTranslation.T("gallery.sort.az", "Az"), 16, 0, 0, AnchorPresets.middleCenter, null);
             fileSortTypeBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             fileSortTypeBtn.GetComponentInChildren<Text>().color = Color.white;
             RectTransform fileSortTypeRT = fileSortTypeBtn.GetComponent<RectTransform>();
             fileSortTypeRT.anchorMin = new Vector2(0.5f, 0.5f);
             fileSortTypeRT.anchorMax = new Vector2(0.5f, 0.5f);
             fileSortTypeRT.pivot = new Vector2(0.5f, 0.5f);
-            fileSortTypeRT.anchoredPosition = new Vector2(120, 0); // To the right of search
+            fileSortTypeRT.anchoredPosition = new Vector2(108, 0); // To the right of search
 
             fileSortTypeText = fileSortTypeBtn.GetComponentInChildren<Text>();
 
             Button fileSortTypeButton = fileSortTypeBtn.GetComponent<Button>();
             fileSortTypeButton.onClick.RemoveAllListeners();
             fileSortTypeButton.onClick.AddListener(() => CycleSort("Files", fileSortTypeText, fileSortDirText));
-            AddTooltip(fileSortTypeBtn, "Cycle sort field (Az→Dt→Sz→Rt)");
+            AddTooltip(fileSortTypeBtn, "gallery.tooltip.sort_cycle_field", "Cycle sort field (Az→Dt→Sz→Rt)");
 
             // File Sort Direction Button
-            GameObject fileSortDirBtn = UI.CreateUIButton(titleBarGO, 35, 40, "↑", 16, 0, 0, AnchorPresets.middleCenter, null);
+            GameObject fileSortDirBtn = UI.CreateUIButton(titleBarGO, 35, 40, VPBTranslation.T("gallery.sort.up", "↑"), 16, 0, 0, AnchorPresets.middleCenter, null);
             fileSortDirBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             fileSortDirBtn.GetComponentInChildren<Text>().color = Color.white;
             RectTransform fileSortDirRT = fileSortDirBtn.GetComponent<RectTransform>();
             fileSortDirRT.anchorMin = new Vector2(0.5f, 0.5f);
             fileSortDirRT.anchorMax = new Vector2(0.5f, 0.5f);
             fileSortDirRT.pivot = new Vector2(0.5f, 0.5f);
-            fileSortDirRT.anchoredPosition = new Vector2(150, 0); // To the right of type button
+            fileSortDirRT.anchoredPosition = new Vector2(151, 0); // To the right of type button
 
             fileSortDirText = fileSortDirBtn.GetComponentInChildren<Text>();
 
             Button fileSortDirButton = fileSortDirBtn.GetComponent<Button>();
             fileSortDirButton.onClick.RemoveAllListeners();
             fileSortDirButton.onClick.AddListener(() => ToggleSortDirection("Files", fileSortTypeText, fileSortDirText));
-            AddTooltip(fileSortDirBtn, "Toggle sort direction (↑/↓)");
+            AddTooltip(fileSortDirBtn, "gallery.tooltip.sort_toggle_dir", "Toggle sort direction (↑/↓)");
 
             // Keep fileSortBtnText for compatibility with existing code
             fileSortBtnText = fileSortTypeText;
@@ -288,7 +290,7 @@ namespace VPB
             // Init File Sort State
             UpdateSortButtonText(fileSortTypeText, fileSortDirText, GetSortState("Files"));
 
-            ratingSortToggleBtn = UI.CreateUIButton(titleBarGO, 40, 40, "★", 18, 0, 0, AnchorPresets.middleCenter, null);
+            ratingSortToggleBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.sort.star", "★"), 18, 0, 0, AnchorPresets.middleCenter, null);
             ratingSortToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             ratingSortToggleBtnText = ratingSortToggleBtn.GetComponentInChildren<Text>();
             ratingSortToggleBtnText.color = Color.white;
@@ -296,29 +298,29 @@ namespace VPB
             ratingSortToggleRT.anchorMin = new Vector2(0.5f, 0.5f);
             ratingSortToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
             ratingSortToggleRT.pivot = new Vector2(0.5f, 0.5f);
-            ratingSortToggleRT.anchoredPosition = new Vector2(180, 0);
+            ratingSortToggleRT.anchoredPosition = new Vector2(197, 0);
             Button ratingSortToggleButton = ratingSortToggleBtn.GetComponent<Button>();
             ratingSortToggleButton.onClick.RemoveAllListeners();
             ratingSortToggleButton.onClick.AddListener(ToggleRatingSort);
-            AddTooltip(ratingSortToggleBtn, "Show Only Rated Items");
+            AddTooltip(ratingSortToggleBtn, "gallery.tooltip.rated_only", "Show Only Rated Items");
             SyncRatingSortToggleState();
 
             // Refresh Button (to the right of Star)
-            GameObject refreshBtn = UI.CreateUIButton(titleBarGO, 90, 40, "Refresh", 16, 0, 0, AnchorPresets.middleCenter, null);
+            GameObject refreshBtn = UI.CreateUIButton(titleBarGO, 90, 40, VPBTranslation.T("gallery.title.refresh", "Refresh"), 16, 0, 0, AnchorPresets.middleCenter, null);
             refreshBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             refreshBtn.GetComponentInChildren<Text>().color = Color.white;
             RectTransform refreshRT = refreshBtn.GetComponent<RectTransform>();
             refreshRT.anchorMin = new Vector2(0.5f, 0.5f);
             refreshRT.anchorMax = new Vector2(0.5f, 0.5f);
             refreshRT.pivot = new Vector2(0.5f, 0.5f);
-            refreshRT.anchoredPosition = new Vector2(255, 0);
+            refreshRT.anchoredPosition = new Vector2(270, 0);
 
             Button refreshButton = refreshBtn.GetComponent<Button>();
             refreshButton.onClick.RemoveAllListeners();
             refreshButton.onClick.AddListener(() => {
                 try
                 {
-                    if (!IsHubMode) ShowTemporaryStatus("Refreshing packages...", 1.5f);
+                    if (!IsHubMode) ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
                     try { MVR.FileManagement.FileManager.Refresh(); } catch { }
                     FileManager.Refresh(true, false, false);
                     creatorsCached = false;
@@ -329,13 +331,15 @@ namespace VPB
                 catch (Exception ex)
                 {
                     LogUtil.LogError("[VPB] Refresh packages failed: " + ex);
-                    ShowTemporaryStatus("Refresh failed. See log.", 2f);
+                    ShowTemporaryStatus(VPBTranslation.T("gallery.status.refresh_failed", "Refresh failed. See log."), 2f);
                 }
             });
-            AddTooltip(refreshBtn, "Refresh Packages");
+            titleBarRefreshBtnText = refreshBtn.GetComponentInChildren<Text>();
+            VPBUiFont.ApplyTo(titleBarRefreshBtnText);
+            AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
 
             // Filter Presets Button
-            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 130, 45, "Filter Presets", 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
+            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 130, 45, VPBTranslation.T("gallery.title.filter_presets", "Filter Presets"), 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
             qfToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             quickFiltersToggleBtnText = qfToggleBtn.GetComponentInChildren<Text>();
             quickFiltersToggleBtnText.color = Color.white;
@@ -344,7 +348,8 @@ namespace VPB
             qfToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
             qfToggleRT.pivot = new Vector2(0.5f, 0.5f);
             qfToggleRT.anchoredPosition = new Vector2(-240, 0); // Adjusted for wider button
-            AddTooltip(qfToggleBtn, "Filter Presets");
+            VPBUiFont.ApplyTo(quickFiltersToggleBtnText);
+            AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets");
 
             // Tab Area - Create for all panels so undocked can clone/filter
             if (true)
@@ -377,7 +382,7 @@ namespace VPB
                 rightSubTabScrollGO.SetActive(false); // Hidden by default
 
                 // Right Sub Sort Button
-                rightSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "Az↑", 14, 0, 0, AnchorPresets.topRight, null);
+                rightSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.sort.az_up", "Az↑"), 14, 0, 0, AnchorPresets.topRight, null);
                 rightSubSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
                 rightSubSortBtn.GetComponentInChildren<Text>().color = Color.white;
                 RectTransform rsSubRT = rightSubSortBtn.GetComponent<RectTransform>();
@@ -409,7 +414,7 @@ namespace VPB
                 rSubSearchRT.anchoredPosition = new Vector2(-10, -10);
                 
                 // Right Sub Clear Button
-                rightSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, "Clear Selected", 14, 0, 0, AnchorPresets.bottomRight, () => {
+                rightSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomRight, () => {
                     activeTags.Clear();
                     currentSceneSourceFilter = "";
                     currentAppearanceSourceFilter = "";
@@ -434,7 +439,7 @@ namespace VPB
                 rightSubSearchInput.gameObject.SetActive(false);
 
                 // Right Sort Button
-                rightSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "Az↑", 14, 0, 0, AnchorPresets.topRight, null);
+                rightSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.sort.az_up", "Az↑"), 14, 0, 0, AnchorPresets.topRight, null);
                 rightSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
                 rightSortBtn.GetComponentInChildren<Text>().color = Color.white;
                 RectTransform rsRT = rightSortBtn.GetComponent<RectTransform>();
@@ -454,7 +459,7 @@ namespace VPB
                 });
 
                 // Right Refresh Button (to the right of Sort, still left of Search)
-                rightRefreshBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "⟳", 18, 0, 0, AnchorPresets.topRight, null);
+                rightRefreshBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.icon.refresh", "⟳"), 18, 0, 0, AnchorPresets.topRight, null);
                 rightRefreshBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
                 rightRefreshBtn.GetComponentInChildren<Text>().color = Color.white;
                 RectTransform rrRT = rightRefreshBtn.GetComponent<RectTransform>();
@@ -469,7 +474,7 @@ namespace VPB
                 rightRefreshButton.onClick.AddListener(() => {
                     try
                     {
-                        if (!IsHubMode) ShowTemporaryStatus("Refreshing packages...", 1.5f);
+                        if (!IsHubMode) ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
                         try { MVR.FileManagement.FileManager.Refresh(); } catch { }
                         FileManager.Refresh(true, false, false);
                         creatorsCached = false;
@@ -480,10 +485,10 @@ namespace VPB
                     catch (Exception ex)
                     {
                         LogUtil.LogError("[VPB] Refresh packages failed: " + ex);
-                        ShowTemporaryStatus("Refresh failed. See log.", 2f);
+                        ShowTemporaryStatus(VPBTranslation.T("gallery.status.refresh_failed", "Refresh failed. See log."), 2f);
                     }
                 });
-                AddTooltip(rightRefreshBtn, "Refresh Packages");
+                AddTooltip(rightRefreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
 
                 rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
@@ -531,7 +536,7 @@ namespace VPB
                 leftSubTabScrollGO.SetActive(false); // Hidden by default
 
                 // Left Sub Sort Button
-                leftSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "Az↑", 14, 0, 0, AnchorPresets.topLeft, null);
+                leftSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.sort.az_up", "Az↑"), 14, 0, 0, AnchorPresets.topLeft, null);
                 leftSubSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
                 leftSubSortBtn.GetComponentInChildren<Text>().color = Color.white;
                 RectTransform lsSubRT = leftSubSortBtn.GetComponent<RectTransform>();
@@ -563,7 +568,7 @@ namespace VPB
                 lSubSearchRT.anchoredPosition = new Vector2(55, -10);
 
                 // Left Sub Clear Button
-                leftSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, "Clear Selected", 14, 0, 0, AnchorPresets.bottomLeft, () => {
+                leftSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomLeft, () => {
                     activeTags.Clear();
                     currentSceneSourceFilter = "";
                     currentAppearanceSourceFilter = "";
@@ -588,7 +593,7 @@ namespace VPB
                 leftSubSearchInput.gameObject.SetActive(false);
 
                 // Left Sort Button
-                leftSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, "Az↑", 14, 0, 0, AnchorPresets.topLeft, null);
+                leftSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.sort.az_up", "Az↑"), 14, 0, 0, AnchorPresets.topLeft, null);
                 leftSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
                 leftSortBtn.GetComponentInChildren<Text>().color = Color.white;
                 RectTransform lsRT = leftSortBtn.GetComponent<RectTransform>();
@@ -663,39 +668,41 @@ namespace VPB
                 float startY = 320f;
 
                 // Fixed/Floating (Topmost)
-                GameObject rightDesktopBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Floating", btnFontSize, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
+                GameObject rightDesktopBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.desktop.floating", "Floating"), btnFontSize, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
                 rightDesktopModeBtnImage = rightDesktopBtn.GetComponent<Image>();
                 rightDesktopModeBtnText = rightDesktopBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightDesktopBtn.GetComponent<RectTransform>());
 
                 // Settings
-                GameObject rightSettingsBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Settings", btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, () => {
+                GameObject rightSettingsBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.settings", "Settings"), btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, () => {
                     ToggleSettings(true);
                 });
                 rightSettingsBtn.GetComponent<Image>().color = new Color(0.15f, 0.3f, 0.45f, 1f); // Darker Blueish
+                rightSettingsBtnText = rightSettingsBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightSettingsBtn.GetComponent<RectTransform>());
 
                 // Follow
-                GameObject rightFollowBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, ToggleFollowMode);
+                GameObject rightFollowBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.follow.static", "Static"), btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, ToggleFollowMode);
                 rightFollowBtnImage = rightFollowBtn.GetComponent<Image>();
                 rightFollowBtnText = rightFollowBtn.GetComponentInChildren<Text>();
                 rightFollowBtnImage.color = new Color(0.15f, 0.45f, 0.6f, 1f); // Darker Follow Blue
                 rightSideButtons.Add(rightFollowBtn.GetComponent<RectTransform>());
 
                 // Clone (Gray)
-                GameObject rightCloneBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => {
+                GameObject rightCloneBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.clone", "Clone"), btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true);
                 });
                 rightCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
+                rightCloneBtnText = rightCloneBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightCloneBtn.GetComponent<RectTransform>());
 
                 // Load Random (always available)
-                rightLoadRandomBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Random", btnFontSize, 0, 0, AnchorPresets.centre, LoadRandom);
+                rightLoadRandomBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.random", "Random"), btnFontSize, 0, 0, AnchorPresets.centre, LoadRandom);
                 rightLoadRandomBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.55f, 1f);
                 rightSideButtons.Add(rightLoadRandomBtn.GetComponent<RectTransform>());
 
                 // Category (Red)
-                GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => {
+                GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.category", "Category"), btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => {
                     if (isFixedLocally) ToggleLeft(ContentType.Category); else ToggleRight(ContentType.Category);
                 });
                 rightCategoryBtnImage = rightCatBtn.GetComponent<Image>();
@@ -705,7 +712,7 @@ namespace VPB
                 AddRightClickDelegate(rightCatBtn, () => ToggleRight(ContentType.Category));
                 
                 // Creator (Green)
-                GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
+                GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.creator", "Creator"), btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
                     if (isFixedLocally) ToggleLeft(ContentType.Creator); else ToggleRight(ContentType.Creator);
                 });
                 rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
@@ -715,7 +722,7 @@ namespace VPB
                 AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
 
                 // Target (Dropdown-like)
-                GameObject rightTargetBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Target: None", 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
+                GameObject rightTargetBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.target_none", "Target: None"), 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
                 rightTargetBtnImage = rightTargetBtn.GetComponent<Image>();
                 rightTargetBtnImage.color = new Color(0.15f, 0.15f, 0.15f, 1f);
                 rightTargetBtnText = rightTargetBtn.GetComponentInChildren<Text>();
@@ -723,25 +730,25 @@ namespace VPB
                 AddRightClickDelegate(rightTargetBtn, () => CycleTarget(false));
 
                 // Apply Mode (Right)
-                GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "2-Click", btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.apply.two_click", "2-Click"), btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
                 rightApplyModeBtnImage = rightApplyModeBtn.GetComponent<Image>();
                 rightApplyModeBtnText = rightApplyModeBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightApplyModeBtn.GetComponent<RectTransform>());
 
                 // Appearance outfit: keep current vs load from preset (Right)
-                rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Clothes: Preset", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
                 rightKeepClothingBtnImage = rightKeepClothingBtnGO.GetComponent<Image>();
                 rightKeepClothingBtnText = rightKeepClothingBtnGO.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightKeepClothingBtnGO.GetComponent<RectTransform>());
                 rightKeepClothingBtnGO.SetActive(false);
 
                 // Replace Toggle (Right)
-                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.add", "Add"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                 rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                 rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
 
-                rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Save", btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
+                rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.save", "Save"), btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
                     try
                     {
                         ToggleSaveSubmenuFromSideButtons();
@@ -872,7 +879,7 @@ namespace VPB
                 }
 
                 // Scene Context (Right)
-                rightRemoveAtomBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nAtom", 18, 0, 0, AnchorPresets.centre, () => {
+                rightRemoveAtomBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_atom", "Remove\nAtom"), 18, 0, 0, AnchorPresets.centre, () => {
                     try
                     {
                         if (SuperController.singleton == null) return;
@@ -921,7 +928,7 @@ namespace VPB
                 catch { }
 
                 // Hub (Orange)
-                GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
+                GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.hub", "Hub"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
                     if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
                     {
                         if (isFixedLocally) ToggleLeft(ContentType.Hub); else ToggleRight(ContentType.Hub);
@@ -950,19 +957,19 @@ namespace VPB
                 });
 
                 // Undo (Right)
-                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
+                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.undo", "Undo"), btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
                 rightUndoBtnGO = rightUndoBtn;
                 rightUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 rightSideButtons.Add(rightUndoBtn.GetComponent<RectTransform>());
 
                 // Redo (Right)
-                GameObject rightRedoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Redo", btnFontSize, 0, startY - spacing * 13 - groupGap * 5, AnchorPresets.centre, Redo);
+                GameObject rightRedoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.redo", "Redo"), btnFontSize, 0, startY - spacing * 13 - groupGap * 5, AnchorPresets.centre, Redo);
                 rightRedoBtnGO = rightRedoBtn;
                 rightRedoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 rightSideButtons.Add(rightRedoBtn.GetComponent<RectTransform>());
 
                 // Context Actions (Right) - inserted above Undo
-                rightRemoveAllClothingBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nClothing", 18, 0, 0, AnchorPresets.centre, () => {
+                rightRemoveAllClothingBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Right)");
                     try
                     {
@@ -1157,7 +1164,7 @@ namespace VPB
                 // Clothing Visibility Toggle Buttons (Right) - pooled, placed outside submenu items
                 for (int i = 0; i < ClothingSubmenuMaxButtons; i++)
                 {
-                    GameObject b = UI.CreateUIButton(rightSideContainer, 80f, btnHeight, "Hide", 16, 0, 0, AnchorPresets.centre, null);
+                    GameObject b = UI.CreateUIButton(rightSideContainer, 80f, btnHeight, VPBTranslation.T("gallery.side.hide", "Hide"), 16, 0, 0, AnchorPresets.centre, null);
                     b.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
                     rightSideButtons.Add(b.GetComponent<RectTransform>());
                     rightRemoveClothingVisibilityToggleButtons.Add(b);
@@ -1239,7 +1246,7 @@ namespace VPB
                     catch { }
                 }
 
-                rightRemoveAllHairBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, "Remove\nHair", 18, 0, 0, AnchorPresets.centre, () => {
+                rightRemoveAllHairBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_hair", "Remove\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Right)");
                     try
                     {
@@ -1456,39 +1463,41 @@ namespace VPB
 
                 // Left Toggle Buttons
                 // Fixed/Floating (Topmost)
-                GameObject leftDesktopBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Floating", btnFontSize, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
+                GameObject leftDesktopBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.desktop.floating", "Floating"), btnFontSize, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
                 leftDesktopModeBtnImage = leftDesktopBtn.GetComponent<Image>();
                 leftDesktopModeBtnText = leftDesktopBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftDesktopBtn.GetComponent<RectTransform>());
 
                 // Settings
-                GameObject leftSettingsBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Settings", btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, () => {
+                GameObject leftSettingsBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.settings", "Settings"), btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, () => {
                     ToggleSettings(false);
                 });
                 leftSettingsBtn.GetComponent<Image>().color = new Color(0.15f, 0.3f, 0.45f, 1f); // Darker Blueish
+                leftSettingsBtnText = leftSettingsBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftSettingsBtn.GetComponent<RectTransform>());
 
                 // Follow
-                GameObject leftFollowBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Static", btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, ToggleFollowMode);
+                GameObject leftFollowBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.follow.static", "Static"), btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, ToggleFollowMode);
                 leftFollowBtnImage = leftFollowBtn.GetComponent<Image>();
                 leftFollowBtnText = leftFollowBtn.GetComponentInChildren<Text>();
                 leftFollowBtnImage.color = new Color(0.15f, 0.45f, 0.6f, 1f); // Darker Follow Blue
                 leftSideButtons.Add(leftFollowBtn.GetComponent<RectTransform>());
 
                 // Clone (Gray)
-                GameObject leftCloneBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Clone", btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => {
+                GameObject leftCloneBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.clone", "Clone"), btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, false);
                 });
                 leftCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
+                leftCloneBtnText = leftCloneBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftCloneBtn.GetComponent<RectTransform>());
 
                 // Load Random (always available)
-                leftLoadRandomBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Random", btnFontSize, 0, 0, AnchorPresets.centre, LoadRandom);
+                leftLoadRandomBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.random", "Random"), btnFontSize, 0, 0, AnchorPresets.centre, LoadRandom);
                 leftLoadRandomBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.55f, 1f);
                 leftSideButtons.Add(leftLoadRandomBtn.GetComponent<RectTransform>());
 
                 // Category (Red)
-                GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Category", btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
+                GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.category", "Category"), btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
                 leftCategoryBtnImage = leftCatBtn.GetComponent<Image>();
                 leftCategoryBtnImage.color = ColorCategory;
                 leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>();
@@ -1496,7 +1505,7 @@ namespace VPB
                 AddRightClickDelegate(leftCatBtn, () => ToggleRight(ContentType.Category));
                 
                 // Creator (Green)
-                GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Creator", btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
+                GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.creator", "Creator"), btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
                 leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
                 leftCreatorBtnImage.color = ColorCreator;
                 leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>();
@@ -1504,7 +1513,7 @@ namespace VPB
                 AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
 
                 // Target (Dropdown-like)
-                GameObject leftTargetBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Target: None", 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
+                GameObject leftTargetBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.target_none", "Target: None"), 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
                 leftTargetBtnImage = leftTargetBtn.GetComponent<Image>();
                 leftTargetBtnImage.color = new Color(0.15f, 0.15f, 0.15f, 1f);
                 leftTargetBtnText = leftTargetBtn.GetComponentInChildren<Text>();
@@ -1512,25 +1521,25 @@ namespace VPB
                 AddRightClickDelegate(leftTargetBtn, () => CycleTarget(false));
 
                 // Apply Mode (Left)
-                GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "2-Click", btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.apply.two_click", "2-Click"), btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
                 leftApplyModeBtnImage = leftApplyModeBtn.GetComponent<Image>();
                 leftApplyModeBtnText = leftApplyModeBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftApplyModeBtn.GetComponent<RectTransform>());
 
                 // Appearance outfit: keep current vs load from preset (Left)
-                leftKeepClothingBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Clothes: Preset", btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                leftKeepClothingBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
                 leftKeepClothingBtnImage = leftKeepClothingBtnGO.GetComponent<Image>();
                 leftKeepClothingBtnText = leftKeepClothingBtnGO.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftKeepClothingBtnGO.GetComponent<RectTransform>());
                 leftKeepClothingBtnGO.SetActive(false);
 
                 // Replace Toggle (Left)
-                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Add", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.add", "Add"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                 leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                 leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
 
-                leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Save", btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
+                leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.save", "Save"), btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
                     try
                     {
                         ToggleSaveSubmenuFromSideButtons();
@@ -1661,7 +1670,7 @@ namespace VPB
                 }
 
                 // Scene Context (Left)
-                leftRemoveAtomBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nAtom", 18, 0, 0, AnchorPresets.centre, () => {
+                leftRemoveAtomBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_atom", "Remove\nAtom"), 18, 0, 0, AnchorPresets.centre, () => {
                     try
                     {
                         if (SuperController.singleton == null) return;
@@ -1710,7 +1719,7 @@ namespace VPB
                 catch { }
 
                 // Hub (Orange)
-                GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Hub", btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
+                GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.hub", "Hub"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
                     if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
                     {
                         ToggleLeft(ContentType.Hub);
@@ -1739,19 +1748,19 @@ namespace VPB
                 });
 
                 // Undo (Left)
-                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Undo", btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
+                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.undo", "Undo"), btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
                 leftUndoBtnGO = leftUndoBtn;
                 leftUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
 
                 // Redo (Left)
-                GameObject leftRedoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Redo", btnFontSize, 0, startY - spacing * 13 - groupGap * 5, AnchorPresets.centre, Redo);
+                GameObject leftRedoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.redo", "Redo"), btnFontSize, 0, startY - spacing * 13 - groupGap * 5, AnchorPresets.centre, Redo);
                 leftRedoBtnGO = leftRedoBtn;
                 leftRedoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
                 leftSideButtons.Add(leftRedoBtn.GetComponent<RectTransform>());
 
                 // Context Actions (Left) - inserted above Undo
-                leftRemoveAllClothingBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nClothing", 18, 0, 0, AnchorPresets.centre, () => {
+                leftRemoveAllClothingBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Left)");
                     try
                     {
@@ -1990,7 +1999,7 @@ namespace VPB
                 // Clothing Visibility Toggle Buttons (Left) - pooled, placed outside submenu items
                 for (int i = 0; i < ClothingSubmenuMaxButtons; i++)
                 {
-                    GameObject b = UI.CreateUIButton(leftSideContainer, 80f, btnHeight, "Hide", 16, 0, 0, AnchorPresets.centre, null);
+                    GameObject b = UI.CreateUIButton(leftSideContainer, 80f, btnHeight, VPBTranslation.T("gallery.side.hide", "Hide"), 16, 0, 0, AnchorPresets.centre, null);
                     b.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
                     leftSideButtons.Add(b.GetComponent<RectTransform>());
                     leftRemoveClothingVisibilityToggleButtons.Add(b);
@@ -2030,7 +2039,7 @@ namespace VPB
                     catch { }
                 }
 
-                leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, "Remove\nHair", 18, 0, 0, AnchorPresets.centre, () => {
+                leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_hair", "Remove\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Left)");
                     try
                     {
@@ -2309,12 +2318,9 @@ UpdateDesktopModeButton();
 
             UpdateSideButtonPositions();
             UpdateSideButtonsVisibility();
-            UpdateDesktopModeButton();
             UpdateLayout();
-            UpdateFollowButtonState();
-            UpdateReplaceButtonState();
-            UpdateKeepClothingButtonState();
-            UpdateApplyModeButtonState();
+            SubscribeLocaleChanged();
+            RefreshLocalizedUi();
         }
     }
 

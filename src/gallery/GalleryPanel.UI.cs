@@ -153,23 +153,23 @@ namespace VPB
             // Scene and core presets at the bottom
             options.Add(new SaveMenuOption
             {
-                Label = "Save Scene...",
+                Label = VPBTranslation.T("gallery.save.scene", "Save Scene..."),
                 Enabled = SuperController.singleton != null,
                 Action = () => SaveSceneFromGallery()
             });
-            AddPresetOption("Save Appearance Preset...", "AppearancePresets");
-            AddPresetOption("Save Clothing Preset...", "ClothingPresets");
-            AddPresetOption("Save Hair Preset...", "HairPresets");
-            AddPresetOption("Save Pose Preset...", "PosePresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.appearance",  "Save Appearance Preset..."),  "AppearancePresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.clothing",    "Save Clothing Preset..."),    "ClothingPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.hair",        "Save Hair Preset..."),        "HairPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.pose",        "Save Pose Preset..."),        "PosePresets");
 
             // Secondary presets above the core ones
-            AddPresetOption("Save Glute Phys Preset...", "FemaleGlutePhysicsPresets");
-            AddPresetOption("Save Breast Phys Preset...", "FemaleBreastPhysicsPresets");
-            AddPresetOption("Save Plugin Preset...", "PluginPresets");
-            AddPresetOption("Save Animation Preset...", "AnimationPresets");
-            AddPresetOption("Save General Preset...", "Preset");
-            AddPresetOption("Save Morph Preset...", "MorphPresets");
-            AddPresetOption("Save Skin Preset...", "SkinPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.glute_phys",  "Save Glute Phys Preset..."),  "FemaleGlutePhysicsPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.breast_phys", "Save Breast Phys Preset..."), "FemaleBreastPhysicsPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.plugin",      "Save Plugin Preset..."),      "PluginPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.animation",   "Save Animation Preset..."),   "AnimationPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.general",     "Save General Preset..."),     "Preset");
+            AddPresetOption(VPBTranslation.T("gallery.save.morph",       "Save Morph Preset..."),       "MorphPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.skin",        "Save Skin Preset..."),        "SkinPresets");
 
             return options;
         }
@@ -685,15 +685,15 @@ namespace VPB
             // Follow Quick Toggles
             footerFollowAngleBtn = UI.CreateUIButton(leftSection, 40, 40, "∡", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
-            AddTooltip(footerFollowAngleBtn, "Follow Angle");
+            AddTooltip(footerFollowAngleBtn, "gallery.tooltip.follow_angle", "Follow Angle");
             
             footerFollowDistanceBtn = UI.CreateUIButton(leftSection, 40, 40, "↕", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Distance"));
             footerFollowDistanceImage = footerFollowDistanceBtn.GetComponent<Image>();
-            AddTooltip(footerFollowDistanceBtn, "Follow Distance");
+            AddTooltip(footerFollowDistanceBtn, "gallery.tooltip.follow_distance", "Follow Distance");
             
             footerFollowHeightBtn = UI.CreateUIButton(leftSection, 40, 40, "⊙", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Height"));
             footerFollowHeightImage = footerFollowHeightBtn.GetComponent<Image>();
-            AddTooltip(footerFollowHeightBtn, "Follow Eye Height");
+            AddTooltip(footerFollowHeightBtn, "gallery.tooltip.follow_eye_height", "Follow Eye Height");
 
             // --- Center Section (Pagination) ---
             GameObject centerSection = new GameObject("CenterSection");
@@ -773,39 +773,39 @@ namespace VPB
             });
             footerRemoveAllHairBtnImage = footerRemoveAllHairBtn.GetComponent<Image>();
             footerRemoveAllHairBtnText = footerRemoveAllHairBtn.GetComponentInChildren<Text>();
-            AddTooltip(footerRemoveAllHairBtn, "Remove All Hair from Target");
+            AddTooltip(footerRemoveAllHairBtn, "gallery.tooltip.remove_all_hair", "Remove All Hair from Target");
 
             // Hover support for pagination (Hub mode)
             AddHoverDelegate(paginationFirstBtn);
-            AddTooltip(paginationFirstBtn, "First Page");
+            AddTooltip(paginationFirstBtn, "gallery.tooltip.page_first", "First Page");
             AddHoverDelegate(paginationPrev10Btn);
-            AddTooltip(paginationPrev10Btn, "Back 10 Pages");
+            AddTooltip(paginationPrev10Btn, "gallery.tooltip.page_back_10", "Back 10 Pages");
             AddHoverDelegate(paginationPrevBtn);
-            AddTooltip(paginationPrevBtn, "Previous Page");
+            AddTooltip(paginationPrevBtn, "gallery.tooltip.page_prev", "Previous Page");
             AddHoverDelegate(paginationNextBtn);
-            AddTooltip(paginationNextBtn, "Next Page");
+            AddTooltip(paginationNextBtn, "gallery.tooltip.page_next", "Next Page");
             AddHoverDelegate(paginationNext10Btn);
-            AddTooltip(paginationNext10Btn, "Forward 10 Pages");
+            AddTooltip(paginationNext10Btn, "gallery.tooltip.page_forward_10", "Forward 10 Pages");
             AddHoverDelegate(paginationLastBtn);
-            AddTooltip(paginationLastBtn, "Last Page");
+            AddTooltip(paginationLastBtn, "gallery.tooltip.page_last", "Last Page");
 
             AddHoverDelegate(selectAllBtn);
-            AddTooltip(selectAllBtn, "Select All");
+            AddTooltip(selectAllBtn, "gallery.tooltip.select_all", "Select All");
             AddHoverDelegate(clearSelectionBtn);
-            AddTooltip(clearSelectionBtn, "Clear Selection");
+            AddTooltip(clearSelectionBtn, "gallery.tooltip.clear_selection", "Clear Selection");
             AddHoverDelegate(gridSizeMinusBtn);
-            AddTooltip(gridSizeMinusBtn, "Decrease Columns");
+            AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease Columns");
             AddHoverDelegate(gridSizePlusBtn);
-            AddTooltip(gridSizePlusBtn, "Increase Columns");
+            AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase Columns");
             AddHoverDelegate(footerFollowAngleBtn);
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
             AddHoverDelegate(footerLayoutBtn);
-            AddTooltip(footerLayoutBtn, "Toggle Layout Mode");
+            AddTooltip(footerLayoutBtn, "gallery.tooltip.toggle_layout", "Toggle Layout Mode");
             AddHoverDelegate(footerHeightBtn);
-            AddTooltip(footerHeightBtn, "Toggle Fixed Height Mode");
+            AddTooltip(footerHeightBtn, "gallery.tooltip.toggle_fixed_height", "Toggle Fixed Height Mode");
             AddHoverDelegate(footerAutoHideBtn);
-            AddTooltip(footerAutoHideBtn, "Auto-Hide (Fixed)");
+            AddTooltip(footerAutoHideBtn, "gallery.tooltip.auto_hide_fixed", "Auto-Hide (Fixed)");
             AddHoverDelegate(footerRemoveAllHairBtn);
 
             // Hover Path Text (Now placed above the buttons with background)
@@ -1019,8 +1019,8 @@ namespace VPB
             {
                 switch(VPBConfig.Instance.DesktopFixedHeightMode)
                 {
-                    case 0: footerHeightBtnText.text = "H1"; break;
-                    case 1: footerHeightBtnText.text = "HC"; break;
+                    case 0: footerHeightBtnText.text = VPBTranslation.T("gallery.footer.height_h1", "H1"); break;
+                    case 1: footerHeightBtnText.text = VPBTranslation.T("gallery.footer.height_hc", "HC"); break;
                 }
             }
         }
@@ -1046,7 +1046,9 @@ namespace VPB
 
             if (footerAutoHideBtnText != null)
             {
-                footerAutoHideBtnText.text = VPBConfig.Instance.DesktopFixedAutoCollapse ? "AH" : "AO";
+                footerAutoHideBtnText.text = VPBConfig.Instance.DesktopFixedAutoCollapse
+                    ? VPBTranslation.T("gallery.footer.autohide_on", "AH")
+                    : VPBTranslation.T("gallery.footer.autohide_off", "AO");
             }
         }
 
@@ -1083,13 +1085,36 @@ namespace VPB
                 footerFollowHeightImage.color = VPBConfig.Instance.FollowEyeHeight != "Off" ? activeColor : inactiveColor;
         }
 
-        private void AddTooltip(GameObject go, string tooltip)
+        private void AddTooltip(GameObject go, string tooltipKey, string englishDefault)
         {
             if (go == null) return;
             var del = go.GetComponent<UIHoverDelegate>();
             if (del == null) del = go.AddComponent<UIHoverDelegate>();
-            
-            del.OnHoverChange += (enter) => {
+
+            del.OnHoverChange += (enter) =>
+            {
+                string msg = VPBTranslation.T(tooltipKey, englishDefault);
+                if (enter)
+                {
+                    if (temporaryStatusCoroutine != null)
+                    {
+                        StopCoroutine(temporaryStatusCoroutine);
+                        temporaryStatusCoroutine = null;
+                    }
+                    temporaryStatusMsg = msg;
+                }
+                else if (temporaryStatusMsg == msg) temporaryStatusMsg = null;
+            };
+        }
+
+        private void AddTooltipPlain(GameObject go, string tooltip)
+        {
+            if (go == null) return;
+            var del = go.GetComponent<UIHoverDelegate>();
+            if (del == null) del = go.AddComponent<UIHoverDelegate>();
+
+            del.OnHoverChange += (enter) =>
+            {
                 if (enter)
                 {
                     if (temporaryStatusCoroutine != null)
@@ -1112,7 +1137,9 @@ namespace VPB
             try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
 
             bool fixedMode = isFixedLocally;
-            string text = fixedMode ? "Floating" : "Fixed";
+            string text = fixedMode
+                ? VPBTranslation.T("gallery.desktop.floating", "Floating")
+                : VPBTranslation.T("gallery.desktop.fixed", "Fixed");
             Color color = fixedMode ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.15f, 0.15f, 0.15f, 1f);
 
             if (rightDesktopModeBtnText != null) 
@@ -1903,7 +1930,9 @@ namespace VPB
 
         private void UpdateReplaceButtonState()
         {
-            string text = DragDropReplaceMode ? "Replace" : "Add";
+            string text = DragDropReplaceMode
+                ? VPBTranslation.T("gallery.side.replace", "Replace")
+                : VPBTranslation.T("gallery.side.add", "Add");
             Color color = DragDropReplaceMode ? new Color(0.6f, 0.15f, 0.15f, 1f) : new Color(0.15f, 0.45f, 0.15f, 1f);
 
             if (rightReplaceBtnText != null) rightReplaceBtnText.text = text;
@@ -1925,17 +1954,17 @@ namespace VPB
             Color color;
             if (string.Equals(m, "keep", StringComparison.OrdinalIgnoreCase))
             {
-                text = "Clothes: Keep";
+                text = VPBTranslation.T("gallery.clothes.keep", "Clothes: Keep");
                 color = new Color(0.15f, 0.35f, 0.55f, 1f);
             }
             else if (string.Equals(m, "clothingonly", StringComparison.OrdinalIgnoreCase))
             {
-                text = "Clothes: Only";
+                text = VPBTranslation.T("gallery.clothes.only", "Clothes: Only");
                 color = new Color(0.15f, 0.45f, 0.28f, 1f);
             }
             else
             {
-                text = "Clothes: Preset";
+                text = VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset");
                 color = new Color(0.35f, 0.3f, 0.2f, 1f);
             }
 
@@ -1966,7 +1995,9 @@ namespace VPB
 
         private void UpdateApplyModeButtonState()
         {
-            string text = ItemApplyMode == ApplyMode.SingleClick ? "1-Click" : "2-Click";
+            string text = ItemApplyMode == ApplyMode.SingleClick
+                ? VPBTranslation.T("gallery.apply.one_click", "1-Click")
+                : VPBTranslation.T("gallery.apply.two_click", "2-Click");
             Color color = ItemApplyMode == ApplyMode.SingleClick ? new Color(0.6f, 0.45f, 0.15f, 1f) : new Color(0.15f, 0.15f, 0.45f, 1f);
 
             if (rightApplyModeBtnText != null) rightApplyModeBtnText.text = text;

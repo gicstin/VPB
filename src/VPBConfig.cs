@@ -131,6 +131,8 @@ namespace VPB
         public bool EnableAutoFixedGallery = true;
         public float ListRowHeight = 100f;
         public int GridColumnCount = 4;
+        /// <summary>UI language id: en, zh_cn, etc. Matches vpb_translations/&lt;id&gt;.json</summary>
+        public string UiLocale = "en";
         public bool IsLoadingScene { get; private set; }
 
         private bool? _isDevMode;
@@ -214,6 +216,7 @@ namespace VPB
             EnableAutoFixedGallery = true;
             ListRowHeight = 100f;
             GridColumnCount = 4;
+            UiLocale = "en";
 
             try
             {
@@ -286,6 +289,7 @@ namespace VPB
                         if (node["EnableAutoFixedGallery"] != null) EnableAutoFixedGallery = node["EnableAutoFixedGallery"].AsBool;
                         if (node["ListRowHeight"] != null) ListRowHeight = node["ListRowHeight"].AsFloat;
                         if (node["GridColumnCount"] != null) GridColumnCount = node["GridColumnCount"].AsInt;
+                        if (node["UiLocale"] != null) UiLocale = node["UiLocale"].Value;
                     }
 
                     try
@@ -354,6 +358,7 @@ namespace VPB
                 node["EnableAutoFixedGallery"].AsBool = EnableAutoFixedGallery;
                 node["ListRowHeight"].AsFloat = ListRowHeight;
                 node["GridColumnCount"].AsInt = GridColumnCount;
+                node["UiLocale"] = UiLocale ?? "en";
                 string jsonOutput = node.ToString();
                 File.WriteAllText(ConfigPath, jsonOutput);
 

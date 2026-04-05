@@ -96,6 +96,34 @@
     "IsDirectory": false
   },
   {
+    "RelativePath": "BepInEx/plugins/vpb_fonts",
+    "IsDirectory": true
+  },
+  {
+    "RelativePath": "BepInEx/plugins/vpb_fonts/NotoSansSC-VariableFont_wght.ttf",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/vpb_fonts/OFL.txt",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/vpb_fonts/README_FONT.txt",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/vpb_translations",
+    "IsDirectory": true
+  },
+  {
+    "RelativePath": "BepInEx/plugins/vpb_translations/zh_cn.json",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/vpb_translations/zh_tw.json",
+    "IsDirectory": false
+  },
+  {
     "RelativePath": "BepInEx/plugins/zstd",
     "IsDirectory": true
   },

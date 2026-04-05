@@ -57,7 +57,7 @@ namespace VPB
         {
             if (titleText != null)
             {
-                if (IsHubMode) titleText.text = "HUB: " + currentHubCategory;
+                if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
                 else titleText.text = currentCategoryTitle;
             }
 
@@ -1482,7 +1482,7 @@ namespace VPB
                     // Add tooltip showing full package path if available
                     if (file is VarFileEntry vfe && vfe.Package != null)
                     {
-                        AddTooltip(labelTr.gameObject, $"Package: {vfe.Package.Uid}.var");
+                        AddTooltipPlain(labelTr.gameObject, $"Package: {vfe.Package.Uid}.var");
                     }
                 }
             }
@@ -1516,7 +1516,7 @@ namespace VPB
                         // Add tooltip showing full package path if available
                         if (file is VarFileEntry vfe && vfe.Package != null)
                         {
-                            AddTooltip(nameTr.gameObject, $"Package: {vfe.Package.Uid}.var");
+                            AddTooltipPlain(nameTr.gameObject, $"Package: {vfe.Package.Uid}.var");
                         }
                     }
                 }

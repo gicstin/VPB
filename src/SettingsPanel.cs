@@ -79,6 +79,9 @@ namespace VPB
 
         private GameObject tooltipGO;
         private Text tooltipText;
+        private Text settingsTitleText;
+        private Text settingsCancelBtnText;
+        private Text settingsSaveBtnText;
 
         public SettingsPanel(GalleryPanel parentPanel, GameObject backgroundBoxGO)
         {
@@ -185,6 +188,24 @@ namespace VPB
             }
 
             RefreshUI();
+            ApplySettingsFonts();
+        }
+
+        public void RefreshLocalizedUi()
+        {
+            if (settingsScrollContent == null) return;
+            if (settingsTitleText != null) settingsTitleText.text = VPBTranslation.T("settings.title", "Settings");
+            if (settingsCancelBtnText != null) settingsCancelBtnText.text = VPBTranslation.T("settings.cancel", "Cancel");
+            if (settingsSaveBtnText != null) settingsSaveBtnText.text = VPBTranslation.T("settings.save", "Save");
+            RefreshUI();
+            ApplySettingsFonts();
+        }
+
+        private void ApplySettingsFonts()
+        {
+            if (settingsPaneGO == null) return;
+            foreach (Text tx in settingsPaneGO.GetComponentsInChildren<Text>(true))
+                VPBUiFont.ApplyTo(tx);
         }
 
         public void Close()
@@ -227,7 +248,8 @@ namespace VPB
             header.transform.SetParent(settingsPaneGO.transform, false);
             Text t = header.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.text = "Settings";
+            settingsTitleText = t;
+            t.text = VPBTranslation.T("settings.title", "Settings");
             t.fontSize = 28;
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleCenter;
@@ -259,11 +281,12 @@ namespace VPB
             float btnW = 180;
             float btnH = 50;
             
-            GameObject cancelBtn = UI.CreateUIButton(settingsPaneGO, btnW, btnH, "Cancel", 24, -120, footerY, AnchorPresets.bottomMiddle, Close);
+            GameObject cancelBtn = UI.CreateUIButton(settingsPaneGO, btnW, btnH, VPBTranslation.T("settings.cancel", "Cancel"), 24, -120, footerY, AnchorPresets.bottomMiddle, Close);
             cancelBtn.GetComponent<Image>().color = new Color(0.6f, 0.25f, 0.25f, 1f);
-            cancelBtn.GetComponentInChildren<Text>().color = Color.white;
+            settingsCancelBtnText = cancelBtn.GetComponentInChildren<Text>();
+            settingsCancelBtnText.color = Color.white;
             
-            GameObject saveBtn = UI.CreateUIButton(settingsPaneGO, btnW, btnH, "Save", 24, 120, footerY, AnchorPresets.bottomMiddle, () => {
+            GameObject saveBtn = UI.CreateUIButton(settingsPaneGO, btnW, btnH, VPBTranslation.T("settings.save", "Save"), 24, 120, footerY, AnchorPresets.bottomMiddle, () => {
                 VPBConfig.Instance.EnableButtonGaps = pendingEnableButtonGaps;
                 VPBConfig.Instance.ShowSideButtons = pendingShowSideButtons;
                 VPBConfig.Instance.FollowAngle = pendingFollowAngle;
@@ -291,7 +314,8 @@ namespace VPB
                 if (tooltipGO != null) tooltipGO.SetActive(false);
             });
             saveBtn.GetComponent<Image>().color = new Color(0.25f, 0.6f, 0.25f, 1f);
-            saveBtn.GetComponentInChildren<Text>().color = Color.white;
+            settingsSaveBtnText = saveBtn.GetComponentInChildren<Text>();
+            settingsSaveBtnText.color = Color.white;
             saveBtn.AddComponent<UIHoverBorder>();
 
             // Close button (X) in top right
@@ -320,34 +344,34 @@ namespace VPB
             foreach (Transform child in settingsScrollContent.transform) GameObject.Destroy(child.gameObject);
 
             // CATEGORY: Visuals
-            CreateHeader("Visuals");
+            CreateHeader(VPBTranslation.T("settings.header.visuals", "Visuals"));
 
             // Enable Gallery Fade
-            CreateToggleSetting("Side Button Fade", pendingEnableGalleryFade, (val) => {
+            CreateToggleSetting(VPBTranslation.T("settings.side_button_fade", "Side Button Fade"), pendingEnableGalleryFade, (val) => {
                 pendingEnableGalleryFade = val;
                 VPBConfig.Instance.EnableGalleryFade = val;
                 VPBConfig.Instance.TriggerChange();
-            }, "Fades out side buttons when not hovering over them.");
+            }, VPBTranslation.T("settings.tip.side_button_fade", "Fades out side buttons when not hovering over them."));
 
             // Gallery Translucency
-            CreateToggleSetting("Gallery Translucency", pendingEnableGalleryTranslucency, (val) => {
+            CreateToggleSetting(VPBTranslation.T("settings.gallery_translucency", "Gallery Translucency"), pendingEnableGalleryTranslucency, (val) => {
                 pendingEnableGalleryTranslucency = val;
                 VPBConfig.Instance.EnableGalleryTranslucency = val;
                 VPBConfig.Instance.TriggerChange();
-            }, "Makes the entire gallery pane translucent.");
+            }, VPBTranslation.T("settings.tip.gallery_translucency", "Makes the entire gallery pane translucent."));
 
-            CreateSliderSetting("Gallery Opacity", pendingGalleryOpacity, 0.1f, 1.0f, (val) => {
+            CreateSliderSetting(VPBTranslation.T("settings.gallery_opacity", "Gallery Opacity"), pendingGalleryOpacity, 0.1f, 1.0f, (val) => {
                 pendingGalleryOpacity = val;
                 VPBConfig.Instance.GalleryOpacity = val;
                 VPBConfig.Instance.TriggerChange();
-            }, "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque.");
+            }, VPBTranslation.T("settings.tip.gallery_opacity", "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque."));
 
             // Side Button Gaps
-            CreateToggleSetting("Side Button Gaps", pendingEnableButtonGaps, (val) => {
+            CreateToggleSetting(VPBTranslation.T("settings.side_button_gaps", "Side Button Gaps"), pendingEnableButtonGaps, (val) => {
                 pendingEnableButtonGaps = val;
                 VPBConfig.Instance.EnableButtonGaps = val;
                 VPBConfig.Instance.TriggerChange(); 
-            }, "Adds small gaps between groups of side buttons for better visual separation.");
+            }, VPBTranslation.T("settings.tip.side_button_gaps", "Adds small gaps between groups of side buttons for better visual separation."));
             
             bool isFixed = parentPanel != null && parentPanel.isFixedLocally;
 
@@ -355,12 +379,16 @@ namespace VPB
             {
                 // Show Side Buttons
                 string[] sideButtonOptions = { "Both", "Left", "Right" };
-                string[] sideButtonLabels = { "Both Sides", "Left Side", "Right Side" };
-                CreateCycleSetting("Show Side Buttons", pendingShowSideButtons, sideButtonOptions, sideButtonLabels, (val) => {
+                string[] sideButtonLabels = {
+                    VPBTranslation.T("settings.side_both", "Both Sides"),
+                    VPBTranslation.T("settings.side_left", "Left Side"),
+                    VPBTranslation.T("settings.side_right", "Right Side")
+                };
+                CreateCycleSetting(VPBTranslation.T("settings.show_side_buttons", "Show Side Buttons"), pendingShowSideButtons, sideButtonOptions, sideButtonLabels, (val) => {
                     pendingShowSideButtons = val;
                     VPBConfig.Instance.ShowSideButtons = val;
                     VPBConfig.Instance.TriggerChange();
-                }, "Choose which sides of the gallery show the action buttons.");
+                }, VPBTranslation.T("settings.tip.show_side_buttons", "Choose which sides of the gallery show the action buttons."));
             }
 
             // CATEGORY: Interaction
@@ -369,97 +397,106 @@ namespace VPB
             if (!isFixed)
             {
                 // CATEGORY: Follow Mode
-                CreateHeader("Follow Mode");
+                CreateHeader(VPBTranslation.T("settings.header.follow_mode", "Follow Mode"));
 
                 string[] followOptions = { "Off", "Desktop", "VR", "Both" };
-                string[] followLabels = { "Off", "Desktop", "VR", "Both" };
+                string[] followLabels = {
+                    VPBTranslation.T("settings.follow.off", "Off"),
+                    VPBTranslation.T("settings.follow.desktop", "Desktop"),
+                    VPBTranslation.T("settings.follow.vr", "VR"),
+                    VPBTranslation.T("settings.follow.both", "Both")
+                };
 
                 // Follow Angle
-                CreateCycleSetting("Follow Angle", pendingFollowAngle, followOptions, followLabels, (val) => {
+                CreateCycleSetting(VPBTranslation.T("settings.follow_angle", "Follow Angle"), pendingFollowAngle, followOptions, followLabels, (val) => {
                     pendingFollowAngle = val;
                     VPBConfig.Instance.FollowAngle = val;
                     VPBConfig.Instance.TriggerChange();
-                }, "When enabled, the panel will rotate to face the user. 'Both' = both VR and Desktop.");
+                }, VPBTranslation.T("settings.tip.follow_angle", "When enabled, the panel will rotate to face the user. 'Both' = both VR and Desktop."));
 
                 // Follow Eye Height
-                CreateCycleSetting("Follow Eye Height", pendingFollowEyeHeight, followOptions, followLabels, (val) => {
+                CreateCycleSetting(VPBTranslation.T("settings.follow_eye_height", "Follow Eye Height"), pendingFollowEyeHeight, followOptions, followLabels, (val) => {
                     pendingFollowEyeHeight = val;
                     VPBConfig.Instance.FollowEyeHeight = val;
                     VPBConfig.Instance.TriggerChange();
-                }, "When enabled, the panel will stay at eye level. 'Both' = both VR and Desktop.");
+                }, VPBTranslation.T("settings.tip.follow_eye_height", "When enabled, the panel will stay at eye level. 'Both' = both VR and Desktop."));
 
                 // Follow Distance (ON/OFF)
-                CreateCycleSetting("Follow Distance", pendingFollowDistance, followOptions, followLabels, (val) => {
+                CreateCycleSetting(VPBTranslation.T("settings.follow_distance", "Follow Distance"), pendingFollowDistance, followOptions, followLabels, (val) => {
                     pendingFollowDistance = val;
                     VPBConfig.Instance.FollowDistance = val;
                     VPBConfig.Instance.TriggerChange();
-                }, "When enabled, the panel will maintain its distance from the user. 'Both' = both VR and Desktop.");
+                }, VPBTranslation.T("settings.tip.follow_distance", "When enabled, the panel will maintain its distance from the user. 'Both' = both VR and Desktop."));
 
                 // Reorient Start Angle
-                CreateSliderSetting("Reorient Angle", pendingReorientStartAngle, 5f, 90f, (val) => {
+                CreateSliderSetting(VPBTranslation.T("settings.reorient_angle", "Reorient Angle"), pendingReorientStartAngle, 5f, 90f, (val) => {
                     pendingReorientStartAngle = val;
                     VPBConfig.Instance.ReorientStartAngle = val;
                     VPBConfig.Instance.TriggerChange();
-                }, "The angle difference required before the panel starts rotating to face you. Higher values reduce frequent rotations.");
+                }, VPBTranslation.T("settings.tip.reorient_angle", "The angle difference required before the panel starts rotating to face you. Higher values reduce frequent rotations."));
 
                 // Movement Threshold
-                CreateSliderSetting("Move Threshold", pendingMovementThreshold, 0.01f, 1.0f, (val) => {
+                CreateSliderSetting(VPBTranslation.T("settings.move_threshold", "Move Threshold"), pendingMovementThreshold, 0.01f, 1.0f, (val) => {
                     pendingMovementThreshold = val;
                     VPBConfig.Instance.MovementThreshold = val;
                     VPBConfig.Instance.TriggerChange();
-                }, "The distance you must move before the panel updates its position. Higher values provide more stable 'discrete' updates.");
+                }, VPBTranslation.T("settings.tip.move_threshold", "The distance you must move before the panel updates its position. Higher values provide more stable 'discrete' updates."));
 
                 // Bring to Front Distance
-                CreateSliderSetting("Bring Front Dist", pendingBringToFrontDistance, 0.5f, 2.5f, (val) => {
+                CreateSliderSetting(VPBTranslation.T("settings.bring_front_dist", "Bring Front Dist"), pendingBringToFrontDistance, 0.5f, 2.5f, (val) => {
                     pendingBringToFrontDistance = val;
                     VPBConfig.Instance.BringToFrontDistance = val;
-                }, "The distance (in meters) from your view where panels will appear when using 'Bring to Front'.");
+                }, VPBTranslation.T("settings.tip.bring_front_dist", "The distance (in meters) from your view where panels will appear when using 'Bring to Front'."));
             }
 
             // CATEGORY: Interaction
-            CreateHeader("Interaction");
-            CreateToggleSetting("Enable Drag & Drop", pendingEnableDragDrop, (val) => {
+            CreateHeader(VPBTranslation.T("settings.header.interaction", "Interaction"));
+            CreateToggleSetting(VPBTranslation.T("settings.enable_drag_drop", "Enable Drag & Drop"), pendingEnableDragDrop, (val) => {
                 pendingEnableDragDrop = val;
                 VPBConfig.Instance.EnableDragDrop = val;
-            }, "When disabled, gallery items can only be applied via click — no drag & drop. Disables the context popup that appears on drag.");
+            }, VPBTranslation.T("settings.tip.enable_drag_drop", "When disabled, gallery items can only be applied via click — no drag & drop. Disables the context popup that appears on drag."));
 
-            CreateSliderSetting("Drag Hold Threshold (s)", pendingDragHoldThreshold, 0.1f, 1.0f, (val) => {
+            CreateSliderSetting(VPBTranslation.T("settings.drag_hold_threshold", "Drag Hold Threshold (s)"), pendingDragHoldThreshold, 0.1f, 1.0f, (val) => {
                 pendingDragHoldThreshold = val;
                 VPBConfig.Instance.DragHoldThreshold = val;
-            }, "How long (in seconds) the mouse button must be held before a drag is initiated. Increase to reduce accidental drags on quick clicks.");
+            }, VPBTranslation.T("settings.tip.drag_hold_threshold", "How long (in seconds) the mouse button must be held before a drag is initiated. Increase to reduce accidental drags on quick clicks."));
 
             string[] appearanceClothingOptions = { "replace", "keep", "clothingonly" };
-            string[] appearanceClothingLabels = { "Preset outfit", "Keep body clothes", "Clothes only" };
-            CreateCycleSetting("Appearance clothing", pendingAppearanceClothingApplyMode, appearanceClothingOptions, appearanceClothingLabels, (val) => {
+            string[] appearanceClothingLabels = {
+                VPBTranslation.T("settings.appearance.preset_outfit", "Preset outfit"),
+                VPBTranslation.T("settings.appearance.keep_body", "Keep body clothes"),
+                VPBTranslation.T("settings.appearance.clothes_only", "Clothes only")
+            };
+            CreateCycleSetting(VPBTranslation.T("settings.appearance_clothing", "Appearance clothing"), pendingAppearanceClothingApplyMode, appearanceClothingOptions, appearanceClothingLabels, (val) => {
                 pendingAppearanceClothingApplyMode = val;
                 VPBConfig.Instance.AppearanceClothingApplyMode = val;
                 VPBConfig.Instance.TriggerChange();
                 if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
-            }, "Preset outfit: full appearance. Keep body clothes: face/body/hair from preset, keep your garments. Clothes only: keep current person; apply only garment clothing from the preset (not hair or makeup-type items).");
+            }, VPBTranslation.T("settings.tip.appearance_clothing", "Preset outfit: full appearance. Keep body clothes: face/body/hair from preset, keep your garments. Clothes only: keep current person; apply only garment clothing from the preset (not hair or makeup-type items)."));
 
             // CATEGORY: Desktop
-            CreateHeader("Desktop");
-            CreateToggleSetting("Startup Gallery (Fixed)", pendingEnableAutoFixedGallery, (val) => {
+            CreateHeader(VPBTranslation.T("settings.header.desktop", "Desktop"));
+            CreateToggleSetting(VPBTranslation.T("settings.startup_fixed_gallery", "Startup Gallery (Fixed)"), pendingEnableAutoFixedGallery, (val) => {
                 pendingEnableAutoFixedGallery = val;
                 VPBConfig.Instance.EnableAutoFixedGallery = val;
                 VPBConfig.Instance.TriggerChange();
-            }, "When enabled, a pinned (Fixed) gallery pane with Autohide enabled will be automatically created on the right side of the screen when the plugin starts.");
+            }, VPBTranslation.T("settings.tip.startup_fixed_gallery", "When enabled, a pinned (Fixed) gallery pane with Autohide enabled will be automatically created on the right side of the screen when the plugin starts."));
 
             if (isFixed)
             {
                 // Bring to Front Distance (for Fixed Mode too, as requested)
-                CreateSliderSetting("Bring Front Dist", pendingBringToFrontDistance, 0.5f, 2.5f, (val) => {
+                CreateSliderSetting(VPBTranslation.T("settings.bring_front_dist", "Bring Front Dist"), pendingBringToFrontDistance, 0.5f, 2.5f, (val) => {
                     pendingBringToFrontDistance = val;
                     VPBConfig.Instance.BringToFrontDistance = val;
-                }, "The distance (in meters) from your view where panels will appear when using 'Bring to Front'.");
+                }, VPBTranslation.T("settings.tip.bring_front_dist", "The distance (in meters) from your view where panels will appear when using 'Bring to Front'."));
             }
 
             if (VPBConfig.Instance.IsDevMode)
             {
-                CreateHeader("Developer");
-                CreateToggleSetting("Developer Mode", pendingIsDevMode, (val) => {
+                CreateHeader(VPBTranslation.T("settings.header.developer", "Developer"));
+                CreateToggleSetting(VPBTranslation.T("settings.developer_mode", "Developer Mode"), pendingIsDevMode, (val) => {
                     pendingIsDevMode = val;
-                }, "Enables developer-only features and debug tools. Requires restart to fully hide/show some elements.");
+                }, VPBTranslation.T("settings.tip.developer_mode", "Enables developer-only features and debug tools. Requires restart to fully hide/show some elements."));
             }
         }
 
@@ -775,8 +812,8 @@ namespace VPB
             float btnH = 45;
             float btnX = 300; 
 
-            GameObject offBtn = UI.CreateUIButton(container, btnW, btnH, "OFF", 18, btnX, 0, AnchorPresets.middleLeft, null);
-            GameObject onBtn = UI.CreateUIButton(container, btnW, btnH, "ON", 18, btnX + btnW + 5, 0, AnchorPresets.middleLeft, null);
+            GameObject offBtn = UI.CreateUIButton(container, btnW, btnH, VPBTranslation.T("settings.toggle.off", "OFF"), 18, btnX, 0, AnchorPresets.middleLeft, null);
+            GameObject onBtn = UI.CreateUIButton(container, btnW, btnH, VPBTranslation.T("settings.toggle.on", "ON"), 18, btnX + btnW + 5, 0, AnchorPresets.middleLeft, null);
             
             offBtn.AddComponent<UIHoverBorder>();
             onBtn.AddComponent<UIHoverBorder>();

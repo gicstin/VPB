@@ -829,8 +829,8 @@ namespace VPB
         {
             try
             {
-                string undoText = "Undo (" + (undoStack != null ? undoStack.Count : 0) + ")";
-                string redoText = "Redo (" + (redoStack != null ? redoStack.Count : 0) + ")";
+                string undoText = VPBTranslation.T("gallery.side.undo", "Undo") + " (" + (undoStack != null ? undoStack.Count : 0) + ")";
+                string redoText = VPBTranslation.T("gallery.side.redo", "Redo") + " (" + (redoStack != null ? redoStack.Count : 0) + ")";
 
                 if (rightUndoBtnGO != null)
                 {
@@ -1277,10 +1277,11 @@ namespace VPB
 
         private void UpdateTargetDropdownUI()
         {
-            string valText = (targetDropdownValue >= 0 && targetDropdownValue < targetDropdownOptions.Count) 
-                ? targetDropdownOptions[targetDropdownValue] 
+            string raw = (targetDropdownValue >= 0 && targetDropdownValue < targetDropdownOptions.Count)
+                ? targetDropdownOptions[targetDropdownValue]
                 : "None";
-            string fullText = "Target: " + valText;
+            string valText = (raw == "None") ? VPBTranslation.T("gallery.side.target_val_none", "None") : raw;
+            string fullText = VPBTranslation.T("gallery.side.target_prefix", "Target: ") + valText;
 
             if (leftTargetBtnText != null) leftTargetBtnText.text = fullText;
             if (rightTargetBtnText != null) rightTargetBtnText.text = fullText;

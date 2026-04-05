@@ -524,6 +524,11 @@ namespace VPB
         private float followDistanceReference = 1.5f;
         private bool offsetsInitialized = false;
         
+        private Text rightSettingsBtnText;
+        private Text leftSettingsBtnText;
+        private Text rightCloneBtnText;
+        private Text leftCloneBtnText;
+
         private Text rightFollowBtnText;
         private Image rightFollowBtnImage;
         private Text leftFollowBtnText;
@@ -720,6 +725,12 @@ namespace VPB
         private Text quickFiltersToggleBtnText; // NEW
         private GameObject ratingSortToggleBtn;
         private Text ratingSortToggleBtnText;
+        private Text titleBarRefreshBtnText;
+        private GameObject languageSwitcherBtnGO;
+        private Text _langBtnText;
+        private Image _langBtnImage;
+        private GameObject languageMenuPopupGO;
+        private bool languageMenuOpen;
         private bool isRatingSortToggleEnabled;
         private SortState ratingSortTogglePreviousState;
 

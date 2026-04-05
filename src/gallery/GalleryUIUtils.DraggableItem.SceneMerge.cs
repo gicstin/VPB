@@ -452,6 +452,75 @@ namespace VPB
             return UI.EnsureInstalled(FileEntry);
         }
 
+        /// <summary>Pending data for deferred clothing-only sub-preset/material restore (applied after items finish loading).</summary>
+        private sealed class PendingClothingOnlySubpresetState
+        {
+            public string AtomUid;
+            public List<KeyValuePair<string, JSONClass>> StorablesToApply;
+            public JSONClass ClothingPresetsJson;
+            public string LoadDirPath;
+        }
+
+        private static IEnumerator DelayedClothingOnlySubpresetRestoreCoroutine(PendingClothingOnlySubpresetState state)
+        {
+            if (state == null || state.StorablesToApply == null || state.StorablesToApply.Count == 0) yield break;
+            // Wait a few frames for item loading to start, then poll until at least one storable appears.
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+
+            Atom a = null;
+            try { a = SuperController.singleton?.GetAtomByUid(state.AtomUid); } catch { }
+            if (a == null) yield break;
+
+            // Poll up to 12 seconds for at least one garment storable to be registered on the atom.
+            DateTime startTime = DateTime.Now;
+            while ((DateTime.Now - startTime).TotalSeconds < 12)
+            {
+                bool anyFound = false;
+                for (int si = 0; si < state.StorablesToApply.Count; si++)
+                {
+                    JSONStorable st = null;
+                    try { st = a.GetStorableByID(state.StorablesToApply[si].Key); } catch { }
+                    if (st != null) { anyFound = true; break; }
+                }
+                if (anyFound) break;
+                yield return new WaitForEndOfFrame();
+            }
+
+            // Re-apply ClothingPresets first so the sub-preset selection is current when material storables are restored.
+            if (state.ClothingPresetsJson != null)
+            {
+                JSONStorable cps = null;
+                try { cps = a.GetStorableByID("ClothingPresets"); } catch { }
+                if (cps != null)
+                {
+                    try
+                    {
+                        try { MVR.FileManagement.FileManager.PushLoadDirFromFilePath(state.LoadDirPath); } catch { }
+                        cps.RestoreFromJSON(state.ClothingPresetsJson);
+                    }
+                    catch { }
+                    finally { try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { } }
+                }
+            }
+
+            int count = 0;
+            try { MVR.FileManagement.FileManager.PushLoadDirFromFilePath(state.LoadDirPath); } catch { }
+            try
+            {
+                for (int si = 0; si < state.StorablesToApply.Count; si++)
+                {
+                    var kv = state.StorablesToApply[si];
+                    JSONStorable cs = null;
+                    try { cs = a.GetStorableByID(kv.Key); } catch { }
+                    if (cs != null) { try { cs.RestoreFromJSON(kv.Value); count++; } catch { } }
+                }
+            }
+            finally { try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { } }
+            LogUtil.Log($"[DragDropDebug][ClothingOnly] delayed subpreset storables applied: {count}");
+        }
+
         /// <summary>Snapshot for "keep garments" appearance apply: body clothes only; hair/makeup load from preset.</summary>
         private sealed class KeepGarmentAppearanceState
         {
@@ -2268,6 +2337,30 @@ namespace VPB
 
                                                 LogUtil.Log($"[DragDropDebug][ClothingOnly] boolsInPreset={boolsTotal} activeInPreset={boolsActive} hasPlugins={pluginsOnlyPreset != null}");
 
+                                                // Apply ClothingPresets from the appearance preset BEFORE activating clothing items.
+                                                // Items read ClothingPresets on first activation; pre-setting it ensures they load
+                                                // with the configured sub-preset (colour variant, etc.) rather than the base default.
+                                                JSONArray fullStorablesEarly = fullPreset["storables"] != null ? fullPreset["storables"].AsArray : null;
+                                                for (int siEarly = 0; fullStorablesEarly != null && siEarly < fullStorablesEarly.Count; siEarly++)
+                                                {
+                                                    JSONClass snEarly = fullStorablesEarly[siEarly] as JSONClass;
+                                                    if (snEarly == null) continue;
+                                                    if (!string.Equals(snEarly["id"]?.Value, "ClothingPresets", StringComparison.OrdinalIgnoreCase)) continue;
+                                                    JSONStorable cpsEarly = atom.GetStorableByID("ClothingPresets");
+                                                    if (cpsEarly != null)
+                                                    {
+                                                        try
+                                                        {
+                                                            try { MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath); } catch { }
+                                                            cpsEarly.RestoreFromJSON(snEarly);
+                                                            LogUtil.Log("[DragDropDebug][ClothingOnly] ClothingPresets pre-applied from preset before item activation");
+                                                        }
+                                                        catch { }
+                                                        finally { try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { } }
+                                                    }
+                                                    break;
+                                                }
+
                                                 ClearAtomGeometryGarmentClothingBools(atom);
                                                 try
                                                 {
@@ -2319,6 +2412,47 @@ namespace VPB
                                                                 }
                                                                 finally { try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { } }
                                                                 LogUtil.Log($"[DragDropDebug][ClothingOnly] subpreset storables applied: {subCount}");
+
+                                                                // If items weren't loaded yet (subCount==0), schedule a delayed pass
+                                                                // that polls until the material storables appear on the atom.
+                                                                if (subCount == 0)
+                                                                {
+                                                                    string atomUidDelay = null;
+                                                                    try { atomUidDelay = atom.uid; } catch { }
+                                                                    if (!string.IsNullOrEmpty(atomUidDelay) && SuperController.singleton != null)
+                                                                    {
+                                                                        var pendingList = new List<KeyValuePair<string, JSONClass>>();
+                                                                        for (int si3 = 0; si3 < fullStorables.Count; si3++)
+                                                                        {
+                                                                            JSONClass sn3 = fullStorables[si3] as JSONClass;
+                                                                            if (sn3 == null) continue;
+                                                                            string sid3 = sn3["id"]?.Value ?? "";
+                                                                            bool match3 = false;
+                                                                            foreach (string pfx3 in garmentPrefixes)
+                                                                                if (sid3.StartsWith(pfx3, StringComparison.OrdinalIgnoreCase)) { match3 = true; break; }
+                                                                            if (match3) pendingList.Add(new KeyValuePair<string, JSONClass>(sid3, CloneJsonClass(sn3)));
+                                                                        }
+                                                                        if (pendingList.Count > 0)
+                                                                        {
+                                                                            JSONClass cpJsonDelay = null;
+                                                                            for (int si4 = 0; si4 < fullStorables.Count; si4++)
+                                                                            {
+                                                                                JSONClass sn4 = fullStorables[si4] as JSONClass;
+                                                                                if (sn4 != null && string.Equals(sn4["id"]?.Value, "ClothingPresets", StringComparison.OrdinalIgnoreCase))
+                                                                                { cpJsonDelay = CloneJsonClass(sn4); break; }
+                                                                            }
+                                                                            var pendingState = new PendingClothingOnlySubpresetState
+                                                                            {
+                                                                                AtomUid = atomUidDelay,
+                                                                                StorablesToApply = pendingList,
+                                                                                ClothingPresetsJson = cpJsonDelay,
+                                                                                LoadDirPath = normalizedPath
+                                                                            };
+                                                                            SuperController.singleton.StartCoroutine(DelayedClothingOnlySubpresetRestoreCoroutine(pendingState));
+                                                                            LogUtil.Log($"[DragDropDebug][ClothingOnly] scheduled delayed subpreset restore for {pendingList.Count} storables");
+                                                                        }
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -2366,6 +2500,23 @@ namespace VPB
 
                                                 if (itemType == ItemType.Appearance && appearanceMode == "keep")
                                                 {
+                                                    // Apply ClothingPresetsJson BEFORE LoadPresetFromJSON so that when geometry bools
+                                                    // activate clothing items, they read the correct sub-preset selection rather than base.
+                                                    if (keepGarmentState?.ClothingPresetsJson != null)
+                                                    {
+                                                        JSONStorable cpsKeep = atom.GetStorableByID("ClothingPresets");
+                                                        if (cpsKeep != null)
+                                                        {
+                                                            try
+                                                            {
+                                                                try { MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath); } catch { }
+                                                                cpsKeep.RestoreFromJSON(keepGarmentState.ClothingPresetsJson);
+                                                                LogUtil.Log("[DragDropDebug] Appearance keep: ClothingPresets pre-applied before LoadPresetFromJSON");
+                                                            }
+                                                            catch { }
+                                                            finally { try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { } }
+                                                        }
+                                                    }
                                                     LogUtil.Log($"[DragDropDebug] Appearance keep: LoadPresetFromJSON merge={merge} (garment state injected into preset JSON; post-restore still runs)");
                                                 }
                                                 LogUtil.Log($"[DragDropDebug] Calling LoadPresetFromJSON (merge={merge})...");

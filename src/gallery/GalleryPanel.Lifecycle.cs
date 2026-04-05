@@ -174,6 +174,8 @@ namespace VPB
 
         void OnDestroy()
         {
+            UnsubscribeLocaleChanged();
+
             if (VPBConfig.Instance != null)
             {
                 VPBConfig.Instance.ConfigChanged -= UpdateSideButtonPositions;

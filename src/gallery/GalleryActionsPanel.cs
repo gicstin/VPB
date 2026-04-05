@@ -119,15 +119,55 @@ namespace VPB
             CreateTabButtons();
         }
 
+        private static string ActionTabLabel(ActionUITabType tabType)
+        {
+            switch (tabType)
+            {
+                case ActionUITabType.Primary: return VPBTranslation.T("actions.tab.primary", "Primary");
+                case ActionUITabType.Tags: return VPBTranslation.T("actions.tab.tags", "Tags");
+                case ActionUITabType.Info: return VPBTranslation.T("actions.tab.info", "Info");
+                case ActionUITabType.Dependencies: return VPBTranslation.T("actions.tab.dependencies", "Dependencies");
+                case ActionUITabType.Audio: return VPBTranslation.T("actions.tab.audio", "Audio");
+                case ActionUITabType.Position: return VPBTranslation.T("actions.tab.position", "Position");
+                default: return tabType.ToString();
+            }
+        }
+
         private void CreateTabButtons()
         {
             foreach (ActionUITabType tabType in Enum.GetValues(typeof(ActionUITabType)))
             {
                 ActionUITabType t = tabType;
-                string label = tabType.ToString();
+                string label = ActionTabLabel(t);
                 GameObject btn = UI.CreateUIButton(tabsContainerGO, 0, 40, label, 16, 0, 0, AnchorPresets.middleCenter, () => SwitchTab(t));
                 tabButtons.Add(btn);
+                Text btxt = btn.GetComponentInChildren<Text>();
+                if (btxt != null) VPBUiFont.ApplyTo(btxt);
             }
+        }
+
+        public void RefreshLocalizedUi()
+        {
+            int i = 0;
+            foreach (ActionUITabType tabType in Enum.GetValues(typeof(ActionUITabType)))
+            {
+                if (i < tabButtons.Count && tabButtons[i] != null)
+                {
+                    Text btxt = tabButtons[i].GetComponentInChildren<Text>();
+                    if (btxt != null)
+                    {
+                        btxt.text = ActionTabLabel(tabType);
+                        VPBUiFont.ApplyTo(btxt);
+                    }
+                }
+                i++;
+            }
+            if (actionsPaneGO != null)
+            {
+                foreach (Text t in actionsPaneGO.GetComponentsInChildren<Text>(true))
+                    VPBUiFont.ApplyTo(t);
+            }
+            UpdateUI();
         }
 
         public void SwitchTab(ActionUITabType tabType)

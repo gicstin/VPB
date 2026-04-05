@@ -376,7 +376,9 @@ namespace VPB
 
         private void UpdateFollowButtonState()
         {
-            string text = followUser ? "Follow" : "Static";
+            string text = followUser
+                ? VPBTranslation.T("gallery.follow.follow", "Follow")
+                : VPBTranslation.T("gallery.follow.static", "Static");
             Color color = followUser ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.3f, 0.3f, 0.3f, 1f);
             
             if (rightFollowBtnText != null) rightFollowBtnText.text = text;
@@ -899,16 +901,6 @@ namespace VPB
                         return refList.FindIndex(rt => rt != null && rt.GetComponentInChildren<Text>() == t);
                     }
 
-                    int FindIndexByExactLabel(string label)
-                    {
-                        if (string.IsNullOrEmpty(label)) return -1;
-                        return refList.FindIndex(rt => {
-                            if (rt == null) return false;
-                            Text tx = rt.GetComponentInChildren<Text>();
-                            if (tx == null) return false;
-                            return string.Equals(tx.text, label, StringComparison.Ordinal);
-                        });
-                    }
 
                     idxCategory = FindIndexByTextRef(rightCategoryBtnText != null ? rightCategoryBtnText : leftCategoryBtnText);
                     idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
@@ -919,9 +911,8 @@ namespace VPB
                     idxFloating = FindIndexByTextRef(rightDesktopModeBtnText != null ? rightDesktopModeBtnText : leftDesktopModeBtnText);
                     idxFollow = FindIndexByTextRef(rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText);
 
-                    // Settings and Clone don't currently have stored Text refs.
-                    idxSettings = FindIndexByExactLabel("Settings");
-                    idxClone = FindIndexByExactLabel("Clone");
+                    idxSettings = FindIndexByTextRef(rightSettingsBtnText != null ? rightSettingsBtnText : leftSettingsBtnText);
+                    idxClone    = FindIndexByTextRef(rightCloneBtnText    != null ? rightCloneBtnText    : leftCloneBtnText);
 
                     if (rightLoadRandomBtn != null)
                     {
