@@ -131,8 +131,8 @@ namespace VPB
         public bool EnableAutoFixedGallery = true;
         public float ListRowHeight = 100f;
         public int GridColumnCount = 4;
-        /// <summary>UI language id: en, zh_cn, etc. Matches vpb_translations/&lt;id&gt;.json</summary>
-        public string UiLocale = "en";
+        /// <summary>UI language id: en, zh_cn, etc. Matches vpb_translations/&lt;id&gt;.json. Empty string means auto-detect on first run.</summary>
+        public string UiLocale = "";
         public bool IsLoadingScene { get; private set; }
 
         private bool? _isDevMode;
@@ -216,7 +216,7 @@ namespace VPB
             EnableAutoFixedGallery = true;
             ListRowHeight = 100f;
             GridColumnCount = 4;
-            UiLocale = "en";
+            UiLocale = "";
 
             try
             {

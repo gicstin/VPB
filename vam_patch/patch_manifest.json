@@ -124,6 +124,14 @@
     "IsDirectory": false
   },
   {
+    "RelativePath": "BepInEx/plugins/vpb_translations/ja.json",
+    "IsDirectory": false
+  },
+  {
+    "RelativePath": "BepInEx/plugins/vpb_translations/ko.json",
+    "IsDirectory": false
+  },
+  {
     "RelativePath": "BepInEx/plugins/zstd",
     "IsDirectory": true
   },

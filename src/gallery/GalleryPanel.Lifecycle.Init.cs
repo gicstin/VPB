@@ -22,7 +22,7 @@ namespace VPB
 
                 isFixedLocally = !isVR && (VPBConfig.Instance.DesktopFixedMode || VPBConfig.Instance.EnableAutoFixedGallery) && (Gallery.singleton == null || Gallery.singleton.PanelCount == 0);
                 
-                if (isFixedLocally && VPBConfig.Instance.DesktopFixedAutoCollapse)
+                if (isFixedLocally)
                 {
                     isCollapsed = true;
                 }
@@ -161,7 +161,7 @@ namespace VPB
             ctHover.OnHoverChange += (enter) => {
                 isHoveringTrigger = enter;
             };
-            collapseTriggerGO.SetActive(isFixedLocally && VPBConfig.Instance.DesktopFixedAutoCollapse);
+            collapseTriggerGO.SetActive(isFixedLocally); // active in fixed mode; visual state controlled by isCollapsed
             if (isFixedLocally)
             {
                 Image img = collapseTriggerGO.GetComponent<Image>();

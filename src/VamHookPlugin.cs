@@ -508,6 +508,9 @@ namespace VPB
             m_StyleSubHeader.fontStyle = FontStyle.Bold;
             m_StyleSubHeader.normal.textColor = new Color(0.85f, 0.88f, 0.92f, 1f);
             m_StyleSubHeader.alignment = TextAnchor.MiddleLeft;
+            // Skin labels often have wordWrap=true; in horizontal rows (e.g. language window title + X)
+            // that yields a tiny column and splits words like "Language" across lines.
+            m_StyleSubHeader.wordWrap = false;
 
             m_StyleButton = new GUIStyle(GUI.skin.button);
             m_StyleButton.normal.background = m_TexBtnBg;

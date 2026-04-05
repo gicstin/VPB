@@ -72,7 +72,11 @@ namespace VPB
             GUILayout.BeginVertical(m_StylePanel);
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label(VPBTranslation.T("hook.lang.title", "Language"), m_StyleSubHeader);
+            GUILayout.Label(
+                VPBTranslation.T("hook.lang.title", "Language"),
+                m_StyleSubHeader,
+                GUILayout.ExpandWidth(false),
+                GUILayout.Height(22));
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(26), GUILayout.Height(22)))
             {

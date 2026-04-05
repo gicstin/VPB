@@ -251,48 +251,45 @@ namespace VPB
                 if (isFixedLocally)
                 {
                     bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
-                    if (collapseTriggerGO != null) collapseTriggerGO.SetActive(autoCollapse);
+                    // Show trigger whenever collapsed (to allow expanding), or when in AH mode expanded (for hover detection)
+                    if (collapseTriggerGO != null) collapseTriggerGO.SetActive(isCollapsed || autoCollapse);
 
-                    if (autoCollapse)
+                    if (isCollapsed)
                     {
-                        if (isCollapsed)
+                        // Both AO and AH: expand on hover over trigger
+                        if (isHoveringTrigger)
                         {
-                            if (isHoveringTrigger)
+                            SetCollapsed(false);
+                        }
+                    }
+                    else if (autoCollapse)
+                    {
+                        // AH mode: auto-collapse after user stops hovering
+                        // Manual hover check for trigger area when it is NOT a raycast target (to avoid blocking scrollbar)
+                        bool isHoveringTriggerManual = false;
+                        if (collapseTriggerGO != null)
+                        {
+                            RectTransform ctRT = collapseTriggerGO.GetComponent<RectTransform>();
+                            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null; // Overlay mode uses null cam
+                            isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
+                        }
+
+                        // If NOT hovering gallery and NOT hovering side buttons and NOT hovering trigger, collapse after delay
+                        bool isHoveringAny = hoverCount > 0 || isHoveringTrigger || isHoveringTriggerManual || (settingsPanel != null && settingsPanel.settingsPaneGO != null && settingsPanel.settingsPaneGO.activeSelf);
+                        if (!isHoveringAny)
+                        {
+                            collapseTimer += Time.deltaTime;
+                            if (collapseTimer >= 1.0f) // 1 second delay
                             {
-                                SetCollapsed(false);
+                                SetCollapsed(true);
                             }
                         }
                         else
                         {
-                            // Manual hover check for trigger area when it is NOT a raycast target (to avoid blocking scrollbar)
-                            bool isHoveringTriggerManual = false;
-                            if (collapseTriggerGO != null)
-                            {
-                                RectTransform ctRT = collapseTriggerGO.GetComponent<RectTransform>();
-                                Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null; // Overlay mode uses null cam
-                                isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
-                            }
-
-                            // If NOT hovering gallery and NOT hovering side buttons and NOT hovering trigger, collapse after delay
-                            bool isHoveringAny = hoverCount > 0 || isHoveringTrigger || isHoveringTriggerManual || (settingsPanel != null && settingsPanel.settingsPaneGO != null && settingsPanel.settingsPaneGO.activeSelf);
-                            if (!isHoveringAny)
-                            {
-                                collapseTimer += Time.deltaTime;
-                                if (collapseTimer >= 1.0f) // 1 second delay
-                                {
-                                    SetCollapsed(true);
-                                }
-                            }
-                            else
-                            {
-                                collapseTimer = 0f;
-                            }
+                            collapseTimer = 0f;
                         }
                     }
-                    else if (isCollapsed)
-                    {
-                        SetCollapsed(false);
-                    }
+                    // AO mode when expanded: stay expanded, no action needed
 
                     if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
                     {

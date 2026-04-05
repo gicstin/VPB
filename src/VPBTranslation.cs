@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -54,12 +55,73 @@ namespace VPB
             string id = "en";
             try
             {
-                if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.UiLocale))
-                    id = NormalizeLocaleId(VPBConfig.Instance.UiLocale);
+                if (VPBConfig.Instance != null)
+                {
+                    string configured = VPBConfig.Instance.UiLocale;
+                    if (!string.IsNullOrEmpty(configured))
+                    {
+                        id = NormalizeLocaleId(configured);
+                    }
+                    else
+                    {
+                        // First run: auto-detect from system locale, save if supported
+                        string detected = DetectSystemLocale();
+                        if (detected != "en")
+                        {
+                            VPBConfig.Instance.UiLocale = detected;
+                            VPBConfig.Instance.Save();
+                        }
+                        else
+                        {
+                            // Mark as explicitly configured to "en" so we don't re-detect next time
+                            VPBConfig.Instance.UiLocale = "en";
+                            VPBConfig.Instance.Save();
+                        }
+                        id = detected;
+                    }
+                }
             }
             catch { }
             SetLocale(id, saveConfig: false);
             _initialized = true;
+        }
+
+        /// <summary>Maps the OS UI culture to a VPB locale id, falling back to "en" if no translation file exists.</summary>
+        private static string DetectSystemLocale()
+        {
+            try
+            {
+                string cultureName = CultureInfo.CurrentUICulture.Name;
+                string candidate = MapCultureNameToLocaleId(cultureName);
+                if (candidate == "en") return "en";
+
+                // Only use the detected locale if the translation file is actually present
+                string dir = TranslationsDirectory;
+                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                {
+                    string filePath = Path.Combine(dir, candidate + ".json");
+                    if (File.Exists(filePath)) return candidate;
+                }
+            }
+            catch { }
+            return "en";
+        }
+
+        /// <summary>Converts a .NET culture name (e.g. "zh-CN", "ja-JP") to a VPB locale id.</summary>
+        private static string MapCultureNameToLocaleId(string cultureName)
+        {
+            if (string.IsNullOrEmpty(cultureName)) return "en";
+            string lower = cultureName.ToLowerInvariant();
+            // Simplified Chinese
+            if (lower == "zh-cn" || lower == "zh-hans" || lower.StartsWith("zh-hans-")) return "zh_cn";
+            // Traditional Chinese
+            if (lower == "zh-tw" || lower == "zh-hk" || lower == "zh-mo" ||
+                lower == "zh-hant" || lower.StartsWith("zh-hant-")) return "zh_tw";
+            // Japanese
+            if (lower == "ja" || lower.StartsWith("ja-")) return "ja";
+            // Korean
+            if (lower == "ko" || lower.StartsWith("ko-")) return "ko";
+            return "en";
         }
 
         public static void EnsureInitialized()
