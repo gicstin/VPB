@@ -9,33 +9,8 @@ namespace VPB
     {
         private void ToggleRatingSort()
         {
-            if (isRatingSortToggleEnabled)
-            {
-                isRatingSortToggleEnabled = false;
-                var restore = ratingSortTogglePreviousState != null
-                    ? ratingSortTogglePreviousState.Clone()
-                    : GallerySortManager.Instance.GetDefaultSortState("Files");
-                ratingSortTogglePreviousState = null;
-
-                SaveSortState("Files", restore);
-                UpdateSortButtonText(fileSortBtnText, restore);
-                UpdateSortButtonText(fileSortTypeText, fileSortDirText, restore);
-                SyncRatingSortToggleState();
-
-                RefreshFiles();
-                return;
-            }
-
-            var current = GetSortState("Files");
-            if (current != null) ratingSortTogglePreviousState = current.Clone();
-            isRatingSortToggleEnabled = true;
-
-            var state = new SortState(SortType.Rating, SortDirection.Descending);
-            SaveSortState("Files", state);
-            UpdateSortButtonText(fileSortBtnText, state);
-            UpdateSortButtonText(fileSortTypeText, fileSortDirText, state);
+            isRatingSortToggleEnabled = !isRatingSortToggleEnabled;
             SyncRatingSortToggleState();
-
             RefreshFiles();
         }
 
@@ -64,13 +39,6 @@ namespace VPB
 
         private void CycleSort(string context, Text typeText, Text dirText)
         {
-            if (context == "Files" && isRatingSortToggleEnabled)
-            {
-                isRatingSortToggleEnabled = false;
-                ratingSortTogglePreviousState = null;
-                SyncRatingSortToggleState();
-            }
-
             var state = GetSortState(context);
             // Cycle Type
             int currentType = (int)state.Type;
@@ -110,13 +78,6 @@ namespace VPB
 
         private void ToggleSortDirection(string context, Text typeText, Text dirText)
         {
-            if (context == "Files" && isRatingSortToggleEnabled)
-            {
-                isRatingSortToggleEnabled = false;
-                ratingSortTogglePreviousState = null;
-                SyncRatingSortToggleState();
-            }
-
             var state = GetSortState(context);
             state.Direction = (state.Direction == SortDirection.Ascending) ? SortDirection.Descending : SortDirection.Ascending;
             SaveSortState(context, state);

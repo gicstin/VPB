@@ -733,7 +733,6 @@ namespace VPB
         private GameObject languageMenuPopupGO;
         private bool languageMenuOpen;
         private bool isRatingSortToggleEnabled;
-        private SortState ratingSortTogglePreviousState;
 
         // Tracks panels hidden when a save flow starts, so they can be restored when it ends
         private List<Canvas> _canvasesHiddenForSave;
