@@ -808,6 +808,34 @@ namespace VPB
             AddTooltip(footerAutoHideBtn, "gallery.tooltip.auto_hide_fixed", "Auto-Hide (Fixed)");
             AddHoverDelegate(footerRemoveAllHairBtn);
 
+            // Register inner pane button scale actions (footer/pagination)
+            { var prt = paginationRT; innerPaneScaleActions.Add(s => { if (prt) prt.sizeDelta = new Vector2(0, 40f*s); }); }
+            var footerBtnGOs = new GameObject[] {
+                footerFollowAngleBtn, footerFollowDistanceBtn, footerFollowHeightBtn,
+                paginationFirstBtn, paginationPrev10Btn, paginationPrevBtn,
+                paginationNextBtn, paginationNext10Btn, paginationLastBtn,
+                selectAllBtn, clearSelectionBtn,
+                gridSizeMinusBtn, gridSizePlusBtn,
+                footerLayoutBtn, footerHeightBtn, footerAutoHideBtn,
+                footerRemoveAllHairBtn,
+            };
+            var footerBtnFonts = new int[] {
+                20, 20, 20,
+                18, 18, 20,
+                20, 18, 18,
+                20, 20,
+                24, 24,
+                20, 20, 20,
+                16,
+            };
+            for (int i = 0; i < footerBtnGOs.Length; i++)
+            {
+                var rt = footerBtnGOs[i] != null ? footerBtnGOs[i].GetComponent<RectTransform>() : null;
+                var t = footerBtnGOs[i] != null ? footerBtnGOs[i].GetComponentInChildren<Text>() : null;
+                int f = footerBtnFonts[i];
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(f*s); });
+            }
+
             // Hover Path Text (Now placed above the buttons with background)
             GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.85f), AnchorPresets.hStretchBottom, 0, 40, new Vector2(0, 40));
             pathGO.name = "HoverPathContainer";

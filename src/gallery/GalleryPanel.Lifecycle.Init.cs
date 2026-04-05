@@ -46,7 +46,8 @@ namespace VPB
                     LogUtil.LogError("[GalleryPanel.Init] Error loading ApplyMode: " + ex.Message);
                 }
 
-                VPBConfig.Instance.ConfigChanged += UpdateSideButtonPositions;
+                VPBConfig.Instance.ConfigChanged += ApplySideButtonScale;
+                VPBConfig.Instance.ConfigChanged += ApplyInnerPaneScale;
                 VPBConfig.Instance.ConfigChanged += UpdateSideButtonsVisibility;
                 VPBConfig.Instance.ConfigChanged += ApplyCurvatureToChildren;
                 VPBConfig.Instance.ConfigChanged += UpdateFooterFollowStates;
@@ -351,6 +352,18 @@ namespace VPB
             VPBUiFont.ApplyTo(quickFiltersToggleBtnText);
             AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets");
 
+            // Register inner pane button scale actions (title bar)
+            { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, 70f*s); }); }
+            { var t = titleText; innerPaneScaleActions.Add(s => { if (t) { t.fontSize = Mathf.RoundToInt(28*s); t.GetComponent<RectTransform>().sizeDelta = new Vector2(300f*s, 40f*s); } }); }
+            { var t = fpsText; innerPaneScaleActions.Add(s => { if (t) { t.fontSize = Mathf.RoundToInt(20*s); t.GetComponent<RectTransform>().sizeDelta = new Vector2(100f*s, 40f*s); } }); }
+            { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) go.GetComponent<RectTransform>().sizeDelta = new Vector2(50f*s, 50f*s); if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(16*s); t.resizeTextMinSize = Mathf.RoundToInt(10*s); } }); }
+            { var rt = titleSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 40f*s); }); }
+            { var rt = fileSortTypeRT; var t = fileSortTypeText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
+            { var rt = fileSortDirRT; var t = fileSortDirText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
+            { var rt = ratingSortToggleRT; var t = ratingSortToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(18*s); }); }
+            { var rt = refreshRT; var t = titleBarRefreshBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(90f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
+            { var rt = qfToggleRT; var t = quickFiltersToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(130f*s, 45f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
+
             // Tab Area - Create for all panels so undocked can clone/filter
             if (true)
             {
@@ -392,6 +405,8 @@ namespace VPB
                 rsSubRT.anchoredPosition = new Vector2(-190, -10); // Below split line
                 
                 rightSubSortBtnText = rightSubSortBtn.GetComponentInChildren<Text>();
+                { var rt = rsSubRT; var t = rightSubSortBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
+                // (right sub-search and sub-clear scale actions added below after their RTs are declared)
                 Button rightSubSortButton = rightSubSortBtn.GetComponent<Button>();
                 rightSubSortButton.onClick.RemoveAllListeners();
                 rightSubSortButton.onClick.AddListener(() => {
@@ -412,6 +427,7 @@ namespace VPB
                 rSubSearchRT.anchorMax = new Vector2(1, 0.5f);
                 rSubSearchRT.pivot = new Vector2(1, 1);
                 rSubSearchRT.anchoredPosition = new Vector2(-10, -10);
+                { var rt = rSubSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
                 
                 // Right Sub Clear Button
                 rightSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomRight, () => {
@@ -430,6 +446,7 @@ namespace VPB
                 rSubClearRT.anchorMax = new Vector2(1, 0);
                 rSubClearRT.pivot = new Vector2(1, 0);
                 rSubClearRT.anchoredPosition = new Vector2(-10, 68);
+                { var rt = rSubClearRT; var t = rightSubClearBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(220f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
                 rightSubClearBtn.SetActive(false);
 
                 // Init Sub Sort Text
@@ -449,6 +466,7 @@ namespace VPB
                 rsRT.anchoredPosition = new Vector2(-190, -55); // Left of Search
                 
                 rightSortBtnText = rightSortBtn.GetComponentInChildren<Text>();
+                { var rt = rsRT; var t = rightSortBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
                 Button rightSortButton = rightSortBtn.GetComponent<Button>();
                 rightSortButton.onClick.RemoveAllListeners();
                 rightSortButton.onClick.AddListener(() => {
@@ -469,6 +487,7 @@ namespace VPB
                 rrRT.anchoredPosition = new Vector2(-145, -55); // Between Sort and Search
 
                 rightRefreshBtnText = rightRefreshBtn.GetComponentInChildren<Text>();
+                { var rt = rrRT; var t = rightRefreshBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(18*s); }); }
                 Button rightRefreshButton = rightRefreshBtn.GetComponent<Button>();
                 rightRefreshButton.onClick.RemoveAllListeners();
                 rightRefreshButton.onClick.AddListener(() => {
@@ -508,6 +527,7 @@ namespace VPB
                 rSearchRT.anchorMax = new Vector2(1, 1);
                 rSearchRT.pivot = new Vector2(1, 1);
                 rSearchRT.anchoredPosition = new Vector2(-10, -55);
+                { var rt = rSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
 
                 // 2. Left Tab Area
                 leftTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchLeft, tabAreaWidth, 0, Vector2.zero);
@@ -546,6 +566,7 @@ namespace VPB
                 lsSubRT.anchoredPosition = new Vector2(10, -10); // Below split line
                 
                 leftSubSortBtnText = leftSubSortBtn.GetComponentInChildren<Text>();
+                { var rt = lsSubRT; var t = leftSubSortBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
                 Button leftSubSortButton = leftSubSortBtn.GetComponent<Button>();
                 leftSubSortButton.onClick.RemoveAllListeners();
                 leftSubSortButton.onClick.AddListener(() => {
@@ -566,6 +587,7 @@ namespace VPB
                 lSubSearchRT.anchorMax = new Vector2(0, 0.5f);
                 lSubSearchRT.pivot = new Vector2(0, 1);
                 lSubSearchRT.anchoredPosition = new Vector2(55, -10);
+                { var rt = lSubSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
 
                 // Left Sub Clear Button
                 leftSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomLeft, () => {
@@ -584,6 +606,7 @@ namespace VPB
                 lSubClearRT.anchorMax = new Vector2(0, 0);
                 lSubClearRT.pivot = new Vector2(0, 0);
                 lSubClearRT.anchoredPosition = new Vector2(10, 68);
+                { var rt = lSubClearRT; var t = leftSubClearBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(220f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
                 leftSubClearBtn.SetActive(false);
 
                 // Init Sub Sort Text
@@ -603,6 +626,7 @@ namespace VPB
                 lsRT.anchoredPosition = new Vector2(10, -55);
                 
                 leftSortBtnText = leftSortBtn.GetComponentInChildren<Text>();
+                { var rt = lsRT; var t = leftSortBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
                 Button leftSortButton = leftSortBtn.GetComponent<Button>();
                 leftSortButton.onClick.RemoveAllListeners();
                 leftSortButton.onClick.AddListener(() => {
@@ -630,6 +654,7 @@ namespace VPB
                 lSearchRT.anchorMax = new Vector2(0, 1);
                 lSearchRT.pivot = new Vector2(0, 1);
                 lSearchRT.anchoredPosition = new Vector2(55, -55);
+                { var rt = lSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
 
                 // Right Button Container
                 rightSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleRight, 130, 700, new Vector2(140, 0));
@@ -2316,7 +2341,12 @@ UpdateDesktopModeButton();
             closeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(closeBtn);
 
-            UpdateSideButtonPositions();
+            // Register inner pane button scale actions (close/minimize)
+            { var rt = minRT; var t = minimizeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(50f*s, 50f*s); if (t) t.fontSize = Mathf.RoundToInt(30*s); }); }
+            { var rt = closeBtn.GetComponent<RectTransform>(); var t = closeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(50f*s, 50f*s); if (t) t.fontSize = Mathf.RoundToInt(30*s); }); }
+
+            ApplyInnerPaneScale();
+            ApplySideButtonScale();
             UpdateSideButtonsVisibility();
             UpdateLayout();
             SubscribeLocaleChanged();

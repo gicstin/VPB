@@ -487,6 +487,7 @@ namespace VPB
             return AppearanceGender.Unknown;
         }
         private List<Atom> personAtoms = new List<Atom>();
+        private System.Collections.Generic.List<System.Action<float>> innerPaneScaleActions = new System.Collections.Generic.List<System.Action<float>>();
         private GameObject leftSideContainer;
         private GameObject rightSideContainer;
         private GameObject leftSideHoverStrip;

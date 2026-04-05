@@ -178,7 +178,8 @@ namespace VPB
 
             if (VPBConfig.Instance != null)
             {
-                VPBConfig.Instance.ConfigChanged -= UpdateSideButtonPositions;
+                VPBConfig.Instance.ConfigChanged -= ApplySideButtonScale;
+                VPBConfig.Instance.ConfigChanged -= ApplyInnerPaneScale;
                 VPBConfig.Instance.ConfigChanged -= UpdateSideButtonsVisibility;
                 VPBConfig.Instance.ConfigChanged -= ApplyCurvatureToChildren;
                 VPBConfig.Instance.ConfigChanged -= UpdateFooterFollowStates;

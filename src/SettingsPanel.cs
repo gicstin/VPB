@@ -59,6 +59,12 @@ namespace VPB
         private float pendingGalleryOpacity;
         private float backupGalleryOpacity;
 
+        private float pendingSideButtonScale;
+        private float backupSideButtonScale;
+
+        private float pendingInnerPaneScale;
+        private float backupInnerPaneScale;
+
         private bool pendingDragDropReplaceMode;
         private bool backupDragDropReplaceMode;
 
@@ -153,6 +159,12 @@ namespace VPB
             pendingGalleryOpacity = VPBConfig.Instance.GalleryOpacity;
             backupGalleryOpacity = VPBConfig.Instance.GalleryOpacity;
 
+            pendingSideButtonScale = VPBConfig.Instance.SideButtonScale;
+            backupSideButtonScale = VPBConfig.Instance.SideButtonScale;
+
+            pendingInnerPaneScale = VPBConfig.Instance.InnerPaneScale;
+            backupInnerPaneScale = VPBConfig.Instance.InnerPaneScale;
+
             pendingDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
             backupDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
 
@@ -228,6 +240,10 @@ namespace VPB
             VPBConfig.Instance.EnableGalleryFade = backupEnableGalleryFade;
             VPBConfig.Instance.EnableGalleryTranslucency = backupEnableGalleryTranslucency;
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
+            VPBConfig.Instance.SideButtonScale = backupSideButtonScale;
+            if (parentPanel != null) parentPanel.ApplySideButtonScale();
+            VPBConfig.Instance.InnerPaneScale = backupInnerPaneScale;
+            if (parentPanel != null) parentPanel.ApplyInnerPaneScale();
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
             VPBConfig.Instance.AppearanceClothingApplyMode = backupAppearanceClothingApplyMode;
             VPBConfig.Instance.EnableDragDrop = backupEnableDragDrop;
@@ -300,6 +316,8 @@ namespace VPB
                 VPBConfig.Instance.EnableGalleryFade = pendingEnableGalleryFade;
                 VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
                 VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
+                VPBConfig.Instance.SideButtonScale = pendingSideButtonScale;
+                VPBConfig.Instance.InnerPaneScale = pendingInnerPaneScale;
                 VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
                 VPBConfig.Instance.AppearanceClothingApplyMode = pendingAppearanceClothingApplyMode;
                 VPBConfig.Instance.EnableDragDrop = pendingEnableDragDrop;
@@ -365,6 +383,18 @@ namespace VPB
                 VPBConfig.Instance.GalleryOpacity = val;
                 VPBConfig.Instance.TriggerChange();
             }, VPBTranslation.T("settings.tip.gallery_opacity", "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque."));
+
+            CreateSliderSetting(VPBTranslation.T("settings.side_button_scale", "Side Button Scale"), pendingSideButtonScale, 0.5f, 2.0f, (val) => {
+                pendingSideButtonScale = val;
+                VPBConfig.Instance.SideButtonScale = val;
+                if (parentPanel != null) parentPanel.ApplySideButtonScale();
+            }, VPBTranslation.T("settings.tip.side_button_scale", "Scales the size of the side buttons. 1.0 = default size."));
+
+            CreateSliderSetting(VPBTranslation.T("settings.inner_pane_scale", "Inner Pane Scale"), pendingInnerPaneScale, 0.5f, 2.0f, (val) => {
+                pendingInnerPaneScale = val;
+                VPBConfig.Instance.InnerPaneScale = val;
+                if (parentPanel != null) parentPanel.ApplyInnerPaneScale();
+            }, VPBTranslation.T("settings.tip.inner_pane_scale", "Scales all UI elements inside the gallery pane. 1.0 = default size."));
 
             // Side Button Gaps
             CreateToggleSetting(VPBTranslation.T("settings.side_button_gaps", "Side Button Gaps"), pendingEnableButtonGaps, (val) => {

@@ -141,8 +141,10 @@ namespace VPB
                 if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
             }
             
-            float bottomOffset = 60; // Overlay status bar on top of grid
-            float topOffset = -65f;
+            float paneScale = VPBConfig.Instance.InnerPaneScale;
+            float bottomOffset = 60 * paneScale; // Overlay status bar on top of grid
+            float topOffset = -65f * paneScale;
+            float tabTopOffset = -95f * paneScale;
 
             contentScrollRT.offsetMin = new Vector2(leftOffset, bottomOffset);
             contentScrollRT.offsetMax = new Vector2(rightOffset, topOffset);
@@ -151,21 +153,25 @@ namespace VPB
             {
                 RectTransform rt = leftTabScrollGO.GetComponent<RectTransform>();
                 rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
+                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
             }
             if (rightTabScrollGO != null)
             {
                 RectTransform rt = rightTabScrollGO.GetComponent<RectTransform>();
                 rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
+                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
             }
             if (leftSubTabScrollGO != null)
             {
                 RectTransform rt = leftSubTabScrollGO.GetComponent<RectTransform>();
                 rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
+                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
             }
             if (rightSubTabScrollGO != null)
             {
                 RectTransform rt = rightSubTabScrollGO.GetComponent<RectTransform>();
                 rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
+                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
             }
             if (leftSubClearBtn != null)
             {
@@ -183,13 +189,13 @@ namespace VPB
             {
                 // Footer bar: ALWAYS stretch to full width of backgroundBoxGO
                 paginationRT.offsetMin = new Vector2(0, 0);
-                paginationRT.offsetMax = new Vector2(0, 60);
-                
+                paginationRT.offsetMax = new Vector2(0, 60 * paneScale);
+
                 if (hoverPathRT != null)
                 {
                     // Hover bar: stretch to full width
-                    hoverPathRT.offsetMin = new Vector2(0, 60);
-                    hoverPathRT.offsetMax = new Vector2(0, 120);
+                    hoverPathRT.offsetMin = new Vector2(0, 60 * paneScale);
+                    hoverPathRT.offsetMax = new Vector2(0, 120 * paneScale);
                 }
             }
             
@@ -388,11 +394,70 @@ namespace VPB
             if (leftFollowBtnImage != null) leftFollowBtnImage.color = color;
         }
 
+        public void ApplyInnerPaneScale()
+        {
+            float s = VPBConfig.Instance.InnerPaneScale;
+            foreach (var action in innerPaneScaleActions)
+            {
+                try { action(s); } catch { }
+            }
+            UpdateLayout();
+        }
+
+        public void ApplySideButtonScale()
+        {
+            float scale = VPBConfig.Instance.SideButtonScale;
+            float w = 120f * scale;
+            float h = 50f * scale;
+            int fontSize = Mathf.RoundToInt(20f * scale);
+            float containerW = 130f * scale;
+            float containerOffset = 140f * scale;
+
+            foreach (var rt in rightSideButtons)
+            {
+                if (rt == null) continue;
+                rt.sizeDelta = new Vector2(w, h);
+                var t = rt.GetComponentInChildren<Text>();
+                if (t != null) t.fontSize = fontSize;
+            }
+            foreach (var rt in leftSideButtons)
+            {
+                if (rt == null) continue;
+                rt.sizeDelta = new Vector2(w, h);
+                var t = rt.GetComponentInChildren<Text>();
+                if (t != null) t.fontSize = fontSize;
+            }
+
+            if (rightSideContainer != null)
+            {
+                var rt = rightSideContainer.GetComponent<RectTransform>();
+                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 700f); rt.anchoredPosition = new Vector2(containerOffset, 0); }
+            }
+            if (rightSideHoverStrip != null)
+            {
+                var rt = rightSideHoverStrip.GetComponent<RectTransform>();
+                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 0f); rt.anchoredPosition = new Vector2(containerOffset, 0); }
+            }
+            if (leftSideContainer != null)
+            {
+                var rt = leftSideContainer.GetComponent<RectTransform>();
+                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 700f); rt.anchoredPosition = new Vector2(-containerOffset, 0); }
+            }
+            if (leftSideHoverStrip != null)
+            {
+                var rt = leftSideHoverStrip.GetComponent<RectTransform>();
+                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 0f); rt.anchoredPosition = new Vector2(-containerOffset, 0); }
+            }
+
+            UpdateSideButtonPositions();
+        }
+
         public void UpdateSideButtonPositions()
         {
             if (backgroundBoxGO == null) return;
-            float spacing = 60f;
-            float groupGap = VPBConfig.Instance.EnableButtonGaps ? 10f : 0f;
+            float scale = VPBConfig.Instance.SideButtonScale;
+            float spacing = 60f * scale;
+            float groupGap = VPBConfig.Instance.EnableButtonGaps ? 10f * scale : 0f;
             float stackHeight = GetSideButtonsStackHeight(spacing, groupGap);
             float topY = stackHeight * 0.5f;
 
