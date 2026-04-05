@@ -153,23 +153,23 @@ namespace VPB
             // Scene and core presets at the bottom
             options.Add(new SaveMenuOption
             {
-                Label = VPBTranslation.T("gallery.save.scene", "Save Scene..."),
+                Label = VPBTranslation.T("gallery.save.scene", "Scene..."),
                 Enabled = SuperController.singleton != null,
                 Action = () => SaveSceneFromGallery()
             });
-            AddPresetOption(VPBTranslation.T("gallery.save.appearance",  "Save Appearance Preset..."),  "AppearancePresets");
-            AddPresetOption(VPBTranslation.T("gallery.save.clothing",    "Save Clothing Preset..."),    "ClothingPresets");
-            AddPresetOption(VPBTranslation.T("gallery.save.hair",        "Save Hair Preset..."),        "HairPresets");
-            AddPresetOption(VPBTranslation.T("gallery.save.pose",        "Save Pose Preset..."),        "PosePresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.appearance",  "Appearance Preset..."),  "AppearancePresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.clothing",    "Clothing Preset..."),    "ClothingPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.hair",        "Hair Preset..."),        "HairPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.pose",        "Pose Preset..."),        "PosePresets");
 
             // Secondary presets above the core ones
-            AddPresetOption(VPBTranslation.T("gallery.save.glute_phys",  "Save Glute Phys Preset..."),  "FemaleGlutePhysicsPresets");
-            AddPresetOption(VPBTranslation.T("gallery.save.breast_phys", "Save Breast Phys Preset..."), "FemaleBreastPhysicsPresets");
-            AddPresetOption(VPBTranslation.T("gallery.save.plugin",      "Save Plugin Preset..."),      "PluginPresets");
-            AddPresetOption(VPBTranslation.T("gallery.save.animation",   "Save Animation Preset..."),   "AnimationPresets");
-            AddPresetOption(VPBTranslation.T("gallery.save.general",     "Save General Preset..."),     "Preset");
-            AddPresetOption(VPBTranslation.T("gallery.save.morph",       "Save Morph Preset..."),       "MorphPresets");
-            AddPresetOption(VPBTranslation.T("gallery.save.skin",        "Save Skin Preset..."),        "SkinPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.glute_phys",  "Glute Phys Preset..."),  "FemaleGlutePhysicsPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.breast_phys", "Breast Phys Preset..."), "FemaleBreastPhysicsPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.plugin",      "Plugin Preset..."),      "PluginPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.animation",   "Animation Preset..."),   "AnimationPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.general",     "General Preset..."),     "Preset");
+            AddPresetOption(VPBTranslation.T("gallery.save.morph",       "Morph Preset..."),       "MorphPresets");
+            AddPresetOption(VPBTranslation.T("gallery.save.skin",        "Skin Preset..."),        "SkinPresets");
 
             return options;
         }
@@ -265,14 +265,15 @@ namespace VPB
         {
             try
             {
-                float spacing = 60f;
-                float btnWidth = 200f; // Width of a single button
+                float scale = VPBConfig.Instance != null ? VPBConfig.Instance.SideButtonScale : 1f;
+                float spacing = 60f * scale;
+                float btnWidth = 200f * scale; // Width of a single button
 
                 // Position right side submenu buttons
                 if (rightSaveBtnGO != null && rightSaveBtnGO.activeInHierarchy)
                 {
                     RectTransform saveBtnRT = rightSaveBtnGO.GetComponent<RectTransform>();
-                    float startX = saveBtnRT.anchoredPosition.x + 110f; // To the right of Save button
+                    float startX = saveBtnRT.anchoredPosition.x + 110f * scale; // To the right of Save button
                     float startY = saveBtnRT.anchoredPosition.y;
 
                     int maxActiveIndex = -1;
@@ -307,7 +308,7 @@ namespace VPB
                 if (leftSaveBtnGO != null && leftSaveBtnGO.activeInHierarchy)
                 {
                     RectTransform saveBtnRT = leftSaveBtnGO.GetComponent<RectTransform>();
-                    float startX = saveBtnRT.anchoredPosition.x - 110f; // To the left of Save button
+                    float startX = saveBtnRT.anchoredPosition.x - 110f * scale; // To the left of Save button
                     float startY = saveBtnRT.anchoredPosition.y;
 
                     int maxActiveIndex = -1;

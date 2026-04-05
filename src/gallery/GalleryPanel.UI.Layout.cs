@@ -450,7 +450,28 @@ namespace VPB
                 if (rt != null) { rt.sizeDelta = new Vector2(containerW, 0f); rt.anchoredPosition = new Vector2(-containerOffset, 0); }
             }
 
+            // Scale submenu buttons proportionally
+            float subW = 120f * 1.6f * scale;
+            int subFontSize = Mathf.RoundToInt(16f * scale);
+            foreach (var go in rightSaveSubmenuButtons)
+            {
+                if (go == null) continue;
+                var rt = go.GetComponent<RectTransform>();
+                if (rt != null) rt.sizeDelta = new Vector2(subW, h);
+                var t = go.GetComponentInChildren<Text>();
+                if (t != null) t.fontSize = subFontSize;
+            }
+            foreach (var go in leftSaveSubmenuButtons)
+            {
+                if (go == null) continue;
+                var rt = go.GetComponent<RectTransform>();
+                if (rt != null) rt.sizeDelta = new Vector2(subW, h);
+                var t = go.GetComponentInChildren<Text>();
+                if (t != null) t.fontSize = subFontSize;
+            }
+
             UpdateSideButtonPositions();
+            PositionSaveSubmenuButtons();
         }
 
         public void UpdateSideButtonPositions()
