@@ -56,6 +56,25 @@ namespace VPB
             return s.Trim();
         }
 
+        // If val starts with a quote that isn't yet closed, consume additional args (space-joined)
+        // until the matching closing quote is found. Handles OS arg-splitting of quoted values with spaces.
+        static string ConsumeQuotedContinuation(string val, string[] args, ref int i)
+        {
+            if (string.IsNullOrEmpty(val)) return val;
+            char q = val[0];
+            if (q != '"' && q != '\'') return val;
+            if (val.Length >= 2 && val[val.Length - 1] == q) return val;
+            while (i + 1 < args.Length)
+            {
+                string next = args[i + 1];
+                if (next == null) break;
+                i++;
+                val = val + " " + next;
+                if (val.Length >= 2 && val[val.Length - 1] == q) break;
+            }
+            return val;
+        }
+
         public static void ParseOnce()
         {
             if (parsed) return;
@@ -125,6 +144,7 @@ namespace VPB
                         {
                             key = arg.Substring("--vpb.vds.".Length, eq - "--vpb.vds.".Length);
                             val = arg.Substring(eq + 1);
+                            val = ConsumeQuotedContinuation(val, args, ref i);
                         }
                         else
                         {
@@ -137,6 +157,7 @@ namespace VPB
                                 {
                                     val = next;
                                     i++;
+                                    val = ConsumeQuotedContinuation(val, args, ref i);
                                 }
                             }
                         }
