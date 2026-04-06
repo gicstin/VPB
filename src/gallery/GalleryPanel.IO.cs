@@ -619,11 +619,10 @@ namespace VPB
             if (activeTags != null && activeTags.Count > 0)
             {
                 bool tagMatch = false;
-                string pathLower = entry.Path.ToLowerInvariant();
                 foreach (var tag in activeTags)
                 {
                     // Check path-based tags (original logic)
-                    if (pathLower.Contains(tag.ToLowerInvariant()))
+                    if (entry.Path.IndexOf(tag, StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         tagMatch = true;
                         break;
