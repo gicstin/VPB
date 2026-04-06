@@ -181,7 +181,6 @@ namespace VPB
                 VPBConfig.Instance.ConfigChanged -= ApplySideButtonScale;
                 VPBConfig.Instance.ConfigChanged -= ApplyInnerPaneScale;
                 VPBConfig.Instance.ConfigChanged -= UpdateSideButtonsVisibility;
-                VPBConfig.Instance.ConfigChanged -= ApplyCurvatureToChildren;
                 VPBConfig.Instance.ConfigChanged -= UpdateFooterFollowStates;
                 VPBConfig.Instance.ConfigChanged -= UpdateDesktopModeButton;
                 VPBConfig.Instance.ConfigChanged -= UpdateLayout;

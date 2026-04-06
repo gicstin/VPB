@@ -22,7 +22,7 @@
   "quickfilters.delete_title": "フィルターを削除",
   "quickfilters.delete_confirm": "「{0}」を削除しますか？",
   "quickfilters.ctx.header_prefix": "フィルター：",
-  "gallery.title.filter_presets": "フィルタープリセット",
+  "gallery.title.filter_presets": "P",
   "gallery.title.refresh": "更新",
   "gallery.tags.clear_selected": "選択を解除",
   "gallery.side.category": "カテゴリ",

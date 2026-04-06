@@ -22,7 +22,7 @@
   "quickfilters.delete_title": "刪除篩選",
   "quickfilters.delete_confirm": "確定要刪除「{0}」嗎？",
   "quickfilters.ctx.header_prefix": "篩選：",
-  "gallery.title.filter_presets": "篩選預設",
+  "gallery.title.filter_presets": "P",
   "gallery.title.refresh": "重新整理",
   "gallery.tags.clear_selected": "清除已選",
   "gallery.side.category": "分類",

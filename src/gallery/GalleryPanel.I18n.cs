@@ -95,7 +95,7 @@ namespace VPB
             }
 
             if (quickFiltersToggleBtnText != null)
-                quickFiltersToggleBtnText.text = VPBTranslation.T("gallery.title.filter_presets", "Filter Presets");
+                quickFiltersToggleBtnText.text = VPBTranslation.T("gallery.title.filter_presets", "P");
             if (titleBarRefreshBtnText != null)
                 titleBarRefreshBtnText.text = VPBTranslation.T("gallery.title.refresh", "Refresh");
 

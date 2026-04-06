@@ -595,11 +595,6 @@ namespace VPB
                             }
                         }
 
-                        // Curvature logic (Independent of follow mode)
-                        if (!fixedMode && VPBConfig.Instance.EnableCurvature)
-                        {
-                            ApplyCurvatureToChildren();
-                        }
                     }
                 }
             }
@@ -619,11 +614,6 @@ namespace VPB
                     if (pointerDotGO.activeSelf) pointerDotGO.SetActive(false);
                 }
             }
-        }
-
-        public void TriggerCurvatureRefresh()
-        {
-            ApplyCurvatureToChildren();
         }
 
         public void ResetFollowOffsets()

@@ -44,12 +44,6 @@ namespace VPB
         private float pendingBringToFrontDistance;
         private float backupBringToFrontDistance;
 
-        private bool pendingEnableCurvature;
-        private bool backupEnableCurvature;
-
-        private float pendingCurvatureIntensity;
-        private float backupCurvatureIntensity;
-
         private bool pendingEnableGalleryFade;
         private bool backupEnableGalleryFade;
 
@@ -120,9 +114,6 @@ namespace VPB
             isSettingsOpen = true;
             settingsOnRight = onRight;
             settingsPaneGO.SetActive(true);
-            UpdateCurvatureLayout();
-
-            // Force a curvature refresh to ensure the newly active settings pane gets subdivided and colliders updated
             VPBConfig.Instance.TriggerChange();
             
             // Initialize pending settings from current config
@@ -149,12 +140,6 @@ namespace VPB
 
             pendingBringToFrontDistance = VPBConfig.Instance.BringToFrontDistance;
             backupBringToFrontDistance = VPBConfig.Instance.BringToFrontDistance;
-
-            pendingEnableCurvature = VPBConfig.Instance.EnableCurvature;
-            backupEnableCurvature = VPBConfig.Instance.EnableCurvature;
-
-            pendingCurvatureIntensity = VPBConfig.Instance.CurvatureIntensity;
-            backupCurvatureIntensity = VPBConfig.Instance.CurvatureIntensity;
 
             pendingEnableGalleryFade = VPBConfig.Instance.EnableGalleryFade;
             backupEnableGalleryFade = VPBConfig.Instance.EnableGalleryFade;
@@ -247,8 +232,6 @@ namespace VPB
             VPBConfig.Instance.ReorientStartAngle = backupReorientStartAngle;
             VPBConfig.Instance.MovementThreshold = backupMovementThreshold;
             VPBConfig.Instance.BringToFrontDistance = backupBringToFrontDistance;
-            VPBConfig.Instance.EnableCurvature = backupEnableCurvature;
-            VPBConfig.Instance.CurvatureIntensity = backupCurvatureIntensity;
             VPBConfig.Instance.EnableGalleryFade = backupEnableGalleryFade;
             VPBConfig.Instance.EnableGalleryTranslucency = backupEnableGalleryTranslucency;
             VPBConfig.Instance.GalleryManualRefreshOnly = backupGalleryManualRefreshOnly;
@@ -326,8 +309,6 @@ namespace VPB
                 VPBConfig.Instance.ReorientStartAngle = pendingReorientStartAngle;
                 VPBConfig.Instance.MovementThreshold = pendingMovementThreshold;
                 VPBConfig.Instance.BringToFrontDistance = pendingBringToFrontDistance;
-                VPBConfig.Instance.EnableCurvature = pendingEnableCurvature;
-                VPBConfig.Instance.CurvatureIntensity = pendingCurvatureIntensity;
                 VPBConfig.Instance.EnableGalleryFade = pendingEnableGalleryFade;
                 VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
                 VPBConfig.Instance.GalleryManualRefreshOnly = pendingGalleryManualRefreshOnly;
@@ -919,74 +900,5 @@ namespace VPB
             });
         }
 
-        public void UpdateCurvatureLayout()
-        {
-            if (settingsPaneGO == null || backgroundBoxGO == null || settingsPaneRT == null) return;
-            
-            Transform canvasT = backgroundBoxGO.transform.parent;
-            if (canvasT == null) return;
-            RectTransform canvasRT = canvasT.GetComponent<RectTransform>();
-            if (canvasRT == null) return;
-            
-            bool enabled = VPBConfig.Instance != null && VPBConfig.Instance.EnableCurvature;
-            float intensity = VPBConfig.Instance != null ? VPBConfig.Instance.CurvatureIntensity : 1.0f;
-            
-            if (!enabled)
-            {
-                // Reset to standard side-docked position
-                settingsPaneRT.anchorMin = new Vector2(settingsOnRight ? 1 : 0, 0.5f);
-                settingsPaneRT.anchorMax = new Vector2(settingsOnRight ? 1 : 0, 0.5f);
-                settingsPaneRT.anchoredPosition3D = new Vector3(settingsOnRight ? SettingsPaneDockOffsetX : -SettingsPaneDockOffsetX, 0, 0);
-                settingsPaneRT.localRotation = Quaternion.identity;
-                return;
-            }
-
-            // Set anchors to center to make 3D positioning absolute relative to parent center
-            settingsPaneRT.anchorMin = new Vector2(0.5f, 0.5f);
-            settingsPaneRT.anchorMax = new Vector2(0.5f, 0.5f);
-
-            // Calculate radius and scale same as the vertex modifier
-            float radius = 2.0f * (1.0f / intensity);
-            if (radius < 0.1f) radius = 0.1f;
-            float scaleX = canvasRT.lossyScale.x;
-            if (scaleX == 0) scaleX = 0.001f;
-
-            // Find where the main panel ends (Background is 1200 wide, so edge is at 600)
-            float edgeX = 600f; 
-            float worldEdgeX = edgeX * scaleX;
-            float angleRad = worldEdgeX / radius;
-            
-            // Calculate edge position in curved space (relative to canvas center)
-            float curvedX = Mathf.Sin(angleRad) * radius / scaleX;
-            float curvedZ = (Mathf.Cos(angleRad) - 1.0f) * radius / scaleX;
-            
-            // If it's on the left, flip X and Angle
-            float sideSign = settingsOnRight ? 1f : -1f;
-            float finalAngleRad = angleRad * sideSign;
-            float finalCurvedX = curvedX * sideSign;
-            
-            // Rotate the panel to be angled toward user
-            // We use the same angle as the curve's end to make it a tangent "wing"
-            settingsPaneRT.localRotation = Quaternion.Euler(0, finalAngleRad * Mathf.Rad2Deg, 0);
-            
-            // The settings pane pivot is middle (0.5, 0.5). 
-            float halfWidth = settingsPaneRT.rect.width * 0.5f;
-            // Overlap slightly with the main panel (as it was originally)
-            float overlap = 20f; 
-            
-            // Direction of the wing (perpendicular to the radius at the edge)
-            // We want the direction to point AWAY from the center on both sides.
-            float dirX = Mathf.Cos(finalAngleRad) * sideSign;
-            float dirZ = -Mathf.Sin(finalAngleRad) * sideSign;
-            
-            float centerX = finalCurvedX + (halfWidth - overlap) * dirX;
-            float centerZ = curvedZ + (halfWidth - overlap) * dirZ;
-            
-            // Apply a small Z-bias toward the user to ensure it stays in front of the main panel where they overlap
-            centerZ += 5f; 
-            
-            // Position relative to backgroundBoxGO center
-            settingsPaneRT.anchoredPosition3D = new Vector3(centerX, 0, centerZ);
-        }
     }
 }

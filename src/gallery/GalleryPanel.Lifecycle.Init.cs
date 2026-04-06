@@ -49,7 +49,6 @@ namespace VPB
                 VPBConfig.Instance.ConfigChanged += ApplySideButtonScale;
                 VPBConfig.Instance.ConfigChanged += ApplyInnerPaneScale;
                 VPBConfig.Instance.ConfigChanged += UpdateSideButtonsVisibility;
-                VPBConfig.Instance.ConfigChanged += ApplyCurvatureToChildren;
                 VPBConfig.Instance.ConfigChanged += UpdateFooterFollowStates;
                 VPBConfig.Instance.ConfigChanged += UpdateDesktopModeButton;
                 VPBConfig.Instance.ConfigChanged += UpdateLayout;
@@ -63,30 +62,11 @@ namespace VPB
             RectTransform canvasRT = canvasGO.GetComponent<RectTransform>();
             canvasRT.sizeDelta = new Vector2(1200, 800);
             
-            // Note: In VaM VR, standard GraphicRaycaster often conflicts or is ignored.
-            // We rely on BoxCollider for the main panel background hit detection.
-            // Adding GraphicRaycaster but disabling it by default unless needed for non-VR mouse interaction?
-            // Actually, let's keep it simple: relying on BoxCollider with offset seems to be the intended path for VaM UI panels.
-            // But user said offset didn't work. The key might be that the collider MUST be there for the laser to "stop"
-            // but the "dimming" means it thinks it's penetrating.
-            // The resize handles work because they have small colliders or none?
-            // Resize handles in this code do NOT have colliders added explicitly! They just use Image + UIHoverBorder/UIHoverColor.
-            // So if resize handles work WITHOUT collider, we should aim for that.
-            
-            // Standard GraphicRaycaster is needed for UI elements without colliders.
-            // We use our custom CylindricalGraphicRaycaster to support curvature.
-            CylindricalGraphicRaycaster gr = canvasGO.AddComponent<CylindricalGraphicRaycaster>();
+            GraphicRaycaster gr = canvasGO.AddComponent<GraphicRaycaster>();
             gr.ignoreReversedGraphics = true;
-            
+
             if (SuperController.singleton != null)
                 SuperController.singleton.AddCanvas(canvas);
-
-            // VaM's AddCanvas often adds a BoxCollider to the canvasGO or its children.
-            // We need to remove it so it doesn't interfere with our curved interaction/MeshCollider.
-            foreach (var bc in canvasGO.GetComponentsInChildren<BoxCollider>(true))
-            {
-                Destroy(bc);
-            }
 
             if (Application.isPlaying)
             {
@@ -186,8 +166,6 @@ namespace VPB
                     canvasGO.SetActive(false);
                     canvasGO.SetActive(true);
                     
-                    // Also ensure curvature is correctly aligned with new position
-                    ApplyCurvatureToChildren();
                 }
             };
 
@@ -324,7 +302,7 @@ namespace VPB
             AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
 
             // Filter Presets Button
-            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 130, 45, VPBTranslation.T("gallery.title.filter_presets", "Filter Presets"), 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
+            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 45, 45, VPBTranslation.T("gallery.title.filter_presets", "P"), 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
             qfToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             quickFiltersToggleBtnText = qfToggleBtn.GetComponentInChildren<Text>();
             quickFiltersToggleBtnText.color = Color.white;

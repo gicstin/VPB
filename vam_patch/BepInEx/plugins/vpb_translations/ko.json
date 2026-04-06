@@ -22,7 +22,7 @@
   "quickfilters.delete_title": "필터 삭제",
   "quickfilters.delete_confirm": "「{0}」을(를) 삭제할까요?",
   "quickfilters.ctx.header_prefix": "필터:",
-  "gallery.title.filter_presets": "필터 프리셋",
+  "gallery.title.filter_presets": "P",
   "gallery.title.refresh": "새로 고침",
   "gallery.tags.clear_selected": "선택 해제",
   "gallery.side.category": "분류",

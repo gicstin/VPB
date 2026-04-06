@@ -461,7 +461,7 @@ namespace VPB
             scrollbar.handleRect = handleRT;
             scrollbar.targetGraphic = handleImg;
 
-            // Add BoxCollider to ensure reliable hit detection even if parent is curved (handled by CylindricalGraphicRaycaster part 1)
+            // Add BoxCollider to ensure reliable hit detection in 3D space
             var bc = scrollbarGO.AddComponent<BoxCollider>();
             bc.size = new Vector3(width, height > 0 ? height : 800f, 1f);
             bc.center = new Vector3(-width / 2, 0, 0); // Pivot is (1, 0.5)
@@ -502,76 +502,6 @@ namespace VPB
             rt.sizeDelta = new Vector2(horizontalSize, verticalSize);
 
             return go;
-        }
-
-        public static Mesh GenerateCurvedMesh(RectTransform targetRT, RectTransform canvasRT, float radiusBase = 2.0f, int segments = 50)
-        {
-            if (targetRT == null || canvasRT == null || VPBConfig.Instance == null) return null;
-
-            float intensity = VPBConfig.Instance.CurvatureIntensity;
-            float radius = radiusBase * (1.0f / (intensity > 0 ? intensity : 0.001f));
-
-            Mesh mesh = new Mesh();
-            mesh.name = "CurvedUIMesh";
-
-            Rect rect = targetRT.rect;
-            float scaleX = canvasRT.lossyScale.x;
-            if (scaleX == 0) scaleX = 0.001f;
-
-            Matrix4x4 localToCanvas = canvasRT.worldToLocalMatrix * targetRT.localToWorldMatrix;
-
-            List<Vector3> vertices = new List<Vector3>();
-            List<int> triangles = new List<int>();
-            List<Vector2> uvs = new List<Vector2>();
-
-            for (int i = 0; i <= segments; i++)
-            {
-                float t = (float)i / segments;
-                float x = Mathf.Lerp(rect.xMin, rect.xMax, t);
-
-                for (int j = 0; j <= 1; j++)
-                {
-                    float y = (j == 0) ? rect.yMin : rect.yMax;
-                    Vector3 pos = new Vector3(x, y, 0);
-
-                    // To Canvas Local Space
-                    Vector3 cPos = localToCanvas.MultiplyPoint3x4(pos);
-
-                    // Apply Cylinder Bend
-                    float worldX = cPos.x * scaleX;
-                    float angle = worldX / radius;
-
-                    float newWorldX = Mathf.Sin(angle) * radius;
-                    float newWorldZ = (Mathf.Cos(angle) - 1.0f) * radius;
-
-                    cPos.x = newWorldX / scaleX;
-                    cPos.z = newWorldZ / scaleX;
-
-                    // Back to Target Local Space
-                    vertices.Add(targetRT.worldToLocalMatrix.MultiplyPoint3x4(canvasRT.localToWorldMatrix.MultiplyPoint3x4(cPos)));
-                    uvs.Add(new Vector2(t, j));
-                }
-            }
-
-            for (int i = 0; i < segments; i++)
-            {
-                int baseIdx = i * 2;
-                triangles.Add(baseIdx);
-                triangles.Add(baseIdx + 1);
-                triangles.Add(baseIdx + 3);
-
-                triangles.Add(baseIdx);
-                triangles.Add(baseIdx + 3);
-                triangles.Add(baseIdx + 2);
-            }
-
-            mesh.SetVertices(vertices);
-            mesh.SetUVs(0, uvs);
-            mesh.SetTriangles(triangles, 0);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-
-            return mesh;
         }
 
         public static GameObject CreateUIButton(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction onClick)
