@@ -810,18 +810,6 @@ namespace VPB
                 AddHoverDelegate(btnGO);
             }
             
-            // Check if it was a group previously (cleanup from previous implementation if pooling mixed types)
-            if (btnGO.name.StartsWith("TabGroup"))
-            {
-                // This shouldn't happen if we clean up properly, but for robustness:
-                // Destroy(btnGO);
-                // btnGO = UI.CreateUIButton(parent, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
-                // AddHoverDelegate(btnGO);
-                
-                // Better: Reuse the Button inside the group if possible, or just re-create.
-                // Since we are reverting, we assume simple button structure.
-            }
-
             // Standard Button Configuration
             Button btnComp = btnGO.GetComponent<Button>();
             btnComp.onClick.RemoveAllListeners();

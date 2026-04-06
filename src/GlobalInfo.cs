@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
 namespace VPB
 {
@@ -11,9 +8,5 @@ namespace VPB
     {
         public static string PluginInfoDirectory = "Custom/PluginData/sfishere";
         public static string AutoInstallPath = "Custom/PluginData/sfishere/AutoInstall.txt";
-
-        //public static string FixVarNamePath = "Custom/PluginData/sfishere/FixVarName.txt";
-
-
     }
 }

@@ -94,12 +94,6 @@ namespace VPB
 
         protected static Dictionary<string, string> pluginHashToPluginPath;
 
-        //protected AsyncFlag userConfirmFlag;
-
-        //protected static HashSet<string> userConfirmedPlugins;
-
-        //protected static HashSet<string> userDeniedPlugins;
-
         protected static LinkedList<string> loadDirStack;
 
         public static int s_InstalledCount = 0;
@@ -1398,7 +1392,6 @@ namespace VPB
                 string text2 = varDirectoryEntry.InternalPath.Replace(input, string.Empty);
                 if (varDirectoryEntry.InternalPath != text2)
                 {
-                    //text2 = text2.Replace('/', '\\');
                     return varDirectoryEntry.Package.Path + ":/" + input + text2;
                 }
             }
@@ -1407,7 +1400,6 @@ namespace VPB
                 string text3 = text.Replace(input, string.Empty);
                 if (text != text3)
                 {
-                    //text3 = text3.Replace('/', '\\');
                     return suggestedDir + text3;
                 }
             }
@@ -2031,31 +2023,6 @@ namespace VPB
 			}
 		}
 
-		//public static void FindAllFiles(string dir, string pattern, List<FileEntry> foundFiles, bool restrictPath = false)
-		//{
-		//	FindRegularFiles(dir, pattern, foundFiles, restrictPath);
-		//	FindVarFiles(dir, pattern, foundFiles);
-		//}
-
-		//public static void FindAllFilesRegex(string dir, string regex, List<FileEntry> foundFiles, bool restrictPath = false)
-		//{
-		//	FindRegularFilesRegex(dir, regex, foundFiles, restrictPath);
-		//	FindVarFilesRegex(dir, regex, foundFiles);
-		//}
-
-		//public static void FindRegularFiles(string dir, string pattern, List<FileEntry> foundFiles, bool restrictPath = false)
-		//{
-		//	if (Directory.Exists(dir))
-		//	{
-		//		if (restrictPath && !IsSecureReadPath(dir))
-		//		{
-		//			throw new Exception("Attempted to find files for non-secure path " + dir);
-		//		}
-		//		string regex = "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
-		//		FindRegularFilesRegex(dir, regex, foundFiles, restrictPath);
-		//	}
-		//}
-
 		public static bool CheckIfDirectoryChanged(string dir, DateTime previousCheckTime, bool recurse = true)
 		{
 			return CheckIfDirectoryChanged(dir, previousCheckTime, recurse, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -2093,40 +2060,6 @@ namespace VPB
 			}
 			return false;
 		}
-
-		//public static void FindRegularFilesRegex(string dir, string regex, List<FileEntry> foundFiles, bool restrictPath = false)
-		//{
-		//	dir = CleanDirectoryPath(dir);
-		//	if (!Directory.Exists(dir))
-		//	{
-		//		return;
-		//	}
-		//	if (restrictPath && !IsSecureReadPath(dir))
-		//	{
-		//		throw new Exception("Attempted to find files for non-secure path " + dir);
-		//	}
-		//	string[] files = Directory.GetFiles(dir);
-		//	foreach (string text in files)
-		//	{
-		//		if (Regex.IsMatch(text, regex, RegexOptions.IgnoreCase))
-		//		{
-		//			SystemFileEntry systemFileEntry = new SystemFileEntry(text);
-		//			if (systemFileEntry.Exists)
-		//			{
-		//				foundFiles.Add(systemFileEntry);
-		//			}
-		//			else
-		//			{
-		//				UnityEngine.Debug.LogError("Error in lookup SystemFileEntry for " + text);
-		//			}
-		//		}
-		//	}
-		//	string[] directories = Directory.GetDirectories(dir);
-		//	foreach (string dir2 in directories)
-		//	{
-		//		FindRegularFilesRegex(dir2, regex, foundFiles);
-		//	}
-		//}
 
 		public static void FindVarFiles(string dir, string pattern, List<FileEntry> foundFiles)
 		{
@@ -2378,31 +2311,6 @@ namespace VPB
 			return false;
 		}
 
-		//public static DirectoryEntry GetDirectoryEntry(string path, bool restrictPath = false)
-		//{
-		//	string path2 = Regex.Replace(path, "(/|\\\\)$", string.Empty);
-		//	DirectoryEntry directoryEntry = GetVarDirectoryEntry(path2);
-		//	if (directoryEntry == null)
-		//	{
-		//		directoryEntry = GetSystemDirectoryEntry(path2, restrictPath);
-		//	}
-		//	return directoryEntry;
-		//}
-
-		//public static SystemDirectoryEntry GetSystemDirectoryEntry(string path, bool restrictPath = false)
-		//{
-		//	SystemDirectoryEntry result = null;
-		//	if (Directory.Exists(path))
-		//	{
-		//		if (restrictPath && !IsSecureReadPath(path))
-		//		{
-		//			throw new Exception("Attempted to get directory entry for non-secure path " + path);
-		//		}
-		//		result = new SystemDirectoryEntry(path);
-		//	}
-		//	return result;
-		//}
-
 		public static VarDirectoryEntry GetVarDirectoryEntry(string path)
 		{
 			VarDirectoryEntry value = null;
@@ -2423,52 +2331,6 @@ namespace VPB
 			//}
 			return value;
 		}
-
-		//public static string[] GetDirectories(string dir, string pattern = null, bool restrictPath = false)
-		//{
-		//	if (restrictPath && !IsSecureReadPath(dir))
-		//	{
-		//		throw new Exception("Attempted to get directories at non-secure path " + dir);
-		//	}
-		//	List<string> list = new List<string>();
-		//	DirectoryEntry directoryEntry = GetDirectoryEntry(dir, restrictPath);
-		//	if (directoryEntry == null)
-		//	{
-		//		throw new Exception("Attempted to get directories at non-existent path " + dir);
-		//	}
-		//	string text = null;
-		//	if (pattern != null)
-		//	{
-		//		text = "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
-		//	}
-		//	foreach (DirectoryEntry subDirectory in directoryEntry.SubDirectories)
-		//	{
-		//		if (text == null || Regex.IsMatch(subDirectory.Name, text))
-		//		{
-		//			list.Add(dir + "\\" + subDirectory.Name);
-		//		}
-		//	}
-		//	return list.ToArray();
-		//}
-
-		//public static string[] GetFiles(string dir, string pattern = null, bool restrictPath = false)
-		//{
-		//	if (restrictPath && !IsSecureReadPath(dir))
-		//	{
-		//		throw new Exception("Attempted to get files at non-secure path " + dir);
-		//	}
-		//	List<string> list = new List<string>();
-		//	DirectoryEntry directoryEntry = GetDirectoryEntry(dir, restrictPath);
-		//	if (directoryEntry == null)
-		//	{
-		//		throw new Exception("Attempted to get files at non-existent path " + dir);
-		//	}
-		//	foreach (FileEntry file in directoryEntry.GetFiles(pattern))
-		//	{
-		//		list.Add(dir + "\\" + file.Name);
-		//	}
-		//	return list.ToArray();
-		//}
 
 		public static void CreateDirectory(string path)
 		{

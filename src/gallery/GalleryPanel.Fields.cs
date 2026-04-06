@@ -14,7 +14,6 @@ namespace VPB
         private GameObject backgroundBoxGO;
         private CanvasGroup backgroundCanvasGroup;
         private GameObject contentGO;
-        // private GameObject tabContainerGO; // Unused
         private ScrollRect scrollRect;
         private GameObject loadingOverlayGO;
         private RectTransform loadingBarContainerRT;
@@ -27,7 +26,6 @@ namespace VPB
         private Text fpsText;
 
         public List<Gallery.Category> categories = new List<Gallery.Category>();
-        // private List<FileEntry> currentFiles = new List<FileEntry>(); // Unused
 
         private List<GameObject> activeButtons = new List<GameObject>();
         private Stack<GameObject> fileButtonPool = new Stack<GameObject>();
@@ -58,7 +56,6 @@ namespace VPB
         private DateTime lastAppliedPackageRefreshTime = DateTime.MinValue;
         
         // Configuration
-        // public bool IsUndocked = false; // Removed
         public bool DragDropReplaceMode
         {
             get { return VPBConfig.Instance != null ? VPBConfig.Instance.DragDropReplaceMode : false; }
@@ -98,13 +95,8 @@ namespace VPB
                 }
             }
         }
-        // private Toggle addToggle;
-        // private Toggle replaceToggle;
-        public Gallery.Category? UndockedCategory; // Removed
-        public string UndockedCreator; // Removed
         public bool hasBeenPositioned = false;
-        // private TabSide currentTabSide = TabSide.Right; // Unused
-        private ContentType activeContentType = ContentType.Category; // Deprecated
+        private ContentType activeContentType = ContentType.Category;
         
         private ContentType? leftActiveContent = null;
         private ContentType? rightActiveContent = ContentType.Category;
@@ -117,7 +109,6 @@ namespace VPB
         private GameObject leftSubTabContainerGO; // NEW: For split view
         private GameObject rightTabContainerGO;
         private GameObject rightSubTabContainerGO; // NEW: For split view
-        // private GameObject tabScrollGO; // Unused
         private RectTransform contentScrollRT;
         
         // Buttons
@@ -326,12 +317,6 @@ namespace VPB
         // Tagging
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // Negative filters (exclusions) - used by Issue 7 exclusion filter feature
-#pragma warning disable CS0414
-        private string excludedCreator = "";
-        private HashSet<string> excludedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-#pragma warning restore CS0414
 
         [Flags]
         private enum ClothingSubfilter
@@ -665,7 +650,6 @@ namespace VPB
         private Text leftDesktopModeBtnText;
         private Image leftDesktopModeBtnImage;
 
-        // private FileEntry selectedFile; // Replaced by Multi-Selection
         public List<FileEntry> selectedFiles = new List<FileEntry>();
         private HashSet<string> selectedFilePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private string selectionAnchorPath = null;

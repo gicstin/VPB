@@ -425,8 +425,6 @@ namespace VPB
             }
 
             // CATEGORY: Interaction
-            //CreateHeader("Interaction");
-
             if (!isFixed)
             {
                 // CATEGORY: Follow Mode

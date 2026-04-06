@@ -9,7 +9,6 @@ namespace VPB
 	{
 		public bool isVar = false;
 		public VarPackage package;
-		//public bool isPlugin = false;
 		public SystemFileEntry(string path)
 			: base(path)
 		{
@@ -32,12 +31,7 @@ namespace VPB
 				}
 			}
 
-			//isPlugin = false;
 			package = FileManager.GetPackage(System.IO.Path.GetFileNameWithoutExtension(Path));
-            //if (package != null && package.Scripts != null && package.Scripts.Length > 0)
-            //{
-            //    isPlugin = true;
-            //}
             if (package != null)
             {
 				isVar = true;

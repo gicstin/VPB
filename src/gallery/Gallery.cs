@@ -53,7 +53,6 @@ namespace VPB
         
         // Panels management
         private List<GalleryPanel> panels = new List<GalleryPanel>();
-        // private GalleryPanel mainPanel; // Removed
 
         // IsVisible property checks if ANY panel is visible
         public bool IsVisible 
@@ -184,7 +183,6 @@ namespace VPB
         public void RemovePanel(GalleryPanel p)
         {
             if (panels.Contains(p)) panels.Remove(p);
-            // if (p == mainPanel) mainPanel = null; // Removed
         }
 
         public void Init()
