@@ -21,8 +21,10 @@ namespace VPB
             Package = pkg;
             if (pkg != null)
             {
-                Uid = pkg.Uid;
+                // Ratings are keyed by FileEntry.Uid. For packages on disk that is the package path
+                // (e.g. AddonPackages/Foo.Bar.1.var), not the VarPackage.Uid. Use pkg.Path when available.
                 Path = pkg.Path;
+                Uid = !string.IsNullOrEmpty(Path) ? Path : pkg.Uid;
                 Name = pkg.Uid + ".var";
                 Exists = true;
                 LastWriteTime = pkg.LastWriteTime;

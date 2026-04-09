@@ -161,28 +161,7 @@ namespace VPB
             {
                 filterSearchBaseFiles = new List<FileEntry>(filtered);
                 filterSearchLower = string.IsNullOrEmpty(nameFilterLower) ? "" : nameFilterLower;
-                if (!string.IsNullOrEmpty(filterSearchLower))
-                {
-                    // Apply current search query within the new filter result.
-                    var searched = new List<FileEntry>();
-                    for (int i = 0; i < filterSearchBaseFiles.Count; i++)
-                    {
-                        var e = filterSearchBaseFiles[i];
-                        if (e == null) continue;
-                        string p = null;
-                        try { p = e.Path; } catch { p = null; }
-                        if (!string.IsNullOrEmpty(p) && p.IndexOf(filterSearchLower, StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            searched.Add(e);
-                            continue;
-                        }
-                        string n = null;
-                        try { n = e.Name; } catch { n = null; }
-                        if (!string.IsNullOrEmpty(n) && n.IndexOf(filterSearchLower, StringComparison.OrdinalIgnoreCase) >= 0)
-                            searched.Add(e);
-                    }
-                    filtered = searched;
-                }
+                filtered = BuildFilterModeView(filterSearchBaseFiles, filterSearchLower);
             }
 
             currentFilteredFiles.Clear();
@@ -195,6 +174,7 @@ namespace VPB
                 recyclingGrid.Refresh();
             }
 
+            try { UpdateTabs(); } catch { }
             try { UpdatePaginationText(); } catch { }
         }
 
@@ -205,31 +185,7 @@ namespace VPB
 
             if (filterSearchBaseFiles == null) filterSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
 
-            List<FileEntry> filtered = null;
-            if (string.IsNullOrEmpty(filterSearchLower))
-            {
-                filtered = new List<FileEntry>(filterSearchBaseFiles);
-            }
-            else
-            {
-                filtered = new List<FileEntry>();
-                for (int i = 0; i < filterSearchBaseFiles.Count; i++)
-                {
-                    var e = filterSearchBaseFiles[i];
-                    if (e == null) continue;
-                    string p = null;
-                    try { p = e.Path; } catch { p = null; }
-                    if (!string.IsNullOrEmpty(p) && p.IndexOf(filterSearchLower, StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        filtered.Add(e);
-                        continue;
-                    }
-                    string n = null;
-                    try { n = e.Name; } catch { n = null; }
-                    if (!string.IsNullOrEmpty(n) && n.IndexOf(filterSearchLower, StringComparison.OrdinalIgnoreCase) >= 0)
-                        filtered.Add(e);
-                }
-            }
+            List<FileEntry> filtered = BuildFilterModeView(filterSearchBaseFiles, filterSearchLower);
 
             currentFilteredFiles.Clear();
             currentFilteredFiles.AddRange(filtered);
@@ -239,6 +195,48 @@ namespace VPB
                 recyclingGrid.Refresh();
             }
             try { UpdatePaginationText(); } catch { }
+        }
+
+        private List<FileEntry> BuildFilterModeView(List<FileEntry> baseList, string searchLower)
+        {
+            var source = baseList ?? new List<FileEntry>();
+            var tmp = new List<FileEntry>();
+
+            // Star toggle: show only rated items (within filtered results)
+            if (isRatingSortToggleEnabled)
+            {
+                for (int i = 0; i < source.Count; i++)
+                {
+                    var e = source[i];
+                    if (e == null) continue;
+                    try { if (RatingsManager.Instance.GetRating(e) > 0) tmp.Add(e); } catch { }
+                }
+            }
+            else
+            {
+                tmp.AddRange(source);
+            }
+
+            if (string.IsNullOrEmpty(searchLower)) return tmp;
+
+            var filtered = new List<FileEntry>();
+            for (int i = 0; i < tmp.Count; i++)
+            {
+                var e = tmp[i];
+                if (e == null) continue;
+                string p = null;
+                try { p = e.Path; } catch { p = null; }
+                if (!string.IsNullOrEmpty(p) && p.IndexOf(searchLower, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    filtered.Add(e);
+                    continue;
+                }
+                string n = null;
+                try { n = e.Name; } catch { n = null; }
+                if (!string.IsNullOrEmpty(n) && n.IndexOf(searchLower, StringComparison.OrdinalIgnoreCase) >= 0)
+                    filtered.Add(e);
+            }
+            return filtered;
         }
 
         public string GetFilterModeLabel
@@ -2009,6 +2007,7 @@ namespace VPB
                     recyclingGrid.Refresh();
                 }
 
+                try { UpdateTabs(); } catch { }
                 try { UpdatePaginationText(); } catch { }
 
                 // Restore scroll after the grid has rebound.

@@ -485,7 +485,65 @@ namespace VPB
         public int GetRating(FileEntry entry)
         {
             if (entry == null) return 0;
+            // Package rows in deps/dependents filter use PackageListEntry (Uid = .var path).
+            // Ratings for the same package are often stored under VarFileEntry Uids (pkgUid:/internalPath)
+            // from list/grid before filtering — resolve all plausible keys so the star matches.
+            if (entry is PackageListEntry ple)
+                return GetRatingForPackageListEntry(ple);
             return GetRating(entry.Uid);
+        }
+
+        private static bool TryAlternateAddonAllPackagesPath(string path, out string alt)
+        {
+            alt = null;
+            if (string.IsNullOrEmpty(path)) return false;
+            const string addon = "AddonPackages/";
+            const string all = "AllPackages/";
+            if (path.StartsWith(all, StringComparison.OrdinalIgnoreCase))
+            {
+                alt = addon + path.Substring(all.Length);
+                return true;
+            }
+            if (path.StartsWith(addon, StringComparison.OrdinalIgnoreCase))
+            {
+                alt = all + path.Substring(addon.Length);
+                return true;
+            }
+            return false;
+        }
+
+        private int GetRatingForPackageListEntry(PackageListEntry ple)
+        {
+            if (ple == null) return 0;
+            VarPackage pkg = ple.Package;
+            if (pkg == null) return GetRating(ple.Uid);
+
+            int best = 0;
+
+            string pathKey = ple.Path ?? pkg.Path ?? "";
+            pathKey = pathKey.Replace('\\', '/');
+            if (!string.IsNullOrEmpty(pathKey))
+            {
+                best = Math.Max(best, GetRating(pathKey));
+                if (TryAlternateAddonAllPackagesPath(pathKey, out string altPath))
+                    best = Math.Max(best, GetRating(altPath));
+            }
+
+            if (!string.IsNullOrEmpty(pkg.Uid))
+            {
+                best = Math.Max(best, GetRating(pkg.Uid));
+                string prefix = pkg.Uid + ":/";
+                lock (lockObj)
+                {
+                    foreach (var kvp in ratings)
+                    {
+                        if (kvp.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                            best = Math.Max(best, kvp.Value);
+                    }
+                }
+            }
+
+            return best;
         }
 
         public int GetRating(string uid)

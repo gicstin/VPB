@@ -83,8 +83,16 @@ namespace VPB
         {
             if (titleText != null)
             {
-                if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
-                else titleText.text = currentCategoryTitle;
+                // When filtering by deps/dependents, the active category title is not meaningful.
+                // Hide it to reduce visual noise; the footer shows the filter mode instead.
+                bool showTitle = !IsFilterActive;
+                if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
+
+                if (showTitle)
+                {
+                    if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
+                    else titleText.text = currentCategoryTitle;
+                }
             }
 
             UpdateFooterContextActions();
@@ -1216,6 +1224,7 @@ namespace VPB
 
             CreateDetailText("Size", "Size", 110);
             CreateDetailText("Date", "Date", 130);
+            CreateDetailText("Category", "Category", 160);
             CreateDetailText("Deps", "Deps", 110);
             CreateDetailText("Dependents", "Dependents", 150);
 
@@ -1597,7 +1606,7 @@ namespace VPB
                         t.text = "Deps: " + v;
                         t.raycastTarget = true;
 
-                        // Hover-highlight only the numeric value.
+                        // Hover-highlight full "Deps: N" line; Set() resets color on recycle.
                         try
                         {
                             var hv = depsTr.GetComponent<UIRichValueHover>();
@@ -1627,6 +1636,29 @@ namespace VPB
                     et.triggers.Add(pointerClickEntry);
                 }
 
+                Transform catTr = btnGO.transform.Find("ListRow/Details/Category");
+                if (catTr != null)
+                {
+                    Text t = catTr.GetComponent<Text>();
+                    if (t != null)
+                    {
+                        string catLabel = "";
+                        try
+                        {
+                            if (IsFilterActive)
+                            {
+                                if (file is PackageListEntry ple && ple.Package != null)
+                                    catLabel = GetBestCategoryLabelForPackage(ple.Package);
+                                else if (file is VarFileEntry vfe3 && vfe3.Package != null)
+                                    catLabel = GetBestCategoryLabelForPackage(vfe3.Package);
+                            }
+                        }
+                        catch { catLabel = ""; }
+
+                        t.text = string.IsNullOrEmpty(catLabel) ? "" : ("Cat: " + catLabel);
+                    }
+                }
+
                 Transform dependentsTr = btnGO.transform.Find("ListRow/Details/Dependents");
                 if (dependentsTr != null)
                 {
@@ -1638,7 +1670,7 @@ namespace VPB
                         t.text = "Dependents: " + v;
                         t.raycastTarget = true;
 
-                        // Hover-highlight only the numeric value.
+                        // Hover-highlight full "Dependents: N" line; Set() resets color on recycle.
                         try
                         {
                             var hv = dependentsTr.GetComponent<UIRichValueHover>();
@@ -1711,6 +1743,113 @@ namespace VPB
             // Draggable
             UIDraggableItem draggable = btnGO.GetComponent<UIDraggableItem>();
             if (draggable != null) draggable.FileEntry = file;
+        }
+
+        private string GetBestCategoryLabelForPackage(VarPackage pkg)
+        {
+            if (pkg == null) return "";
+            try
+            {
+                if (packageCategoryLabelCache != null && packageCategoryLabelCache.TryGetValue(pkg.Uid, out string cached))
+                    return cached ?? "";
+            }
+            catch { }
+
+            string result = "Unknown";
+            try
+            {
+                if (categories == null || categories.Count == 0) return result;
+
+                List<string> names; List<long> ticks; List<long> sizes;
+                if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) return result;
+
+                int best = 0;
+                int bestCount = 0;
+                int ties = 0;
+
+                for (int ci = 0; ci < categories.Count; ci++)
+                {
+                    var cat = categories[ci];
+                    if (string.IsNullOrEmpty(cat.name) || string.IsNullOrEmpty(cat.extension)) continue;
+
+                    string[] exts = cat.extension.Split('|');
+                    if (exts == null || exts.Length == 0) continue;
+
+                    int hits = 0;
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        string ip = names[i];
+                        if (string.IsNullOrEmpty(ip)) continue;
+
+                        // ext match
+                        string entryExt = System.IO.Path.GetExtension(ip);
+                        if (string.IsNullOrEmpty(entryExt) || entryExt.Length < 2) continue;
+                        string ext = entryExt.Substring(1);
+                        bool extMatch = false;
+                        for (int e = 0; e < exts.Length; e++)
+                        {
+                            var ce = exts[e];
+                            if (!string.IsNullOrEmpty(ce) && string.Equals(ext, ce.Trim(), StringComparison.OrdinalIgnoreCase))
+                            { extMatch = true; break; }
+                        }
+                        if (!extMatch) continue;
+
+                        // path match
+                        bool pathOk = false;
+                        if (cat.paths != null && cat.paths.Count > 0)
+                        {
+                            for (int p = 0; p < cat.paths.Count; p++)
+                            {
+                                var pref = cat.paths[p];
+                                if (!string.IsNullOrEmpty(pref) && ip.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                { pathOk = true; break; }
+                            }
+                        }
+                        else if (!string.IsNullOrEmpty(cat.path))
+                        {
+                            if (ip.StartsWith(cat.path, StringComparison.OrdinalIgnoreCase)) pathOk = true;
+                        }
+                        else
+                        {
+                            pathOk = true;
+                        }
+                        if (!pathOk) continue;
+
+                        hits++;
+                        if (hits >= 8) break; // cap work per category
+                    }
+
+                    if (hits > bestCount)
+                    {
+                        bestCount = hits;
+                        best = ci;
+                        ties = 0;
+                    }
+                    else if (hits > 0 && hits == bestCount)
+                    {
+                        ties++;
+                    }
+                }
+
+                if (bestCount > 0)
+                {
+                    if (ties > 0) result = "Mixed";
+                    else result = categories[best].name;
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (packageCategoryLabelCache != null)
+                {
+                    if (packageCategoryLabelCache.Count > 8000) packageCategoryLabelCache.Clear();
+                    packageCategoryLabelCache[pkg.Uid] = result;
+                }
+            }
+            catch { }
+
+            return result;
         }
 
         /// <summary>Update filter indicator UI when filter state changes.</summary>

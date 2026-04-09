@@ -11,6 +11,11 @@ namespace VPB
         {
             isRatingSortToggleEnabled = !isRatingSortToggleEnabled;
             SyncRatingSortToggleState();
+            if (IsFilterActive)
+            {
+                try { ApplySearchWithinFilter(nameFilter); } catch { }
+                return;
+            }
             RefreshFiles();
         }
 
@@ -65,7 +70,24 @@ namespace VPB
 
             if (context == "Files")
             {
-                RefreshFiles();
+                if (IsFilterActive)
+                {
+                    try
+                    {
+                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
+                        if (recyclingGrid != null)
+                        {
+                            recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                            recyclingGrid.Refresh();
+                        }
+                        UpdatePaginationText();
+                    }
+                    catch { }
+                }
+                else
+                {
+                    RefreshFiles();
+                }
             }
             else UpdateTabs();
         }
@@ -85,7 +107,24 @@ namespace VPB
 
             if (context == "Files")
             {
-                RefreshFiles();
+                if (IsFilterActive)
+                {
+                    try
+                    {
+                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
+                        if (recyclingGrid != null)
+                        {
+                            recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                            recyclingGrid.Refresh();
+                        }
+                        UpdatePaginationText();
+                    }
+                    catch { }
+                }
+                else
+                {
+                    RefreshFiles();
+                }
             }
             else UpdateTabs();
         }
@@ -94,6 +133,10 @@ namespace VPB
         {
             if (context == "Files")
             {
+                if (IsFilterActive)
+                {
+                    return type == SortType.Name || type == SortType.Date || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents;
+                }
                 return type == SortType.Name || type == SortType.Date || type == SortType.Size || type == SortType.Rating;
             }
             else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags")
@@ -116,6 +159,8 @@ namespace VPB
                 case SortType.Count: symbol = "#"; break;
                 case SortType.Score: symbol = "Sc"; break;
                 case SortType.Rating: symbol = "Rt"; break;
+                case SortType.Deps: symbol = "Dp"; break;
+                case SortType.Dependents: symbol = "Dd"; break;
             }
             string arrow = state.Direction == SortDirection.Ascending ? "↑" : "↓";
             t.text = symbol + arrow;
@@ -135,6 +180,8 @@ namespace VPB
                     case SortType.Count: symbol = "#"; break;
                     case SortType.Score: symbol = "Sc"; break;
                     case SortType.Rating: symbol = "Rt"; break;
+                    case SortType.Deps: symbol = "Dp"; break;
+                    case SortType.Dependents: symbol = "Dd"; break;
                 }
                 typeText.text = symbol;
             }

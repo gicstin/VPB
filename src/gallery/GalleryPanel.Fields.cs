@@ -26,6 +26,7 @@ namespace VPB
         private Text fpsText;
 
         public List<Gallery.Category> categories = new List<Gallery.Category>();
+        private Dictionary<string, string> packageCategoryLabelCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         private List<GameObject> activeButtons = new List<GameObject>();
         private Stack<GameObject> fileButtonPool = new Stack<GameObject>();

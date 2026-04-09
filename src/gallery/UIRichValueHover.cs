@@ -4,13 +4,17 @@ using UnityEngine.UI;
 
 namespace VPB
 {
+    /// <summary>
+    /// Highlights the entire Text (prefix + value) on pointer hover.
+    /// Resets on Set() and OnDisable so recycled list rows never keep a stuck hover color.
+    /// </summary>
     public class UIRichValueHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         public Text target;
         public string prefix = "";
         public string value = "";
-        public Color normalValueColor = new Color(0.75f, 0.75f, 0.75f, 1f);
-        public Color hoverValueColor = Color.yellow;
+        public Color normalColor = new Color(0.75f, 0.75f, 0.75f, 1f);
+        public Color hoverColor = Color.yellow;
 
         private bool _hover;
 
@@ -18,28 +22,35 @@ namespace VPB
         {
             prefix = prefixText ?? "";
             value = valueText ?? "";
-            Apply();
+            // Row rebound / recycle: force non-hover so color never sticks from a previous bind.
+            _hover = false;
+            ApplyVisual();
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
             _hover = true;
-            Apply();
+            ApplyVisual();
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             _hover = false;
-            Apply();
+            ApplyVisual();
         }
 
-        private void Apply()
+        private void OnDisable()
+        {
+            _hover = false;
+            if (target != null) target.color = normalColor;
+        }
+
+        private void ApplyVisual()
         {
             if (target == null) return;
-            target.supportRichText = true;
-            string hex = ColorUtility.ToHtmlStringRGB(_hover ? hoverValueColor : normalValueColor);
-            target.text = prefix + "<color=#" + hex + ">" + value + "</color>";
+            target.supportRichText = false;
+            target.text = prefix + value;
+            target.color = _hover ? hoverColor : normalColor;
         }
     }
 }
-

@@ -14,7 +14,9 @@ namespace VPB
         Size,
         Count,
         Score,
-        Rating
+        Rating,
+        Deps,
+        Dependents
     }
 
     public enum SortDirection
@@ -102,7 +104,55 @@ namespace VPB
                         return res;
                     });
                     break;
+                case SortType.Deps:
+                    files.Sort((a, b) => {
+                        int dA = GetDepsCount(a);
+                        int dB = GetDepsCount(b);
+                        int res = (state.Direction == SortDirection.Ascending) ? dA.CompareTo(dB) : dB.CompareTo(dA);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    break;
+                case SortType.Dependents:
+                    files.Sort((a, b) => {
+                        int dA = GetDependentsCount(a);
+                        int dB = GetDependentsCount(b);
+                        int res = (state.Direction == SortDirection.Ascending) ? dA.CompareTo(dB) : dB.CompareTo(dA);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    break;
             }
+        }
+
+        private static int GetDepsCount(FileEntry file)
+        {
+            try
+            {
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                {
+                    var deps = vfe.Package.RecursivePackageDependencies;
+                    return deps != null ? deps.Count : 0;
+                }
+                if (file is PackageListEntry ple && ple.Package != null)
+                {
+                    var deps = ple.Package.RecursivePackageDependencies;
+                    return deps != null ? deps.Count : 0;
+                }
+            }
+            catch { }
+            return 0;
+        }
+
+        private static int GetDependentsCount(FileEntry file)
+        {
+            try
+            {
+                if (file is VarFileEntry vfe && vfe.Package != null) return vfe.Package.DependentCount;
+                if (file is PackageListEntry ple && ple.Package != null) return ple.Package.DependentCount;
+            }
+            catch { }
+            return 0;
         }
 
         public void SortCategories(List<Gallery.Category> categories, SortState state, Dictionary<string, int> counts = null)
