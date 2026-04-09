@@ -29,13 +29,25 @@ namespace VPB
         {
             try
             {
-                if (file is VarFileEntry vfe && vfe.Package != null && vfe.Package.RecursivePackageDependencies != null)
+                if (file is VarFileEntry vfe && vfe.Package != null)
                 {
-                    return vfe.Package.RecursivePackageDependencies.Count;
+                    var deps = vfe.Package.RecursivePackageDependencies;
+                    return deps != null ? deps.Count : 0;
                 }
             }
             catch { }
-            return -1;
+            return 0;
+        }
+
+        private static int GetDependentsCountForList(FileEntry file)
+        {
+            try
+            {
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                    return vfe.Package.DependentCount;
+            }
+            catch { }
+            return 0;
         }
         private float CurrentBottomOffset
         {
@@ -790,6 +802,11 @@ namespace VPB
 
         private static void AddBorderEdge(GameObject parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta)
         {
+            AddBorderEdge(parent, anchorMin, anchorMax, pivot, sizeDelta, Color.white);
+        }
+
+        private static void AddBorderEdge(GameObject parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta, Color color)
+        {
             GameObject go = new GameObject("E");
             go.transform.SetParent(parent.transform, false);
             RectTransform rt = go.AddComponent<RectTransform>();
@@ -798,7 +815,7 @@ namespace VPB
             rt.pivot = pivot;
             rt.sizeDelta = sizeDelta;
             rt.anchoredPosition = Vector2.zero;
-            go.AddComponent<Image>().color = Color.white;
+            go.AddComponent<Image>().color = color;
         }
 
         private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null)
@@ -1127,7 +1144,7 @@ namespace VPB
             listRowRT.anchorMax = new Vector2(1, 1);
             listRowRT.pivot = new Vector2(0, 0.5f);
             listRowRT.offsetMin = new Vector2(60, 0);
-            listRowRT.offsetMax = new Vector2(-260, 0);
+            listRowRT.offsetMax = new Vector2(-50, 0);
 
             VerticalLayoutGroup listVLG = listRowGO.AddComponent<VerticalLayoutGroup>();
             listVLG.childAlignment = TextAnchor.MiddleLeft;
@@ -1143,7 +1160,7 @@ namespace VPB
             listNameGO.transform.SetParent(listRowGO.transform, false);
             Text listNameText = listNameGO.AddComponent<Text>();
             listNameText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            listNameText.fontSize = 24;
+            listNameText.fontSize = 28;
             listNameText.fontStyle = FontStyle.Bold;
             listNameText.color = Color.white;
             listNameText.alignment = TextAnchor.LowerLeft;
@@ -1152,7 +1169,7 @@ namespace VPB
             listNameText.raycastTarget = false;
             LayoutElement listNameLE = listNameGO.AddComponent<LayoutElement>();
             listNameLE.flexibleWidth = 1;
-            listNameLE.minHeight = 32;
+            listNameLE.minHeight = 36;
 
             // Details Row
             GameObject detailsRowGO = new GameObject("Details");
@@ -1163,11 +1180,11 @@ namespace VPB
             detailsHLG.childControlWidth = true;
             detailsHLG.childForceExpandHeight = false;
             detailsHLG.childForceExpandWidth = false;
-            detailsHLG.spacing = 20f;
+            detailsHLG.spacing = 15f;
             detailsHLG.padding = new RectOffset(0, 0, 0, 0);
             LayoutElement detailsLE = detailsRowGO.AddComponent<LayoutElement>();
             detailsLE.flexibleWidth = 1;
-            detailsLE.minHeight = 24;
+            detailsLE.minHeight = 28;
 
             // Helper to create detail text
             GameObject CreateDetailText(string name, string placeholder, float width)
@@ -1176,7 +1193,7 @@ namespace VPB
                 go.transform.SetParent(detailsRowGO.transform, false);
                 Text t = go.AddComponent<Text>();
                 t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                t.fontSize = 18;
+                t.fontSize = 22;
                 t.color = new Color(0.75f, 0.75f, 0.75f, 1f);
                 t.alignment = TextAnchor.MiddleLeft;
                 t.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -1189,9 +1206,10 @@ namespace VPB
                 return go;
             }
 
-            CreateDetailText("Size", "Size", 100);
-            CreateDetailText("Date", "Date", 120);
-            CreateDetailText("Deps", "Deps", 100);
+            CreateDetailText("Size", "Size", 110);
+            CreateDetailText("Date", "Date", 130);
+            CreateDetailText("Deps", "Deps", 110);
+            CreateDetailText("Dependents", "Dependents", 150);
 
             // Rating (Top-right corner)
             GameObject ratingGO = new GameObject("Rating");
@@ -1304,6 +1322,38 @@ namespace VPB
             aiBadgeTextRT.anchoredPosition = Vector2.zero;
             aiBadgeGO.SetActive(false);
 
+            // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
+            GameObject listHoverBarGO = new GameObject("ListHoverBar");
+            listHoverBarGO.transform.SetParent(btnGO.transform, false);
+            Image listHoverBarImg = listHoverBarGO.AddComponent<Image>();
+            listHoverBarImg.color = new Color(1f, 1f, 1f, 0.45f);
+            listHoverBarImg.raycastTarget = false;
+            RectTransform listHoverBarRT = listHoverBarGO.GetComponent<RectTransform>();
+            listHoverBarRT.anchorMin = new Vector2(0, 0);
+            listHoverBarRT.anchorMax = new Vector2(0, 1);
+            listHoverBarRT.pivot = new Vector2(0, 0.5f);
+            listHoverBarRT.sizeDelta = new Vector2(2, 0);
+            listHoverBarRT.anchoredPosition = Vector2.zero;
+            listHoverBarGO.SetActive(false);
+
+            // List-mode selection indicator: left accent bar (yellow, opaque)
+            GameObject listSelBarGO = new GameObject("ListSelectionBar");
+            listSelBarGO.transform.SetParent(btnGO.transform, false);
+            Image listSelBarImg = listSelBarGO.AddComponent<Image>();
+            listSelBarImg.color = new Color(1f, 0.85f, 0f, 1f);
+            listSelBarImg.raycastTarget = false;
+            RectTransform listSelBarRT = listSelBarGO.GetComponent<RectTransform>();
+            listSelBarRT.anchorMin = new Vector2(0, 0);
+            listSelBarRT.anchorMax = new Vector2(0, 1);
+            listSelBarRT.pivot = new Vector2(0, 0.5f);
+            listSelBarRT.sizeDelta = new Vector2(3, 0);
+            listSelBarRT.anchoredPosition = Vector2.zero;
+            listSelBarGO.SetActive(false);
+
+            // Wire hover bar into UIHoverBorder; selection bar is managed by UpdateFileButtonVisuals
+            UIHoverBorder hoverBorderComp = btnGO.GetComponent<UIHoverBorder>();
+            if (hoverBorderComp != null) hoverBorderComp.hoverBorderGO = listHoverBarGO;
+
             SetLayerRecursive(btnGO, 5);
             return btnGO;
         }
@@ -1316,39 +1366,42 @@ namespace VPB
             Image img = btnGO.GetComponent<Image>();
             bool isSelected = (!string.IsNullOrEmpty(file.Path) && selectedFilePaths.Contains(file.Path));
             
-            // Semi-translucent for List mode to match gallery style
+            Outline outline = btnGO.GetComponent<Outline>();
+            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
+
             if (layoutMode == GalleryLayoutMode.List)
             {
-                if (isSelected) img.color = new Color(0.6f, 0.5f, 0.0f, 0.7f);
-                else img.color = new Color(0f, 0f, 0f, 0.4f);
+                // List mode: always dark background. Use ListSelectionBorder (4 edge Images)
+                // for selection highlight — avoids Outline which fills the whole row yellow.
+                img.color = new Color(0f, 0f, 0f, 0.4f);
+                if (outline != null) { outline.effectColor = new Color(0f, 0f, 0f, 0f); outline.enabled = false; }
+                if (hoverBorder != null) hoverBorder.isSelected = isSelected;
+                // selection bar (left accent) is independent of hover bar
+                Transform selBar = btnGO.transform.Find("ListSelectionBar");
+                if (selBar != null) selBar.gameObject.SetActive(isSelected);
             }
             else
             {
                 if (isSelected) img.color = new Color(0.7f, 0.7f, 0.2f, 1f);
                 else img.color = Color.gray;
-            }
 
-            // Handle Selection Outline
-            Outline outline = btnGO.GetComponent<Outline>();
-            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
-            
-            if (outline != null)
-            {
-                if (outline.enabled != isSelected) outline.enabled = isSelected;
-                if (isSelected)
+                // Hide list indicators in grid mode
+                Transform selBar2 = btnGO.transform.Find("ListSelectionBar");
+                if (selBar2 != null) selBar2.gameObject.SetActive(false);
+                Transform hoverBar2 = btnGO.transform.Find("ListHoverBar");
+                if (hoverBar2 != null) hoverBar2.gameObject.SetActive(false);
+
+                if (outline != null)
                 {
                     outline.effectColor = Color.yellow;
-                    outline.effectDistance = new Vector2(4f, -4f);
-                }
-                else
-                {
-                    outline.effectDistance = new Vector2(2f, -2f);
-                }
+                    if (outline.enabled != isSelected) outline.enabled = isSelected;
+                    outline.effectDistance = isSelected ? new Vector2(4f, -4f) : new Vector2(2f, -2f);
 
-                if (hoverBorder != null) 
-                {
-                    hoverBorder.isSelected = isSelected;
-                    hoverBorder.borderSize = isSelected ? 4f : 2f;
+                    if (hoverBorder != null)
+                    {
+                        hoverBorder.isSelected = isSelected;
+                        hoverBorder.borderSize = isSelected ? 4f : 2f;
+                    }
                 }
             }
         }
@@ -1398,8 +1451,7 @@ namespace VPB
                     {
                         float leftPad = listThumbSize + 15f;
                         listRowRT.offsetMin = new Vector2(leftPad, 0);
-                        // Use full width
-                        listRowRT.offsetMax = new Vector2(0, 0);
+                        listRowRT.offsetMax = new Vector2(-50, 0);
                     }
                 }
             }
@@ -1531,7 +1583,18 @@ namespace VPB
                     if (t != null)
                     {
                         int deps = GetDepsCountForList(file);
-                        t.text = deps >= 0 ? ("Deps: " + deps.ToString()) : "";
+                        t.text = "Deps: " + deps.ToString();
+                    }
+                }
+
+                Transform dependentsTr = btnGO.transform.Find("ListRow/Details/Dependents");
+                if (dependentsTr != null)
+                {
+                    Text t = dependentsTr.GetComponent<Text>();
+                    if (t != null)
+                    {
+                        int dependents = GetDependentsCountForList(file);
+                        t.text = "Dependents: " + dependents.ToString();
                     }
                 }
 

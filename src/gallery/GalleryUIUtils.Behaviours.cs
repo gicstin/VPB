@@ -385,8 +385,11 @@ namespace VPB
         public Graphic targetGraphic;
         public Color hoverColor = new Color(1f, 1f, 0f, 1f); // Bright yellow visible highlight
         public float borderSize = 2f;
-        public bool isSelected = false; // Add this to keep border visible
-        
+        public bool isSelected = false;
+        // When set, show/hide this GO on hover instead of using the Outline component.
+        // Used in list mode to avoid the Outline filling the entire semi-transparent row.
+        public GameObject hoverBorderGO;
+
         private Outline outline;
 
         void Awake()
@@ -407,22 +410,26 @@ namespace VPB
 
         void OnEnable()
         {
-            if (outline != null) outline.enabled = isSelected;
+            if (hoverBorderGO != null) hoverBorderGO.SetActive(isSelected);
+            else if (outline != null) outline.enabled = isSelected;
         }
 
         void OnDisable()
         {
-            if (outline != null) outline.enabled = false;
+            if (hoverBorderGO != null) hoverBorderGO.SetActive(false);
+            else if (outline != null) outline.enabled = false;
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (outline != null) outline.enabled = true;
+            if (hoverBorderGO != null) hoverBorderGO.SetActive(true);
+            else if (outline != null) outline.enabled = true;
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (outline != null && !isSelected) outline.enabled = false;
+            if (hoverBorderGO != null) { if (!isSelected) hoverBorderGO.SetActive(false); }
+            else if (outline != null && !isSelected) outline.enabled = false;
         }
     }
 

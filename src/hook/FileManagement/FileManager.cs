@@ -941,6 +941,7 @@ namespace VPB
 			{
 				if (flag && onRefreshHandlers != null) onRefreshHandlers();
 			}
+			RebuildDependentCounts();
 			MessageKit.post(MessageDef.FileManagerRefresh);
 			m_StartScanCo = null;
 		}
@@ -1200,6 +1201,44 @@ namespace VPB
 		{
 			string resolvedId = MaybeForceLatestDependency(dependencyId);
 			return GetPackage(resolvedId, ensureInstalled);
+		}
+
+		// Builds a reverse-dependency index: for every installed package D, counts how many
+		// other packages list D as a (transitive) dependency and stores it in D.DependentCount.
+		// Called once at the end of each scan, before the FileManagerRefresh message is posted.
+		public static void RebuildDependentCounts()
+		{
+			try
+			{
+				VarPackage[] snapshot;
+				lock (packagesLock)
+				{
+					if (packagesByUid == null) return;
+					snapshot = packagesByUid.Values.ToArray();
+				}
+
+				// Reset
+				for (int i = 0; i < snapshot.Length; i++)
+					snapshot[i].DependentCount = 0;
+
+				// Each package's RecursivePackageDependencies is already a de-duped set,
+				// so we can increment directly without per-package seen-tracking.
+				for (int i = 0; i < snapshot.Length; i++)
+				{
+					var deps = snapshot[i].RecursivePackageDependencies;
+					if (deps == null) continue;
+					for (int j = 0; j < deps.Count; j++)
+					{
+						VarPackage dep = GetPackageForDependency(deps[j], false);
+						if (dep != null)
+							dep.DependentCount++;
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB] RebuildDependentCounts failed: " + ex.Message);
+			}
 		}
 
 		public List<string> GetMissingDependenciesNames()
