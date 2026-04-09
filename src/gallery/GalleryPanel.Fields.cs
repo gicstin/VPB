@@ -557,6 +557,10 @@ namespace VPB
         private int currentPage = 0;
         private Text paginationText;
         private RectTransform paginationRT;
+        private GameObject footerClearFilterBtn;
+        private Text footerClearFilterBtnText;
+        private Text footerFilterModeText;
+        private GameObject footerFilterModeSpacerGO;
         private Text hoverPathText;
         private RectTransform hoverPathRT;
         private CanvasGroup hoverPathCanvasGroup;

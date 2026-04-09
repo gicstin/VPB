@@ -372,6 +372,9 @@
     <Compile Include="src\gallery\SceneUtils.cs" />
     <Compile Include="src\gallery\ChamferedRect.cs" />
     <Compile Include="src\gallery\UIDragBlocker.cs" />
+    <Compile Include="src\gallery\UIScrollPassthrough.cs" />
+    <Compile Include="src\gallery\UIRichValueHover.cs" />
+    <Compile Include="src\gallery\PackageListEntry.cs" />
     <Compile Include="src\gallery\QuickFilterSettings.cs" />
     <Compile Include="src\gallery\QuickFiltersUI.cs" />
     <Compile Include="src\gallery\UIColorPicker.cs" />

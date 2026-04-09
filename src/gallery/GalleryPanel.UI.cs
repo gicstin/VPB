@@ -725,6 +725,52 @@ namespace VPB
             RectTransform textRT = textGO.GetComponent<RectTransform>();
             textRT.sizeDelta = new Vector2(200, 40);
 
+            // Filter Mode Label (shown in filter mode, left of clear button)
+            {
+                GameObject modeGO = new GameObject("FilterModeLabel");
+                modeGO.transform.SetParent(centerSection.transform, false);
+                footerFilterModeText = modeGO.AddComponent<Text>();
+                footerFilterModeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                footerFilterModeText.fontSize = 22;
+                footerFilterModeText.color = new Color(1f, 0.85f, 0f, 1f);
+                footerFilterModeText.alignment = TextAnchor.MiddleRight;
+                footerFilterModeText.text = "";
+                footerFilterModeText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                footerFilterModeText.verticalOverflow = VerticalWrapMode.Truncate;
+                footerFilterModeText.raycastTarget = false;
+                RectTransform modeRT = modeGO.GetComponent<RectTransform>();
+                modeRT.sizeDelta = new Vector2(180, 40);
+                modeGO.SetActive(false);
+            }
+
+            // Small spacer between mode label and clear button (only visible in filter mode)
+            {
+                footerFilterModeSpacerGO = new GameObject("FilterModeSpacer");
+                footerFilterModeSpacerGO.transform.SetParent(centerSection.transform, false);
+                footerFilterModeSpacerGO.AddComponent<RectTransform>();
+                var le = footerFilterModeSpacerGO.AddComponent<LayoutElement>();
+                le.preferredWidth = 12f;
+                le.minWidth = 12f;
+                footerFilterModeSpacerGO.SetActive(false);
+            }
+
+            // Clear Filter Button (shown in place of the count text while filtering)
+            footerClearFilterBtn = UI.CreateUIButton(centerSection, 200, 40, "Clear Filter", 18, 0, 0, AnchorPresets.middleCenter, ClearPackageFilter);
+            footerClearFilterBtn.name = "ClearFilterButton";
+            var clearImg = footerClearFilterBtn.GetComponent<Image>();
+            if (clearImg != null) clearImg.color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
+            footerClearFilterBtnText = footerClearFilterBtn.GetComponentInChildren<Text>();
+            if (footerClearFilterBtnText != null)
+            {
+                footerClearFilterBtnText.text = "Clear Filter";
+                footerClearFilterBtnText.color = Color.white;
+                footerClearFilterBtnText.alignment = TextAnchor.MiddleCenter;
+                footerClearFilterBtnText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                footerClearFilterBtnText.verticalOverflow = VerticalWrapMode.Truncate;
+                footerClearFilterBtnText.fontSize = 22;
+            }
+            footerClearFilterBtn.SetActive(false);
+
             paginationNextBtn = UI.CreateUIButton(centerSection, 40, 40, ">", 20, 0, 0, AnchorPresets.middleCenter, NextPage);
             paginationNext10Btn = UI.CreateUIButton(centerSection, 40, 40, ">>", 18, 0, 0, AnchorPresets.middleCenter, Next10Page);
             paginationLastBtn = UI.CreateUIButton(centerSection, 40, 40, ">|", 18, 0, 0, AnchorPresets.middleCenter, LastPage);
@@ -798,6 +844,8 @@ namespace VPB
             AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease Columns");
             AddHoverDelegate(gridSizePlusBtn);
             AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase Columns");
+            AddHoverDelegate(footerClearFilterBtn);
+            AddTooltip(footerClearFilterBtn, "gallery.tooltip.clear_filter", "Clear Filter");
             AddHoverDelegate(footerFollowAngleBtn);
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
@@ -835,6 +883,27 @@ namespace VPB
                 var t = footerBtnGOs[i] != null ? footerBtnGOs[i].GetComponentInChildren<Text>() : null;
                 int f = footerBtnFonts[i];
                 innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(f*s); });
+            }
+
+            // Scale the clear filter button to match the slot
+            {
+                var rt = footerClearFilterBtn != null ? footerClearFilterBtn.GetComponent<RectTransform>() : null;
+                var t = footerClearFilterBtnText;
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(200f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(22*s); });
+            }
+
+            // Scale the filter mode label
+            {
+                var t = footerFilterModeText;
+                var rt = t != null ? t.GetComponent<RectTransform>() : null;
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(180f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(22*s); });
+            }
+            // Scale the spacer
+            {
+                var go = footerFilterModeSpacerGO;
+                var rt = go != null ? go.GetComponent<RectTransform>() : null;
+                var le = go != null ? go.GetComponent<LayoutElement>() : null;
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(12f*s, 40f*s); if (le != null) { le.preferredWidth = 12f*s; le.minWidth = 12f*s; } });
             }
 
             // Hover Path Text (Now placed above the buttons with background)
@@ -884,6 +953,11 @@ namespace VPB
 
             if (IsHubMode)
             {
+                if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(false);
+                if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(false);
+                if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(false);
+                if (paginationText != null) paginationText.gameObject.SetActive(true);
+
                 // Hub still uses pagination (server-side)
                 paginationText.text = string.Format(VPBTranslation.T("gallery.page", "Page {0}"), currentPage + 1);
 
@@ -925,6 +999,25 @@ namespace VPB
             }
             else
             {
+                bool showClearFilter = IsFilterActive;
+                if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(showClearFilter);
+                if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(showClearFilter);
+                if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(showClearFilter);
+                if (paginationText != null) paginationText.gameObject.SetActive(!showClearFilter);
+
+                if (showClearFilter && footerClearFilterBtn != null)
+                {
+                    var btn = footerClearFilterBtn.GetComponent<Button>();
+                    if (btn != null)
+                    {
+                        btn.onClick.RemoveAllListeners();
+                        btn.onClick.AddListener(ClearPackageFilter);
+                    }
+                    if (footerClearFilterBtnText != null) footerClearFilterBtnText.text = "Clear Filter";
+                    if (footerFilterModeText != null)
+                        footerFilterModeText.text = string.IsNullOrEmpty(GetFilterModeLabel) ? "" : $"{GetFilterModeLabel} ({GetFilterModeCount})";
+                }
+
                 // With RecyclingGridView, we no longer have "pages".
                 // Just show total count.
                 if (currentFilteredFiles != null)

@@ -330,8 +330,55 @@ namespace VPB
             if (f == nameFilter) return;
             nameFilter = f;
             nameFilterLower = string.IsNullOrEmpty(f) ? "" : f.ToLowerInvariant();
-            
-            RefreshFiles();
+
+            // In package filter mode, keep search scoped to the current filtered list
+            // (do not refresh the whole gallery, which would clear filter mode).
+            if (IsFilterActive)
+            {
+                ApplySearchWithinFilter(f);
+                return;
+            }
+
+            // Outside filter mode: perform top search in-memory so clearing search can instantly
+            // restore the full list without a rebuild (prevents stalls).
+            if (topSearchBaseFiles == null)
+                topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
+
+            if (string.IsNullOrEmpty(nameFilterLower))
+            {
+                currentFilteredFiles.Clear();
+                currentFilteredFiles.AddRange(topSearchBaseFiles);
+                topSearchBaseFiles = null;
+            }
+            else
+            {
+                var filtered = new List<FileEntry>();
+                for (int i = 0; i < topSearchBaseFiles.Count; i++)
+                {
+                    var e = topSearchBaseFiles[i];
+                    if (e == null) continue;
+                    string p = null;
+                    try { p = e.Path; } catch { p = null; }
+                    if (!string.IsNullOrEmpty(p) && p.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        filtered.Add(e);
+                        continue;
+                    }
+                    string n = null;
+                    try { n = e.Name; } catch { n = null; }
+                    if (!string.IsNullOrEmpty(n) && n.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) >= 0)
+                        filtered.Add(e);
+                }
+                currentFilteredFiles.Clear();
+                currentFilteredFiles.AddRange(filtered);
+            }
+
+            if (recyclingGrid != null)
+            {
+                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                recyclingGrid.Refresh();
+            }
+            try { UpdatePaginationText(); } catch { }
         }
 
         private void OnFileRightClick(FileEntry file)

@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 
 namespace VPB
 {
@@ -34,6 +35,11 @@ namespace VPB
                     var deps = vfe.Package.RecursivePackageDependencies;
                     return deps != null ? deps.Count : 0;
                 }
+                if (file is PackageListEntry ple && ple.Package != null)
+                {
+                    var deps = ple.Package.RecursivePackageDependencies;
+                    return deps != null ? deps.Count : 0;
+                }
             }
             catch { }
             return 0;
@@ -45,6 +51,8 @@ namespace VPB
             {
                 if (file is VarFileEntry vfe && vfe.Package != null)
                     return vfe.Package.DependentCount;
+                if (file is PackageListEntry ple && ple.Package != null)
+                    return ple.Package.DependentCount;
             }
             catch { }
             return 0;
@@ -1373,7 +1381,9 @@ namespace VPB
             {
                 // List mode: always dark background. Use ListSelectionBorder (4 edge Images)
                 // for selection highlight — avoids Outline which fills the whole row yellow.
-                img.color = new Color(0f, 0f, 0f, 0.4f);
+                bool isMaster = false;
+                try { isMaster = IsFilterActive && IsFilterMasterEntry(file); } catch { isMaster = false; }
+                img.color = isMaster ? new Color(0.1f, 0.25f, 0.45f, 0.55f) : new Color(0f, 0f, 0f, 0.4f);
                 if (outline != null) { outline.effectColor = new Color(0f, 0f, 0f, 0f); outline.enabled = false; }
                 if (hoverBorder != null) hoverBorder.isSelected = isSelected;
                 // selection bar (left accent) is independent of hover bar
@@ -1583,8 +1593,38 @@ namespace VPB
                     if (t != null)
                     {
                         int deps = GetDepsCountForList(file);
-                        t.text = "Deps: " + deps.ToString();
+                        string v = deps.ToString();
+                        t.text = "Deps: " + v;
+                        t.raycastTarget = true;
+
+                        // Hover-highlight only the numeric value.
+                        try
+                        {
+                            var hv = depsTr.GetComponent<UIRichValueHover>();
+                            if (hv == null) hv = depsTr.gameObject.AddComponent<UIRichValueHover>();
+                            hv.target = t;
+                            hv.Set("Deps: ", v);
+                        }
+                        catch { }
                     }
+                    // Keep ScrollRect scrolling even when hovering over clickable text.
+                    try
+                    {
+                        UIScrollPassthrough sp = depsTr.GetComponent<UIScrollPassthrough>();
+                        if (sp == null) sp = depsTr.gameObject.AddComponent<UIScrollPassthrough>();
+                        sp.target = scrollRect;
+                    }
+                    catch { }
+                    // Make clickable to filter by dependencies using EventTrigger (non-invasive)
+                    EventTrigger et = depsTr.GetComponent<EventTrigger>();
+                    if (et == null) et = depsTr.gameObject.AddComponent<EventTrigger>();
+                    var pointerClickEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+                    pointerClickEntry.callback.AddListener((data) => {
+                        if (GetDepsCountForList(file) > 0)
+                            ApplyDependenciesFilter(file);
+                    });
+                    et.triggers.Clear();
+                    et.triggers.Add(pointerClickEntry);
                 }
 
                 Transform dependentsTr = btnGO.transform.Find("ListRow/Details/Dependents");
@@ -1594,8 +1634,38 @@ namespace VPB
                     if (t != null)
                     {
                         int dependents = GetDependentsCountForList(file);
-                        t.text = "Dependents: " + dependents.ToString();
+                        string v = dependents.ToString();
+                        t.text = "Dependents: " + v;
+                        t.raycastTarget = true;
+
+                        // Hover-highlight only the numeric value.
+                        try
+                        {
+                            var hv = dependentsTr.GetComponent<UIRichValueHover>();
+                            if (hv == null) hv = dependentsTr.gameObject.AddComponent<UIRichValueHover>();
+                            hv.target = t;
+                            hv.Set("Dependents: ", v);
+                        }
+                        catch { }
                     }
+                    // Keep ScrollRect scrolling even when hovering over clickable text.
+                    try
+                    {
+                        UIScrollPassthrough sp = dependentsTr.GetComponent<UIScrollPassthrough>();
+                        if (sp == null) sp = dependentsTr.gameObject.AddComponent<UIScrollPassthrough>();
+                        sp.target = scrollRect;
+                    }
+                    catch { }
+                    // Make clickable to filter by dependents using EventTrigger (non-invasive)
+                    EventTrigger et = dependentsTr.GetComponent<EventTrigger>();
+                    if (et == null) et = dependentsTr.gameObject.AddComponent<EventTrigger>();
+                    var pointerClickEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+                    pointerClickEntry.callback.AddListener((data) => {
+                        if (GetDependentsCountForList(file) > 0)
+                            ApplyDependentsFilter(file);
+                    });
+                    et.triggers.Clear();
+                    et.triggers.Add(pointerClickEntry);
                 }
 
                 Transform sizeTr = btnGO.transform.Find("ListRow/Details/Size");
@@ -1641,6 +1711,91 @@ namespace VPB
             // Draggable
             UIDraggableItem draggable = btnGO.GetComponent<UIDraggableItem>();
             if (draggable != null) draggable.FileEntry = file;
+        }
+
+        /// <summary>Update filter indicator UI when filter state changes.</summary>
+        public void UpdateFilterIndicator()
+        {
+            // Top filter label removed; keep filter exit control in the footer only.
+            HideFilterIndicator();
+        }
+
+        private GameObject GetOrCreateFilterIndicator()
+        {
+            if (scrollRect == null) return null;
+
+            Transform parent = scrollRect.transform.parent;
+            if (parent == null) return null;
+
+            Transform existingIndicator = parent.Find("FilterIndicator");
+            if (existingIndicator != null) return existingIndicator.gameObject;
+
+            // Create new filter indicator
+            GameObject indicatorGO = new GameObject("FilterIndicator");
+            indicatorGO.transform.SetParent(parent, false);
+
+            RectTransform rt = indicatorGO.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, 1);
+            rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(0, 1);
+            rt.sizeDelta = new Vector2(0, 28);
+            rt.anchoredPosition = new Vector2(0, -2);
+
+            Image bgImg = indicatorGO.AddComponent<Image>();
+            bgImg.color = new Color(0.2f, 0.35f, 0.2f, 0.9f);
+
+            HorizontalLayoutGroup hgroup = indicatorGO.AddComponent<HorizontalLayoutGroup>();
+            hgroup.padding = new RectOffset(8, 8, 4, 4);
+            hgroup.spacing = 8f;
+            hgroup.childForceExpandWidth = false;
+            hgroup.childForceExpandHeight = false;
+
+            // Description text
+            GameObject descGO = new GameObject("Description");
+            descGO.transform.SetParent(indicatorGO.transform, false);
+            Text descText = descGO.AddComponent<Text>();
+            descText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            descText.fontSize = 12;
+            descText.fontStyle = FontStyle.Bold;
+            descText.color = Color.white;
+            descText.text = "Filtered";
+            descText.raycastTarget = false;
+            descGO.AddComponent<LayoutElement>().preferredWidth = 200;
+
+            // Clear button
+            GameObject clearBtnGO = new GameObject("ClearButton");
+            clearBtnGO.transform.SetParent(indicatorGO.transform, false);
+            Image clearBtnImg = clearBtnGO.AddComponent<Image>();
+            clearBtnImg.color = new Color(0.8f, 0.2f, 0.2f, 0.8f);
+            Button clearBtn = clearBtnGO.AddComponent<Button>();
+            clearBtn.targetGraphic = clearBtnImg;
+
+            Text clearBtnText = new GameObject("Text").AddComponent<Text>();
+            clearBtnText.transform.SetParent(clearBtnGO.transform, false);
+            clearBtnText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            clearBtnText.fontSize = 12;
+            clearBtnText.fontStyle = FontStyle.Bold;
+            clearBtnText.color = Color.white;
+            clearBtnText.text = "Clear Filter";
+            clearBtnText.alignment = TextAnchor.MiddleCenter;
+            clearBtnText.raycastTarget = false;
+
+            RectTransform clearBtnRT = clearBtnGO.GetComponent<RectTransform>();
+            clearBtnRT.sizeDelta = new Vector2(90, 20);
+
+            clearBtnGO.AddComponent<LayoutElement>().preferredWidth = 90;
+
+            return indicatorGO;
+        }
+
+        private void HideFilterIndicator()
+        {
+            if (scrollRect == null) return;
+            Transform parent = scrollRect.transform.parent;
+            if (parent == null) return;
+
+            Transform indicator = parent.Find("FilterIndicator");
+            if (indicator != null) indicator.gameObject.SetActive(false);
         }
 
     }

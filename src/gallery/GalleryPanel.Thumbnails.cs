@@ -34,6 +34,69 @@ namespace VPB
 
     public partial class GalleryPanel
     {
+        // Cache for package list thumbnails: package UID -> internal image path (within the package).
+        // Keeps package preview lookups cheap while scrolling.
+        private readonly Dictionary<string, string> _packagePreviewInternalPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        private static bool IsImagePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string p = path.ToLowerInvariant();
+            return p.EndsWith(".jpg") || p.EndsWith(".png");
+        }
+
+        private string GetOrChoosePackagePreviewInternalPath(VarPackage pkg)
+        {
+            if (pkg == null) return null;
+            try
+            {
+                string uid = pkg.Uid;
+                if (!string.IsNullOrEmpty(uid) && _packagePreviewInternalPathCache.TryGetValue(uid, out string cached))
+                    return cached;
+
+                List<string> names; List<long> ticks; List<long> sizes;
+                if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) return null;
+
+                string chosen = null;
+
+                // Prefer preview-ish names.
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string n = names[i];
+                    if (!IsImagePath(n)) continue;
+                    string ln = n.ToLowerInvariant();
+                    if (ln.Contains("preview") || ln.Contains("thumbnail") || ln.Contains("thumb") || ln.Contains("screenshot"))
+                    {
+                        chosen = n;
+                        break;
+                    }
+                }
+
+                // Fallback: first image found.
+                if (chosen == null)
+                {
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        string n = names[i];
+                        if (IsImagePath(n)) { chosen = n; break; }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    // Cap growth to avoid unbounded memory use.
+                    if (_packagePreviewInternalPathCache.Count > 8000) _packagePreviewInternalPathCache.Clear();
+                    _packagePreviewInternalPathCache[uid] = chosen;
+                }
+
+                return chosen;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private struct ThumbnailCacheJob
         {
             public string Path;
@@ -81,6 +144,15 @@ namespace VPB
             if (lowerPath.EndsWith(".jpg") || lowerPath.EndsWith(".png"))
             {
                 imgPath = file.Path;
+            }
+            else if (file is PackageListEntry ple && ple.Package != null)
+            {
+                // For package list rows, pick an internal image (jpg/png) inside the .var.
+                // IMPORTANT: do not request thumbnails from the .var file itself; that can trigger package
+                // ensure-install paths and fails on some setups. Use an internal image path instead.
+                string chosen = GetOrChoosePackagePreviewInternalPath(ple.Package);
+                if (!string.IsNullOrEmpty(chosen))
+                    imgPath = ple.Package.Path + ":/" + chosen.Replace('\\', '/');
             }
             else
             {

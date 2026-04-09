@@ -11,8 +11,440 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private enum PackageFilterMode
+        {
+            None = 0,
+            Dependencies = 1,
+            Dependents = 2,
+        }
+
         private List<FileEntry> currentFilteredFiles = new List<FileEntry>();
+        private List<FileEntry> filterBaseFiles = null; // Original list when filtering first activated
+        private string filterBaseAnchorKey = null; // Scroll anchor captured when first entering filter mode
+        private string currentFilterDesc = null; // Description of active filter (e.g., "Dependents of X.var")
+        private PackageFilterMode currentPackageFilterMode = PackageFilterMode.None;
+        private string currentPackageFilterMasterUid = null;
+        private int currentPackageFilterCount = 0;
+        private List<FileEntry> filterSearchBaseFiles = null; // Base list for search within filter mode
+        private string filterSearchLower = "";
+        private bool filterEnteredFromTopSearch = false;
+        private List<FileEntry> topSearchBaseFiles = null; // Base list for top search (non-filter mode)
         private RecyclingGridView recyclingGrid;
+        private string filterRestoreAnchorKey = null;
+        private Coroutine filterRestoreCoroutine = null;
+
+        private static string GetEntryAnchorKey(FileEntry entry)
+        {
+            if (entry == null) return null;
+            try
+            {
+                if (!string.IsNullOrEmpty(entry.Uid)) return entry.Uid;
+            }
+            catch { }
+            try
+            {
+                if (!string.IsNullOrEmpty(entry.Path)) return entry.Path;
+            }
+            catch { }
+            return null;
+        }
+
+        private void SaveFilterScrollAnchor()
+        {
+            filterRestoreAnchorKey = null;
+            if (recyclingGrid == null || currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
+
+            int idx = -1;
+            try { idx = recyclingGrid.GetCenterItemIndex(); } catch { idx = -1; }
+            if (idx < 0 || idx >= currentFilteredFiles.Count) return;
+
+            filterRestoreAnchorKey = GetEntryAnchorKey(currentFilteredFiles[idx]);
+        }
+
+        private bool TryGetPackageFromEntry(FileEntry file, out VarPackage pkg, out string label)
+        {
+            pkg = null;
+            label = null;
+            if (file == null) return false;
+
+            try
+            {
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                {
+                    pkg = vfe.Package;
+                    label = file.Name;
+                    return true;
+                }
+                if (file is PackageListEntry ple && ple.Package != null)
+                {
+                    pkg = ple.Package;
+                    label = ple.Package.Uid;
+                    return true;
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
+        private static string GetPackageGroupShortUid(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return null;
+            try
+            {
+                // VarPackage UID format: Author.Name.Version (Version may be numeric or a constraint like latest/minX)
+                int firstDot = uid.IndexOf('.');
+                if (firstDot < 0) return null;
+                int secondDot = uid.IndexOf('.', firstDot + 1);
+                if (secondDot < 0) return null;
+                return uid.Substring(0, secondDot);
+            }
+            catch { return null; }
+        }
+
+        private static bool DepRefersToTarget(string depUidOrPath, string targetUid, string targetShort)
+        {
+            if (string.IsNullOrEmpty(depUidOrPath) || string.IsNullOrEmpty(targetUid)) return false;
+            try
+            {
+                // Normalize common inputs:
+                // - Some dependency strings may include ".var" or a full path; strip to filename if so.
+                string d = depUidOrPath.Replace('\\', '/');
+                int lastSlash = d.LastIndexOf('/');
+                if (lastSlash >= 0 && lastSlash + 1 < d.Length) d = d.Substring(lastSlash + 1);
+                if (d.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+                    d = d.Substring(0, d.Length - 4);
+
+                if (string.Equals(d, targetUid, StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.IsNullOrEmpty(targetShort)) return false;
+
+                // Accept any dependency that targets the same package group (Author.Name.*), including:
+                // - Author.Name.1
+                // - Author.Name.latest
+                // - Author.Name.min3
+                if (d.Length > targetShort.Length + 1 &&
+                    d.StartsWith(targetShort, StringComparison.OrdinalIgnoreCase) &&
+                    d[targetShort.Length] == '.')
+                {
+                    return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private void EnsureFilterBaseCaptured()
+        {
+            if (filterBaseFiles != null) return;
+            filterBaseFiles = new List<FileEntry>(currentFilteredFiles);
+
+            // Capture "return point" once for Clear Filter
+            filterBaseAnchorKey = null;
+            SaveFilterScrollAnchor();
+            filterBaseAnchorKey = filterRestoreAnchorKey;
+
+            // Initialize filter-mode search base
+            filterSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
+            filterSearchLower = "";
+
+            // If filter mode is entered while the top search is narrowing the list, "Clear Filter"
+            // should return to the full category list (not the search snapshot).
+            try { filterEnteredFromTopSearch = !string.IsNullOrEmpty(nameFilterLower); } catch { filterEnteredFromTopSearch = false; }
+        }
+
+        private void ApplyFilteredList(List<FileEntry> filtered, string desc)
+        {
+            if (filtered == null) filtered = new List<FileEntry>();
+
+            // Reset filter-mode search base whenever the filter result changes.
+            if (IsFilterActive)
+            {
+                filterSearchBaseFiles = new List<FileEntry>(filtered);
+                filterSearchLower = string.IsNullOrEmpty(nameFilterLower) ? "" : nameFilterLower;
+                if (!string.IsNullOrEmpty(filterSearchLower))
+                {
+                    // Apply current search query within the new filter result.
+                    var searched = new List<FileEntry>();
+                    for (int i = 0; i < filterSearchBaseFiles.Count; i++)
+                    {
+                        var e = filterSearchBaseFiles[i];
+                        if (e == null) continue;
+                        string p = null;
+                        try { p = e.Path; } catch { p = null; }
+                        if (!string.IsNullOrEmpty(p) && p.IndexOf(filterSearchLower, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            searched.Add(e);
+                            continue;
+                        }
+                        string n = null;
+                        try { n = e.Name; } catch { n = null; }
+                        if (!string.IsNullOrEmpty(n) && n.IndexOf(filterSearchLower, StringComparison.OrdinalIgnoreCase) >= 0)
+                            searched.Add(e);
+                    }
+                    filtered = searched;
+                }
+            }
+
+            currentFilteredFiles.Clear();
+            currentFilteredFiles.AddRange(filtered);
+            currentFilterDesc = desc;
+
+            if (recyclingGrid != null)
+            {
+                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                recyclingGrid.Refresh();
+            }
+
+            try { UpdatePaginationText(); } catch { }
+        }
+
+        public void ApplySearchWithinFilter(string query)
+        {
+            if (!IsFilterActive) return;
+            filterSearchLower = string.IsNullOrEmpty(query) ? "" : query.ToLowerInvariant();
+
+            if (filterSearchBaseFiles == null) filterSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
+
+            List<FileEntry> filtered = null;
+            if (string.IsNullOrEmpty(filterSearchLower))
+            {
+                filtered = new List<FileEntry>(filterSearchBaseFiles);
+            }
+            else
+            {
+                filtered = new List<FileEntry>();
+                for (int i = 0; i < filterSearchBaseFiles.Count; i++)
+                {
+                    var e = filterSearchBaseFiles[i];
+                    if (e == null) continue;
+                    string p = null;
+                    try { p = e.Path; } catch { p = null; }
+                    if (!string.IsNullOrEmpty(p) && p.IndexOf(filterSearchLower, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        filtered.Add(e);
+                        continue;
+                    }
+                    string n = null;
+                    try { n = e.Name; } catch { n = null; }
+                    if (!string.IsNullOrEmpty(n) && n.IndexOf(filterSearchLower, StringComparison.OrdinalIgnoreCase) >= 0)
+                        filtered.Add(e);
+                }
+            }
+
+            currentFilteredFiles.Clear();
+            currentFilteredFiles.AddRange(filtered);
+            if (recyclingGrid != null)
+            {
+                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                recyclingGrid.Refresh();
+            }
+            try { UpdatePaginationText(); } catch { }
+        }
+
+        public string GetFilterModeLabel
+        {
+            get
+            {
+                switch (currentPackageFilterMode)
+                {
+                    case PackageFilterMode.Dependencies: return "Dependencies";
+                    case PackageFilterMode.Dependents: return "Dependents";
+                    default: return "";
+                }
+            }
+        }
+
+        public int GetFilterModeCount => currentPackageFilterCount;
+
+        public bool IsFilterMasterEntry(FileEntry entry)
+        {
+            if (entry == null || string.IsNullOrEmpty(currentPackageFilterMasterUid)) return false;
+            try
+            {
+                if (entry is VarFileEntry vfe && vfe.Package != null)
+                    return string.Equals(vfe.Package.Uid, currentPackageFilterMasterUid, StringComparison.OrdinalIgnoreCase);
+                if (entry is PackageListEntry ple && ple.Package != null)
+                    return string.Equals(ple.Package.Uid, currentPackageFilterMasterUid, StringComparison.OrdinalIgnoreCase);
+                if (entry is MissingPackageListEntry mpe)
+                    return string.Equals(mpe.RequestedUid, currentPackageFilterMasterUid, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { }
+            return false;
+        }
+
+        private IEnumerator RestoreFilterScrollAnchorNextFrame()
+        {
+            yield return null;
+            filterRestoreCoroutine = null;
+
+            if (string.IsNullOrEmpty(filterRestoreAnchorKey)) yield break;
+            if (recyclingGrid == null || currentFilteredFiles == null || currentFilteredFiles.Count == 0) yield break;
+
+            int idx = -1;
+            for (int i = 0; i < currentFilteredFiles.Count; i++)
+            {
+                string key = GetEntryAnchorKey(currentFilteredFiles[i]);
+                if (!string.IsNullOrEmpty(key) && string.Equals(key, filterRestoreAnchorKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    idx = i;
+                    break;
+                }
+            }
+
+            if (idx >= 0)
+            {
+                try { recyclingGrid.ScrollToCenterItem(idx); } catch { }
+            }
+        }
+
+        private List<FileEntry> BuildCategoryEntriesForPackageUids(HashSet<string> uids)
+        {
+            var result = new List<FileEntry>();
+            if (uids == null || uids.Count == 0) return result;
+
+            // Mirror the category/prefix/extension matching logic used in RefreshFilesRoutine / ApplyPackageDelta,
+            // but restrict the package set to the UID list.
+            string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
+            bool hasExt = extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
+            bool hasNameFilt = !string.IsNullOrEmpty(nameFilterLower);
+
+            foreach (var uid in uids)
+            {
+                if (string.IsNullOrEmpty(uid)) continue;
+
+                VarPackage pkg = null;
+                // IMPORTANT: Filtering is read-only; do not auto-install packages/dependencies here.
+                try { pkg = FileManager.GetPackage(uid, ensureInstalled: false); } catch { pkg = null; }
+                if (pkg == null) continue;
+
+                // Respect creator filter if set
+                if (!string.IsNullOrEmpty(currentCreator))
+                {
+                    try
+                    {
+                        if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
+                    }
+                    catch { continue; }
+                }
+
+                List<string> names; List<long> ticks; List<long> sizes;
+                try
+                {
+                    if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
+                    {
+                        continue;
+                    }
+                }
+                catch { continue; }
+
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string ip = names[i];
+                    if (string.IsNullOrEmpty(ip)) continue;
+
+                    // Extension filter
+                    if (hasExt)
+                    {
+                        string entryExt = System.IO.Path.GetExtension(ip);
+                        if (string.IsNullOrEmpty(entryExt)) continue;
+                        entryExt = entryExt.Substring(1);
+                        bool extMatch = false;
+                        for (int e = 0; e < extensions.Length; e++)
+                            if (string.Equals(entryExt, extensions[e], StringComparison.OrdinalIgnoreCase)) { extMatch = true; break; }
+                        if (!extMatch) continue;
+                    }
+
+                    // Path prefix filter
+                    bool pathOk = true;
+                    if (currentPaths != null && currentPaths.Count > 0)
+                    {
+                        pathOk = false;
+                        for (int p = 0; p < currentPaths.Count; p++)
+                        {
+                            string pref = currentPaths[p];
+                            if (ip.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (string.Equals(pref, "Saves/Person", StringComparison.OrdinalIgnoreCase) ||
+                                    string.Equals(pref, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (ip.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase)) continue;
+                                }
+                                pathOk = true;
+                                break;
+                            }
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(currentPath))
+                    {
+                        pathOk = false;
+                        if (ip.StartsWith(currentPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (string.Equals(currentPath, "Saves/Person", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(currentPath, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (!ip.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                                    pathOk = true;
+                            }
+                            else pathOk = true;
+                        }
+                    }
+                    if (!pathOk) continue;
+
+                    // Name filter
+                    if (hasNameFilt &&
+                        pkg.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0 &&
+                        ip.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
+
+                    // Apply the rest of the active filters (tags/rating/size/scene source/etc)
+                    if (!PassesFilters(entry, true)) continue;
+
+                    result.Add(entry);
+                }
+            }
+
+            // Keep display stable
+            try
+            {
+                var sortState = GetSortState("Files");
+                GallerySortManager.Instance.SortFiles(result, sortState);
+            }
+            catch { }
+
+            return result;
+        }
+
+        private List<FileEntry> BuildPackageListEntriesForUids(HashSet<string> uids)
+        {
+            var result = new List<FileEntry>();
+            if (uids == null || uids.Count == 0) return result;
+
+            foreach (var uid in uids)
+            {
+                if (string.IsNullOrEmpty(uid)) continue;
+                try
+                {
+                    // Read-only resolve (no auto-install)
+                    var pkg = FileManager.GetPackage(uid, ensureInstalled: false);
+                    if (pkg != null) result.Add(new PackageListEntry(pkg));
+                    else result.Add(new MissingPackageListEntry(uid));
+                }
+                catch
+                {
+                    result.Add(new MissingPackageListEntry(uid));
+                }
+            }
+
+            // Stable sort by display name
+            try
+            {
+                result.Sort((a, b) => string.Compare(a != null ? a.Name : "", b != null ? b.Name : "", StringComparison.OrdinalIgnoreCase));
+            }
+            catch { }
+
+            return result;
+        }
 
         private bool TryGetKnownPosePeopleCount(FileEntry entry, out int peopleCount)
         {
@@ -659,6 +1091,11 @@ namespace VPB
 
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false, bool isRetry = false)
         {
+            // Clear any active dependency filter when refreshing
+            ClearPackageFilter();
+            // Reset in-memory top search base; RefreshFiles rebuilds the list.
+            topSearchBaseFiles = null;
+
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
             {
@@ -1410,5 +1847,216 @@ namespace VPB
                 }
             }
         }
+
+        /// <summary>Filter to show only the selected package and its dependencies.</summary>
+        public void ApplyDependenciesFilter(FileEntry file)
+        {
+            if (!TryGetPackageFromEntry(file, out VarPackage pkg, out string label) || pkg == null) return;
+
+            // Enter filter mode (or keep it) but do NOT compound filters.
+            EnsureFilterBaseCaptured();
+
+            var deps = pkg.RecursivePackageDependencies;
+
+            // In some categories (notably Scene), the current list may not contain representative
+            // entries for dependency packages. In that case, switch the filtered view to show the
+            // actual .var packages for the dependency set.
+            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            bool isSceneCategory = title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isPackageListLevel = (currentFilteredFiles != null && currentFilteredFiles.Count > 0 &&
+                                       (currentFilteredFiles[0] is PackageListEntry || currentFilteredFiles[0] is MissingPackageListEntry));
+
+            List<FileEntry> filtered;
+            if (isSceneCategory || isPackageListLevel)
+            {
+                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try { uids.Add(pkg.Uid); } catch { }
+                if (deps != null)
+                {
+                    for (int i = 0; i < deps.Count; i++)
+                    {
+                        var duid = deps[i];
+                        if (!string.IsNullOrEmpty(duid)) uids.Add(duid);
+                    }
+                }
+                // Scene deps: show package list (All-items mode) so we don't exclude dependencies
+                // that don't contain Scene json entries.
+                filtered = BuildPackageListEntriesForUids(uids);
+                currentPackageFilterCount = Math.Max(0, uids.Count - 1);
+            }
+            else
+            {
+                filtered = new List<FileEntry>();
+                filtered.Add(file);
+
+                if (deps != null)
+                {
+                    for (int i = 0; i < currentFilteredFiles.Count; i++)
+                    {
+                        var other = currentFilteredFiles[i];
+                        if (other == file) continue;
+                        if (other is VarFileEntry otherVfe && otherVfe.Package != null)
+                        {
+                            if (deps.Contains(otherVfe.Package.Uid))
+                                filtered.Add(other);
+                        }
+                    }
+                }
+                currentPackageFilterCount = Math.Max(0, filtered.Count - 1);
+            }
+            currentPackageFilterMasterUid = pkg.Uid;
+            currentPackageFilterMode = PackageFilterMode.Dependencies;
+            ApplyFilteredList(filtered, $"Dependencies of {label}");
+        }
+
+        /// <summary>Filter to show only the selected package and its dependents.</summary>
+        public void ApplyDependentsFilter(FileEntry file)
+        {
+            if (!TryGetPackageFromEntry(file, out VarPackage pkg, out string label) || pkg == null) return;
+
+            // Enter filter mode (or keep it) but do NOT compound filters.
+            EnsureFilterBaseCaptured();
+
+            string targetUid = pkg.Uid;
+            string targetShort = GetPackageGroupShortUid(targetUid);
+
+            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            bool isSceneCategory = title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isPackageListLevel = (currentFilteredFiles != null && currentFilteredFiles.Count > 0 &&
+                                       (currentFilteredFiles[0] is PackageListEntry || currentFilteredFiles[0] is MissingPackageListEntry));
+
+            List<FileEntry> filtered;
+            if (isSceneCategory || isPackageListLevel)
+            {
+                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try { uids.Add(pkg.Uid); } catch { }
+
+                if (FileManager.PackagesByUid != null && !string.IsNullOrEmpty(targetUid))
+                {
+                    foreach (var pkg2 in FileManager.PackagesByUid.Values)
+                    {
+                        if (pkg2 == null) continue;
+                        try
+                        {
+                            var otherDeps = pkg2.RecursivePackageDependencies;
+                            if (otherDeps != null)
+                            {
+                                bool hit = false;
+                                for (int di = 0; di < otherDeps.Count; di++)
+                                {
+                                    if (DepRefersToTarget(otherDeps[di], targetUid, targetShort))
+                                    {
+                                        hit = true;
+                                        break;
+                                    }
+                                }
+                                if (hit)
+                                {
+                                    uids.Add(pkg2.Uid);
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                // Scene dependents: show package list (All-items mode) for completeness.
+                filtered = BuildPackageListEntriesForUids(uids);
+                currentPackageFilterCount = Math.Max(0, uids.Count - 1);
+            }
+            else
+            {
+                filtered = new List<FileEntry>();
+                filtered.Add(file);
+
+                for (int i = 0; i < currentFilteredFiles.Count; i++)
+                {
+                    var other = currentFilteredFiles[i];
+                    if (other == file) continue;
+                    if (other is VarFileEntry otherVfe && otherVfe.Package != null)
+                    {
+                        var otherDeps = otherVfe.Package.RecursivePackageDependencies;
+                        if (otherDeps != null && otherDeps.Contains(targetUid))
+                            filtered.Add(other);
+                    }
+                }
+                currentPackageFilterCount = Math.Max(0, filtered.Count - 1);
+            }
+            currentPackageFilterMasterUid = pkg.Uid;
+            currentPackageFilterMode = PackageFilterMode.Dependents;
+            ApplyFilteredList(filtered, $"Dependents of {label}");
+        }
+
+        /// <summary>Clear any active filter and restore the full list.</summary>
+        public void ClearPackageFilter()
+        {
+            if (filterBaseFiles != null)
+            {
+                currentFilteredFiles.Clear();
+                currentFilteredFiles.AddRange(filterBaseFiles);
+                filterBaseFiles = null;
+                currentFilterDesc = null;
+                currentPackageFilterMode = PackageFilterMode.None;
+                currentPackageFilterMasterUid = null;
+                currentPackageFilterCount = 0;
+                filterSearchBaseFiles = null;
+                filterSearchLower = "";
+                bool enteredFromSearch = filterEnteredFromTopSearch;
+                filterEnteredFromTopSearch = false;
+
+                if (recyclingGrid != null)
+                {
+                    recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                    recyclingGrid.Refresh();
+                }
+
+                try { UpdatePaginationText(); } catch { }
+
+                // Restore scroll after the grid has rebound.
+                filterRestoreAnchorKey = filterBaseAnchorKey;
+                filterBaseAnchorKey = null;
+                if (filterRestoreCoroutine != null)
+                {
+                    try { StopCoroutine(filterRestoreCoroutine); } catch { }
+                    filterRestoreCoroutine = null;
+                }
+                try { filterRestoreCoroutine = StartCoroutine(RestoreFilterScrollAnchorNextFrame()); } catch { }
+
+                // If the user entered filter mode while a top search was active, clearing the filter should
+                // return to the full category list (not the search-limited snapshot).
+                if (enteredFromSearch)
+                {
+                    try
+                    {
+                        nameFilter = "";
+                        nameFilterLower = "";
+                        if (titleSearchInput != null) titleSearchInput.text = "";
+                    }
+                    catch { }
+                    try
+                    {
+                        // Restore full list instantly via in-memory top search base.
+                        if (topSearchBaseFiles != null)
+                        {
+                            currentFilteredFiles.Clear();
+                            currentFilteredFiles.AddRange(topSearchBaseFiles);
+                            topSearchBaseFiles = null;
+                            if (recyclingGrid != null)
+                            {
+                                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                                recyclingGrid.Refresh();
+                            }
+                            try { UpdatePaginationText(); } catch { }
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        /// <summary>Returns whether a filter is currently active.</summary>
+        public bool IsFilterActive => filterBaseFiles != null;
+
+        /// <summary>Returns the description of the active filter, or null if none.</summary>
+        public string GetFilterDescription => currentFilterDesc;
     }
 }
