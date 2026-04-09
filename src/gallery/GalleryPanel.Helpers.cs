@@ -88,7 +88,8 @@ namespace VPB
                 if (!sameUid) SetSelectorVisible(false);
             }
             
-            currentRating = RatingsManager.Instance.GetRating(e);
+            try { currentRating = RatingsManager.Instance.GetRating(e); }
+            catch { currentRating = 0; }
             UpdateDisplay();
         }
 
@@ -106,7 +107,8 @@ namespace VPB
                 if (!sameUid) SetSelectorVisible(false);
             }
 
-            currentRating = RatingsManager.Instance.GetRating(uid);
+            try { currentRating = RatingsManager.Instance.GetRating(uid); }
+            catch { currentRating = 0; }
             UpdateDisplay();
         }
 

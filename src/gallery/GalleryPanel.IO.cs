@@ -133,6 +133,111 @@ namespace VPB
             return false;
         }
 
+        private void RefreshRecycleGridAfterFilterChange()
+        {
+            if (recyclingGrid == null || currentFilteredFiles == null) return;
+            try
+            {
+                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                recyclingGrid.Refresh();
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.Log("[VPB] RefreshRecycleGridAfterFilterChange: " + ex.Message); } catch { }
+            }
+        }
+
+        /// <summary>Scene category or already showing package-level rows — use package list for deps/dependents filter.</summary>
+        private bool PackageFilterUsesPackageListRows()
+        {
+            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            if (!string.IsNullOrEmpty(title) && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return false;
+            FileEntry head = currentFilteredFiles[0];
+            if (head == null) return false;
+            return head is PackageListEntry || head is MissingPackageListEntry;
+        }
+
+        private static HashSet<string> BuildUidSetForDependenciesFilter(VarPackage pkg)
+        {
+            var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (pkg == null) return uids;
+            if (!string.IsNullOrEmpty(pkg.Uid)) uids.Add(pkg.Uid);
+            var deps = pkg.RecursivePackageDependencies;
+            if (deps == null) return uids;
+            for (int i = 0; i < deps.Count; i++)
+            {
+                string d = deps[i];
+                if (!string.IsNullOrEmpty(d)) uids.Add(d);
+            }
+            return uids;
+        }
+
+        private static HashSet<string> CollectUidsForDependentsPackageListFilter(string targetUid, string targetShort)
+        {
+            var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(targetUid))
+            {
+                try { uids.Add(targetUid); } catch { }
+            }
+            if (FileManager.PackagesByUid == null || string.IsNullOrEmpty(targetUid)) return uids;
+
+            foreach (VarPackage pkg2 in FileManager.PackagesByUid.Values)
+            {
+                if (pkg2 == null) continue;
+                try
+                {
+                    var otherDeps = pkg2.RecursivePackageDependencies;
+                    if (otherDeps == null) continue;
+                    for (int di = 0; di < otherDeps.Count; di++)
+                    {
+                        if (!DepRefersToTarget(otherDeps[di], targetUid, targetShort)) continue;
+                        if (!string.IsNullOrEmpty(pkg2.Uid)) uids.Add(pkg2.Uid);
+                        break;
+                    }
+                }
+                catch { }
+            }
+            return uids;
+        }
+
+        private static void AddVarFileEntriesWithPackageInDepList(List<FileEntry> filtered, FileEntry master, IList<FileEntry> source, List<string> depUids)
+        {
+            if (filtered == null || depUids == null || source == null) return;
+            for (int i = 0; i < source.Count; i++)
+            {
+                FileEntry other = source[i];
+                if (other == master) continue;
+                if (other is VarFileEntry vfe && vfe.Package != null && depUids.Contains(vfe.Package.Uid))
+                    filtered.Add(other);
+            }
+        }
+
+        /// <summary>Same dependency matching as package-list dependents path (exact UID + version-group / path forms).</summary>
+        private static void AddVarFileEntriesThatDependOnPackageUid(List<FileEntry> filtered, FileEntry master, IList<FileEntry> source, string targetUid, string targetShort)
+        {
+            if (filtered == null || source == null || string.IsNullOrEmpty(targetUid)) return;
+            for (int i = 0; i < source.Count; i++)
+            {
+                FileEntry other = source[i];
+                if (other == master) continue;
+                if (other is VarFileEntry vfe && vfe.Package != null)
+                {
+                    var od = vfe.Package.RecursivePackageDependencies;
+                    if (od == null) continue;
+                    for (int j = 0; j < od.Count; j++)
+                    {
+                        if (DepRefersToTarget(od[j], targetUid, targetShort))
+                        {
+                            filtered.Add(other);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         private void EnsureFilterBaseCaptured()
         {
             if (filterBaseFiles != null) return;
@@ -168,14 +273,9 @@ namespace VPB
             currentFilteredFiles.AddRange(filtered);
             currentFilterDesc = desc;
 
-            if (recyclingGrid != null)
-            {
-                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                recyclingGrid.Refresh();
-            }
-
             try { UpdateTabs(); } catch { }
             try { UpdatePaginationText(); } catch { }
+            RefreshRecycleGridAfterFilterChange();
         }
 
         public void ApplySearchWithinFilter(string query)
@@ -189,54 +289,41 @@ namespace VPB
 
             currentFilteredFiles.Clear();
             currentFilteredFiles.AddRange(filtered);
-            if (recyclingGrid != null)
-            {
-                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                recyclingGrid.Refresh();
-            }
             try { UpdatePaginationText(); } catch { }
+            RefreshRecycleGridAfterFilterChange();
         }
 
         private List<FileEntry> BuildFilterModeView(List<FileEntry> baseList, string searchLower)
         {
             var source = baseList ?? new List<FileEntry>();
-            var tmp = new List<FileEntry>();
+            bool needSearch = !string.IsNullOrEmpty(searchLower);
+            var result = new List<FileEntry>();
 
-            // Star toggle: show only rated items (within filtered results)
-            if (isRatingSortToggleEnabled)
+            for (int i = 0; i < source.Count; i++)
             {
-                for (int i = 0; i < source.Count; i++)
-                {
-                    var e = source[i];
-                    if (e == null) continue;
-                    try { if (RatingsManager.Instance.GetRating(e) > 0) tmp.Add(e); } catch { }
-                }
-            }
-            else
-            {
-                tmp.AddRange(source);
-            }
-
-            if (string.IsNullOrEmpty(searchLower)) return tmp;
-
-            var filtered = new List<FileEntry>();
-            for (int i = 0; i < tmp.Count; i++)
-            {
-                var e = tmp[i];
+                FileEntry e = source[i];
                 if (e == null) continue;
-                string p = null;
-                try { p = e.Path; } catch { p = null; }
-                if (!string.IsNullOrEmpty(p) && p.IndexOf(searchLower, StringComparison.OrdinalIgnoreCase) >= 0)
+
+                if (isRatingSortToggleEnabled)
                 {
-                    filtered.Add(e);
+                    try { if (RatingsManager.Instance.GetRating(e) <= 0) continue; } catch { continue; }
+                }
+
+                if (!needSearch)
+                {
+                    result.Add(e);
                     continue;
                 }
+
+                string p = null;
                 string n = null;
-                try { n = e.Name; } catch { n = null; }
-                if (!string.IsNullOrEmpty(n) && n.IndexOf(searchLower, StringComparison.OrdinalIgnoreCase) >= 0)
-                    filtered.Add(e);
+                try { p = e.Path; } catch { }
+                try { n = e.Name; } catch { }
+                if ((!string.IsNullOrEmpty(p) && p.IndexOf(searchLower, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                    (!string.IsNullOrEmpty(n) && n.IndexOf(searchLower, StringComparison.OrdinalIgnoreCase) >= 0))
+                    result.Add(e);
             }
-            return filtered;
+            return result;
         }
 
         public string GetFilterModeLabel
@@ -1851,57 +1938,24 @@ namespace VPB
         {
             if (!TryGetPackageFromEntry(file, out VarPackage pkg, out string label) || pkg == null) return;
 
-            // Enter filter mode (or keep it) but do NOT compound filters.
             EnsureFilterBaseCaptured();
 
+            List<FileEntry> filtered;
             var deps = pkg.RecursivePackageDependencies;
 
-            // In some categories (notably Scene), the current list may not contain representative
-            // entries for dependency packages. In that case, switch the filtered view to show the
-            // actual .var packages for the dependency set.
-            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
-            bool isSceneCategory = title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isPackageListLevel = (currentFilteredFiles != null && currentFilteredFiles.Count > 0 &&
-                                       (currentFilteredFiles[0] is PackageListEntry || currentFilteredFiles[0] is MissingPackageListEntry));
-
-            List<FileEntry> filtered;
-            if (isSceneCategory || isPackageListLevel)
+            if (PackageFilterUsesPackageListRows())
             {
-                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                try { uids.Add(pkg.Uid); } catch { }
-                if (deps != null)
-                {
-                    for (int i = 0; i < deps.Count; i++)
-                    {
-                        var duid = deps[i];
-                        if (!string.IsNullOrEmpty(duid)) uids.Add(duid);
-                    }
-                }
-                // Scene deps: show package list (All-items mode) so we don't exclude dependencies
-                // that don't contain Scene json entries.
+                HashSet<string> uids = BuildUidSetForDependenciesFilter(pkg);
                 filtered = BuildPackageListEntriesForUids(uids);
                 currentPackageFilterCount = Math.Max(0, uids.Count - 1);
             }
             else
             {
-                filtered = new List<FileEntry>();
-                filtered.Add(file);
-
-                if (deps != null)
-                {
-                    for (int i = 0; i < currentFilteredFiles.Count; i++)
-                    {
-                        var other = currentFilteredFiles[i];
-                        if (other == file) continue;
-                        if (other is VarFileEntry otherVfe && otherVfe.Package != null)
-                        {
-                            if (deps.Contains(otherVfe.Package.Uid))
-                                filtered.Add(other);
-                        }
-                    }
-                }
+                filtered = new List<FileEntry> { file };
+                AddVarFileEntriesWithPackageInDepList(filtered, file, currentFilteredFiles, deps);
                 currentPackageFilterCount = Math.Max(0, filtered.Count - 1);
             }
+
             currentPackageFilterMasterUid = pkg.Uid;
             currentPackageFilterMode = PackageFilterMode.Dependencies;
             ApplyFilteredList(filtered, $"Dependencies of {label}");
@@ -1912,73 +1966,25 @@ namespace VPB
         {
             if (!TryGetPackageFromEntry(file, out VarPackage pkg, out string label) || pkg == null) return;
 
-            // Enter filter mode (or keep it) but do NOT compound filters.
             EnsureFilterBaseCaptured();
 
             string targetUid = pkg.Uid;
             string targetShort = GetPackageGroupShortUid(targetUid);
 
-            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
-            bool isSceneCategory = title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isPackageListLevel = (currentFilteredFiles != null && currentFilteredFiles.Count > 0 &&
-                                       (currentFilteredFiles[0] is PackageListEntry || currentFilteredFiles[0] is MissingPackageListEntry));
-
             List<FileEntry> filtered;
-            if (isSceneCategory || isPackageListLevel)
+            if (PackageFilterUsesPackageListRows())
             {
-                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                try { uids.Add(pkg.Uid); } catch { }
-
-                if (FileManager.PackagesByUid != null && !string.IsNullOrEmpty(targetUid))
-                {
-                    foreach (var pkg2 in FileManager.PackagesByUid.Values)
-                    {
-                        if (pkg2 == null) continue;
-                        try
-                        {
-                            var otherDeps = pkg2.RecursivePackageDependencies;
-                            if (otherDeps != null)
-                            {
-                                bool hit = false;
-                                for (int di = 0; di < otherDeps.Count; di++)
-                                {
-                                    if (DepRefersToTarget(otherDeps[di], targetUid, targetShort))
-                                    {
-                                        hit = true;
-                                        break;
-                                    }
-                                }
-                                if (hit)
-                                {
-                                    uids.Add(pkg2.Uid);
-                                }
-                            }
-                        }
-                        catch { }
-                    }
-                }
-                // Scene dependents: show package list (All-items mode) for completeness.
+                HashSet<string> uids = CollectUidsForDependentsPackageListFilter(targetUid, targetShort);
                 filtered = BuildPackageListEntriesForUids(uids);
                 currentPackageFilterCount = Math.Max(0, uids.Count - 1);
             }
             else
             {
-                filtered = new List<FileEntry>();
-                filtered.Add(file);
-
-                for (int i = 0; i < currentFilteredFiles.Count; i++)
-                {
-                    var other = currentFilteredFiles[i];
-                    if (other == file) continue;
-                    if (other is VarFileEntry otherVfe && otherVfe.Package != null)
-                    {
-                        var otherDeps = otherVfe.Package.RecursivePackageDependencies;
-                        if (otherDeps != null && otherDeps.Contains(targetUid))
-                            filtered.Add(other);
-                    }
-                }
+                filtered = new List<FileEntry> { file };
+                AddVarFileEntriesThatDependOnPackageUid(filtered, file, currentFilteredFiles, targetUid, targetShort);
                 currentPackageFilterCount = Math.Max(0, filtered.Count - 1);
             }
+
             currentPackageFilterMasterUid = pkg.Uid;
             currentPackageFilterMode = PackageFilterMode.Dependents;
             ApplyFilteredList(filtered, $"Dependents of {label}");
@@ -2001,11 +2007,7 @@ namespace VPB
                 bool enteredFromSearch = filterEnteredFromTopSearch;
                 filterEnteredFromTopSearch = false;
 
-                if (recyclingGrid != null)
-                {
-                    recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                    recyclingGrid.Refresh();
-                }
+                RefreshRecycleGridAfterFilterChange();
 
                 try { UpdateTabs(); } catch { }
                 try { UpdatePaginationText(); } catch { }
@@ -2039,11 +2041,7 @@ namespace VPB
                             currentFilteredFiles.Clear();
                             currentFilteredFiles.AddRange(topSearchBaseFiles);
                             topSearchBaseFiles = null;
-                            if (recyclingGrid != null)
-                            {
-                                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                                recyclingGrid.Refresh();
-                            }
+                            RefreshRecycleGridAfterFilterChange();
                             try { UpdatePaginationText(); } catch { }
                         }
                     }

@@ -125,7 +125,8 @@ namespace VPB
             }
         }
 
-        private static int GetDepsCount(FileEntry file)
+        /// <summary>Shared by list UI and Deps sort — same rules for VarFileEntry and PackageListEntry.</summary>
+        public static int GetDepsCount(FileEntry file)
         {
             try
             {
@@ -144,7 +145,7 @@ namespace VPB
             return 0;
         }
 
-        private static int GetDependentsCount(FileEntry file)
+        public static int GetDependentsCount(FileEntry file)
         {
             try
             {

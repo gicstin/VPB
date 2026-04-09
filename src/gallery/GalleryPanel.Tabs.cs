@@ -26,37 +26,6 @@ namespace VPB
             return d.ToString("0.0") + " " + suffix[i];
         }
 
-        private static int GetDepsCountForList(FileEntry file)
-        {
-            try
-            {
-                if (file is VarFileEntry vfe && vfe.Package != null)
-                {
-                    var deps = vfe.Package.RecursivePackageDependencies;
-                    return deps != null ? deps.Count : 0;
-                }
-                if (file is PackageListEntry ple && ple.Package != null)
-                {
-                    var deps = ple.Package.RecursivePackageDependencies;
-                    return deps != null ? deps.Count : 0;
-                }
-            }
-            catch { }
-            return 0;
-        }
-
-        private static int GetDependentsCountForList(FileEntry file)
-        {
-            try
-            {
-                if (file is VarFileEntry vfe && vfe.Package != null)
-                    return vfe.Package.DependentCount;
-                if (file is PackageListEntry ple && ple.Package != null)
-                    return ple.Package.DependentCount;
-            }
-            catch { }
-            return 0;
-        }
         private float CurrentBottomOffset
         {
             get
@@ -1601,7 +1570,7 @@ namespace VPB
                     Text t = depsTr.GetComponent<Text>();
                     if (t != null)
                     {
-                        int deps = GetDepsCountForList(file);
+                        int deps = GallerySortManager.GetDepsCount(file);
                         string v = deps.ToString();
                         t.text = "Deps: " + v;
                         t.raycastTarget = true;
@@ -1629,7 +1598,7 @@ namespace VPB
                     if (et == null) et = depsTr.gameObject.AddComponent<EventTrigger>();
                     var pointerClickEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
                     pointerClickEntry.callback.AddListener((data) => {
-                        if (GetDepsCountForList(file) > 0)
+                        if (GallerySortManager.GetDepsCount(file) > 0)
                             ApplyDependenciesFilter(file);
                     });
                     et.triggers.Clear();
@@ -1665,7 +1634,7 @@ namespace VPB
                     Text t = dependentsTr.GetComponent<Text>();
                     if (t != null)
                     {
-                        int dependents = GetDependentsCountForList(file);
+                        int dependents = GallerySortManager.GetDependentsCount(file);
                         string v = dependents.ToString();
                         t.text = "Dependents: " + v;
                         t.raycastTarget = true;
@@ -1693,7 +1662,7 @@ namespace VPB
                     if (et == null) et = dependentsTr.gameObject.AddComponent<EventTrigger>();
                     var pointerClickEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
                     pointerClickEntry.callback.AddListener((data) => {
-                        if (GetDependentsCountForList(file) > 0)
+                        if (GallerySortManager.GetDependentsCount(file) > 0)
                             ApplyDependentsFilter(file);
                     });
                     et.triggers.Clear();

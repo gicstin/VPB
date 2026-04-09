@@ -42,7 +42,7 @@ namespace VPB
         private void OnDisable()
         {
             _hover = false;
-            if (target != null) target.color = normalColor;
+            ApplyVisual();
         }
 
         private void ApplyVisual()
