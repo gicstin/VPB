@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine.Networking;
 using System.Collections;
 using System.Text.RegularExpressions;
@@ -336,7 +336,8 @@ namespace VPB
                         {
                             continue;
                         }
-                        VarPackage package = FileManager.GetPackage(text);
+                        // Hub browsing should not auto-install packages. We only need to know if it exists locally.
+                        VarPackage package = FileManager.GetPackage(text, ensureInstalled: false);
                         if (package == null)
                         {
                             VarPackageGroup packageGroup = FileManager.GetPackageGroup(packageGroupUid);

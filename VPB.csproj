@@ -349,6 +349,7 @@
     <Compile Include="src\gallery\GalleryPanel.UI.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Overlays.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Layout.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SelectionContextMenu.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />

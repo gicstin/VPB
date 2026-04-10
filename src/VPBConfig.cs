@@ -131,6 +131,8 @@ namespace VPB
         public bool EnableAutoFixedGallery = true;
         public float ListRowHeight = 100f;
         public int GridColumnCount = 4;
+        /// <summary>0 = Grid, 1 = List. Matches <see cref="GalleryLayoutMode"/>.</summary>
+        public int GalleryLayoutMode = 0;
         public float SideButtonScale = 1.0f;
         public float InnerPaneScale = 1.0f;
         /// <summary>UI language id: en, zh_cn, etc. Matches vpb_translations/&lt;id&gt;.json. Empty string means auto-detect on first run.</summary>
@@ -228,6 +230,7 @@ namespace VPB
             EnableAutoFixedGallery = true;
             ListRowHeight = 100f;
             GridColumnCount = 4;
+            GalleryLayoutMode = 0;
             UiLocale = "";
 
             try
@@ -299,6 +302,7 @@ namespace VPB
                         if (node["EnableAutoFixedGallery"] != null) EnableAutoFixedGallery = node["EnableAutoFixedGallery"].AsBool;
                         if (node["ListRowHeight"] != null) ListRowHeight = node["ListRowHeight"].AsFloat;
                         if (node["GridColumnCount"] != null) GridColumnCount = node["GridColumnCount"].AsInt;
+                        if (node["GalleryLayoutMode"] != null) GalleryLayoutMode = node["GalleryLayoutMode"].AsInt;
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["InnerPaneScale"] != null) InnerPaneScale = node["InnerPaneScale"].AsFloat;
                         if (node["UiLocale"] != null) UiLocale = node["UiLocale"].Value;
@@ -378,6 +382,7 @@ namespace VPB
                 node["EnableAutoFixedGallery"].AsBool = EnableAutoFixedGallery;
                 node["ListRowHeight"].AsFloat = ListRowHeight;
                 node["GridColumnCount"].AsInt = GridColumnCount;
+                node["GalleryLayoutMode"].AsInt = GalleryLayoutMode;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["InnerPaneScale"].AsFloat = InnerPaneScale;
                 node["UiLocale"] = UiLocale ?? "en";

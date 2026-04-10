@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -17,6 +17,7 @@ namespace VPB
 {
     public class HubBrowse : JSONStorable
     {
+        private const string SortSubmissionDate = "Submission Date";
         public delegate void BinaryRequestStartedCallback();
 
         public delegate void BinaryRequestSuccessCallback(byte[] data, Dictionary<string, string> responseHeaders);
@@ -411,6 +412,11 @@ namespace VPB
             Stopwatch sw = Stopwatch.StartNew();
             using (UnityWebRequest webRequest = UnityWebRequest.Get(uri))
             {
+                // UnityWebRequest can occasionally hang indefinitely on some systems/networks.
+                // Add a hard timeout so the Hub UI doesn't get stuck on "Fetching Hub Info".
+                const int timeoutSeconds = 30;
+                try { webRequest.timeout = timeoutSeconds; } catch { }
+
                 long createMs = sw.ElapsedMilliseconds;
                 if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
                     LogUtil.Log($"HubBrowse.GetRequest CREATED uri={uri} ms={createMs}");
@@ -424,8 +430,17 @@ namespace VPB
 
                 sw.Reset();
                 sw.Start();
+                float startRealtime = Time.realtimeSinceStartup;
                 while (!webRequest.isDone)
                 {
+                    if (Time.realtimeSinceStartup - startRealtime > timeoutSeconds)
+                    {
+                        try { webRequest.Abort(); } catch { }
+                        string toErr = $"Timeout after {timeoutSeconds}s";
+                        LogUtil.LogError($"HubBrowse.GetRequest DONE_TIMEOUT uri={uri} totalMs={totalSw.ElapsedMilliseconds} err={toErr}");
+                        if (errorCallback != null) errorCallback(toErr);
+                        yield break;
+                    }
                     yield return null;
                 }
                 long waitMs = sw.ElapsedMilliseconds;
@@ -525,6 +540,11 @@ namespace VPB
             Stopwatch sw = Stopwatch.StartNew();
             using (UnityWebRequest webRequest = UnityWebRequest.Post(uri, postData))
             {
+                // UnityWebRequest can occasionally hang indefinitely on some systems/networks.
+                // Add a hard timeout so the Hub UI doesn't get stuck on "Fetching Hub Info".
+                const int timeoutSeconds = 30;
+                try { webRequest.timeout = timeoutSeconds; } catch { }
+
                 webRequest.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(postData));
                 webRequest.SetRequestHeader("Content-Type", "application/json");
                 webRequest.SetRequestHeader("Accept", "application/json");
@@ -541,8 +561,17 @@ namespace VPB
 
                 sw.Reset();
                 sw.Start();
+                float startRealtime = Time.realtimeSinceStartup;
                 while (!webRequest.isDone)
                 {
+                    if (Time.realtimeSinceStartup - startRealtime > timeoutSeconds)
+                    {
+                        try { webRequest.Abort(); } catch { }
+                        string toErr = $"Timeout after {timeoutSeconds}s";
+                        LogUtil.LogError($"HubBrowse.PostRequest DONE_TIMEOUT uri={uri} waitMs={sw.ElapsedMilliseconds} totalMs={totalSw.ElapsedMilliseconds} code={webRequest.responseCode} err={toErr}");
+                        if (errorCallback != null) errorCallback(toErr);
+                        yield break;
+                    }
                     yield return null;
                 }
                 long waitMs = sw.ElapsedMilliseconds;
@@ -782,6 +811,9 @@ namespace VPB
 
                             RectTransform rectTransform = UnityEngine.Object.Instantiate(itemPrefab);
                             rectTransform.SetParent(itemContainer, false);
+                            // The built-in Hub item prefab is often kept inactive as a template.
+                            // Ensure the instance is active so HubResourceItemUI.OnEnable runs and queues thumbnails immediately.
+                            if (!rectTransform.gameObject.activeSelf) rectTransform.gameObject.SetActive(true);
                             HubResourceItemUI component = rectTransform.GetComponent<HubResourceItemUI>();
                             if (component != null)
                             {
@@ -1959,6 +1991,17 @@ namespace VPB
                             disposable4.Dispose();
                         }
                     }
+
+                    // VaM Hub supports "Submission Date" sorting on the website; ensure it's available in the in-game UI.
+                    // We only add it if the API didn't include it in the getInfo sort array.
+                    if (!list6.Contains(SortSubmissionDate))
+                    {
+                        list6.Add(SortSubmissionDate);
+                    }
+                    if (!list7.Contains(SortSubmissionDate))
+                    {
+                        list7.Add(SortSubmissionDate);
+                    }
                     sortPrimaryChooser.choices = list6;
                     sortSecondaryChooser.choices = list7;
                 }
@@ -2229,6 +2272,7 @@ namespace VPB
             RegisterStringChooser(tagsFilterChooser);
             list = new List<string>();
             list.Add("Latest Update");
+            if (!list.Contains(SortSubmissionDate)) list.Add(SortSubmissionDate);
             List<string> choicesList6 = list;
             sortPrimaryChooser = new JSONStorableStringChooser("sortPrimary", choicesList6, _sortPrimary, "Primary Sort", SyncSortPrimary);
             sortPrimaryChooser.isStorable = false;
@@ -2236,6 +2280,7 @@ namespace VPB
             RegisterStringChooser(sortPrimaryChooser);
             list = new List<string>();
             list.Add("None");
+            if (!list.Contains(SortSubmissionDate)) list.Add(SortSubmissionDate);
             List<string> choicesList7 = list;
             sortSecondaryChooser = new JSONStorableStringChooser("sortSecondary", choicesList7, _sortSecondary, "Secondary Sort", SyncSortSecondary);
             sortSecondaryChooser.isStorable = false;

@@ -54,6 +54,8 @@ namespace VPB
                 }
                 catch { }
 
+                try { UpdateSelectionContextMenu(); } catch { }
+
                 try
                 {
                     if (hairSubmenuOpen)

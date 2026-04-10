@@ -1067,45 +1067,8 @@ namespace VPB
 
         private void ToggleLayoutMode()
         {
-            if (layoutMode == GalleryLayoutMode.Grid) layoutMode = GalleryLayoutMode.List;
-            else layoutMode = GalleryLayoutMode.Grid;
-            
-            if (scrollRect != null) scrollRect.gameObject.SetActive(true);
-
-            UpdateFooterLayoutState();
-            UpdateLayout();
-
-            // IMPORTANT: Avoid a full RefreshFiles() here.
-            // RefreshFilesRoutine() clears the grid to 0 items then repopulates, which causes a visible
-            // "blink" on layout toggle (show -> blank -> show). The item template supports both modes,
-            // so we only need to reconfigure the RecyclingGridView and refresh visible bindings.
-            if (contentGO != null)
-            {
-                RecyclingGridView rgv = contentGO.GetComponent<RecyclingGridView>();
-                if (rgv != null)
-                {
-                    // Preserve current viewport center across a column/height change.
-                    try { rgv.preserveCenterItemIndex = rgv.GetCenterItemIndex(); } catch { }
-
-                    if (layoutMode == GalleryLayoutMode.List)
-                    {
-                        // List mode: 1 column
-                        rgv.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
-                        rgv.SetAdaptiveConfig(true, 0f, 1, true);
-                    }
-                    else
-                    {
-                        // Grid mode
-                        float minSize = 200f;
-                        int cols = GridColumnCount;
-                        rgv.SetGridConfig(100f, 100f, 10f, 10f, cols);
-                        rgv.SetAdaptiveConfig(true, minSize, cols, false);
-                    }
-
-                    // Force a rebind of visible items so visuals (ListRow, selection bars, etc.) update immediately.
-                    try { rgv.Refresh(); } catch { }
-                }
-            }
+            var next = (layoutMode == GalleryLayoutMode.Grid) ? GalleryLayoutMode.List : GalleryLayoutMode.Grid;
+            SetLayoutMode(next);
         }
 
         private void UpdateFooterLayoutState()

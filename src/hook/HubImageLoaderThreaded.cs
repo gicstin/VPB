@@ -175,7 +175,23 @@ namespace VPB
             public bool WebCachePathExists()
             {
                 string webCachePath = GetWebCachePath();
-                return webCachePath != null && FileManager.FileExists(webCachePath);
+                if (string.IsNullOrEmpty(webCachePath)) return false;
+
+                // Treat 0-byte / missing-meta entries as invalid so we fall back to re-download.
+                // This prevents "cached" previews that can never be loaded.
+                try
+                {
+                    string meta = webCachePath + "meta";
+                    if (!FileManager.FileExists(meta)) return false;
+                    if (!FileManager.FileExists(webCachePath)) return false;
+                    long len = new FileInfo(webCachePath).Length;
+                    if (len <= 0) return false;
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
             }
 
             public void CreateTexture()
@@ -452,6 +468,16 @@ namespace VPB
                                 using (Stream fs = new FileStream(webCachePath, FileMode.Open, FileAccess.Read))
                                 {
                                     int len = (int)fs.Length;
+                                    if (len <= 0)
+                                    {
+                                        // Corrupt/empty cache entry. Remove it so we can re-download.
+                                        try { File.Delete(webCachePath); } catch { }
+                                        try { File.Delete(text); } catch { }
+                                        hadError = true;
+                                        errorText = "Empty web cache file " + webCachePath;
+                                        processed = true;
+                                        return;
+                                    }
                                     raw = ByteArrayPool.Rent(len);
                                     int read = 0;
                                     while (read < len)
@@ -517,6 +543,15 @@ namespace VPB
                                     using (Stream fs = new FileStream(diskCachePath, FileMode.Open, FileAccess.Read))
                                     {
                                         int len = (int)fs.Length;
+                                        if (len <= 0)
+                                        {
+                                            // Corrupt/empty cache entry. Remove it so we can re-process from source.
+                                            try { File.Delete(diskCachePath); } catch { }
+                                            try { File.Delete(text2); } catch { }
+                                            // We'll fall back to ProcessFromStream below.
+                                        }
+                                        else
+                                        {
                                         raw = ByteArrayPool.Rent(len);
                                         int read = 0;
                                         while (read < len)
@@ -525,15 +560,21 @@ namespace VPB
                                             if (r == 0) break;
                                             read += r;
                                         }
+                                        }
                                     }
-                                    preprocessed = true;
-                                    loadedFromCache = true;
+                                    if (raw != null)
+                                    {
+                                        preprocessed = true;
+                                        loadedFromCache = true;
+                                    }
                                 }
                                 else { hadError = true; errorText = "Missing cache meta file " + text2; }
                             }
                             catch (Exception ex3) { LogUtil.LogError("Exception during cache file read " + ex3); hadError = true; errorText = ex3.ToString(); }
                         }
-                        else
+                        
+                        // If we didn't successfully load a cache entry, read the source image and decode.
+                        if (!preprocessed)
                         {
                             try
                             {
@@ -596,7 +637,8 @@ namespace VPB
                         { 
                             TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat); 
                             bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
-                            tex.Apply(false, !isSimTexture); 
+                            // Keep readable until after we write cache (if enabled).
+                            tex.Apply(false, false);
                             if (isSimTexture) LogUtil.Log($"[VPB SIM] HubLoader (Standard): Applied READABLE sim texture: {imgPath}");
                             if (canCompress) tex.Compress(true); 
                         }
@@ -615,12 +657,26 @@ namespace VPB
                                     jSONClass["height"] = tex.height.ToString();
                                     jSONClass["format"] = tex.format.ToString();
                                     byte[] rawTextureData2 = tex.GetRawTextureData();
-                                    File.WriteAllText(text + "meta", jSONClass.ToString(string.Empty));
-                                    File.WriteAllBytes(text, rawTextureData2);
+                                    if (rawTextureData2 != null && rawTextureData2.Length > 0)
+                                    {
+                                        File.WriteAllText(text + "meta", jSONClass.ToString(string.Empty));
+                                        File.WriteAllBytes(text, rawTextureData2);
+                                    }
                                 }
                                 catch (Exception ex) { LogUtil.LogError("Exception during Hub caching " + ex); }
                             }
                         }
+
+                        // Now we can optionally drop CPU-side texture data.
+                        try
+                        {
+                            bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
+                            if (!isSimTexture && tex != null)
+                            {
+                                tex.Apply(false, true);
+                            }
+                        }
+                        catch { }
                     }
                 }
                 finally

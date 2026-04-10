@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using MVR.FileManagement;
@@ -298,7 +298,8 @@ namespace VPB
 
         public void OpenInPackageManager()
         {
-            VarPackage package = FileManager.GetPackage(nameJSON.val);
+            // Don't auto-install from Hub UI inspection.
+            VarPackage package = FileManager.GetPackage(nameJSON.val, ensureInstalled: false);
             if (package != null)
             {
                 //SuperController.singleton.OpenPackageInManager(nameJSON.val);
@@ -319,13 +320,13 @@ namespace VPB
             VarPackage package = null;
             if (isDependencyJSON.val)
             {
-                package = FileManager.GetPackage(nameJSON.val);
+                package = FileManager.GetPackage(nameJSON.val, ensureInstalled: false);
             }
             else
             {
                 string text = FileManager.PackageIDToPackageGroupID(nameJSON.val);
                 string packageUidOrPath = text + ".latest";
-                package = FileManager.GetPackage(packageUidOrPath);
+                package = FileManager.GetPackage(packageUidOrPath, ensureInstalled: false);
             }
             if (package != null)
             {

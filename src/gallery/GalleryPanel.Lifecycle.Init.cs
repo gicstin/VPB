@@ -21,6 +21,15 @@ namespace VPB
                 try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
 
                 isFixedLocally = !isVR && (VPBConfig.Instance.DesktopFixedMode || VPBConfig.Instance.EnableAutoFixedGallery) && (Gallery.singleton == null || Gallery.singleton.PanelCount == 0);
+
+                // Restore persisted layout mode (Grid/List) before UI is built.
+                try
+                {
+                    int v = VPBConfig.Instance.GalleryLayoutMode;
+                    if (v == (int)GalleryLayoutMode.Grid || v == (int)GalleryLayoutMode.List)
+                        layoutMode = (GalleryLayoutMode)v;
+                }
+                catch { }
                 
                 if (isFixedLocally)
                 {

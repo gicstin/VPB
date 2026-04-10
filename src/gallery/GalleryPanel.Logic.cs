@@ -28,6 +28,17 @@ namespace VPB
             }
 
             layoutMode = mode;
+
+            // Persist across restarts
+            try
+            {
+                if (VPBConfig.Instance != null)
+                {
+                    VPBConfig.Instance.GalleryLayoutMode = (int)layoutMode;
+                    VPBConfig.Instance.Save();
+                }
+            }
+            catch { }
             
             // ALWAYS use internal UI now
             if (scrollRect != null) scrollRect.gameObject.SetActive(true);
