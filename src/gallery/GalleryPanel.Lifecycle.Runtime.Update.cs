@@ -668,6 +668,7 @@ namespace VPB
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             bool a = Input.GetKeyDown(KeyCode.A);
+            bool del = Input.GetKeyDown(KeyCode.Delete) || Input.GetKeyDown(KeyCode.Backspace);
 
             if (ctrl && a)
             {
@@ -684,6 +685,15 @@ namespace VPB
                 
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
+                return;
+            }
+
+            if (del)
+            {
+                if (selectedFiles != null && selectedFiles.Count > 0)
+                {
+                    try { TboxDeleteSelectedPackages(); } catch { }
+                }
                 return;
             }
 

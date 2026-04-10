@@ -9,17 +9,19 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
-        private GameObject _selectionCtxMenuGO;
-        private Text _selectionCtxMenuLabel;
-        private GameObject _selectionCtxCopyPkgNamesBtnGO;
+        // Selection toolbox ("tbox")
+        private GameObject tbox;
+        private Text tboxLabel;
+        private GameObject tboxCopyPkgNamesBtn;
+        private GameObject tboxDeleteBtn;
 
-        private void EnsureSelectionContextMenuUI()
+        private void EnsureTboxUI()
         {
-            if (_selectionCtxMenuGO != null) return;
+            if (tbox != null) return;
             if (backgroundBoxGO == null) return;
 
             // Position above the hover-path bar (which sits at y=60..120 in the pane)
-            _selectionCtxMenuGO = UI.AddChildGOImage(
+            tbox = UI.AddChildGOImage(
                 backgroundBoxGO,
                 new Color(0f, 0f, 0f, 0.85f),
                 AnchorPresets.hStretchBottom,
@@ -27,22 +29,22 @@ namespace VPB
                 44,
                 new Vector2(0, 120)
             );
-            _selectionCtxMenuGO.name = "SelectionContextMenu";
+            tbox.name = "SelectionToolbox";
 
-            var img = _selectionCtxMenuGO.GetComponent<Image>();
+            var img = tbox.GetComponent<Image>();
             if (img != null) img.raycastTarget = true;
 
             // Label (left)
             {
                 var labelGO = new GameObject("Label");
-                labelGO.transform.SetParent(_selectionCtxMenuGO.transform, false);
-                _selectionCtxMenuLabel = labelGO.AddComponent<Text>();
-                _selectionCtxMenuLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                _selectionCtxMenuLabel.fontSize = 18;
-                _selectionCtxMenuLabel.color = Color.white;
-                _selectionCtxMenuLabel.alignment = TextAnchor.MiddleLeft;
-                _selectionCtxMenuLabel.text = "";
-                _selectionCtxMenuLabel.raycastTarget = false;
+                labelGO.transform.SetParent(tbox.transform, false);
+                tboxLabel = labelGO.AddComponent<Text>();
+                tboxLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                tboxLabel.fontSize = 18;
+                tboxLabel.color = Color.white;
+                tboxLabel.alignment = TextAnchor.MiddleLeft;
+                tboxLabel.text = "";
+                tboxLabel.raycastTarget = false;
 
                 var rt = labelGO.GetComponent<RectTransform>();
                 rt.anchorMin = new Vector2(0, 0);
@@ -50,41 +52,60 @@ namespace VPB
                 rt.pivot = new Vector2(0, 0.5f);
                 rt.anchoredPosition = new Vector2(12, 0);
                 rt.offsetMin = new Vector2(12, 0);
-                rt.offsetMax = new Vector2(-260, 0); // leave room for right button
+                rt.offsetMax = new Vector2(-520, 0); // leave room for right buttons
             }
 
-            // Copy Package Names (right)
+            // Right buttons (Copy, Delete)
             {
-                _selectionCtxCopyPkgNamesBtnGO = UI.CreateUIButton(
-                    _selectionCtxMenuGO,
-                    240,
+                tboxCopyPkgNamesBtn = UI.CreateUIButton(
+                    tbox,
+                    210,
                     34,
                     "Copy Package Names",
                     16,
-                    -12,
+                    -12 - 220,
                     0,
                     AnchorPresets.middleRight,
                     CopySelectedPackageNamesToClipboard
                 );
-                _selectionCtxCopyPkgNamesBtnGO.name = "CopyPackageNamesButton";
+                tboxCopyPkgNamesBtn.name = "Tbox_CopyPackageNames";
+
+                tboxDeleteBtn = UI.CreateUIButton(
+                    tbox,
+                    180,
+                    34,
+                    "Delete",
+                    16,
+                    -12,
+                    0,
+                    AnchorPresets.middleRight,
+                    TboxDeleteSelectedPackages
+                );
+                tboxDeleteBtn.name = "Tbox_Delete";
+                try
+                {
+                    var delImg = tboxDeleteBtn.GetComponent<Image>();
+                    if (delImg != null) delImg.color = new Color(0.35f, 0.15f, 0.15f, 1f);
+                }
+                catch { }
             }
 
-            _selectionCtxMenuGO.SetActive(false);
+            tbox.SetActive(false);
         }
 
         private void UpdateSelectionContextMenu()
         {
             if (canvas == null) return;
-            EnsureSelectionContextMenuUI();
-            if (_selectionCtxMenuGO == null) return;
+            EnsureTboxUI();
+            if (tbox == null) return;
 
             int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
             bool visible = sel > 0;
-            if (_selectionCtxMenuGO.activeSelf != visible) _selectionCtxMenuGO.SetActive(visible);
+            if (tbox.activeSelf != visible) tbox.SetActive(visible);
             if (!visible) return;
 
-            if (_selectionCtxMenuLabel != null)
-                _selectionCtxMenuLabel.text = sel == 1 ? "1 item selected" : $"{sel} items selected";
+            if (tboxLabel != null)
+                tboxLabel.text = sel == 1 ? "1 item selected" : $"{sel} items selected";
         }
 
         private void CopySelectedPackageNamesToClipboard()
