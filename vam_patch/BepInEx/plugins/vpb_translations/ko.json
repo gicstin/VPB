@@ -237,5 +237,14 @@
   "gallery.hub.next_page": "다음 페이지 >>",
   "gallery.hub.clear_tags_count": "태그 지우기 ({0})",
   "gallery.hub.loading": "허브 불러오는 중…",
-  "gallery.hub.all": "전체"
+  "gallery.hub.all": "전체",
+
+  "gallery.tbox.copy_names": "패키지 이름 복사",
+  "gallery.tbox.delete": "삭제",
+  "gallery.tbox.selected_one": "1개 선택됨",
+  "gallery.tbox.selected_many": "{0}개 선택됨",
+  "gallery.tooltip.tbox_copy_names": "선택한 항목의 패키지 파일명을 클립보드에 복사",
+  "gallery.tooltip.tbox_delete": "선택한 패키지를 DeletedPackages 폴더로 이동",
+  "gallery.tooltip.tbox_pin": "고정 — 툴바를 펼친 상태로 유지",
+  "gallery.tooltip.tbox_label": "마우스를 올려 선택 툴바 펼치기"
 }

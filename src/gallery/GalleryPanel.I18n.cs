@@ -143,6 +143,10 @@ namespace VPB
             RefreshGoText(rightRemoveAtomBtn,  "gallery.side.remove_atom", "Remove\nAtom");
             RefreshGoText(leftRemoveAtomBtn,   "gallery.side.remove_atom", "Remove\nAtom");
 
+            // Selection toolbox buttons
+            RefreshGoText(tboxCopyPkgNamesBtn, "gallery.tbox.copy_names", "Copy Package Names");
+            RefreshGoText(tboxDeleteBtn,        "gallery.tbox.delete",      "Delete");
+
             // Undo / Redo labels include the stack count – delegate to the dedicated updater
             try { UpdateUndoRedoButtonLabels(); } catch { }
 

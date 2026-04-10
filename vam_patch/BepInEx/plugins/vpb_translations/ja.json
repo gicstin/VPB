@@ -237,5 +237,14 @@
   "gallery.hub.next_page": "次のページ >>",
   "gallery.hub.clear_tags_count": "タグを解除 ({0})",
   "gallery.hub.loading": "ハブを読み込み中…",
-  "gallery.hub.all": "すべて"
+  "gallery.hub.all": "すべて",
+
+  "gallery.tbox.copy_names": "パッケージ名をコピー",
+  "gallery.tbox.delete": "削除",
+  "gallery.tbox.selected_one": "1 件選択中",
+  "gallery.tbox.selected_many": "{0} 件選択中",
+  "gallery.tooltip.tbox_copy_names": "選択したアイテムのパッケージファイル名をクリップボードにコピー",
+  "gallery.tooltip.tbox_delete": "選択したパッケージを DeletedPackages フォルダーに移動",
+  "gallery.tooltip.tbox_pin": "ピン留め — ツールバーを展開したまま保持",
+  "gallery.tooltip.tbox_label": "ホバーして選択ツールバーを展開"
 }

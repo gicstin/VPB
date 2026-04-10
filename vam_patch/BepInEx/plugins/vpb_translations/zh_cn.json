@@ -237,5 +237,14 @@
   "gallery.hub.next_page": "下一页 >>",
   "gallery.hub.clear_tags_count": "清除标签 ({0})",
   "gallery.hub.loading": "加载中心...",
-  "gallery.hub.all": "全部"
+  "gallery.hub.all": "全部",
+
+  "gallery.tbox.copy_names": "复制资源包名称",
+  "gallery.tbox.delete": "删除",
+  "gallery.tbox.selected_one": "已选 1 项",
+  "gallery.tbox.selected_many": "已选 {0} 项",
+  "gallery.tooltip.tbox_copy_names": "将所选项目的资源包文件名复制到剪贴板",
+  "gallery.tooltip.tbox_delete": "将所选资源包移至 DeletedPackages 文件夹",
+  "gallery.tooltip.tbox_pin": "固定 — 保持工具栏展开",
+  "gallery.tooltip.tbox_label": "悬停以展开选择工具栏"
 }
