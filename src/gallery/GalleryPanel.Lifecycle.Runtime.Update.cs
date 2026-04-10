@@ -72,7 +72,7 @@ namespace VPB
                                         tgt = SuperController.singleton.GetAtomByUid(hairSubmenuTargetAtomUid);
                                 }
                                 catch { }
-                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                if (tgt == null) tgt = GetBestTargetAtom();
                                 // Keep open if there are still options; auto-closes inside if empty.
                                 SyncHairSubmenu(tgt, true);
                             }
@@ -154,7 +154,7 @@ namespace VPB
                                         tgt = SuperController.singleton.GetAtomByUid(clothingSubmenuTargetAtomUid);
                                 }
                                 catch { }
-                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                if (tgt == null) tgt = GetBestTargetAtom();
                                 // Keep open if there are still options; auto-closes inside if empty.
                                 SyncClothingSubmenu(tgt, true);
                             }
@@ -682,7 +682,6 @@ namespace VPB
                 
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
-                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
                 return;
             }
 
@@ -786,7 +785,6 @@ namespace VPB
                 SetHoverPath(newFile);
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
-                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
             }
         }
     }

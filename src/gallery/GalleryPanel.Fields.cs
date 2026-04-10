@@ -551,7 +551,6 @@ namespace VPB
 
         // Settings Pane
         private SettingsPanel settingsPanel;
-        private GalleryActionsPanel actionsPanel;
         private QuickFiltersUI quickFiltersUI; // NEW
         
         private List<CreatorCacheEntry> cachedCreators = new List<CreatorCacheEntry>();

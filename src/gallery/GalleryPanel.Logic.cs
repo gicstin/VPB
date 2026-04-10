@@ -886,7 +886,7 @@ namespace VPB
         private Atom GetBestUndoRedoTargetAtom()
         {
             Atom a = null;
-            try { a = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { a = null; }
+            try { a = GetBestTargetAtom(); } catch { a = null; }
             if (a == null)
             {
                 try { a = SelectedTargetAtom; } catch { a = null; }
@@ -1078,7 +1078,7 @@ namespace VPB
                         catch { ps = null; }
 
                         Atom bestAtom = null;
-                        try { bestAtom = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { }
+                        try { bestAtom = GetBestTargetAtom(); } catch { }
                         if (bestAtom == null)
                         {
                             try { bestAtom = SelectedTargetAtom; } catch { bestAtom = null; }
@@ -1335,7 +1335,7 @@ namespace VPB
                 {
                     // Ensure context submenus refresh immediately after Undo restores items.
                     Atom tgt = null;
-                    try { tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { }
+                    try { tgt = GetBestTargetAtom(); } catch { }
                     if (clothingSubmenuOpen) SyncClothingSubmenu(tgt, true);
                     if (hairSubmenuOpen) SyncHairSubmenu(tgt, true);
                     UpdateSideContextActions();
@@ -1374,7 +1374,7 @@ namespace VPB
                 try
                 {
                     Atom tgt = null;
-                    try { tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { }
+                    try { tgt = GetBestTargetAtom(); } catch { }
                     if (clothingSubmenuOpen) SyncClothingSubmenu(tgt, true);
                     if (hairSubmenuOpen) SyncHairSubmenu(tgt, true);
                     UpdateSideContextActions();

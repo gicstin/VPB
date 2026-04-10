@@ -11,6 +11,159 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private Atom GetBestTargetAtom()
+        {
+            if (SuperController.singleton == null) return null;
+
+            // 0. Prefer the target selected in the GalleryPanel dropdown
+            try
+            {
+                Atom selectedInDropdown = SelectedTargetAtom;
+                if (selectedInDropdown != null) return selectedInDropdown;
+            }
+            catch { }
+
+            // 1. Prefer selected atom if it's a Person
+            try
+            {
+                Atom selected = SuperController.singleton.GetSelectedAtom();
+                if (selected != null && selected.type == "Person") return selected;
+            }
+            catch { }
+
+            // 2. Fallback: Find any Person atom in the scene
+            try
+            {
+                List<Atom> allAtoms = SuperController.singleton.GetAtoms();
+                if (allAtoms != null)
+                {
+                    foreach (Atom a in allAtoms)
+                    {
+                        if (a == null) continue;
+                        try { if (a.type == "Person") return a; } catch { }
+                    }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private bool ExecuteAutoActionForFile(FileEntry file, Hub.GalleryHubItem hubItem = null)
+        {
+            if (file == null) return false;
+
+            try
+            {
+                // Create a lightweight action runner without showing any UI.
+                var go = new GameObject("VPB_AutoActionRunner");
+                go.hideFlags = HideFlags.HideAndDontSave;
+
+                try
+                {
+                    var dragger = go.AddComponent<UIDraggableItem>();
+                    dragger.FileEntry = file;
+                    dragger.HubItem = hubItem;
+                    dragger.Panel = this;
+
+                    string pathLower = (file.Path ?? "").ToLowerInvariant();
+                    string category = CurrentCategoryTitle ?? "";
+
+                    // Match the primary tab's first action behavior (auto action = first button).
+                    if (pathLower.EndsWith(".var"))
+                    {
+                        try
+                        {
+                            NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, file.Path);
+                            return true;
+                        }
+                        catch { return false; }
+                    }
+
+                    if (pathLower.Contains("/clothing/") || pathLower.Contains("\\clothing\\") || category.Contains("Clothing"))
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadClothing(target);
+                        return true;
+                    }
+
+                    if (pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || category.Contains("SubScene"))
+                    {
+                        dragger.LoadSubScene(file.Uid);
+                        return true;
+                    }
+
+                    bool isScene = pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || category.Contains("Scene"));
+                    if (isScene)
+                    {
+                        dragger.LoadSceneFile(file.Uid);
+                        return true;
+                    }
+
+                    if (pathLower.Contains("/hair/") || pathLower.Contains("\\hair\\") || category.Contains("Hair"))
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadHair(target);
+                        return true;
+                    }
+
+                    if (pathLower.Contains("/skin/") || pathLower.Contains("\\skin\\") || category.Contains("Skin"))
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadSkin(target);
+                        return true;
+                    }
+
+                    if (pathLower.Contains("/morphs/") || pathLower.Contains("\\morphs\\") || category.Contains("Morphs"))
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadMorphs(target);
+                        return true;
+                    }
+
+                    if (pathLower.Contains("/appearance/") || pathLower.Contains("\\appearance\\") || category.Contains("Appearance"))
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadAppearance(target);
+                        return true;
+                    }
+
+                    if (pathLower.Contains("/pose/") || pathLower.Contains("\\pose\\") || pathLower.Contains("/person/") || pathLower.Contains("\\person\\") || category.Contains("Pose"))
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadPose(target);
+                        return true;
+                    }
+
+                    if (pathLower.Contains("/assets/") || pathLower.Contains("\\assets\\") || pathLower.EndsWith(".assetbundle") || pathLower.EndsWith(".unity3d"))
+                    {
+                        Atom selected = null;
+                        try { selected = SuperController.singleton != null ? SuperController.singleton.GetSelectedAtom() : null; } catch { selected = null; }
+                        if (selected != null && selected.type == "CustomUnityAsset") dragger.LoadCUAIntoAtom(selected, file.Uid);
+                        else dragger.LoadCUA(file.Uid);
+                        return true;
+                    }
+
+                    return false;
+                }
+                finally
+                {
+                    try { UnityEngine.Object.Destroy(go); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] ExecuteAutoActionForFile error: " + ex);
+                return false;
+            }
+        }
+
         private void LoadRandom()
         {
             try
@@ -42,7 +195,6 @@ namespace VPB
                 SetHoverPath(file);
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
-                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
 
                 // Apply (same logic as click)
                 string pathLower = (file.Path ?? "").ToLowerInvariant();
@@ -55,13 +207,9 @@ namespace VPB
                     return;
                 }
 
-                if (actionsPanel != null)
+                if (!ExecuteAutoActionForFile(file))
                 {
-                    bool success = actionsPanel.ExecuteAutoAction();
-                    if (!success)
-                    {
-                        LogUtil.LogWarning("[VPB] Load Random: no auto action available for this item.");
-                    }
+                    LogUtil.LogWarning("[VPB] Load Random: no auto action available for this item.");
                 }
             }
             catch (Exception ex)
@@ -224,7 +372,6 @@ namespace VPB
                 canvas.gameObject.SetActive(false);
 
             hoverCount = 0;
-            actionsPanel?.Hide();
         }
 
         private static string MakeCategoryScrollKey(string title, string path)
@@ -385,7 +532,9 @@ namespace VPB
         {
             if (file == null) return;
 
-            // Right click selects if not selected, and opens actions panel
+            // Right click selects if not selected.
+            // Note: We intentionally do NOT open the actions panel here; right-click should not
+            // force any bottom UI to appear (a separate context menu implementation will handle actions).
             if (!selectedFilePaths.Contains(file.Path))
             {
                 selectedFiles.Clear();
@@ -399,7 +548,6 @@ namespace VPB
                 SetHoverPath(file);
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
-                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
             }
 
             if (isFixedLocally && VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode == 0)
@@ -408,131 +556,6 @@ namespace VPB
                 UpdateFooterHeightState();
                 UpdateLayout();
             }
-
-            // Show context menu with dependency indexing options
-            ShowFileContextMenu();
-
-            if (actionsPanel != null)
-            {
-                actionsPanel.Open();
-                actionsPanel.Show();
-            }
-        }
-
-        private void ShowFileContextMenu()
-        {
-            try
-            {
-                ContextMenuPanel ctxMenu = ContextMenuPanel.ExistingInstance;
-                if (ctxMenu == null)
-                {
-                    LogUtil.LogWarning("[VPB] ContextMenuPanel not found");
-                    return;
-                }
-
-                var options = new List<ContextMenuPanel.Option>
-                {
-                    new ContextMenuPanel.Option
-                    {
-                        Label = "Index Missing Dependencies (Selected)",
-                        Action = () => IndexMissingDependencies(false)
-                    },
-                    new ContextMenuPanel.Option
-                    {
-                        Label = "Index Missing Dependencies (All)",
-                        Action = () => IndexMissingDependencies(true)
-                    }
-                };
-
-                Vector3 menuPosition = Input.mousePosition;
-                ctxMenu.Show(menuPosition, options, "Dependencies");
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("[VPB] ShowFileContextMenu error: " + ex);
-            }
-        }
-
-        private void IndexMissingDependencies(bool indexAll)
-        {
-            try
-            {
-                var packagesToIndex = indexAll ? GetAllPackages() : GetSelectedPackages();
-
-                if (packagesToIndex.Count == 0)
-                {
-                    LogUtil.LogWarning("[VPB] No packages to index");
-                    return;
-                }
-
-                LogUtil.Log($"[VPB] Indexing missing dependencies for {packagesToIndex.Count} package(s)...");
-
-                int indexed = 0;
-                foreach (var package in packagesToIndex)
-                {
-                    if (package == null) continue;
-                    // Force recalculation by resetting the cache
-                    package.MissingDepsCount = -1;
-                    // Trigger calculation by accessing the method
-                    CalculateMissingDepsForPackage(package);
-                    indexed++;
-                }
-
-                LogUtil.Log($"[VPB] Indexed missing dependencies for {indexed} packages");
-                RefreshFiles();
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("[VPB] IndexMissingDependencies error: " + ex);
-            }
-        }
-
-        private void CalculateMissingDepsForPackage(VarPackage package)
-        {
-            if (package?.RecursivePackageDependencies == null || package.RecursivePackageDependencies.Count == 0)
-            {
-                package.MissingDepsCount = 0;
-                return;
-            }
-
-            int missingCount = 0;
-            foreach (var dep in package.RecursivePackageDependencies)
-            {
-                VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
-                if (pkg == null)
-                {
-                    missingCount++;
-                }
-            }
-            package.MissingDepsCount = missingCount;
-        }
-
-        private List<VarPackage> GetSelectedPackages()
-        {
-            List<VarPackage> packages = new List<VarPackage>();
-            foreach (var file in selectedFiles)
-            {
-                if (file is VarFileEntry vfe && vfe.Package != null)
-                {
-                    packages.Add(vfe.Package);
-                }
-            }
-            return packages;
-        }
-
-        private List<VarPackage> GetAllPackages()
-        {
-            List<VarPackage> packages = new List<VarPackage>();
-            try
-            {
-                var allPackages = FileManager.GetPackages();
-                if (allPackages != null)
-                {
-                    packages.AddRange(allPackages);
-                }
-            }
-            catch { }
-            return packages;
         }
 
         private void OnFileClick(FileEntry file)
@@ -646,7 +669,6 @@ namespace VPB
                 SetHoverPath(file);
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
-                actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
             }
             else if (ItemApplyMode == ApplyMode.DoubleClick && !isDoubleClick)
             {
@@ -663,13 +685,9 @@ namespace VPB
                 bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || currentCategoryTitle.Contains("SubScene");
                 bool isScene = !isSubScene && pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || currentCategoryTitle.Contains("Scene"));
                 
-                if (!isScene && actionsPanel != null)
+                if (!isScene)
                 {
-                    bool success = actionsPanel.ExecuteAutoAction();
-                    if (!success)
-                    {
-                        // No auto action available
-                    }
+                    ExecuteAutoActionForFile(file);
                 }
                 else if (isScene)
                 {

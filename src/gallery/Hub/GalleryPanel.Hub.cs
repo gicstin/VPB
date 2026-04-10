@@ -474,7 +474,6 @@ namespace VPB
                     selectedFile = null;
                     selectedPath = null;
                     selectedHubItem = item;
-                    actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
                 });
             }
         }

@@ -211,8 +211,6 @@ namespace VPB
                 float yShift = 0;
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yShift);
             }
-
-            if (actionsPanel != null) actionsPanel.UpdateUI();
             UpdateFooterLayoutState();
         }
 
@@ -1406,7 +1404,7 @@ namespace VPB
                                     if (!string.IsNullOrEmpty(hairSubmenuTargetAtomUid)) tgt = SuperController.singleton.GetAtomByUid(hairSubmenuTargetAtomUid);
                                 }
                                 catch { }
-                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                if (tgt == null) tgt = GetBestTargetAtom();
 
                                 if (tgt != null && !string.IsNullOrEmpty(uid))
                                 {
@@ -1432,7 +1430,7 @@ namespace VPB
                                     if (!string.IsNullOrEmpty(hairSubmenuTargetAtomUid)) tgt = SuperController.singleton.GetAtomByUid(hairSubmenuTargetAtomUid);
                                 }
                                 catch { }
-                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                if (tgt == null) tgt = GetBestTargetAtom();
 
                                 if (tgt != null && !string.IsNullOrEmpty(uid))
                                 {
@@ -1458,7 +1456,7 @@ namespace VPB
                                         if (!string.IsNullOrEmpty(hairSubmenuTargetAtomUid)) tgt = SuperController.singleton.GetAtomByUid(hairSubmenuTargetAtomUid);
                                     }
                                     catch { }
-                                    if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                    if (tgt == null) tgt = GetBestTargetAtom();
                                     if (tgt == null) return;
 
                                     ClearHairPreview();
@@ -1682,7 +1680,7 @@ namespace VPB
             if (isClothing)
             {
                 Atom tgt = null;
-                try { tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom; } catch { }
+                try { tgt = GetBestTargetAtom(); } catch { }
 
                 int count = 0;
                 try
@@ -1774,7 +1772,7 @@ namespace VPB
                 int count = 0;
                 try
                 {
-                    Atom tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                    Atom tgt = GetBestTargetAtom();
                     if (tgt != null)
                     {
                         // When submenu is open, keep label count stable by using the cached submenu option count.

@@ -31,10 +31,6 @@ namespace VPB
             get
             {
                 float bottom = 60;
-                if (isFixedLocally && actionsPanel != null && actionsPanel.actionsPaneGO != null && actionsPanel.actionsPaneGO.activeSelf)
-                {
-                    bottom = 410;
-                }
                 return bottom;
             }
         }
@@ -1454,6 +1450,7 @@ namespace VPB
             }
 
             // Right Click
+            // Kept: right click selects + opens the actions panel, but no longer shows the dependency context menu.
             var rightClick = btnGO.GetComponent<UIRightClickDelegate>();
             if (rightClick == null) rightClick = btnGO.AddComponent<UIRightClickDelegate>();
             rightClick.OnRightClick = () => OnFileRightClick(file);

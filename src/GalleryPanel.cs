@@ -125,7 +125,6 @@ namespace VPB
                     }
 
                     UpdateLayout();
-                    if (actionsPanel != null) actionsPanel.UpdateUI(true);
                 }
             };
             resizer.onResizeStatusChange = (isResizing) => {

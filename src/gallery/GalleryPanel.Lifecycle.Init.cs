@@ -170,7 +170,6 @@ namespace VPB
             };
 
             settingsPanel = new SettingsPanel(this, backgroundBoxGO);
-            actionsPanel = new GalleryActionsPanel(this, canvasGO, backgroundBoxGO);
             quickFiltersUI = new QuickFiltersUI(this, backgroundBoxGO);
 
             // Register Panel
@@ -944,7 +943,7 @@ namespace VPB
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Right)");
                     try
                     {
-                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        Atom target = GetBestTargetAtom();
                         LogUtil.Log($"[VPB] Remove Clothing (Right) resolved target: {(target != null ? target.uid + " (" + target.type + ")" : "<null>")}");
                         if (target == null)
                         {
@@ -978,7 +977,7 @@ namespace VPB
                     entry.callback.AddListener((data) => {
                         try
                         {
-                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            Atom target = GetBestTargetAtom();
                             if (target == null) return;
                             clothingSubmenuParentHoverCount++;
                             clothingSubmenuParentHovered = true;
@@ -1007,7 +1006,7 @@ namespace VPB
                 rightRemoveClothingExpandBtn = UI.CreateUIButton(rightRemoveAllClothingBtn, btnHeight, btnHeight, ">", 18, 104, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
-                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        Atom target = GetBestTargetAtom();
                         if (target == null)
                         {
                             LogUtil.LogWarning("[VPB] Please select a Person atom.");
@@ -1028,7 +1027,7 @@ namespace VPB
                     entry.callback.AddListener((data) => {
                         try
                         {
-                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            Atom target = GetBestTargetAtom();
                             if (target == null) return;
                             if (!clothingSubmenuOpen) ToggleClothingSubmenuFromSideButtons(target);
                         }
@@ -1221,7 +1220,7 @@ namespace VPB
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Right)");
                     try
                     {
-                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        Atom target = GetBestTargetAtom();
                         LogUtil.Log($"[VPB] Remove Hair (Right) resolved target: {(target != null ? target.uid + " (" + target.type + ")" : "<null>")}");
                         if (target == null)
                         {
@@ -1251,7 +1250,7 @@ namespace VPB
                     entry.callback.AddListener((data) => {
                         try
                         {
-                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            Atom target = GetBestTargetAtom();
                             if (target == null) return;
                             hairSubmenuParentHoverCount++;
                             hairSubmenuParentHovered = true;
@@ -1280,7 +1279,7 @@ namespace VPB
                 rightRemoveHairExpandBtn = UI.CreateUIButton(rightRemoveAllHairBtn, btnHeight, btnHeight, ">", 18, 104, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
-                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        Atom target = GetBestTargetAtom();
                         if (target == null)
                         {
                             LogUtil.LogWarning("[VPB] Please select a Person atom.");
@@ -1301,7 +1300,7 @@ namespace VPB
                     entry.callback.AddListener((data) => {
                         try
                         {
-                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            Atom target = GetBestTargetAtom();
                             if (target == null) return;
                             if (!hairSubmenuOpen) ToggleHairSubmenuFromSideButtons(target);
                         }
@@ -1735,7 +1734,7 @@ namespace VPB
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Left)");
                     try
                     {
-                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        Atom target = GetBestTargetAtom();
                         LogUtil.Log($"[VPB] Remove Clothing (Left) resolved target: {(target != null ? target.uid + " (" + target.type + ")" : "<null>")}");
                         if (target == null)
                         {
@@ -1771,7 +1770,7 @@ namespace VPB
                     entry.callback.AddListener((data) => {
                         try
                         {
-                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            Atom target = GetBestTargetAtom();
                             if (target == null) return;
                             clothingSubmenuParentHoverCount++;
                             clothingSubmenuParentHovered = true;
@@ -1800,7 +1799,7 @@ namespace VPB
                 leftRemoveClothingExpandBtn = UI.CreateUIButton(leftRemoveAllClothingBtn, btnHeight, btnHeight, "<", 18, -104, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
-                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        Atom target = GetBestTargetAtom();
                         if (target == null)
                         {
                             LogUtil.LogWarning("[VPB] Please select a Person atom.");
@@ -1821,7 +1820,7 @@ namespace VPB
                     entry.callback.AddListener((data) => {
                         try
                         {
-                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            Atom target = GetBestTargetAtom();
                             if (target == null) return;
                             if (!clothingSubmenuOpen) ToggleClothingSubmenuFromSideButtons(target);
                         }
@@ -2014,7 +2013,7 @@ namespace VPB
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Left)");
                     try
                     {
-                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        Atom target = GetBestTargetAtom();
                         LogUtil.Log($"[VPB] Remove Hair (Left) resolved target: {(target != null ? target.uid + " (" + target.type + ")" : "<null>")}");
                         if (target == null)
                         {
@@ -2044,7 +2043,7 @@ namespace VPB
                     entry.callback.AddListener((data) => {
                         try
                         {
-                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            Atom target = GetBestTargetAtom();
                             if (target == null) return;
                             hairSubmenuParentHoverCount++;
                             hairSubmenuParentHovered = true;
@@ -2073,7 +2072,7 @@ namespace VPB
                 leftRemoveHairExpandBtn = UI.CreateUIButton(leftRemoveAllHairBtn, btnHeight, btnHeight, "<", 18, -104, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
-                        Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                        Atom target = GetBestTargetAtom();
                         if (target == null)
                         {
                             LogUtil.LogWarning("[VPB] Please select a Person atom.");
@@ -2094,7 +2093,7 @@ namespace VPB
                     entry.callback.AddListener((data) => {
                         try
                         {
-                            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                            Atom target = GetBestTargetAtom();
                             if (target == null) return;
                             if (!hairSubmenuOpen) ToggleHairSubmenuFromSideButtons(target);
                         }

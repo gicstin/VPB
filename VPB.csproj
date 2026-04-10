@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -328,16 +328,8 @@
     <Compile Include="src\VamHookPlugin.State.cs" />
     <Compile Include="src\ContextMenuPanel.cs" />
     <Compile Include="src\gallery\Gallery.cs" />
-    <Compile Include="src\gallery\GalleryActionsPanel.cs" />
-    <Compile Include="src\gallery\GalleryActionTabBase.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
-    <Compile Include="src\gallery\tabs\GalleryPrimaryActionTab.cs" />
-    <Compile Include="src\gallery\tabs\GalleryAudioActionTab.cs" />
-    <Compile Include="src\gallery\tabs\GalleryDependenciesActionTab.cs" />
-    <Compile Include="src\gallery\tabs\GalleryInfoActionTab.cs" />
-    <Compile Include="src\gallery\tabs\GalleryPositionActionTab.cs" />
-    <Compile Include="src\gallery\tabs\GalleryTagsActionTab.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
     <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />

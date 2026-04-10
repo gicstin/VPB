@@ -137,7 +137,7 @@ namespace VPB
 
             if (IsHubMode) return options;
 
-            Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+            Atom target = GetBestTargetAtom();
             bool hasTarget = target != null && target.type == "Person";
 
             void AddPresetOption(string label, string storableId)
@@ -806,7 +806,7 @@ namespace VPB
 
             // --- Context Actions (Category-aware) ---
             footerRemoveAllHairBtn = UI.CreateUIButton(rightSection, 40, 40, "Hr", 16, 0, 0, AnchorPresets.middleCenter, () => {
-                Atom target = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                Atom target = GetBestTargetAtom();
                 if (target == null)
                 {
                     LogUtil.LogWarning("[VPB] Please select a Person atom.");
@@ -1501,7 +1501,7 @@ namespace VPB
                                     if (!string.IsNullOrEmpty(clothingSubmenuTargetAtomUid)) tgt = SuperController.singleton.GetAtomByUid(clothingSubmenuTargetAtomUid);
                                 }
                                 catch { }
-                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                if (tgt == null) tgt = GetBestTargetAtom();
 
                                 if (tgt != null && !string.IsNullOrEmpty(uid))
                                 {
@@ -1527,7 +1527,7 @@ namespace VPB
                                     if (!string.IsNullOrEmpty(clothingSubmenuTargetAtomUid)) tgt = SuperController.singleton.GetAtomByUid(clothingSubmenuTargetAtomUid);
                                 }
                                 catch { }
-                                if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                if (tgt == null) tgt = GetBestTargetAtom();
 
                                 if (tgt != null && !string.IsNullOrEmpty(uid))
                                 {
@@ -1554,7 +1554,7 @@ namespace VPB
                                         if (!string.IsNullOrEmpty(clothingSubmenuTargetAtomUid)) tgt = SuperController.singleton.GetAtomByUid(clothingSubmenuTargetAtomUid);
                                     }
                                     catch { }
-                                    if (tgt == null) tgt = actionsPanel != null ? actionsPanel.GetBestTargetAtom() : SelectedTargetAtom;
+                                    if (tgt == null) tgt = GetBestTargetAtom();
                                     if (tgt == null) return;
 
                                     // Hover preview temporarily hides clothing by flipping geometry bools.
@@ -1952,7 +1952,6 @@ namespace VPB
 
             RefreshFiles(true);
             UpdatePaginationText();
-            actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
         }
 
         private void ClearSelection()
@@ -1965,7 +1964,6 @@ namespace VPB
             SetHoverPath("");
             RefreshFiles(true);
             UpdatePaginationText();
-            actionsPanel?.HandleSelectionChanged(selectedFiles, selectedHubItem);
         }
 
         private void AdjustGridColumns(int delta)

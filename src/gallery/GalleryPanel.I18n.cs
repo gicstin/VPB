@@ -29,7 +29,6 @@ namespace VPB
                 RefreshLocalizedUi();
                 try { settingsPanel?.RefreshLocalizedUi(); } catch { }
                 try { quickFiltersUI?.RefreshLocalizedUi(); } catch { }
-                try { actionsPanel?.RefreshLocalizedUi(); } catch { }
             }
             catch { }
         }
