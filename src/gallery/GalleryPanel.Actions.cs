@@ -409,11 +409,130 @@ namespace VPB
                 UpdateLayout();
             }
 
+            // Show context menu with dependency indexing options
+            ShowFileContextMenu();
+
             if (actionsPanel != null)
             {
                 actionsPanel.Open();
                 actionsPanel.Show();
             }
+        }
+
+        private void ShowFileContextMenu()
+        {
+            try
+            {
+                ContextMenuPanel ctxMenu = ContextMenuPanel.ExistingInstance;
+                if (ctxMenu == null)
+                {
+                    LogUtil.LogWarning("[VPB] ContextMenuPanel not found");
+                    return;
+                }
+
+                var options = new List<ContextMenuPanel.Option>
+                {
+                    new ContextMenuPanel.Option
+                    {
+                        Label = "Index Missing Dependencies (Selected)",
+                        Action = () => IndexMissingDependencies(false)
+                    },
+                    new ContextMenuPanel.Option
+                    {
+                        Label = "Index Missing Dependencies (All)",
+                        Action = () => IndexMissingDependencies(true)
+                    }
+                };
+
+                Vector3 menuPosition = Input.mousePosition;
+                ctxMenu.Show(menuPosition, options, "Dependencies");
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] ShowFileContextMenu error: " + ex);
+            }
+        }
+
+        private void IndexMissingDependencies(bool indexAll)
+        {
+            try
+            {
+                var packagesToIndex = indexAll ? GetAllPackages() : GetSelectedPackages();
+
+                if (packagesToIndex.Count == 0)
+                {
+                    LogUtil.LogWarning("[VPB] No packages to index");
+                    return;
+                }
+
+                LogUtil.Log($"[VPB] Indexing missing dependencies for {packagesToIndex.Count} package(s)...");
+
+                int indexed = 0;
+                foreach (var package in packagesToIndex)
+                {
+                    if (package == null) continue;
+                    // Force recalculation by resetting the cache
+                    package.MissingDepsCount = -1;
+                    // Trigger calculation by accessing the method
+                    CalculateMissingDepsForPackage(package);
+                    indexed++;
+                }
+
+                LogUtil.Log($"[VPB] Indexed missing dependencies for {indexed} packages");
+                RefreshFiles();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] IndexMissingDependencies error: " + ex);
+            }
+        }
+
+        private void CalculateMissingDepsForPackage(VarPackage package)
+        {
+            if (package?.RecursivePackageDependencies == null || package.RecursivePackageDependencies.Count == 0)
+            {
+                package.MissingDepsCount = 0;
+                return;
+            }
+
+            int missingCount = 0;
+            foreach (var dep in package.RecursivePackageDependencies)
+            {
+                VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
+                if (pkg == null)
+                {
+                    missingCount++;
+                }
+            }
+            package.MissingDepsCount = missingCount;
+        }
+
+        private List<VarPackage> GetSelectedPackages()
+        {
+            List<VarPackage> packages = new List<VarPackage>();
+            foreach (var file in selectedFiles)
+            {
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                {
+                    packages.Add(vfe.Package);
+                }
+            }
+            return packages;
+        }
+
+        private List<VarPackage> GetAllPackages()
+        {
+            List<VarPackage> packages = new List<VarPackage>();
+            try
+            {
+                var allPackages = FileManager.GetPackages();
+                if (allPackages != null)
+                {
+                    packages.AddRange(allPackages);
+                }
+            }
+            catch { }
+            return packages;
         }
 
         private void OnFileClick(FileEntry file)

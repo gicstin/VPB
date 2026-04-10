@@ -133,11 +133,7 @@ namespace VPB
         {
             if (context == "Files")
             {
-                if (IsFilterActive)
-                {
-                    return type == SortType.Name || type == SortType.Date || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents;
-                }
-                return type == SortType.Name || type == SortType.Date || type == SortType.Size || type == SortType.Rating;
+                return type == SortType.Name || type == SortType.Date || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing;
             }
             else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags")
             {
@@ -160,7 +156,8 @@ namespace VPB
                 case SortType.Score: symbol = "Sc"; break;
                 case SortType.Rating: symbol = "Rt"; break;
                 case SortType.Deps: symbol = "Dp"; break;
-                case SortType.Dependents: symbol = "Dd"; break;
+                case SortType.Dependents: symbol = "Dn"; break;
+                case SortType.Missing: symbol = "Ms"; break;
             }
             string arrow = state.Direction == SortDirection.Ascending ? "↑" : "↓";
             t.text = symbol + arrow;
@@ -181,7 +178,8 @@ namespace VPB
                     case SortType.Score: symbol = "Sc"; break;
                     case SortType.Rating: symbol = "Rt"; break;
                     case SortType.Deps: symbol = "Dp"; break;
-                    case SortType.Dependents: symbol = "Dd"; break;
+                    case SortType.Dependents: symbol = "Dn"; break;
+                    case SortType.Missing: symbol = "Ms"; break;
                 }
                 typeText.text = symbol;
             }

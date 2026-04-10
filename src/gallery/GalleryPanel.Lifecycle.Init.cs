@@ -244,7 +244,7 @@ namespace VPB
             Button fileSortTypeButton = fileSortTypeBtn.GetComponent<Button>();
             fileSortTypeButton.onClick.RemoveAllListeners();
             fileSortTypeButton.onClick.AddListener(() => CycleSort("Files", fileSortTypeText, fileSortDirText));
-            AddTooltip(fileSortTypeBtn, "gallery.tooltip.sort_cycle_field", "Cycle sort field (Az→Dt→Sz→Rt)");
+            AddTooltip(fileSortTypeBtn, "gallery.tooltip.sort_cycle_field", "Cycle sort field (Az→Dt→Sz→Rt→Dp→Dn→Ms)");
 
             // File Sort Direction Button
             GameObject fileSortDirBtn = UI.CreateUIButton(titleBarGO, 35, 40, VPBTranslation.T("gallery.sort.up", "↑"), 16, 0, 0, AnchorPresets.middleCenter, null);

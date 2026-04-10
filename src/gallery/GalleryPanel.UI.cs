@@ -1015,7 +1015,14 @@ namespace VPB
                     }
                     if (footerClearFilterBtnText != null) footerClearFilterBtnText.text = "Clear Filter";
                     if (footerFilterModeText != null)
+                    {
                         footerFilterModeText.text = string.IsNullOrEmpty(GetFilterModeLabel) ? "" : $"{GetFilterModeLabel} ({GetFilterModeCount})";
+                        // Set color to red for Missing filter, yellow for other filters
+                        if (GetFilterModeLabel == "Missing")
+                            footerFilterModeText.color = new Color(1f, 0.2f, 0.2f, 1f);  // Red
+                        else
+                            footerFilterModeText.color = new Color(1f, 0.85f, 0f, 1f);   // Yellow
+                    }
                 }
 
                 // With RecyclingGridView, we no longer have "pages".

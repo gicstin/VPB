@@ -1194,8 +1194,9 @@ namespace VPB
             CreateDetailText("Size", "Size", 110);
             CreateDetailText("Date", "Date", 130);
             CreateDetailText("Category", "Category", 160);
-            CreateDetailText("Deps", "Deps", 110);
-            CreateDetailText("Dependents", "Dependents", 150);
+            CreateDetailText("Deps", "D:", 80);
+            CreateDetailText("Missing", "M:", 80);
+            CreateDetailText("Dependents", "Dn:", 80);
 
             // Rating (Top-right corner)
             GameObject ratingGO = new GameObject("Rating");
@@ -1397,10 +1398,16 @@ namespace VPB
         public void BindFileButton(GameObject btnGO, FileEntry file)
         {
             btnGO.name = "FileButton_" + file.Name;
-            
+
             // Update mapping
             Image img = btnGO.GetComponent<Image>();
             fileButtonImages[file.Path] = img;
+
+            // Color missing entries red
+            if (file is VirtualFileEntry)
+            {
+                img.color = new Color(0.4f, 0.15f, 0.15f, 0.8f); // Red shade
+            }
 
             // Update Visuals
             UpdateFileButtonVisuals(btnGO, file);
@@ -1571,17 +1578,17 @@ namespace VPB
                     if (t != null)
                     {
                         int deps = GallerySortManager.GetDepsCount(file);
-                        string v = deps.ToString();
-                        t.text = "Deps: " + v;
+                        string v = deps.ToString().PadLeft(3);
+                        t.text = "D: " + v + "  |  ";
                         t.raycastTarget = true;
 
-                        // Hover-highlight full "Deps: N" line; Set() resets color on recycle.
+                        // Hover-highlight only the value; Set() resets color on recycle.
                         try
                         {
                             var hv = depsTr.GetComponent<UIRichValueHover>();
                             if (hv == null) hv = depsTr.gameObject.AddComponent<UIRichValueHover>();
                             hv.target = t;
-                            hv.Set("Deps: ", v);
+                            hv.Set("D: ", v, "  |  ");
                         }
                         catch { }
                     }
@@ -1603,6 +1610,60 @@ namespace VPB
                     });
                     et.triggers.Clear();
                     et.triggers.Add(pointerClickEntry);
+                    // Add tooltip
+                    try { AddTooltip(depsTr.gameObject, "gallery.tooltip.dependencies", "Dependencies"); } catch { }
+                }
+
+                Transform missingTr = btnGO.transform.Find("ListRow/Details/Missing");
+                if (missingTr != null)
+                {
+                    Text t = missingTr.GetComponent<Text>();
+                    if (t != null)
+                    {
+                        int missing = GallerySortManager.GetMissingDepsCount(file);
+                        string v = missing.ToString().PadLeft(3);
+                        t.text = "M: " + v + "  |  ";
+                        t.raycastTarget = true;
+
+                        // Hover-highlight only the value; Set() resets color on recycle.
+                        try
+                        {
+                            var hv = missingTr.GetComponent<UIRichValueHover>();
+                            if (hv == null) hv = missingTr.gameObject.AddComponent<UIRichValueHover>();
+                            hv.target = t;
+                            hv.Set("M: ", v, "  |  ");
+                        }
+                        catch { }
+                    }
+                    // Keep ScrollRect scrolling even when hovering over clickable text.
+                    try
+                    {
+                        UIScrollPassthrough sp = missingTr.GetComponent<UIScrollPassthrough>();
+                        if (sp == null) sp = missingTr.gameObject.AddComponent<UIScrollPassthrough>();
+                        sp.target = scrollRect;
+                    }
+                    catch { }
+                    // Make clickable to filter by missing dependencies using EventTrigger (non-invasive)
+                    EventTrigger et = missingTr.GetComponent<EventTrigger>();
+                    if (et == null) et = missingTr.gameObject.AddComponent<EventTrigger>();
+                    var pointerClickEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+                    pointerClickEntry.callback.AddListener((data) => {
+                        try
+                        {
+                            int missingCount = GallerySortManager.GetMissingDepsCount(file);
+                            LogUtil.Log($"[VPB] Missing field clicked: missingCount={missingCount}, file={file?.Name}");
+                            if (missingCount > 0)
+                                ApplyMissingDependenciesFilter(file);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError($"[VPB] Missing click handler error: {ex}");
+                        }
+                    });
+                    et.triggers.Clear();
+                    et.triggers.Add(pointerClickEntry);
+                    // Add tooltip
+                    try { AddTooltip(missingTr.gameObject, "gallery.tooltip.missing_dependencies", "Missing Dependencies"); } catch { }
                 }
 
                 Transform catTr = btnGO.transform.Find("ListRow/Details/Category");
@@ -1635,17 +1696,17 @@ namespace VPB
                     if (t != null)
                     {
                         int dependents = GallerySortManager.GetDependentsCount(file);
-                        string v = dependents.ToString();
-                        t.text = "Dependents: " + v;
+                        string v = dependents.ToString().PadLeft(3);
+                        t.text = "Dn: " + v;
                         t.raycastTarget = true;
 
-                        // Hover-highlight full "Dependents: N" line; Set() resets color on recycle.
+                        // Hover-highlight only the value; Set() resets color on recycle.
                         try
                         {
                             var hv = dependentsTr.GetComponent<UIRichValueHover>();
                             if (hv == null) hv = dependentsTr.gameObject.AddComponent<UIRichValueHover>();
                             hv.target = t;
-                            hv.Set("Dependents: ", v);
+                            hv.Set("Dn: ", v, "");
                         }
                         catch { }
                     }
@@ -1667,6 +1728,8 @@ namespace VPB
                     });
                     et.triggers.Clear();
                     et.triggers.Add(pointerClickEntry);
+                    // Add tooltip
+                    try { AddTooltip(dependentsTr.gameObject, "gallery.tooltip.dependents", "Dependents"); } catch { }
                 }
 
                 Transform sizeTr = btnGO.transform.Find("ListRow/Details/Size");

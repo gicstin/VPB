@@ -16,7 +16,8 @@ namespace VPB
         Score,
         Rating,
         Deps,
-        Dependents
+        Dependents,
+        Missing
     }
 
     public enum SortDirection
@@ -122,6 +123,15 @@ namespace VPB
                         return res;
                     });
                     break;
+                case SortType.Missing:
+                    files.Sort((a, b) => {
+                        int mA = GetMissingDepsCount(a);
+                        int mB = GetMissingDepsCount(b);
+                        int res = (state.Direction == SortDirection.Ascending) ? mA.CompareTo(mB) : mB.CompareTo(mA);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    break;
             }
         }
 
@@ -151,6 +161,56 @@ namespace VPB
             {
                 if (file is VarFileEntry vfe && vfe.Package != null) return vfe.Package.DependentCount;
                 if (file is PackageListEntry ple && ple.Package != null) return ple.Package.DependentCount;
+            }
+            catch { }
+            return 0;
+        }
+
+        public static int GetMissingDepsCount(FileEntry file)
+        {
+            try
+            {
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                {
+                    // Lazy cache: calculate on first access
+                    if (vfe.Package.MissingDepsCount < 0)
+                    {
+                        vfe.Package.MissingDepsCount = CalculateMissingDeps(vfe.Package);
+                    }
+                    return vfe.Package.MissingDepsCount;
+                }
+                if (file is PackageListEntry ple && ple.Package != null)
+                {
+                    // Lazy cache: calculate on first access
+                    if (ple.Package.MissingDepsCount < 0)
+                    {
+                        ple.Package.MissingDepsCount = CalculateMissingDeps(ple.Package);
+                    }
+                    return ple.Package.MissingDepsCount;
+                }
+            }
+            catch { }
+            return 0;
+        }
+
+        private static int CalculateMissingDeps(VarPackage package)
+        {
+            try
+            {
+                var deps = package.RecursivePackageDependencies;
+                if (deps != null && deps.Count > 0)
+                {
+                    int missingCount = 0;
+                    foreach (var dep in deps)
+                    {
+                        VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
+                        if (pkg == null)
+                        {
+                            missingCount++;
+                        }
+                    }
+                    return missingCount;
+                }
             }
             catch { }
             return 0;

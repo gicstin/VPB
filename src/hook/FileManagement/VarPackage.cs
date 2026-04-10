@@ -864,6 +864,8 @@ namespace VPB
 		// Number of installed packages that list this package as a (transitive) dependency.
 		// Rebuilt by FileManager.RebuildDependentCounts() after each scan.
 		public int DependentCount;
+		// Cached count of missing dependencies from the recursive dependency list
+		public int MissingDepsCount = -1;
 
 		public HashSet<string> GetDependenciesDeep(int maxDepth = 2)
 		{
@@ -939,7 +941,7 @@ namespace VPB
 			HadReferenceIssues = false;
 
 			//PackageDependencies = new List<string>();
-			//PackageDependenciesMissing = new HashSet<string>();
+			PackageDependenciesMissing = new HashSet<string>();
 			//PackageDependenciesResolved = new List<VarPackage>();
 			if (FileManager.debug)
 			{
@@ -1606,7 +1608,22 @@ namespace VPB
 			this.HairFileEntryNames = svp.HairFileEntryNames;
 			this.HairTags = svp.HairTags;
 
-			if (VarPackageMgr.singleton != null)
+			// Detect missing dependencies after loading
+			try
+			{
+				using (VarFileEntryStreamReader varFileEntryStreamReader = new VarFileEntryStreamReader(metaEntry))
+				{
+					string aJSON = varFileEntryStreamReader.ReadToEnd();
+					JSONClass asObject = JSON.Parse(aJSON).AsObject;
+					if (asObject != null)
+					{
+						FindMissingDependenciesRecursive(asObject);
+					}
+				}
+			}
+			catch { }
+
+		if (VarPackageMgr.singleton != null)
 			{
 				VarPackageMgr.singleton.SetCache(this.Uid, svp);
 			}

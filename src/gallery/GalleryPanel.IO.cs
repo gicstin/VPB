@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using UnityEngine;
@@ -332,7 +333,11 @@ namespace VPB
             {
                 switch (currentPackageFilterMode)
                 {
-                    case PackageFilterMode.Dependencies: return "Dependencies";
+                    case PackageFilterMode.Dependencies:
+                        // Check if this is a missing dependencies filter
+                        if (currentFilteredFiles != null && currentFilteredFiles.Count > 0 && currentFilteredFiles[0] is VirtualFileEntry)
+                            return "Missing";
+                        return "Dependencies";
                     case PackageFilterMode.Dependents: return "Dependents";
                     default: return "";
                 }
@@ -1990,6 +1995,61 @@ namespace VPB
             ApplyFilteredList(filtered, $"Dependents of {label}");
         }
 
+        /// <summary>Filter to show only the missing dependencies of the selected package.</summary>
+        public void ApplyMissingDependenciesFilter(FileEntry file)
+        {
+            try
+            {
+                if (!TryGetPackageFromEntry(file, out VarPackage pkg, out string label) || pkg == null) return;
+
+                EnsureFilterBaseCaptured();
+
+                var deps = pkg.RecursivePackageDependencies;
+                if (deps == null || deps.Count == 0)
+                {
+                    LogUtil.LogWarning("[VPB] No dependencies to filter");
+                    return;
+                }
+
+                // Build a list of missing dependency UIDs and create placeholder entries
+                List<string> missingUids = new List<string>();
+                List<FileEntry> filtered = new List<FileEntry>();
+
+                foreach (var depUid in deps)
+                {
+                    VarPackage depPkg = FileManager.GetPackageForDependency(depUid, false);
+                    if (depPkg == null)
+                    {
+                        missingUids.Add(depUid);
+                        // Create a placeholder entry just for display
+                        filtered.Add(new VirtualFileEntry(depUid));
+                    }
+                }
+
+                if (missingUids.Count == 0)
+                {
+                    LogUtil.Log($"[VPB] No missing dependencies for {label}");
+                    return;
+                }
+
+                // Show message about missing dependencies
+                string missingList = string.Join(", ", missingUids.Take(5).ToArray());
+                if (missingUids.Count > 5)
+                    missingList += $" ... and {missingUids.Count - 5} more";
+
+                LogUtil.Log($"[VPB] Missing {missingUids.Count} dependencies for {label}: {missingList}");
+
+                currentPackageFilterCount = missingUids.Count;
+                currentPackageFilterMasterUid = pkg.Uid;
+                currentPackageFilterMode = PackageFilterMode.Dependencies;
+                ApplyFilteredList(filtered, $"Missing Dependencies ({missingUids.Count})");
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] ApplyMissingDependenciesFilter error: " + ex);
+            }
+        }
+
         /// <summary>Clear any active filter and restore the full list.</summary>
         public void ClearPackageFilter()
         {
@@ -2055,5 +2115,30 @@ namespace VPB
 
         /// <summary>Returns the description of the active filter, or null if none.</summary>
         public string GetFilterDescription => currentFilterDesc;
+    }
+
+    /// <summary>Virtual/placeholder file entry for displaying missing dependencies.</summary>
+    public class VirtualFileEntry : FileEntry
+    {
+        public VirtualFileEntry(string uid)
+        {
+            this.Uid = uid;
+            this.Name = uid;
+            this.Path = "[MISSING] " + uid;
+            this.Size = 0;
+            this.LastWriteTime = DateTime.MinValue;
+        }
+
+        public override FileEntryStream OpenStream()
+        {
+            return null; // Virtual entries cannot be opened
+        }
+
+        public override FileEntryStreamReader OpenStreamReader()
+        {
+            return null; // Virtual entries cannot be read
+        }
+
+        public override string ToString() => $"[MISSING] {Name}";
     }
 }

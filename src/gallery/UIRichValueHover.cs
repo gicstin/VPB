@@ -5,7 +5,7 @@ using UnityEngine.UI;
 namespace VPB
 {
     /// <summary>
-    /// Highlights the entire Text (prefix + value) on pointer hover.
+    /// Highlights only the value part (not separators) on pointer hover.
     /// Resets on Set() and OnDisable so recycled list rows never keep a stuck hover color.
     /// </summary>
     public class UIRichValueHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
@@ -13,15 +13,17 @@ namespace VPB
         public Text target;
         public string prefix = "";
         public string value = "";
+        public string separator = "";  // Part that stays uncolored (e.g., "  |  ")
         public Color normalColor = new Color(0.75f, 0.75f, 0.75f, 1f);
         public Color hoverColor = Color.yellow;
 
         private bool _hover;
 
-        public void Set(string prefixText, string valueText)
+        public void Set(string prefixText, string valueText, string separatorText = "")
         {
             prefix = prefixText ?? "";
             value = valueText ?? "";
+            separator = separatorText ?? "";
             // Row rebound / recycle: force non-hover so color never sticks from a previous bind.
             _hover = false;
             ApplyVisual();
@@ -48,9 +50,20 @@ namespace VPB
         private void ApplyVisual()
         {
             if (target == null) return;
-            target.supportRichText = false;
-            target.text = prefix + value;
-            target.color = _hover ? hoverColor : normalColor;
+            target.supportRichText = true;
+
+            // Use rich text to color prefix + value, but not the separator
+            if (_hover && (!string.IsNullOrEmpty(prefix) || !string.IsNullOrEmpty(value)))
+            {
+                string colorHex = ColorUtility.ToHtmlStringRGB(hoverColor);
+                target.text = $"<color=#{colorHex}>{prefix}{value}</color>" + separator;
+                target.color = normalColor;
+            }
+            else
+            {
+                target.text = prefix + value + separator;
+                target.color = normalColor;
+            }
         }
     }
 }

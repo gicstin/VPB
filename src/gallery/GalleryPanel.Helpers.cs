@@ -44,9 +44,6 @@ namespace VPB
         {
             if (eventData.button == PointerEventData.InputButton.Right)
             {
-                // Temporarily disable right click in desktop mode
-                if (!UnityEngine.XR.XRSettings.enabled) return;
-
                 OnRightClick?.Invoke();
             }
         }
