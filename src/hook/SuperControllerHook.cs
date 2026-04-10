@@ -278,7 +278,6 @@ namespace VPB
             {
                 if (filename.Length > 0 && char.IsDigit(filename[filename.Length - 1]))
                 {
-                    LogUtil.Log($"[VPB SIM] Detected clothing sim texture by heuristic: {path}");
                     return true;
                 }
             }

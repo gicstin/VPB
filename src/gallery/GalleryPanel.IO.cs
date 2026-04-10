@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -1211,6 +1211,17 @@ namespace VPB
             if (thumbnailCacheCoroutine != null) StopCoroutine(thumbnailCacheCoroutine);
             thumbnailCacheCoroutine = null;
             if (pendingThumbnailCacheJobs != null) pendingThumbnailCacheJobs.Clear();
+            _thumbCacheTotalEnqueued = 0;
+            _thumbCacheSaved = 0;
+            _thumbCacheFinishTime = -1f;
+            _nextThumbPriority = 0;
+            HideThumbnailCacheProgress();
+            // Rotate the group ID here (synchronously) so that any in-flight thumbnail callbacks
+            // from the old category fail the capturedGroupId == currentLoadingGroupId guard and
+            // don't pollute the new session. The coroutine's yield-return-null would be too late.
+            if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
+                CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
+            currentLoadingGroupId = Guid.NewGuid().ToString();
             if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
@@ -1431,11 +1442,8 @@ namespace VPB
             posePeopleFacetCountSingle = 0;
             posePeopleFacetCountDual = 0;
             
-            if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
-            {
-                CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
-            }
-            currentLoadingGroupId = Guid.NewGuid().ToString();
+            // currentLoadingGroupId was already rotated synchronously in RefreshFiles()
+            // before this coroutine started; no need to rotate again here.
 
             // Determine scroll target before clearing the grid.
             // Auto-refresh (keepScroll=true, content already loaded): capture the center item index now,
@@ -1840,7 +1848,7 @@ namespace VPB
                     {
                         int centerIdx = recyclingGrid != null ? recyclingGrid.GetCenterItemIndex() : 0;
                         int dist = Mathf.Abs(index - centerIdx);
-                        _nextThumbPriority = Mathf.Max(10, 100 - dist * 3);
+                        _nextThumbPriority = Mathf.Min(90, dist * 3); // center=0 (first), edges=higher (later)
                         BindFileButton(go, currentFilteredFiles[index]);
                     }
                 };
@@ -1978,61 +1986,72 @@ namespace VPB
                     // Deduplicate: keep only latest version of each Author.Name
                     deps = GallerySortManager.DeduplicateDependenciesByLatestVersion(deps);
 
-                    List<FileEntry> filtered = new List<FileEntry> { file };
-                    // Resolve each dependency to actual VarPackage and add as VarFileEntry
-                    foreach (var dep in deps)
+                    List<FileEntry> filtered;
+                    if (PackageFilterUsesPackageListRows())
                     {
-                        VarPackage depPkg = FileManager.GetPackageForDependency(dep, false);
-                        if (depPkg != null)
+                        // In the Scene categories, show package-level rows so missing deps
+                        // use the same "Missing" styling as other dependency filters.
+                        var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var dep in deps)
                         {
-                            // Get file entries to find correct internal path
-                            List<string> fileNames;
-                            List<long> fileTimes;
-                            List<long> fileSizes;
-                            depPkg.TryGetCachedFileEntryData(out fileNames, out fileTimes, out fileSizes);
-
-                            // Create VarFileEntry - always use meta.json to show master package only
-                            string internalPath = "meta.json";
-                            try
+                            if (!string.IsNullOrEmpty(dep)) uids.Add(dep);
+                        }
+                        filtered = new List<FileEntry> { file };
+                        filtered.AddRange(BuildPackageListEntriesForUids(uids));
+                    }
+                    else
+                    {
+                        filtered = new List<FileEntry> { file };
+                        // Resolve each dependency to actual VarPackage and add as VarFileEntry
+                        foreach (var dep in deps)
+                        {
+                            VarPackage depPkg = FileManager.GetPackageForDependency(dep, false);
+                            if (depPkg != null)
                             {
-                                VarFileEntry vfe = new VarFileEntry(depPkg, internalPath, depPkg.LastWriteTime, depPkg.Size);
-                                if (!string.IsNullOrEmpty(vfe.Name) && !string.IsNullOrEmpty(vfe.Path))
+                                // Create VarFileEntry - always use meta.json to show master package only
+                                string internalPath = "meta.json";
+                                try
                                 {
-                                    filtered.Add(vfe);
+                                    VarFileEntry vfe = new VarFileEntry(depPkg, internalPath, depPkg.LastWriteTime, depPkg.Size);
+                                    if (!string.IsNullOrEmpty(vfe.Name) && !string.IsNullOrEmpty(vfe.Path))
+                                    {
+                                        filtered.Add(vfe);
+                                    }
+                                    else
+                                    {
+                                        LogUtil.LogError($"[VPB] Invalid VarFileEntry created for {depPkg.Uid}/{internalPath}");
+                                        filtered.Add(new VirtualFileEntry(dep));
+                                    }
                                 }
-                                else
+                                catch (Exception ex)
                                 {
-                                    LogUtil.LogError($"[VPB] Invalid VarFileEntry created for {depPkg.Uid}/{internalPath}");
+                                    LogUtil.LogError($"[VPB] Failed to create VarFileEntry for {depPkg.Uid}: {ex}");
                                     filtered.Add(new VirtualFileEntry(dep));
                                 }
                             }
-                            catch (Exception ex)
+                            else
                             {
-                                LogUtil.LogError($"[VPB] Failed to create VarFileEntry for {depPkg.Uid}: {ex}");
-                                filtered.Add(new VirtualFileEntry(dep));
-                            }
-                        }
-                        else
-                        {
-                            // If package not found, use placeholder
-                            try
-                            {
-                                VirtualFileEntry vfe = new VirtualFileEntry(dep);
-                                if (!string.IsNullOrEmpty(vfe.Name) && !string.IsNullOrEmpty(vfe.Path))
+                                // If package not found, use placeholder
+                                try
                                 {
-                                    filtered.Add(vfe);
+                                    VirtualFileEntry vfe = new VirtualFileEntry(dep);
+                                    if (!string.IsNullOrEmpty(vfe.Name) && !string.IsNullOrEmpty(vfe.Path))
+                                    {
+                                        filtered.Add(vfe);
+                                    }
+                                    else
+                                    {
+                                        LogUtil.LogError($"[VPB] Invalid VirtualFileEntry created for {dep}");
+                                    }
                                 }
-                                else
+                                catch (Exception ex)
                                 {
-                                    LogUtil.LogError($"[VPB] Invalid VirtualFileEntry created for {dep}");
+                                    LogUtil.LogError($"[VPB] Failed to create VirtualFileEntry for {dep}: {ex}");
                                 }
-                            }
-                            catch (Exception ex)
-                            {
-                                LogUtil.LogError($"[VPB] Failed to create VirtualFileEntry for {dep}: {ex}");
                             }
                         }
                     }
+
                     currentPackageFilterCount = deps.Count;
                     currentPackageFilterMasterUid = file.Path;
                     currentPackageFilterMode = PackageFilterMode.Dependencies;

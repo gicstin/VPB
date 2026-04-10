@@ -22,6 +22,15 @@ namespace VPB
         private Queue<ThumbnailCacheJob> pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
         private Coroutine thumbnailCacheCoroutine;
         private int _nextThumbPriority = 10;
+
+        // Thumbnail cache progress UI
+        private GameObject _thumbCacheProgressGO;
+        private RectTransform _thumbCacheBarFillRT;
+
+        // Thumbnail cache progress tracking
+        private int _thumbCacheTotalEnqueued;
+        private int _thumbCacheSaved;
+        private float _thumbCacheFinishTime = -1f;
         private Text titleText;
         private Text fpsText;
 

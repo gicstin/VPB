@@ -1,4 +1,4 @@
-﻿using ICSharpCode.SharpZipLib.Zip;
+using ICSharpCode.SharpZipLib.Zip;
 using SimpleJSON;
 using System;
 using System.Linq;
@@ -1074,6 +1074,7 @@ namespace VPB
 			HairFileEntryNames = null;
 			HairTags = null;
 			RecursivePackageDependencies = null;
+			PackageDependencies = null;
 		}
 		public void Scan()
 		{
@@ -1557,11 +1558,32 @@ namespace VPB
 						JSONClass asObject = JSON.Parse(aJSON).AsObject;
 						if (asObject != null)
 						{
-                            HashSet<string> depends = new HashSet<string>();
-							// Find dependencies
-							GetDependenciesRecursive(asObject, depends);
-							HashSet<string> scripts = new HashSet<string>();
+							// Build a direct dependency list (first-level keys + scanned references)
+							HashSet<string> directDepends = new HashSet<string>();
+							try
+							{
+								JSONClass depObj = asObject["dependencies"].AsObject;
+								if (depObj != null)
+								{
+									foreach (string key in depObj.Keys)
+									{
+										if (!string.IsNullOrEmpty(key)) directDepends.Add(key);
+									}
+								}
+							}
+							catch { }
+							try
+							{
+								DependencyExtractor.ScanAllStringsForDependencies(asObject, directDepends);
+							}
+							catch { }
 
+							// Keep the existing recursive list for backwards compatibility and older caches.
+							HashSet<string> depends = new HashSet<string>();
+							GetDependenciesRecursive(asObject, depends);
+
+							var directList = directDepends.ToList();
+							try { this.PackageDependencies = directList; } catch { }
 							svp.RecursivePackageDependencies = depends.ToList();
 						}
 					}

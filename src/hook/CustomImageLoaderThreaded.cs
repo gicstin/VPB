@@ -822,7 +822,6 @@ namespace VPB
 					}
 					bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
 					tex.Apply(false, !isSimTexture);
-					if (isSimTexture) LogUtil.Log($"[VPB SIM] CustomLoader: Applied READABLE sim texture: {imgPath}");
 					if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
 					{
 						try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
@@ -832,7 +831,6 @@ namespace VPB
                 {
 					bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
                     tex.Apply(createMipMaps, !canCompress && !isSimTexture);
-					if (isSimTexture) LogUtil.Log($"[VPB SIM] CustomLoader (FastPath): Applied READABLE sim texture: {imgPath}");
                     if (canCompress && tex.format != TextureFormat.DXT1 && tex.format != TextureFormat.DXT5)
                     {
                         try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
@@ -853,7 +851,6 @@ namespace VPB
 					    tex.LoadRawTextureData(rawTextureData);
 						bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
 					    tex.Apply(false, !isSimTexture);
-						if (isSimTexture) LogUtil.Log($"[VPB SIM] CustomLoader (DXT Fallback): Applied READABLE sim texture: {imgPath}");
 					    UnityEngine.Object.Destroy(texture2D);
                     }
                     catch (Exception ex)
@@ -868,7 +865,6 @@ namespace VPB
 					    TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat);
 						bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
 					    tex.Apply(false, !isSimTexture);
-						if (isSimTexture) LogUtil.Log($"[VPB SIM] CustomLoader (Standard): Applied READABLE sim texture: {imgPath}");
 					    if (canCompress)
 					    {
 						    try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
@@ -1011,6 +1007,8 @@ namespace VPB
 
         protected int runningTasks;
         protected const int MaxConcurrentTasks = 16;
+        protected int runningThumbnailTasks;
+        protected const int MaxConcurrentThumbnailTasks = 4;
 
 		protected Dictionary<string, Texture2D> thumbnailCache;
 		private const int ThumbnailCacheMaxItems = 512;
@@ -1021,6 +1019,18 @@ namespace VPB
 
 		private readonly object pendingThumbnailLock = new object();
 		private Dictionary<string, List<ImageLoaderCallback>> pendingThumbnailCallbacks;
+
+        /// <summary>Number of thumbnails still being decoded/loaded in the background queue.</summary>
+        public int PendingThumbnailCount
+        {
+            get
+            {
+                lock (pendingThumbnailLock)
+                {
+                    return pendingThumbnailCallbacks != null ? pendingThumbnailCallbacks.Count : 0;
+                }
+            }
+        }
 
 		protected Dictionary<string, Texture2D> textureCache;
 
@@ -1681,12 +1691,13 @@ namespace VPB
             for(int i=0; i<dispatchedImages.Count; i++)
             {
                 if (runningTasks >= MaxConcurrentTasks) break;
-                
+
                 QueuedImage qi = dispatchedImages[i];
                 if (!qi.working && !qi.processed && !qi.cancel)
                 {
                     // Check conditions
                     if (qi.webRequest != null && !qi.webRequestDone) continue;
+                    if (qi.isThumbnail && runningThumbnailTasks >= MaxConcurrentThumbnailTasks) continue;
 
                     // Execute
                     StartWorker(qi);
@@ -1702,10 +1713,11 @@ namespace VPB
                 {
                     QueuedImage head = queuedImages.Peek();
                     if (head == null) break;
+                    if (head.isThumbnail && runningThumbnailTasks >= MaxConcurrentThumbnailTasks) break;
 
                     // Perform pre-checks (cache, web)
-                    PreprocessImageQueue(); 
-                    
+                    PreprocessImageQueue();
+
                     // Preprocess might have set processed=true or initialized web request
                     // We must dequeue it to move it to dispatched list
                     head = queuedImages.Dequeue();
@@ -1716,7 +1728,7 @@ namespace VPB
                     if (head.webRequest != null && !head.webRequestDone)
                     {
                         // Waiting for web, do not start worker yet
-                        continue; 
+                        continue;
                     }
 
                     StartWorker(head);
@@ -1729,6 +1741,7 @@ namespace VPB
             // if (head.isThumbnail) LogUtil.Log("[VPB-Debug] StartWorker: " + head.imgPath);
             head.working = true;
             System.Threading.Interlocked.Increment(ref runningTasks);
+            if (head.isThumbnail) System.Threading.Interlocked.Increment(ref runningThumbnailTasks);
             bool success = false;
             try
             {
@@ -1747,6 +1760,7 @@ namespace VPB
                         head.processed = true;
                         head.working = false;
                         System.Threading.Interlocked.Decrement(ref runningTasks);
+                        if (head.isThumbnail) System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
                     }
                 });
             }
@@ -1761,6 +1775,7 @@ namespace VPB
                 // Failed to queue worker (Thread pool exhausted?)
                 // Revert state so it can be picked up again
                 System.Threading.Interlocked.Decrement(ref runningTasks);
+                if (head.isThumbnail) System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
                 head.working = false;
                 // Note: It remains in dispatchedImages, so Update loop will try to start it again next frame.
                 // LogUtil.LogWarning("[VPB] [Loader] Failed to queue worker for " + head.imgPath); // Reduce log noise

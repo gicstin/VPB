@@ -2217,6 +2217,7 @@ UpdateDesktopModeButton();
             
             contentGO = scrollRect.content.gameObject;
             CreateLoadingOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
+            CreateThumbnailCacheProgressPanel(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
 
             // Clean up legacy layout components that interfere with virtualization
             var legacyGLG = contentGO.GetComponent<GridLayoutGroup>();

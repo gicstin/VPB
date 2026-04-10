@@ -240,11 +240,35 @@ namespace VPB
                 }
                 catch { }
 
-                if (thumbnailCacheCoroutine == null && pendingThumbnailCacheJobs != null && pendingThumbnailCacheJobs.Count > 0)
+                // Determine whether the gallery is "active" (scrolling or thumbnails still loading).
+                // While active we pause all disk saves — background threads must not contend on
+                // the cache write-lock while the user is interacting; the cost is we defer
+                // persistence, but current-session display is unaffected (images stay in memory).
+                bool isScrollingRecently = (Time.unscaledTime - lastScrollTime) < 1.0f;
+                bool isThumbnailLoading  = CustomImageLoaderThreaded.singleton != null &&
+                                           CustomImageLoaderThreaded.singleton.PendingThumbnailCount > 0;
+                bool savingActive = !isScrollingRecently && !isThumbnailLoading;
+                if (GalleryThumbnailCache.Instance != null)
+                    GalleryThumbnailCache.Instance.SavingPaused = !savingActive;
+
+                // Only start the disk-save coroutine when saving is safe to resume.
+                if (savingActive &&
+                    thumbnailCacheCoroutine == null &&
+                    pendingThumbnailCacheJobs != null &&
+                    pendingThumbnailCacheJobs.Count > 0)
                 {
-                    if (Time.unscaledTime - lastScrollTime > 0.25f)
+                    thumbnailCacheCoroutine = StartCoroutine(ProcessThumbnailCacheQueue());
+                }
+
+                // Update thumbnail cache progress panel
+                if (_thumbCacheProgressGO != null && _thumbCacheProgressGO.activeSelf)
+                {
+                    UpdateThumbnailCacheProgressDisplay();
+                    bool queueEmpty = pendingThumbnailCacheJobs == null || pendingThumbnailCacheJobs.Count == 0;
+                    if (queueEmpty && _thumbCacheSaved > 0 && thumbnailCacheCoroutine == null)
                     {
-                        thumbnailCacheCoroutine = StartCoroutine(ProcessThumbnailCacheQueue());
+                        if (_thumbCacheFinishTime < 0f) _thumbCacheFinishTime = Time.unscaledTime;
+                        else if (Time.unscaledTime - _thumbCacheFinishTime > 3f) HideThumbnailCacheProgress();
                     }
                 }
 

@@ -111,7 +111,30 @@ namespace VPB
             {
                 while (pendingThumbnailCacheJobs != null && pendingThumbnailCacheJobs.Count > 0)
                 {
-                    if (Time.unscaledTime - lastScrollTime <= 0.25f)
+                    // Gate 1: wait for scroll to settle (1 s idle instead of 0.25 s — gives the
+                    // image-loader background threads time to finish their own SaveThumbnail calls
+                    // and release the cache write-lock before we add more pressure from the main thread).
+                    if (Time.unscaledTime - lastScrollTime <= 1.0f)
+                    {
+                        yield return null;
+                        continue;
+                    }
+
+                    // Gate 2: wait until the image loader has no thumbnails actively decoding.
+                    // While the loader is busy its background threads are calling SaveThumbnail
+                    // (holding the write-lock + doing disk flushes); adding our own saves on top
+                    // causes severe lock contention and disk saturation.
+                    if (CustomImageLoaderThreaded.singleton != null &&
+                        CustomImageLoaderThreaded.singleton.PendingThumbnailCount > 0)
+                    {
+                        yield return null;
+                        continue;
+                    }
+
+                    // Gate 3: skip this frame if we're already running slow (< ~40 FPS).
+                    // ReadPixels + disk flush cost 10–50 ms; adding that to an already-slow
+                    // frame makes scrolling impossible.
+                    if (Time.unscaledDeltaTime > 0.025f)
                     {
                         yield return null;
                         continue;
@@ -122,6 +145,11 @@ namespace VPB
                     if (!string.IsNullOrEmpty(job.GroupId) && job.GroupId != currentLoadingGroupId) { yield return null; continue; }
 
                     yield return StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(job.Path, job.Texture, job.LastWriteTime));
+                    _thumbCacheSaved++;
+
+                    // Pause at least 2 frames between saves so ReadPixels/flush don't stack up
+                    // back-to-back and starve the render thread.
+                    yield return null;
                     yield return null;
                 }
             }
@@ -135,6 +163,9 @@ namespace VPB
         {
             if (pendingThumbnailCacheJobs == null) pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
             pendingThumbnailCacheJobs.Enqueue(new ThumbnailCacheJob { Path = path, Texture = tex, LastWriteTime = lastWriteTime, GroupId = groupId });
+            _thumbCacheTotalEnqueued++;
+            _thumbCacheFinishTime = -1f;
+            ShowThumbnailCacheProgress();
         }
 
         private void LoadThumbnail(FileEntry file, RawImage target)
@@ -182,10 +213,29 @@ namespace VPB
             }
             else if (file is VarFileEntry vfe && vfe.Package != null)
             {
-                // For VarFileEntry from dependencies, also look for internal images
-                string chosen = GetOrChoosePackagePreviewInternalPath(vfe.Package);
-                if (!string.IsNullOrEmpty(chosen))
-                    imgPath = vfe.Package.Path + ":/" + chosen.Replace('\\', '/');
+                // First try per-item sister file: same internal path but .jpg/.png extension.
+                // This gives each clothing variation its own thumbnail instead of sharing the
+                // package-wide preview image.
+                string internalNoExt = System.IO.Path.GetFileNameWithoutExtension(vfe.InternalPath);
+                string internalDir   = System.IO.Path.GetDirectoryName(vfe.InternalPath);
+                string baseInternal  = string.IsNullOrEmpty(internalDir)
+                    ? internalNoExt
+                    : internalDir.Replace('\\', '/') + "/" + internalNoExt;
+
+                string sisterJpg = vfe.Package.Path + ":/" + baseInternal + ".jpg";
+                string sisterPng = vfe.Package.Path + ":/" + baseInternal + ".png";
+
+                if (FileManager.FileExists(sisterJpg))
+                    imgPath = sisterJpg;
+                else if (FileManager.FileExists(sisterPng))
+                    imgPath = sisterPng;
+                else
+                {
+                    // Fall back to the package-wide preview image
+                    string chosen = GetOrChoosePackagePreviewInternalPath(vfe.Package);
+                    if (!string.IsNullOrEmpty(chosen))
+                        imgPath = vfe.Package.Path + ":/" + chosen.Replace('\\', '/');
+                }
             }
             else
             {
@@ -227,7 +277,8 @@ namespace VPB
 
             if (CustomImageLoaderThreaded.singleton == null) return;
 
-            string expectedTag = currentLoadingGroupId + "|" + imgPath;
+            string capturedGroupId = currentLoadingGroupId;
+            string expectedTag = capturedGroupId + "|" + imgPath;
             ThumbnailBindingTag bind = null;
             if (target != null)
             {
@@ -301,9 +352,9 @@ namespace VPB
                         else imgTime = file.LastWriteTime.ToFileTime();
                     }
 
-                    if (!res.loadedFromGalleryCache)
+                    if (!res.loadedFromGalleryCache && capturedGroupId == currentLoadingGroupId)
                     {
-                        EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, currentLoadingGroupId);
+                        EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, capturedGroupId);
                     }
                 }
             };

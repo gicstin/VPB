@@ -314,6 +314,11 @@ namespace VPB
             if (thumbnailCacheCoroutine != null) StopCoroutine(thumbnailCacheCoroutine);
             thumbnailCacheCoroutine = null;
             if (pendingThumbnailCacheJobs != null) pendingThumbnailCacheJobs.Clear();
+            _thumbCacheTotalEnqueued = 0;
+            _thumbCacheSaved = 0;
+            _thumbCacheFinishTime = -1f;
+            _nextThumbPriority = 0;
+            HideThumbnailCacheProgress();
             ShowLoadingOverlay("Loading...");
             if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
             refreshCoroutine = StartCoroutine(RefreshHubItemsRoutine());

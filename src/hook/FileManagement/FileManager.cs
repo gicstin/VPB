@@ -1,4 +1,4 @@
-using ICSharpCode.SharpZipLib.Core;
+﻿using ICSharpCode.SharpZipLib.Core;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -942,6 +942,7 @@ namespace VPB
 				if (flag && onRefreshHandlers != null) onRefreshHandlers();
 			}
 			RebuildDependentCounts();
+			DependencyGraph.Rebuild();
 			MessageKit.post(MessageDef.FileManagerRefresh);
 			m_StartScanCo = null;
 		}

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -309,10 +309,10 @@ namespace VPB
             {
                 string filePath = file.Path;
 
-                // Use Memory-Mapped File + Span<T>.IndexOf for SIMD-accelerated search
+                // Stream-scan the file without loading it into memory.
                 if (!string.IsNullOrEmpty(filePath) && System.IO.File.Exists(filePath))
                 {
-                    dependencies = ExtractDependenciesWithMemoryMappedFile(file, filePath);
+                    dependencies = DependencyExtractor.ExtractDependenciesFromFile(filePath, maxDependencies: 150, maxMilliseconds: 1500);
                 }
             }
             catch (Exception ex)
@@ -387,138 +387,6 @@ namespace VPB
         public void SaveCache()
         {
             cache.Save();
-        }
-
-        /// <summary>Extract dependencies using Memory-Mapped File + Span<T>.IndexOf (SIMD-accelerated)</summary>
-        private static HashSet<string> ExtractDependenciesWithMemoryMappedFile(FileEntry file, string filePath)
-        {
-            var dependencies = new HashSet<string>();
-
-            try
-            {
-                using (var fileStream = new System.IO.FileStream(filePath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
-                {
-                    long fileSize = fileStream.Length;
-                    if (fileSize == 0) return dependencies;
-
-                    // For very large files, read in chunks
-                    int chunkSize = (int)System.Math.Min(fileSize, 10 * 1024 * 1024); // 10MB chunks
-                    byte[] buffer = new byte[chunkSize];
-                    int bytesRead = fileStream.Read(buffer, 0, chunkSize);
-
-                    if (bytesRead > 0)
-                    {
-                        // Convert bytes to string for searching
-                        string content = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-                        // Extract dependencies using fast substring search
-                        ExtractDependenciesFromSpan(content, dependencies);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError($"[VPB] ExtractDependenciesWithMemoryMappedFile error: {ex}");
-            }
-
-            return dependencies;
-        }
-
-        /// <summary>Extract dependencies using fast substring search</summary>
-        private static void ExtractDependenciesFromSpan(string content, HashSet<string> dependencies)
-        {
-            // Look for dot-separated sequences (Author.Name.version pattern)
-            int pos = 0;
-
-            while (pos < content.Length && dependencies.Count < 150)
-            {
-                // Find next dot
-                int nextDot = content.IndexOf('.', pos);
-                if (nextDot < 0) break;
-
-                // Backtrack to find start of identifier
-                int start = nextDot;
-                while (start > 0 && (char.IsLetterOrDigit(content[start - 1]) || content[start - 1] == '_' || content[start - 1] == '-' || content[start - 1] == ' '))
-                    start--;
-
-                // Skip if doesn't start with letter/underscore/digit
-                if (start >= nextDot || (!char.IsLetterOrDigit(content[start]) && content[start] != '_' && content[start] != ' '))
-                {
-                    pos = nextDot + 1;
-                    continue;
-                }
-
-                // Look for second dot
-                int nextDot2 = content.IndexOf('.', nextDot + 1);
-                if (nextDot2 < 0)
-                {
-                    pos = nextDot + 1;
-                    continue;
-                }
-
-                // Find end of version (after second dot)
-                int versionEnd = nextDot2 + 1;
-                while (versionEnd < content.Length && (char.IsLetterOrDigit(content[versionEnd]) || content[versionEnd] == '.' || content[versionEnd] == '-' || content[versionEnd] == '_' || content[versionEnd] == ' '))
-                    versionEnd++;
-
-                string candidate = content.Substring(start, versionEnd - start);
-                // Strip anything after colon (e.g., "Author.Name.Version:path/to/file" -> "Author.Name.Version")
-                int colonIdx = candidate.IndexOf(':');
-                if (colonIdx > 0)
-                    candidate = candidate.Substring(0, colonIdx);
-
-                if (IsValidDependencyCandidate(candidate))
-                {
-                    dependencies.Add(candidate);
-                }
-
-                pos = nextDot + 1;
-            }
-        }
-
-        private static bool IsValidDependencyCandidate(string candidate)
-        {
-            if (string.IsNullOrEmpty(candidate) || candidate.Length > 200) return false;
-
-            var parts = candidate.Split('.');
-            // Only accept exactly 3 parts: Author.Name.Version
-            if (parts.Length != 3) return false;
-
-            // Author must be non-empty and start with letter, digit, or underscore
-            if (string.IsNullOrEmpty(parts[0]) ||
-                (!char.IsLetterOrDigit(parts[0][0]) && parts[0][0] != '_'))
-                return false;
-
-            // Name must be non-empty
-            if (string.IsNullOrEmpty(parts[1]))
-                return false;
-
-            // Reject if author or name contains invalid characters (comma, equals, brackets, etc.)
-            if (parts[0].IndexOfAny(new[] { ',', '=', '[', ']', '{', '}', '(', ')', '<', '>', ':', ';', '!', '?', '%', '$', '#', '@', '&', '*', '+', '^' }) >= 0)
-                return false;
-            if (parts[1].IndexOfAny(new[] { ',', '=', '[', ']', '{', '}', '(', ')', '<', '>', ':', ';', '!', '?', '%', '$', '#', '@', '&', '*', '+', '^' }) >= 0)
-                return false;
-
-            // Author or name must contain at least one letter (reject purely numeric patterns)
-            bool authorHasLetter = parts[0].Any(c => char.IsLetter(c));
-            bool nameHasLetter = parts[1].Any(c => char.IsLetter(c));
-            if (!authorHasLetter && !nameHasLetter)
-                return false;
-
-            // Version part must be valid and not all zeros
-            string version = parts[2];
-            if (version == "latest") return true;
-            if (version.StartsWith("min") && version.Length > 3 && char.IsDigit(version[3])) return true;
-            // Version must start with non-zero digit or be "0" (single zero is valid, but "00", "000" etc. are not)
-            if (version.Length > 0 && char.IsDigit(version[0]))
-            {
-                // Reject if all zeros (like "00", "000", "0000")
-                if (!version.Any(c => c != '0' && c != '.'))
-                    return false;
-                return true;
-            }
-
-            return false;
         }
 
         public static HashSet<string> DeduplicateDependenciesByLatestVersion(HashSet<string> deps)

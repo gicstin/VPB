@@ -80,6 +80,67 @@ namespace VPB
             if (loadingOverlayGO != null) loadingOverlayGO.SetActive(false);
         }
 
+        // ── Thumbnail cache progress bar (1px, bottom of viewport) ─────────
+
+        private void CreateThumbnailCacheProgressPanel(GameObject viewportGO)
+        {
+            if (viewportGO == null || _thumbCacheProgressGO != null) return;
+
+            // 1px full-width bar anchored to the very bottom of the viewport
+            _thumbCacheProgressGO = new GameObject("ThumbCacheProgress");
+            _thumbCacheProgressGO.transform.SetParent(viewportGO.transform, false);
+            RectTransform panelRT = _thumbCacheProgressGO.AddComponent<RectTransform>();
+            panelRT.anchorMin = new Vector2(0f, 0f);
+            panelRT.anchorMax = new Vector2(1f, 0f);
+            panelRT.pivot     = new Vector2(0.5f, 0f);
+            panelRT.anchoredPosition = Vector2.zero;
+            panelRT.sizeDelta = new Vector2(0f, 1f);
+
+            // Dark track (background)
+            Image trackImg = _thumbCacheProgressGO.AddComponent<Image>();
+            trackImg.color = new Color(1f, 1f, 1f, 0.12f);
+            trackImg.raycastTarget = false;
+
+            SetLayerRecursive(_thumbCacheProgressGO, viewportGO.layer);
+
+            // Blue fill — grows from anchorMax.x=0 to 1
+            GameObject fillGO = new GameObject("Fill");
+            fillGO.transform.SetParent(_thumbCacheProgressGO.transform, false);
+            _thumbCacheBarFillRT = fillGO.AddComponent<RectTransform>();
+            _thumbCacheBarFillRT.anchorMin = Vector2.zero;
+            _thumbCacheBarFillRT.anchorMax = new Vector2(0f, 1f);
+            _thumbCacheBarFillRT.sizeDelta  = Vector2.zero;
+            Image fillImg = fillGO.AddComponent<Image>();
+            fillImg.color = new Color(0.3f, 0.7f, 1f, 1f);
+            fillImg.raycastTarget = false;
+
+            _thumbCacheProgressGO.SetActive(false);
+        }
+
+        private void ShowThumbnailCacheProgress()
+        {
+            if (_thumbCacheProgressGO == null) return;
+            _thumbCacheFinishTime = -1f;
+            _thumbCacheProgressGO.SetActive(true);
+        }
+
+        private void HideThumbnailCacheProgress()
+        {
+            if (_thumbCacheProgressGO != null) _thumbCacheProgressGO.SetActive(false);
+            _thumbCacheTotalEnqueued = 0;
+            _thumbCacheSaved = 0;
+            _thumbCacheFinishTime = -1f;
+        }
+
+        private void UpdateThumbnailCacheProgressDisplay()
+        {
+            if (_thumbCacheBarFillRT == null) return;
+            float fraction = (_thumbCacheTotalEnqueued > 0)
+                ? Mathf.Clamp01((float)_thumbCacheSaved / _thumbCacheTotalEnqueued)
+                : 0f;
+            _thumbCacheBarFillRT.anchorMax = new Vector2(fraction, 1f);
+        }
+
         public void DisplayColorPicker(string title, Color initialColor, UnityAction<Color> onConfirm)
         {
              // Use the singleton

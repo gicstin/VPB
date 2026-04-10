@@ -1,7 +1,9 @@
-using SimpleJSON;
+﻿using SimpleJSON;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace VPB
@@ -14,7 +16,8 @@ namespace VPB
 	{
 		// Regex pattern for matching dependency references: Author.Name.version
 		// Use word boundary before and negative lookahead after to avoid matching file extensions (.dll, .cs, etc)
-		private static readonly Regex DepPattern = new Regex(@"\b([A-Za-z_][A-Za-z0-9_]*)\.((?:[A-Za-z0-9_]+\.)*[A-Za-z0-9_]+)\.(latest|min\d+|\d+(?:\.\d+)?)(?![a-zA-Z])", RegexOptions.Compiled);
+		// Note: real-world UIDs can start with digits and may contain '-' in the name.
+		private static readonly Regex DepPattern = new Regex(@"\b([A-Za-z0-9_][A-Za-z0-9_-]*)\.([A-Za-z0-9_][A-Za-z0-9_-]*)\.(latest|min\d+|\d+)(?![A-Za-z0-9_-])", RegexOptions.Compiled);
 
 		/// <summary>
 		/// Recursively walks every string value in a JSONNode and extracts dependency references.
@@ -138,6 +141,54 @@ namespace VPB
 				}
 			}
 			catch { }
+
+			return dependencies;
+		}
+
+		/// <summary>
+		/// Extract dependencies from a text file without loading it all into memory.
+		/// Reads incrementally and feeds the regex scanner with a small overlap window
+		/// to avoid missing matches that cross buffer boundaries.
+		/// </summary>
+		public static HashSet<string> ExtractDependenciesFromFile(string filePath, int maxDependencies = 150, int maxMilliseconds = 1500)
+		{
+			HashSet<string> dependencies = new HashSet<string>();
+			if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return dependencies;
+
+			try
+			{
+				var sw = System.Diagnostics.Stopwatch.StartNew();
+
+				// Keep some overlap between chunks to avoid losing matches at boundaries.
+				const int overlapChars = 512;
+				const int bufferChars = 64 * 1024; // 64Ki chars (~128KB)
+				char[] buffer = new char[bufferChars];
+				string tail = "";
+
+				using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+				using (var reader = new StreamReader(fs, Encoding.UTF8, true, bufferChars))
+				{
+					while (!reader.EndOfStream && dependencies.Count < maxDependencies)
+					{
+						if (sw.ElapsedMilliseconds > maxMilliseconds) break;
+
+						int read = reader.Read(buffer, 0, buffer.Length);
+						if (read <= 0) break;
+
+						string chunk = tail + new string(buffer, 0, read);
+						ExtractDependenciesWithRegex(chunk, dependencies);
+
+						if (chunk.Length > overlapChars)
+							tail = chunk.Substring(chunk.Length - overlapChars, overlapChars);
+						else
+							tail = chunk;
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				LogUtil.LogError($"[VPB] DependencyExtractor.ExtractDependenciesFromFile error: {ex}");
+			}
 
 			return dependencies;
 		}

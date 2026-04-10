@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace VPB
 {
@@ -62,7 +62,7 @@ namespace VPB
         {
             RequestedUid = requestedUid ?? "";
             Uid = RequestedUid;
-            Path = "";
+            Path = "[MISSING] " + RequestedUid;
             Name = RequestedUid + ".var";
             Exists = false;
             LastWriteTime = DateTime.MinValue;

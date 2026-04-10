@@ -41,6 +41,13 @@ namespace VPB
         private Dictionary<string, CacheEntry> index = new Dictionary<string, CacheEntry>(StringComparer.OrdinalIgnoreCase);
         private bool savingDisabled = false;
 
+        /// <summary>
+        /// When true, SaveThumbnail is a no-op. Set from the main thread while the user is
+        /// actively scrolling or thumbnails are loading, to prevent background threads from
+        /// contending on the write lock and stalling disk I/O.
+        /// </summary>
+        public volatile bool SavingPaused = false;
+
         private struct CacheEntry
         {
             public long Offset;
@@ -472,11 +479,11 @@ namespace VPB
                             {
                                 return false;
                             }
-                            
+
                             fileStream.Position = entry.Offset;
                             data = ByteArrayPool.Rent(entry.Length);
                             int bytesRead = fileStream.Read(data, 0, entry.Length);
-                            
+
                             if (bytesRead != entry.Length)
                             {
                                 ByteArrayPool.Return(data);
@@ -496,7 +503,7 @@ namespace VPB
                                     return false;
                                 }
                             }
-                            
+
                             width = entry.Width;
                             height = entry.Height;
                             format = (TextureFormat)entry.Format;
@@ -523,6 +530,10 @@ namespace VPB
 
         public void SaveThumbnail(string path, byte[] data, int dataLength, int width, int height, TextureFormat format, long lastWriteTime)
         {
+            // Checked before acquiring any lock so background threads pay zero cost
+            // when the gallery is actively scrolling or loading thumbnails.
+            if (SavingPaused) return;
+
             if (IsPackagePath(path)) lastWriteTime = 0;
             if (width <= 0 || height <= 0) return;
 
@@ -619,38 +630,34 @@ namespace VPB
             int w = sourceTex.width;
             int h = sourceTex.height;
 
-            TextureFormat format = sourceTex.format;
-
-            if (w <= maxDim && h <= maxDim)
-            {
-                bytes = sourceTex.GetRawTextureData();
-            }
-            else
+            // Always use Blit+ReadPixels — GetRawTextureData requires the texture to be marked
+            // Read/Write in the import settings, which loaded thumbnails are not.
+            if (w > maxDim || h > maxDim)
             {
                 float aspect = (float)w / h;
                 if (w > h) { w = maxDim; h = Mathf.RoundToInt(maxDim / aspect); }
                 else { h = maxDim; w = Mathf.RoundToInt(maxDim * aspect); }
-                yield return null;
-
-                RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.Default);
-                Graphics.Blit(sourceTex, rt);
-                yield return null;
-                
-                RenderTexture prev = RenderTexture.active;
-                RenderTexture.active = rt;
-                
-                format = TextureFormat.RGB24;
-                Texture2D newTex = new Texture2D(w, h, format, false);
-                newTex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
-                newTex.Apply();
-                yield return null;
-                
-                RenderTexture.active = prev;
-                RenderTexture.ReleaseTemporary(rt);
-                
-                bytes = newTex.GetRawTextureData();
-                UnityEngine.Object.Destroy(newTex);
             }
+            yield return null;
+
+            RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.Default);
+            Graphics.Blit(sourceTex, rt);
+            yield return null;
+
+            RenderTexture prev = RenderTexture.active;
+            RenderTexture.active = rt;
+
+            TextureFormat format = TextureFormat.RGB24;
+            Texture2D newTex = new Texture2D(w, h, format, false);
+            newTex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+            newTex.Apply();
+            yield return null;
+
+            RenderTexture.active = prev;
+            RenderTexture.ReleaseTemporary(rt);
+
+            bytes = newTex.GetRawTextureData();
+            UnityEngine.Object.Destroy(newTex);
 
             if (bytes != null)
             {
