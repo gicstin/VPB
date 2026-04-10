@@ -32,14 +32,36 @@ namespace VPB
             // ALWAYS use internal UI now
             if (scrollRect != null) scrollRect.gameObject.SetActive(true);
 
-            // Purge buttons as templates changed
-            foreach (var go in fileButtonPool) if (go != null) Destroy(go);
-            fileButtonPool.Clear();
-            foreach (var go in activeButtons) if (go != null) Destroy(go);
-            activeButtons.Clear();
-
             UpdateFooterLayoutState();
             UpdateLayout();
+
+            // Layout switch should not force a full RefreshFiles().
+            // The grid items support both modes, so we just reconfigure and rebind visible rows.
+            try
+            {
+                if (contentGO != null)
+                {
+                    var rgv = contentGO.GetComponent<RecyclingGridView>();
+                    if (rgv != null)
+                    {
+                        try { rgv.preserveCenterItemIndex = rgv.GetCenterItemIndex(); } catch { }
+
+                        if (layoutMode == GalleryLayoutMode.List)
+                        {
+                            rgv.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
+                            rgv.SetAdaptiveConfig(true, 0f, 1, true);
+                        }
+                        else
+                        {
+                            int cols = GridColumnCount;
+                            rgv.SetGridConfig(100f, 100f, 10f, 10f, cols);
+                            rgv.SetAdaptiveConfig(true, 200f, cols, false);
+                        }
+                        rgv.Refresh();
+                    }
+                }
+            }
+            catch { }
         }
 
         public Atom SelectedTargetAtom

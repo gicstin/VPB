@@ -357,6 +357,9 @@ namespace VPB
                     return string.Equals(ple.Package.Uid, currentPackageFilterMasterUid, StringComparison.OrdinalIgnoreCase);
                 if (entry is MissingPackageListEntry mpe)
                     return string.Equals(mpe.RequestedUid, currentPackageFilterMasterUid, StringComparison.OrdinalIgnoreCase);
+                // Handle scene files (generic FileEntry with .Path)
+                if (entry.Path != null)
+                    return string.Equals(entry.Path, currentPackageFilterMasterUid, StringComparison.OrdinalIgnoreCase);
             }
             catch { }
             return false;
@@ -1741,7 +1744,7 @@ namespace VPB
                         foreach (var ext in extensions)
                         {
                             string[] sysFiles = new string[0];
-                            try 
+                            try
                             {
                                 List<string> sysFileList = new List<string>();
                                 FileManager.SafeGetFiles(searchPath, "*." + ext, sysFileList);
@@ -1806,7 +1809,7 @@ namespace VPB
                     }
                 }
             }
-            
+
             yield return null; // Yield before sorting
             var sortState = GetSortState("Files");
             GallerySortManager.Instance.SortFiles(files, sortState);
@@ -1941,29 +1944,101 @@ namespace VPB
         /// <summary>Filter to show only the selected package and its dependencies.</summary>
         public void ApplyDependenciesFilter(FileEntry file)
         {
-            if (!TryGetPackageFromEntry(file, out VarPackage pkg, out string label) || pkg == null) return;
-
             EnsureFilterBaseCaptured();
 
-            List<FileEntry> filtered;
-            var deps = pkg.RecursivePackageDependencies;
-
-            if (PackageFilterUsesPackageListRows())
+            // Try to handle as VarPackage first
+            if (TryGetPackageFromEntry(file, out VarPackage pkg, out string label) && pkg != null)
             {
-                HashSet<string> uids = BuildUidSetForDependenciesFilter(pkg);
-                filtered = BuildPackageListEntriesForUids(uids);
-                currentPackageFilterCount = Math.Max(0, uids.Count - 1);
-            }
-            else
-            {
-                filtered = new List<FileEntry> { file };
-                AddVarFileEntriesWithPackageInDepList(filtered, file, currentFilteredFiles, deps);
-                currentPackageFilterCount = Math.Max(0, filtered.Count - 1);
-            }
+                List<FileEntry> filtered;
+                var deps = pkg.RecursivePackageDependencies;
 
-            currentPackageFilterMasterUid = pkg.Uid;
-            currentPackageFilterMode = PackageFilterMode.Dependencies;
-            ApplyFilteredList(filtered, $"Dependencies of {label}");
+                if (PackageFilterUsesPackageListRows())
+                {
+                    HashSet<string> uids = BuildUidSetForDependenciesFilter(pkg);
+                    filtered = BuildPackageListEntriesForUids(uids);
+                    currentPackageFilterCount = Math.Max(0, uids.Count - 1);
+                }
+                else
+                {
+                    filtered = new List<FileEntry> { file };
+                    AddVarFileEntriesWithPackageInDepList(filtered, file, currentFilteredFiles, deps);
+                    currentPackageFilterCount = Math.Max(0, filtered.Count - 1);
+                }
+
+                currentPackageFilterMasterUid = pkg.Uid;
+                currentPackageFilterMode = PackageFilterMode.Dependencies;
+                ApplyFilteredList(filtered, $"Dependencies of {label}");
+            }
+            // Handle scene files
+            else if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
+            {
+                var deps = GallerySortManager.ExtractSceneDependencies(file);
+                if (deps != null && deps.Count > 0)
+                {
+                    // Deduplicate: keep only latest version of each Author.Name
+                    deps = GallerySortManager.DeduplicateDependenciesByLatestVersion(deps);
+
+                    List<FileEntry> filtered = new List<FileEntry> { file };
+                    // Resolve each dependency to actual VarPackage and add as VarFileEntry
+                    foreach (var dep in deps)
+                    {
+                        VarPackage depPkg = FileManager.GetPackageForDependency(dep, false);
+                        if (depPkg != null)
+                        {
+                            // Get file entries to find correct internal path
+                            List<string> fileNames;
+                            List<long> fileTimes;
+                            List<long> fileSizes;
+                            depPkg.TryGetCachedFileEntryData(out fileNames, out fileTimes, out fileSizes);
+
+                            // Create VarFileEntry - always use meta.json to show master package only
+                            string internalPath = "meta.json";
+                            try
+                            {
+                                VarFileEntry vfe = new VarFileEntry(depPkg, internalPath, depPkg.LastWriteTime, depPkg.Size);
+                                if (!string.IsNullOrEmpty(vfe.Name) && !string.IsNullOrEmpty(vfe.Path))
+                                {
+                                    filtered.Add(vfe);
+                                }
+                                else
+                                {
+                                    LogUtil.LogError($"[VPB] Invalid VarFileEntry created for {depPkg.Uid}/{internalPath}");
+                                    filtered.Add(new VirtualFileEntry(dep));
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError($"[VPB] Failed to create VarFileEntry for {depPkg.Uid}: {ex}");
+                                filtered.Add(new VirtualFileEntry(dep));
+                            }
+                        }
+                        else
+                        {
+                            // If package not found, use placeholder
+                            try
+                            {
+                                VirtualFileEntry vfe = new VirtualFileEntry(dep);
+                                if (!string.IsNullOrEmpty(vfe.Name) && !string.IsNullOrEmpty(vfe.Path))
+                                {
+                                    filtered.Add(vfe);
+                                }
+                                else
+                                {
+                                    LogUtil.LogError($"[VPB] Invalid VirtualFileEntry created for {dep}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError($"[VPB] Failed to create VirtualFileEntry for {dep}: {ex}");
+                            }
+                        }
+                    }
+                    currentPackageFilterCount = deps.Count;
+                    currentPackageFilterMasterUid = file.Path;
+                    currentPackageFilterMode = PackageFilterMode.Dependencies;
+                    ApplyFilteredList(filtered, $"Dependencies ({deps.Count})");
+                }
+            }
         }
 
         /// <summary>Filter to show only the selected package and its dependents.</summary>
@@ -2000,49 +2075,104 @@ namespace VPB
         {
             try
             {
-                if (!TryGetPackageFromEntry(file, out VarPackage pkg, out string label) || pkg == null) return;
-
                 EnsureFilterBaseCaptured();
 
-                var deps = pkg.RecursivePackageDependencies;
-                if (deps == null || deps.Count == 0)
+                // Try to handle as VarPackage first
+                if (TryGetPackageFromEntry(file, out VarPackage pkg, out string label) && pkg != null)
                 {
-                    LogUtil.LogWarning("[VPB] No dependencies to filter");
-                    return;
-                }
-
-                // Build a list of missing dependency UIDs and create placeholder entries
-                List<string> missingUids = new List<string>();
-                List<FileEntry> filtered = new List<FileEntry>();
-
-                foreach (var depUid in deps)
-                {
-                    VarPackage depPkg = FileManager.GetPackageForDependency(depUid, false);
-                    if (depPkg == null)
+                    var deps = pkg.RecursivePackageDependencies;
+                    if (deps == null || deps.Count == 0)
                     {
-                        missingUids.Add(depUid);
-                        // Create a placeholder entry just for display
-                        filtered.Add(new VirtualFileEntry(depUid));
+                        return;
                     }
-                }
 
-                if (missingUids.Count == 0)
+                    // Build a list of missing dependency UIDs and create placeholder entries
+                    List<string> missingUids = new List<string>();
+                    List<FileEntry> filtered = new List<FileEntry>();
+
+                    foreach (var depUid in deps)
+                    {
+                        VarPackage depPkg = FileManager.GetPackageForDependency(depUid, false);
+                        if (depPkg == null)
+                        {
+                            missingUids.Add(depUid);
+                            try
+                            {
+                                VirtualFileEntry vfe = new VirtualFileEntry(depUid);
+                                if (!string.IsNullOrEmpty(vfe.Name) && !string.IsNullOrEmpty(vfe.Path))
+                                {
+                                    filtered.Add(vfe);
+                                }
+                                else
+                                {
+                                    LogUtil.LogError($"[VPB] Invalid VirtualFileEntry created for {depUid}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError($"[VPB] Failed to create VirtualFileEntry for {depUid}: {ex}");
+                            }
+                        }
+                    }
+
+                    if (missingUids.Count == 0)
+                    {
+                        return;
+                    }
+
+                    currentPackageFilterCount = missingUids.Count;
+                    currentPackageFilterMasterUid = pkg.Uid;
+                    currentPackageFilterMode = PackageFilterMode.Dependencies;
+                    ApplyFilteredList(filtered, $"Missing Dependencies ({missingUids.Count})");
+                }
+                // Handle scene files
+                else if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
                 {
-                    LogUtil.Log($"[VPB] No missing dependencies for {label}");
-                    return;
+                    var deps = GallerySortManager.ExtractSceneDependencies(file);
+                    if (deps == null || deps.Count == 0)
+                    {
+                        return;
+                    }
+
+                    // Build a list of missing dependencies
+                    List<string> missingDeps = new List<string>();
+                    List<FileEntry> filtered = new List<FileEntry>();
+
+                    foreach (var dep in deps)
+                    {
+                        VarPackage depPkg = FileManager.GetPackageForDependency(dep, false);
+                        if (depPkg == null)
+                        {
+                            missingDeps.Add(dep);
+                            try
+                            {
+                                VirtualFileEntry vfe = new VirtualFileEntry(dep);
+                                if (!string.IsNullOrEmpty(vfe.Name) && !string.IsNullOrEmpty(vfe.Path))
+                                {
+                                    filtered.Add(vfe);
+                                }
+                                else
+                                {
+                                    LogUtil.LogError($"[VPB] Invalid VirtualFileEntry created for {dep}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError($"[VPB] Failed to create VirtualFileEntry for {dep}: {ex}");
+                            }
+                        }
+                    }
+
+                    if (missingDeps.Count == 0)
+                    {
+                        return;
+                    }
+
+                    currentPackageFilterCount = missingDeps.Count;
+                    currentPackageFilterMasterUid = file.Path;
+                    currentPackageFilterMode = PackageFilterMode.Dependencies;
+                    ApplyFilteredList(filtered, $"Missing ({missingDeps.Count})");
                 }
-
-                // Show message about missing dependencies
-                string missingList = string.Join(", ", missingUids.Take(5).ToArray());
-                if (missingUids.Count > 5)
-                    missingList += $" ... and {missingUids.Count - 5} more";
-
-                LogUtil.Log($"[VPB] Missing {missingUids.Count} dependencies for {label}: {missingList}");
-
-                currentPackageFilterCount = missingUids.Count;
-                currentPackageFilterMasterUid = pkg.Uid;
-                currentPackageFilterMode = PackageFilterMode.Dependencies;
-                ApplyFilteredList(filtered, $"Missing Dependencies ({missingUids.Count})");
             }
             catch (Exception ex)
             {

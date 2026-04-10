@@ -1636,8 +1636,10 @@ namespace VPB
 			}
 		}
 
+
 		protected void FindMissingDependenciesRecursive(JSONClass jc)
 		{
+			// First, try the explicit "dependencies" key (for well-formed packages)
 			JSONClass asObject = jc["dependencies"].AsObject;
 			if (asObject != null)
 			{
@@ -1656,9 +1658,27 @@ namespace VPB
 					}
 				}
 			}
+
+			// Also scan all strings for dependencies (catches local/custom references)
+			HashSet<string> scannedDeps = new HashSet<string>();
+			DependencyExtractor.ScanAllStringsForDependencies(jc, scannedDeps);
+			foreach (string dep in scannedDeps)
+			{
+				if (!PackageDependenciesMissing.Contains(dep))
+				{
+					VarPackage package = FileManager.GetPackageForDependency(dep, false);
+					if (package == null)
+					{
+						HasMissingDependencies = true;
+						PackageDependenciesMissing.Add(dep);
+					}
+				}
+			}
 		}
+
 		void GetDependenciesRecursive(JSONClass jc, HashSet<string> depends)
 		{
+			// First, collect from explicit "dependencies" key (for well-formed packages)
 			JSONClass asObject = jc["dependencies"].AsObject;
 			if (asObject != null)
 			{
@@ -1672,6 +1692,9 @@ namespace VPB
 					}
 				}
 			}
+
+			// Also scan all strings for dependencies (catches local/custom references and embedded deps)
+			DependencyExtractor.ScanAllStringsForDependencies(jc, depends);
 		}
 		public bool InstallRecursive()
         {

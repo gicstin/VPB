@@ -17,6 +17,11 @@ namespace VPB
         public Color normalColor = new Color(0.75f, 0.75f, 0.75f, 1f);
         public Color hoverColor = Color.yellow;
 
+        // Conditional coloring: different colors based on value
+        public bool useConditionalColoring = false;
+        public Color zeroValueColor = Color.green;  // Color when value is 0
+        public Color nonZeroValueColor = Color.red; // Color when value > 0
+
         private bool _hover;
 
         public void Set(string prefixText, string valueText, string separatorText = "")
@@ -52,10 +57,19 @@ namespace VPB
             if (target == null) return;
             target.supportRichText = true;
 
+            // Determine the color for the value based on conditional coloring
+            Color colorToUse = hoverColor;
+            if (useConditionalColoring && !string.IsNullOrEmpty(value))
+            {
+                // Check if value is "0" (possibly with spaces)
+                string trimmedValue = value.Trim();
+                colorToUse = (trimmedValue == "0") ? zeroValueColor : nonZeroValueColor;
+            }
+
             // Use rich text to color prefix + value, but not the separator
             if (_hover && (!string.IsNullOrEmpty(prefix) || !string.IsNullOrEmpty(value)))
             {
-                string colorHex = ColorUtility.ToHtmlStringRGB(hoverColor);
+                string colorHex = ColorUtility.ToHtmlStringRGB(colorToUse);
                 target.text = $"<color=#{colorHex}>{prefix}{value}</color>" + separator;
                 target.color = normalColor;
             }

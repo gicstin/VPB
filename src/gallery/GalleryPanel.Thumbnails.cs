@@ -139,6 +139,32 @@ namespace VPB
 
         private void LoadThumbnail(FileEntry file, RawImage target)
         {
+            // Skip thumbnails for missing/virtual entries
+            if (file is VirtualFileEntry || file is MissingPackageListEntry)
+            {
+                ClearThumbnailTarget(target);
+                return;
+            }
+
+            try
+            {
+                LoadThumbnailInternal(file, target);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] LoadThumbnail exception for file {file?.Name ?? "null"}: {ex}");
+            }
+        }
+
+        private void LoadThumbnailInternal(FileEntry file, RawImage target)
+        {
+            // Skip thumbnails for missing/virtual entries - clear any existing texture
+            if (file is VirtualFileEntry || file is MissingPackageListEntry)
+            {
+                ClearThumbnailTarget(target);
+                return;
+            }
+
             string imgPath = "";
             string lowerPath = file.Path.ToLowerInvariant();
             if (lowerPath.EndsWith(".jpg") || lowerPath.EndsWith(".png"))
@@ -154,26 +180,47 @@ namespace VPB
                 if (!string.IsNullOrEmpty(chosen))
                     imgPath = ple.Package.Path + ":/" + chosen.Replace('\\', '/');
             }
+            else if (file is VarFileEntry vfe && vfe.Package != null)
+            {
+                // For VarFileEntry from dependencies, also look for internal images
+                string chosen = GetOrChoosePackagePreviewInternalPath(vfe.Package);
+                if (!string.IsNullOrEmpty(chosen))
+                    imgPath = vfe.Package.Path + ":/" + chosen.Replace('\\', '/');
+            }
             else
             {
                 // Sister-file rule: same name, .jpg or .png extension
                 // Optimized discovery via archive flattening (FileManager.FileExists)
-                string testJpg = Path.ChangeExtension(file.Path, ".jpg");
-                if (FileManager.FileExists(testJpg))
+                try
                 {
-                    imgPath = testJpg;
-                }
-                else
-                {
-                    string testPng = Path.ChangeExtension(file.Path, ".png");
-                    if (FileManager.FileExists(testPng))
+                    string testJpg = Path.ChangeExtension(file.Path, ".jpg");
+                    if (FileManager.FileExists(testJpg))
                     {
-                        imgPath = testPng;
+                        imgPath = testJpg;
                     }
+                    else
+                    {
+                        string testPng = Path.ChangeExtension(file.Path, ".png");
+                        if (FileManager.FileExists(testPng))
+                        {
+                            imgPath = testPng;
+                        }
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    // file.Path contains invalid characters (e.g., from VarFileEntry with internal paths)
+                    // Skip sister-file lookup for such paths
                 }
             }
 
-            if (string.IsNullOrEmpty(imgPath)) return;
+            // IMPORTANT: if we can't resolve a thumbnail path for this row, explicitly clear any
+            // previous binding/texture so recycled list rows don't show stale thumbnails.
+            if (string.IsNullOrEmpty(imgPath))
+            {
+                ClearThumbnailTarget(target);
+                return;
+            }
 
             // Debug Log
             // LogUtil.Log($"[VPB] LoadThumbnail requested for {file.Name} (GroupId: {currentLoadingGroupId})");
@@ -261,6 +308,29 @@ namespace VPB
                 }
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
+        }
+
+        private static void ClearThumbnailTarget(RawImage target)
+        {
+            if (target == null) return;
+            try
+            {
+                var bind = target.GetComponent<ThumbnailBindingTag>();
+                if (bind != null)
+                {
+                    bind.ExpectedTag = null;
+                    if (bind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
+                    {
+                        CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(bind.CurrentTexture);
+                    }
+                    bind.CurrentTexture = null;
+                }
+
+                target.texture = null;
+                if (target.material != null) target.material.mainTexture = null;
+                target.color = new Color(0, 0, 0, 0);
+            }
+            catch { }
         }
 
         private void UpdateAspectRatio(RawImage target, Texture tex)

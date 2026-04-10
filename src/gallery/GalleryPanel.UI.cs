@@ -1072,12 +1072,21 @@ namespace VPB
             
             if (scrollRect != null) scrollRect.gameObject.SetActive(true);
 
-            // Immediately update grid component
+            UpdateFooterLayoutState();
+            UpdateLayout();
+
+            // IMPORTANT: Avoid a full RefreshFiles() here.
+            // RefreshFilesRoutine() clears the grid to 0 items then repopulates, which causes a visible
+            // "blink" on layout toggle (show -> blank -> show). The item template supports both modes,
+            // so we only need to reconfigure the RecyclingGridView and refresh visible bindings.
             if (contentGO != null)
             {
                 RecyclingGridView rgv = contentGO.GetComponent<RecyclingGridView>();
                 if (rgv != null)
                 {
+                    // Preserve current viewport center across a column/height change.
+                    try { rgv.preserveCenterItemIndex = rgv.GetCenterItemIndex(); } catch { }
+
                     if (layoutMode == GalleryLayoutMode.List)
                     {
                         // List mode: 1 column
@@ -1092,21 +1101,11 @@ namespace VPB
                         rgv.SetGridConfig(100f, 100f, 10f, 10f, cols);
                         rgv.SetAdaptiveConfig(true, minSize, cols, false);
                     }
+
+                    // Force a rebind of visible items so visuals (ListRow, selection bars, etc.) update immediately.
+                    try { rgv.Refresh(); } catch { }
                 }
             }
-
-            // FULL PURGE: Clear both pooled and active buttons because templates are fundamentally different
-            foreach (var go in fileButtonPool) if (go != null) Destroy(go);
-            fileButtonPool.Clear();
-            
-            foreach (var go in activeButtons) if (go != null) Destroy(go);
-            activeButtons.Clear();
-
-            UpdateFooterLayoutState();
-            UpdateLayout();
-            
-            // Refresh from existing data, don't trigger a new scan
-            RefreshFiles(true); 
         }
 
         private void UpdateFooterLayoutState()

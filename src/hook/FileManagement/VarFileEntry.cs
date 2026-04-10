@@ -23,8 +23,8 @@ namespace VPB
 			get { return base.Size; }
 		}
 
-		public override long Size 
-		{ 
+		public override long Size
+		{
 			get { return Package != null ? Package.Size : base.Size; }
 			protected set { base.Size = value; }
 		}
@@ -34,7 +34,15 @@ namespace VPB
 			Package = vp;
 			InternalPath = entryName;
 			Uid = vp.Uid + ":/" + InternalPath;
-			Path = vp.Path + ":/" + InternalPath;
+			// If internal path is meta.json, show the package path directly without the internal path suffix
+			if (string.Equals(InternalPath, "meta.json", System.StringComparison.OrdinalIgnoreCase))
+			{
+				Path = vp.Path;
+			}
+			else
+			{
+				Path = vp.Path + ":/" + InternalPath;
+			}
 			int lastSlash = Path.LastIndexOf('/');
 			Name = (lastSlash >= 0 && lastSlash + 1 < Path.Length) ? Path.Substring(lastSlash + 1) : Path;
 			Exists = true;

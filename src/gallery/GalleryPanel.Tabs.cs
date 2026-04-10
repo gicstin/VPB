@@ -1347,7 +1347,16 @@ namespace VPB
 
         public void UpdateFileButtonVisuals(GameObject btnGO, FileEntry file)
         {
-            if (btnGO == null || file == null) return;
+            if (btnGO == null)
+            {
+                LogUtil.LogError("[VPB] UpdateFileButtonVisuals: btnGO is null");
+                return;
+            }
+            if (file == null)
+            {
+                LogUtil.LogError("[VPB] UpdateFileButtonVisuals: file is null");
+                return;
+            }
             
             // Image
             Image img = btnGO.GetComponent<Image>();
@@ -1397,16 +1406,33 @@ namespace VPB
 
         public void BindFileButton(GameObject btnGO, FileEntry file)
         {
+            // Validate inputs
+            if (btnGO == null || file == null)
+            {
+                LogUtil.LogError("[VPB] BindFileButton: btnGO or file is null");
+                return;
+            }
+
+            // Validate file properties
+            if (string.IsNullOrEmpty(file.Name) || string.IsNullOrEmpty(file.Path))
+            {
+                LogUtil.LogError($"[VPB] BindFileButton: Invalid entry - Name={file.Name}, Path={file.Path}");
+                return;
+            }
+
             btnGO.name = "FileButton_" + file.Name;
 
             // Update mapping
             Image img = btnGO.GetComponent<Image>();
-            fileButtonImages[file.Path] = img;
+            if (img != null)
+            {
+                fileButtonImages[file.Path] = img;
+            }
 
             // Color missing entries red
             if (file is VirtualFileEntry)
             {
-                img.color = new Color(0.4f, 0.15f, 0.15f, 0.8f); // Red shade
+                if (img != null) img.color = new Color(0.4f, 0.15f, 0.15f, 0.8f); // Red shade
             }
 
             // Update Visuals
@@ -1528,12 +1554,17 @@ namespace VPB
                 Text labelText = labelTr.GetComponent<Text>();
                 if (labelText != null)
                 {
-                    labelText.text = file.Name;
+                    string displayName = string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
+                    labelText.text = displayName;
                     // Add tooltip showing full package path if available
-                    if (file is VarFileEntry vfe && vfe.Package != null)
+                    try
                     {
-                        AddTooltipPlain(labelTr.gameObject, $"Package: {vfe.Package.Uid}.var");
+                        if (file is VarFileEntry vfe && vfe.Package != null)
+                        {
+                            AddTooltipPlain(labelTr.gameObject, $"Package: {vfe.Package.Uid}.var");
+                        }
                     }
+                    catch { }
                 }
             }
 
@@ -1562,12 +1593,17 @@ namespace VPB
                     Text t = nameTr.GetComponent<Text>();
                     if (t != null)
                     {
-                        t.text = file.Name;
+                        string displayName = string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
+                        t.text = displayName;
                         // Add tooltip showing full package path if available
-                        if (file is VarFileEntry vfe && vfe.Package != null)
+                        try
                         {
-                            AddTooltipPlain(nameTr.gameObject, $"Package: {vfe.Package.Uid}.var");
+                            if (file is VarFileEntry vfe && vfe.Package != null)
+                            {
+                                AddTooltipPlain(nameTr.gameObject, $"Package: {vfe.Package.Uid}.var");
+                            }
                         }
+                        catch { }
                     }
                 }
 
@@ -1631,6 +1667,9 @@ namespace VPB
                             var hv = missingTr.GetComponent<UIRichValueHover>();
                             if (hv == null) hv = missingTr.gameObject.AddComponent<UIRichValueHover>();
                             hv.target = t;
+                            hv.useConditionalColoring = true;
+                            hv.zeroValueColor = Color.green;  // Green when no missing
+                            hv.nonZeroValueColor = Color.red; // Red when missing deps exist
                             hv.Set("M: ", v, "  |  ");
                         }
                         catch { }
@@ -1651,7 +1690,6 @@ namespace VPB
                         try
                         {
                             int missingCount = GallerySortManager.GetMissingDepsCount(file);
-                            LogUtil.Log($"[VPB] Missing field clicked: missingCount={missingCount}, file={file?.Name}");
                             if (missingCount > 0)
                                 ApplyMissingDependenciesFilter(file);
                         }
@@ -1673,19 +1711,33 @@ namespace VPB
                     if (t != null)
                     {
                         string catLabel = "";
-                        try
-                        {
-                            if (IsFilterActive)
-                            {
-                                if (file is PackageListEntry ple && ple.Package != null)
-                                    catLabel = GetBestCategoryLabelForPackage(ple.Package);
-                                else if (file is VarFileEntry vfe3 && vfe3.Package != null)
-                                    catLabel = GetBestCategoryLabelForPackage(vfe3.Package);
-                            }
-                        }
-                        catch { catLabel = ""; }
+                        bool isMissing = file is VirtualFileEntry || file is MissingPackageListEntry;
 
-                        t.text = string.IsNullOrEmpty(catLabel) ? "" : ("Cat: " + catLabel);
+                        if (isMissing)
+                        {
+                            catLabel = "Missing";
+                            t.text = "Missing";
+                            // Color missing label red
+                            try { t.color = new Color(0.8f, 0.2f, 0.2f, 1f); } catch { }
+                        }
+                        else
+                        {
+                            try
+                            {
+                                if (IsFilterActive)
+                                {
+                                    if (file is PackageListEntry ple && ple.Package != null)
+                                        catLabel = GetBestCategoryLabelForPackage(ple.Package);
+                                    else if (file is VarFileEntry vfe3 && vfe3.Package != null)
+                                        catLabel = GetBestCategoryLabelForPackage(vfe3.Package);
+                                }
+                            }
+                            catch { catLabel = ""; }
+
+                            t.text = string.IsNullOrEmpty(catLabel) ? "" : ("Cat: " + catLabel);
+                            // Reset to default color
+                            try { t.color = Color.white; } catch { }
+                        }
                     }
                 }
 
