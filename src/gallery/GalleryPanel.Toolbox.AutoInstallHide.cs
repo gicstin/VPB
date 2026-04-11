@@ -146,7 +146,17 @@ namespace VPB
                 }
 
                 if (ok > 0 && !IsHubMode)
+                {
                     try { RemoveCurrentGalleryEntriesMatchingHideFilter(); } catch { }
+                    // When "show hidden" is on, rows stay in the list so Remove… skips grid refresh; rebind for H badge.
+                    bool showHidden = false;
+                    try { showHidden = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages; } catch { }
+                    if (showHidden)
+                    {
+                        try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                        try { RefreshSelectionVisuals(); } catch { }
+                    }
+                }
 
                 if (ok == 0)
                     ShowTemporaryStatus(failed > 0 ? "Hide failed (see log)." : "Nothing to hide.", 2f);
