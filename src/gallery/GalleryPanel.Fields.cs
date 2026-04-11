@@ -109,7 +109,7 @@ namespace VPB
         private ContentType activeContentType = ContentType.Category;
         
         private ContentType? leftActiveContent = null;
-        private ContentType? rightActiveContent = ContentType.Category;
+        private ContentType? rightActiveContent = null;
         
         private GameObject leftTabScrollGO;
         private GameObject leftSubTabScrollGO; // NEW: For split view

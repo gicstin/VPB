@@ -132,6 +132,8 @@ namespace VPB
         public bool PluginGalleryGridThumbnails = true;
         /// <summary>When true, gallery list layout uses each item's file name (legacy). When false (default), .var rows show Creator.Package.Version (package uid, no .var suffix).</summary>
         public bool GalleryListNamesLegacyFileName = false;
+        /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
+        public bool GalleryTboxToolbarPinned = false;
 
         /// <summary>Maps user/config values to a canonical option; unknown values become "Scenes".</summary>
         public static string NormalizeInitialGalleryCategory(string value)
@@ -153,6 +155,26 @@ namespace VPB
             if (string.Equals(n, "LastUsed", StringComparison.OrdinalIgnoreCase))
                 return null;
             return n;
+        }
+
+        /// <summary>Which list opens on the left when a gallery pane is created: None, Category, or Creator.</summary>
+        public string GalleryDefaultLeftSidePanel = "None";
+        /// <summary>Which list opens on the right when a gallery pane is created: None, Category, or Creator.</summary>
+        public string GalleryDefaultRightSidePanel = "None";
+
+        private static readonly string[] s_GallerySidePanelCanonical = { "None", "Category", "Creator" };
+
+        /// <summary>Maps user/config values to None, Category, or Creator.</summary>
+        public static string NormalizeGallerySidePanel(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "None";
+            string v = value.Trim();
+            for (int i = 0; i < s_GallerySidePanelCanonical.Length; i++)
+            {
+                if (string.Equals(v, s_GallerySidePanelCanonical[i], StringComparison.OrdinalIgnoreCase))
+                    return s_GallerySidePanelCanonical[i];
+            }
+            return "None";
         }
         public bool DesktopFixedMode = false;
         public bool DesktopFixedAutoCollapse = true;
@@ -267,6 +289,9 @@ namespace VPB
             GalleryLayoutMode = 0;
             GalleryShowHiddenPackages = false;
             GalleryListNamesLegacyFileName = false;
+            GalleryDefaultLeftSidePanel = "None";
+            GalleryDefaultRightSidePanel = "None";
+            GalleryTboxToolbarPinned = false;
             UiLocale = "";
 
             try
@@ -332,6 +357,10 @@ namespace VPB
                         if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
                         if (node["InitialGalleryCategory"] != null)
                             InitialGalleryCategory = NormalizeInitialGalleryCategory(node["InitialGalleryCategory"].Value);
+                        if (node["GalleryDefaultLeftSidePanel"] != null)
+                            GalleryDefaultLeftSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultLeftSidePanel"].Value);
+                        if (node["GalleryDefaultRightSidePanel"] != null)
+                            GalleryDefaultRightSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultRightSidePanel"].Value);
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                         if (node["DesktopFixedHeightMode"] != null) DesktopFixedHeightMode = node["DesktopFixedHeightMode"].AsInt;
@@ -344,6 +373,7 @@ namespace VPB
                         if (node["GalleryShowHiddenPackages"] != null) GalleryShowHiddenPackages = node["GalleryShowHiddenPackages"].AsBool;
                         if (node["PluginGalleryGridThumbnails"] != null) PluginGalleryGridThumbnails = node["PluginGalleryGridThumbnails"].AsBool;
                         if (node["GalleryListNamesLegacyFileName"] != null) GalleryListNamesLegacyFileName = node["GalleryListNamesLegacyFileName"].AsBool;
+                        if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["InnerPaneScale"] != null) InnerPaneScale = node["InnerPaneScale"].AsFloat;
                         if (node["UiLocale"] != null) UiLocale = node["UiLocale"].Value;
@@ -416,6 +446,8 @@ namespace VPB
                 node["ApplyMode"] = ApplyMode;
                 node["LastGalleryCategory"] = LastGalleryCategory;
                 node["InitialGalleryCategory"] = InitialGalleryCategory;
+                node["GalleryDefaultLeftSidePanel"] = GalleryDefaultLeftSidePanel;
+                node["GalleryDefaultRightSidePanel"] = GalleryDefaultRightSidePanel;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
                 node["DesktopFixedHeightMode"].AsInt = DesktopFixedHeightMode;
@@ -428,6 +460,7 @@ namespace VPB
                 node["GalleryShowHiddenPackages"].AsBool = GalleryShowHiddenPackages;
                 node["PluginGalleryGridThumbnails"].AsBool = PluginGalleryGridThumbnails;
                 node["GalleryListNamesLegacyFileName"].AsBool = GalleryListNamesLegacyFileName;
+                node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["InnerPaneScale"].AsFloat = InnerPaneScale;
                 node["UiLocale"] = UiLocale ?? "en";

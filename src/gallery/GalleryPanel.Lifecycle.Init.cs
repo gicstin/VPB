@@ -2229,6 +2229,7 @@ UpdateDesktopModeButton();
 
             ApplyInnerPaneScale();
             ApplySideButtonScale();
+            ApplySidePanelDefaultsFromConfig();
             UpdateSideButtonsVisibility();
             UpdateLayout();
             SubscribeLocaleChanged();

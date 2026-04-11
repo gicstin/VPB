@@ -31,6 +31,33 @@ namespace VPB
             UpdateTabs();
         }
 
+        /// <summary>Applies <see cref="VPBConfig.GalleryDefaultLeftSidePanel"/> and <see cref="VPBConfig.GalleryDefaultRightSidePanel"/> (and floating fallback: Category on right when both None).</summary>
+        public void ApplySidePanelDefaultsFromConfig()
+        {
+            if (VPBConfig.Instance == null) return;
+            string ls = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel);
+            string rs = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel);
+            ContentType? l = SidePanelStringToContentType(ls);
+            ContentType? r = SidePanelStringToContentType(rs);
+            if (l.HasValue && r.HasValue && l.Value == r.Value)
+                r = null;
+            leftActiveContent = l;
+            rightActiveContent = r;
+            if (!isFixedLocally && !l.HasValue && !r.HasValue)
+                rightActiveContent = ContentType.Category;
+            UpdateLayout();
+            UpdateTabs();
+        }
+
+        private static ContentType? SidePanelStringToContentType(string normalized)
+        {
+            if (string.Equals(normalized, "Category", StringComparison.OrdinalIgnoreCase))
+                return ContentType.Category;
+            if (string.Equals(normalized, "Creator", StringComparison.OrdinalIgnoreCase))
+                return ContentType.Creator;
+            return null;
+        }
+
         public void SetFilters(string path, string extension, string creator)
         {
             currentPath = path;

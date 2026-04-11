@@ -579,6 +579,11 @@ namespace VPB
                 () =>
                 {
                     tboxPinned = !tboxPinned;
+                    if (VPBConfig.Instance != null)
+                    {
+                        VPBConfig.Instance.GalleryTboxToolbarPinned = tboxPinned;
+                        try { VPBConfig.Instance.Save(); } catch { }
+                    }
                     RefreshTboxPinVisual();
                 }
             );
@@ -645,6 +650,8 @@ namespace VPB
                 });
             }
 
+            if (VPBConfig.Instance != null)
+                tboxPinned = VPBConfig.Instance.GalleryTboxToolbarPinned;
             RefreshTboxPinVisual();
             AddTooltip(tboxPinBtn, "gallery.tooltip.tbox_pin", "Pin — keep toolbar expanded");
         }
@@ -676,6 +683,16 @@ namespace VPB
             EnsureTboxUI();
             if (tbox == null) return;
 
+            if (VPBConfig.Instance != null)
+            {
+                bool cfgPin = VPBConfig.Instance.GalleryTboxToolbarPinned;
+                if (tboxPinned != cfgPin)
+                {
+                    tboxPinned = cfgPin;
+                    RefreshTboxPinVisual();
+                }
+            }
+
             int sel   = (selectedFiles != null) ? selectedFiles.Count : 0;
             int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
 
@@ -696,7 +713,7 @@ namespace VPB
                 }
             }
 
-            // Expansion only when there is a selection
+            // Action buttons only when there is a selection; pin persists until user toggles (saved in VPB.cfg).
             bool canExpand = sel > 0;
             if (!canExpand)
             {
@@ -705,7 +722,14 @@ namespace VPB
                 tboxButtonLayoutRows = 1;
                 if (tboxButtonsLayerRT != null)
                     tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, tboxInfoRowHeight);
-                if (tboxPinned) { tboxPinned = false; RefreshTboxPinVisual(); }
+            }
+
+            if (tboxHintLabel != null && tboxHintLabel.gameObject != null)
+            {
+                bool showPinnedHint = sel == 0 && tboxPinned;
+                tboxHintLabel.gameObject.SetActive(showPinnedHint);
+                if (showPinnedHint)
+                    tboxHintLabel.text = VPBTranslation.T("gallery.tbox.pinned_select", "Pinned — select items for actions");
             }
 
             bool wantExpanded = canExpand && (tboxIsHovered || tboxPinned);

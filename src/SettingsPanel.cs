@@ -83,6 +83,12 @@ namespace VPB
         private string pendingInitialGalleryCategory;
         private string backupInitialGalleryCategory;
 
+        private string pendingGalleryDefaultLeftSidePanel;
+        private string backupGalleryDefaultLeftSidePanel;
+
+        private string pendingGalleryDefaultRightSidePanel;
+        private string backupGalleryDefaultRightSidePanel;
+
         private HashSet<string> pendingHiddenCategories;
         private HashSet<string> backupHiddenCategories;
 
@@ -189,6 +195,11 @@ namespace VPB
             pendingInitialGalleryCategory = VPBConfig.NormalizeInitialGalleryCategory(VPBConfig.Instance.InitialGalleryCategory);
             backupInitialGalleryCategory = pendingInitialGalleryCategory;
 
+            pendingGalleryDefaultLeftSidePanel = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel);
+            backupGalleryDefaultLeftSidePanel = pendingGalleryDefaultLeftSidePanel;
+            pendingGalleryDefaultRightSidePanel = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel);
+            backupGalleryDefaultRightSidePanel = pendingGalleryDefaultRightSidePanel;
+
             pendingHiddenCategories = new HashSet<string>(VPBConfig.Instance.HiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
             backupHiddenCategories  = new HashSet<string>(pendingHiddenCategories, StringComparer.OrdinalIgnoreCase);
 
@@ -265,6 +276,8 @@ namespace VPB
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.EnableAutoFixedGallery = backupEnableAutoFixedGallery;
             VPBConfig.Instance.InitialGalleryCategory = backupInitialGalleryCategory;
+            VPBConfig.Instance.GalleryDefaultLeftSidePanel = backupGalleryDefaultLeftSidePanel;
+            VPBConfig.Instance.GalleryDefaultRightSidePanel = backupGalleryDefaultRightSidePanel;
             VPBConfig.Instance.HiddenCategories = new HashSet<string>(backupHiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
             pendingHiddenCategories = new HashSet<string>(backupHiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
             VPBConfig.Instance.PluginGalleryGridThumbnails = backupPluginGalleryGridThumbnails;
@@ -275,6 +288,7 @@ namespace VPB
             VPBConfig.Instance.TriggerChange();
             if (parentPanel != null && galleryListLegacyWasPending) parentPanel.RefreshFiles(true);
             if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
+            if (parentPanel != null) parentPanel.ApplySidePanelDefaultsFromConfig();
         }
 
         private void CreatePane()
@@ -347,11 +361,16 @@ namespace VPB
                 VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                 VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
                 VPBConfig.Instance.InitialGalleryCategory = pendingInitialGalleryCategory;
+                VPBConfig.Instance.GalleryDefaultLeftSidePanel = pendingGalleryDefaultLeftSidePanel;
+                VPBConfig.Instance.GalleryDefaultRightSidePanel = pendingGalleryDefaultRightSidePanel;
+                backupGalleryDefaultLeftSidePanel = pendingGalleryDefaultLeftSidePanel;
+                backupGalleryDefaultRightSidePanel = pendingGalleryDefaultRightSidePanel;
                 VPBConfig.Instance.PluginGalleryGridThumbnails = pendingPluginGalleryGridThumbnails;
                 backupPluginGalleryGridThumbnails = pendingPluginGalleryGridThumbnails;
                 VPBConfig.Instance.GalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
                 backupGalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
                 VPBConfig.Instance.Save();
+                if (parentPanel != null) parentPanel.ApplySidePanelDefaultsFromConfig();
                 if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
                 
                 isSettingsOpen = false;
@@ -559,6 +578,29 @@ namespace VPB
                 VPBConfig.Instance.TriggerChange();
             }, VPBTranslation.T("settings.tip.initial_gallery_category", "Which category is shown when the gallery first opens this session or when a new pane is created. Default is Scenes. Last used restores the tab saved when you last left the gallery."));
 
+            CreateSettingsSectionSeparator();
+            CreateHeader(VPBTranslation.T("settings.header.gallery_side_lists", "Gallery side lists"));
+            string[] sidePanelOptions = { "None", "Category", "Creator" };
+            string[] sidePanelLabels = {
+                VPBTranslation.T("settings.gallery_side.none", "None"),
+                VPBTranslation.T("settings.gallery_side.category", "Category"),
+                VPBTranslation.T("settings.gallery_side.creator", "Creator")
+            };
+            CreateCycleSetting(VPBTranslation.T("settings.gallery_default_left_panel", "Left side list (default)"), pendingGalleryDefaultLeftSidePanel, sidePanelOptions, sidePanelLabels, (val) => {
+                pendingGalleryDefaultLeftSidePanel = val;
+                VPBConfig.Instance.GalleryDefaultLeftSidePanel = val;
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) parentPanel.ApplySidePanelDefaultsFromConfig();
+            }, VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list is open on the left when a gallery pane is created. None leaves that side closed. If left and right are the same, only the left opens. Floating mode: if both are None, Category opens on the right (same as before)."));
+
+            CreateCycleSetting(VPBTranslation.T("settings.gallery_default_right_panel", "Right side list (default)"), pendingGalleryDefaultRightSidePanel, sidePanelOptions, sidePanelLabels, (val) => {
+                pendingGalleryDefaultRightSidePanel = val;
+                VPBConfig.Instance.GalleryDefaultRightSidePanel = val;
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) parentPanel.ApplySidePanelDefaultsFromConfig();
+            }, VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list is open on the right when a gallery pane is created. None leaves that side closed unless floating mode applies the Category-on-right fallback when both sides are None."));
+            CreateSettingsSectionSeparator();
+
             CreateToggleSetting(VPBTranslation.T("settings.plugin_gallery_grid_thumbnails", "Plugin thumbnails in grid"), pendingPluginGalleryGridThumbnails, (val) => {
                 pendingPluginGalleryGridThumbnails = val;
                 VPBConfig.Instance.PluginGalleryGridThumbnails = val;
@@ -651,6 +693,26 @@ namespace VPB
             lrt.anchorMax = new Vector2(1, 0);
             lrt.sizeDelta = new Vector2(-20, 2);
             lrt.anchoredPosition = new Vector2(0, 2);
+        }
+
+        private void CreateSettingsSectionSeparator()
+        {
+            GameObject row = new GameObject("SectionSeparator");
+            row.transform.SetParent(settingsScrollContent.transform, false);
+            LayoutElement le = row.AddComponent<LayoutElement>();
+            le.minHeight = 16;
+            le.preferredHeight = 16;
+            le.flexibleWidth = 1;
+
+            GameObject line = new GameObject("Line");
+            line.transform.SetParent(row.transform, false);
+            Image img = line.AddComponent<Image>();
+            img.color = new Color(0.32f, 0.32f, 0.32f, 1f);
+            RectTransform lrt = line.GetComponent<RectTransform>();
+            lrt.anchorMin = Vector2.zero;
+            lrt.anchorMax = Vector2.one;
+            lrt.offsetMin = new Vector2(8, 7);
+            lrt.offsetMax = new Vector2(-8, -7);
         }
 
         private void AddTooltipIcon(GameObject container, string tooltip)
