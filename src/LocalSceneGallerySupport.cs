@@ -134,5 +134,78 @@ namespace VPB
             try { return FileEntry.AutoInstallLookup != null && FileEntry.AutoInstallLookup.Contains(key); }
             catch { return false; }
         }
+
+        /// <summary>
+        /// For a disk scene JSON, runs <see cref="VarPackage.InstallSelf"/> on each extracted package UID (scene file is not moved).
+        /// </summary>
+        public static bool InstallDependenciesForSceneJsonFile(string absoluteJsonPath)
+        {
+            bool dirty = false;
+            if (string.IsNullOrEmpty(absoluteJsonPath) || !File.Exists(absoluteJsonPath)) return false;
+
+            try
+            {
+                var deps = DependencyExtractor.ExtractDependenciesFromFile(absoluteJsonPath, maxDependencies: 250, maxMilliseconds: 2500);
+                if (deps == null || deps.Count == 0) return false;
+
+                foreach (string uid in deps)
+                {
+                    if (string.IsNullOrEmpty(uid)) continue;
+                    try
+                    {
+                        VarPackage pkg = FileManager.GetPackage(uid);
+                        if (pkg != null && pkg.InstallSelf())
+                            dirty = true;
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] InstallDependenciesForSceneJsonFile: " + ex.Message);
+            }
+
+            return dirty;
+        }
+
+        /// <summary>
+        /// Startup pass: every <see cref="AutoInstallLookupKeyPrefix"/> entry in AutoInstall.txt gets dependency packages installed from AllPackages.
+        /// </summary>
+        public static bool InstallDependenciesForAllAutoMarkedLocalScenes()
+        {
+            bool anyDirty = false;
+            try
+            {
+                var lookup = FileEntry.AutoInstallLookup;
+                if (lookup == null) return false;
+
+                foreach (string item in lookup)
+                {
+                    if (string.IsNullOrEmpty(item) || item.Length <= AutoInstallLookupKeyPrefix.Length) continue;
+                    if (!item.StartsWith(AutoInstallLookupKeyPrefix, StringComparison.Ordinal)) continue;
+
+                    string rel = item.Substring(AutoInstallLookupKeyPrefix.Length);
+                    if (string.IsNullOrEmpty(rel)) continue;
+
+                    string full;
+                    try
+                    {
+                        full = FileManager.GetFullPath(rel.Replace('/', Path.DirectorySeparatorChar));
+                    }
+                    catch { continue; }
+
+                    if (!File.Exists(full)) continue;
+
+                    if (InstallDependenciesForSceneJsonFile(full))
+                        anyDirty = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] InstallDependenciesForAllAutoMarkedLocalScenes: " + ex.Message);
+            }
+
+            return anyDirty;
+        }
     }
 }

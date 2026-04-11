@@ -1256,6 +1256,7 @@ namespace VPB
 
         bool AutoInstalled = false;
         // Once per process: install every package listed in AutoInstall.txt (AllPackages → AddonPackages).
+        // Also install dependencies for local Saves/scene JSON rows flagged with VPB_LS:… keys (scene file stays put).
         // Toggling AutoInstall in the UI only updates that list; it does not move files until this runs.
         void TryAutoInstall()
         {
@@ -1271,6 +1272,12 @@ namespace VPB
                     if (dirty) flag = true;
                 }
             }
+            try
+            {
+                if (LocalSceneGallerySupport.InstallDependenciesForAllAutoMarkedLocalScenes())
+                    flag = true;
+            }
+            catch { }
             if (flag)
             {
                 MVR.FileManagement.FileManager.Refresh();

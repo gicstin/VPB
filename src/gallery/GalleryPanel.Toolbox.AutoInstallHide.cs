@@ -31,7 +31,7 @@ namespace VPB
                     resolvedUids++;
                     if (fiAi && uidAl) continue;
 
-                    if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
+                    if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out string absLocalJson, out _, false))
                     {
                         if (!fiAi)
                         {
@@ -43,6 +43,18 @@ namespace VPB
                             catch (Exception ex)
                             {
                                 LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages local scene " + uid + ": " + ex.Message);
+                            }
+                            try
+                            {
+                                if (LocalSceneGallerySupport.InstallDependenciesForSceneJsonFile(absLocalJson))
+                                {
+                                    try { MVR.FileManagement.FileManager.Refresh(); } catch { }
+                                    try { FileManager.Refresh(); } catch { }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages local scene deps " + uid + ": " + ex.Message);
                             }
                         }
                         continue;
