@@ -1305,6 +1305,35 @@ namespace VPB
             aiBadgeTextRT.anchoredPosition = Vector2.zero;
             aiBadgeGO.SetActive(false);
 
+            // Hidden package badge (top-left, to the right of AutoInstall "A")
+            GameObject hideBadgeGO = new GameObject("HidePackageBadge");
+            hideBadgeGO.transform.SetParent(btnGO.transform, false);
+            RectTransform hideBadgeRT = hideBadgeGO.AddComponent<RectTransform>();
+            hideBadgeRT.anchorMin = new Vector2(0, 1);
+            hideBadgeRT.anchorMax = new Vector2(0, 1);
+            hideBadgeRT.pivot = new Vector2(0, 1);
+            hideBadgeRT.sizeDelta = new Vector2(32, 32);
+            hideBadgeRT.anchoredPosition = new Vector2(42, -6);
+            Image hideBadgeBg = hideBadgeGO.AddComponent<Image>();
+            hideBadgeBg.color = new Color(0.35f, 0.35f, 0.4f, 0.9f);
+            hideBadgeBg.raycastTarget = false;
+            GameObject hideBadgeTextGO = new GameObject("Text");
+            hideBadgeTextGO.transform.SetParent(hideBadgeGO.transform, false);
+            Text hideBadgeText = hideBadgeTextGO.AddComponent<Text>();
+            hideBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            hideBadgeText.fontSize = 22;
+            hideBadgeText.fontStyle = FontStyle.Bold;
+            hideBadgeText.color = Color.white;
+            hideBadgeText.alignment = TextAnchor.MiddleCenter;
+            hideBadgeText.text = "H";
+            hideBadgeText.raycastTarget = false;
+            RectTransform hideBadgeTextRT = hideBadgeTextGO.GetComponent<RectTransform>();
+            hideBadgeTextRT.anchorMin = Vector2.zero;
+            hideBadgeTextRT.anchorMax = Vector2.one;
+            hideBadgeTextRT.sizeDelta = Vector2.zero;
+            hideBadgeTextRT.anchoredPosition = Vector2.zero;
+            hideBadgeGO.SetActive(false);
+
             // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
             GameObject listHoverBarGO = new GameObject("ListHoverBar");
             listHoverBarGO.transform.SetParent(btnGO.transform, false);
@@ -1577,6 +1606,12 @@ namespace VPB
             if (aiBadgeTr != null)
             {
                 aiBadgeTr.gameObject.SetActive(file.IsAutoInstall());
+            }
+
+            Transform hideBadgeTr = btnGO.transform.Find("HidePackageBadge");
+            if (hideBadgeTr != null)
+            {
+                hideBadgeTr.gameObject.SetActive(PackageHidePrefs.IsPackageVarHidden(file));
             }
 
             // List Row Bind

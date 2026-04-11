@@ -43,13 +43,10 @@ namespace VPB
                     rightActiveContent = null;
                 }
 
-                try 
+                try
                 {
-                    if (!string.IsNullOrEmpty(VPBConfig.Instance.ApplyMode)) {
-                        LogUtil.Log("[GalleryPanel.Init] Loading ApplyMode from VPBConfig: " + VPBConfig.Instance.ApplyMode);
+                    if (!string.IsNullOrEmpty(VPBConfig.Instance.ApplyMode))
                         ItemApplyMode = (ApplyMode)Enum.Parse(typeof(ApplyMode), VPBConfig.Instance.ApplyMode);
-                        LogUtil.Log("[GalleryPanel.Init] ItemApplyMode now set to: " + ItemApplyMode);
-                    }
                 }
                 catch (System.Exception ex) { 
                     LogUtil.LogError("[GalleryPanel.Init] Error loading ApplyMode: " + ex.Message);

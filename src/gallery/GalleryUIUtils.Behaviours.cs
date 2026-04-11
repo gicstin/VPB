@@ -774,6 +774,31 @@ namespace VPB
             Refresh();
         }
 
+        /// <summary>
+        /// Sets item count and immediately positions the scroll to <paramref name="normalizedPos"/>
+        /// before the first UpdateVisibleItems runs, so the initial item bind happens at the
+        /// correct scroll position instead of always starting from the top.
+        /// </summary>
+        public void SetItemCountAtScroll(int count, float normalizedPos)
+        {
+            itemsCount = count;
+            UpdateContentHeight();
+            if (_scrollRect != null) _scrollRect.verticalNormalizedPosition = normalizedPos;
+            Refresh();
+        }
+
+        /// <summary>
+        /// Sets item count and immediately centers the viewport on <paramref name="centerItemIndex"/>
+        /// before the first UpdateVisibleItems runs.
+        /// </summary>
+        public void SetItemCountAtItem(int count, int centerItemIndex)
+        {
+            itemsCount = count;
+            UpdateContentHeight();
+            ScrollToCenterItem(centerItemIndex);
+            // ScrollToCenterItem calls UpdateVisibleItems internally, so skip the Refresh() here.
+        }
+
         private void UpdateContentHeight()
         {
             rowCount = Mathf.CeilToInt((float)itemsCount / colCount);

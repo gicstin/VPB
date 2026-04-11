@@ -52,6 +52,31 @@ namespace VPB
             return GalleryPage.CategoryHair;
         }
 
+        private void TryFillLastGalleryPageFromPersisted(ref string lastPageName)
+        {
+            if (!string.IsNullOrEmpty(lastPageName)) return;
+            string diskLast = "";
+            try { diskLast = VPBConfig.ReadLastGalleryCategoryFromDisk(); } catch { }
+            if (!string.IsNullOrEmpty(diskLast))
+            {
+                lastPageName = diskLast;
+                LogUtil.Log("[Gallery] OpenGallery using disk LastGalleryCategory='" + lastPageName + "'");
+                return;
+            }
+            if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
+            {
+                lastPageName = VPBConfig.Instance.LastGalleryCategory;
+                LogUtil.Log("[Gallery] OpenGallery using memory LastGalleryCategory='" + lastPageName + "'");
+                return;
+            }
+            if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
+            {
+                lastPageName = Settings.Instance.LastGalleryPage.Value;
+                if (!string.IsNullOrEmpty(lastPageName))
+                    LogUtil.Log("[Gallery] OpenGallery using Settings.LastGalleryPage='" + lastPageName + "'");
+            }
+        }
+
         public void OpenGallery()
         {
             // 1. Try to restore using category name (supports "Scenes", "Clothing" etc. stored by Gallery UI)
@@ -61,29 +86,18 @@ namespace VPB
 
                 string lastPageName = "";
 
-                // On first open this session (startup), default to Scenes.
-                // On reopen within session, restore the last used category.
+                // First open this session: use InitialGalleryCategory unless set to LastUsed (then restore saved tab).
+                // Reopen within session: always restore last used category.
                 bool isFirstOpen = Gallery.singleton.PanelCount == 0;
                 if (!isFirstOpen)
+                    TryFillLastGalleryPageFromPersisted(ref lastPageName);
+                else if (VPBConfig.Instance != null)
                 {
-                    string diskLast = "";
-                    try { diskLast = VPBConfig.ReadLastGalleryCategoryFromDisk(); } catch { }
-                    if (!string.IsNullOrEmpty(diskLast))
-                    {
-                        lastPageName = diskLast;
-                        LogUtil.Log("[Gallery] OpenGallery using disk LastGalleryCategory='" + lastPageName + "'");
-                    }
-                    else if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
-                    {
-                        lastPageName = VPBConfig.Instance.LastGalleryCategory;
-                        LogUtil.Log("[Gallery] OpenGallery using memory LastGalleryCategory='" + lastPageName + "'");
-                    }
+                    string resolved = VPBConfig.Instance.ResolveInitialGalleryCategoryName();
+                    if (resolved != null)
+                        lastPageName = resolved;
                     else
-                    {
-                        lastPageName = (Settings.Instance != null && Settings.Instance.LastGalleryPage != null) ? Settings.Instance.LastGalleryPage.Value : "";
-                        if (!string.IsNullOrEmpty(lastPageName))
-                            LogUtil.Log("[Gallery] OpenGallery using Settings.LastGalleryPage='" + lastPageName + "'");
-                    }
+                        TryFillLastGalleryPageFromPersisted(ref lastPageName);
                 }
 
                 if (string.IsNullOrEmpty(lastPageName))

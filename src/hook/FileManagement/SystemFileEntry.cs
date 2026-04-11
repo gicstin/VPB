@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using UnityEngine;
 using System.Collections.Generic;
@@ -31,7 +31,9 @@ namespace VPB
 				}
 			}
 
-			package = FileManager.GetPackage(System.IO.Path.GetFileNameWithoutExtension(Path));
+			// Do not use GetPackage(uid) default (ensureInstalled: true): that runs InstallRecursive()
+			// as a side effect of merely representing an on-disk .var (e.g. gallery Autoinstall path).
+			package = FileManager.GetPackage(System.IO.Path.GetFileNameWithoutExtension(Path), false);
             if (package != null)
             {
 				isVar = true;
@@ -79,11 +81,7 @@ namespace VPB
             {
 				string key = System.IO.Path.GetFileNameWithoutExtension(Path);
 				SetAutoInstallInternal(key, b);
-                if (b)
-                {
-					bool dirty=Install();
-					return dirty;
-				}
+				// Install() deferred to TryAutoInstall() on next launch (see VarFileEntry.SetAutoInstall).
 			}
 			return false;
 		}

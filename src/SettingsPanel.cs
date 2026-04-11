@@ -80,6 +80,9 @@ namespace VPB
         private bool pendingEnableAutoFixedGallery;
         private bool backupEnableAutoFixedGallery;
 
+        private string pendingInitialGalleryCategory;
+        private string backupInitialGalleryCategory;
+
         private HashSet<string> pendingHiddenCategories;
         private HashSet<string> backupHiddenCategories;
 
@@ -177,6 +180,9 @@ namespace VPB
             pendingEnableAutoFixedGallery = VPBConfig.Instance.EnableAutoFixedGallery;
             backupEnableAutoFixedGallery = VPBConfig.Instance.EnableAutoFixedGallery;
 
+            pendingInitialGalleryCategory = VPBConfig.NormalizeInitialGalleryCategory(VPBConfig.Instance.InitialGalleryCategory);
+            backupInitialGalleryCategory = pendingInitialGalleryCategory;
+
             pendingHiddenCategories = new HashSet<string>(VPBConfig.Instance.HiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
             backupHiddenCategories  = new HashSet<string>(pendingHiddenCategories, StringComparer.OrdinalIgnoreCase);
 
@@ -246,6 +252,7 @@ namespace VPB
             VPBConfig.Instance.DragHoldThreshold = backupDragHoldThreshold;
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.EnableAutoFixedGallery = backupEnableAutoFixedGallery;
+            VPBConfig.Instance.InitialGalleryCategory = backupInitialGalleryCategory;
             VPBConfig.Instance.HiddenCategories = new HashSet<string>(backupHiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
             pendingHiddenCategories = new HashSet<string>(backupHiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
             VPBConfig.Instance.TriggerChange();
@@ -321,6 +328,7 @@ namespace VPB
                 VPBConfig.Instance.DragHoldThreshold = pendingDragHoldThreshold;
                 VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                 VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
+                VPBConfig.Instance.InitialGalleryCategory = pendingInitialGalleryCategory;
                 VPBConfig.Instance.Save();
                 if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
                 
@@ -512,6 +520,21 @@ namespace VPB
                 VPBConfig.Instance.EnableAutoFixedGallery = val;
                 VPBConfig.Instance.TriggerChange();
             }, VPBTranslation.T("settings.tip.startup_fixed_gallery", "When enabled, a pinned (Fixed) gallery pane with Autohide enabled will be automatically created on the right side of the screen when the plugin starts."));
+
+            string[] initialGalleryOptions = { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "LastUsed" };
+            string[] initialGalleryLabels = {
+                VPBTranslation.T("settings.initial_gallery.scenes", "Scenes"),
+                VPBTranslation.T("settings.initial_gallery.clothing", "Clothing"),
+                VPBTranslation.T("settings.initial_gallery.hair", "Hair"),
+                VPBTranslation.T("settings.initial_gallery.pose", "Pose"),
+                VPBTranslation.T("settings.initial_gallery.appearance", "Appearance"),
+                VPBTranslation.T("settings.initial_gallery.last_used", "Last used")
+            };
+            CreateCycleSetting(VPBTranslation.T("settings.initial_gallery_category", "Gallery opens on"), pendingInitialGalleryCategory, initialGalleryOptions, initialGalleryLabels, (val) => {
+                pendingInitialGalleryCategory = val;
+                VPBConfig.Instance.InitialGalleryCategory = val;
+                VPBConfig.Instance.TriggerChange();
+            }, VPBTranslation.T("settings.tip.initial_gallery_category", "Which category is shown when the gallery first opens this session or when a new pane is created. Default is Scenes. Last used restores the tab saved when you last left the gallery."));
 
             if (isFixed)
             {

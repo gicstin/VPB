@@ -123,6 +123,32 @@ namespace VPB
         public float DragHoldThreshold = 0.5f;
         public string ApplyMode = "DoubleClick";
         public string LastGalleryCategory = "";
+        /// <summary>Category when opening a new gallery pane or at session first open: "Scenes" (default), "Clothing", "Hair", "Pose", "Appearance", or "LastUsed".</summary>
+        public string InitialGalleryCategory = "Scenes";
+
+        private static readonly string[] s_InitialGalleryCategoryCanonical = { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "LastUsed" };
+
+        /// <summary>Maps user/config values to a canonical option; unknown values become "Scenes".</summary>
+        public static string NormalizeInitialGalleryCategory(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "Scenes";
+            string v = value.Trim();
+            for (int i = 0; i < s_InitialGalleryCategoryCanonical.Length; i++)
+            {
+                if (string.Equals(v, s_InitialGalleryCategoryCanonical[i], StringComparison.OrdinalIgnoreCase))
+                    return s_InitialGalleryCategoryCanonical[i];
+            }
+            return "Scenes";
+        }
+
+        /// <summary>Resolved tab for a new pane or first gallery open this session: a category name, or null when <see cref="InitialGalleryCategory"/> is LastUsed (restore saved tab).</summary>
+        public string ResolveInitialGalleryCategoryName()
+        {
+            string n = NormalizeInitialGalleryCategory(InitialGalleryCategory);
+            if (string.Equals(n, "LastUsed", StringComparison.OrdinalIgnoreCase))
+                return null;
+            return n;
+        }
         public bool DesktopFixedMode = false;
         public bool DesktopFixedAutoCollapse = true;
         public int DesktopFixedHeightMode = 0; // 0: Full, 1: Custom
@@ -133,6 +159,8 @@ namespace VPB
         public int GridColumnCount = 4;
         /// <summary>0 = Grid, 1 = List. Matches <see cref="GalleryLayoutMode"/>.</summary>
         public int GalleryLayoutMode = 0;
+        /// <summary>When true, gallery lists include packages that have an AddonPackagesFilePrefs .hide sidecar.</summary>
+        public bool GalleryShowHiddenPackages = false;
         public float SideButtonScale = 1.0f;
         public float InnerPaneScale = 1.0f;
         /// <summary>UI language id: en, zh_cn, etc. Matches vpb_translations/&lt;id&gt;.json. Empty string means auto-detect on first run.</summary>
@@ -222,6 +250,7 @@ namespace VPB
             DragHoldThreshold = 0.5f;
             ApplyMode = "DoubleClick";
             LastGalleryCategory = "";
+            InitialGalleryCategory = "Scenes";
             DesktopFixedMode = false;
             DesktopFixedAutoCollapse = true;
             DesktopFixedHeightMode = 0;
@@ -231,6 +260,7 @@ namespace VPB
             ListRowHeight = 100f;
             GridColumnCount = 4;
             GalleryLayoutMode = 0;
+            GalleryShowHiddenPackages = false;
             UiLocale = "";
 
             try
@@ -294,6 +324,8 @@ namespace VPB
                         if (node["DragHoldThreshold"] != null) DragHoldThreshold = node["DragHoldThreshold"].AsFloat;
                         if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
                         if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
+                        if (node["InitialGalleryCategory"] != null)
+                            InitialGalleryCategory = NormalizeInitialGalleryCategory(node["InitialGalleryCategory"].Value);
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                         if (node["DesktopFixedHeightMode"] != null) DesktopFixedHeightMode = node["DesktopFixedHeightMode"].AsInt;
@@ -303,6 +335,7 @@ namespace VPB
                         if (node["ListRowHeight"] != null) ListRowHeight = node["ListRowHeight"].AsFloat;
                         if (node["GridColumnCount"] != null) GridColumnCount = node["GridColumnCount"].AsInt;
                         if (node["GalleryLayoutMode"] != null) GalleryLayoutMode = node["GalleryLayoutMode"].AsInt;
+                        if (node["GalleryShowHiddenPackages"] != null) GalleryShowHiddenPackages = node["GalleryShowHiddenPackages"].AsBool;
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["InnerPaneScale"] != null) InnerPaneScale = node["InnerPaneScale"].AsFloat;
                         if (node["UiLocale"] != null) UiLocale = node["UiLocale"].Value;
@@ -374,6 +407,7 @@ namespace VPB
                 node["DragHoldThreshold"].AsFloat = DragHoldThreshold;
                 node["ApplyMode"] = ApplyMode;
                 node["LastGalleryCategory"] = LastGalleryCategory;
+                node["InitialGalleryCategory"] = InitialGalleryCategory;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
                 node["DesktopFixedHeightMode"].AsInt = DesktopFixedHeightMode;
@@ -383,6 +417,7 @@ namespace VPB
                 node["ListRowHeight"].AsFloat = ListRowHeight;
                 node["GridColumnCount"].AsInt = GridColumnCount;
                 node["GalleryLayoutMode"].AsInt = GalleryLayoutMode;
+                node["GalleryShowHiddenPackages"].AsBool = GalleryShowHiddenPackages;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["InnerPaneScale"].AsFloat = InnerPaneScale;
                 node["UiLocale"] = UiLocale ?? "en";

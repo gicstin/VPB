@@ -1043,6 +1043,20 @@ namespace VPB
         //    }
         //}
 
+        /// <summary>
+        /// Updates AutoInstall / installed tint on visible rows only. Prefer this over posting
+        /// <see cref="MessageDef.FileManagerRefresh"/>, which notifies the gallery and other global observers.
+        /// </summary>
+        public void RefreshDisplayedInstallStatus()
+        {
+            if (displayedFileButtons == null || displayedFileButtons.Count == 0) return;
+            foreach (var b in displayedFileButtons)
+            {
+                if (b == null) continue;
+                try { b.RefreshInstallStatus(); } catch { }
+            }
+        }
+
         public void SyncFileButtonImage(FileButton fb)
 		{
 			if (fb.imgPath != null && fb.altIcon != null)

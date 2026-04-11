@@ -616,38 +616,30 @@ namespace VPB
         // Apply Mode
         public ApplyMode ItemApplyMode
         {
-            get { 
+            get {
                 if (VPBConfig.Instance != null) {
-                    ApplyMode mode;
                     try
                     {
-                        mode = (ApplyMode)Enum.Parse(typeof(ApplyMode), VPBConfig.Instance.ApplyMode);
+                        return (ApplyMode)Enum.Parse(typeof(ApplyMode), VPBConfig.Instance.ApplyMode);
                     }
                     catch
                     {
-                        LogUtil.LogWarning("[GalleryPanel] ItemApplyMode GET: unrecognized value '" + VPBConfig.Instance.ApplyMode + "', defaulting to DoubleClick");
-                        mode = ApplyMode.DoubleClick;
+                        LogUtil.LogWarning("[GalleryPanel] ItemApplyMode: unrecognized value '" + VPBConfig.Instance.ApplyMode + "', defaulting to DoubleClick");
+                        return ApplyMode.DoubleClick;
                     }
-                    LogUtil.Log("[GalleryPanel] ItemApplyMode GET: " + mode + " (from VPBConfig: " + VPBConfig.Instance.ApplyMode + ")");
-                    return mode;
                 }
-                LogUtil.Log("[GalleryPanel] ItemApplyMode GET: DoubleClick (VPBConfig is null)");
                 return ApplyMode.DoubleClick;
             }
-            set { 
-                LogUtil.Log("[GalleryPanel] ItemApplyMode SET to: " + value);
+            set {
                 if (VPBConfig.Instance != null) {
                     if (string.Equals(VPBConfig.Instance.ApplyMode, value.ToString(), System.StringComparison.Ordinal)) {
-                        LogUtil.Log("[GalleryPanel] ItemApplyMode already " + value + ", skipping save");
                         return;
                     }
-                    LogUtil.Log("[GalleryPanel] ItemApplyMode saving to VPBConfig: " + value + " (was: " + VPBConfig.Instance.ApplyMode + ")");
                     VPBConfig.Instance.ApplyMode = value.ToString();
                     VPBConfig.Instance.TriggerChange();
-                    try { 
+                    try {
                         VPBConfig.Instance.Save();
-                        LogUtil.Log("[GalleryPanel] ItemApplyMode saved successfully");
-                    } catch (System.Exception ex) { 
+                    } catch (System.Exception ex) {
                         LogUtil.LogError("[GalleryPanel] ItemApplyMode save failed: " + ex.Message);
                     }
                 }
@@ -716,6 +708,10 @@ namespace VPB
         private GameObject footerAutoHideBtn;
         private Text footerAutoHideBtnText;
         private Image footerAutoHideBtnImage;
+
+        private GameObject footerShowHiddenPackagesBtn;
+        private Text footerShowHiddenPackagesBtnText;
+        private Image footerShowHiddenPackagesBtnImage;
         
         private Text fileSortBtnText; // NEW
         private Text fileSortTypeText; // Sort Type button text (Az/Dt/Sz/Rt)

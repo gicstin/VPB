@@ -12,8 +12,38 @@ namespace VPB
         // Selection toolbox ("tbox")
         private GameObject tbox;
         private Text       tboxLabel;
+        private Text       tboxHintLabel;
         private GameObject tboxCopyPkgNamesBtn;
         private GameObject tboxDeleteBtn;
+        private GameObject tboxAutoInstallBtn;
+        private GameObject tboxHideBtn;
+
+        // Info box ("ibox") — shows details for a single selected item
+        private GameObject ibox;
+        private RectTransform iboxRT;
+
+        private bool  iboxIsHovered = false;
+        private bool  iboxPinned    = false;
+        private float iboxExpandT   = 0f; // 0 = collapsed, 1 = expanded
+
+        private CanvasGroup iboxCollapsedCG;
+        private CanvasGroup iboxExpandedCG;
+
+        private GameObject  iboxPinBtn;
+        private Text        iboxPinBtnText;
+
+        private Text        iboxHeaderText; // always visible (expanded/collapsed)
+
+        private Text        iboxCollapsedLabel;
+        private RawImage    iboxPreviewImage;
+        private Text        iboxTitleText;
+        private Text        iboxCreatorText;
+        private Text        iboxStarsText;
+        private Text        iboxDepsText;
+        private Text        iboxMissingText;
+        private Text        iboxDependentsText;
+        private Text        iboxSizeText;
+        private Text        iboxDateText;
 
         // Expand/collapse state
         private bool  tboxIsHovered  = false;
@@ -26,9 +56,13 @@ namespace VPB
         private GameObject    tboxPinBtn;
         private Text          tboxPinBtnText;
 
-        private const float TboxCollapsedH = 38f;  // height when showing "X Selected"
-        private const float TboxExpandedH  = 56f;  // height when showing action buttons
+        private const float TboxCollapsedH = 38f;  // height when showing "X Selected" + hover hint (one row)
+        private const float TboxExpandedH  = 56f;  // height when showing action buttons (4 action buttons)
         private const float TboxBottomY    = 120f; // sits above the hover-path bar
+
+        private const float IboxCollapsedH = 34f;
+        private const float IboxExpandedH  = 162f;
+        private const float IboxTopOffsetY = -70f; // sits just below 70px title bar
 
         // ─────────────────────────────────────────────────────────────────────────
 
@@ -55,7 +89,7 @@ namespace VPB
             var hoverDel = tbox.AddComponent<UIHoverDelegate>();
             hoverDel.OnHoverChange = h => tboxIsHovered = h;
 
-            // ── "X Selected" label (collapsed view) ───────────────────────────────
+            // ── "X Selected" + hover hint, one row (collapsed view) ─────────────
             var labelGO = new GameObject("TboxLabelLayer");
             labelGO.transform.SetParent(tbox.transform, false);
             tboxLabelCG = labelGO.AddComponent<CanvasGroup>();
@@ -68,22 +102,58 @@ namespace VPB
             labelLayerRT.offsetMin = new Vector2(0f,   0f);
             labelLayerRT.offsetMax = new Vector2(-48f, 0f);
 
+            var rowGO = new GameObject("TboxLabelRow");
+            rowGO.transform.SetParent(labelGO.transform, false);
+            var rowRT = rowGO.AddComponent<RectTransform>();
+            rowRT.anchorMin = Vector2.zero;
+            rowRT.anchorMax = Vector2.one;
+            rowRT.offsetMin = Vector2.zero;
+            rowRT.offsetMax = Vector2.zero;
+
+            var rowHLG = rowGO.AddComponent<HorizontalLayoutGroup>();
+            rowHLG.childAlignment      = TextAnchor.MiddleCenter;
+            rowHLG.spacing             = 12f;
+            rowHLG.childForceExpandWidth  = false;
+            rowHLG.childForceExpandHeight = true;
+            rowHLG.childControlWidth   = true;
+            rowHLG.childControlHeight  = true;
+            rowHLG.padding             = new RectOffset(8, 8, 0, 0);
+
+            const int tboxCollapsedFont = 18;
+            var labelColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+
             var labelTextGO = new GameObject("Text");
-            labelTextGO.transform.SetParent(labelGO.transform, false);
+            labelTextGO.transform.SetParent(rowGO.transform, false);
             tboxLabel = labelTextGO.AddComponent<Text>();
             tboxLabel.font      = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            tboxLabel.fontSize  = 18;
+            tboxLabel.fontSize  = tboxCollapsedFont;
             tboxLabel.fontStyle = FontStyle.Bold;
-            tboxLabel.color     = new Color(0.92f, 0.92f, 0.92f, 1f);
+            tboxLabel.color     = labelColor;
             tboxLabel.alignment = TextAnchor.MiddleCenter;
             tboxLabel.raycastTarget = false;
             var labelShadow = labelTextGO.AddComponent<Shadow>();
             labelShadow.effectColor    = new Color(0f, 0f, 0f, 0.5f);
             labelShadow.effectDistance = new Vector2(1f, -1f);
-            var labelTextRT = labelTextGO.GetComponent<RectTransform>();
-            labelTextRT.anchorMin = Vector2.zero;
-            labelTextRT.anchorMax = Vector2.one;
-            labelTextRT.sizeDelta = Vector2.zero;
+            var labelCSF = labelTextGO.AddComponent<ContentSizeFitter>();
+            labelCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            labelCSF.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
+
+            var hintTextGO = new GameObject("HoverHint");
+            hintTextGO.transform.SetParent(rowGO.transform, false);
+            tboxHintLabel = hintTextGO.AddComponent<Text>();
+            tboxHintLabel.font      = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            tboxHintLabel.fontSize  = tboxCollapsedFont;
+            tboxHintLabel.fontStyle = FontStyle.Normal;
+            tboxHintLabel.color     = labelColor;
+            tboxHintLabel.alignment = TextAnchor.MiddleCenter;
+            tboxHintLabel.raycastTarget = false;
+            tboxHintLabel.text      = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
+            var hintShadow = hintTextGO.AddComponent<Shadow>();
+            hintShadow.effectColor    = new Color(0f, 0f, 0f, 0.5f);
+            hintShadow.effectDistance = new Vector2(1f, -1f);
+            var hintCSF = hintTextGO.AddComponent<ContentSizeFitter>();
+            hintCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            hintCSF.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
 
             // ── Buttons panel (expanded view) ─────────────────────────────────────
             var bpGO = new GameObject("TboxButtonsLayer");
@@ -100,9 +170,10 @@ namespace VPB
             bpRT.offsetMin = new Vector2(0f,   0f);
             bpRT.offsetMax = new Vector2(-48f, 0f); // same right inset as label layer
 
+            const int tboxActionBtnFont = 16;
             tboxCopyPkgNamesBtn = UI.CreateUIButton(
                 bpGO, 210, 42,
-                VPBTranslation.T("gallery.tbox.copy_names", "Copy Package Names"), 15,
+                VPBTranslation.T("gallery.tbox.copy_names", "Copy Names"), tboxActionBtnFont,
                 -12, 0, AnchorPresets.middleRight,
                 CopySelectedPackageNamesToClipboard
             );
@@ -111,7 +182,7 @@ namespace VPB
 
             tboxDeleteBtn = UI.CreateUIButton(
                 bpGO, 180, 42,
-                VPBTranslation.T("gallery.tbox.delete", "Delete"), 15,
+                VPBTranslation.T("gallery.tbox.delete", "Delete"), tboxActionBtnFont,
                 -12 - 220, 0, AnchorPresets.middleRight,
                 TboxDeleteSelectedPackages
             );
@@ -124,9 +195,27 @@ namespace VPB
             }
             catch { }
 
+            tboxAutoInstallBtn = UI.CreateUIButton(
+                bpGO, 168, 42,
+                VPBTranslation.T("gallery.tbox.autoinstall", "Autoinstall"), tboxActionBtnFont,
+                -12 - 220 - 190, 0, AnchorPresets.middleRight,
+                TboxAutoInstallSelectedPackages
+            );
+            tboxAutoInstallBtn.name = "Tbox_AutoInstall";
+            AddTooltip(tboxAutoInstallBtn, "gallery.tooltip.tbox_autoinstall", "Flag selected packages for auto-install and auto-load. Packages in AllPackages are copied to AddonPackages on the next VaM start (not immediately).");
+
+            tboxHideBtn = UI.CreateUIButton(
+                bpGO, 100, 42,
+                VPBTranslation.T("gallery.tbox.hide", "Hide"), tboxActionBtnFont,
+                -12 - 220 - 190 - 178, 0, AnchorPresets.middleRight,
+                TboxHideSelectedPackages
+            );
+            tboxHideBtn.name = "Tbox_Hide";
+            AddTooltip(tboxHideBtn, "gallery.tooltip.tbox_hide", "Hide selected packages in VaM file lists (AddonPackagesFilePrefs … .hide)");
+
             // ── Pin toggle (right edge, always visible) ───────────────────────────
             tboxPinBtn = UI.CreateUIButton(
-                tbox, 44, 0, "", 14,
+                tbox, 44, 0, "", 15,
                 0, 0, AnchorPresets.vStretchRight,
                 () =>
                 {
@@ -167,6 +256,502 @@ namespace VPB
             tbox.SetActive(false);
         }
 
+        // ─────────────────────────────────────────────────────────────────────────
+
+        private void EnsureIboxUI()
+        {
+            if (ibox != null) return;
+            if (backgroundBoxGO == null) return;
+
+            // Bar: full-width, anchored at top, just below the title bar (expands downward)
+            ibox = UI.AddChildGOImage(
+                backgroundBoxGO,
+                new Color(0f, 0f, 0f, 0.90f),
+                AnchorPresets.hStretchTop,
+                0,
+                IboxCollapsedH,
+                new Vector2(0f, IboxTopOffsetY)
+            );
+            ibox.name = "InfoBox";
+            iboxRT = ibox.GetComponent<RectTransform>();
+            if (iboxRT != null) iboxRT.pivot = new Vector2(0.5f, 1f);
+
+            var img = ibox.GetComponent<Image>();
+            if (img != null) img.raycastTarget = true;
+
+            var hoverDel = ibox.AddComponent<UIHoverDelegate>();
+            hoverDel.OnHoverChange = h => iboxIsHovered = h;
+
+            // Always-visible header (so name stays visible while expanded/collapsed layers cross-fade)
+            {
+                var headerGO = new GameObject("IboxHeader");
+                headerGO.transform.SetParent(ibox.transform, false);
+                var headerRT = headerGO.AddComponent<RectTransform>();
+                headerRT.anchorMin = new Vector2(0f, 1f);
+                headerRT.anchorMax = new Vector2(1f, 1f);
+                headerRT.pivot = new Vector2(0.5f, 1f);
+                headerRT.anchoredPosition = new Vector2(0f, 0f);
+                headerRT.sizeDelta = new Vector2(-48f, 26f); // leave room for pin
+
+                iboxHeaderText = headerGO.AddComponent<Text>();
+                iboxHeaderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                iboxHeaderText.fontSize = 20;
+                iboxHeaderText.fontStyle = FontStyle.Bold;
+                iboxHeaderText.color = Color.white;
+                iboxHeaderText.alignment = TextAnchor.UpperLeft;
+                iboxHeaderText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                iboxHeaderText.verticalOverflow = VerticalWrapMode.Truncate;
+                iboxHeaderText.raycastTarget = false;
+
+                var sh = headerGO.AddComponent<Shadow>();
+                sh.effectColor = new Color(0f, 0f, 0f, 0.75f);
+                sh.effectDistance = new Vector2(1f, -1f);
+            }
+
+            // Collapsed layer
+            var collapsedGO = new GameObject("IboxCollapsedLayer");
+            collapsedGO.transform.SetParent(ibox.transform, false);
+            iboxCollapsedCG = collapsedGO.AddComponent<CanvasGroup>();
+
+            var collapsedRT = collapsedGO.GetComponent<RectTransform>();
+            if (collapsedRT == null) collapsedRT = collapsedGO.AddComponent<RectTransform>();
+            collapsedRT.anchorMin = Vector2.zero;
+            collapsedRT.anchorMax = Vector2.one;
+            // Leave space for the always-visible header at the top
+            collapsedRT.offsetMin = new Vector2(0f, 0f);
+            collapsedRT.offsetMax = new Vector2(-48f, -26f); // right inset for pin button + top header
+
+            var collapsedTextGO = new GameObject("Text");
+            collapsedTextGO.transform.SetParent(collapsedGO.transform, false);
+            iboxCollapsedLabel = collapsedTextGO.AddComponent<Text>();
+            iboxCollapsedLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            iboxCollapsedLabel.fontSize = 20;
+            iboxCollapsedLabel.fontStyle = FontStyle.Bold;
+            iboxCollapsedLabel.color = new Color(0.92f, 0.92f, 0.92f, 1f);
+            iboxCollapsedLabel.alignment = TextAnchor.MiddleLeft;
+            iboxCollapsedLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            iboxCollapsedLabel.verticalOverflow = VerticalWrapMode.Truncate;
+            iboxCollapsedLabel.raycastTarget = false;
+            var cShadow = collapsedTextGO.AddComponent<Shadow>();
+            cShadow.effectColor = new Color(0f, 0f, 0f, 0.6f);
+            cShadow.effectDistance = new Vector2(1f, -1f);
+            var collapsedTextRT = collapsedTextGO.GetComponent<RectTransform>();
+            collapsedTextRT.anchorMin = Vector2.zero;
+            collapsedTextRT.anchorMax = Vector2.one;
+            collapsedTextRT.offsetMin = new Vector2(12f, 0f);
+            collapsedTextRT.offsetMax = new Vector2(-12f, 0f);
+
+            // Expanded layer
+            var expandedGO = new GameObject("IboxExpandedLayer");
+            expandedGO.transform.SetParent(ibox.transform, false);
+            iboxExpandedCG = expandedGO.AddComponent<CanvasGroup>();
+            iboxExpandedCG.alpha = 0f;
+            iboxExpandedCG.blocksRaycasts = false;
+            iboxExpandedCG.interactable = false;
+
+            var expandedRT = expandedGO.GetComponent<RectTransform>();
+            if (expandedRT == null) expandedRT = expandedGO.AddComponent<RectTransform>();
+            expandedRT.anchorMin = Vector2.zero;
+            expandedRT.anchorMax = Vector2.one;
+            // Leave space for the always-visible header at the top
+            expandedRT.offsetMin = new Vector2(0f, 0f);
+            expandedRT.offsetMax = new Vector2(-48f, -26f); // right inset for pin + top header
+
+            // Preview image (left)
+            var previewGO = new GameObject("Preview");
+            previewGO.transform.SetParent(expandedGO.transform, false);
+            var previewBg = previewGO.AddComponent<Image>();
+            previewBg.color = new Color(1f, 1f, 1f, 0.06f);
+            previewBg.raycastTarget = false;
+            var previewRT = previewGO.GetComponent<RectTransform>();
+            previewRT.anchorMin = new Vector2(0f, 0.5f);
+            previewRT.anchorMax = new Vector2(0f, 0.5f);
+            previewRT.pivot = new Vector2(0f, 0.5f);
+            previewRT.anchoredPosition = new Vector2(10f, -6f);
+            previewRT.sizeDelta = new Vector2(112f, 112f);
+
+            var rawGO = new GameObject("Image");
+            rawGO.transform.SetParent(previewGO.transform, false);
+            iboxPreviewImage = rawGO.AddComponent<RawImage>();
+            iboxPreviewImage.color = new Color(1f, 1f, 1f, 0f);
+            iboxPreviewImage.raycastTarget = false;
+            var rawRT = rawGO.GetComponent<RectTransform>();
+            rawRT.anchorMin = Vector2.zero;
+            rawRT.anchorMax = Vector2.one;
+            rawRT.offsetMin = new Vector2(6f, 6f);
+            rawRT.offsetMax = new Vector2(-6f, -6f);
+            var arf = rawGO.AddComponent<AspectRatioFitter>();
+            arf.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            arf.aspectRatio = 1f;
+
+            // Info panel (right)
+            var infoGO = new GameObject("Info");
+            infoGO.transform.SetParent(expandedGO.transform, false);
+            var infoRT = infoGO.AddComponent<RectTransform>();
+            infoRT.anchorMin = new Vector2(0f, 0f);
+            infoRT.anchorMax = new Vector2(1f, 1f);
+            infoRT.offsetMin = new Vector2(132f, 8f);
+            infoRT.offsetMax = new Vector2(-10f, -8f);
+
+            var vlg = infoGO.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(0, 0, 0, 0);
+            vlg.spacing = 4f;
+            vlg.childControlHeight = true;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childForceExpandWidth = true;
+
+            var titleRow = new GameObject("TitleRow");
+            titleRow.transform.SetParent(infoGO.transform, false);
+            var titleLE = titleRow.AddComponent<LayoutElement>();
+            // Title is shown in the always-visible header; keep this row at 0 height.
+            titleLE.minHeight = 0f;
+            titleLE.preferredHeight = 0f;
+
+            iboxTitleText = titleRow.AddComponent<Text>();
+            iboxTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            iboxTitleText.fontSize = 26;
+            iboxTitleText.fontStyle = FontStyle.Bold;
+            iboxTitleText.color = Color.white;
+            iboxTitleText.alignment = TextAnchor.MiddleLeft;
+            iboxTitleText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            iboxTitleText.verticalOverflow = VerticalWrapMode.Truncate;
+            iboxTitleText.raycastTarget = false;
+
+            // Info grid (expanded view)
+            var gridGO = new GameObject("Grid");
+            gridGO.transform.SetParent(infoGO.transform, false);
+            var gridLE = gridGO.AddComponent<LayoutElement>();
+            gridLE.minHeight = 124f;
+            gridLE.preferredHeight = 124f;
+
+            var grid = gridGO.AddComponent<GridLayoutGroup>();
+            grid.padding = new RectOffset(0, 0, 0, 0);
+            grid.spacing = new Vector2(10f, 8f);
+            grid.childAlignment = TextAnchor.UpperLeft;
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 4;
+            grid.cellSize = new Vector2(170f, 56f);
+
+            Text MakeCell(string name)
+            {
+                var go = new GameObject(name);
+                go.transform.SetParent(gridGO.transform, false);
+                var t = go.AddComponent<Text>();
+                t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                t.fontSize = 22;
+                t.color = new Color(0.92f, 0.92f, 0.92f, 1f);
+                t.alignment = TextAnchor.MiddleLeft;
+                t.lineSpacing = 1.0f;
+                t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                t.verticalOverflow = VerticalWrapMode.Truncate;
+                t.raycastTarget = false;
+                return t;
+            }
+
+            // 4x2 grid (8 cells) — keep stable ordering for quick scanning
+            iboxCreatorText    = MakeCell("Creator");
+            iboxStarsText      = MakeCell("Stars");
+            iboxSizeText       = MakeCell("Size");
+            iboxDateText       = MakeCell("Date");
+
+            iboxDepsText       = MakeCell("Deps");
+            iboxMissingText    = MakeCell("Missing");
+            iboxDependentsText = MakeCell("Dependents");
+            {
+                // filler cell so grid stays 4x2; keeps spacing consistent even if we add later
+                var filler = MakeCell("Filler");
+                filler.text = "";
+                filler.color = new Color(1f, 1f, 1f, 0f);
+            }
+
+            // Pin toggle (right edge, always visible)
+            iboxPinBtn = UI.CreateUIButton(
+                ibox, 44, 0, "", 14,
+                0, 0, AnchorPresets.vStretchRight,
+                () =>
+                {
+                    iboxPinned = !iboxPinned;
+                    RefreshIboxPinVisual();
+                }
+            );
+            iboxPinBtn.name = "Ibox_Pin";
+            var pinRT = iboxPinBtn.GetComponent<RectTransform>();
+            pinRT.anchorMin = new Vector2(1f, 0f);
+            pinRT.anchorMax = new Vector2(1f, 1f);
+            pinRT.pivot = new Vector2(1f, 0.5f);
+            pinRT.anchoredPosition = Vector2.zero;
+            pinRT.sizeDelta = new Vector2(44f, 0f);
+
+            iboxPinBtnText = iboxPinBtn.GetComponentInChildren<Text>();
+
+            // Separator line
+            {
+                var sep = new GameObject("Separator");
+                sep.transform.SetParent(iboxPinBtn.transform, false);
+                var sepImg = sep.AddComponent<Image>();
+                sepImg.color = new Color(1f, 1f, 1f, 0.08f);
+                sepImg.raycastTarget = false;
+                var sepRT = sep.GetComponent<RectTransform>();
+                sepRT.anchorMin = new Vector2(0f, 0.15f);
+                sepRT.anchorMax = new Vector2(0f, 0.85f);
+                sepRT.pivot = new Vector2(0f, 0.5f);
+                sepRT.anchoredPosition = Vector2.zero;
+                sepRT.sizeDelta = new Vector2(1f, 0f);
+            }
+
+            RefreshIboxPinVisual();
+            AddTooltip(iboxPinBtn, "gallery.tooltip.ibox_pin", "Pin — keep info box expanded");
+            AddTooltip(ibox, "gallery.tooltip.ibox_label", "Hover to expand info box");
+
+            ibox.SetActive(false);
+        }
+
+        private void RefreshIboxPinVisual()
+        {
+            if (iboxPinBtnText == null) return;
+            if (iboxPinned)
+            {
+                iboxPinBtnText.text = "●";
+                iboxPinBtnText.color = new Color(0.45f, 0.75f, 0.90f, 1f);
+                var pinImg = iboxPinBtn != null ? iboxPinBtn.GetComponent<Image>() : null;
+                if (pinImg != null) pinImg.color = new Color(0.10f, 0.22f, 0.30f, 1f);
+            }
+            else
+            {
+                iboxPinBtnText.text = "○";
+                iboxPinBtnText.color = new Color(0.45f, 0.45f, 0.45f, 1f);
+                var pinImg = iboxPinBtn != null ? iboxPinBtn.GetComponent<Image>() : null;
+                if (pinImg != null) pinImg.color = new Color(0.20f, 0.20f, 0.20f, 1f);
+            }
+        }
+
+        private static string FormatBytes(long bytes)
+        {
+            try
+            {
+                if (bytes < 0) return "?";
+                string[] units = { "B", "KB", "MB", "GB", "TB" };
+                double b = bytes;
+                int u = 0;
+                while (b >= 1024.0 && u < units.Length - 1)
+                {
+                    b /= 1024.0;
+                    u++;
+                }
+                if (u == 0) return ((long)b).ToString() + " " + units[u];
+                return b.ToString(b >= 10.0 ? "0.0" : "0.00") + " " + units[u];
+            }
+            catch { return "?"; }
+        }
+
+        private static string SafeDate(DateTime dt)
+        {
+            try
+            {
+                if (dt == DateTime.MinValue) return "-";
+                return dt.ToString("yyyy-MM-dd HH:mm");
+            }
+            catch { return "-"; }
+        }
+
+        private VarPackage TryGetPackageForEntry(FileEntry f)
+        {
+            if (f == null) return null;
+            try
+            {
+                if (f is VarFileEntry vfe && vfe.Package != null) return vfe.Package;
+                if (f is PackageListEntry ple && ple.Package != null) return ple.Package;
+            }
+            catch { }
+
+            try
+            {
+                string uid = TryGetPackageUidForEntry(f);
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    return FileManager.GetPackageForDependency(uid, false);
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private void UpdateIboxUI()
+        {
+            if (canvas == null) return;
+            EnsureIboxUI();
+            if (ibox == null) return;
+
+            int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
+            bool visible = sel > 0;
+            if (ibox.activeSelf != visible) ibox.SetActive(visible);
+
+            if (!visible)
+            {
+                iboxExpandT = 0f;
+                iboxIsHovered = false;
+                if (iboxPinned) { iboxPinned = false; RefreshIboxPinVisual(); }
+                return;
+            }
+
+            FileEntry firstEntry = null;
+            try { firstEntry = selectedFiles[0]; } catch { firstEntry = null; }
+
+            // Aggregate stats across selection (simple sums, as requested)
+            string headerName = null;
+            string creator = "-";
+            int stars = 0;
+            int deps = 0;
+            int missing = 0;
+            int dependents = 0;
+            long size = 0;
+            DateTime newestDate = DateTime.MinValue;
+
+            if (sel == 1)
+            {
+                VarPackage pkg = TryGetPackageForEntry(firstEntry);
+                try
+                {
+                    if (pkg != null)
+                    {
+                        headerName = pkg.Uid + ".var";
+                        creator = string.IsNullOrEmpty(pkg.Creator) ? "-" : pkg.Creator;
+                        dependents = Math.Max(0, pkg.DependentCount);
+                        size = pkg.Size;
+                        newestDate = pkg.LastWriteTime;
+
+                        try
+                        {
+                            var direct = pkg.PackageDependencies;
+                            if (direct != null) deps = direct.Count;
+                            else if (pkg.RecursivePackageDependencies != null) deps = pkg.RecursivePackageDependencies.Count;
+                        }
+                        catch { deps = 0; }
+
+                        try
+                        {
+                            if (pkg.MissingDepsCount >= 0) missing = pkg.MissingDepsCount;
+                            else missing = DependencyGraph.GetMissingCount(pkg.Uid);
+                        }
+                        catch { missing = 0; }
+
+                        try
+                        {
+                            stars = RatingsManager.Instance != null ? RatingsManager.Instance.GetRating(new PackageListEntry(pkg)) : 0;
+                        }
+                        catch { stars = 0; }
+                    }
+                    else if (firstEntry != null)
+                    {
+                        headerName = !string.IsNullOrEmpty(firstEntry.Name) ? firstEntry.Name : (firstEntry.Path ?? "Selected");
+                        size = firstEntry.Size;
+                        newestDate = firstEntry.LastWriteTime;
+                        stars = RatingsManager.Instance != null ? RatingsManager.Instance.GetRating(firstEntry) : 0;
+                    }
+                }
+                catch { }
+            }
+            else
+            {
+                headerName = sel.ToString() + " Selected";
+                creator = "Mixed";
+                stars = 0;
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    var e = selectedFiles[i];
+                    if (e == null) continue;
+                    VarPackage pkg = null;
+                    try { pkg = TryGetPackageForEntry(e); } catch { pkg = null; }
+
+                    if (pkg != null)
+                    {
+                        try
+                        {
+                            var direct = pkg.PackageDependencies;
+                            if (direct != null) deps += Math.Max(0, direct.Count);
+                            else if (pkg.RecursivePackageDependencies != null) deps += Math.Max(0, pkg.RecursivePackageDependencies.Count);
+                        }
+                        catch { }
+
+                        try
+                        {
+                            int m = (pkg.MissingDepsCount >= 0) ? pkg.MissingDepsCount : DependencyGraph.GetMissingCount(pkg.Uid);
+                            missing += Math.Max(0, m);
+                        }
+                        catch { }
+
+                        try { dependents += Math.Max(0, pkg.DependentCount); } catch { }
+                        try { size += Math.Max(0, pkg.Size); } catch { }
+                        try { if (pkg.LastWriteTime > newestDate) newestDate = pkg.LastWriteTime; } catch { }
+                    }
+                    else
+                    {
+                        try { size += Math.Max(0, e.Size); } catch { }
+                        try { if (e.LastWriteTime > newestDate) newestDate = e.LastWriteTime; } catch { }
+                    }
+                }
+            }
+
+            if (iboxHeaderText != null) iboxHeaderText.text = headerName ?? "Selection";
+
+            if (iboxCollapsedLabel != null)
+            {
+                string missTxt = "  Missing: " + missing.ToString();
+                iboxCollapsedLabel.text = "Missing:" + missing.ToString();
+            }
+
+            if (iboxTitleText != null) iboxTitleText.text = "";
+            // Expanded grid cells (single-line label/value)
+            if (iboxCreatorText != null) iboxCreatorText.text = "Creator: " + (creator ?? "-");
+            if (iboxStarsText != null) iboxStarsText.text = "★: " + (stars > 0 ? stars.ToString() : "-");
+            if (iboxSizeText != null) iboxSizeText.text = "Sz: " + (size > 0 ? FormatBytes(size) : "-");
+            if (iboxDateText != null) iboxDateText.text = "Date: " + SafeDate(newestDate);
+
+            if (iboxDepsText != null) iboxDepsText.text = "D: " + deps.ToString();
+            if (iboxMissingText != null) iboxMissingText.text = "M: " + missing.ToString();
+            if (iboxDependentsText != null) iboxDependentsText.text = "Dn: " + dependents.ToString();
+
+            // Preview: use the selected entry when possible (gives per-item sisters), otherwise fall back to package row
+            if (iboxPreviewImage != null)
+            {
+                try
+                {
+                    if (sel == 1 && firstEntry != null)
+                        LoadThumbnail(firstEntry, iboxPreviewImage);
+                    else
+                        ClearThumbnailTarget(iboxPreviewImage);
+                }
+                catch { }
+            }
+
+            // Expand/collapse animation (same approach as tbox)
+            bool wantExpanded = iboxIsHovered || iboxPinned;
+            float targetT = wantExpanded ? 1f : 0f;
+            iboxExpandT = Mathf.Lerp(iboxExpandT, targetT, Time.deltaTime * 10f);
+            if (Mathf.Abs(iboxExpandT - targetT) < 0.005f) iboxExpandT = targetT;
+
+            if (iboxRT != null)
+            {
+                float h = Mathf.Lerp(IboxCollapsedH, IboxExpandedH, iboxExpandT);
+                iboxRT.sizeDelta = new Vector2(0f, h);
+            }
+
+            if (iboxCollapsedCG != null)
+                iboxCollapsedCG.alpha = Mathf.Lerp(iboxCollapsedCG.alpha, 1f - iboxExpandT, Time.deltaTime * 14f);
+
+            if (iboxExpandedCG != null)
+            {
+                float targetAlpha = iboxExpandT;
+                iboxExpandedCG.alpha = Mathf.Lerp(iboxExpandedCG.alpha, targetAlpha, Time.deltaTime * 14f);
+                if (Mathf.Abs(iboxExpandedCG.alpha - targetAlpha) < 0.01f) iboxExpandedCG.alpha = targetAlpha;
+
+                bool active = iboxExpandedCG.alpha > 0.1f;
+                iboxExpandedCG.blocksRaycasts = active;
+                iboxExpandedCG.interactable = iboxExpandedCG.alpha > 0.6f;
+            }
+        }
+
         private void RefreshTboxPinVisual()
         {
             if (tboxPinBtnText == null) return;
@@ -202,6 +787,8 @@ namespace VPB
                 tboxExpandT   = 0f;
                 tboxIsHovered = false;
                 if (tboxPinned) { tboxPinned = false; RefreshTboxPinVisual(); }
+                // Keep ibox consistent when selection is cleared
+                try { UpdateIboxUI(); } catch { }
                 return;
             }
 
@@ -242,6 +829,9 @@ namespace VPB
                 tboxButtonsCG.blocksRaycasts = active;
                 tboxButtonsCG.interactable   = tboxButtonsCG.alpha > 0.6f;
             }
+
+            // Info box (top) updates independently (single selection only)
+            try { UpdateIboxUI(); } catch { }
         }
 
         // ─────────────────────────────────────────────────────────────────────────

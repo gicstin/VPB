@@ -1994,14 +1994,12 @@ namespace VPB
 
                     // VaM Hub supports "Submission Date" sorting on the website; ensure it's available in the in-game UI.
                     // We only add it if the API didn't include it in the getInfo sort array.
-                    if (!list6.Contains(SortSubmissionDate))
-                    {
-                        list6.Add(SortSubmissionDate);
-                    }
-                    if (!list7.Contains(SortSubmissionDate))
-                    {
-                        list7.Add(SortSubmissionDate);
-                    }
+                    // If present, keep it first to match the VPB UI convention.
+                    list6.Remove(SortSubmissionDate);
+                    list6.Insert(0, SortSubmissionDate);
+
+                    list7.Remove(SortSubmissionDate);
+                    list7.Insert(0, SortSubmissionDate);
                     sortPrimaryChooser.choices = list6;
                     sortSecondaryChooser.choices = list7;
                 }
@@ -2180,6 +2178,7 @@ namespace VPB
         protected void Init()
         {
             LogUtil.LogVerboseUi("HubBrowse Init");
+            var _initSw = System.Diagnostics.Stopwatch.StartNew();
 
             if (Settings.Instance != null)
             {
@@ -2271,8 +2270,8 @@ namespace VPB
             tagsFilterChooser.isRestorable = false;
             RegisterStringChooser(tagsFilterChooser);
             list = new List<string>();
+            list.Add(SortSubmissionDate);
             list.Add("Latest Update");
-            if (!list.Contains(SortSubmissionDate)) list.Add(SortSubmissionDate);
             List<string> choicesList6 = list;
             sortPrimaryChooser = new JSONStorableStringChooser("sortPrimary", choicesList6, _sortPrimary, "Primary Sort", SyncSortPrimary);
             sortPrimaryChooser.isStorable = false;
@@ -2280,7 +2279,7 @@ namespace VPB
             RegisterStringChooser(sortPrimaryChooser);
             list = new List<string>();
             list.Add("None");
-            if (!list.Contains(SortSubmissionDate)) list.Add(SortSubmissionDate);
+            list.Add(SortSubmissionDate);
             List<string> choicesList7 = list;
             sortSecondaryChooser = new JSONStorableStringChooser("sortSecondary", choicesList7, _sortSecondary, "Secondary Sort", SyncSortSecondary);
             sortSecondaryChooser.isStorable = false;
@@ -2306,11 +2305,12 @@ namespace VPB
             savedResourceDetailsPanels = new Dictionary<string, HubResourceItemDetailUI>();
             downloadQueue = new Queue<DownloadRequest>();
             StartCoroutine(DownloadRoutine());
-
+            LogUtil.LogVerboseUi("HubBrowse Init setup " + _initSw.ElapsedMilliseconds + "ms");
         }
 
         protected override void InitUI(Transform t, bool isAlt)
         {
+            var _uiSw = System.Diagnostics.Stopwatch.StartNew();
             LogUtil.LogVerboseUi("HubBrowse InitUI");
             if (t == null) return;
             MVR.Hub.HubBrowseUI componentInChildren = t.GetComponentInChildren<MVR.Hub.HubBrowseUI>(true);
@@ -2470,7 +2470,7 @@ namespace VPB
             }
             
 
-                LogUtil.LogVerboseUi("HubBrowse Init End");
+                LogUtil.LogVerboseUi("HubBrowse Init End " + _uiSw.ElapsedMilliseconds + "ms");
         }
         JSONStorableBool onlyDownloadable;
 

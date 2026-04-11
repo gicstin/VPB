@@ -800,6 +800,11 @@ namespace VPB
             footerHeightBtnImage = footerHeightBtn.GetComponent<Image>();
             footerHeightBtnText = footerHeightBtn.GetComponentInChildren<Text>();
 
+            footerShowHiddenPackagesBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleGalleryShowHiddenPackages);
+            footerShowHiddenPackagesBtnImage = footerShowHiddenPackagesBtn.GetComponent<Image>();
+            footerShowHiddenPackagesBtnText = footerShowHiddenPackagesBtn.GetComponentInChildren<Text>();
+            footerShowHiddenPackagesBtn.name = "Footer_ShowHiddenPackages";
+
             footerAutoHideBtn = UI.CreateUIButton(rightSection, 40, 40, "A", 20, 0, 0, AnchorPresets.middleCenter, ToggleAutoHideMode);
             footerAutoHideBtnImage = footerAutoHideBtn.GetComponent<Image>();
             footerAutoHideBtnText = footerAutoHideBtn.GetComponentInChildren<Text>();
@@ -853,6 +858,8 @@ namespace VPB
             AddTooltip(footerLayoutBtn, "gallery.tooltip.toggle_layout", "Toggle Layout Mode");
             AddHoverDelegate(footerHeightBtn);
             AddTooltip(footerHeightBtn, "gallery.tooltip.toggle_fixed_height", "Toggle Fixed Height Mode");
+            AddHoverDelegate(footerShowHiddenPackagesBtn);
+            AddTooltip(footerShowHiddenPackagesBtn, "gallery.tooltip.show_hidden_packages", "Show packages marked hidden (.hide) in the gallery");
             AddHoverDelegate(footerAutoHideBtn);
             AddTooltip(footerAutoHideBtn, "gallery.tooltip.auto_hide_fixed", "Auto-Hide (Fixed)");
             AddHoverDelegate(footerRemoveAllHairBtn);
@@ -865,7 +872,7 @@ namespace VPB
                 paginationNextBtn, paginationNext10Btn, paginationLastBtn,
                 selectAllBtn, clearSelectionBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
-                footerLayoutBtn, footerHeightBtn, footerAutoHideBtn,
+                footerLayoutBtn, footerHeightBtn, footerShowHiddenPackagesBtn, footerAutoHideBtn,
                 footerRemoveAllHairBtn,
             };
             var footerBtnFonts = new int[] {
@@ -874,7 +881,7 @@ namespace VPB
                 20, 18, 18,
                 20, 20,
                 24, 24,
-                20, 20, 20,
+                20, 20, 20, 20,
                 16,
             };
             for (int i = 0; i < footerBtnGOs.Length; i++)
@@ -942,6 +949,7 @@ namespace VPB
             UpdateFooterFollowStates();
             UpdateFooterLayoutState();
             UpdateFooterHeightState();
+            UpdateFooterShowHiddenPackagesState();
             UpdateFooterAutoHideState();
             UpdateFooterContextActions();
             UpdatePaginationText();
@@ -1114,6 +1122,29 @@ namespace VPB
                     case 1: footerHeightBtnText.text = VPBTranslation.T("gallery.footer.height_hc", "HC"); break;
                 }
             }
+        }
+
+        private void ToggleGalleryShowHiddenPackages()
+        {
+            if (VPBConfig.Instance == null) return;
+            VPBConfig.Instance.GalleryShowHiddenPackages = !VPBConfig.Instance.GalleryShowHiddenPackages;
+            VPBConfig.Instance.Save();
+            UpdateFooterShowHiddenPackagesState();
+            try { RefreshFiles(true); } catch { }
+        }
+
+        private void UpdateFooterShowHiddenPackagesState()
+        {
+            if (VPBConfig.Instance == null) return;
+
+            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
+            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+
+            if (footerShowHiddenPackagesBtnImage != null)
+                footerShowHiddenPackagesBtnImage.color = VPBConfig.Instance.GalleryShowHiddenPackages ? activeColor : inactiveColor;
+
+            if (footerShowHiddenPackagesBtnText != null)
+                footerShowHiddenPackagesBtnText.text = "H";
         }
 
         private void ToggleAutoHideMode()

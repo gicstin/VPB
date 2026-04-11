@@ -110,13 +110,8 @@ namespace VPB
 			string key = this.Package.Uid;
 			SetAutoInstallInternal(key, b);
 
-			if(b)
-            {
-				bool dirty=this.Package.InstallSelf();
-				return dirty;
-			}
-			// When set to false, it will not uninstall automatically
-
+			// Do not call InstallSelf() here: moving AllPackages → AddonPackages is deferred to
+			// VamHookPlugin.TryAutoInstall() on the next process launch (faster UI; one batch I/O).
 			return false;
 		}
 

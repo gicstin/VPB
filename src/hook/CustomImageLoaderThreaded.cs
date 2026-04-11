@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -1518,7 +1518,7 @@ namespace VPB
                     }
 
                     value.Finish();
-                    
+
                     if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
                     {
                         if (value.isThumbnail)
@@ -1734,6 +1734,7 @@ namespace VPB
                     StartWorker(head);
                 }
 			}
+
 		}
 
         private void StartWorker(QueuedImage head)

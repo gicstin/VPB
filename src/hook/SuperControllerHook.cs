@@ -430,6 +430,7 @@ namespace VPB
         public static void PreRefresh()
         {
             LogUtil.Log("FileManager PreRefresh");
+            try { PackageHidePrefs.InvalidateHideMarkerCache(); } catch { }
         }
 
         [HarmonyPrefix]

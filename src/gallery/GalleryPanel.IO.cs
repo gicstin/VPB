@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -211,7 +211,10 @@ namespace VPB
                 FileEntry other = source[i];
                 if (other == master) continue;
                 if (other is VarFileEntry vfe && vfe.Package != null && depUids.Contains(vfe.Package.Uid))
+                {
+                    if (PackageHidePrefs.IsExcludedByGalleryHideFilter(other)) continue;
                     filtered.Add(other);
+                }
             }
         }
 
@@ -231,6 +234,7 @@ namespace VPB
                     {
                         if (DepRefersToTarget(od[j], targetUid, targetShort))
                         {
+                            if (PackageHidePrefs.IsExcludedByGalleryHideFilter(other)) break;
                             filtered.Add(other);
                             break;
                         }
@@ -520,7 +524,12 @@ namespace VPB
                 {
                     // Read-only resolve (no auto-install)
                     var pkg = FileManager.GetPackage(uid, ensureInstalled: false);
-                    if (pkg != null) result.Add(new PackageListEntry(pkg));
+                    if (pkg != null)
+                    {
+                        var row = new PackageListEntry(pkg);
+                        if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row)) continue;
+                        result.Add(row);
+                    }
                     else result.Add(new MissingPackageListEntry(uid));
                 }
                 catch
@@ -928,6 +937,9 @@ namespace VPB
         private bool PassesFilters(FileEntry entry, bool ignorePosePeopleFilter)
         {
             if (entry == null) return false;
+
+            // Hide filtering is deferred to PostFilterHiddenRoutine (runs after grid_ready)
+            // to avoid per-entry FileManager.FileExists calls blocking the scan drain loop.
 
             // Clothing subfilter (Gallery left Tags panel)
             // Applies only when browsing Clothing category.
@@ -1436,7 +1448,6 @@ namespace VPB
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
         {
             yield return null; // Allow UI to render first
-            var swTotal = System.Diagnostics.Stopwatch.StartNew();
 
             // Reset pose facet counts for this refresh
             posePeopleFacetCountSingle = 0;
@@ -1870,12 +1881,25 @@ namespace VPB
                     recyclingGrid.SetGridConfig(100, 100, 10f, 10f, cols);
                     recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false);
                 }
-                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                // Set item count and pre-position scroll so the first UpdateVisibleItems
+                // binds the correct viewport items, not items at the top.
+                if (scrollToBottom)
+                {
+                    recyclingGrid.SetItemCountAtScroll(currentFilteredFiles.Count, 0f);
+                }
+                else if (savedCenterItemIndex >= 0)
+                {
+                    recyclingGrid.SetItemCountAtItem(currentFilteredFiles.Count, savedCenterItemIndex);
+                }
+                else
+                {
+                    recyclingGrid.SetItemCountAtScroll(currentFilteredFiles.Count, savedScrollNormalizedPos);
+                }
             }
-            
-            // We still need to clear activeButtons if they were used outside recycling grid, 
+
+            // We still need to clear activeButtons if they were used outside recycling grid,
             // but RecyclingGridView manages its own pool now.
-            foreach (var btn in activeButtons) 
+            foreach (var btn in activeButtons)
             {
                 if (btn != null) Destroy(btn);
             }
@@ -1884,25 +1908,130 @@ namespace VPB
 
             UpdatePaginationText();
 
-            // Apply scroll position. scrollToBottom (pagination) always wins.
-            // For keepScroll (auto-refresh / layout change): restore via item index so the same row stays
-            // centered even if the column count or content height changed.
-            // For category change / first load: fall back to the saved normalised position.
-            if (scrollRect != null)
+            // Build creator and category caches on a background thread so the main thread
+            // doesn't block for ~2 s iterating all 19k+ packages synchronously.
+            if (!creatorsCached || !categoriesCached)
             {
-                if (scrollToBottom)
+                // Snapshot all state the background thread will need.
+                string _bCreator    = currentCreator;
+                string _bExtension  = currentExtension;
+                List<string> _bPaths = currentPaths != null ? new List<string>(currentPaths) : null;
+                string _bPath       = currentPath;
+                var _bCategories    = categories != null ? new List<Gallery.Category>(categories) : null;
+
+                bool _buildCreators = !creatorsCached;
+                bool _buildCats     = !categoriesCached;
+
+                List<CreatorCacheEntry> _newCreators = null;
+                Dictionary<string, int> _newCatCounts = null;
+                bool _buildDone = false;
+
+                ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    scrollRect.verticalNormalizedPosition = 0f;
-                    if (recyclingGrid != null) recyclingGrid.Refresh();
+                    try
+                    {
+                        if (_buildCreators)
+                        {
+                            var counts = new Dictionary<string, int>();
+                            string[] exts2 = string.IsNullOrEmpty(_bExtension) ? new string[0] : _bExtension.Split('|');
+                            var tExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var e in exts2) if (!string.IsNullOrEmpty(e)) tExts.Add(e.Trim());
+
+                            if (FileManager.PackagesByUid != null)
+                            {
+                                foreach (var pkg in FileManager.PackagesByUid.Values)
+                                {
+                                    if (string.IsNullOrEmpty(pkg.Creator)) continue;
+                                    if (pkg.FileEntries == null) continue;
+                                    int cnt = pkg.FileEntries.Count;
+                                    for (int i = 0; i < cnt; i++)
+                                    {
+                                        string ip = pkg.FileEntries[i].InternalPath;
+                                        int dot = ip.LastIndexOf('.');
+                                        if (dot < 0 || dot == ip.Length - 1) continue;
+                                        if (!tExts.Contains(ip.Substring(dot + 1))) continue;
+                                        bool match = false;
+                                        if (_bPaths != null && _bPaths.Count > 0)
+                                        { for (int k = 0; k < _bPaths.Count; k++) if (ip.StartsWith(_bPaths[k], StringComparison.OrdinalIgnoreCase)) { match = true; break; } }
+                                        else if (!string.IsNullOrEmpty(_bPath))
+                                            match = ip.StartsWith(_bPath, StringComparison.OrdinalIgnoreCase);
+                                        else match = true;
+                                        if (match) { int cur; counts.TryGetValue(pkg.Creator, out cur); counts[pkg.Creator] = cur + 1; }
+                                    }
+                                }
+                            }
+                            _newCreators = counts.Select(kv => new CreatorCacheEntry { Name = kv.Key, Count = kv.Value })
+                                                 .OrderBy(c => c.Name).ToList();
+                        }
+
+                        if (_buildCats && _bCategories != null)
+                        {
+                            var catCounts2 = new Dictionary<string, int>();
+                            var extToCats2 = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var c in _bCategories)
+                            {
+                                catCounts2[c.name] = 0;
+                                if (string.IsNullOrEmpty(c.extension)) continue;
+                                foreach (string ce in c.extension.Split('|'))
+                                {
+                                    if (string.IsNullOrEmpty(ce)) continue;
+                                    string et = ce.Trim();
+                                    if (!extToCats2.ContainsKey(et)) extToCats2[et] = new List<Gallery.Category>();
+                                    extToCats2[et].Add(c);
+                                }
+                            }
+                            if (FileManager.PackagesByUid != null)
+                            {
+                                foreach (var pkg in FileManager.PackagesByUid.Values)
+                                {
+                                    if (!string.IsNullOrEmpty(_bCreator) && (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != _bCreator)) continue;
+                                    if (pkg.FileEntries == null) continue;
+                                    int cnt = pkg.FileEntries.Count;
+                                    for (int i = 0; i < cnt; i++)
+                                    {
+                                        string ip = pkg.FileEntries[i].InternalPath;
+                                        int dot = ip.LastIndexOf('.');
+                                        if (dot < 0 || dot == ip.Length - 1) continue;
+                                        List<Gallery.Category> cands2;
+                                        if (extToCats2.TryGetValue(ip.Substring(dot + 1), out cands2))
+                                        {
+                                            for (int j = 0; j < cands2.Count; j++)
+                                            {
+                                                var cat2 = cands2[j];
+                                                bool pm = false;
+                                                if (cat2.paths != null && cat2.paths.Count > 0)
+                                                { for (int k = 0; k < cat2.paths.Count; k++) if (ip.StartsWith(cat2.paths[k], StringComparison.OrdinalIgnoreCase)) { pm = true; break; } }
+                                                else if (!string.IsNullOrEmpty(cat2.path)) pm = ip.StartsWith(cat2.path, StringComparison.OrdinalIgnoreCase);
+                                                else pm = true;
+                                                if (pm) { catCounts2[cat2.name]++; break; }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _newCatCounts = catCounts2;
+                        }
+                    }
+                    catch { }
+                    finally { _buildDone = true; }
+                });
+
+                while (!_buildDone) yield return null;
+
+                // Apply results on the main thread.
+                if (_buildCreators)
+                {
+                    cachedCreators = _newCreators ?? new List<CreatorCacheEntry>();
+                    creatorsCached = true;
                 }
-                else if (savedCenterItemIndex >= 0 && recyclingGrid != null)
+                if (_buildCats)
                 {
-                    recyclingGrid.ScrollToCenterItem(savedCenterItemIndex);
-                }
-                else
-                {
-                    scrollRect.verticalNormalizedPosition = savedScrollNormalizedPos;
-                    if (recyclingGrid != null) recyclingGrid.Refresh();
+                    if (_newCatCounts != null)
+                    {
+                        categoryCounts.Clear();
+                        foreach (var kv in _newCatCounts) categoryCounts[kv.Key] = kv.Value;
+                    }
+                    categoriesCached = true;
                 }
             }
 
@@ -1922,6 +2051,15 @@ namespace VPB
             HideLoadingOverlay();
             hasLoadedContent = true;
             refreshCoroutine = null;
+
+            // Defer hide filtering until after the grid is visible (prescan .hide markers then filter in a coroutine).
+            try
+            {
+                bool showHidden = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages;
+                if (!showHidden)
+                    StartCoroutine(PostFilterHiddenRoutine(currentLoadingGroupId));
+            }
+            catch { }
 
             // If packages were skipped because their content cache wasn't ready yet
             // (FileManager scan still in progress), schedule a single retry — but only
@@ -1946,6 +2084,47 @@ namespace VPB
                 {
                     try { StartPosePeopleIndexCoroutine(currentLoadingGroupId); } catch { }
                 }
+            }
+        }
+
+        private IEnumerator PostFilterHiddenRoutine(string groupId)
+        {
+            // Let two frames render so thumbnails appear before we do filter work.
+            yield return null;
+            yield return null;
+
+            if (groupId != currentLoadingGroupId || currentFilteredFiles == null) yield break;
+
+            try { PackageHidePrefs.RebuildHideMarkerCache(); } catch { }
+
+            bool anyRemoved = false;
+            // Iterate backwards so RemoveAt doesn't shift indices we haven't visited yet.
+            for (int i = currentFilteredFiles.Count - 1; i >= 0; i--)
+            {
+                if (groupId != currentLoadingGroupId) yield break;
+                try
+                {
+                    if (PackageHidePrefs.IsExcludedByGalleryHideFilter(currentFilteredFiles[i]))
+                    {
+                        currentFilteredFiles.RemoveAt(i);
+                        anyRemoved = true;
+                    }
+                }
+                catch { }
+
+                // Yield every 2000 entries so we don't hitch a frame.
+                if (i % 2000 == 0)
+                    yield return null;
+            }
+
+            if (anyRemoved && groupId == currentLoadingGroupId)
+            {
+                try
+                {
+                    if (recyclingGrid != null) recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                    UpdatePaginationText();
+                }
+                catch { }
             }
         }
 
@@ -2015,7 +2194,8 @@ namespace VPB
                                     VarFileEntry vfe = new VarFileEntry(depPkg, internalPath, depPkg.LastWriteTime, depPkg.Size);
                                     if (!string.IsNullOrEmpty(vfe.Name) && !string.IsNullOrEmpty(vfe.Path))
                                     {
-                                        filtered.Add(vfe);
+                                        if (!PackageHidePrefs.IsExcludedByGalleryHideFilter(vfe))
+                                            filtered.Add(vfe);
                                     }
                                     else
                                     {

@@ -52,7 +52,6 @@ namespace VPB
                 }
                 
                 jsonPath = Path.Combine(saveDir, "ratings.json");
-                Debug.Log("[VPB] RatingsManager: Using JSON path: " + jsonPath);
 
                 // Load existing JSON if it exists
                 Load();
@@ -67,14 +66,12 @@ namespace VPB
                 string oldPath = Path.Combine(saveDir, "ratings.bin");
                 if (File.Exists(oldPath))
                 {
-                    Debug.Log("[VPB] RatingsManager: Found legacy ratings.bin, migrating...");
                     int countBefore = ratings.Count;
                     LoadLegacyBinary(oldPath);
                     int countAfter = ratings.Count;
                     
                     if (countAfter > countBefore)
                     {
-                        Debug.Log("[VPB] RatingsManager: Migrated " + (countAfter - countBefore) + " new ratings from legacy binary.");
                         hasLoadedSuccessfully = true;
                         Save();
                     }
@@ -84,7 +81,6 @@ namespace VPB
                         string migratedPath = oldPath + ".migrated";
                         if (File.Exists(migratedPath)) File.Delete(migratedPath);
                         File.Move(oldPath, migratedPath);
-                        Debug.Log("[VPB] RatingsManager: Renamed legacy binary to .migrated");
                     } 
                     catch (Exception ex)
                     {
@@ -305,7 +301,6 @@ namespace VPB
                 {
                     if (TryLoadFile(jsonPath))
                     {
-                        Debug.Log("[VPB] RatingsManager: Loaded " + ratings.Count + " ratings from ratings.json");
                         hasLoadedSuccessfully = true;
                         return;
                     }
@@ -316,7 +311,6 @@ namespace VPB
                 {
                     if (TryLoadFile(backupPath))
                     {
-                        Debug.Log("[VPB] Successfully restored " + ratings.Count + " ratings from backup.");
                         hasLoadedSuccessfully = true;
                         // Restore main file from backup immediately
                         try { File.Copy(backupPath, jsonPath, true); } catch {}
@@ -328,10 +322,6 @@ namespace VPB
                 if (mainExists || backupExists)
                 {
                     Debug.LogError("[VPB] RatingsManager: Failed to load existing ratings from JSON or backup.");
-                }
-                else
-                {
-                    Debug.Log("[VPB] RatingsManager: No existing ratings found, starting fresh.");
                 }
 
                 ratings.Clear();
@@ -473,7 +463,6 @@ namespace VPB
                     }
                     
                     File.Move(tmpPath, jsonPath);
-                    Debug.Log("[VPB] RatingsManager: Successfully saved " + ratings.Count + " ratings to " + jsonPath);
                 }
                 catch (Exception ex)
                 {
@@ -594,33 +583,22 @@ namespace VPB
 
                 string favPath = null;
                 if (!TryBuildLegacyFavPath(prefsDir, entry, out favPath)) return;
-                string markerPath = favPath + ".vpb";
+                string legacyMarkerPath = favPath + ".vpb";
 
                 bool favExists = false;
                 try { favExists = File.Exists(favPath); } catch { favExists = false; }
-                bool ownedByVPB = false;
-                try { ownedByVPB = File.Exists(markerPath); } catch { ownedByVPB = false; }
 
                 if (rating <= 0)
                 {
-                    // Safety: never delete user-managed legacy .fav files.
-                    // Only delete if VPB previously created the file (marker exists).
-                    if (ownedByVPB)
-                    {
-                        try { if (favExists) File.Delete(favPath); } catch { }
-                        try { File.Delete(markerPath); } catch { }
-                    }
+                    try { if (favExists) File.Delete(favPath); } catch { }
+                    try { File.Delete(legacyMarkerPath); } catch { }
                     return;
                 }
-
-                // Safety: don't overwrite existing .fav files unless VPB owns them.
-                // If a user already has a legacy .fav marker, leave it alone.
-                if (favExists && !ownedByVPB) return;
 
                 string dir = Path.GetDirectoryName(favPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 File.WriteAllText(favPath, Mathf.Clamp(rating, 1, 5).ToString());
-                try { if (!ownedByVPB) File.WriteAllBytes(markerPath, new byte[] { 0 }); } catch { }
+                try { File.Delete(legacyMarkerPath); } catch { }
             }
             catch { }
         }

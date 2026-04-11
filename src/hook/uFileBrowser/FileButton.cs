@@ -440,7 +440,7 @@ namespace VPB
 
             }
         }
-        void RefreshInstallStatus()
+        public void RefreshInstallStatus()
         {
             useFileAsTemplateToggle.onValueChanged.RemoveAllListeners();
             bool isInstalled = false;

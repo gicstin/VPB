@@ -1,0 +1,143 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace VPB
+{
+	/// <summary>
+	/// Package-level .hide markers under AddonPackagesFilePrefs, same path layout as legacy .fav.
+	/// Presence is resolved via a prescan of all <c>*.hide</c> files under that tree (see
+	/// <see cref="RebuildHideMarkerCache"/>) and <see cref="HashSet{T}.Contains"/> on normalized full paths,
+	/// avoiding per-entry <see cref="File.Exists"/> / <see cref="FileManager.FileExists"/> calls.
+	/// Invalidate when the game FileManager runs Refresh; gallery post-filter rebuilds before bulk checks.
+	/// </summary>
+	public static class PackageHidePrefs
+	{
+		// Cached once — Directory.GetCurrentDirectory() never changes at runtime.
+		private static string s_prefsDirCached;
+
+		/// <summary>Full paths of existing .hide sidecars; null after <see cref="InvalidateHideMarkerCache"/>.</summary>
+		private static HashSet<string> s_hideMarkerFullPaths;
+
+		public static void InvalidateHideMarkerCache()
+		{
+			s_hideMarkerFullPaths = null;
+		}
+
+		/// <summary>Enumerates all <c>*.hide</c> under AddonPackagesFilePrefs into an in-memory set.</summary>
+		public static void RebuildHideMarkerCache()
+		{
+			var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			try
+			{
+				string root = GetAddonPackagesFilePrefsDir();
+				if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
+				{
+					// .NET 3.5: use GetFiles (EnumerateFiles is 4.0+).
+					string[] paths = Directory.GetFiles(root, "*.hide", SearchOption.AllDirectories);
+					for (int i = 0; i < paths.Length; i++)
+					{
+						try
+						{
+							set.Add(Path.GetFullPath(paths[i]));
+						}
+						catch { }
+					}
+				}
+			}
+			catch { }
+			s_hideMarkerFullPaths = set;
+		}
+
+		private static void EnsureHideMarkerCache()
+		{
+			if (s_hideMarkerFullPaths == null)
+				RebuildHideMarkerCache();
+		}
+
+		public static string GetAddonPackagesFilePrefsDir()
+		{
+			if (s_prefsDirCached != null) return s_prefsDirCached;
+			try { s_prefsDirCached = Path.Combine(Directory.GetCurrentDirectory(), "AddonPackagesFilePrefs"); }
+			catch { }
+			return s_prefsDirCached;
+		}
+
+		/// <summary>Builds the absolute path to this entry's .hide sidecar, e.g.
+		/// <c>…/AddonPackagesFilePrefs/&lt;uid&gt;/AddonPackages/author.pkg.1.var.hide</c>.</summary>
+		public static bool TryBuildPackageVarHidePath(FileEntry entry, out string hidePath)
+		{
+			hidePath = null;
+			try
+			{
+				string prefsDir = GetAddonPackagesFilePrefsDir();
+				if (string.IsNullOrEmpty(prefsDir) || entry == null) return false;
+
+				VarPackage pkg = null;
+				string sysPath = null;
+
+				if (entry is VarFileEntry vfe && vfe.Package != null)       { pkg = vfe.Package;  sysPath = pkg.Path; }
+				else if (entry is SystemFileEntry sfe && sfe.isVar && sfe.package != null)
+				                                                              { pkg = sfe.package;  sysPath = pkg.Path; }
+				else if (entry is PackageListEntry ple && ple.Package != null) { pkg = ple.Package; sysPath = pkg.Path; }
+
+				if (pkg == null || string.IsNullOrEmpty(sysPath)) return false;
+				string uid = pkg.Uid;
+				if (string.IsNullOrEmpty(uid)) return false;
+
+				hidePath = Path.Combine(Path.Combine(prefsDir, uid), sysPath.Replace('/', Path.DirectorySeparatorChar) + ".hide");
+				return true;
+			}
+			catch { return false; }
+		}
+
+		/// <summary>True when this entry has a .hide sidecar (ignores the "show hidden" toggle).</summary>
+		public static bool IsPackageVarHidden(FileEntry entry)
+		{
+			EnsureHideMarkerCache();
+			if (!TryBuildPackageVarHidePath(entry, out string hidePath)) return false;
+			try
+			{
+				return s_hideMarkerFullPaths.Contains(Path.GetFullPath(hidePath));
+			}
+			catch { return false; }
+		}
+
+		/// <summary>True when the gallery should omit this entry (hidden marker present and user is not showing hidden packages).</summary>
+		public static bool IsExcludedByGalleryHideFilter(FileEntry entry)
+		{
+			try
+			{
+				if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages) return false;
+			}
+			catch { }
+			return IsPackageVarHidden(entry);
+		}
+
+		/// <summary>
+		/// Ensures a .hide sidecar exists for this package (same marker VaM and other tools use).
+		/// If one already exists, succeeds without overwriting.
+		/// </summary>
+		public static bool TryEnsureVpbPackageHidden(FileEntry entry)
+		{
+			try
+			{
+				if (!TryBuildPackageVarHidePath(entry, out string hidePath)) return false;
+				try { File.Delete(hidePath + ".vpb"); } catch { }
+
+				EnsureHideMarkerCache();
+				string fullHide;
+				try { fullHide = Path.GetFullPath(hidePath); }
+				catch { return false; }
+				if (s_hideMarkerFullPaths.Contains(fullHide)) return true;
+
+				string dir = Path.GetDirectoryName(hidePath);
+				if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+				File.WriteAllText(hidePath, string.Empty);
+				try { s_hideMarkerFullPaths.Add(fullHide); } catch { }
+				return true;
+			}
+			catch { return false; }
+		}
+	}
+}

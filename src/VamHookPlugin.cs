@@ -920,7 +920,8 @@ namespace VPB
                 if (Gallery.singleton != null && Gallery.singleton.PanelCount == 0)
                 {
                     if (!m_GalleryCatsInited) InitGalleryCategories();
-                    Gallery.singleton.CreatePane("Scenes");
+
+                    Gallery.singleton.CreatePane();
                 }
             }
         }
@@ -1251,7 +1252,8 @@ namespace VPB
 
 
         bool AutoInstalled = false;
-        // On entering the game, process AutoInstall packages once.
+        // Once per process: install every package listed in AutoInstall.txt (AllPackages → AddonPackages).
+        // Toggling AutoInstall in the UI only updates that list; it does not move files until this runs.
         void TryAutoInstall()
         {
             if (AutoInstalled) return;
@@ -1382,6 +1384,7 @@ namespace VPB
         void CreateHubBrowse()
         {
             LogUtil.LogVerboseUi("VPB CreateHubBrowse");
+            var _hubSw = System.Diagnostics.Stopwatch.StartNew();
             if (m_HubBrowse == null)
             {
 
@@ -1488,6 +1491,7 @@ namespace VPB
                 LogUtil.LogError("HubBrowse no OpenPackageManager");
             }
             newgo.SetActive(false);
+            LogUtil.Log("CreateHubBrowse took " + _hubSw.ElapsedMilliseconds + "ms");
         }
 
         Canvas m_QuickMenuCanvas;
@@ -2073,8 +2077,8 @@ namespace VPB
 
             m_FileBrowser.Show(fileFormat, path, LoadFromSceneWorldDialog, true, inGame);
 
-            // Refresh favorite and AutoInstall state.
-            MessageKit.post(MessageDef.FileManagerRefresh);
+            // Refresh AutoInstall / install tint on visible file rows only (avoid global FileManagerRefresh → gallery).
+            try { m_FileBrowser.RefreshDisplayedInstallStatus(); } catch { }
         }
 
         public void ShowSaveFileBrowser(string title, string fileFormat, string path, string defaultFileNameNoExt, Action<string> onSelected, bool inGame = false)

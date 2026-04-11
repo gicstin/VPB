@@ -144,8 +144,12 @@ namespace VPB
             RefreshGoText(leftRemoveAtomBtn,   "gallery.side.remove_atom", "Remove\nAtom");
 
             // Selection toolbox buttons
-            RefreshGoText(tboxCopyPkgNamesBtn, "gallery.tbox.copy_names", "Copy Package Names");
+            RefreshGoText(tboxCopyPkgNamesBtn, "gallery.tbox.copy_names", "Copy Names");
             RefreshGoText(tboxDeleteBtn,        "gallery.tbox.delete",      "Delete");
+            RefreshGoText(tboxAutoInstallBtn,   "gallery.tbox.autoinstall", "Autoinstall");
+            RefreshGoText(tboxHideBtn,          "gallery.tbox.hide",        "Hide");
+            if (tboxHintLabel != null)
+                tboxHintLabel.text = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
 
             // Undo / Redo labels include the stack count – delegate to the dedicated updater
             try { UpdateUndoRedoButtonLabels(); } catch { }
@@ -169,6 +173,7 @@ namespace VPB
             UpdateTabs();
             UpdateFooterFollowStates();
             UpdateFooterHeightState();
+            UpdateFooterShowHiddenPackagesState();
             UpdateFooterAutoHideState();
             UpdateFooterLayoutState();
             SyncRatingSortToggleState();

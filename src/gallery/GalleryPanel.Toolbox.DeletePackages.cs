@@ -10,7 +10,7 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
-        private const string DeletedPackagesFolderName = "DeletedPacakges";
+        private const string DeletedPackagesFolderName = "DeletedPackages";
 
         // Called by the toolbox button created in GalleryPanel.SelectionContextMenu.cs
         private void TboxDeleteSelectedPackages()

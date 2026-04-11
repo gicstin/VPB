@@ -101,13 +101,16 @@ namespace VPB
                 LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (suppressed)");
                 return;
             }
-            
-            LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
 
             DateTime refreshTime = DateTime.MinValue;
             try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
-            if (refreshTime <= lastObservedPackageRefreshTime) return;
+            // Ignore broadcasts that did not advance the package scan clock (e.g. legacy global pings).
+            if (lastObservedPackageRefreshTime != DateTime.MinValue &&
+                refreshTime <= lastObservedPackageRefreshTime)
+                return;
+
+            LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
             lastObservedPackageRefreshTime = refreshTime;
 
             _hasHadInitialRefresh = true;
@@ -151,7 +154,8 @@ namespace VPB
                         try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
 
                         if (!p.IsVisible) continue;
-                        if (changed) p.ApplyPackageDelta(added, removed);
+                        if (changed)
+                            p.ApplyPackageDelta(added, removed);
                     }
 
                     if (!autoRefreshPending) break;
@@ -358,22 +362,24 @@ namespace VPB
             {
                 Gallery.Category initial = categories[0];
 
-                if (!string.IsNullOrEmpty(forcedInitialCategory))
+                string categoryToOpen = forcedInitialCategory;
+                if (string.IsNullOrEmpty(categoryToOpen) && VPBConfig.Instance != null)
+                    categoryToOpen = VPBConfig.Instance.ResolveInitialGalleryCategoryName();
+
+                if (!string.IsNullOrEmpty(categoryToOpen))
                 {
-                    // Caller specified a category (e.g. "Scenes" on startup) – use it, don't restore last viewed.
                     for (int i = 0; i < categories.Count; i++)
                     {
-                        if (string.Equals(categories[i].name, forcedInitialCategory, StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(categories[i].name, categoryToOpen, StringComparison.OrdinalIgnoreCase))
                         {
                             initial = categories[i];
                             break;
                         }
                     }
-                    LogUtil.Log("[Gallery] CreatePane forced category='" + initial.name + "'");
                 }
                 else
                 {
-                    // Restore last-viewed category from saved state.
+                    // LastUsed: restore last-viewed category from saved state.
                     try
                     {
                         string last = VPBConfig.ReadLastGalleryCategoryFromDisk();
@@ -406,8 +412,6 @@ namespace VPB
                                     break;
                                 }
                             }
-
-                            LogUtil.Log("[Gallery] CreatePane initial category='" + initial.name + "' (saved='" + last + "')");
                         }
                     }
                     catch { }
