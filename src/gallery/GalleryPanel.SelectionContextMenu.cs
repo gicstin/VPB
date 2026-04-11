@@ -189,7 +189,7 @@ namespace VPB
                 TboxDeleteSelectedPackages
             );
             tboxDeleteBtn.name = "Tbox_Delete";
-            AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages folder");
+            AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes");
             try
             {
                 var delImg = tboxDeleteBtn.GetComponent<Image>();
@@ -866,7 +866,7 @@ namespace VPB
             if (selectedFiles != null && selectedFiles.Count > 0)
             {
                 copyN = CollectUniquePackageUidsFromSelection(selectedFiles).Count;
-                try { deleteN = GetTboxDeleteEligiblePackageCount(); } catch { deleteN = 0; }
+                try { deleteN = GetTboxDeleteEligiblePackageCount() + GetTboxDeleteEligibleLocalSceneCount(); } catch { deleteN = 0; }
 
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < selectedFiles.Count; i++)

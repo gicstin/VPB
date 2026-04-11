@@ -256,7 +256,7 @@
   "gallery.tbox.selected_many": "已选 {0} 项",
   "gallery.tbox.hover_expand": "悬停展开",
   "gallery.tooltip.tbox_copy_names": "将所选项目的资源包文件名复制到剪贴板",
-  "gallery.tooltip.tbox_delete": "将所选资源包移至 DeletedPackages 文件夹",
+  "gallery.tooltip.tbox_delete": "将所选资源包移至 DeletedPackages；本地 Saves/scene 的 JSON（及预览图）移至 DeletedScenes",
   "gallery.tooltip.tbox_pin": "固定 — 保持工具栏展开",
   "gallery.tooltip.tbox_label": "悬停以展开选择工具栏",
   "gallery.tbox.unhide": "取消隐藏",

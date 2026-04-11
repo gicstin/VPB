@@ -256,7 +256,7 @@
   "gallery.tbox.selected_many": "{0} 件選択中",
   "gallery.tbox.hover_expand": "ホバーで展開",
   "gallery.tooltip.tbox_copy_names": "選択したアイテムのパッケージファイル名をクリップボードにコピー",
-  "gallery.tooltip.tbox_delete": "選択したパッケージを DeletedPackages フォルダーに移動",
+  "gallery.tooltip.tbox_delete": "選択したパッケージを DeletedPackages に、ローカルの Saves/scene の JSON（+プレビュー）を DeletedScenes に移動",
   "gallery.tooltip.tbox_pin": "ピン留め — ツールバーを展開したまま保持",
   "gallery.tooltip.tbox_label": "ホバーして選択ツールバーを展開",
   "gallery.tbox.unhide": "隠し解除",

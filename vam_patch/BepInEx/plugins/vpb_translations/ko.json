@@ -256,7 +256,7 @@
   "gallery.tbox.selected_many": "{0}개 선택됨",
   "gallery.tbox.hover_expand": "마우스를 올려 펼치기",
   "gallery.tooltip.tbox_copy_names": "선택한 항목의 패키지 파일명을 클립보드에 복사",
-  "gallery.tooltip.tbox_delete": "선택한 패키지를 DeletedPackages 폴더로 이동",
+  "gallery.tooltip.tbox_delete": "선택한 패키지는 DeletedPackages로, 로컬 Saves/scene JSON(+미리보기)은 DeletedScenes로 이동",
   "gallery.tooltip.tbox_pin": "고정 — 툴바를 펼친 상태로 유지",
   "gallery.tooltip.tbox_label": "마우스를 올려 선택 툴바 펼치기",
   "gallery.tbox.unhide": "숨김 해제",

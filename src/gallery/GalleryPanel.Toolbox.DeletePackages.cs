@@ -107,7 +107,7 @@ namespace VPB
             }
         }
 
-        /// <summary>Package count that would be moved on delete confirm (same rules as <see cref="TboxDeleteSelectedPackages"/>).</summary>
+        /// <summary>Package count for toolbox Delete (local scenes counted separately via <see cref="GetTboxDeleteEligibleLocalSceneCount"/>).</summary>
         private int GetTboxDeleteEligiblePackageCount()
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return 0;
@@ -136,17 +136,15 @@ namespace VPB
                     return;
                 }
 
+                var localScenes = CollectLocalSceneDeleteItemsFromSelection(selectedFiles);
+
                 var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
 
-                if (uids.Count == 0)
-                {
-                    ShowTemporaryStatus("No packages found in selection.");
-                    return;
-                }
-
                 string baseDir = Directory.GetCurrentDirectory();
-                string deletedDir = Path.Combine(baseDir, DeletedPackagesFolderName);
-                EnsureDeletedPackagesDirectory(deletedDir);
+                string deletedPkgDir = Path.Combine(baseDir, DeletedPackagesFolderName);
+                string deletedSceneDir = Path.Combine(baseDir, DeletedLocalScenesFolderName);
+                EnsureDeletedPackagesDirectory(deletedPkgDir);
+                EnsureDeletedLocalScenesDirectory(deletedSceneDir);
 
                 string currentScenePkg = null;
                 try { currentScenePkg = VamHookPlugin.CurrentScenePackageUid; } catch { }
@@ -156,7 +154,8 @@ namespace VPB
                 var blocked = new List<string>();
                 var warned = new List<string>();
                 var toDelete = new List<string>();
-                ClassifyUidsForTboxDelete(uids, currentScenePkg, runningSceneDeps, blocked, warned, toDelete);
+                if (uids.Count > 0)
+                    ClassifyUidsForTboxDelete(uids, currentScenePkg, runningSceneDeps, blocked, warned, toDelete);
 
                 var relatedEntries = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < toDelete.Count; i++)
@@ -171,36 +170,67 @@ namespace VPB
                     catch { }
                 }
 
-                if (toDelete.Count == 0)
+                if (toDelete.Count == 0 && localScenes.Count == 0)
                 {
-                    ShowTemporaryStatus(blocked.Count > 0 ? "Nothing to delete (blocked)." : "Nothing to delete.");
+                    if (uids.Count == 0)
+                        ShowTemporaryStatus("Nothing to delete (no packages or local scenes in selection).");
+                    else
+                        ShowTemporaryStatus(blocked.Count > 0 ? "Nothing to delete (blocked)." : "Nothing to delete.");
                     return;
                 }
 
                 string relatedBlock = BuildRelatedEntriesBlock(relatedEntries);
 
+                var summaryLines = new List<string>();
+                if (toDelete.Count > 0)
+                    summaryLines.Add($"Move {toDelete.Count} package(s) into '{DeletedPackagesFolderName}'.");
+                if (localScenes.Count > 0)
+                    summaryLines.Add($"Move {localScenes.Count} local scene(s) (JSON and preview image if present) into '{DeletedLocalScenesFolderName}'.");
+
                 string msg =
-                    $"Delete will move {toDelete.Count} package(s) into '{DeletedPackagesFolderName}'.\n\n" +
+                    string.Join("\n", summaryLines.ToArray()) + "\n\n" +
                     (string.IsNullOrEmpty(relatedBlock) ? "" : (relatedBlock + "\n\n")) +
                     (warned.Count > 0 ? ("Warnings:\n- " + string.Join("\n- ", warned.Distinct().Take(12).ToArray()) + (warned.Count > 12 ? "\n- ..." : "") + "\n\n") : "") +
-                    (blocked.Count > 0 ? ("Blocked (will NOT be deleted):\n- " + string.Join("\n- ", blocked.Distinct().Take(12).ToArray()) + (blocked.Count > 12 ? "\n- ..." : "") + "\n\n") : "") +
+                    (blocked.Count > 0 ? ("Blocked packages (will NOT be deleted):\n- " + string.Join("\n- ", blocked.Distinct().Take(12).ToArray()) + (blocked.Count > 12 ? "\n- ..." : "") + "\n\n") : "") +
                     "Proceed?";
 
-                if (warned.Count > 0)
+                DisplayConfirm("Delete", msg, () =>
                 {
-                    DisplayConfirm("Delete Packages", msg, () => PerformDeleteMove(toDelete, deletedDir));
-                }
-                else
-                {
-                    // Still confirm on destructive action
-                    DisplayConfirm("Delete Packages", msg, () => PerformDeleteMove(toDelete, deletedDir));
-                }
+                    int pm = 0, pf = 0, sm = 0, sf = 0;
+                    if (toDelete.Count > 0)
+                        PerformDeleteMove(toDelete, deletedPkgDir, out pm, out pf);
+                    if (localScenes.Count > 0)
+                        PerformLocalScenesDeleteMove(localScenes, deletedSceneDir, out sm, out sf);
+                    ShowCombinedDeleteStatus(pm, pf, sm, sf);
+                });
             }
             catch (Exception ex)
             {
                 LogUtil.LogError("[VPB] TboxDeleteSelectedPackages error: " + ex);
                 ShowTemporaryStatus("Delete failed. See log.", 2f);
             }
+        }
+
+        private void ShowCombinedDeleteStatus(int pkgMoved, int pkgFailed, int sceneMoved, int sceneFailed)
+        {
+            int ok = pkgMoved + sceneMoved;
+            int fail = pkgFailed + sceneFailed;
+            if (ok == 0 && fail == 0) return;
+
+            var parts = new List<string>();
+            if (pkgMoved > 0) parts.Add(pkgMoved + " package(s)");
+            if (sceneMoved > 0) parts.Add(sceneMoved + " local scene(s)");
+
+            if (fail == 0)
+            {
+                ShowTemporaryStatus("Deleted " + string.Join(" and ", parts.ToArray()) + ".", 2f);
+                return;
+            }
+
+            if (ok > 0)
+                ShowTemporaryStatus("Deleted " + string.Join(", ", parts.ToArray()) + "; " + fail + " failed. See log.", 3f);
+            else
+                ShowTemporaryStatus("Delete failed (" + fail + "). See log.", 3f);
         }
 
         private static void EnsureDeletedPackagesDirectory(string deletedDir)
@@ -212,10 +242,10 @@ namespace VPB
             catch { }
         }
 
-        private void PerformDeleteMove(List<string> uids, string deletedDir)
+        private void PerformDeleteMove(List<string> uids, string deletedDir, out int moved, out int failed)
         {
-            int moved = 0;
-            int failed = 0;
+            moved = 0;
+            failed = 0;
             var movedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 0; i < uids.Count; i++)
@@ -259,9 +289,6 @@ namespace VPB
                 try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
             }
             catch { }
-
-            if (failed == 0) ShowTemporaryStatus($"Deleted {moved} package(s).", 2f);
-            else ShowTemporaryStatus($"Deleted {moved}, failed {failed}. See log.", 3f);
         }
 
         private static int GetDependentCount(string uid)
