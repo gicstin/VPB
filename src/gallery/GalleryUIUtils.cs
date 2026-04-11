@@ -358,7 +358,7 @@ namespace VPB
             }
         }
 
-        public static GameObject CreateVScrollableContent(GameObject parentGO, Color backgroundColor, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, float scrollBarWidth = 15f, float spacing = 0f)
+        public static GameObject CreateVScrollableContent(GameObject parentGO, Color backgroundColor, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, float scrollBarWidth = 15f, float spacing = 0f, bool addBottomFlexSpacer = true)
         {
             GameObject scrollableContentGO = AddChildGOImage(parentGO, backgroundColor, anchorPreset, horizontalSize, verticalSize, anchoredPositionOffset);
 
@@ -391,13 +391,16 @@ namespace VPB
             csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            // Add a flexible spacer to the content so it doesn't leave huge empty gaps if there are few items
-            GameObject spacer = new GameObject("BottomSpacer");
-            spacer.transform.SetParent(contentGO.transform, false);
-            LayoutElement le = spacer.AddComponent<LayoutElement>();
-            le.preferredHeight = 0;
-            le.flexibleHeight = 10000; // Large flexible height to consume any extra space in the parent
-            
+            if (addBottomFlexSpacer)
+            {
+                // Main grid only: lets short lists fill the viewport. Sub-tab lists stay tight to the last row.
+                GameObject spacer = new GameObject("BottomSpacer");
+                spacer.transform.SetParent(contentGO.transform, false);
+                LayoutElement le = spacer.AddComponent<LayoutElement>();
+                le.preferredHeight = 0;
+                le.flexibleHeight = 10000;
+            }
+
             GameObject scrollbarGO = CreateScrollBar(scrollableContentGO, scrollBarWidth, verticalSize, Scrollbar.Direction.BottomToTop);
             Scrollbar scrollbar = scrollbarGO.GetComponent<Scrollbar>();
 

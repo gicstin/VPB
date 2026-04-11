@@ -363,7 +363,7 @@ namespace VPB
                 rightTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
 
                 // 1b. Right Sub Tab Area (For Tags split view)
-                rightSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero);
+                rightSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero, 15f, 0f, false);
                 RectTransform rightSubTabRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                 rightSubTabRT.anchorMin = new Vector2(1, 0);
                 rightSubTabRT.anchorMax = new Vector2(1, 0.5f); // Bottom half default
@@ -508,7 +508,7 @@ namespace VPB
                 leftTabScrollGO.SetActive(false); // Hidden by default
 
                 // 2b. Left Sub Tab Area (For Tags split view)
-                leftSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchLeft, tabAreaWidth, 0, Vector2.zero);
+                leftSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchLeft, tabAreaWidth, 0, Vector2.zero, 15f, 0f, false);
                 RectTransform leftSubTabRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                 leftSubTabRT.anchorMin = new Vector2(0, 0);
                 leftSubTabRT.anchorMax = new Vector2(0, 0.5f); // Bottom half default
@@ -2275,10 +2275,16 @@ UpdateDesktopModeButton();
             statusBarText.raycastTarget = false;
             
             RectTransform statusRT = statusBarGO.GetComponent<RectTransform>();
-            statusRT.anchorMin = Vector2.zero;
-            statusRT.anchorMax = Vector2.one;
-            statusRT.sizeDelta = Vector2.zero;
+            // Bottom-row anchor: same as hoverPathText and tboxLabelLayer
+            statusRT.anchorMin        = new Vector2(0f, 0f);
+            statusRT.anchorMax        = new Vector2(1f, 0f);
+            statusRT.pivot            = new Vector2(0.5f, 0f);
             statusRT.anchoredPosition = Vector2.zero;
+            statusRT.sizeDelta        = new Vector2(0f, 60f);
+            {
+                var sRT = statusRT;
+                innerPaneScaleActions.Add(s => { if (sRT != null) sRT.sizeDelta = new Vector2(0f, 60f * s); });
+            }
 
             // Pointer Dot
             pointerDotGO = new GameObject("PointerDot");

@@ -73,17 +73,8 @@ namespace VPB
             return d.ToString("0.0") + " " + suffix[i];
         }
 
-        private float CurrentBottomOffset
-        {
-            get
-            {
-                float bottom = 60;
-                return bottom;
-            }
-        }
-
-        private float SideTabBottomMargin => isFixedLocally ? CurrentBottomOffset + 8f : 5f;
-        private float SideTabDefaultBottomOffset => isFixedLocally ? CurrentBottomOffset + 8f : 68f;
+        private float SideTabBottomMargin => GalleryMainAreaBottomInset() + 8f;
+        private float SideTabDefaultBottomOffset => GalleryMainAreaBottomInset() + 8f;
         // Top inset for main tab scroll: clears the sort button + search row (anchored at y=-55, height=35*scale)
         private float TabScrollTopOffset()
         {
@@ -159,14 +150,14 @@ namespace VPB
                     RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
                     leftRT.anchorMin = new Vector2(0, 0.5f);
                     leftRT.anchorMax = new Vector2(0, 1);
-                    leftRT.offsetMin = new Vector2(10, SideTabBottomMargin); // Add gap at bottom
+                    leftRT.offsetMin = new Vector2(10, SideTabSplitSeamInset());
                     leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
 
                     RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                     subRT.anchorMin = new Vector2(0, 0);
                     subRT.anchorMax = new Vector2(0, 0.5f);
-                    subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
-                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105); // Gap for clear button (moved up)
+                    subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
+                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
                     // Populate Top (Category / Hub Category / Status)
                     UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
@@ -260,14 +251,14 @@ namespace VPB
                     RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
                     rightRT.anchorMin = new Vector2(1, 0.5f);
                     rightRT.anchorMax = new Vector2(1, 1);
-                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabBottomMargin); // Add gap at bottom
+                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabSplitSeamInset());
                     rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
 
                     RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                     subRT.anchorMin = new Vector2(1, 0);
                     subRT.anchorMax = new Vector2(1, 0.5f);
-                    subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55); // Add gap at top for controls
-                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105); // Gap for clear button (moved up)
+                    subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
+                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
                     // Populate Top (Category / Hub Category / Status)
                     UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
@@ -338,14 +329,14 @@ namespace VPB
                 RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
                 leftRT.anchorMin = new Vector2(0, 0.5f);
                 leftRT.anchorMax = new Vector2(0, 1);
-                leftRT.offsetMin = new Vector2(10, SideTabBottomMargin);
+                leftRT.offsetMin = new Vector2(10, SideTabSplitSeamInset());
                 leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
 
                 RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                 subRT.anchorMin = new Vector2(0, 0);
                 subRT.anchorMax = new Vector2(0, 0.5f);
-                subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55);
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105);
+                subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
+                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
                 UpdateTabs(ContentType.Hub, leftTabContainerGO, leftActiveTabButtons, true);
                 UpdateTabs(ContentType.HubTags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
@@ -383,14 +374,14 @@ namespace VPB
                 RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
                 rightRT.anchorMin = new Vector2(1, 0.7f);
                 rightRT.anchorMax = new Vector2(1, 1);
-                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabBottomMargin);
+                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabSplitSeamInset());
                 rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
 
                 RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                 subRT.anchorMin = new Vector2(1, 0);
                 subRT.anchorMax = new Vector2(1, 0.7f);
-                subRT.offsetMax = new Vector2(subRT.offsetMax.x, -55);
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin + 105);
+                subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
+                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
                 UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
                 UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);

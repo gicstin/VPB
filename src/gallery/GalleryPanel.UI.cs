@@ -913,18 +913,35 @@ namespace VPB
                 innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(12f*s, 40f*s); if (le != null) { le.preferredWidth = 12f*s; le.minWidth = 12f*s; } });
             }
 
-            // Hover Path Text (Now placed above the buttons with background)
-            GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.85f), AnchorPresets.hStretchBottom, 0, 40, new Vector2(0, 40));
+            // Unified info bar — always visible; hosts hover path, status messages, and tbox label/buttons.
+            // RectMask2D clips the buttons row when the bar is in collapsed state.
+            GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0.15f, 0.15f, 0.15f, 1f), AnchorPresets.hStretchBottom, 0, 40, new Vector2(0, 40));
             pathGO.name = "HoverPathContainer";
-            pathGO.GetComponent<Image>().raycastTarget = false;
+            pathGO.GetComponent<Image>().raycastTarget = true; // tbox hover delegate needs raycasts
+            pathGO.AddComponent<RectMask2D>();                 // clips buttons row until bar grows
             hoverPathRT = pathGO.GetComponent<RectTransform>();
-            hoverPathCanvasGroup = pathGO.AddComponent<CanvasGroup>();
+
+            // HoverPathText — anchored to the bottom (tooltip) row; CanvasGroup fades only the text
+            GameObject hoverPathTextGO = new GameObject("HoverPathText");
+            hoverPathTextGO.transform.SetParent(pathGO.transform, false);
+            hoverPathCanvasGroup = hoverPathTextGO.AddComponent<CanvasGroup>();
             hoverPathCanvasGroup.alpha = 0;
             hoverPathCanvasGroup.blocksRaycasts = false;
             hoverPathCanvasGroup.interactable = false;
-            
-            GameObject hoverPathTextGO = new GameObject("HoverPathText");
-            hoverPathTextGO.transform.SetParent(pathGO.transform, false);
+            var hoverPathTextRT2 = hoverPathTextGO.GetComponent<RectTransform>();
+            if (hoverPathTextRT2 == null) hoverPathTextRT2 = hoverPathTextGO.AddComponent<RectTransform>();
+            // Bottom-row anchor: pinned to bottom of bar, fixed 60 px tall (updated by scale actions)
+            hoverPathTextRT2.anchorMin        = new Vector2(0f, 0f);
+            hoverPathTextRT2.anchorMax        = new Vector2(1f, 0f);
+            hoverPathTextRT2.pivot            = new Vector2(0.5f, 0f);
+            hoverPathTextRT2.anchoredPosition = Vector2.zero;
+            hoverPathTextRT2.sizeDelta        = new Vector2(0f, 60f);
+            // Scale action keeps text wrapper in sync with row height
+            {
+                var hpRT = hoverPathTextRT2;
+                innerPaneScaleActions.Add(s => { if (hpRT != null) hpRT.sizeDelta = new Vector2(0f, 60f * s); });
+            }
+
             hoverPathText = hoverPathTextGO.AddComponent<Text>();
             hoverPathText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             hoverPathText.fontSize = 20; // Slightly smaller to ensure 2 rows fit comfortably in 60px
@@ -939,11 +956,7 @@ namespace VPB
             hoverPathText.text = "";
             hoverPathText.raycastTarget = false;
             
-            RectTransform hoverPathTextRT = hoverPathTextGO.GetComponent<RectTransform>();
-            hoverPathTextRT.anchorMin = Vector2.zero;
-            hoverPathTextRT.anchorMax = Vector2.one;
-            hoverPathTextRT.sizeDelta = Vector2.zero;
-            hoverPathTextRT.anchoredPosition = Vector2.zero;
+            // RectTransform already configured above on hoverPathTextRT2
 
             UpdateSideButtonsVisibility();
             UpdateFooterFollowStates();
@@ -1011,7 +1024,8 @@ namespace VPB
                 if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(showClearFilter);
                 if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(showClearFilter);
                 if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(showClearFilter);
-                if (paginationText != null) paginationText.gameObject.SetActive(!showClearFilter);
+                // Item count moved to tbox bar — hide it from the bottom bar in gallery mode
+                if (paginationText != null) paginationText.gameObject.SetActive(false);
 
                 if (showClearFilter && footerClearFilterBtn != null)
                 {

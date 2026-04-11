@@ -451,6 +451,7 @@ namespace VPB
                 finalStatus = temporaryStatusMsg;
             }
 
+            // When a status message is showing, interrupt any in-progress path fade
             if (!string.IsNullOrEmpty(finalStatus) && hoverPathCanvasGroup != null)
             {
                 if (hoverFadeCoroutine != null)
@@ -458,7 +459,7 @@ namespace VPB
                     StopCoroutine(hoverFadeCoroutine);
                     hoverFadeCoroutine = null;
                 }
-                hoverPathCanvasGroup.alpha = 1f;
+                hoverPathCanvasGroup.alpha = 0f; // hide path text while status is visible
             }
 
             if (statusBarText != null)
@@ -469,16 +470,12 @@ namespace VPB
 
             if (hoverPathText != null)
             {
-                // Path label and status/hit label should never be on at once. Status has priority.
+                // Path text and status text are never shown together; status has priority.
                 bool showPath = string.IsNullOrEmpty(finalStatus) && !string.IsNullOrEmpty(hoverPathText.text);
                 hoverPathText.gameObject.SetActive(showPath);
             }
 
-            if (hoverPathRT != null)
-            {
-                bool anyVisible = (statusBarText != null && statusBarText.gameObject.activeSelf) || (hoverPathText != null && hoverPathText.gameObject.activeSelf);
-                hoverPathRT.gameObject.SetActive(anyVisible);
-            }
+            // Info bar (hoverPathRT) is always active — no show/hide needed
 
             // FPS (lightweight, ~2Hz)
             if (fpsText != null)

@@ -58,9 +58,13 @@ namespace VPB
         private GameObject    tboxPinBtn;
         private Text          tboxPinBtnText;
 
-        private const float TboxCollapsedH = 38f;  // height when showing "X Selected" + hover hint (one row)
-        private const float TboxExpandedH  = 56f;  // height when showing action buttons (4 action buttons)
-        private const float TboxBottomY    = 120f; // sits above the hover-path bar
+        // Row height: matches the collapsed bar height set by the layout system.
+        // Updated by layout code (UI.Layout.cs) and innerPaneScaleActions.
+        private float tboxInfoRowHeight = 60f;   // single row height (= collapsed bar height)
+        private float tboxTopOffsetBase = 120f;   // bar's top offset (offsetMax.y) when fully collapsed
+
+        private RectTransform tboxLabelLayerRT;   // reference for scale updates
+        private RectTransform tboxButtonsLayerRT; // reference for scale updates
 
         private const float IboxCollapsedH = 34f;
         private const float IboxExpandedH  = 162f;
@@ -71,22 +75,16 @@ namespace VPB
         private void EnsureTboxUI()
         {
             if (tbox != null) return;
-            if (backgroundBoxGO == null) return;
+            // Reuse the unified info bar (hoverPath container) as the tbox
+            if (hoverPathRT == null) return;
 
-            // ── Bar (full-width, anchored at bottom) ──────────────────────────────
-            tbox = UI.AddChildGOImage(
-                backgroundBoxGO,
-                new Color(0f, 0f, 0f, 0.85f),
-                AnchorPresets.hStretchBottom,
-                0,
-                TboxCollapsedH,
-                new Vector2(0f, TboxBottomY)
-            );
-            tbox.name = "SelectionToolbox";
-            tboxRT = tbox.GetComponent<RectTransform>();
+            tbox   = hoverPathRT.gameObject;
+            tboxRT = hoverPathRT;
+            tbox.name = "InfoBar";
 
+            // Background already set to opaque grey in UI.cs; ensure raycastTarget on
             var img = tbox.GetComponent<Image>();
-            if (img != null) img.raycastTarget = true;
+            if (img != null) { img.color = new Color(0.15f, 0.15f, 0.15f, 1f); img.raycastTarget = true; }
 
             var hoverDel = tbox.AddComponent<UIHoverDelegate>();
             hoverDel.OnHoverChange = h => tboxIsHovered = h;
@@ -96,13 +94,15 @@ namespace VPB
             labelGO.transform.SetParent(tbox.transform, false);
             tboxLabelCG = labelGO.AddComponent<CanvasGroup>();
 
-            // RectTransform — fill bar, leave 48 px on right for pin button
+            // Label layer occupies the BOTTOM row (always visible), leaving 48 px on right for pin
             var labelLayerRT = labelGO.GetComponent<RectTransform>();
             if (labelLayerRT == null) labelLayerRT = labelGO.AddComponent<RectTransform>();
-            labelLayerRT.anchorMin = Vector2.zero;
-            labelLayerRT.anchorMax = Vector2.one;
-            labelLayerRT.offsetMin = new Vector2(0f,   0f);
-            labelLayerRT.offsetMax = new Vector2(-48f, 0f);
+            labelLayerRT.anchorMin        = new Vector2(0f, 0f);
+            labelLayerRT.anchorMax        = new Vector2(1f, 0f);
+            labelLayerRT.pivot            = new Vector2(0.5f, 0f);
+            labelLayerRT.anchoredPosition = Vector2.zero;
+            labelLayerRT.sizeDelta        = new Vector2(-48f, tboxInfoRowHeight);
+            tboxLabelLayerRT = labelLayerRT;
 
             var rowGO = new GameObject("TboxLabelRow");
             rowGO.transform.SetParent(labelGO.transform, false);
@@ -122,7 +122,6 @@ namespace VPB
             rowHLG.padding             = new RectOffset(8, 8, 0, 0);
 
             const int tboxCollapsedFont = 18;
-            var labelColor = new Color(0.92f, 0.92f, 0.92f, 1f);
 
             var labelTextGO = new GameObject("Text");
             labelTextGO.transform.SetParent(rowGO.transform, false);
@@ -130,7 +129,7 @@ namespace VPB
             tboxLabel.font      = Resources.GetBuiltinResource<Font>("Arial.ttf");
             tboxLabel.fontSize  = tboxCollapsedFont;
             tboxLabel.fontStyle = FontStyle.Bold;
-            tboxLabel.color     = labelColor;
+            tboxLabel.color     = new Color(0.92f, 0.92f, 0.92f, 1f);
             tboxLabel.alignment = TextAnchor.MiddleCenter;
             tboxLabel.raycastTarget = false;
             var labelShadow = labelTextGO.AddComponent<Shadow>();
@@ -146,10 +145,11 @@ namespace VPB
             tboxHintLabel.font      = Resources.GetBuiltinResource<Font>("Arial.ttf");
             tboxHintLabel.fontSize  = tboxCollapsedFont;
             tboxHintLabel.fontStyle = FontStyle.Normal;
-            tboxHintLabel.color     = labelColor;
+            tboxHintLabel.color     = new Color(0.50f, 0.50f, 0.50f, 1f);
             tboxHintLabel.alignment = TextAnchor.MiddleCenter;
             tboxHintLabel.raycastTarget = false;
             tboxHintLabel.text      = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
+            hintTextGO.SetActive(false);
             var hintShadow = hintTextGO.AddComponent<Shadow>();
             hintShadow.effectColor    = new Color(0f, 0f, 0f, 0.5f);
             hintShadow.effectDistance = new Vector2(1f, -1f);
@@ -165,12 +165,16 @@ namespace VPB
             tboxButtonsCG.blocksRaycasts = false;
             tboxButtonsCG.interactable   = false;
 
+            // Buttons layer sits in the TOP row — directly above the label row.
+            // Revealed by RectMask2D as the bar grows upward.
             var bpRT = bpGO.GetComponent<RectTransform>();
             if (bpRT == null) bpRT = bpGO.AddComponent<RectTransform>();
-            bpRT.anchorMin = Vector2.zero;
-            bpRT.anchorMax = Vector2.one;
-            bpRT.offsetMin = new Vector2(0f,   0f);
-            bpRT.offsetMax = new Vector2(-48f, 0f); // same right inset as label layer
+            bpRT.anchorMin        = new Vector2(0f, 0f);
+            bpRT.anchorMax        = new Vector2(1f, 0f);
+            bpRT.pivot            = new Vector2(0.5f, 0f);
+            bpRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight); // sits one row above bottom
+            bpRT.sizeDelta        = new Vector2(-48f, tboxInfoRowHeight);
+            tboxButtonsLayerRT = bpRT;
 
             const int tboxActionBtnFont = 16;
             tboxCopyPkgNamesBtn = UI.CreateUIButton(
@@ -247,13 +251,13 @@ namespace VPB
                 }
             );
             tboxPinBtn.name = "Tbox_Pin";
-            // vStretchRight: right-edge, full height of bar
+            // Pin button is anchored to the bottom row (tooltip row), not the full bar
             var pinRT = tboxPinBtn.GetComponent<RectTransform>();
             pinRT.anchorMin        = new Vector2(1f, 0f);
-            pinRT.anchorMax        = new Vector2(1f, 1f);
-            pinRT.pivot            = new Vector2(1f, 0.5f);
+            pinRT.anchorMax        = new Vector2(1f, 0f);
+            pinRT.pivot            = new Vector2(1f, 0f);
             pinRT.anchoredPosition = Vector2.zero;
-            pinRT.sizeDelta        = new Vector2(44f, 0f);
+            pinRT.sizeDelta        = new Vector2(44f, tboxInfoRowHeight);
 
             tboxPinBtnText = tboxPinBtn.GetComponentInChildren<Text>();
 
@@ -272,11 +276,43 @@ namespace VPB
                 sepRT.sizeDelta        = new Vector2(1f, 0f);
             }
 
+            // Thin separator line at the row boundary (between tooltip row and toolbox row)
+            {
+                var rowSepGO = new GameObject("RowSeparator");
+                rowSepGO.transform.SetParent(tbox.transform, false);
+                var rowSepImg = rowSepGO.AddComponent<Image>();
+                rowSepImg.color = new Color(1f, 1f, 1f, 0.12f);
+                rowSepImg.raycastTarget = false;
+                var rowSepRT = rowSepGO.GetComponent<RectTransform>();
+                rowSepRT.anchorMin        = new Vector2(0f, 0f);
+                rowSepRT.anchorMax        = new Vector2(1f, 0f);
+                rowSepRT.pivot            = new Vector2(0.5f, 0f);
+                rowSepRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight);
+                rowSepRT.sizeDelta        = new Vector2(0f, 1f);
+
+                // Scale action to reposition separator when InnerPaneScale changes
+                var rsRT = rowSepRT;
+                innerPaneScaleActions.Add(s => {
+                    if (rsRT != null) rsRT.anchoredPosition = new Vector2(0f, 60f * s);
+                });
+            }
+
+            // Scale actions to resize rows when InnerPaneScale changes
+            {
+                var lRT = tboxLabelLayerRT;
+                var bRT = tboxButtonsLayerRT;
+                var pRT = pinRT;
+                innerPaneScaleActions.Add(s => {
+                    float rowH = 60f * s;
+                    tboxInfoRowHeight = rowH;
+                    if (lRT != null) lRT.sizeDelta = new Vector2(lRT.sizeDelta.x, rowH);
+                    if (bRT != null) { bRT.anchoredPosition = new Vector2(0f, rowH); bRT.sizeDelta = new Vector2(bRT.sizeDelta.x, rowH); }
+                    if (pRT != null) pRT.sizeDelta = new Vector2(pRT.sizeDelta.x, rowH);
+                });
+            }
+
             RefreshTboxPinVisual();
             AddTooltip(tboxPinBtn, "gallery.tooltip.tbox_pin", "Pin — keep toolbar expanded");
-            AddTooltip(tbox, "gallery.tooltip.tbox_label", "Hover to expand selection toolbar");
-
-            tbox.SetActive(false);
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -802,61 +838,93 @@ namespace VPB
             EnsureTboxUI();
             if (tbox == null) return;
 
-            int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
-            bool visible = sel > 0;
-            if (tbox.activeSelf != visible) tbox.SetActive(visible);
-            if (!visible)
+            int sel   = (selectedFiles != null) ? selectedFiles.Count : 0;
+            int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
+
+            // Update label: "X Selected  ·  Y Items" when selected, or just "Y Items"
+            if (tboxLabel != null)
+            {
+                string countStr = string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
+                if (sel > 0)
+                {
+                    string selStr = sel == 1
+                        ? VPBTranslation.T("gallery.tbox.selected_one", "1 Selected")
+                        : string.Format(VPBTranslation.T("gallery.tbox.selected_many", "{0} Selected"), sel);
+                    tboxLabel.text = string.Format("{0}  ·  {1}", selStr, countStr);
+                }
+                else
+                {
+                    tboxLabel.text = countStr;
+                }
+            }
+
+            // Expansion only when there is a selection
+            bool canExpand = sel > 0;
+            if (!canExpand)
             {
                 tboxExpandT   = 0f;
                 tboxIsHovered = false;
                 if (tboxPinned) { tboxPinned = false; RefreshTboxPinVisual(); }
-                // Keep ibox consistent when selection is cleared
-                try { UpdateIboxUI(); } catch { }
-                return;
             }
 
-            if (tboxLabel != null)
-                tboxLabel.text = sel == 1
-                    ? VPBTranslation.T("gallery.tbox.selected_one", "1 Selected")
-                    : string.Format(VPBTranslation.T("gallery.tbox.selected_many", "{0} Selected"), sel);
+            bool wantExpanded = canExpand && (tboxIsHovered || tboxPinned);
 
-            // Whether the bar should be in expanded state
-            bool wantExpanded = tboxIsHovered || tboxPinned;
-
-            // Smooth animate expand T
+            // Smooth animate expand T — fast snap
             float targetT = wantExpanded ? 1f : 0f;
-            tboxExpandT = Mathf.Lerp(tboxExpandT, targetT, Time.deltaTime * 10f);
+            tboxExpandT = Mathf.Lerp(tboxExpandT, targetT, Time.deltaTime * 22f);
             if (Mathf.Abs(tboxExpandT - targetT) < 0.005f) tboxExpandT = targetT;
 
-            // Resize bar height (grows/shrinks upward, pivot is at bottom)
+            // Animate bar height: grow offsetMax upward to reveal the buttons row
             if (tboxRT != null)
             {
-                float h = Mathf.Lerp(TboxCollapsedH, TboxExpandedH, tboxExpandT);
-                tboxRT.sizeDelta = new Vector2(0f, h);
+                float targetTop = tboxTopOffsetBase + tboxInfoRowHeight * tboxExpandT;
+                float newTop = Mathf.Lerp(tboxRT.offsetMax.y, targetTop, Time.deltaTime * 22f);
+                if (Mathf.Abs(newTop - targetTop) < 0.5f) newTop = targetTop;
+                tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, newTop);
             }
 
-            // Cross-fade: label fades out, buttons fade in
+            // Label is suppressed when path/status is actually visible, or buttons are expanded
+            bool pathVisible = hoverPathText != null && hoverPathText.gameObject.activeSelf
+                            && hoverPathCanvasGroup != null && hoverPathCanvasGroup.alpha > 0.1f;
+            bool infoShowing = pathVisible
+                             || !string.IsNullOrEmpty(dragStatusMsg)
+                             || !string.IsNullOrEmpty(temporaryStatusMsg);
+            // Label alpha tracks collapse directly — no separate lerp needed
+            float labelTarget = (infoShowing || tboxExpandT > 0.05f) ? 0f : 1f;
             if (tboxLabelCG != null)
-            {
-                tboxLabelCG.alpha = Mathf.Lerp(tboxLabelCG.alpha, 1f - tboxExpandT, Time.deltaTime * 14f);
-            }
+                tboxLabelCG.alpha = Mathf.Lerp(tboxLabelCG.alpha, labelTarget, Time.deltaTime * 22f);
 
+            // Buttons stay fully opaque — RectMask2D handles the slide-in reveal as the bar grows.
+            // Gate on tboxExpandT only (not infoShowing) so that a fading hover-path label
+            // doesn't suppress buttons and cause them to flash when the path finally fades out.
             if (tboxButtonsCG != null)
             {
-                float targetAlpha = tboxExpandT;
-                tboxButtonsCG.alpha = Mathf.Lerp(tboxButtonsCG.alpha, targetAlpha, Time.deltaTime * 14f);
-                if (Mathf.Abs(tboxButtonsCG.alpha - targetAlpha) < 0.01f)
-                    tboxButtonsCG.alpha = targetAlpha;
-
-                bool active = tboxButtonsCG.alpha > 0.1f;
-                tboxButtonsCG.blocksRaycasts = active;
-                tboxButtonsCG.interactable   = tboxButtonsCG.alpha > 0.6f;
+                bool showButtons = canExpand && tboxExpandT > 0.05f;
+                tboxButtonsCG.alpha          = showButtons ? 1f : 0f;
+                tboxButtonsCG.blocksRaycasts = canExpand && tboxExpandT > 0.5f;
+                tboxButtonsCG.interactable   = canExpand && tboxExpandT > 0.85f;
             }
 
-            RefreshTboxConditionalActionButtons();
+            if (sel > 0)
+                RefreshTboxConditionalActionButtons();
 
             // Info box (top) updates independently (single selection only)
             try { UpdateIboxUI(); } catch { }
+
+            // Keep grid / side tab scrollers above the footer while tbox height animates.
+            try
+            {
+                if (contentScrollRT != null)
+                {
+                    float tabTop = TabScrollTopOffset();
+                    SyncGalleryMainAreaBottomEdge(
+                        contentScrollRT.offsetMin.x,
+                        contentScrollRT.offsetMax.x,
+                        contentScrollRT.offsetMax.y,
+                        tabTop);
+                }
+            }
+            catch { }
         }
 
         /// <summary>Copy/Delete/Hide/Unhide/Autoinstall: counts in labels and compact layout for the hide/AI group.</summary>

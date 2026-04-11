@@ -142,49 +142,10 @@ namespace VPB
             }
             
             float paneScale = VPBConfig.Instance.InnerPaneScale;
-            float bottomOffset = 60 * paneScale; // Overlay status bar on top of grid
             float topOffset = -65f * paneScale;
             float tabTopOffset = TabScrollTopOffset(); // clears fixed sort/search row (pos -55, height 35*s)
 
-            contentScrollRT.offsetMin = new Vector2(leftOffset, bottomOffset);
-            contentScrollRT.offsetMax = new Vector2(rightOffset, topOffset);
-
-            if (leftTabScrollGO != null)
-            {
-                RectTransform rt = leftTabScrollGO.GetComponent<RectTransform>();
-                rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
-                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
-            }
-            if (rightTabScrollGO != null)
-            {
-                RectTransform rt = rightTabScrollGO.GetComponent<RectTransform>();
-                rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
-                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
-            }
-            if (leftSubTabScrollGO != null)
-            {
-                RectTransform rt = leftSubTabScrollGO.GetComponent<RectTransform>();
-                rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
-                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
-            }
-            if (rightSubTabScrollGO != null)
-            {
-                RectTransform rt = rightSubTabScrollGO.GetComponent<RectTransform>();
-                rt.offsetMin = new Vector2(rt.offsetMin.x, bottomOffset + 8);
-                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
-            }
-            if (leftSubClearBtn != null)
-            {
-                RectTransform rt = leftSubClearBtn.GetComponent<RectTransform>();
-                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, bottomOffset + 8);
-            }
-            if (rightSubClearBtn != null)
-            {
-                RectTransform rt = rightSubClearBtn.GetComponent<RectTransform>();
-                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, bottomOffset + 8);
-            }
-
-            // Move Footer (Pagination and Hover Path)
+            // Footer first: main grid/tab insets use the top of this stack (grows when tbox expands).
             if (paginationRT != null)
             {
                 // Footer bar: ALWAYS stretch to full width of backgroundBoxGO
@@ -193,25 +154,125 @@ namespace VPB
 
                 if (hoverPathRT != null)
                 {
-                    // Hover bar: stretch to full width
+                    // Info bar: stretch to full width, sits above the buttons bar
                     hoverPathRT.offsetMin = new Vector2(0, 60 * paneScale);
                     hoverPathRT.offsetMax = new Vector2(0, 120 * paneScale);
+                    // Update tbox expansion references so animation uses the correct scale
+                    tboxTopOffsetBase  = 120f * paneScale;
+                    tboxInfoRowHeight  = 60f  * paneScale;
                 }
             }
-            
+
+            SyncGalleryMainAreaBottomEdge(leftOffset, rightOffset, topOffset, tabTopOffset);
+
+            // Side button stacks stay vertically fixed (do not ride the footer inset).
             if (leftSideContainer != null)
             {
                 RectTransform rt = leftSideContainer.GetComponent<RectTransform>();
-                float yShift = 0;
-                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yShift);
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, 0f);
             }
             if (rightSideContainer != null)
             {
                 RectTransform rt = rightSideContainer.GetComponent<RectTransform>();
-                float yShift = 0;
-                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, yShift);
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, 0f);
             }
+            if (leftSideHoverStrip != null)
+            {
+                RectTransform rt = leftSideHoverStrip.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(rt.offsetMin.x, 0f);
+            }
+            if (rightSideHoverStrip != null)
+            {
+                RectTransform rt = rightSideHoverStrip.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(rt.offsetMin.x, 0f);
+            }
+
             UpdateFooterLayoutState();
+        }
+
+        /// <summary>Distance from panel bottom to the top edge of the bottom chrome (pagination + info/tbox bar).</summary>
+        private float GalleryMainAreaBottomInset()
+        {
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            if (hoverPathRT != null) return hoverPathRT.offsetMax.y;
+            return 120f * s;
+        }
+
+        /// <summary>Bottom inset for category/creator/tag tab scroll rects — keeps lists above pagination + info/tbox bar.</summary>
+        private float SideTabScrollBottomInsetY()
+        {
+            return GalleryMainAreaBottomInset() + 8f;
+        }
+
+        /// <summary>Small gap at the horizontal split only (upper pane — not footer clearance).</summary>
+        private float SideTabSplitSeamInset()
+        {
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            return 5f * s;
+        }
+
+        /// <summary>True for the upper stack in a split tab column (category / hub pay-type / etc.).</summary>
+        private static bool IsUpperStackedSideTabPane(RectTransform rt)
+        {
+            if (rt == null) return false;
+            return rt.anchorMax.y >= 0.92f && rt.anchorMin.y >= 0.25f;
+        }
+
+        /// <summary>Top inset for sub-tab scroll rects (anchors end at mid-split / hub line). Do not use TabScrollTopOffset (title-bar row — far too large here).</summary>
+        private float SubTabScrollPaneTopOffset()
+        {
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            return -(15f + 35f * s + 5f * s);
+        }
+
+        /// <summary>Keeps grid, side tab scrollers, and sub clear buttons above the footer; call after tbox height animates.</summary>
+        private void SyncGalleryMainAreaBottomEdge(float leftOffset, float rightOffset, float topOffset, float tabTopOffset)
+        {
+            if (contentScrollRT == null) return;
+
+            float gridBottomInset = GalleryMainAreaBottomInset();
+            float tabBottomInset = SideTabScrollBottomInsetY();
+
+            contentScrollRT.offsetMin = new Vector2(leftOffset, gridBottomInset);
+            contentScrollRT.offsetMax = new Vector2(rightOffset, topOffset);
+
+            if (leftTabScrollGO != null && leftTabScrollGO.activeSelf)
+            {
+                RectTransform rt = leftTabScrollGO.GetComponent<RectTransform>();
+                float tabBot = IsUpperStackedSideTabPane(rt) ? SideTabSplitSeamInset() : tabBottomInset;
+                rt.offsetMin = new Vector2(rt.offsetMin.x, tabBot);
+                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
+            }
+            if (rightTabScrollGO != null && rightTabScrollGO.activeSelf)
+            {
+                RectTransform rt = rightTabScrollGO.GetComponent<RectTransform>();
+                float tabBot = IsUpperStackedSideTabPane(rt) ? SideTabSplitSeamInset() : tabBottomInset;
+                rt.offsetMin = new Vector2(rt.offsetMin.x, tabBot);
+                rt.offsetMax = new Vector2(rt.offsetMax.x, tabTopOffset);
+            }
+            float subTabTop = SubTabScrollPaneTopOffset();
+            if (leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf)
+            {
+                RectTransform rt = leftSubTabScrollGO.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(rt.offsetMin.x, tabBottomInset);
+                rt.offsetMax = new Vector2(rt.offsetMax.x, subTabTop);
+            }
+            if (rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf)
+            {
+                RectTransform rt = rightSubTabScrollGO.GetComponent<RectTransform>();
+                rt.offsetMin = new Vector2(rt.offsetMin.x, tabBottomInset);
+                rt.offsetMax = new Vector2(rt.offsetMax.x, subTabTop);
+            }
+            if (leftSubClearBtn != null && leftSubClearBtn.activeSelf)
+            {
+                RectTransform rt = leftSubClearBtn.GetComponent<RectTransform>();
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, tabBottomInset);
+            }
+            if (rightSubClearBtn != null && rightSubClearBtn.activeSelf)
+            {
+                RectTransform rt = rightSubClearBtn.GetComponent<RectTransform>();
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, tabBottomInset);
+            }
         }
 
         private void UpdateButtonState(Text btnText, bool isRight, ContentType type)
