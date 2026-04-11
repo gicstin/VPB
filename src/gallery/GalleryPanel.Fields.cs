@@ -127,18 +127,14 @@ namespace VPB
         private Text rightCreatorBtnText;
         private Image rightCreatorBtnImage;
         
-        private Text rightHubBtnText; // NEW
-        private Image rightHubBtnImage; // NEW
-        private GameObject rightHubBtnGO;
+        private Text footerHubBtnText;
+        private Image footerHubBtnImage;
+        private GameObject footerHubBtnGO;
 
         private Text leftCategoryBtnText;
         private Image leftCategoryBtnImage;
         private Text leftCreatorBtnText;
         private Image leftCreatorBtnImage;
-
-        private Text leftHubBtnText; // NEW
-        private Image leftHubBtnImage; // NEW
-        private GameObject leftHubBtnGO;
 
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
@@ -152,10 +148,8 @@ namespace VPB
         private Text leftKeepClothingBtnText;
         private Image leftKeepClothingBtnImage;
 
-        private GameObject rightUndoBtnGO;
-        private GameObject leftUndoBtnGO;
-        private GameObject rightRedoBtnGO;
-        private GameObject leftRedoBtnGO;
+        private GameObject footerUndoBtnGO;
+        private GameObject footerRedoBtnGO;
 
         private GameObject rightRemoveAllClothingBtn;
         private GameObject rightRemoveAllHairBtn;
@@ -520,8 +514,7 @@ namespace VPB
         private float followDistanceReference = 1.5f;
         private bool offsetsInitialized = false;
         
-        private Text rightSettingsBtnText;
-        private Text leftSettingsBtnText;
+        private Text titleBarSettingsBtnText;
         private Text rightCloneBtnText;
         private Text leftCloneBtnText;
 
@@ -546,8 +539,7 @@ namespace VPB
         private GameObject leftClearCreatorBtn;
         private GameObject rightClearCreatorBtn;
 
-        private GameObject leftLoadRandomBtn;
-        private GameObject rightLoadRandomBtn;
+        private GameObject footerLoadRandomBtn;
 
         // Settings Pane
         private SettingsPanel settingsPanel;

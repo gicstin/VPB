@@ -121,10 +121,7 @@ namespace VPB
                 rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
             if (leftCreatorBtnText != null)
                 leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
-            if (rightHubBtnText != null)
-                rightHubBtnText.text = VPBTranslation.T("gallery.side.hub", "Hub");
-            if (leftHubBtnText != null)
-                leftHubBtnText.text = VPBTranslation.T("gallery.side.hub", "Hub");
+            RefreshGoText(footerHubBtnGO, "gallery.side.hub", "Hub");
             if (rightReplaceBtnText != null)
                 rightReplaceBtnText.text = VPBTranslation.T("gallery.side.add", "Add");
             if (leftReplaceBtnText != null)
@@ -132,14 +129,12 @@ namespace VPB
             try { UpdateTargetDropdownUI(); } catch { }
 
             // Buttons that store Text refs directly
-            if (rightSettingsBtnText != null) rightSettingsBtnText.text = VPBTranslation.T("gallery.side.settings", "Settings");
-            if (leftSettingsBtnText  != null) leftSettingsBtnText.text  = VPBTranslation.T("gallery.side.settings", "Settings");
+            if (titleBarSettingsBtnText != null) titleBarSettingsBtnText.text = VPBTranslation.T("gallery.title.settings_abbrev", "S");
             if (rightCloneBtnText    != null) rightCloneBtnText.text    = VPBTranslation.T("gallery.side.clone",    "Clone");
             if (leftCloneBtnText     != null) leftCloneBtnText.text     = VPBTranslation.T("gallery.side.clone",    "Clone");
 
             // Buttons stored as GOs – reach the Text child at refresh time
-            RefreshGoText(rightLoadRandomBtn, "gallery.side.random",      "Random");
-            RefreshGoText(leftLoadRandomBtn,  "gallery.side.random",      "Random");
+            RefreshGoText(footerLoadRandomBtn, "gallery.footer.random_abbrev", "Rdm");
             RefreshGoText(rightSaveBtnGO,     "gallery.side.save",        "Save");
             RefreshGoText(leftSaveBtnGO,      "gallery.side.save",        "Save");
             RefreshGoText(rightRemoveAtomBtn,  "gallery.side.remove_atom", "Remove\nAtom");

@@ -683,6 +683,40 @@ namespace VPB
             leftHLG.childAlignment = TextAnchor.MiddleLeft;
             leftHLG.spacing = 10;
 
+            // Undo / Redo / Random (footer left; compact labels U/R/Rdm)
+            footerUndoBtnGO = UI.CreateUIButton(leftSection, 52, 40, VPBTranslation.T("gallery.footer.undo_abbrev", "U") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Undo);
+            footerUndoBtnGO.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f);
+            footerRedoBtnGO = UI.CreateUIButton(leftSection, 52, 40, VPBTranslation.T("gallery.footer.redo_abbrev", "R") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Redo);
+            footerRedoBtnGO.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f);
+            footerLoadRandomBtn = UI.CreateUIButton(leftSection, 50, 40, VPBTranslation.T("gallery.footer.random_abbrev", "Rdm"), 14, 0, 0, AnchorPresets.middleCenter, LoadRandom);
+            footerLoadRandomBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.55f, 1f);
+
+            footerHubBtnGO = UI.CreateUIButton(leftSection, 52, 40, VPBTranslation.T("gallery.side.hub", "Hub"), 14, 0, 0, AnchorPresets.middleCenter, () => {
+                if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
+                {
+                    if (isFixedLocally) ToggleLeft(ContentType.Hub); else ToggleRight(ContentType.Hub);
+                }
+                else
+                {
+                    VamHookPlugin.singleton?.OpenHubBrowse();
+                    Hide();
+                }
+            });
+            footerHubBtnImage = footerHubBtnGO.GetComponent<Image>();
+            footerHubBtnImage.color = ColorHub;
+            footerHubBtnText = footerHubBtnGO.GetComponentInChildren<Text>();
+            AddRightClickDelegate(footerHubBtnGO, () => {
+                if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
+                {
+                    ToggleRight(ContentType.Hub);
+                }
+                else
+                {
+                    VamHookPlugin.singleton?.OpenHubBrowse();
+                    Hide();
+                }
+            });
+
             // Follow Quick Toggles
             footerFollowAngleBtn = UI.CreateUIButton(leftSection, 40, 40, "∡", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
@@ -851,6 +885,14 @@ namespace VPB
             AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase Columns");
             AddHoverDelegate(footerClearFilterBtn);
             AddTooltip(footerClearFilterBtn, "gallery.tooltip.clear_filter", "Clear Filter");
+            AddHoverDelegate(footerUndoBtnGO);
+            AddTooltip(footerUndoBtnGO, "gallery.tooltip.undo", "Undo last change");
+            AddHoverDelegate(footerRedoBtnGO);
+            AddTooltip(footerRedoBtnGO, "gallery.tooltip.redo", "Redo");
+            AddHoverDelegate(footerLoadRandomBtn);
+            AddTooltip(footerLoadRandomBtn, "gallery.tooltip.load_random", "Load random item");
+            AddHoverDelegate(footerHubBtnGO);
+            AddTooltip(footerHubBtnGO, "gallery.tooltip.hub", "Hub browse / dev Hub panel");
             AddHoverDelegate(footerFollowAngleBtn);
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
@@ -866,6 +908,26 @@ namespace VPB
 
             // Register inner pane button scale actions (footer/pagination)
             { var prt = paginationRT; innerPaneScaleActions.Add(s => { if (prt) prt.sizeDelta = new Vector2(0, 40f*s); }); }
+            {
+                var uRT = footerUndoBtnGO != null ? footerUndoBtnGO.GetComponent<RectTransform>() : null;
+                var rRT = footerRedoBtnGO != null ? footerRedoBtnGO.GetComponent<RectTransform>() : null;
+                var rndRT = footerLoadRandomBtn != null ? footerLoadRandomBtn.GetComponent<RectTransform>() : null;
+                var uT = footerUndoBtnGO != null ? footerUndoBtnGO.GetComponentInChildren<Text>() : null;
+                var rT = footerRedoBtnGO != null ? footerRedoBtnGO.GetComponentInChildren<Text>() : null;
+                var rndT = footerLoadRandomBtn != null ? footerLoadRandomBtn.GetComponentInChildren<Text>() : null;
+                var hRT = footerHubBtnGO != null ? footerHubBtnGO.GetComponent<RectTransform>() : null;
+                var hT = footerHubBtnText;
+                innerPaneScaleActions.Add(s => {
+                    if (uRT != null) uRT.sizeDelta = new Vector2(52f * s, 40f * s);
+                    if (rRT != null) rRT.sizeDelta = new Vector2(52f * s, 40f * s);
+                    if (rndRT != null) rndRT.sizeDelta = new Vector2(50f * s, 40f * s);
+                    if (hRT != null) hRT.sizeDelta = new Vector2(52f * s, 40f * s);
+                    if (uT != null) uT.fontSize = Mathf.RoundToInt(14 * s);
+                    if (rT != null) rT.fontSize = Mathf.RoundToInt(14 * s);
+                    if (rndT != null) rndT.fontSize = Mathf.RoundToInt(14 * s);
+                    if (hT != null) hT.fontSize = Mathf.RoundToInt(14 * s);
+                });
+            }
             var footerBtnGOs = new GameObject[] {
                 footerFollowAngleBtn, footerFollowDistanceBtn, footerFollowHeightBtn,
                 paginationFirstBtn, paginationPrev10Btn, paginationPrevBtn,
@@ -966,6 +1028,7 @@ namespace VPB
             UpdateFooterAutoHideState();
             UpdateFooterContextActions();
             UpdatePaginationText();
+            try { UpdateUndoRedoButtonLabels(); } catch { }
         }
 
         public void UpdatePaginationText()

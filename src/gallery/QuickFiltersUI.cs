@@ -82,8 +82,8 @@ namespace VPB
             rt.anchorMin = new Vector2(0.5f, 1);
             rt.anchorMax = new Vector2(0.5f, 1);
             rt.pivot = new Vector2(0.5f, 1);
-            // Positioned below the "Filter Presets" button (now at -240)
-            rt.anchoredPosition = new Vector2(-240, -105); 
+            // Aligned under title-bar P (anchored with main search: center -184)
+            rt.anchoredPosition = new Vector2(-184, -105); 
             rt.sizeDelta = new Vector2(260, 400); // Larger width and height for VR
             
             Image bgImg = containerGO.AddComponent<Image>();

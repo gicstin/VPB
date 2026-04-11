@@ -320,8 +320,24 @@ namespace VPB
             VPBUiFont.ApplyTo(titleBarRefreshBtnText);
             AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
 
-            // Filter Presets Button
-            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 45, 45, VPBTranslation.T("gallery.title.filter_presets", "P"), 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
+            // Settings (title bar, left of filter presets; side rails no longer host Settings)
+            GameObject titleBarSettingsBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.title.settings_abbrev", "S"), 16, 0, 0, AnchorPresets.middleCenter, () => {
+                ToggleSettings(!isFixedLocally);
+            });
+            titleBarSettingsBtn.GetComponent<Image>().color = new Color(0.15f, 0.3f, 0.45f, 1f);
+            titleBarSettingsBtnText = titleBarSettingsBtn.GetComponentInChildren<Text>();
+            titleBarSettingsBtnText.color = Color.white;
+            RectTransform titleBarSettingsRT = titleBarSettingsBtn.GetComponent<RectTransform>();
+            titleBarSettingsRT.anchorMin = new Vector2(0.5f, 0.5f);
+            titleBarSettingsRT.anchorMax = new Vector2(0.5f, 0.5f);
+            titleBarSettingsRT.pivot = new Vector2(0.5f, 0.5f);
+            // Left of P: 40×40 Settings, 6px gap, 40×40 P, 4px gap, then main search (center -40, width 240) → Settings center -230
+            titleBarSettingsRT.anchoredPosition = new Vector2(-230, 0);
+            VPBUiFont.ApplyTo(titleBarSettingsBtnText);
+            AddTooltip(titleBarSettingsBtn, "gallery.tooltip.open_settings", "Settings");
+
+            // Filter Presets Button (square, same height as Refresh)
+            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.title.filter_presets", "P"), 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
             qfToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             quickFiltersToggleBtnText = qfToggleBtn.GetComponentInChildren<Text>();
             quickFiltersToggleBtnText.color = Color.white;
@@ -329,7 +345,8 @@ namespace VPB
             qfToggleRT.anchorMin = new Vector2(0.5f, 0.5f);
             qfToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
             qfToggleRT.pivot = new Vector2(0.5f, 0.5f);
-            qfToggleRT.anchoredPosition = new Vector2(-240, 0); // Adjusted for wider button
+            // Immediately left of search: search left = -40 - 120 = -160; 4px gap; P half-width 20 → center -184
+            qfToggleRT.anchoredPosition = new Vector2(-184, 0);
             VPBUiFont.ApplyTo(quickFiltersToggleBtnText);
             AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets");
 
@@ -343,7 +360,8 @@ namespace VPB
             { var rt = fileSortDirRT; var t = fileSortDirText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
             { var rt = ratingSortToggleRT; var t = ratingSortToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(18*s); }); }
             { var rt = refreshRT; var t = titleBarRefreshBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(90f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
-            { var rt = qfToggleRT; var t = quickFiltersToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(130f*s, 45f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
+            { var rt = titleBarSettingsRT; var t = titleBarSettingsBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
+            { var rt = qfToggleRT; var t = quickFiltersToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
 
             // Tab Area - Create for all panels so undocked can clone/filter
             if (true)
@@ -663,33 +681,20 @@ namespace VPB
                 rightDesktopModeBtnText = rightDesktopBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightDesktopBtn.GetComponent<RectTransform>());
 
-                // Settings
-                GameObject rightSettingsBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.settings", "Settings"), btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, () => {
-                    ToggleSettings(true);
-                });
-                rightSettingsBtn.GetComponent<Image>().color = new Color(0.15f, 0.3f, 0.45f, 1f); // Darker Blueish
-                rightSettingsBtnText = rightSettingsBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightSettingsBtn.GetComponent<RectTransform>());
-
                 // Follow
-                GameObject rightFollowBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.follow.static", "Static"), btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, ToggleFollowMode);
+                GameObject rightFollowBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.follow.static", "Static"), btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
                 rightFollowBtnImage = rightFollowBtn.GetComponent<Image>();
                 rightFollowBtnText = rightFollowBtn.GetComponentInChildren<Text>();
                 rightFollowBtnImage.color = new Color(0.15f, 0.45f, 0.6f, 1f); // Darker Follow Blue
                 rightSideButtons.Add(rightFollowBtn.GetComponent<RectTransform>());
 
                 // Clone (Gray)
-                GameObject rightCloneBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.clone", "Clone"), btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => {
+                GameObject rightCloneBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.clone", "Clone"), btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true);
                 });
                 rightCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
                 rightCloneBtnText = rightCloneBtn.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightCloneBtn.GetComponent<RectTransform>());
-
-                // Load Random (always available)
-                rightLoadRandomBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.random", "Random"), btnFontSize, 0, 0, AnchorPresets.centre, LoadRandom);
-                rightLoadRandomBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.55f, 1f);
-                rightSideButtons.Add(rightLoadRandomBtn.GetComponent<RectTransform>());
 
                 // Category (Red)
                 GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.category", "Category"), btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => {
@@ -917,48 +922,7 @@ namespace VPB
                 }
                 catch { }
 
-                // Hub (Orange)
-                GameObject rightHubBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.hub", "Hub"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
-                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
-                    {
-                        if (isFixedLocally) ToggleLeft(ContentType.Hub); else ToggleRight(ContentType.Hub);
-                    }
-                    else
-                    {
-                        VamHookPlugin.singleton?.OpenHubBrowse();
-                        Hide();
-                    }
-                });
-                rightHubBtnGO = rightHubBtn;
-                rightHubBtnImage = rightHubBtn.GetComponent<Image>();
-                rightHubBtnImage.color = ColorHub;
-                rightHubBtnText = rightHubBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightHubBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(rightHubBtn, () => {
-                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
-                    {
-                        ToggleRight(ContentType.Hub);
-                    }
-                    else
-                    {
-                        VamHookPlugin.singleton?.OpenHubBrowse();
-                        Hide();
-                    }
-                });
-
-                // Undo (Right)
-                GameObject rightUndoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.undo", "Undo"), btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
-                rightUndoBtnGO = rightUndoBtn;
-                rightUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
-                rightSideButtons.Add(rightUndoBtn.GetComponent<RectTransform>());
-
-                // Redo (Right)
-                GameObject rightRedoBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.redo", "Redo"), btnFontSize, 0, startY - spacing * 13 - groupGap * 5, AnchorPresets.centre, Redo);
-                rightRedoBtnGO = rightRedoBtn;
-                rightRedoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
-                rightSideButtons.Add(rightRedoBtn.GetComponent<RectTransform>());
-
-                // Context Actions (Right) - inserted above Undo
+                // Context Actions (Right)
                 rightRemoveAllClothingBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Right)");
                     try
@@ -1458,33 +1422,20 @@ namespace VPB
                 leftDesktopModeBtnText = leftDesktopBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftDesktopBtn.GetComponent<RectTransform>());
 
-                // Settings
-                GameObject leftSettingsBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.settings", "Settings"), btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, () => {
-                    ToggleSettings(false);
-                });
-                leftSettingsBtn.GetComponent<Image>().color = new Color(0.15f, 0.3f, 0.45f, 1f); // Darker Blueish
-                leftSettingsBtnText = leftSettingsBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftSettingsBtn.GetComponent<RectTransform>());
-
                 // Follow
-                GameObject leftFollowBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.follow.static", "Static"), btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, ToggleFollowMode);
+                GameObject leftFollowBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.follow.static", "Static"), btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
                 leftFollowBtnImage = leftFollowBtn.GetComponent<Image>();
                 leftFollowBtnText = leftFollowBtn.GetComponentInChildren<Text>();
                 leftFollowBtnImage.color = new Color(0.15f, 0.45f, 0.6f, 1f); // Darker Follow Blue
                 leftSideButtons.Add(leftFollowBtn.GetComponent<RectTransform>());
 
                 // Clone (Gray)
-                GameObject leftCloneBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.clone", "Clone"), btnFontSize, 0, startY - spacing * 3 - groupGap * 2, AnchorPresets.centre, () => {
+                GameObject leftCloneBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.clone", "Clone"), btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, false);
                 });
                 leftCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
                 leftCloneBtnText = leftCloneBtn.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftCloneBtn.GetComponent<RectTransform>());
-
-                // Load Random (always available)
-                leftLoadRandomBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.random", "Random"), btnFontSize, 0, 0, AnchorPresets.centre, LoadRandom);
-                leftLoadRandomBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.55f, 1f);
-                leftSideButtons.Add(leftLoadRandomBtn.GetComponent<RectTransform>());
 
                 // Category (Red)
                 GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.category", "Category"), btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
@@ -1708,48 +1659,7 @@ namespace VPB
                 }
                 catch { }
 
-                // Hub (Orange)
-                GameObject leftHubBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.hub", "Hub"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, () => {
-                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
-                    {
-                        ToggleLeft(ContentType.Hub);
-                    }
-                    else
-                    {
-                        VamHookPlugin.singleton?.OpenHubBrowse();
-                        Hide();
-                    }
-                });
-                leftHubBtnGO = leftHubBtn;
-                leftHubBtnImage = leftHubBtn.GetComponent<Image>();
-                leftHubBtnImage.color = ColorHub;
-                leftHubBtnText = leftHubBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftHubBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(leftHubBtn, () => {
-                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
-                    {
-                        ToggleRight(ContentType.Hub);
-                    }
-                    else
-                    {
-                        VamHookPlugin.singleton?.OpenHubBrowse();
-                        Hide();
-                    }
-                });
-
-                // Undo (Left)
-                GameObject leftUndoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.undo", "Undo"), btnFontSize, 0, startY - spacing * 12 - groupGap * 5, AnchorPresets.centre, Undo);
-                leftUndoBtnGO = leftUndoBtn;
-                leftUndoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
-                leftSideButtons.Add(leftUndoBtn.GetComponent<RectTransform>());
-
-                // Redo (Left)
-                GameObject leftRedoBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.redo", "Redo"), btnFontSize, 0, startY - spacing * 13 - groupGap * 5, AnchorPresets.centre, Redo);
-                leftRedoBtnGO = leftRedoBtn;
-                leftRedoBtn.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f); // Darker Brown/Orange
-                leftSideButtons.Add(leftRedoBtn.GetComponent<RectTransform>());
-
-                // Context Actions (Left) - inserted above Undo
+                // Context Actions (Left)
                 leftRemoveAllClothingBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Left)");
                     try

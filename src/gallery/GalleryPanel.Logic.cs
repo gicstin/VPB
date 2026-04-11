@@ -907,32 +907,20 @@ namespace VPB
         {
             try
             {
-                string undoText = VPBTranslation.T("gallery.side.undo", "Undo") + " (" + (undoStack != null ? undoStack.Count : 0) + ")";
-                string redoText = VPBTranslation.T("gallery.side.redo", "Redo") + " (" + (redoStack != null ? redoStack.Count : 0) + ")";
+                string undoText = VPBTranslation.T("gallery.footer.undo_abbrev", "U") + " (" + (undoStack != null ? undoStack.Count : 0) + ")";
+                string redoText = VPBTranslation.T("gallery.footer.redo_abbrev", "R") + " (" + (redoStack != null ? redoStack.Count : 0) + ")";
 
-                if (rightUndoBtnGO != null)
+                if (footerUndoBtnGO != null)
                 {
                     Text t = null;
-                    try { t = rightUndoBtnGO.GetComponentInChildren<Text>(true); } catch { }
-                    if (t != null) t.text = undoText;
-                }
-                if (leftUndoBtnGO != null)
-                {
-                    Text t = null;
-                    try { t = leftUndoBtnGO.GetComponentInChildren<Text>(true); } catch { }
+                    try { t = footerUndoBtnGO.GetComponentInChildren<Text>(true); } catch { }
                     if (t != null) t.text = undoText;
                 }
 
-                if (rightRedoBtnGO != null)
+                if (footerRedoBtnGO != null)
                 {
                     Text t = null;
-                    try { t = rightRedoBtnGO.GetComponentInChildren<Text>(true); } catch { }
-                    if (t != null) t.text = redoText;
-                }
-                if (leftRedoBtnGO != null)
-                {
-                    Text t = null;
-                    try { t = leftRedoBtnGO.GetComponentInChildren<Text>(true); } catch { }
+                    try { t = footerRedoBtnGO.GetComponentInChildren<Text>(true); } catch { }
                     if (t != null) t.text = redoText;
                 }
             }

@@ -901,7 +901,6 @@ namespace VPB
             bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
 
-            int idxSettings = -1;
             int idxFloating = -1;
             int idxClone = -1;
             int idxFollow = -1;
@@ -911,13 +910,9 @@ namespace VPB
             int idxApplyMode = -1;
             int idxKeepOutfit = -1;
             int idxReplace = -1;
-            int idxRandom = 4;
             int idxRemoveHair = 15;
             int idxRemoveClothing = 14;
             int idxRemoveAtom = -1;
-            int idxHub = 12;
-            int idxUndo = 13;
-            int idxRedo = 16;
             int idxSave = -1;
             try
             {
@@ -941,14 +936,7 @@ namespace VPB
                     idxFloating = FindIndexByTextRef(rightDesktopModeBtnText != null ? rightDesktopModeBtnText : leftDesktopModeBtnText);
                     idxFollow = FindIndexByTextRef(rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText);
 
-                    idxSettings = FindIndexByTextRef(rightSettingsBtnText != null ? rightSettingsBtnText : leftSettingsBtnText);
                     idxClone    = FindIndexByTextRef(rightCloneBtnText    != null ? rightCloneBtnText    : leftCloneBtnText);
-
-                    if (rightLoadRandomBtn != null)
-                    {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == rightLoadRandomBtn);
-                        if (i >= 0) idxRandom = i;
-                    }
 
                     if (rightRemoveAllHairBtn != null)
                     {
@@ -969,27 +957,6 @@ namespace VPB
                         if (i >= 0) idxRemoveAtom = i;
                     }
 
-                    GameObject hubGo = rightHubBtnGO != null ? rightHubBtnGO : leftHubBtnGO;
-                    if (hubGo != null)
-                    {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == hubGo);
-                        if (i >= 0) idxHub = i;
-                    }
-
-                    GameObject undoGo = rightUndoBtnGO != null ? rightUndoBtnGO : leftUndoBtnGO;
-                    if (undoGo != null)
-                    {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == undoGo);
-                        if (i >= 0) idxUndo = i;
-                    }
-
-                    GameObject redoGo = rightRedoBtnGO != null ? rightRedoBtnGO : leftRedoBtnGO;
-                    if (redoGo != null)
-                    {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == redoGo);
-                        if (i >= 0) idxRedo = i;
-                    }
-
                     GameObject saveGo = rightSaveBtnGO != null ? rightSaveBtnGO : leftSaveBtnGO;
                     if (saveGo != null)
                     {
@@ -1002,15 +969,12 @@ namespace VPB
 
             var layout = new List<SideButtonLayoutEntry>()
             {
-                new SideButtonLayoutEntry(idxSettings, 0, 0), // Settings
-
                 new SideButtonLayoutEntry(idxFloating, 0, 2), // Floating
                 new SideButtonLayoutEntry(idxClone, 0, 0), // Clone
                 new SideButtonLayoutEntry(idxFollow, 0, 0), // Follow
 
                 new SideButtonLayoutEntry(idxCategory, 0, 2), // Category
                 new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
-                new SideButtonLayoutEntry(idxHub, 0, 0), // Hub
 
                 new SideButtonLayoutEntry(idxSave, 0, 2), // Save
 
@@ -1024,9 +988,6 @@ namespace VPB
                 new SideButtonLayoutEntry(idxRemoveHair, 0, 0), // Remove Hair (context)
             };
 
-            layout.Add(new SideButtonLayoutEntry(idxRandom, 0, 2)); // Random
-            layout.Add(new SideButtonLayoutEntry(idxUndo, 0, 0)); // Undo
-            layout.Add(new SideButtonLayoutEntry(idxRedo, 0, 0)); // Redo
             return layout.ToArray();
         }
 
