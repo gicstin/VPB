@@ -15,28 +15,6 @@ namespace VPB
             public string GalleryRelativePath;
         }
 
-        /// <summary>
-        /// True if <paramref name="fileFullPath"/> is a file path inside <paramref name="directoryFullPath"/> (resolved).
-        /// Handles symlink/junction-expanded paths: both arguments should already be passed through GetFullPath.
-        /// </summary>
-        private static bool IsStrictFilePathInsideDirectory(string fileFullPath, string directoryFullPath)
-        {
-            if (string.IsNullOrEmpty(fileFullPath) || string.IsNullOrEmpty(directoryFullPath)) return false;
-            try
-            {
-                string f = Path.GetFullPath(fileFullPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                string d = Path.GetFullPath(directoryFullPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                if (f.Length <= d.Length) return false;
-                if (!f.StartsWith(d, StringComparison.OrdinalIgnoreCase)) return false;
-                char boundary = f[d.Length];
-                return boundary == Path.DirectorySeparatorChar || boundary == Path.AltDirectorySeparatorChar;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
         private static string EnsureDirectoryPrefixForStartsWith(string directoryFullPathTrimmed)
         {
             if (string.IsNullOrEmpty(directoryFullPathTrimmed)) return directoryFullPathTrimmed;
@@ -77,18 +55,6 @@ namespace VPB
             }
         }
 
-        private static string GetSavesSceneDirectoryFullPath()
-        {
-            try
-            {
-                return FileManager.GetFullPath(Path.Combine(Path.Combine(Directory.GetCurrentDirectory(), "Saves"), "scene"));
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
         private static string GetExpectedDeletedScenesDirectoryFullPath()
         {
             try
@@ -101,76 +67,7 @@ namespace VPB
             }
         }
 
-        private static bool LooksLikeLocalUserScenePath(string p)
-        {
-            if (string.IsNullOrEmpty(p)) return false;
-            p = p.Replace('\\', '/');
-            if (!p.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
-
-            string lower = p.ToLowerInvariant();
-            if (lower.Contains("/subscene/") || lower.Contains("/subscenedata/")) return false;
-            if (lower.Contains("/saves/scene/vpb_tmpscenes/") || lower.Contains("vpb_tmpscenes")) return false;
-            if (lower.Contains("/deletedscenes/")) return false;
-
-            if (lower.IndexOf("/saves/scene/", StringComparison.Ordinal) >= 0) return true;
-            if (lower.StartsWith("saves/scene/", StringComparison.OrdinalIgnoreCase)) return true;
-            return false;
-        }
-
-        /// <summary>True for on-disk Saves/scene/*.json entries (not package VarFileEntry), after canonical path and containment checks.</summary>
-        private static bool TryGetLocalSceneJsonForDelete(FileEntry f, out string absoluteJsonPath, out string galleryRelativePath)
-        {
-            absoluteJsonPath = null;
-            galleryRelativePath = null;
-            if (f == null) return false;
-            if (f is VarFileEntry) return false;
-
-            string p = f.Path;
-            if (string.IsNullOrEmpty(p)) return false;
-            p = p.Replace('\\', '/');
-
-            try
-            {
-                if (FileManager.IsPackagePath(p)) return false;
-            }
-            catch { }
-
-            if (!LooksLikeLocalUserScenePath(p)) return false;
-
-            string sceneRoot = GetSavesSceneDirectoryFullPath();
-            if (string.IsNullOrEmpty(sceneRoot)) return false;
-
-            string full;
-            try
-            {
-                full = FileManager.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar));
-            }
-            catch
-            {
-                return false;
-            }
-
-            if (string.IsNullOrEmpty(full) || !File.Exists(full)) return false;
-
-            try
-            {
-                FileAttributes fa = File.GetAttributes(full);
-                if ((fa & FileAttributes.Directory) != 0) return false;
-            }
-            catch { }
-
-            if (!IsStrictFilePathInsideDirectory(full, sceneRoot))
-            {
-                LogUtil.LogWarning("[VPB] Local scene delete: rejected path outside Saves/scene (possible traversal or symlink escape): " + full);
-                return false;
-            }
-
-            absoluteJsonPath = full;
-            galleryRelativePath = p;
-            return true;
-        }
-
-        private static List<LocalSceneDeleteItem> CollectLocalSceneDeleteItemsFromSelection(IList<FileEntry> files)
+        private static List<LocalSceneDeleteItem> CollectLocalSceneDeleteItemsFromSelection(IList<FileEntry> files, bool logTraversalWarning)
         {
             var list = new List<LocalSceneDeleteItem>();
             if (files == null || files.Count == 0) return list;
@@ -179,7 +76,7 @@ namespace VPB
             for (int i = 0; i < files.Count; i++)
             {
                 var f = files[i];
-                if (!TryGetLocalSceneJsonForDelete(f, out string abs, out string rel)) continue;
+                if (!LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out string abs, out string rel, logTraversalWarning)) continue;
                 if (!seenAbs.Add(abs)) continue;
                 list.Add(new LocalSceneDeleteItem { AbsoluteJson = abs, GalleryRelativePath = rel });
             }
@@ -189,7 +86,7 @@ namespace VPB
         private int GetTboxDeleteEligibleLocalSceneCount()
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return 0;
-            return CollectLocalSceneDeleteItemsFromSelection(selectedFiles).Count;
+            return CollectLocalSceneDeleteItemsFromSelection(selectedFiles, false).Count;
         }
 
         private static bool EnsureDeletedLocalScenesDirectory(string deletedDir)
@@ -309,7 +206,7 @@ namespace VPB
             failed = 0;
             if (items == null || items.Count == 0) return;
 
-            string sceneRoot = GetSavesSceneDirectoryFullPath();
+            string sceneRoot = LocalSceneGallerySupport.GetSavesSceneDirectoryFullPath();
             string gameRoot = GetGameRootFullPath();
             string expectedDeleted = GetExpectedDeletedScenesDirectoryFullPath();
             if (string.IsNullOrEmpty(sceneRoot) || string.IsNullOrEmpty(gameRoot) || string.IsNullOrEmpty(expectedDeleted))
@@ -388,7 +285,7 @@ namespace VPB
                     continue;
                 }
 
-                if (!IsStrictFilePathInsideDirectory(srcJson, sceneRoot))
+                if (!LocalSceneGallerySupport.IsStrictFilePathInsideDirectory(srcJson, sceneRoot))
                 {
                     LogUtil.LogWarning("[VPB] Local scene delete: skipped (no longer under Saves/scene): " + srcJson);
                     failed++;
@@ -509,7 +406,7 @@ namespace VPB
                 return;
             }
 
-            if (!string.IsNullOrEmpty(sceneRootFull) && !IsStrictFilePathInsideDirectory(srcFull, sceneRootFull))
+            if (!string.IsNullOrEmpty(sceneRootFull) && !LocalSceneGallerySupport.IsStrictFilePathInsideDirectory(srcFull, sceneRootFull))
             {
                 LogUtil.LogWarning("[VPB] " + logContext + " skipped (not under Saves/scene): " + srcFull);
                 return;

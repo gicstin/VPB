@@ -180,7 +180,7 @@ namespace VPB
                 CopySelectedPackageNamesToClipboard
             );
             tboxCopyPkgNamesBtn.name = "Tbox_CopyPackageNames";
-            AddTooltip(tboxCopyPkgNamesBtn, "gallery.tooltip.tbox_copy_names", "Copy package filenames of selected items to clipboard");
+            AddTooltip(tboxCopyPkgNamesBtn, "gallery.tooltip.tbox_copy_names", "Copy package .var names and local Saves/scene paths (one per line) to clipboard");
 
             tboxDeleteBtn = UI.CreateUIButton(
                 bpGO, 180, 42,
@@ -865,7 +865,8 @@ namespace VPB
             int copyN = 0, deleteN = 0, hideN = 0, unhideN = 0, aiN = 0, noAiN = 0;
             if (selectedFiles != null && selectedFiles.Count > 0)
             {
-                copyN = CollectUniquePackageUidsFromSelection(selectedFiles).Count;
+                copyN = CollectUniquePackageUidsFromSelection(selectedFiles).Count
+                    + CollectUniqueLocalSceneGalleryRelativePathsFromSelection(selectedFiles).Count;
                 try { deleteN = GetTboxDeleteEligiblePackageCount() + GetTboxDeleteEligibleLocalSceneCount(); } catch { deleteN = 0; }
 
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -953,6 +954,21 @@ namespace VPB
             if (showNoAi) Place(tboxDisableAutoInstallBtn, wNoAi);
         }
 
+        /// <summary>Unique gallery-relative paths for on-disk Saves/scene JSON rows (for Copy Names).</summary>
+        private static HashSet<string> CollectUniqueLocalSceneGalleryRelativePathsFromSelection(IList<FileEntry> files)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (files == null) return set;
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                if (f == null) continue;
+                if (!LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out string rel, false)) continue;
+                if (!string.IsNullOrEmpty(rel)) set.Add(rel.Replace('\\', '/'));
+            }
+            return set;
+        }
+
         /// <summary>Resolve a gallery row to an on-disk .var for tbox hide/autoinstall actions (one row may share a UID).</summary>
         private bool TryGetTboxResolvablePackageState(FileEntry f, out string uid, out FileEntry diskFe, out bool isHidden, out bool fileAutoInstall, out bool uidAutoLoad)
         {
@@ -961,6 +977,17 @@ namespace VPB
             isHidden = false;
             fileAutoInstall = false;
             uidAutoLoad = false;
+
+            if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out string relGallery, false))
+            {
+                uid = relGallery.Replace('\\', '/');
+                diskFe = f;
+                isHidden = PackageHidePrefs.IsLocalSceneJsonHidden(f);
+                try { fileAutoInstall = LocalSceneGallerySupport.IsLocalSceneAutoInstallMarked(f); }
+                catch { fileAutoInstall = false; }
+                uidAutoLoad = false;
+                return true;
+            }
 
             uid = TryGetPackageUidForEntry(f);
             if (string.IsNullOrEmpty(uid)) return false;
@@ -1002,21 +1029,24 @@ namespace VPB
                 }
 
                 var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
-                if (uids.Count == 0)
+                var localScenes = CollectUniqueLocalSceneGalleryRelativePathsFromSelection(selectedFiles);
+                if (uids.Count == 0 && localScenes.Count == 0)
                 {
-                    ShowTemporaryStatus("No package names found in selection.");
+                    ShowTemporaryStatus("No package or local scene paths in selection.");
                     return;
                 }
 
-                var list = new List<string>(uids.Count);
+                var list = new List<string>(uids.Count + localScenes.Count);
                 foreach (var uid in uids)
                     list.Add(uid + ".var");
+                foreach (var rel in localScenes)
+                    list.Add(rel);
                 list.Sort(StringComparer.OrdinalIgnoreCase);
 
                 string text = string.Join("\n", list.ToArray());
 
                 GUIUtility.systemCopyBuffer = text;
-                ShowTemporaryStatus($"Copied {list.Count} package name(s) to clipboard.", 2f);
+                ShowTemporaryStatus($"Copied {list.Count} name(s) to clipboard.", 2f);
             }
             catch (Exception ex)
             {

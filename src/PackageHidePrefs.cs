@@ -103,6 +103,13 @@ namespace VPB
 			catch { return false; }
 		}
 
+		/// <summary>True when the gallery should show the "H" badge (package prefs .hide or adjacent local scene.json.hide).</summary>
+		public static bool IsGalleryHideBadgeVisible(FileEntry entry)
+		{
+			if (entry == null) return false;
+			return IsPackageVarHidden(entry) || IsLocalSceneJsonHidden(entry);
+		}
+
 		/// <summary>True when the gallery should omit this entry (hidden marker present and user is not showing hidden packages).</summary>
 		public static bool IsExcludedByGalleryHideFilter(FileEntry entry)
 		{
@@ -111,7 +118,49 @@ namespace VPB
 				if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages) return false;
 			}
 			catch { }
-			return IsPackageVarHidden(entry);
+			return IsPackageVarHidden(entry) || IsLocalSceneJsonHidden(entry);
+		}
+
+		/// <summary>Adjacent <c>scene.json.hide</c> next to a disk <c>Saves/scene</c> JSON (not AddonPackagesFilePrefs).</summary>
+		public static bool TryBuildLocalSceneJsonHidePath(FileEntry entry, out string hidePath)
+		{
+			hidePath = null;
+			if (!LocalSceneGallerySupport.TryResolveSavesSceneJson(entry, out string jsonFull, out _, false))
+				return false;
+			hidePath = jsonFull + ".hide";
+			return true;
+		}
+
+		/// <summary>True when a <c>.hide</c> sidecar exists beside this local scene JSON.</summary>
+		public static bool IsLocalSceneJsonHidden(FileEntry entry)
+		{
+			if (!TryBuildLocalSceneJsonHidePath(entry, out string hp)) return false;
+			try { return File.Exists(hp); }
+			catch { return false; }
+		}
+
+		public static bool TryEnsureLocalSceneJsonHidden(FileEntry entry)
+		{
+			try
+			{
+				if (!TryBuildLocalSceneJsonHidePath(entry, out string hp)) return false;
+				if (File.Exists(hp)) return true;
+				File.WriteAllText(hp, string.Empty);
+				return File.Exists(hp);
+			}
+			catch { return false; }
+		}
+
+		public static bool TryRemoveLocalSceneJsonHide(FileEntry entry)
+		{
+			try
+			{
+				if (!TryBuildLocalSceneJsonHidePath(entry, out string hp)) return false;
+				if (!File.Exists(hp)) return false;
+				File.Delete(hp);
+				return true;
+			}
+			catch { return false; }
 		}
 
 		/// <summary>

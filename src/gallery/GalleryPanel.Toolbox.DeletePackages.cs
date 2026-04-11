@@ -136,7 +136,7 @@ namespace VPB
                     return;
                 }
 
-                var localScenes = CollectLocalSceneDeleteItemsFromSelection(selectedFiles);
+                var localScenes = CollectLocalSceneDeleteItemsFromSelection(selectedFiles, true);
 
                 var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
 

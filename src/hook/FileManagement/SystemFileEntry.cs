@@ -68,12 +68,16 @@ namespace VPB
 		}
 		public override bool IsAutoInstall()
 		{
-            string key = System.IO.Path.GetFileNameWithoutExtension(Path);
-
-            if (AutoInstallLookup.Contains(key))
-                return true;
-            return false;
-        }
+			if (isVar)
+			{
+				string key = System.IO.Path.GetFileNameWithoutExtension(Path);
+				return AutoInstallLookup.Contains(key);
+			}
+			if (LocalSceneGallerySupport.TryGetLocalSceneAutoInstallLookupKey(this, out string sceneKey))
+				return AutoInstallLookup.Contains(sceneKey);
+			string basenameKey = System.IO.Path.GetFileNameWithoutExtension(Path);
+			return AutoInstallLookup.Contains(basenameKey);
+		}
 		public override bool SetAutoInstall(bool b)
         {
 			LogUtil.Log("SetAutoInstall " + b+" "+Path);
@@ -82,7 +86,11 @@ namespace VPB
 				string key = System.IO.Path.GetFileNameWithoutExtension(Path);
 				SetAutoInstallInternal(key, b);
 				// Install() deferred to TryAutoInstall() on next launch (see VarFileEntry.SetAutoInstall).
-			}
+            }
+            else if (LocalSceneGallerySupport.TryGetLocalSceneAutoInstallLookupKey(this, out string sceneKey))
+            {
+				SetAutoInstallInternal(sceneKey, b);
+            }
 			return false;
 		}
 

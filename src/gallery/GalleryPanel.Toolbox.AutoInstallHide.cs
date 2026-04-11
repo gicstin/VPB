@@ -31,6 +31,23 @@ namespace VPB
                     resolvedUids++;
                     if (fiAi && uidAl) continue;
 
+                    if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
+                    {
+                        if (!fiAi)
+                        {
+                            try
+                            {
+                                f.SetAutoInstall(true);
+                                installOk++;
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages local scene " + uid + ": " + ex.Message);
+                            }
+                        }
+                        continue;
+                    }
+
                     string path = ResolveVarPathForUid(uid);
                     if (string.IsNullOrEmpty(path)) continue;
 
@@ -69,7 +86,7 @@ namespace VPB
 
                 if (resolvedUids == 0)
                 {
-                    ShowTemporaryStatus("No packages found in selection.");
+                    ShowTemporaryStatus("No packages or local scenes in selection.");
                     return;
                 }
                 if (installOk == 0 && loadOk == 0)
@@ -117,7 +134,12 @@ namespace VPB
 
                     try
                     {
-                        if (PackageHidePrefs.TryEnsureVpbPackageHidden(fe)) ok++;
+                        bool hid;
+                        if (LocalSceneGallerySupport.TryResolveSavesSceneJson(fe, out _, out _, false))
+                            hid = PackageHidePrefs.TryEnsureLocalSceneJsonHidden(fe);
+                        else
+                            hid = PackageHidePrefs.TryEnsureVpbPackageHidden(fe);
+                        if (hid) ok++;
                         else failed++;
                     }
                     catch (Exception ex)
@@ -129,7 +151,7 @@ namespace VPB
 
                 if (resolvableUids == 0)
                 {
-                    ShowTemporaryStatus("No packages found in selection.");
+                    ShowTemporaryStatus("No packages or local scenes in selection.");
                     return;
                 }
 
@@ -150,7 +172,7 @@ namespace VPB
                 if (ok == 0)
                     ShowTemporaryStatus(failed > 0 ? "Hide failed (see log)." : "Nothing to hide.", 2f);
                 else
-                    ShowTemporaryStatus($"Hidden {ok} package(s)" + (failed > 0 ? $", {failed} skipped." : "."), 2f);
+                    ShowTemporaryStatus($"Hidden {ok}" + (failed > 0 ? $", {failed} skipped." : "."), 2f);
             }
             catch (Exception ex)
             {
@@ -260,7 +282,12 @@ namespace VPB
 
                     try
                     {
-                        if (PackageHidePrefs.TryRemovePackageVarHide(fe)) ok++;
+                        bool unhid;
+                        if (LocalSceneGallerySupport.TryResolveSavesSceneJson(fe, out _, out _, false))
+                            unhid = PackageHidePrefs.TryRemoveLocalSceneJsonHide(fe);
+                        else
+                            unhid = PackageHidePrefs.TryRemovePackageVarHide(fe);
+                        if (unhid) ok++;
                         else failed++;
                     }
                     catch (Exception ex)
@@ -272,7 +299,7 @@ namespace VPB
 
                 if (resolvableUids == 0)
                 {
-                    ShowTemporaryStatus("No packages found in selection.");
+                    ShowTemporaryStatus("No packages or local scenes in selection.");
                     return;
                 }
 
@@ -282,7 +309,7 @@ namespace VPB
                 if (ok == 0)
                     ShowTemporaryStatus(failed > 0 ? "Unhide failed (see log)." : "Nothing hidden in selection.", 2f);
                 else
-                    ShowTemporaryStatus($"Unhid {ok} package(s)" + (failed > 0 ? $", {failed} failed." : "."), 2f);
+                    ShowTemporaryStatus($"Unhid {ok}" + (failed > 0 ? $", {failed} failed." : "."), 2f);
             }
             catch (Exception ex)
             {
@@ -315,6 +342,23 @@ namespace VPB
                     if (!seenUid.Add(uid)) continue;
                     resolvableUids++;
                     if (!fiAi && !uidAl) continue;
+
+                    if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
+                    {
+                        if (fiAi)
+                        {
+                            try
+                            {
+                                f.SetAutoInstall(false);
+                                installOk++;
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages local scene " + uid + ": " + ex.Message);
+                            }
+                        }
+                        continue;
+                    }
 
                     string path = ResolveVarPathForUid(uid);
                     if (string.IsNullOrEmpty(path)) continue;
@@ -360,7 +404,7 @@ namespace VPB
 
                 if (resolvableUids == 0)
                 {
-                    ShowTemporaryStatus("No packages found in selection.");
+                    ShowTemporaryStatus("No packages or local scenes in selection.");
                     return;
                 }
 

@@ -1611,7 +1611,7 @@ namespace VPB
             Transform hideBadgeTr = btnGO.transform.Find("HidePackageBadge");
             if (hideBadgeTr != null)
             {
-                hideBadgeTr.gameObject.SetActive(PackageHidePrefs.IsPackageVarHidden(file));
+                hideBadgeTr.gameObject.SetActive(PackageHidePrefs.IsGalleryHideBadgeVisible(file));
             }
 
             // List Row Bind
