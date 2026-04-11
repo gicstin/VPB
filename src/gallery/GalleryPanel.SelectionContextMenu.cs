@@ -16,7 +16,9 @@ namespace VPB
         private GameObject tboxCopyPkgNamesBtn;
         private GameObject tboxDeleteBtn;
         private GameObject tboxAutoInstallBtn;
+        private GameObject tboxDisableAutoInstallBtn;
         private GameObject tboxHideBtn;
+        private GameObject tboxUnhideBtn;
 
         // Info box ("ibox") — shows details for a single selected item
         private GameObject ibox;
@@ -212,6 +214,27 @@ namespace VPB
             );
             tboxHideBtn.name = "Tbox_Hide";
             AddTooltip(tboxHideBtn, "gallery.tooltip.tbox_hide", "Hide selected packages in VaM file lists (AddonPackagesFilePrefs … .hide)");
+
+            const float tboxHideX = -12f - 220f - 190f - 178f;
+            tboxUnhideBtn = UI.CreateUIButton(
+                bpGO, 100, 42,
+                VPBTranslation.T("gallery.tbox.unhide", "Unhide"), tboxActionBtnFont,
+                tboxHideX - 10f - 100f, 0, AnchorPresets.middleRight,
+                TboxUnhideSelectedPackages
+            );
+            tboxUnhideBtn.name = "Tbox_Unhide";
+            tboxUnhideBtn.SetActive(false);
+            AddTooltip(tboxUnhideBtn, "gallery.tooltip.tbox_unhide", "Remove .hide markers for selected packages");
+
+            tboxDisableAutoInstallBtn = UI.CreateUIButton(
+                bpGO, 168, 42,
+                VPBTranslation.T("gallery.tbox.no_autoinstall", "No autoinstall"), tboxActionBtnFont,
+                tboxHideX - 10f - 100f - 10f - 168f, 0, AnchorPresets.middleRight,
+                TboxDisableAutoInstallSelectedPackages
+            );
+            tboxDisableAutoInstallBtn.name = "Tbox_NoAutoInstall";
+            tboxDisableAutoInstallBtn.SetActive(false);
+            AddTooltip(tboxDisableAutoInstallBtn, "gallery.tooltip.tbox_no_autoinstall", "Clear auto-install and VPB auto-load for selected packages");
 
             // ── Pin toggle (right edge, always visible) ───────────────────────────
             tboxPinBtn = UI.CreateUIButton(
@@ -830,8 +853,74 @@ namespace VPB
                 tboxButtonsCG.interactable   = tboxButtonsCG.alpha > 0.6f;
             }
 
+            RefreshTboxConditionalActionButtons();
+
             // Info box (top) updates independently (single selection only)
             try { UpdateIboxUI(); } catch { }
+        }
+
+        /// <summary>Show Unhide / No autoinstall only when the current selection includes matching packages.</summary>
+        private void RefreshTboxConditionalActionButtons()
+        {
+            if (tboxUnhideBtn != null)
+                tboxUnhideBtn.SetActive(SelectionIncludesHiddenVarPackage());
+            if (tboxDisableAutoInstallBtn != null)
+                tboxDisableAutoInstallBtn.SetActive(SelectionIncludesAutoInstallOrAutoLoad());
+        }
+
+        private bool SelectionIncludesHiddenVarPackage()
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0) return false;
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                var f = selectedFiles[i];
+                if (f == null) continue;
+                string uid = TryGetPackageUidForEntry(f);
+                if (string.IsNullOrEmpty(uid)) continue;
+                string path = ResolveVarPathForUid(uid);
+                if (string.IsNullOrEmpty(path)) continue;
+                try
+                {
+                    var fe = FileManager.GetFileEntry(path, true);
+                    if (fe != null && PackageHidePrefs.IsPackageVarHidden(fe)) return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        private bool SelectionIncludesAutoInstallOrAutoLoad()
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0) return false;
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                var f = selectedFiles[i];
+                if (f == null) continue;
+                string uid = TryGetPackageUidForEntry(f);
+                if (string.IsNullOrEmpty(uid)) continue;
+                string path = ResolveVarPathForUid(uid);
+                if (string.IsNullOrEmpty(path)) continue;
+                try
+                {
+                    var fe = FileManager.GetFileEntry(path, true);
+                    if (fe != null)
+                    {
+                        try
+                        {
+                            if (fe.IsAutoInstall()) return true;
+                        }
+                        catch { }
+                    }
+                    try
+                    {
+                        if (AutoLoadPackagesManager.Instance != null && AutoLoadPackagesManager.Instance.IsAutoLoad(uid))
+                            return true;
+                    }
+                    catch { }
+                }
+                catch { }
+            }
+            return false;
         }
 
         // ─────────────────────────────────────────────────────────────────────────

@@ -139,5 +139,34 @@ namespace VPB
 			}
 			catch { return false; }
 		}
+
+		/// <summary>
+		/// Removes the .hide sidecar for this package (and VPB companion) and updates the marker cache.
+		/// </summary>
+		public static bool TryRemovePackageVarHide(FileEntry entry)
+		{
+			try
+			{
+				if (!TryBuildPackageVarHidePath(entry, out string hidePath)) return false;
+				EnsureHideMarkerCache();
+				string fullHide;
+				try { fullHide = Path.GetFullPath(hidePath); }
+				catch { return false; }
+
+				bool onDisk = false;
+				try { onDisk = File.Exists(hidePath); } catch { }
+				bool inCache = s_hideMarkerFullPaths != null && s_hideMarkerFullPaths.Contains(fullHide);
+				if (!onDisk && !inCache) return false;
+
+				if (onDisk)
+				{
+					try { File.Delete(hidePath); } catch { return false; }
+				}
+				try { File.Delete(hidePath + ".vpb"); } catch { }
+				try { if (s_hideMarkerFullPaths != null) s_hideMarkerFullPaths.Remove(fullHide); } catch { }
+				return true;
+			}
+			catch { return false; }
+		}
 	}
 }

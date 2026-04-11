@@ -256,5 +256,9 @@
   "gallery.tooltip.tbox_copy_names": "将所选项目的资源包文件名复制到剪贴板",
   "gallery.tooltip.tbox_delete": "将所选资源包移至 DeletedPackages 文件夹",
   "gallery.tooltip.tbox_pin": "固定 — 保持工具栏展开",
-  "gallery.tooltip.tbox_label": "悬停以展开选择工具栏"
+  "gallery.tooltip.tbox_label": "悬停以展开选择工具栏",
+  "gallery.tbox.unhide": "取消隐藏",
+  "gallery.tbox.no_autoinstall": "关闭自动安装",
+  "gallery.tooltip.tbox_unhide": "移除所选资源包的 .hide 标记",
+  "gallery.tooltip.tbox_no_autoinstall": "清除所选资源包的自动安装与 VPB 自动加载"
 }

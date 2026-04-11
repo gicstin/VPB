@@ -145,14 +145,8 @@ namespace VPB
                     }
                 }
 
-                try
-                {
-                    try { FileManager.Refresh(); } catch { }
-                    try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
-                }
-                catch { }
-
-                try { RefreshFiles(true); } catch { }
+                if (ok > 0 && !IsHubMode)
+                    try { RemoveCurrentGalleryEntriesMatchingHideFilter(); } catch { }
 
                 if (ok == 0)
                     ShowTemporaryStatus(failed > 0 ? "Hide failed (see log)." : "Nothing to hide.", 2f);
@@ -163,6 +157,242 @@ namespace VPB
             {
                 LogUtil.LogError("[VPB] TboxHideSelectedPackages error: " + ex);
                 ShowTemporaryStatus("Hide failed. See log.", 2f);
+            }
+        }
+
+        /// <summary>
+        /// Removes entries excluded by the package-hide filter from the visible list and grid without rescanning.
+        /// </summary>
+        private void RemoveCurrentGalleryEntriesMatchingHideFilter()
+        {
+            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
+
+            var removedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = currentFilteredFiles.Count - 1; i >= 0; i--)
+            {
+                var fe = currentFilteredFiles[i];
+                if (fe == null) continue;
+                if (!PackageHidePrefs.IsExcludedByGalleryHideFilter(fe)) continue;
+                try
+                {
+                    if (!string.IsNullOrEmpty(fe.Path)) removedPaths.Add(fe.Path);
+                }
+                catch { }
+                currentFilteredFiles.RemoveAt(i);
+            }
+
+            if (lastFilteredFiles != null && removedPaths.Count > 0)
+            {
+                try
+                {
+                    lastFilteredFiles.RemoveAll(f => f != null && !string.IsNullOrEmpty(f.Path) && removedPaths.Contains(f.Path));
+                }
+                catch { }
+            }
+
+            if (removedPaths.Count == 0) return;
+
+            if (selectedFiles != null)
+            {
+                try
+                {
+                    selectedFiles.RemoveAll(f => f != null && removedPaths.Contains(f.Path));
+                }
+                catch { }
+            }
+
+            if (selectedFilePaths != null)
+            {
+                foreach (var p in removedPaths)
+                    selectedFilePaths.Remove(p);
+            }
+
+            if (!string.IsNullOrEmpty(selectedPath) && removedPaths.Contains(selectedPath))
+            {
+                if (selectedFiles != null && selectedFiles.Count > 0)
+                {
+                    selectedPath = selectedFiles[0].Path;
+                    try { SetHoverPath(selectedFiles[0]); } catch { }
+                }
+                else
+                {
+                    selectedPath = null;
+                    try { SetHoverPath(""); } catch { }
+                }
+            }
+
+            try
+            {
+                if (recyclingGrid != null)
+                {
+                    recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                    recyclingGrid.Refresh();
+                }
+            }
+            catch { }
+            try { UpdatePaginationText(); } catch { }
+            try { RefreshSelectionVisuals(); } catch { }
+        }
+
+        private void TboxUnhideSelectedPackages()
+        {
+            try
+            {
+                if (selectedFiles == null || selectedFiles.Count == 0)
+                {
+                    ShowTemporaryStatus("No selection.");
+                    return;
+                }
+
+                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    var f = selectedFiles[i];
+                    if (f == null) continue;
+                    string uid = TryGetPackageUidForEntry(f);
+                    if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
+                }
+
+                if (uids.Count == 0)
+                {
+                    ShowTemporaryStatus("No packages found in selection.");
+                    return;
+                }
+
+                int ok = 0;
+                int failed = 0;
+
+                foreach (var uid in uids)
+                {
+                    if (string.IsNullOrEmpty(uid)) continue;
+
+                    string path = ResolveVarPathForUid(uid);
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        failed++;
+                        continue;
+                    }
+
+                    try
+                    {
+                        var fe = FileManager.GetFileEntry(path, true);
+                        if (fe == null)
+                        {
+                            failed++;
+                            continue;
+                        }
+                        if (!PackageHidePrefs.IsPackageVarHidden(fe)) continue;
+                        if (PackageHidePrefs.TryRemovePackageVarHide(fe)) ok++;
+                        else failed++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        LogUtil.LogError("[VPB] TboxUnhideSelectedPackages " + uid + ": " + ex.Message);
+                    }
+                }
+
+                try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                try { RefreshTboxConditionalActionButtons(); } catch { }
+
+                if (ok == 0)
+                    ShowTemporaryStatus(failed > 0 ? "Unhide failed (see log)." : "Nothing hidden in selection.", 2f);
+                else
+                    ShowTemporaryStatus($"Unhid {ok} package(s)" + (failed > 0 ? $", {failed} failed." : "."), 2f);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] TboxUnhideSelectedPackages error: " + ex);
+                ShowTemporaryStatus("Unhide failed. See log.", 2f);
+            }
+        }
+
+        private void TboxDisableAutoInstallSelectedPackages()
+        {
+            try
+            {
+                if (selectedFiles == null || selectedFiles.Count == 0)
+                {
+                    ShowTemporaryStatus("No selection.");
+                    return;
+                }
+
+                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    var f = selectedFiles[i];
+                    if (f == null) continue;
+                    string uid = TryGetPackageUidForEntry(f);
+                    if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
+                }
+
+                if (uids.Count == 0)
+                {
+                    ShowTemporaryStatus("No packages found in selection.");
+                    return;
+                }
+
+                int installOk = 0;
+                int loadOk = 0;
+
+                foreach (var uid in uids)
+                {
+                    if (string.IsNullOrEmpty(uid)) continue;
+
+                    string path = ResolveVarPathForUid(uid);
+                    if (string.IsNullOrEmpty(path)) continue;
+
+                    try
+                    {
+                        var fe = FileManager.GetFileEntry(path, true);
+                        if (fe is VarFileEntry vfe)
+                        {
+                            if (vfe.IsAutoInstall())
+                            {
+                                vfe.SetAutoInstall(false);
+                                installOk++;
+                            }
+                        }
+                        else if (fe is SystemFileEntry sfe && sfe.isVar)
+                        {
+                            if (sfe.IsAutoInstall())
+                            {
+                                sfe.SetAutoInstall(false);
+                                installOk++;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages SetAutoInstall " + uid + ": " + ex.Message);
+                    }
+
+                    try
+                    {
+                        if (AutoLoadPackagesManager.Instance != null && AutoLoadPackagesManager.Instance.IsAutoLoad(uid))
+                        {
+                            AutoLoadPackagesManager.Instance.SetAutoLoad(uid, false);
+                            loadOk++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages SetAutoLoad " + uid + ": " + ex.Message);
+                    }
+                }
+
+                try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                try { RefreshTboxConditionalActionButtons(); } catch { }
+
+                if (installOk == 0 && loadOk == 0)
+                    ShowTemporaryStatus("No auto-install or auto-load flags to clear.", 2f);
+                else
+                    ShowTemporaryStatus($"Cleared autoinstall: {installOk}, auto-load: {loadOk}.", 2.5f);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages error: " + ex);
+                ShowTemporaryStatus("Clear autoinstall failed. See log.", 2f);
             }
         }
     }

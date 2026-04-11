@@ -148,6 +148,8 @@ namespace VPB
             RefreshGoText(tboxDeleteBtn,        "gallery.tbox.delete",      "Delete");
             RefreshGoText(tboxAutoInstallBtn,   "gallery.tbox.autoinstall", "Autoinstall");
             RefreshGoText(tboxHideBtn,          "gallery.tbox.hide",        "Hide");
+            RefreshGoText(tboxUnhideBtn,      "gallery.tbox.unhide",      "Unhide");
+            RefreshGoText(tboxDisableAutoInstallBtn, "gallery.tbox.no_autoinstall", "No autoinstall");
             if (tboxHintLabel != null)
                 tboxHintLabel.text = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
 

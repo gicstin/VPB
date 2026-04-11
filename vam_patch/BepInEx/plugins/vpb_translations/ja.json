@@ -256,5 +256,9 @@
   "gallery.tooltip.tbox_copy_names": "選択したアイテムのパッケージファイル名をクリップボードにコピー",
   "gallery.tooltip.tbox_delete": "選択したパッケージを DeletedPackages フォルダーに移動",
   "gallery.tooltip.tbox_pin": "ピン留め — ツールバーを展開したまま保持",
-  "gallery.tooltip.tbox_label": "ホバーして選択ツールバーを展開"
+  "gallery.tooltip.tbox_label": "ホバーして選択ツールバーを展開",
+  "gallery.tbox.unhide": "隠し解除",
+  "gallery.tbox.no_autoinstall": "自動導入オフ",
+  "gallery.tooltip.tbox_unhide": "選択したパッケージの .hide マーカーを削除",
+  "gallery.tooltip.tbox_no_autoinstall": "選択したパッケージの自動導入と VPB 自動読み込みを解除"
 }

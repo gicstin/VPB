@@ -256,5 +256,9 @@
   "gallery.tooltip.tbox_copy_names": "선택한 항목의 패키지 파일명을 클립보드에 복사",
   "gallery.tooltip.tbox_delete": "선택한 패키지를 DeletedPackages 폴더로 이동",
   "gallery.tooltip.tbox_pin": "고정 — 툴바를 펼친 상태로 유지",
-  "gallery.tooltip.tbox_label": "마우스를 올려 선택 툴바 펼치기"
+  "gallery.tooltip.tbox_label": "마우스를 올려 선택 툴바 펼치기",
+  "gallery.tbox.unhide": "숨김 해제",
+  "gallery.tbox.no_autoinstall": "자동 설치 끄기",
+  "gallery.tooltip.tbox_unhide": "선택한 패키지의 .hide 표시 제거",
+  "gallery.tooltip.tbox_no_autoinstall": "선택한 패키지의 자동 설치 및 VPB 자동 로드 해제"
 }
