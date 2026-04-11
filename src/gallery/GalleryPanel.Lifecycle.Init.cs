@@ -248,8 +248,22 @@ namespace VPB
 
             Button fileSortTypeButton = fileSortTypeBtn.GetComponent<Button>();
             fileSortTypeButton.onClick.RemoveAllListeners();
-            fileSortTypeButton.onClick.AddListener(() => CycleSort("Files", fileSortTypeText, fileSortDirText));
-            AddTooltip(fileSortTypeBtn, "gallery.tooltip.sort_cycle_field", "Cycle sort field (Az→Dt→Sz→Rt→Dp→Dn→Ms)");
+
+            EventTrigger fileSortTypeEt = fileSortTypeBtn.GetComponent<EventTrigger>();
+            if (fileSortTypeEt == null) fileSortTypeEt = fileSortTypeBtn.AddComponent<EventTrigger>();
+            var fileSortPointerClick = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+            fileSortPointerClick.callback.AddListener((data) =>
+            {
+                var ped = (PointerEventData)data;
+                if (ped.button == PointerEventData.InputButton.Right)
+                    CycleSort("Files", fileSortTypeText, fileSortDirText);
+                else if (ped.button == PointerEventData.InputButton.Left)
+                    ToggleFileSortTypeMenu();
+            });
+            fileSortTypeEt.triggers.Add(fileSortPointerClick);
+
+            AddTooltip(fileSortTypeBtn, "gallery.tooltip.sort_cycle_field", "Sort field: left-click list, right-click cycle (Az→Dt→Sz→Rt→Dp→Dn→Ms→Hd→HO→Ai→AO)");
+            SetupFileSortTypeMenu();
 
             // File Sort Direction Button
             GameObject fileSortDirBtn = UI.CreateUIButton(titleBarGO, 35, 40, VPBTranslation.T("gallery.sort.up", "↑"), 16, 0, 0, AnchorPresets.middleCenter, null);

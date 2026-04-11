@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace VPB
 {
@@ -51,6 +51,13 @@ namespace VPB
         {
             // Package list entries are not real file entries and are never meant to be opened as readers.
             return null;
+        }
+
+        public override bool IsAutoInstall()
+        {
+            if (Package == null) return false;
+            try { return AutoInstallLookup != null && AutoInstallLookup.Contains(Package.Uid); }
+            catch { return false; }
         }
     }
 

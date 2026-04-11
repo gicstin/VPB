@@ -66,10 +66,10 @@ namespace VPB
             var sortNode = node["SortState"];
             if (sortNode != null)
             {
-                entry.SortState = new SortState(
-                    (SortType)sortNode["Type"].AsInt,
-                    (SortDirection)sortNode["Direction"].AsInt
-                );
+                int ti = sortNode["Type"].AsInt;
+                int di = sortNode["Direction"].AsInt;
+                if (Enum.IsDefined(typeof(SortType), ti) && Enum.IsDefined(typeof(SortDirection), di))
+                    entry.SortState = new SortState((SortType)ti, (SortDirection)di);
             }
 
             if (node["ButtonColor"] != null) entry.ButtonColor = HexToColor(node["ButtonColor"]);

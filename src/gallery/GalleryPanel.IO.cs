@@ -278,6 +278,14 @@ namespace VPB
             currentFilteredFiles.AddRange(filtered);
             currentFilterDesc = desc;
 
+            try
+            {
+                var st = GetSortState("Files");
+                ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
+                GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
+            }
+            catch { }
+
             try { UpdateTabs(); } catch { }
             try { UpdatePaginationText(); } catch { }
             RefreshRecycleGridAfterFilterChange();
@@ -294,6 +302,13 @@ namespace VPB
 
             currentFilteredFiles.Clear();
             currentFilteredFiles.AddRange(filtered);
+            try
+            {
+                var st = GetSortState("Files");
+                ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
+                GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
+            }
+            catch { }
             try { UpdatePaginationText(); } catch { }
             RefreshRecycleGridAfterFilterChange();
         }
@@ -938,7 +953,7 @@ namespace VPB
         {
             if (entry == null) return false;
 
-            // Hide filtering is deferred to PostFilterHiddenRoutine (runs after grid_ready)
+            // Hide filtering and sort-only narrowing run in PostFilesListHideAndSortFollowupRoutine after the grid is shown.
             // to avoid per-entry FileManager.FileExists calls blocking the scan drain loop.
 
             // Clothing subfilter (Gallery left Tags panel)
@@ -2053,11 +2068,10 @@ namespace VPB
             refreshCoroutine = null;
 
             // Defer hide filtering until after the grid is visible (prescan .hide markers then filter in a coroutine).
+            // Always run follow-up: hide strip (unless sort needs hidden rows), then Hidden-only / AutoInstall-only narrowing, then re-sort.
             try
             {
-                bool showHidden = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages;
-                if (!showHidden)
-                    StartCoroutine(PostFilterHiddenRoutine(currentLoadingGroupId));
+                StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId));
             }
             catch { }
 
@@ -2087,9 +2101,48 @@ namespace VPB
             }
         }
 
-        private IEnumerator PostFilterHiddenRoutine(string groupId)
+        private bool FilesSortKeepsHiddenInList()
         {
-            // Let two frames render so thumbnails appear before we do filter work.
+            try
+            {
+                SortType t = GetSortState("Files").Type;
+                return t == SortType.Hidden || t == SortType.HiddenOnly;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Removes non-matching rows for Hidden-only / AutoInstall-only file sort modes (list is modified in place).</summary>
+        private static void ApplyFilesSortExclusiveFiltersInPlace(List<FileEntry> list, SortType type)
+        {
+            if (list == null) return;
+            if (type == SortType.HiddenOnly)
+            {
+                for (int i = list.Count - 1; i >= 0; i--)
+                {
+                    try
+                    {
+                        if (!PackageHidePrefs.IsGalleryHideBadgeVisible(list[i]))
+                            list.RemoveAt(i);
+                    }
+                    catch { try { list.RemoveAt(i); } catch { } }
+                }
+            }
+            else if (type == SortType.AutoInstallOnly)
+            {
+                for (int i = list.Count - 1; i >= 0; i--)
+                {
+                    try
+                    {
+                        if (list[i] == null || !list[i].IsAutoInstall())
+                            list.RemoveAt(i);
+                    }
+                    catch { try { list.RemoveAt(i); } catch { } }
+                }
+            }
+        }
+
+        private IEnumerator PostFilesListHideAndSortFollowupRoutine(string groupId)
+        {
             yield return null;
             yield return null;
 
@@ -2097,31 +2150,53 @@ namespace VPB
 
             try { PackageHidePrefs.RebuildHideMarkerCache(); } catch { }
 
-            bool anyRemoved = false;
-            // Iterate backwards so RemoveAt doesn't shift indices we haven't visited yet.
-            for (int i = currentFilteredFiles.Count - 1; i >= 0; i--)
-            {
-                if (groupId != currentLoadingGroupId) yield break;
-                try
-                {
-                    if (PackageHidePrefs.IsExcludedByGalleryHideFilter(currentFilteredFiles[i]))
-                    {
-                        currentFilteredFiles.RemoveAt(i);
-                        anyRemoved = true;
-                    }
-                }
-                catch { }
+            bool showHidden = false;
+            try { showHidden = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages; } catch { }
+            bool keepHiddenForSort = FilesSortKeepsHiddenInList();
 
-                // Yield every 2000 entries so we don't hitch a frame.
-                if (i % 2000 == 0)
-                    yield return null;
+            bool anyRemoved = false;
+            if (!showHidden && !keepHiddenForSort)
+            {
+                for (int i = currentFilteredFiles.Count - 1; i >= 0; i--)
+                {
+                    if (groupId != currentLoadingGroupId) yield break;
+                    try
+                    {
+                        if (PackageHidePrefs.IsExcludedByGalleryHideFilter(currentFilteredFiles[i]))
+                        {
+                            currentFilteredFiles.RemoveAt(i);
+                            anyRemoved = true;
+                        }
+                    }
+                    catch { }
+
+                    if (i % 2000 == 0)
+                        yield return null;
+                }
             }
 
-            if (anyRemoved && groupId == currentLoadingGroupId)
+            if (groupId != currentLoadingGroupId) yield break;
+
+            try
+            {
+                SortState st = GetSortState("Files");
+                int beforeExclusive = currentFilteredFiles.Count;
+                ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
+                if (currentFilteredFiles.Count != beforeExclusive)
+                    anyRemoved = true;
+                GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
+            }
+            catch { }
+
+            if (groupId == currentLoadingGroupId)
             {
                 try
                 {
-                    if (recyclingGrid != null) recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                    if (recyclingGrid != null)
+                    {
+                        recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                        recyclingGrid.Refresh();
+                    }
                     UpdatePaginationText();
                 }
                 catch { }

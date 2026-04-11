@@ -26,6 +26,7 @@ namespace VPB
             try
             {
                 CloseLanguageMenu();
+                try { CloseFileSortTypeMenu(); } catch { }
                 RefreshLocalizedUi();
                 try { settingsPanel?.RefreshLocalizedUi(); } catch { }
                 try { quickFiltersUI?.RefreshLocalizedUi(); } catch { }
@@ -99,6 +100,7 @@ namespace VPB
                 titleBarRefreshBtnText.text = VPBTranslation.T("gallery.title.refresh", "Refresh");
 
             UpdateSortButtonText(fileSortTypeText, fileSortDirText, GetSortState("Files"));
+            try { RebuildFileSortTypeMenuOptions(); } catch { }
             if (leftActiveContent.HasValue)
                 UpdateSortButtonText(leftSortBtnText, GetSortState(leftActiveContent.Value.ToString()));
             if (rightActiveContent.HasValue)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -18,7 +18,11 @@ namespace VPB
         Rating,
         Deps,
         Dependents,
-        Missing
+        Missing,
+        Hidden,
+        HiddenOnly,
+        AutoInstall,
+        AutoInstallOnly
     }
 
     public enum SortDirection
@@ -132,6 +136,31 @@ namespace VPB
                         int mA = GetMissingDepsCount(a);
                         int mB = GetMissingDepsCount(b);
                         int res = (state.Direction == SortDirection.Ascending) ? mA.CompareTo(mB) : mB.CompareTo(mA);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    break;
+                case SortType.Hidden:
+                    files.Sort((a, b) => {
+                        int ha = PackageHidePrefs.IsGalleryHideBadgeVisible(a) ? 1 : 0;
+                        int hb = PackageHidePrefs.IsGalleryHideBadgeVisible(b) ? 1 : 0;
+                        int res = (state.Direction == SortDirection.Ascending) ? ha.CompareTo(hb) : hb.CompareTo(ha);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    break;
+                case SortType.HiddenOnly:
+                case SortType.AutoInstallOnly:
+                    if (state.Direction == SortDirection.Ascending)
+                        files.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                    else
+                        files.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+                    break;
+                case SortType.AutoInstall:
+                    files.Sort((a, b) => {
+                        int ia = a.IsAutoInstall() ? 1 : 0;
+                        int ib = b.IsAutoInstall() ? 1 : 0;
+                        int res = (state.Direction == SortDirection.Ascending) ? ia.CompareTo(ib) : ib.CompareTo(ia);
                         if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
                         return res;
                     });

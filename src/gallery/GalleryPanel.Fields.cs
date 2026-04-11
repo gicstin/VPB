@@ -716,6 +716,8 @@ namespace VPB
         private Text fileSortBtnText; // NEW
         private Text fileSortTypeText; // Sort Type button text (Az/Dt/Sz/Rt)
         private Text fileSortDirText; // Sort Direction button text (↑/↓)
+        private GameObject fileSortTypeMenuRoot;
+        private GameObject fileSortTypeMenuPanelGO;
         private Text quickFiltersToggleBtnText; // NEW
         private GameObject ratingSortToggleBtn;
         private Text ratingSortToggleBtnText;
