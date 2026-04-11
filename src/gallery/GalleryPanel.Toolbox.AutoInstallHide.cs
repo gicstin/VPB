@@ -16,26 +16,20 @@ namespace VPB
                     return;
                 }
 
-                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                int resolvedUids = 0;
+                int installOk = 0;
+                int loadOk = 0;
+
                 for (int i = 0; i < selectedFiles.Count; i++)
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    string uid = TryGetPackageUidForEntry(f);
-                    if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
-                }
-
-                if (uids.Count == 0)
-                {
-                    ShowTemporaryStatus("No packages found in selection.");
-                    return;
-                }
-
-                int installOk = 0;
-                int loadOk = 0;
-                foreach (var uid in uids)
-                {
-                    if (string.IsNullOrEmpty(uid)) continue;
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl))
+                        continue;
+                    if (!seen.Add(uid)) continue;
+                    resolvedUids++;
+                    if (fiAi && uidAl) continue;
 
                     string path = ResolveVarPathForUid(uid);
                     if (string.IsNullOrEmpty(path)) continue;
@@ -43,12 +37,12 @@ namespace VPB
                     try
                     {
                         var fe = FileManager.GetFileEntry(path, true);
-                        if (fe is VarFileEntry vfe)
+                        if (fe is VarFileEntry vfe && !fiAi)
                         {
                             vfe.SetAutoInstall(true);
                             installOk++;
                         }
-                        else if (fe is SystemFileEntry sfe && sfe.isVar)
+                        else if (fe is SystemFileEntry sfe && sfe.isVar && !fiAi)
                         {
                             sfe.SetAutoInstall(true);
                             installOk++;
@@ -61,7 +55,7 @@ namespace VPB
 
                     try
                     {
-                        if (AutoLoadPackagesManager.Instance != null)
+                        if (!uidAl && AutoLoadPackagesManager.Instance != null)
                         {
                             AutoLoadPackagesManager.Instance.SetAutoLoad(uid, true);
                             loadOk++;
@@ -73,13 +67,21 @@ namespace VPB
                     }
                 }
 
+                if (resolvedUids == 0)
+                {
+                    ShowTemporaryStatus("No packages found in selection.");
+                    return;
+                }
+                if (installOk == 0 && loadOk == 0)
+                {
+                    ShowTemporaryStatus("Nothing to enable for current selection.", 2f);
+                    return;
+                }
+
                 // SetAutoInstall no longer moves .var files here; refresh grid so AI badges match the updated lookup.
                 try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
-
-                if (installOk == 0 && loadOk == 0)
-                    ShowTemporaryStatus("Could not update packages (not found on disk?).", 2.5f);
-                else
-                    ShowTemporaryStatus($"Autoinstall: {installOk}, auto-load: {loadOk} (install at next launch).", 2.5f);
+                try { RefreshTboxConditionalActionButtons(); } catch { }
+                ShowTemporaryStatus($"Autoinstall: {installOk}, auto-load: {loadOk} (install at next launch).", 2.5f);
             }
             catch (Exception ex)
             {
@@ -98,43 +100,23 @@ namespace VPB
                     return;
                 }
 
-                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var seenUid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                int resolvableUids = 0;
+                int ok = 0;
+                int failed = 0;
+
                 for (int i = 0; i < selectedFiles.Count; i++)
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    string uid = TryGetPackageUidForEntry(f);
-                    if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
-                }
-
-                if (uids.Count == 0)
-                {
-                    ShowTemporaryStatus("No packages found in selection.");
-                    return;
-                }
-
-                int ok = 0;
-                int failed = 0;
-
-                foreach (var uid in uids)
-                {
-                    if (string.IsNullOrEmpty(uid)) continue;
-
-                    string path = ResolveVarPathForUid(uid);
-                    if (string.IsNullOrEmpty(path))
-                    {
-                        failed++;
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out FileEntry fe, out bool hidden, out _, out _))
                         continue;
-                    }
+                    if (!seenUid.Add(uid)) continue;
+                    resolvableUids++;
+                    if (hidden) continue;
 
                     try
                     {
-                        var fe = FileManager.GetFileEntry(path, true);
-                        if (fe == null)
-                        {
-                            failed++;
-                            continue;
-                        }
                         if (PackageHidePrefs.TryEnsureVpbPackageHidden(fe)) ok++;
                         else failed++;
                     }
@@ -143,6 +125,12 @@ namespace VPB
                         failed++;
                         LogUtil.LogError("[VPB] TboxHideSelectedPackages " + uid + ": " + ex.Message);
                     }
+                }
+
+                if (resolvableUids == 0)
+                {
+                    ShowTemporaryStatus("No packages found in selection.");
+                    return;
                 }
 
                 if (ok > 0 && !IsHubMode)
@@ -157,6 +145,7 @@ namespace VPB
                         try { RefreshSelectionVisuals(); } catch { }
                     }
                 }
+                try { RefreshTboxConditionalActionButtons(); } catch { }
 
                 if (ok == 0)
                     ShowTemporaryStatus(failed > 0 ? "Hide failed (see log)." : "Nothing to hide.", 2f);
@@ -254,44 +243,23 @@ namespace VPB
                     return;
                 }
 
-                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var seenUid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                int resolvableUids = 0;
+                int ok = 0;
+                int failed = 0;
+
                 for (int i = 0; i < selectedFiles.Count; i++)
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    string uid = TryGetPackageUidForEntry(f);
-                    if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
-                }
-
-                if (uids.Count == 0)
-                {
-                    ShowTemporaryStatus("No packages found in selection.");
-                    return;
-                }
-
-                int ok = 0;
-                int failed = 0;
-
-                foreach (var uid in uids)
-                {
-                    if (string.IsNullOrEmpty(uid)) continue;
-
-                    string path = ResolveVarPathForUid(uid);
-                    if (string.IsNullOrEmpty(path))
-                    {
-                        failed++;
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out FileEntry fe, out bool hidden, out _, out _))
                         continue;
-                    }
+                    if (!seenUid.Add(uid)) continue;
+                    resolvableUids++;
+                    if (!hidden) continue;
 
                     try
                     {
-                        var fe = FileManager.GetFileEntry(path, true);
-                        if (fe == null)
-                        {
-                            failed++;
-                            continue;
-                        }
-                        if (!PackageHidePrefs.IsPackageVarHidden(fe)) continue;
                         if (PackageHidePrefs.TryRemovePackageVarHide(fe)) ok++;
                         else failed++;
                     }
@@ -300,6 +268,12 @@ namespace VPB
                         failed++;
                         LogUtil.LogError("[VPB] TboxUnhideSelectedPackages " + uid + ": " + ex.Message);
                     }
+                }
+
+                if (resolvableUids == 0)
+                {
+                    ShowTemporaryStatus("No packages found in selection.");
+                    return;
                 }
 
                 try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
@@ -327,27 +301,20 @@ namespace VPB
                     return;
                 }
 
-                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var seenUid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                int resolvableUids = 0;
+                int installOk = 0;
+                int loadOk = 0;
+
                 for (int i = 0; i < selectedFiles.Count; i++)
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    string uid = TryGetPackageUidForEntry(f);
-                    if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
-                }
-
-                if (uids.Count == 0)
-                {
-                    ShowTemporaryStatus("No packages found in selection.");
-                    return;
-                }
-
-                int installOk = 0;
-                int loadOk = 0;
-
-                foreach (var uid in uids)
-                {
-                    if (string.IsNullOrEmpty(uid)) continue;
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl))
+                        continue;
+                    if (!seenUid.Add(uid)) continue;
+                    resolvableUids++;
+                    if (!fiAi && !uidAl) continue;
 
                     string path = ResolveVarPathForUid(uid);
                     if (string.IsNullOrEmpty(path)) continue;
@@ -391,11 +358,17 @@ namespace VPB
                     }
                 }
 
+                if (resolvableUids == 0)
+                {
+                    ShowTemporaryStatus("No packages found in selection.");
+                    return;
+                }
+
                 try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
 
                 if (installOk == 0 && loadOk == 0)
-                    ShowTemporaryStatus("No auto-install or auto-load flags to clear.", 2f);
+                    ShowTemporaryStatus("No auto-install or auto-load flags to clear for selection.", 2f);
                 else
                     ShowTemporaryStatus($"Cleared autoinstall: {installOk}, auto-load: {loadOk}.", 2.5f);
             }

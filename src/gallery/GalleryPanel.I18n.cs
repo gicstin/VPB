@@ -143,13 +143,8 @@ namespace VPB
             RefreshGoText(rightRemoveAtomBtn,  "gallery.side.remove_atom", "Remove\nAtom");
             RefreshGoText(leftRemoveAtomBtn,   "gallery.side.remove_atom", "Remove\nAtom");
 
-            // Selection toolbox buttons
-            RefreshGoText(tboxCopyPkgNamesBtn, "gallery.tbox.copy_names", "Copy Names");
-            RefreshGoText(tboxDeleteBtn,        "gallery.tbox.delete",      "Delete");
-            RefreshGoText(tboxAutoInstallBtn,   "gallery.tbox.autoinstall", "Autoinstall");
-            RefreshGoText(tboxHideBtn,          "gallery.tbox.hide",        "Hide");
-            RefreshGoText(tboxUnhideBtn,      "gallery.tbox.unhide",      "Unhide");
-            RefreshGoText(tboxDisableAutoInstallBtn, "gallery.tbox.no_autoinstall", "No autoinstall");
+            // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
+            try { RefreshTboxConditionalActionButtons(); } catch { }
             if (tboxHintLabel != null)
                 tboxHintLabel.text = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
 

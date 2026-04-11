@@ -249,7 +249,9 @@
   "gallery.hub.all": "全部",
 
   "gallery.tbox.copy_names": "复制名称",
+  "gallery.tbox.copy_names_count": "复制名称 ({0})",
   "gallery.tbox.delete": "删除",
+  "gallery.tbox.delete_count": "删除 ({0})",
   "gallery.tbox.selected_one": "已选 1 项",
   "gallery.tbox.selected_many": "已选 {0} 项",
   "gallery.tbox.hover_expand": "悬停展开",
@@ -258,6 +260,10 @@
   "gallery.tooltip.tbox_pin": "固定 — 保持工具栏展开",
   "gallery.tooltip.tbox_label": "悬停以展开选择工具栏",
   "gallery.tbox.unhide": "取消隐藏",
+  "gallery.tbox.hide_count": "隐藏 ({0})",
+  "gallery.tbox.unhide_count": "取消隐藏 ({0})",
+  "gallery.tbox.autoinstall_count": "自动安装 ({0})",
+  "gallery.tbox.no_autoinstall_count": "关闭自动安装 ({0})",
   "gallery.tbox.no_autoinstall": "关闭自动安装",
   "gallery.tooltip.tbox_unhide": "移除所选资源包的 .hide 标记",
   "gallery.tooltip.tbox_no_autoinstall": "清除所选资源包的自动安装与 VPB 自动加载"

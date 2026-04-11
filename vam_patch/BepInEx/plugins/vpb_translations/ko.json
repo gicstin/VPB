@@ -249,7 +249,9 @@
   "gallery.hub.all": "전체",
 
   "gallery.tbox.copy_names": "이름 복사",
+  "gallery.tbox.copy_names_count": "이름 복사 ({0})",
   "gallery.tbox.delete": "삭제",
+  "gallery.tbox.delete_count": "삭제 ({0})",
   "gallery.tbox.selected_one": "1개 선택됨",
   "gallery.tbox.selected_many": "{0}개 선택됨",
   "gallery.tbox.hover_expand": "마우스를 올려 펼치기",
@@ -258,6 +260,10 @@
   "gallery.tooltip.tbox_pin": "고정 — 툴바를 펼친 상태로 유지",
   "gallery.tooltip.tbox_label": "마우스를 올려 선택 툴바 펼치기",
   "gallery.tbox.unhide": "숨김 해제",
+  "gallery.tbox.hide_count": "숨기기 ({0})",
+  "gallery.tbox.unhide_count": "숨김 해제 ({0})",
+  "gallery.tbox.autoinstall_count": "자동 설치 ({0})",
+  "gallery.tbox.no_autoinstall_count": "자동 설치 끄기 ({0})",
   "gallery.tbox.no_autoinstall": "자동 설치 끄기",
   "gallery.tooltip.tbox_unhide": "선택한 패키지의 .hide 표시 제거",
   "gallery.tooltip.tbox_no_autoinstall": "선택한 패키지의 자동 설치 및 VPB 자동 로드 해제"

@@ -248,7 +248,13 @@
   "gallery.hub.loading": "載入中心...",
   "gallery.hub.all": "全部",
 
+  "gallery.tbox.copy_names_count": "複製名稱 ({0})",
+  "gallery.tbox.delete_count": "刪除 ({0})",
   "gallery.tbox.unhide": "取消隱藏",
+  "gallery.tbox.hide_count": "隱藏 ({0})",
+  "gallery.tbox.unhide_count": "取消隱藏 ({0})",
+  "gallery.tbox.autoinstall_count": "自動安裝 ({0})",
+  "gallery.tbox.no_autoinstall_count": "關閉自動安裝 ({0})",
   "gallery.tbox.no_autoinstall": "關閉自動安裝",
   "gallery.tooltip.tbox_unhide": "移除所選套件的 .hide 標記",
   "gallery.tooltip.tbox_no_autoinstall": "清除所選套件的自動安裝與 VPB 自動載入"

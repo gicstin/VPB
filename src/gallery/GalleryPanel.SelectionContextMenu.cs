@@ -859,68 +859,134 @@ namespace VPB
             try { UpdateIboxUI(); } catch { }
         }
 
-        /// <summary>Show Unhide / No autoinstall only when the current selection includes matching packages.</summary>
+        /// <summary>Copy/Delete/Hide/Unhide/Autoinstall: counts in labels and compact layout for the hide/AI group.</summary>
         private void RefreshTboxConditionalActionButtons()
         {
+            int copyN = 0, deleteN = 0, hideN = 0, unhideN = 0, aiN = 0, noAiN = 0;
+            if (selectedFiles != null && selectedFiles.Count > 0)
+            {
+                copyN = CollectUniquePackageUidsFromSelection(selectedFiles).Count;
+                try { deleteN = GetTboxDeleteEligiblePackageCount(); } catch { deleteN = 0; }
+
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    var f = selectedFiles[i];
+                    if (f == null) continue;
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out bool hidden, out bool fiAi, out bool uidAl))
+                        continue;
+                    if (!seen.Add(uid)) continue;
+                    if (hidden) unhideN++;
+                    else hideN++;
+                    if (fiAi || uidAl) noAiN++;
+                    if (!fiAi || !uidAl) aiN++;
+                }
+            }
+
+            if (tboxCopyPkgNamesBtn != null)
+                SetTboxCountButtonLabel(tboxCopyPkgNamesBtn, "gallery.tbox.copy_names_count", "Copy Names ({0})", copyN);
+            if (tboxDeleteBtn != null)
+                SetTboxCountButtonLabel(tboxDeleteBtn, "gallery.tbox.delete_count", "Delete ({0})", deleteN);
+
+            bool showHide = hideN > 0;
+            bool showUnhide = unhideN > 0;
+            bool showAi = aiN > 0;
+            bool showNoAi = noAiN > 0;
+
+            if (tboxHideBtn != null)
+            {
+                tboxHideBtn.SetActive(showHide);
+                if (showHide) SetTboxCountButtonLabel(tboxHideBtn, "gallery.tbox.hide_count", "Hide ({0})", hideN);
+            }
             if (tboxUnhideBtn != null)
-                tboxUnhideBtn.SetActive(SelectionIncludesHiddenVarPackage());
+            {
+                tboxUnhideBtn.SetActive(showUnhide);
+                if (showUnhide) SetTboxCountButtonLabel(tboxUnhideBtn, "gallery.tbox.unhide_count", "Unhide ({0})", unhideN);
+            }
+            if (tboxAutoInstallBtn != null)
+            {
+                tboxAutoInstallBtn.SetActive(showAi);
+                if (showAi) SetTboxCountButtonLabel(tboxAutoInstallBtn, "gallery.tbox.autoinstall_count", "Autoinstall ({0})", aiN);
+            }
             if (tboxDisableAutoInstallBtn != null)
-                tboxDisableAutoInstallBtn.SetActive(SelectionIncludesAutoInstallOrAutoLoad());
+            {
+                tboxDisableAutoInstallBtn.SetActive(showNoAi);
+                if (showNoAi) SetTboxCountButtonLabel(tboxDisableAutoInstallBtn, "gallery.tbox.no_autoinstall_count", "No autoinstall ({0})", noAiN);
+            }
+
+            LayoutTboxHideAutoinstallButtonRow(showAi, showHide, showUnhide, showNoAi);
         }
 
-        private bool SelectionIncludesHiddenVarPackage()
+        private static void SetTboxCountButtonLabel(GameObject go, string key, string fallbackFmt, int count)
         {
-            if (selectedFiles == null || selectedFiles.Count == 0) return false;
-            for (int i = 0; i < selectedFiles.Count; i++)
-            {
-                var f = selectedFiles[i];
-                if (f == null) continue;
-                string uid = TryGetPackageUidForEntry(f);
-                if (string.IsNullOrEmpty(uid)) continue;
-                string path = ResolveVarPathForUid(uid);
-                if (string.IsNullOrEmpty(path)) continue;
-                try
-                {
-                    var fe = FileManager.GetFileEntry(path, true);
-                    if (fe != null && PackageHidePrefs.IsPackageVarHidden(fe)) return true;
-                }
-                catch { }
-            }
-            return false;
+            if (go == null) return;
+            Text t = go.GetComponentInChildren<Text>(true);
+            if (t != null)
+                t.text = string.Format(VPBTranslation.T(key, fallbackFmt), count);
         }
 
-        private bool SelectionIncludesAutoInstallOrAutoLoad()
+        /// <summary>Repack Autoinstall / Hide / Unhide / No autoinstall against Delete so hidden buttons leave no gap.</summary>
+        private void LayoutTboxHideAutoinstallButtonRow(bool showAi, bool showHide, bool showUnhide, bool showNoAi)
         {
-            if (selectedFiles == null || selectedFiles.Count == 0) return false;
-            for (int i = 0; i < selectedFiles.Count; i++)
+            const float gap = 10f;
+            const float wAi = 168f;
+            const float wHide = 100f;
+            const float wUnhide = 100f;
+            const float wNoAi = 168f;
+            const float deletePivotX = -232f;
+            const float deleteW = 180f;
+            float x = deletePivotX - deleteW - gap;
+
+            void Place(GameObject go, float width)
             {
-                var f = selectedFiles[i];
-                if (f == null) continue;
-                string uid = TryGetPackageUidForEntry(f);
-                if (string.IsNullOrEmpty(uid)) continue;
-                string path = ResolveVarPathForUid(uid);
-                if (string.IsNullOrEmpty(path)) continue;
+                if (go == null) return;
+                var rt = go.GetComponent<RectTransform>();
+                if (rt == null) return;
+                Vector2 p = rt.anchoredPosition;
+                rt.anchoredPosition = new Vector2(x, p.y);
+                x -= width + gap;
+            }
+
+            if (showAi) Place(tboxAutoInstallBtn, wAi);
+            if (showHide) Place(tboxHideBtn, wHide);
+            if (showUnhide) Place(tboxUnhideBtn, wUnhide);
+            if (showNoAi) Place(tboxDisableAutoInstallBtn, wNoAi);
+        }
+
+        /// <summary>Resolve a gallery row to an on-disk .var for tbox hide/autoinstall actions (one row may share a UID).</summary>
+        private bool TryGetTboxResolvablePackageState(FileEntry f, out string uid, out FileEntry diskFe, out bool isHidden, out bool fileAutoInstall, out bool uidAutoLoad)
+        {
+            uid = null;
+            diskFe = null;
+            isHidden = false;
+            fileAutoInstall = false;
+            uidAutoLoad = false;
+
+            uid = TryGetPackageUidForEntry(f);
+            if (string.IsNullOrEmpty(uid)) return false;
+
+            string path = ResolveVarPathForUid(uid);
+            if (string.IsNullOrEmpty(path)) return false;
+
+            try
+            {
+                var fe = FileManager.GetFileEntry(path, true);
+                if (fe == null) return false;
+                diskFe = fe;
+                isHidden = PackageHidePrefs.IsPackageVarHidden(fe);
+                try { fileAutoInstall = fe.IsAutoInstall(); }
+                catch { fileAutoInstall = false; }
                 try
                 {
-                    var fe = FileManager.GetFileEntry(path, true);
-                    if (fe != null)
-                    {
-                        try
-                        {
-                            if (fe.IsAutoInstall()) return true;
-                        }
-                        catch { }
-                    }
-                    try
-                    {
-                        if (AutoLoadPackagesManager.Instance != null && AutoLoadPackagesManager.Instance.IsAutoLoad(uid))
-                            return true;
-                    }
-                    catch { }
+                    uidAutoLoad = AutoLoadPackagesManager.Instance != null && AutoLoadPackagesManager.Instance.IsAutoLoad(uid);
                 }
-                catch { }
+                catch { uidAutoLoad = false; }
+                return true;
             }
-            return false;
+            catch
+            {
+                return false;
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -935,25 +1001,18 @@ namespace VPB
                     return;
                 }
 
-                var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                for (int i = 0; i < selectedFiles.Count; i++)
-                {
-                    var f = selectedFiles[i];
-                    if (f == null) continue;
-
-                    string uid = TryGetPackageUidForEntry(f);
-                    if (string.IsNullOrEmpty(uid)) continue;
-                    set.Add(uid + ".var");
-                }
-
-                if (set.Count == 0)
+                var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
+                if (uids.Count == 0)
                 {
                     ShowTemporaryStatus("No package names found in selection.");
                     return;
                 }
 
-                var list = set.ToList();
+                var list = new List<string>(uids.Count);
+                foreach (var uid in uids)
+                    list.Add(uid + ".var");
                 list.Sort(StringComparer.OrdinalIgnoreCase);
+
                 string text = string.Join("\n", list.ToArray());
 
                 GUIUtility.systemCopyBuffer = text;

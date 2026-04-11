@@ -249,7 +249,9 @@
   "gallery.hub.all": "すべて",
 
   "gallery.tbox.copy_names": "名前をコピー",
+  "gallery.tbox.copy_names_count": "名前をコピー ({0})",
   "gallery.tbox.delete": "削除",
+  "gallery.tbox.delete_count": "削除 ({0})",
   "gallery.tbox.selected_one": "1 件選択中",
   "gallery.tbox.selected_many": "{0} 件選択中",
   "gallery.tbox.hover_expand": "ホバーで展開",
@@ -258,6 +260,10 @@
   "gallery.tooltip.tbox_pin": "ピン留め — ツールバーを展開したまま保持",
   "gallery.tooltip.tbox_label": "ホバーして選択ツールバーを展開",
   "gallery.tbox.unhide": "隠し解除",
+  "gallery.tbox.hide_count": "隠す ({0})",
+  "gallery.tbox.unhide_count": "隠し解除 ({0})",
+  "gallery.tbox.autoinstall_count": "自動導入 ({0})",
+  "gallery.tbox.no_autoinstall_count": "自動導入オフ ({0})",
   "gallery.tbox.no_autoinstall": "自動導入オフ",
   "gallery.tooltip.tbox_unhide": "選択したパッケージの .hide マーカーを削除",
   "gallery.tooltip.tbox_no_autoinstall": "選択したパッケージの自動導入と VPB 自動読み込みを解除"

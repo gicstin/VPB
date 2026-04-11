@@ -12,6 +12,119 @@ namespace VPB
     {
         private const string DeletedPackagesFolderName = "DeletedPackages";
 
+        /// <summary>Unique package UIDs referenced by the current selection (same basis as copy / delete).</summary>
+        private static HashSet<string> CollectUniquePackageUidsFromSelection(IList<FileEntry> files)
+        {
+            var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (files == null) return uids;
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                if (f == null) continue;
+                string uid = TryGetPackageUidForEntry(f);
+                if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
+            }
+            return uids;
+        }
+
+        /// <summary>Classify selected UIDs for toolbox delete; <paramref name="toDelete"/> matches what the confirm dialog will move.</summary>
+        private static void ClassifyUidsForTboxDelete(
+            HashSet<string> uids,
+            string currentScenePkg,
+            HashSet<string> runningSceneDeps,
+            List<string> blocked,
+            List<string> warned,
+            List<string> toDelete)
+        {
+            if (uids == null || uids.Count == 0) return;
+
+            foreach (var uid in uids)
+            {
+                if (string.IsNullOrEmpty(uid)) continue;
+
+                // Critical: locked packages should never be moved
+                try
+                {
+                    if (LockedPackagesManager.Instance != null && LockedPackagesManager.Instance.IsLocked(uid))
+                    {
+                        blocked.Add($"{uid}.var (locked)");
+                        continue;
+                    }
+                }
+                catch { }
+
+                // Critical: do not delete the currently loaded scene's package
+                if (!string.IsNullOrEmpty(currentScenePkg) && string.Equals(uid, currentScenePkg, StringComparison.OrdinalIgnoreCase))
+                {
+                    blocked.Add($"{uid}.var (current scene package)");
+                    continue;
+                }
+
+                // Critical: if the running scene references this package, require confirm (or block if you prefer)
+                if (runningSceneDeps != null && runningSceneDeps.Contains(uid))
+                {
+                    warned.Add($"{uid}.var (referenced by running scene)");
+                }
+
+                // Dependents warning
+                int depCount = 0;
+                try { depCount = GetDependentCount(uid); } catch { depCount = 0; }
+                if (depCount > 0)
+                {
+                    warned.Add($"{uid}.var ({depCount} dependents)");
+                }
+
+                // Critical: must be resolvable to a file on disk
+                string srcPath = ResolveVarPathForUid(uid);
+                if (string.IsNullOrEmpty(srcPath) || !File.Exists(srcPath))
+                {
+                    blocked.Add($"{uid}.var (file not found)");
+                    continue;
+                }
+
+                // Critical: already deleted
+                try
+                {
+                    string norm = srcPath.Replace('\\', '/');
+                    if (norm.IndexOf("/" + DeletedPackagesFolderName + "/", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        blocked.Add($"{uid}.var (already in {DeletedPackagesFolderName})");
+                        continue;
+                    }
+                }
+                catch { }
+
+                // Critical: avoid moving enabled auto-install packages (too easy to break user prefs)
+                try
+                {
+                    // Only warn; user may still proceed
+                    if (FileEntry.AutoInstallLookup != null && FileEntry.AutoInstallLookup.Contains(uid))
+                        warned.Add($"{uid}.var (auto-install enabled)");
+                }
+                catch { }
+
+                toDelete.Add(uid);
+            }
+        }
+
+        /// <summary>Package count that would be moved on delete confirm (same rules as <see cref="TboxDeleteSelectedPackages"/>).</summary>
+        private int GetTboxDeleteEligiblePackageCount()
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0) return 0;
+            var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
+            if (uids.Count == 0) return 0;
+
+            string currentScenePkg = null;
+            try { currentScenePkg = VamHookPlugin.CurrentScenePackageUid; } catch { }
+            HashSet<string> runningSceneDeps = TryGetRunningSceneDependenciesFast();
+
+            var blocked = new List<string>();
+            var warned = new List<string>();
+            var toDelete = new List<string>();
+            ClassifyUidsForTboxDelete(uids, currentScenePkg, runningSceneDeps, blocked, warned, toDelete);
+            return toDelete.Count;
+        }
+
         // Called by the toolbox button created in GalleryPanel.SelectionContextMenu.cs
         private void TboxDeleteSelectedPackages()
         {
@@ -23,15 +136,7 @@ namespace VPB
                     return;
                 }
 
-                // Collect unique package UIDs from selection
-                var uids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                for (int i = 0; i < selectedFiles.Count; i++)
-                {
-                    var f = selectedFiles[i];
-                    if (f == null) continue;
-                    string uid = TryGetPackageUidForEntry(f);
-                    if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
-                }
+                var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
 
                 if (uids.Count == 0)
                 {
@@ -43,7 +148,6 @@ namespace VPB
                 string deletedDir = Path.Combine(baseDir, DeletedPackagesFolderName);
                 EnsureDeletedPackagesDirectory(deletedDir);
 
-                // Build running-scene dependency info (best-effort)
                 string currentScenePkg = null;
                 try { currentScenePkg = VamHookPlugin.CurrentScenePackageUid; } catch { }
 
@@ -52,76 +156,13 @@ namespace VPB
                 var blocked = new List<string>();
                 var warned = new List<string>();
                 var toDelete = new List<string>();
+                ClassifyUidsForTboxDelete(uids, currentScenePkg, runningSceneDeps, blocked, warned, toDelete);
+
                 var relatedEntries = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var uid in uids)
+                for (int i = 0; i < toDelete.Count; i++)
                 {
+                    string uid = toDelete[i];
                     if (string.IsNullOrEmpty(uid)) continue;
-
-                    // Critical: locked packages should never be moved
-                    try
-                    {
-                        if (LockedPackagesManager.Instance != null && LockedPackagesManager.Instance.IsLocked(uid))
-                        {
-                            blocked.Add($"{uid}.var (locked)");
-                            continue;
-                        }
-                    }
-                    catch { }
-
-                    // Critical: do not delete the currently loaded scene's package
-                    if (!string.IsNullOrEmpty(currentScenePkg) && string.Equals(uid, currentScenePkg, StringComparison.OrdinalIgnoreCase))
-                    {
-                        blocked.Add($"{uid}.var (current scene package)");
-                        continue;
-                    }
-
-                    // Critical: if the running scene references this package, require confirm (or block if you prefer)
-                    if (runningSceneDeps != null && runningSceneDeps.Contains(uid))
-                    {
-                        warned.Add($"{uid}.var (referenced by running scene)");
-                    }
-
-                    // Dependents warning
-                    int depCount = 0;
-                    try { depCount = GetDependentCount(uid); } catch { depCount = 0; }
-                    if (depCount > 0)
-                    {
-                        warned.Add($"{uid}.var ({depCount} dependents)");
-                    }
-
-                    // Critical: must be resolvable to a file on disk
-                    string srcPath = ResolveVarPathForUid(uid);
-                    if (string.IsNullOrEmpty(srcPath) || !File.Exists(srcPath))
-                    {
-                        blocked.Add($"{uid}.var (file not found)");
-                        continue;
-                    }
-
-                    // Critical: already deleted
-                    try
-                    {
-                        string norm = srcPath.Replace('\\', '/');
-                        if (norm.IndexOf("/" + DeletedPackagesFolderName + "/", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            blocked.Add($"{uid}.var (already in {DeletedPackagesFolderName})");
-                            continue;
-                        }
-                    }
-                    catch { }
-
-                    // Critical: avoid moving enabled auto-install packages (too easy to break user prefs)
-                    try
-                    {
-                        // Only warn; user may still proceed
-                        if (FileEntry.AutoInstallLookup != null && FileEntry.AutoInstallLookup.Contains(uid))
-                            warned.Add($"{uid}.var (auto-install enabled)");
-                    }
-                    catch { }
-
-                    toDelete.Add(uid);
-
-                    // Gather related gallery entries that will disappear when this .var moves
                     try
                     {
                         var rel = GetRelatedGalleryEntryNamesForPackage(uid, maxNames: 16);
