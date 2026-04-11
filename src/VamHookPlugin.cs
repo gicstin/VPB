@@ -644,6 +644,9 @@ namespace VPB
                 m_TitleTagStyle.fontSize = GUI.skin.window.fontSize;
                 m_TitleTagStyle.wordWrap = false;
                 m_TitleTagStyle.padding = new RectOffset(0, 0, 0, 0);
+                m_TitleTagStyle.hover.background = m_TitleTagStyle.normal.background;
+                m_TitleTagStyle.active.background = m_TitleTagStyle.normal.background;
+                m_TitleTagStyle.focused.background = m_TitleTagStyle.normal.background;
             }
 
             if (m_TitleBarLabelStyle == null)
@@ -2292,33 +2295,24 @@ namespace VPB
                         var sceneClickSeconds = LogUtil.GetSceneClickSecondsForDisplay();
                         var sceneLoadSeconds = LogUtil.GetSceneLoadSecondsForDisplay();
                         string tagText;
-                        string tagTextHover;
                         if (sceneLoadSeconds.HasValue)
                         {
-                            // Prefer showing load time; keep text compact to avoid truncation in small headers.
                             tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneLoadSeconds.Value);
-                            tagTextHover = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.BuildVersion, startupSeconds, sceneLoadSeconds.Value);
                         }
                         else if (sceneClickSeconds.HasValue)
                         {
                             tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneClickSeconds.Value);
-                            tagTextHover = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.BuildVersion, startupSeconds, sceneClickSeconds.Value);
                         }
                         else
                         {
                             tagText = string.Format("VPB {0} | {1:0.0}s", PluginVersionInfo.Version, startupSeconds);
-                            tagTextHover = string.Format("VPB {0} | {1:0.0}s", PluginVersionInfo.BuildVersion, startupSeconds);
                         }
 
-                        var tagContent = new GUIContent(tagText, "VPB v" + PluginVersionInfo.Version + "\nBuild " + PluginVersionInfo.BuildVersion);
-                        var tagContentHover = new GUIContent(tagTextHover, "VPB v" + PluginVersionInfo.Version + "\nBuild " + PluginVersionInfo.BuildVersion);
+                        var tagContent = new GUIContent(tagText);
                         float desiredTagWidth = 100f;
                         if (m_TitleTagStyle != null)
                         {
-                            desiredTagWidth = Mathf.Max(
-                                m_TitleTagStyle.CalcSize(tagContent).x,
-                                m_TitleTagStyle.CalcSize(tagContentHover).x
-                            );
+                            desiredTagWidth = m_TitleTagStyle.CalcSize(tagContent).x;
                         }
                         float availableTagWidth = Mathf.Max(0f, m_Rect.width - 6f - titleRightPadding - fpsWidth);
                         float tagWidth = Mathf.Min(desiredTagWidth, availableTagWidth);
@@ -2327,8 +2321,7 @@ namespace VPB
                         GUI.contentColor = new Color(1f, 1f, 1f, m_WindowAlphaState);
                         if (m_TitleTagStyle != null)
                         {
-                            bool isTagHover = tagRect.Contains(Event.current.mousePosition);
-                            GUI.Label(tagRect, isTagHover ? tagContentHover : tagContent, m_TitleTagStyle);
+                            GUI.Label(tagRect, tagContent, m_TitleTagStyle);
                         }
 
                         if (!string.IsNullOrEmpty(fpsText) && fpsRect.width > 4f && m_StyleFpsBadgeOuter != null && m_StyleFpsBadge != null)

@@ -423,44 +423,25 @@
     <Page Remove="vam_patch\**" />
   </ItemGroup>
 
-  <Target Name="GeneratePluginVersion" BeforeTargets="BeforeCompile">
+  <!--
+    plugin_version.txt: line 1 = base (e.g. 0.28.0 or v0.28.0), line 2 = next build counter (integer).
+    Before each compile: if line 1 changed vs last build (see obj/VPB_last_plugin_base.txt), line 2 resets to 1;
+    then PluginVersion.g.cs is written for this build, and line 2 is bumped for the next compile.
+    Set SkipVPBVersionPrepare=true to skip (e.g. some CI). Design-time builds are skipped.
+  -->
+  <Target Name="GeneratePluginVersion" BeforeTargets="BeforeCompile" Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipVPBVersionPrepare)' != 'true'">
+    <!-- Trim trailing \ so cmd.exe does not treat \" inside -IntermediateDir "...\Debug\" as an escaped quote (which drops -ProjectDir). -->
     <PropertyGroup>
-      <PluginVersionFile>$(MSBuildProjectDirectory)\plugin_version.txt</PluginVersionFile>
-      <PluginVersionGeneratedFile>$(IntermediateOutputPath)PluginVersion.g.cs</PluginVersionGeneratedFile>
+      <_PVFullInt>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)'))</_PVFullInt>
+      <PluginVersionIntermediateDir>$([System.String]::Copy('$(_PVFullInt)').TrimEnd('\'))</PluginVersionIntermediateDir>
+      <_PVProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_PVProjDir>
     </PropertyGroup>
-
-    <PropertyGroup>
-      <PluginBuildDayOfYear>$([System.String]::Format('{0:000}', $([System.DateTime]::Now.DayOfYear)))</PluginBuildDayOfYear>
-      <PluginBuildTime>$([System.DateTime]::Now.ToString('HHmm'))</PluginBuildTime>
-      <PluginBuildVersion>$(PluginBuildDayOfYear).$(PluginBuildTime)</PluginBuildVersion>
-    </PropertyGroup>
-
-    <ReadLinesFromFile File="$(PluginVersionFile)">
-      <Output TaskParameter="Lines" ItemName="_PluginVersionLines" />
-    </ReadLinesFromFile>
-
-    <PropertyGroup>
-      <PluginVersion>$([System.Text.RegularExpressions.Regex]::Replace('%(_PluginVersionLines.Identity)', '\\s+', ''))</PluginVersion>
-    </PropertyGroup>
-
-    <MakeDir Directories="$(IntermediateOutputPath)" />
-
-    <ItemGroup>
-      <_PluginVersionSourceLines Include="namespace VPB {" />
-      <_PluginVersionSourceLines Include="    internal static class PluginVersionInfo {" />
-      <_PluginVersionSourceLines Include="        public const string Version = &quot;$(PluginVersion)&quot;%3B" />
-      <_PluginVersionSourceLines Include="        public const string BuildVersion = &quot;$(PluginBuildVersion)&quot;%3B" />
-      <_PluginVersionSourceLines Include="    }" />
-      <_PluginVersionSourceLines Include="}" />
-    </ItemGroup>
-
-    <WriteLinesToFile
-      File="$(PluginVersionGeneratedFile)"
-      Overwrite="true"
-      Lines="@(_PluginVersionSourceLines)" />
+    <MakeDir Directories="$(PluginVersionIntermediateDir)" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_PVProjDir)\scripts\PreparePluginVersion.ps1&quot; -VersionFile &quot;$(_PVProjDir)\plugin_version.txt&quot; -IntermediateDir &quot;$(PluginVersionIntermediateDir)&quot; -ProjectDir &quot;$(_PVProjDir)&quot;" WorkingDirectory="$(_PVProjDir)" />
   </Target>
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
   <PropertyGroup>
     <!-- DLL + vpb_translations + vpb_fonts: same PostBuildEvent so copies always run with the DLL (AfterTargets=PostBuildEvent is unreliable across MSBuild/VS). Robocopy: exit 0-7 = success. -->
     <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\scripts\VPB.dll"
