@@ -276,5 +276,13 @@
   "gallery.tbox.no_autoinstall_count": "关闭自动安装 ({0})",
   "gallery.tbox.no_autoinstall": "关闭自动安装",
   "gallery.tooltip.tbox_unhide": "移除所选资源包的 .hide 标记",
-  "gallery.tooltip.tbox_no_autoinstall": "清除所选资源包的自动安装与 VPB 自动加载"
+  "gallery.tooltip.tbox_no_autoinstall": "清除所选资源包的自动安装与 VPB 自动加载",
+  "gallery.tbox.load": "加载",
+  "gallery.tbox.unload": "卸载",
+  "gallery.tbox.load_deps": "加载依赖",
+  "gallery.tbox.cache_textures": "缓存纹理",
+  "gallery.tooltip.tbox_load": "将所选 .var 从 AllPackages 复制到 AddonPackages（仅本包，不含依赖）",
+  "gallery.tooltip.tbox_unload": "将已安装的所选 .var 从 AddonPackages 移回 AllPackages",
+  "gallery.tooltip.tbox_load_deps": "将所选包及其依赖从 AllPackages 复制到 AddonPackages（遵循设置中的“随包加载依赖”）",
+  "gallery.tooltip.tbox_cache_textures": "为所选 .var 构建 VPB 纹理缓存（与 F3 包缓存相同）"
 }

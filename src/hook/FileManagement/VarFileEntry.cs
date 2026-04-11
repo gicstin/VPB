@@ -115,6 +115,20 @@ namespace VPB
 			return false;
 		}
 
+		/// <summary>After <see cref="VarPackage.InstallSelf"/> / recursive install moves the .var on disk, sync Path/Uid/Name.</summary>
+		public void RefreshDisplayPathsFromPackage()
+		{
+			if (Package == null) return;
+			if (string.Equals(InternalPath, "meta.json", StringComparison.OrdinalIgnoreCase))
+				Path = Package.Path;
+			else
+				Path = Package.Path + ":/" + InternalPath;
+			Uid = Package.Uid + ":/" + InternalPath;
+			int lastSlash = Path.LastIndexOf('/');
+			Name = (lastSlash >= 0 && lastSlash + 1 < Path.Length) ? Path.Substring(lastSlash + 1) : Path;
+			InvalidateUidLowerInvariantCache();
+		}
+
 	}
 
 }

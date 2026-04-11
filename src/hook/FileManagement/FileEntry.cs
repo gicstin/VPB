@@ -137,6 +137,12 @@ namespace VPB
 			sf.names = list.ToArray();
 			File.WriteAllText(GlobalInfo.AutoInstallPath, JsonUtility.ToJson(sf));
 		}
+
+		/// <summary>Call after mutating <see cref="Uid"/> so <see cref="UidLowerInvariant"/> recomputes.</summary>
+		protected void InvalidateUidLowerInvariantCache()
+		{
+			m_UidLowerInvariant = null;
+		}
 	}
 
 }

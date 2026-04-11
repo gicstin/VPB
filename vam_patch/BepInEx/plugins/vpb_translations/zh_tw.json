@@ -267,5 +267,13 @@
   "gallery.tbox.no_autoinstall_count": "關閉自動安裝 ({0})",
   "gallery.tbox.no_autoinstall": "關閉自動安裝",
   "gallery.tooltip.tbox_unhide": "移除所選套件的 .hide 標記",
-  "gallery.tooltip.tbox_no_autoinstall": "清除所選套件的自動安裝與 VPB 自動載入"
+  "gallery.tooltip.tbox_no_autoinstall": "清除所選套件的自動安裝與 VPB 自動載入",
+  "gallery.tbox.load": "載入",
+  "gallery.tbox.unload": "卸載",
+  "gallery.tbox.load_deps": "載入相依",
+  "gallery.tbox.cache_textures": "快取紋理",
+  "gallery.tooltip.tbox_load": "將所選 .var 從 AllPackages 複製到 AddonPackages（僅此套件，不含相依）",
+  "gallery.tooltip.tbox_unload": "將已安裝的所選 .var 從 AddonPackages 移回 AllPackages",
+  "gallery.tooltip.tbox_load_deps": "將所選套件及其相依從 AllPackages 複製到 AddonPackages（遵循設定中的「隨套件載入相依」）",
+  "gallery.tooltip.tbox_cache_textures": "為所選 .var 建立 VPB 紋理快取（與 F3 套件快取相同）"
 }

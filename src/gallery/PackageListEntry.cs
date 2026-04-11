@@ -59,6 +59,18 @@ namespace VPB
             try { return AutoInstallLookup != null && AutoInstallLookup.Contains(Package.Uid); }
             catch { return false; }
         }
+
+        /// <summary>After the backing <see cref="VarPackage"/> path changes (install/uninstall), sync list row fields.</summary>
+        public void RefreshPathsFromPackage()
+        {
+            if (Package == null) return;
+            Path = string.IsNullOrEmpty(Package.Path) ? "" : Package.Path.Replace('\\', '/');
+            Uid = !string.IsNullOrEmpty(Path) ? Path : Package.Uid;
+            Name = Package.Uid + ".var";
+            LastWriteTime = Package.LastWriteTime;
+            base.Size = Package.Size;
+            InvalidateUidLowerInvariantCache();
+        }
     }
 
     public class MissingPackageListEntry : FileEntry

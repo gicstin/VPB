@@ -276,5 +276,13 @@
   "gallery.tbox.no_autoinstall_count": "자동 설치 끄기 ({0})",
   "gallery.tbox.no_autoinstall": "자동 설치 끄기",
   "gallery.tooltip.tbox_unhide": "선택한 패키지의 .hide 표시 제거",
-  "gallery.tooltip.tbox_no_autoinstall": "선택한 패키지의 자동 설치 및 VPB 자동 로드 해제"
+  "gallery.tooltip.tbox_no_autoinstall": "선택한 패키지의 자동 설치 및 VPB 자동 로드 해제",
+  "gallery.tbox.load": "로드",
+  "gallery.tbox.unload": "언로드",
+  "gallery.tbox.load_deps": "의존성 로드",
+  "gallery.tbox.cache_textures": "텍스처 캐시",
+  "gallery.tooltip.tbox_load": "선택한 .var를 AllPackages에서 AddonPackages로 복사(해당 패키지만, 의존성 없음)",
+  "gallery.tooltip.tbox_unload": "설치된 선택 .var를 AddonPackages에서 AllPackages로 되돌림",
+  "gallery.tooltip.tbox_load_deps": "선택 패키지와 의존성을 AllPackages에서 AddonPackages로 복사(설정의 패키지와 함께 의존성 로드 준수)",
+  "gallery.tooltip.tbox_cache_textures": "선택한 .var에 대해 VPB 텍스처 캐시 생성(F3 패키지 캐시와 동일)"
 }

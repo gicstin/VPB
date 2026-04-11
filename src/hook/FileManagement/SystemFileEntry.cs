@@ -171,6 +171,18 @@ namespace VPB
             }
 				return false;
 		}
+
+		/// <summary>Sync Path after <see cref="VarPackage"/> moved the .var (e.g. InstallSelf / UninstallSelf).</summary>
+		public void RefreshVarDisplayPathFromPackage()
+		{
+			if (!isVar || package == null) return;
+			string p = package.Path;
+			if (string.IsNullOrEmpty(p)) return;
+			Path = p.Replace('\\', '/');
+			Uid = Path;
+			Name = System.IO.Path.GetFileName(Path) ?? Path;
+			InvalidateUidLowerInvariantCache();
+		}
 	}
 
 }

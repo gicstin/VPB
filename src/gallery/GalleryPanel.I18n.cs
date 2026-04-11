@@ -147,6 +147,10 @@ namespace VPB
 
             // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
             try { RefreshTboxConditionalActionButtons(); } catch { }
+            RefreshGoText(tboxLoadBtn, "gallery.tbox.load", "Load");
+            RefreshGoText(tboxUnloadBtn, "gallery.tbox.unload", "Unload");
+            RefreshGoText(tboxLoadDepsBtn, "gallery.tbox.load_deps", "Load Deps");
+            RefreshGoText(tboxCacheTexturesBtn, "gallery.tbox.cache_textures", "Cache Textures");
             if (tboxHintLabel != null)
                 tboxHintLabel.text = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
 

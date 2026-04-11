@@ -353,6 +353,7 @@
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeletePackages.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalScenes.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.AutoInstallHide.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.LoadUnloadCache.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />

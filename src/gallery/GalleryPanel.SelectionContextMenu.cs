@@ -19,6 +19,233 @@ namespace VPB
         private GameObject tboxDisableAutoInstallBtn;
         private GameObject tboxHideBtn;
         private GameObject tboxUnhideBtn;
+        private GameObject tboxLoadBtn;
+        private GameObject tboxUnloadBtn;
+        private GameObject tboxLoadDepsBtn;
+        private GameObject tboxCacheTexturesBtn;
+
+        // Responsive tbox action buttons: 1–2 rows, flexible widths
+        private GameObject    tboxButtonsFlexRoot;
+        private RectTransform tboxButtonsFlexRootRT;
+        private GameObject    tboxBtnRow0GO;
+        private GameObject    tboxBtnRow1GO;
+        private RectTransform tboxBtnRow0RT;
+        private RectTransform tboxBtnRow1RT;
+        private LayoutElement tboxBtnRow0LE;
+        private LayoutElement tboxBtnRow1LE;
+        private HorizontalLayoutGroup tboxBtnRow0HLG;
+        private HorizontalLayoutGroup tboxBtnRow1HLG;
+        private GameObject    tboxButtonStash;
+        private int           tboxButtonLayoutRows = 1;
+        private float         tboxLastFlexAvailW = -1f;
+        private const float   tboxBtnRowGap = 4f;
+
+        private static void TboxConfigureActionButtonFlex(GameObject go, float minW, float prefW, float innerRowH)
+        {
+            if (go == null) return;
+            var rt = go.GetComponent<RectTransform>();
+            if (rt == null) return;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            var le = go.GetComponent<LayoutElement>();
+            if (le == null) le = go.AddComponent<LayoutElement>();
+            le.minWidth = minW;
+            le.preferredWidth = prefW;
+            le.flexibleWidth = 1f;
+            le.minHeight = innerRowH;
+            le.preferredHeight = innerRowH;
+            le.flexibleHeight = 1f;
+        }
+
+        private void TboxSetAllFlexActionButtonHeights(float innerRowH)
+        {
+            void one(GameObject go)
+            {
+                if (go == null) return;
+                var le = go.GetComponent<LayoutElement>();
+                if (le == null) return;
+                le.minHeight = innerRowH;
+                le.preferredHeight = innerRowH;
+            }
+            one(tboxDisableAutoInstallBtn);
+            one(tboxUnhideBtn);
+            one(tboxHideBtn);
+            one(tboxAutoInstallBtn);
+            one(tboxDeleteBtn);
+            one(tboxLoadBtn);
+            one(tboxUnloadBtn);
+            one(tboxLoadDepsBtn);
+            one(tboxCacheTexturesBtn);
+            one(tboxCopyPkgNamesBtn);
+        }
+
+        private void TboxDetachAllActionButtonsForLayout()
+        {
+            if (tboxButtonStash == null) return;
+            Transform p = tboxButtonStash.transform;
+            void d(GameObject go)
+            {
+                if (go != null) go.transform.SetParent(p, false);
+            }
+            d(tboxDisableAutoInstallBtn);
+            d(tboxUnhideBtn);
+            d(tboxHideBtn);
+            d(tboxAutoInstallBtn);
+            d(tboxDeleteBtn);
+            d(tboxLoadBtn);
+            d(tboxUnloadBtn);
+            d(tboxLoadDepsBtn);
+            d(tboxCacheTexturesBtn);
+            d(tboxCopyPkgNamesBtn);
+        }
+
+        private static void TboxPopulateRowLtr(HorizontalLayoutGroup hlg, List<GameObject> listLtr)
+        {
+            if (hlg == null || listLtr == null) return;
+            Transform t = hlg.transform;
+            for (int i = 0; i < listLtr.Count; i++)
+            {
+                GameObject go = listLtr[i];
+                if (go == null) continue;
+                go.transform.SetParent(t, false);
+            }
+        }
+
+        private static void TboxPopulateRowFromRtlPack(HorizontalLayoutGroup hlg, List<GameObject> rtlPacked)
+        {
+            if (hlg == null || rtlPacked == null) return;
+            Transform t = hlg.transform;
+            for (int i = rtlPacked.Count - 1; i >= 0; i--)
+            {
+                GameObject go = rtlPacked[i];
+                if (go == null) continue;
+                go.transform.SetParent(t, false);
+            }
+        }
+
+        /// <summary>Wrap tbox actions to two rows when minimum widths no longer fit; stretch button band height.</summary>
+        private void RefreshTboxFlexButtonLayout()
+        {
+            if (tboxButtonsFlexRootRT == null || tboxBtnRow0HLG == null || tboxBtnRow1HLG == null) return;
+
+            float innerH = Mathf.Max(34f, tboxInfoRowHeight - 8f);
+            if (tboxBtnRow0LE != null) { tboxBtnRow0LE.minHeight = innerH; tboxBtnRow0LE.preferredHeight = innerH; }
+            if (tboxBtnRow1LE != null) { tboxBtnRow1LE.minHeight = innerH; tboxBtnRow1LE.preferredHeight = innerH; }
+            TboxSetAllFlexActionButtonHeights(innerH);
+
+            Canvas.ForceUpdateCanvases();
+            float avail = tboxButtonsFlexRootRT.rect.width;
+            if (avail < 8f)
+                avail = (tboxLastFlexAvailW > 8f) ? tboxLastFlexAvailW : 640f;
+
+            const float gap = 10f;
+
+            bool TryGetWidths(GameObject go, out float minW, out float prefW)
+            {
+                minW = 56f;
+                prefW = 100f;
+                if (go == null) return false;
+                var le = go.GetComponent<LayoutElement>();
+                if (le == null) return false;
+                minW = le.minWidth;
+                prefW = le.preferredWidth;
+                return true;
+            }
+
+            float RowMinSum(List<GameObject> row)
+            {
+                float s = 0f;
+                for (int i = 0; i < row.Count; i++)
+                {
+                    if (!TryGetWidths(row[i], out float mw, out _)) continue;
+                    s += mw;
+                    if (i > 0) s += gap;
+                }
+                return s;
+            }
+
+            var ltr = new List<GameObject>(14);
+            if (tboxDisableAutoInstallBtn != null && tboxDisableAutoInstallBtn.activeSelf) ltr.Add(tboxDisableAutoInstallBtn);
+            if (tboxUnhideBtn != null && tboxUnhideBtn.activeSelf) ltr.Add(tboxUnhideBtn);
+            if (tboxHideBtn != null && tboxHideBtn.activeSelf) ltr.Add(tboxHideBtn);
+            if (tboxAutoInstallBtn != null && tboxAutoInstallBtn.activeSelf) ltr.Add(tboxAutoInstallBtn);
+            if (tboxDeleteBtn != null) ltr.Add(tboxDeleteBtn);
+            if (tboxLoadBtn != null) ltr.Add(tboxLoadBtn);
+            if (tboxUnloadBtn != null) ltr.Add(tboxUnloadBtn);
+            if (tboxLoadDepsBtn != null) ltr.Add(tboxLoadDepsBtn);
+            if (tboxCacheTexturesBtn != null) ltr.Add(tboxCacheTexturesBtn);
+            if (tboxCopyPkgNamesBtn != null) ltr.Add(tboxCopyPkgNamesBtn);
+
+            var rtl = new List<GameObject>(ltr.Count);
+            for (int i = ltr.Count - 1; i >= 0; i--)
+                rtl.Add(ltr[i]);
+
+            bool FitsOneRowMin()
+            {
+                return RowMinSum(rtl) <= avail + 1f;
+            }
+
+            List<GameObject> row0rtl = new List<GameObject>();
+            List<GameObject> row1rtl = new List<GameObject>();
+
+            if (FitsOneRowMin())
+            {
+                tboxButtonLayoutRows = 1;
+                row0rtl.AddRange(rtl);
+            }
+            else
+            {
+                float used = 0f;
+                for (int i = 0; i < rtl.Count; i++)
+                {
+                    GameObject go = rtl[i];
+                    if (!TryGetWidths(go, out float mw, out _)) continue;
+                    float need = mw + (row0rtl.Count > 0 ? gap : 0f);
+                    if (used + need <= avail + 1f)
+                    {
+                        row0rtl.Add(go);
+                        used += need;
+                    }
+                    else
+                    {
+                        for (int j = i; j < rtl.Count; j++)
+                            row1rtl.Add(rtl[j]);
+                        break;
+                    }
+                }
+                if (row0rtl.Count == 0 && rtl.Count > 0)
+                {
+                    row0rtl.Add(rtl[0]);
+                    row1rtl.Clear();
+                    for (int j = 1; j < rtl.Count; j++)
+                        row1rtl.Add(rtl[j]);
+                }
+                tboxButtonLayoutRows = row1rtl.Count > 0 ? 2 : 1;
+            }
+
+            TboxDetachAllActionButtonsForLayout();
+            if (tboxButtonLayoutRows == 1)
+            {
+                TboxPopulateRowLtr(tboxBtnRow0HLG, ltr);
+                tboxBtnRow1GO.SetActive(false);
+            }
+            else
+            {
+                tboxBtnRow1GO.SetActive(true);
+                TboxPopulateRowFromRtlPack(tboxBtnRow0HLG, row0rtl);
+                TboxPopulateRowFromRtlPack(tboxBtnRow1HLG, row1rtl);
+            }
+
+            float band = tboxInfoRowHeight * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap : 0f);
+            if (tboxButtonsLayerRT != null)
+                tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, band);
+
+            LayoutRebuilder.MarkLayoutForRebuild(tboxButtonsFlexRootRT);
+            tboxLastFlexAvailW = tboxButtonsFlexRootRT.rect.width;
+        }
 
         // Expand/collapse state
         private bool  tboxIsHovered  = false;
@@ -145,23 +372,156 @@ namespace VPB
             bpRT.sizeDelta        = new Vector2(-48f, tboxInfoRowHeight);
             tboxButtonsLayerRT = bpRT;
 
+            // Flex root + two HLG rows (second row toggled when wrapping)
+            var flexGO = new GameObject("TboxButtonsFlexRoot");
+            flexGO.transform.SetParent(bpGO.transform, false);
+            tboxButtonsFlexRoot = flexGO;
+            tboxButtonsFlexRootRT = flexGO.AddComponent<RectTransform>();
+            tboxButtonsFlexRootRT.anchorMin = Vector2.zero;
+            tboxButtonsFlexRootRT.anchorMax = Vector2.one;
+            tboxButtonsFlexRootRT.offsetMin = new Vector2(8f, 0f);
+            tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f, 0f);
+            tboxButtonsFlexRootRT.pivot = new Vector2(0.5f, 0f);
+            var flexVlg = flexGO.AddComponent<VerticalLayoutGroup>();
+            flexVlg.spacing = tboxBtnRowGap;
+            flexVlg.padding = new RectOffset(0, 0, 0, 0);
+            flexVlg.childAlignment = TextAnchor.UpperRight;
+            flexVlg.childControlWidth = true;
+            flexVlg.childForceExpandWidth = true;
+            flexVlg.childControlHeight = true;
+            flexVlg.childForceExpandHeight = false;
+
+            // Hold buttons between relayout passes (sibling of flex root — not in the VLG).
+            var stashGO = new GameObject("TboxBtnStash");
+            stashGO.transform.SetParent(bpGO.transform, false);
+            var stashRT = stashGO.AddComponent<RectTransform>();
+            stashRT.anchorMin = Vector2.zero;
+            stashRT.anchorMax = Vector2.zero;
+            stashRT.pivot = Vector2.zero;
+            stashRT.anchoredPosition = Vector2.zero;
+            stashRT.sizeDelta = Vector2.zero;
+            tboxButtonStash = stashGO;
+
+            float innerRowH = Mathf.Max(34f, tboxInfoRowHeight - 8f);
+
+            tboxBtnRow0GO = new GameObject("TboxBtnRow0");
+            tboxBtnRow0GO.transform.SetParent(flexGO.transform, false);
+            tboxBtnRow0RT = tboxBtnRow0GO.AddComponent<RectTransform>();
+            tboxBtnRow0RT.anchorMin = Vector2.zero;
+            tboxBtnRow0RT.anchorMax = Vector2.one;
+            tboxBtnRow0RT.sizeDelta = Vector2.zero;
+            tboxBtnRow0LE = tboxBtnRow0GO.AddComponent<LayoutElement>();
+            tboxBtnRow0LE.minHeight = innerRowH;
+            tboxBtnRow0LE.preferredHeight = innerRowH;
+            tboxBtnRow0LE.flexibleWidth = 1f;
+            tboxBtnRow0HLG = tboxBtnRow0GO.AddComponent<HorizontalLayoutGroup>();
+            tboxBtnRow0HLG.spacing = 10f;
+            tboxBtnRow0HLG.padding = new RectOffset(0, 0, 0, 0);
+            tboxBtnRow0HLG.childAlignment = TextAnchor.MiddleRight;
+            tboxBtnRow0HLG.childControlWidth = true;
+            tboxBtnRow0HLG.childForceExpandWidth = false;
+            tboxBtnRow0HLG.childControlHeight = true;
+            tboxBtnRow0HLG.childForceExpandHeight = true;
+
+            tboxBtnRow1GO = new GameObject("TboxBtnRow1");
+            tboxBtnRow1GO.transform.SetParent(flexGO.transform, false);
+            tboxBtnRow1RT = tboxBtnRow1GO.AddComponent<RectTransform>();
+            tboxBtnRow1RT.anchorMin = Vector2.zero;
+            tboxBtnRow1RT.anchorMax = Vector2.one;
+            tboxBtnRow1RT.sizeDelta = Vector2.zero;
+            tboxBtnRow1LE = tboxBtnRow1GO.AddComponent<LayoutElement>();
+            tboxBtnRow1LE.minHeight = innerRowH;
+            tboxBtnRow1LE.preferredHeight = innerRowH;
+            tboxBtnRow1LE.flexibleWidth = 1f;
+            tboxBtnRow1HLG = tboxBtnRow1GO.AddComponent<HorizontalLayoutGroup>();
+            tboxBtnRow1HLG.spacing = 10f;
+            tboxBtnRow1HLG.padding = new RectOffset(0, 0, 0, 0);
+            tboxBtnRow1HLG.childAlignment = TextAnchor.MiddleRight;
+            tboxBtnRow1HLG.childControlWidth = true;
+            tboxBtnRow1HLG.childForceExpandWidth = false;
+            tboxBtnRow1HLG.childControlHeight = true;
+            tboxBtnRow1HLG.childForceExpandHeight = true;
+            tboxBtnRow1GO.SetActive(false);
+
             const int tboxActionBtnFont = 16;
+            const float tboxWCopy = 210f;
+            const float tboxWCache = 142f;
+            const float tboxWLoadDeps = 118f;
+            const float tboxWUnload = 90f;
+            const float tboxWLoad = 88f;
+            const float tboxWDelete = 180f;
+            const float tboxWAi = 168f;
+            const float tboxWHide = 100f;
+            const float tboxMinCopy = 108f;
+            const float tboxMinCache = 72f;
+            const float tboxMinLoadDeps = 72f;
+            const float tboxMinUnload = 64f;
+            const float tboxMinLoad = 56f;
+            const float tboxMinDelete = 80f;
+            const float tboxMinAi = 104f;
+            const float tboxMinHide = 56f;
+            const float tboxMinUnhide = 64f;
+            const float tboxMinNoAi = 104f;
+
+            // Placeholders — layout is resolved in RefreshTboxFlexButtonLayout (stretch + LayoutElement).
             tboxCopyPkgNamesBtn = UI.CreateUIButton(
-                bpGO, 210, 42,
+                tboxBtnRow0GO, 0, 0,
                 VPBTranslation.T("gallery.tbox.copy_names", "Copy Names"), tboxActionBtnFont,
-                -12, 0, AnchorPresets.middleRight,
+                0, 0, AnchorPresets.stretchAll,
                 CopySelectedPackageNamesToClipboard
             );
             tboxCopyPkgNamesBtn.name = "Tbox_CopyPackageNames";
+            TboxConfigureActionButtonFlex(tboxCopyPkgNamesBtn, tboxMinCopy, tboxWCopy, innerRowH);
             AddTooltip(tboxCopyPkgNamesBtn, "gallery.tooltip.tbox_copy_names", "Copy package .var names and local Saves/scene paths (one per line) to clipboard");
 
+            tboxCacheTexturesBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cache_textures", "Cache Textures"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxCacheTexturesSelected
+            );
+            tboxCacheTexturesBtn.name = "Tbox_CacheTextures";
+            TboxConfigureActionButtonFlex(tboxCacheTexturesBtn, tboxMinCache, tboxWCache, innerRowH);
+            AddTooltip(tboxCacheTexturesBtn, "gallery.tooltip.tbox_cache_textures", "Build VPB texture cache for selected .var packages (same as F3 for packages)");
+
+            tboxLoadDepsBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.load_deps", "Load Deps"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxLoadDepsSelectedPackages
+            );
+            tboxLoadDepsBtn.name = "Tbox_LoadDeps";
+            TboxConfigureActionButtonFlex(tboxLoadDepsBtn, tboxMinLoadDeps, tboxWLoadDeps, innerRowH);
+            AddTooltip(tboxLoadDepsBtn, "gallery.tooltip.tbox_load_deps", "Copy selected packages and their dependencies from AllPackages to AddonPackages (respects Settings → load deps with package)");
+
+            tboxUnloadBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.unload", "Unload"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxUnloadSelectedPackages
+            );
+            tboxUnloadBtn.name = "Tbox_Unload";
+            TboxConfigureActionButtonFlex(tboxUnloadBtn, tboxMinUnload, tboxWUnload, innerRowH);
+            AddTooltip(tboxUnloadBtn, "gallery.tooltip.tbox_unload", "Move selected installed .var files from AddonPackages back to AllPackages");
+
+            tboxLoadBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.load", "Load"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxLoadSelectedPackages
+            );
+            tboxLoadBtn.name = "Tbox_Load";
+            TboxConfigureActionButtonFlex(tboxLoadBtn, tboxMinLoad, tboxWLoad, innerRowH);
+            AddTooltip(tboxLoadBtn, "gallery.tooltip.tbox_load", "Copy selected .var from AllPackages to AddonPackages (this package only, no dependencies)");
+
             tboxDeleteBtn = UI.CreateUIButton(
-                bpGO, 180, 42,
+                tboxBtnRow0GO, 0, 0,
                 VPBTranslation.T("gallery.tbox.delete", "Delete"), tboxActionBtnFont,
-                -12 - 220, 0, AnchorPresets.middleRight,
+                0, 0, AnchorPresets.stretchAll,
                 TboxDeleteSelectedPackages
             );
             tboxDeleteBtn.name = "Tbox_Delete";
+            TboxConfigureActionButtonFlex(tboxDeleteBtn, tboxMinDelete, tboxWDelete, innerRowH);
             AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes");
             try
             {
@@ -171,42 +531,45 @@ namespace VPB
             catch { }
 
             tboxAutoInstallBtn = UI.CreateUIButton(
-                bpGO, 168, 42,
+                tboxBtnRow0GO, 0, 0,
                 VPBTranslation.T("gallery.tbox.autoinstall", "Autoinstall"), tboxActionBtnFont,
-                -12 - 220 - 190, 0, AnchorPresets.middleRight,
+                0, 0, AnchorPresets.stretchAll,
                 TboxAutoInstallSelectedPackages
             );
             tboxAutoInstallBtn.name = "Tbox_AutoInstall";
+            TboxConfigureActionButtonFlex(tboxAutoInstallBtn, tboxMinAi, tboxWAi, innerRowH);
             AddTooltip(tboxAutoInstallBtn, "gallery.tooltip.tbox_autoinstall", "Flag selected packages for auto-install and auto-load. Packages in AllPackages are copied to AddonPackages on the next VaM start (not immediately).");
 
             tboxHideBtn = UI.CreateUIButton(
-                bpGO, 100, 42,
+                tboxBtnRow0GO, 0, 0,
                 VPBTranslation.T("gallery.tbox.hide", "Hide"), tboxActionBtnFont,
-                -12 - 220 - 190 - 178, 0, AnchorPresets.middleRight,
+                0, 0, AnchorPresets.stretchAll,
                 TboxHideSelectedPackages
             );
             tboxHideBtn.name = "Tbox_Hide";
+            TboxConfigureActionButtonFlex(tboxHideBtn, tboxMinHide, tboxWHide, innerRowH);
             AddTooltip(tboxHideBtn, "gallery.tooltip.tbox_hide", "Hide selected packages in VaM file lists (AddonPackagesFilePrefs … .hide)");
 
-            const float tboxHideX = -12f - 220f - 190f - 178f;
             tboxUnhideBtn = UI.CreateUIButton(
-                bpGO, 100, 42,
+                tboxBtnRow0GO, 0, 0,
                 VPBTranslation.T("gallery.tbox.unhide", "Unhide"), tboxActionBtnFont,
-                tboxHideX - 10f - 100f, 0, AnchorPresets.middleRight,
+                0, 0, AnchorPresets.stretchAll,
                 TboxUnhideSelectedPackages
             );
             tboxUnhideBtn.name = "Tbox_Unhide";
             tboxUnhideBtn.SetActive(false);
+            TboxConfigureActionButtonFlex(tboxUnhideBtn, tboxMinUnhide, tboxWHide, innerRowH);
             AddTooltip(tboxUnhideBtn, "gallery.tooltip.tbox_unhide", "Remove .hide markers for selected packages");
 
             tboxDisableAutoInstallBtn = UI.CreateUIButton(
-                bpGO, 168, 42,
+                tboxBtnRow0GO, 0, 0,
                 VPBTranslation.T("gallery.tbox.no_autoinstall", "No autoinstall"), tboxActionBtnFont,
-                tboxHideX - 10f - 100f - 10f - 168f, 0, AnchorPresets.middleRight,
+                0, 0, AnchorPresets.stretchAll,
                 TboxDisableAutoInstallSelectedPackages
             );
             tboxDisableAutoInstallBtn.name = "Tbox_NoAutoInstall";
             tboxDisableAutoInstallBtn.SetActive(false);
+            TboxConfigureActionButtonFlex(tboxDisableAutoInstallBtn, tboxMinNoAi, tboxWAi, innerRowH);
             AddTooltip(tboxDisableAutoInstallBtn, "gallery.tooltip.tbox_no_autoinstall", "Clear auto-install and VPB auto-load for selected packages");
 
             // ── Pin toggle (right edge, always visible) ───────────────────────────
@@ -275,8 +638,10 @@ namespace VPB
                     float rowH = 60f * s;
                     tboxInfoRowHeight = rowH;
                     if (lRT != null) lRT.sizeDelta = new Vector2(lRT.sizeDelta.x, rowH);
-                    if (bRT != null) { bRT.anchoredPosition = new Vector2(0f, rowH); bRT.sizeDelta = new Vector2(bRT.sizeDelta.x, rowH); }
+                    if (bRT != null) bRT.anchoredPosition = new Vector2(0f, rowH);
                     if (pRT != null) pRT.sizeDelta = new Vector2(pRT.sizeDelta.x, rowH);
+                    try { TboxSetAllFlexActionButtonHeights(Mathf.Max(34f, rowH - 8f)); } catch { }
+                    try { RefreshTboxFlexButtonLayout(); } catch { }
                 });
             }
 
@@ -337,6 +702,9 @@ namespace VPB
             {
                 tboxExpandT   = 0f;
                 tboxIsHovered = false;
+                tboxButtonLayoutRows = 1;
+                if (tboxButtonsLayerRT != null)
+                    tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, tboxInfoRowHeight);
                 if (tboxPinned) { tboxPinned = false; RefreshTboxPinVisual(); }
             }
 
@@ -347,10 +715,21 @@ namespace VPB
             tboxExpandT = Mathf.Lerp(tboxExpandT, targetT, Time.deltaTime * 22f);
             if (Mathf.Abs(tboxExpandT - targetT) < 0.005f) tboxExpandT = targetT;
 
-            // Animate bar height: grow offsetMax upward to reveal the buttons row
+            // Animate bar height: grow offsetMax upward to reveal the button band (1 or 2 rows)
             if (tboxRT != null)
             {
-                float targetTop = tboxTopOffsetBase + tboxInfoRowHeight * tboxExpandT;
+                if (sel > 0 && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
+                {
+                    float w = tboxButtonsFlexRootRT.rect.width;
+                    if (w > 8f && Mathf.Abs(w - tboxLastFlexAvailW) > 2f)
+                    {
+                        try { RefreshTboxFlexButtonLayout(); } catch { }
+                    }
+                }
+
+                float btnBand = tboxInfoRowHeight * Mathf.Max(1, tboxButtonLayoutRows)
+                    + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap : 0f);
+                float targetTop = tboxTopOffsetBase + btnBand * tboxExpandT;
                 float newTop = Mathf.Lerp(tboxRT.offsetMax.y, targetTop, Time.deltaTime * 22f);
                 if (Mathf.Abs(newTop - targetTop) < 0.5f) newTop = targetTop;
                 tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, newTop);
@@ -453,7 +832,7 @@ namespace VPB
                 if (showNoAi) SetTboxCountButtonLabel(tboxDisableAutoInstallBtn, "gallery.tbox.no_autoinstall_count", "No autoinstall ({0})", noAiN);
             }
 
-            LayoutTboxHideAutoinstallButtonRow(showAi, showHide, showUnhide, showNoAi);
+            RefreshTboxFlexButtonLayout();
         }
 
         private static void SetTboxCountButtonLabel(GameObject go, string key, string fallbackFmt, int count)
@@ -462,34 +841,6 @@ namespace VPB
             Text t = go.GetComponentInChildren<Text>(true);
             if (t != null)
                 t.text = string.Format(VPBTranslation.T(key, fallbackFmt), count);
-        }
-
-        /// <summary>Repack Autoinstall / Hide / Unhide / No autoinstall against Delete so hidden buttons leave no gap.</summary>
-        private void LayoutTboxHideAutoinstallButtonRow(bool showAi, bool showHide, bool showUnhide, bool showNoAi)
-        {
-            const float gap = 10f;
-            const float wAi = 168f;
-            const float wHide = 100f;
-            const float wUnhide = 100f;
-            const float wNoAi = 168f;
-            const float deletePivotX = -232f;
-            const float deleteW = 180f;
-            float x = deletePivotX - deleteW - gap;
-
-            void Place(GameObject go, float width)
-            {
-                if (go == null) return;
-                var rt = go.GetComponent<RectTransform>();
-                if (rt == null) return;
-                Vector2 p = rt.anchoredPosition;
-                rt.anchoredPosition = new Vector2(x, p.y);
-                x -= width + gap;
-            }
-
-            if (showAi) Place(tboxAutoInstallBtn, wAi);
-            if (showHide) Place(tboxHideBtn, wHide);
-            if (showUnhide) Place(tboxUnhideBtn, wUnhide);
-            if (showNoAi) Place(tboxDisableAutoInstallBtn, wNoAi);
         }
 
         /// <summary>Unique gallery-relative paths for on-disk Saves/scene JSON rows (for Copy Names).</summary>

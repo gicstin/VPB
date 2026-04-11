@@ -680,20 +680,78 @@ namespace VPB
             
             if (shouldApply)
             {
-                string pathLower = file.Path.ToLowerInvariant();
+                FileEntry applyFile = file;
+                FileEntry resolvedScene = TryResolveSceneCategoryPackageRowToSceneJson(file);
+                if (resolvedScene != null)
+                    applyFile = resolvedScene;
+
+                string pathLower = (applyFile.Path ?? "").ToLowerInvariant();
                 // Exclude Scenes from auto-apply, but allow SubScenes
-                bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || currentCategoryTitle.Contains("SubScene");
-                bool isScene = !isSubScene && pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || currentCategoryTitle.Contains("Scene"));
-                
+                bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\")
+                    || (!string.IsNullOrEmpty(currentCategoryTitle) && currentCategoryTitle.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0);
+                bool isScene = !isSubScene && pathLower.EndsWith(".json")
+                    && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene")
+                        || (!string.IsNullOrEmpty(currentCategoryTitle) && currentCategoryTitle.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0));
+
                 if (!isScene)
                 {
-                    ExecuteAutoActionForFile(file);
+                    ExecuteAutoActionForFile(applyFile);
                 }
-                else if (isScene)
+                else
                 {
-                    UI.LoadSceneFile(file);
+                    UI.LoadSceneFile(applyFile);
                 }
             }
+        }
+
+        /// <summary>
+        /// In Scene categories, package-level rows use <see cref="VarFileEntry"/> with <c>meta.json</c> (Path = .var), so click apply
+        /// must target a real scene JSON inside the zip — otherwise <see cref="ExecuteAutoActionForFile"/> treats the row as a bare .var and runs texture caching.
+        /// </summary>
+        private FileEntry TryResolveSceneCategoryPackageRowToSceneJson(FileEntry file)
+        {
+            if (file == null) return null;
+            if (string.IsNullOrEmpty(currentCategoryTitle)) return null;
+            if (currentCategoryTitle.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0) return null;
+            if (currentCategoryTitle.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) < 0) return null;
+
+            string pathNorm = (file.Path ?? "").Replace('\\', '/');
+            string pathLower = pathNorm.ToLowerInvariant();
+            if (pathLower.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return null;
+
+            VarPackage pkg = null;
+            if (file is VarFileEntry vfe && vfe.Package != null)
+            {
+                string ip = (vfe.InternalPath ?? "").Replace('\\', '/');
+                if (string.Equals(ip, "meta.json", StringComparison.OrdinalIgnoreCase))
+                    pkg = vfe.Package;
+                else if (pathLower.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+                    pkg = vfe.Package;
+            }
+            else if (file is PackageListEntry ple && ple.Package != null && pathLower.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+                pkg = ple.Package;
+
+            if (pkg == null) return null;
+
+            List<VarFileEntry> entries = pkg.FileEntries;
+            if (entries == null || entries.Count == 0) return null;
+
+            VarFileEntry best = null;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                VarFileEntry cand = entries[i];
+                if (cand == null) continue;
+                string ip = (cand.InternalPath ?? "").Replace('\\', '/');
+                if (!ip.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
+                string ipLower = ip.ToLowerInvariant();
+                if (ipLower.IndexOf("saves/scene", StringComparison.OrdinalIgnoreCase) < 0
+                    && ipLower.IndexOf("/scene/", StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                if (best == null || cand.LastWriteTime > best.LastWriteTime)
+                    best = cand;
+            }
+
+            return best;
         }
 
         private void RefreshSelectionVisuals()
