@@ -11,6 +11,53 @@ namespace VPB
     public partial class GalleryPanel
     {
 
+        /// <summary>List row label: package uid (Creator.Package.Version) unless legacy file-name mode is on.</summary>
+        private static string GetGalleryListRowDisplayName(FileEntry file)
+        {
+            if (file == null) return "[UNNAMED]";
+            bool legacy = VPBConfig.Instance != null && VPBConfig.Instance.GalleryListNamesLegacyFileName;
+            if (legacy)
+                return string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
+            try
+            {
+                if (file is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
+                    return vfe.Package.Uid;
+                if (file is PackageListEntry ple && ple.Package != null && !string.IsNullOrEmpty(ple.Package.Uid))
+                    return ple.Package.Uid;
+                if (file is MissingPackageListEntry mple && !string.IsNullOrEmpty(mple.RequestedUid))
+                    return mple.RequestedUid;
+            }
+            catch { }
+            return string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
+        }
+
+        private void SetGalleryListRowNameTooltip(GameObject nameGO, FileEntry file)
+        {
+            if (nameGO == null || file == null) return;
+            try
+            {
+                bool legacy = VPBConfig.Instance != null && VPBConfig.Instance.GalleryListNamesLegacyFileName;
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                {
+                    if (legacy)
+                        AddTooltipPlain(nameGO, $"Package: {vfe.Package.Uid}.var");
+                    else
+                    {
+                        string hint = string.IsNullOrEmpty(vfe.InternalPath) ? vfe.Name : vfe.InternalPath.Replace('\\', '/');
+                        AddTooltipPlain(nameGO, hint);
+                    }
+                }
+                else if (file is PackageListEntry ple && ple.Package != null)
+                {
+                    if (legacy)
+                        AddTooltipPlain(nameGO, $"Package: {ple.Package.Uid}.var");
+                    else if (!string.IsNullOrEmpty(ple.Path))
+                        AddTooltipPlain(nameGO, ple.Path);
+                }
+            }
+            catch { }
+        }
+
         private static string FormatBytesForList(long bytes)
         {
             if (bytes < 0) bytes = 0;
@@ -381,7 +428,8 @@ namespace VPB
                     int count = 0;
                     if (categoryCounts.ContainsKey(c.name)) count = categoryCounts[c.name];
                     
-                    if (count == 0 && !isActive) continue;
+                    // Plugins are mostly local Custom/Scripts files; keep the tab visible even when count is 0 (fresh install).
+                    if (count == 0 && !isActive && !string.Equals(c.name, "Plugins", StringComparison.OrdinalIgnoreCase)) continue;
                     if (VPBConfig.Instance != null && VPBConfig.Instance.IsHiddenCategory(c.name) && !isActive) continue;
 
                     string label = c.name + " (" + count + ")";
@@ -1625,17 +1673,9 @@ namespace VPB
                     Text t = nameTr.GetComponent<Text>();
                     if (t != null)
                     {
-                        string displayName = string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
+                        string displayName = GetGalleryListRowDisplayName(file);
                         t.text = displayName;
-                        // Add tooltip showing full package path if available
-                        try
-                        {
-                            if (file is VarFileEntry vfe && vfe.Package != null)
-                            {
-                                AddTooltipPlain(nameTr.gameObject, $"Package: {vfe.Package.Uid}.var");
-                            }
-                        }
-                        catch { }
+                        SetGalleryListRowNameTooltip(nameTr.gameObject, file);
                     }
                 }
 
@@ -1917,13 +1957,13 @@ namespace VPB
                             for (int p = 0; p < cat.paths.Count; p++)
                             {
                                 var pref = cat.paths[p];
-                                if (!string.IsNullOrEmpty(pref) && ip.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                if (!string.IsNullOrEmpty(pref) && GalleryInternalPathStartsWithPrefix(ip, pref))
                                 { pathOk = true; break; }
                             }
                         }
                         else if (!string.IsNullOrEmpty(cat.path))
                         {
-                            if (ip.StartsWith(cat.path, StringComparison.OrdinalIgnoreCase)) pathOk = true;
+                            if (GalleryInternalPathStartsWithPrefix(ip, cat.path)) pathOk = true;
                         }
                         else
                         {

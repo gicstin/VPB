@@ -741,7 +741,7 @@ namespace VPB
                 try
                 {
                     if (sel == 1 && firstEntry != null)
-                        LoadThumbnail(firstEntry, iboxPreviewImage);
+                        LoadThumbnail(firstEntry, iboxPreviewImage, gridThumbnailContext: false);
                     else
                         ClearThumbnailTarget(iboxPreviewImage);
                 }

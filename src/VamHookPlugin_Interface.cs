@@ -16,6 +16,7 @@ namespace VPB
             CategoryHair,
             CategoryPose,
             CategoryCUA,
+            CategoryPlugins,
             CustomScene,
             CustomSavedPerson,
             CustomPersonPreset,
@@ -154,6 +155,7 @@ namespace VPB
                 case GalleryPage.CategoryHair: OpenCategoryHair(); break;
                 case GalleryPage.CategoryPose: OpenCategoryPose(); break;
                 case GalleryPage.CategoryCUA: OpenCategoryCUA(); break;
+                case GalleryPage.CategoryPlugins: OpenCategoryPlugins(); break;
                 case GalleryPage.CustomScene: OpenCustomScene(); break;
                 case GalleryPage.CustomSavedPerson: OpenCustomSavedPerson(); break;
                 case GalleryPage.CustomPersonPreset: OpenPersonPreset(); break;
@@ -241,6 +243,7 @@ namespace VPB
                 // 1. Static/Legacy Categories
                 addCat("Scenes", "json", "Saves/scene");
                 addCat("SubScenes", "json", "Custom/SubScene");
+                addCat("Plugins", "cs|cslist|dll", "Custom/Scripts");
                 addCat("Clothing", "vam|vap", "Custom/Clothing");
                 addCat("Clothing", "vap", "Custom/Atom/Person/Clothing");
                 addCat("Clothing", "vam|vap", "Saves/Person/Clothing");
@@ -626,6 +629,11 @@ namespace VPB
         {
             SetLastGalleryPage(GalleryPage.CategoryCUA);
             ShowGallery("CUA", "assetbundle|unity3d", "Custom/Assets");
+        }
+        public void OpenCategoryPlugins()
+        {
+            SetLastGalleryPage(GalleryPage.CategoryPlugins);
+            ShowGallery("Plugins", "cs|cslist|dll", "Custom/Scripts");
         }
         public void OpenMiscCUA()
         {

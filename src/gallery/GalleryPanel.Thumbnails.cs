@@ -168,7 +168,7 @@ namespace VPB
             ShowThumbnailCacheProgress();
         }
 
-        private void LoadThumbnail(FileEntry file, RawImage target)
+        private void LoadThumbnail(FileEntry file, RawImage target, bool gridThumbnailContext = true)
         {
             // Skip thumbnails for missing/virtual entries
             if (file is VirtualFileEntry || file is MissingPackageListEntry)
@@ -179,7 +179,7 @@ namespace VPB
 
             try
             {
-                LoadThumbnailInternal(file, target);
+                LoadThumbnailInternal(file, target, gridThumbnailContext);
             }
             catch (Exception ex)
             {
@@ -187,10 +187,29 @@ namespace VPB
             }
         }
 
-        private void LoadThumbnailInternal(FileEntry file, RawImage target)
+        /// <summary>Plugin script paths under Custom/Scripts (same convention as Browser Assist).</summary>
+        private static bool IsPluginScriptGalleryFile(FileEntry file)
+        {
+            if (file == null || string.IsNullOrEmpty(file.Path)) return false;
+            string p = file.Path.Replace('\\', '/');
+            if (p.IndexOf("Custom/Scripts/", StringComparison.OrdinalIgnoreCase) < 0) return false;
+            string lower = p.ToLowerInvariant();
+            return lower.EndsWith(".cs") || lower.EndsWith(".cslist") || lower.EndsWith(".dll");
+        }
+
+        private void LoadThumbnailInternal(FileEntry file, RawImage target, bool gridThumbnailContext)
         {
             // Skip thumbnails for missing/virtual entries - clear any existing texture
             if (file is VirtualFileEntry || file is MissingPackageListEntry)
+            {
+                ClearThumbnailTarget(target);
+                return;
+            }
+
+            if (gridThumbnailContext &&
+                VPBConfig.Instance != null &&
+                !VPBConfig.Instance.PluginGalleryGridThumbnails &&
+                IsPluginScriptGalleryFile(file))
             {
                 ClearThumbnailTarget(target);
                 return;

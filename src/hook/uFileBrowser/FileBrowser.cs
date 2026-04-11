@@ -3332,30 +3332,34 @@ namespace VPB
 			{
 				VamHookPlugin.singleton.OpenCategoryPose();
 			});
+			CreateRightButton("Plugins", -450 + offset).button.onClick.AddListener(() =>
+			{
+				VamHookPlugin.singleton.OpenCategoryPlugins();
+			});
 
-			CreateRightHeader("Preset", -450 - 10 + offset, Color.black);
-			CreateRightButton("Person", -500 + offset).button.onClick.AddListener(() =>
+			CreateRightHeader("Preset", -500 - 10 + offset, Color.black);
+			CreateRightButton("Person", -550 + offset).button.onClick.AddListener(() =>
 			{
 				VamHookPlugin.singleton.OpenPresetPerson();
 			});
-			CreateRightButton("Clothing", -550 + offset).button.onClick.AddListener(() =>
+			CreateRightButton("Clothing", -600 + offset).button.onClick.AddListener(() =>
 			{
 				VamHookPlugin.singleton.OpenPresetClothing();
 			});
-			CreateRightButton("Hair",-600 + offset).button.onClick.AddListener(() =>
+			CreateRightButton("Hair",-650 + offset).button.onClick.AddListener(() =>
 			{
 				VamHookPlugin.singleton.OpenPresetHair();
 			});
-			CreateRightButton("Other",-650 + offset).button.onClick.AddListener(() =>
+			CreateRightButton("Other",-700 + offset).button.onClick.AddListener(() =>
 			{
 				VamHookPlugin.singleton.OpenPresetOther();
 			});
-			CreateRightHeader("Misc", -700 - 10 + offset, Color.black);
-			CreateRightButton("AssetBundle", -750 + offset).button.onClick.AddListener(() =>
+			CreateRightHeader("Misc", -750 - 10 + offset, Color.black);
+			CreateRightButton("AssetBundle", -800 + offset).button.onClick.AddListener(() =>
 			{
 				VamHookPlugin.singleton.OpenMiscCUA();
 			});
-			CreateRightButton("All", -800 + offset).button.onClick.AddListener(() =>
+			CreateRightButton("All", -850 + offset).button.onClick.AddListener(() =>
 			{
 				VamHookPlugin.singleton.OpenMiscAll();
 			});

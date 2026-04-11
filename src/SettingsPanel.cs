@@ -86,6 +86,12 @@ namespace VPB
         private HashSet<string> pendingHiddenCategories;
         private HashSet<string> backupHiddenCategories;
 
+        private bool pendingPluginGalleryGridThumbnails;
+        private bool backupPluginGalleryGridThumbnails;
+
+        private bool pendingGalleryListNamesLegacyFileName;
+        private bool backupGalleryListNamesLegacyFileName;
+
         private GameObject tooltipGO;
         private Text tooltipText;
         private Text settingsTitleText;
@@ -186,6 +192,12 @@ namespace VPB
             pendingHiddenCategories = new HashSet<string>(VPBConfig.Instance.HiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
             backupHiddenCategories  = new HashSet<string>(pendingHiddenCategories, StringComparer.OrdinalIgnoreCase);
 
+            pendingPluginGalleryGridThumbnails = VPBConfig.Instance.PluginGalleryGridThumbnails;
+            backupPluginGalleryGridThumbnails = VPBConfig.Instance.PluginGalleryGridThumbnails;
+
+            pendingGalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName;
+            backupGalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName;
+
             RectTransform rt = settingsPaneRT;
             if (onRight)
             {
@@ -255,7 +267,13 @@ namespace VPB
             VPBConfig.Instance.InitialGalleryCategory = backupInitialGalleryCategory;
             VPBConfig.Instance.HiddenCategories = new HashSet<string>(backupHiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
             pendingHiddenCategories = new HashSet<string>(backupHiddenCategories ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
+            VPBConfig.Instance.PluginGalleryGridThumbnails = backupPluginGalleryGridThumbnails;
+            pendingPluginGalleryGridThumbnails = backupPluginGalleryGridThumbnails;
+            bool galleryListLegacyWasPending = pendingGalleryListNamesLegacyFileName != backupGalleryListNamesLegacyFileName;
+            VPBConfig.Instance.GalleryListNamesLegacyFileName = backupGalleryListNamesLegacyFileName;
+            pendingGalleryListNamesLegacyFileName = backupGalleryListNamesLegacyFileName;
             VPBConfig.Instance.TriggerChange();
+            if (parentPanel != null && galleryListLegacyWasPending) parentPanel.RefreshFiles(true);
             if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
         }
 
@@ -329,6 +347,10 @@ namespace VPB
                 VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                 VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
                 VPBConfig.Instance.InitialGalleryCategory = pendingInitialGalleryCategory;
+                VPBConfig.Instance.PluginGalleryGridThumbnails = pendingPluginGalleryGridThumbnails;
+                backupPluginGalleryGridThumbnails = pendingPluginGalleryGridThumbnails;
+                VPBConfig.Instance.GalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
+                backupGalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
                 VPBConfig.Instance.Save();
                 if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
                 
@@ -521,13 +543,14 @@ namespace VPB
                 VPBConfig.Instance.TriggerChange();
             }, VPBTranslation.T("settings.tip.startup_fixed_gallery", "When enabled, a pinned (Fixed) gallery pane with Autohide enabled will be automatically created on the right side of the screen when the plugin starts."));
 
-            string[] initialGalleryOptions = { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "LastUsed" };
+            string[] initialGalleryOptions = { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "Plugins", "LastUsed" };
             string[] initialGalleryLabels = {
                 VPBTranslation.T("settings.initial_gallery.scenes", "Scenes"),
                 VPBTranslation.T("settings.initial_gallery.clothing", "Clothing"),
                 VPBTranslation.T("settings.initial_gallery.hair", "Hair"),
                 VPBTranslation.T("settings.initial_gallery.pose", "Pose"),
                 VPBTranslation.T("settings.initial_gallery.appearance", "Appearance"),
+                VPBTranslation.T("settings.initial_gallery.plugins", "Plugins"),
                 VPBTranslation.T("settings.initial_gallery.last_used", "Last used")
             };
             CreateCycleSetting(VPBTranslation.T("settings.initial_gallery_category", "Gallery opens on"), pendingInitialGalleryCategory, initialGalleryOptions, initialGalleryLabels, (val) => {
@@ -535,6 +558,20 @@ namespace VPB
                 VPBConfig.Instance.InitialGalleryCategory = val;
                 VPBConfig.Instance.TriggerChange();
             }, VPBTranslation.T("settings.tip.initial_gallery_category", "Which category is shown when the gallery first opens this session or when a new pane is created. Default is Scenes. Last used restores the tab saved when you last left the gallery."));
+
+            CreateToggleSetting(VPBTranslation.T("settings.plugin_gallery_grid_thumbnails", "Plugin thumbnails in grid"), pendingPluginGalleryGridThumbnails, (val) => {
+                pendingPluginGalleryGridThumbnails = val;
+                VPBConfig.Instance.PluginGalleryGridThumbnails = val;
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) parentPanel.RefreshFiles(true);
+            }, VPBTranslation.T("settings.tip.plugin_gallery_grid_thumbnails", "When on, .cs/.cslist/.dll under Custom/Scripts use the same sister-image rule as other files: MyPlugin.jpg or MyPlugin.png next to MyPlugin.cs shows in the grid. When off, the grid stays blank for plugins; select an item and expand the info strip to see a preview if a sister image exists."));
+
+            CreateToggleSetting(VPBTranslation.T("settings.gallery_list_legacy_names", "Legacy gallery list names"), pendingGalleryListNamesLegacyFileName, (val) => {
+                pendingGalleryListNamesLegacyFileName = val;
+                VPBConfig.Instance.GalleryListNamesLegacyFileName = val;
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) parentPanel.RefreshFiles(true);
+            }, VPBTranslation.T("settings.tip.gallery_list_legacy_names", "When off (default), list layout shows the package id (Creator.Package.Version, without .var) for items inside packages. When on, list rows use the file or item name like before."));
 
             if (isFixed)
             {
@@ -549,7 +586,7 @@ namespace VPB
             CreateHeader(VPBTranslation.T("settings.header.gallery_categories", "Gallery Categories"));
             var knownHideable = new[] {
                 "Person", "Person BreastPhysics", "Person General",
-                "Person GlutePhysics", "Person Morphs", "Person Textures", "SubScenes"
+                "Person GlutePhysics", "Person Morphs", "Person Textures", "SubScenes", "Plugins"
             };
             foreach (var catName in knownHideable)
             {

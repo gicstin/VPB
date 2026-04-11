@@ -123,10 +123,15 @@ namespace VPB
         public float DragHoldThreshold = 0.5f;
         public string ApplyMode = "DoubleClick";
         public string LastGalleryCategory = "";
-        /// <summary>Category when opening a new gallery pane or at session first open: "Scenes" (default), "Clothing", "Hair", "Pose", "Appearance", or "LastUsed".</summary>
+        /// <summary>Category when opening a new gallery pane or at session first open: "Scenes" (default), "Clothing", "Hair", "Pose", "Appearance", "Plugins", or "LastUsed".</summary>
         public string InitialGalleryCategory = "Scenes";
 
-        private static readonly string[] s_InitialGalleryCategoryCanonical = { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "LastUsed" };
+        private static readonly string[] s_InitialGalleryCategoryCanonical = { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "Plugins", "LastUsed" };
+
+        /// <summary>When false, plugin rows (.cs/.cslist/.dll under Custom/Scripts) show no thumbnail in the grid/list; selection info box can still show a sister .jpg/.png preview.</summary>
+        public bool PluginGalleryGridThumbnails = true;
+        /// <summary>When true, gallery list layout uses each item's file name (legacy). When false (default), .var rows show Creator.Package.Version (package uid, no .var suffix).</summary>
+        public bool GalleryListNamesLegacyFileName = false;
 
         /// <summary>Maps user/config values to a canonical option; unknown values become "Scenes".</summary>
         public static string NormalizeInitialGalleryCategory(string value)
@@ -261,6 +266,7 @@ namespace VPB
             GridColumnCount = 4;
             GalleryLayoutMode = 0;
             GalleryShowHiddenPackages = false;
+            GalleryListNamesLegacyFileName = false;
             UiLocale = "";
 
             try
@@ -336,6 +342,8 @@ namespace VPB
                         if (node["GridColumnCount"] != null) GridColumnCount = node["GridColumnCount"].AsInt;
                         if (node["GalleryLayoutMode"] != null) GalleryLayoutMode = node["GalleryLayoutMode"].AsInt;
                         if (node["GalleryShowHiddenPackages"] != null) GalleryShowHiddenPackages = node["GalleryShowHiddenPackages"].AsBool;
+                        if (node["PluginGalleryGridThumbnails"] != null) PluginGalleryGridThumbnails = node["PluginGalleryGridThumbnails"].AsBool;
+                        if (node["GalleryListNamesLegacyFileName"] != null) GalleryListNamesLegacyFileName = node["GalleryListNamesLegacyFileName"].AsBool;
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["InnerPaneScale"] != null) InnerPaneScale = node["InnerPaneScale"].AsFloat;
                         if (node["UiLocale"] != null) UiLocale = node["UiLocale"].Value;
@@ -418,6 +426,8 @@ namespace VPB
                 node["GridColumnCount"].AsInt = GridColumnCount;
                 node["GalleryLayoutMode"].AsInt = GalleryLayoutMode;
                 node["GalleryShowHiddenPackages"].AsBool = GalleryShowHiddenPackages;
+                node["PluginGalleryGridThumbnails"].AsBool = PluginGalleryGridThumbnails;
+                node["GalleryListNamesLegacyFileName"].AsBool = GalleryListNamesLegacyFileName;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["InnerPaneScale"].AsFloat = InnerPaneScale;
                 node["UiLocale"] = UiLocale ?? "en";

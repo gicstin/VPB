@@ -12,6 +12,19 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
+        /// <summary>VAR zip paths often use '\'; category roots use '/'. Matches Browser Assist-style Custom/Scripts checks.</summary>
+        private static string GalleryNormalizePathSlashes(string p)
+        {
+            return string.IsNullOrEmpty(p) ? p : p.Replace('\\', '/');
+        }
+
+        /// <summary>True if internal path is under prefix (after slash normalization).</summary>
+        private static bool GalleryInternalPathStartsWithPrefix(string internalPath, string prefix)
+        {
+            if (string.IsNullOrEmpty(prefix)) return true;
+            return GalleryNormalizePathSlashes(internalPath).StartsWith(GalleryNormalizePathSlashes(prefix), StringComparison.OrdinalIgnoreCase);
+        }
+
         public string CurrentCategoryTitle => currentCategoryTitle;
         public GalleryLayoutMode LayoutMode => layoutMode;
 
@@ -148,7 +161,7 @@ namespace VPB
                                     int pCount = cat.paths.Count;
                                     for(int k=0; k<pCount; k++)
                                     {
-                                        if (internalPath.StartsWith(cat.paths[k], StringComparison.OrdinalIgnoreCase))
+                                        if (GalleryInternalPathStartsWithPrefix(internalPath, cat.paths[k]))
                                         {
                                             pathMatch = true;
                                             break;
@@ -157,7 +170,7 @@ namespace VPB
                                 }
                                 else if (!string.IsNullOrEmpty(cat.path))
                                 {
-                                    if (internalPath.StartsWith(cat.path, StringComparison.OrdinalIgnoreCase))
+                                    if (GalleryInternalPathStartsWithPrefix(internalPath, cat.path))
                                         pathMatch = true;
                                 }
                                 else
@@ -176,7 +189,39 @@ namespace VPB
                     }
                 }
             }
+
+            // Tab counts are VAR-only above; Custom/Scripts plugins live on local disk (same tree RefreshFiles scans).
+            AddLocalCustomScriptsCountToCategory(categoryCounts);
+
             categoriesCached = true;
+        }
+
+        /// <summary>
+        /// Count .cs / .cslist / .dll under Custom/Scripts on disk so the Plugins category is not stuck at 0.
+        /// (Package-only counting misses almost all session plugins.)
+        /// </summary>
+        private static void AddLocalCustomScriptsCountToCategory(Dictionary<string, int> counts)
+        {
+            if (counts == null || !counts.ContainsKey("Plugins")) return;
+            const string root = "Custom/Scripts";
+            try
+            {
+                if (!Directory.Exists(root)) return;
+            }
+            catch { return; }
+
+            int n = 0;
+            foreach (string ext in new[] { "cs", "cslist", "dll" })
+            {
+                var buf = new List<string>();
+                try
+                {
+                    FileManager.SafeGetFiles(root, "*." + ext, buf);
+                    n += buf.Count;
+                }
+                catch { }
+            }
+            counts["Plugins"] += n;
         }
 
         private void CacheCreators()
@@ -205,18 +250,18 @@ namespace VPB
                     string ext = internalPath.Substring(lastDot + 1);
                     if (!targetExts.Contains(ext)) continue;
 
-                    // 2. Check path match
+                    // 2. Check path match (slash-normalized for VAR internal paths)
                     bool match = false;
                     if (currentPaths != null && currentPaths.Count > 0)
                     {
                          for(int k=0; k<currentPaths.Count; k++)
                          {
-                             if (internalPath.StartsWith(currentPaths[k], StringComparison.OrdinalIgnoreCase)) { match = true; break; }
+                             if (GalleryInternalPathStartsWithPrefix(internalPath, currentPaths[k])) { match = true; break; }
                          }
                     }
                     else if (!string.IsNullOrEmpty(currentPath))
                     {
-                         if (internalPath.StartsWith(currentPath, StringComparison.OrdinalIgnoreCase)) match = true;
+                         if (GalleryInternalPathStartsWithPrefix(internalPath, currentPath)) match = true;
                     }
                     else
                     {

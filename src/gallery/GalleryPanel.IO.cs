@@ -466,7 +466,7 @@ namespace VPB
                         if (!extMatch) continue;
                     }
 
-                    // Path prefix filter
+                    // Path prefix filter (normalize slashes so VAR entries like Custom\Scripts\ match Custom/Scripts/)
                     bool pathOk = true;
                     if (currentPaths != null && currentPaths.Count > 0)
                     {
@@ -474,12 +474,12 @@ namespace VPB
                         for (int p = 0; p < currentPaths.Count; p++)
                         {
                             string pref = currentPaths[p];
-                            if (ip.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                            if (GalleryInternalPathStartsWithPrefix(ip, pref))
                             {
-                                if (string.Equals(pref, "Saves/Person", StringComparison.OrdinalIgnoreCase) ||
-                                    string.Equals(pref, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                string prefN = GalleryNormalizePathSlashes(pref).TrimEnd('/');
+                                if (string.Equals(prefN, "Saves/Person", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    if (ip.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase)) continue;
+                                    if (GalleryNormalizePathSlashes(ip).StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase)) continue;
                                 }
                                 pathOk = true;
                                 break;
@@ -489,12 +489,12 @@ namespace VPB
                     else if (!string.IsNullOrEmpty(currentPath))
                     {
                         pathOk = false;
-                        if (ip.StartsWith(currentPath, StringComparison.OrdinalIgnoreCase))
+                        if (GalleryInternalPathStartsWithPrefix(ip, currentPath))
                         {
-                            if (string.Equals(currentPath, "Saves/Person", StringComparison.OrdinalIgnoreCase) ||
-                                string.Equals(currentPath, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                            string curN = GalleryNormalizePathSlashes(currentPath).TrimEnd('/');
+                            if (string.Equals(curN, "Saves/Person", StringComparison.OrdinalIgnoreCase))
                             {
-                                if (!ip.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                                if (!GalleryNormalizePathSlashes(ip).StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
                                     pathOk = true;
                             }
                             else pathOk = true;
@@ -1374,12 +1374,12 @@ namespace VPB
                             for (int p = 0; p < currentPaths.Count; p++)
                             {
                                 string pref = currentPaths[p];
-                                if (ip.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                if (GalleryInternalPathStartsWithPrefix(ip, pref))
                                 {
-                                    if (string.Equals(pref, "Saves/Person", StringComparison.OrdinalIgnoreCase) ||
-                                        string.Equals(pref, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                    string prefN = GalleryNormalizePathSlashes(pref).TrimEnd('/');
+                                    if (string.Equals(prefN, "Saves/Person", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        if (ip.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase)) continue;
+                                        if (GalleryNormalizePathSlashes(ip).StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase)) continue;
                                     }
                                     pathOk = true;
                                     break;
@@ -1389,12 +1389,12 @@ namespace VPB
                         else if (!string.IsNullOrEmpty(currentPath))
                         {
                             pathOk = false;
-                            if (ip.StartsWith(currentPath, StringComparison.OrdinalIgnoreCase))
+                            if (GalleryInternalPathStartsWithPrefix(ip, currentPath))
                             {
-                                if (string.Equals(currentPath, "Saves/Person", StringComparison.OrdinalIgnoreCase) ||
-                                    string.Equals(currentPath, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                string curN = GalleryNormalizePathSlashes(currentPath).TrimEnd('/');
+                                if (string.Equals(curN, "Saves/Person", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    if (!ip.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                                    if (!GalleryNormalizePathSlashes(ip).StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
                                         pathOk = true;
                                 }
                                 else pathOk = true;
@@ -1625,11 +1625,12 @@ namespace VPB
                                     for (int p = 0; p < currentPaths.Count; p++)
                                     {
                                         string pref = currentPaths[p];
-                                        if (checkPath.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                        if (GalleryInternalPathStartsWithPrefix(checkPath, pref))
                                         {
-                                            if (string.Equals(pref, "Saves/Person", StringComparison.OrdinalIgnoreCase) || string.Equals(pref, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                            string prefN = GalleryNormalizePathSlashes(pref).TrimEnd('/');
+                                            if (string.Equals(prefN, "Saves/Person", StringComparison.OrdinalIgnoreCase))
                                             {
-                                                if (checkPath.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                                                if (GalleryNormalizePathSlashes(checkPath).StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
                                                     continue;
                                             }
                                             pathOk = true;
@@ -1640,11 +1641,12 @@ namespace VPB
                                 else if (!string.IsNullOrEmpty(currentPath))
                                 {
                                     pathOk = false;
-                                    if (checkPath.StartsWith(currentPath, StringComparison.OrdinalIgnoreCase))
+                                    if (GalleryInternalPathStartsWithPrefix(checkPath, currentPath))
                                     {
-                                        if (string.Equals(currentPath, "Saves/Person", StringComparison.OrdinalIgnoreCase) || string.Equals(currentPath, "Saves/Person/", StringComparison.OrdinalIgnoreCase))
+                                        string curN = GalleryNormalizePathSlashes(currentPath).TrimEnd('/');
+                                        if (string.Equals(curN, "Saves/Person", StringComparison.OrdinalIgnoreCase))
                                         {
-                                            if (!checkPath.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
+                                            if (!GalleryNormalizePathSlashes(checkPath).StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase))
                                                 pathOk = true;
                                         }
                                         else
@@ -1967,9 +1969,9 @@ namespace VPB
                                         if (!tExts.Contains(ip.Substring(dot + 1))) continue;
                                         bool match = false;
                                         if (_bPaths != null && _bPaths.Count > 0)
-                                        { for (int k = 0; k < _bPaths.Count; k++) if (ip.StartsWith(_bPaths[k], StringComparison.OrdinalIgnoreCase)) { match = true; break; } }
+                                        { for (int k = 0; k < _bPaths.Count; k++) if (GalleryInternalPathStartsWithPrefix(ip, _bPaths[k])) { match = true; break; } }
                                         else if (!string.IsNullOrEmpty(_bPath))
-                                            match = ip.StartsWith(_bPath, StringComparison.OrdinalIgnoreCase);
+                                            match = GalleryInternalPathStartsWithPrefix(ip, _bPath);
                                         else match = true;
                                         if (match) { int cur; counts.TryGetValue(pkg.Creator, out cur); counts[pkg.Creator] = cur + 1; }
                                     }
@@ -2015,8 +2017,8 @@ namespace VPB
                                                 var cat2 = cands2[j];
                                                 bool pm = false;
                                                 if (cat2.paths != null && cat2.paths.Count > 0)
-                                                { for (int k = 0; k < cat2.paths.Count; k++) if (ip.StartsWith(cat2.paths[k], StringComparison.OrdinalIgnoreCase)) { pm = true; break; } }
-                                                else if (!string.IsNullOrEmpty(cat2.path)) pm = ip.StartsWith(cat2.path, StringComparison.OrdinalIgnoreCase);
+                                                { for (int k = 0; k < cat2.paths.Count; k++) if (GalleryInternalPathStartsWithPrefix(ip, cat2.paths[k])) { pm = true; break; } }
+                                                else if (!string.IsNullOrEmpty(cat2.path)) pm = GalleryInternalPathStartsWithPrefix(ip, cat2.path);
                                                 else pm = true;
                                                 if (pm) { catCounts2[cat2.name]++; break; }
                                             }
@@ -2024,6 +2026,7 @@ namespace VPB
                                     }
                                 }
                             }
+                            AddLocalCustomScriptsCountToCategory(catCounts2);
                             _newCatCounts = catCounts2;
                         }
                     }

@@ -260,6 +260,17 @@ namespace VPB
 		private const int CodePageGbk = 936;
 		private const int CodePageSystemDefault = 0;
 
+		/// <summary>Browser Assist: plugins under Custom/Scripts as .cs / .cslist / .dll (paths may use \ or / in zip).</summary>
+		private static bool IsPluginScriptZipEntry(string entryName)
+		{
+			if (string.IsNullOrEmpty(entryName)) return false;
+			string norm = entryName.Replace('\\', '/');
+			if (!norm.StartsWith("Custom/Scripts/", StringComparison.OrdinalIgnoreCase)) return false;
+			return norm.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+				|| norm.EndsWith(".cslist", StringComparison.OrdinalIgnoreCase)
+				|| norm.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
+		}
+
 		private struct ZipNameEncodingCacheItem
 		{
 			public long Size;
@@ -1283,6 +1294,27 @@ namespace VPB
 													VarFileEntry varFileEntry2 = new VarFileEntry(this, jpgEntry.Name, jpgEntry.DateTime, jpgEntry.Size);
 													FileEntries.Add(varFileEntry2);
 													set.Add(entry);
+												}
+											}
+										}
+										// Session plugins in VARs (BA indexes full archive; VPB previously skipped .cs/.cslist/.dll entirely).
+										else if (IsPluginScriptZipEntry(entryName))
+										{
+											VarFileEntry varFileEntry = new VarFileEntry(this, entryName, zipEntry.DateTime, zipEntry.Size);
+											FileEntries.Add(varFileEntry);
+											string baseNoExt = entryName;
+											int dotIdx = baseNoExt.LastIndexOf('.');
+											if (dotIdx > 0) baseNoExt = baseNoExt.Substring(0, dotIdx);
+											string[] scriptSisterExts = { ".jpg", ".png" };
+											foreach (var sExt in scriptSisterExts)
+											{
+												string sisterPath = baseNoExt + sExt;
+												if (set.Contains(sisterPath)) continue;
+												ZipEntry sisterZe = zipFile.GetEntry(sisterPath);
+												if (sisterZe != null)
+												{
+													FileEntries.Add(new VarFileEntry(this, sisterZe.Name, sisterZe.DateTime, sisterZe.Size));
+													set.Add(sisterPath);
 												}
 											}
 										}

@@ -22,7 +22,7 @@ namespace VPB
         static string CacheDir = "Cache/VPB";
         static string CachePath = "Cache/VPB/" + "AllPackages.bytes2";
         const int CacheMagic = 0x56504231;
-        const int CacheVersion = 4;
+        const int CacheVersion = 5; // 5: include Custom/Scripts .cs/.cslist/.dll in package file index (gallery Plugins)
         readonly object lookupLock = new object();
         public Dictionary<string, SerializableVarPackage> lookup = new Dictionary<string, SerializableVarPackage>();
         
