@@ -883,7 +883,15 @@ namespace VPB
             }
 
             LogUtil.Log("[Gallery] SetCategories resolved: currentPath='" + currentPath + "' currentCategoryTitle='" + currentCategoryTitle + "'");
-            UpdateTabs();
+            // Full UpdateTabs() runs synchronous CacheCategoryCounts/CacheCreators and can take many seconds on large libraries.
+            // New panes defer that work to RefreshFilesRoutine (background cache + one UpdateTabs at the end).
+            if (hasLoadedContent)
+                UpdateTabs();
+            else
+            {
+                _sideTabsNeedFullRebuildAfterFirstRefresh = true;
+                UpdateTabsImpl(rebuildSideTabLists: false);
+            }
             // If we have categories but no path, set title to first category
             if (categories.Count > 0 && string.IsNullOrEmpty(currentPath))
             {

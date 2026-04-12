@@ -397,6 +397,8 @@ namespace VPB
                     hasBeenPositioned = true;
                 }
             }
+            if (_paneLoadTimingStopwatch != null && refreshCoroutine == null)
+                CompletePaneLoadTimingIfPending("(Show finished without async refresh)");
             LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
         }
 

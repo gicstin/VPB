@@ -173,6 +173,7 @@ namespace VPB
         {
             if (Gallery.singleton != null)
             {
+                Gallery.MarkCreateGalleryPaneRequested();
                 if (!m_GalleryCatsInited) InitGalleryCategories();
                 Gallery.singleton.CreatePane();
             }

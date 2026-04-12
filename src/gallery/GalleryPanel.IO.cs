@@ -12,6 +12,129 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        internal void BeginPaneLoadTiming(System.Diagnostics.Stopwatch startedStopwatch, string kind)
+        {
+            if (startedStopwatch == null) return;
+            _paneLoadTimingStopwatch = startedStopwatch;
+            _paneLoadTimingKind = kind ?? "";
+        }
+
+        private void CompletePaneLoadTimingIfPending(string suffix = null)
+        {
+            if (_paneLoadTimingStopwatch == null) return;
+            _paneLoadTimingStopwatch.Stop();
+            long ms = _paneLoadTimingStopwatch.ElapsedMilliseconds;
+            string k = string.IsNullOrEmpty(_paneLoadTimingKind) ? "?" : _paneLoadTimingKind;
+            string extra = string.IsNullOrEmpty(suffix) ? "" : " " + suffix;
+            LogUtil.Log("[Gallery] Pane load timing (" + k + "): " + ms + " ms until grid ready" + extra + ".");
+            _paneLoadTimingStopwatch = null;
+            _paneLoadTimingKind = null;
+        }
+
+        // Shared creator/category side-tab metadata: identical for any panel with the same filters + category list while package scan is unchanged.
+        private static readonly object s_SharedSideMetaLock = new object();
+        private static DateTime s_SharedSideMetaPackageStamp = DateTime.MinValue;
+        private static readonly Dictionary<string, SharedSideMetaSnapshot> s_SharedSideMetaByKey =
+            new Dictionary<string, SharedSideMetaSnapshot>(StringComparer.Ordinal);
+
+        private sealed class SharedSideMetaSnapshot
+        {
+            public List<CreatorCacheEntry> Creators;
+            public Dictionary<string, int> CategoryCounts;
+        }
+
+        private const int SharedSideMetaMaxEntries = 24;
+
+        private static void InvalidateSharedSideMetaIfPackageScanAdvanced()
+        {
+            DateTime t = DateTime.MinValue;
+            try { t = FileManager.lastPackageRefreshTime; } catch { }
+            if (t != s_SharedSideMetaPackageStamp)
+            {
+                s_SharedSideMetaPackageStamp = t;
+                lock (s_SharedSideMetaLock) { s_SharedSideMetaByKey.Clear(); }
+            }
+        }
+
+        private static string BuildSharedSideMetaCacheKey(string creator, string ext, string path, List<string> paths, List<Gallery.Category> cats)
+        {
+            var sb = new StringBuilder(512);
+            sb.Append(creator ?? ""); sb.Append('\u001E');
+            sb.Append(ext ?? ""); sb.Append('\u001E');
+            sb.Append(path ?? ""); sb.Append('\u001E');
+            if (paths != null)
+            {
+                for (int i = 0; i < paths.Count; i++)
+                {
+                    sb.Append(paths[i] ?? "");
+                    sb.Append('\u001F');
+                }
+            }
+            sb.Append('\u001E');
+            if (cats != null)
+            {
+                for (int i = 0; i < cats.Count; i++)
+                {
+                    var c = cats[i];
+                    sb.Append(c.name ?? ""); sb.Append('\u0001'); sb.Append(c.extension ?? ""); sb.Append('\u0001'); sb.Append(c.path ?? ""); sb.Append('\u001F');
+                    if (c.paths != null)
+                    {
+                        for (int j = 0; j < c.paths.Count; j++)
+                        {
+                            sb.Append(c.paths[j] ?? "");
+                            sb.Append('\u0002');
+                        }
+                    }
+                    sb.Append('\u001F');
+                }
+            }
+            return sb.ToString();
+        }
+
+        private static List<CreatorCacheEntry> CloneCreatorCacheList(List<CreatorCacheEntry> src)
+        {
+            if (src == null) return new List<CreatorCacheEntry>();
+            var r = new List<CreatorCacheEntry>(src.Count);
+            for (int i = 0; i < src.Count; i++)
+                r.Add(src[i]);
+            return r;
+        }
+
+        private static Dictionary<string, int> CloneCategoryCountsDict(Dictionary<string, int> src)
+        {
+            if (src == null) return new Dictionary<string, int>(StringComparer.Ordinal);
+            return new Dictionary<string, int>(src, StringComparer.Ordinal);
+        }
+
+        private static bool TryGetSharedSideMeta(string key, out List<CreatorCacheEntry> creators, out Dictionary<string, int> counts)
+        {
+            creators = null;
+            counts = null;
+            if (string.IsNullOrEmpty(key)) return false;
+            lock (s_SharedSideMetaLock)
+            {
+                if (!s_SharedSideMetaByKey.TryGetValue(key, out SharedSideMetaSnapshot snap) || snap == null) return false;
+                creators = CloneCreatorCacheList(snap.Creators);
+                counts = CloneCategoryCountsDict(snap.CategoryCounts);
+                return true;
+            }
+        }
+
+        private static void StoreSharedSideMetaIfRoom(string key, List<CreatorCacheEntry> creators, Dictionary<string, int> counts)
+        {
+            if (string.IsNullOrEmpty(key) || creators == null || counts == null) return;
+            lock (s_SharedSideMetaLock)
+            {
+                if (s_SharedSideMetaByKey.Count >= SharedSideMetaMaxEntries)
+                    s_SharedSideMetaByKey.Clear();
+                s_SharedSideMetaByKey[key] = new SharedSideMetaSnapshot
+                {
+                    Creators = CloneCreatorCacheList(creators),
+                    CategoryCounts = CloneCategoryCountsDict(counts),
+                };
+            }
+        }
+
         private enum PackageFilterMode
         {
             None = 0,
@@ -1220,6 +1343,7 @@ namespace VPB
             if (Gallery.IsSuppressed())
             {
                 LogUtil.Log("[VPB] GalleryPanel.RefreshFiles: SKIPPED (suppressed)");
+                CompletePaneLoadTimingIfPending("(refresh suppressed)");
                 return;
             }
             
@@ -1460,6 +1584,68 @@ namespace VPB
             categoriesCached = false;
         }
 
+        /// <summary>Key for <see cref="GalleryFileListSnapshotCache"/> when the full enumeration result is reproducible from panel state.</summary>
+        private bool TryBuildFileListSnapshotCacheKey(out string key)
+        {
+            key = null;
+            if (IsHubMode) return false;
+            if (IsFilterActive) return false;
+
+            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : null) ?? "";
+            if (title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+
+            try
+            {
+                var sb = new StringBuilder(640);
+                sb.Append((int)activeContentType).Append('\u001E');
+                sb.Append(currentExtension ?? "").Append('\u001E');
+                sb.Append(currentPath ?? "").Append('\u001E');
+                if (currentPaths != null)
+                {
+                    for (int i = 0; i < currentPaths.Count; i++)
+                    {
+                        sb.Append(currentPaths[i] ?? "");
+                        sb.Append('\u001F');
+                    }
+                }
+                sb.Append('\u001E');
+                sb.Append(currentCreator ?? "").Append('\u001E');
+                sb.Append(nameFilterLower ?? "").Append('\u001E');
+                sb.Append(title).Append('\u001E');
+                sb.Append((int)posePeopleFilter).Append('\u001E');
+                sb.Append((int)clothingSubfilter).Append('\u001E');
+                sb.Append((int)appearanceSubfilter).Append('\u001E');
+                sb.Append(currentSceneSourceFilter ?? "").Append('\u001E');
+                sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
+                sb.Append(currentRatingFilter ?? "").Append('\u001E');
+                sb.Append(currentSizeFilter ?? "").Append('\u001E');
+                sb.Append(categoryFilter ?? "").Append('\u001E');
+                sb.Append(creatorFilter ?? "").Append('\u001E');
+                sb.Append(tagFilter ?? "").Append('\u001E');
+                sb.Append(isRatingSortToggleEnabled ? '1' : '0').Append('\u001E');
+                if (activeTags != null && activeTags.Count > 0)
+                {
+                    var arr = new List<string>(activeTags);
+                    arr.Sort(StringComparer.Ordinal);
+                    for (int i = 0; i < arr.Count; i++)
+                    {
+                        sb.Append(arr[i] ?? "");
+                        sb.Append('\u001F');
+                    }
+                }
+                sb.Append('\u001E');
+                SortState st = GetSortState("Files");
+                sb.Append((int)st.Type).Append('\u001E').Append((int)st.Direction);
+                key = sb.ToString();
+                return true;
+            }
+            catch
+            {
+                key = null;
+                return false;
+            }
+        }
+
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
         {
             yield return null; // Allow UI to render first
@@ -1511,7 +1697,6 @@ namespace VPB
                 }
             }
             
-            List<FileEntry> files = new List<FileEntry>();
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             bool hasNameFilter = !string.IsNullOrEmpty(nameFilterLower);
 
@@ -1548,14 +1733,181 @@ namespace VPB
                 }
             }
             
-            // Time-based yielding configuration
+            // Time-based yielding: first full load uses a larger per-frame budget so the list finishes in fewer frames (still yields to avoid long stalls).
+            bool isColdGalleryContentLoad = !hasLoadedContent;
             var yieldWatch = new System.Diagnostics.Stopwatch();
-            long maxMsPerFrame = 10; // Allow 10ms of work per frame
+            long maxMsPerFrame = isColdGalleryContentLoad ? 36 : 10;
 
             yieldWatch.Start();
 
             int[] skippedForNoCache = { 0 };
 
+            string fileListSnapKey;
+            bool canFileListCache = TryBuildFileListSnapshotCacheKey(out fileListSnapKey);
+            List<FileEntry> snapList = null;
+            bool fileListFromCache = false;
+            bool fileListFromSibling = false;
+            if (canFileListCache && Gallery.singleton != null)
+            {
+                var panels = Gallery.singleton.Panels;
+                for (int pi = 0; pi < panels.Count; pi++)
+                {
+                    GalleryPanel o = panels[pi];
+                    if (o == null || o == this || !o.HasLoadedContent) continue;
+                    string ok;
+                    if (!o.TryBuildFileListSnapshotCacheKey(out ok) || !string.Equals(ok, fileListSnapKey, StringComparison.Ordinal)) continue;
+                    if (o.currentFilteredFiles == null || o.currentFilteredFiles.Count == 0) continue;
+                    snapList = new List<FileEntry>(o.currentFilteredFiles);
+                    fileListFromCache = true;
+                    fileListFromSibling = true;
+                    if (VPBConfig.IsLogConfigPerfEnabled())
+                    {
+                        try { LogUtil.Log("[VPB] Gallery file-list snapshot SIBLING reuse (count=" + snapList.Count + ")"); } catch { }
+                    }
+                    break;
+                }
+            }
+            if (!fileListFromCache && canFileListCache)
+                fileListFromCache = GalleryFileListSnapshotCache.TryGet(fileListSnapKey, out snapList);
+            if (fileListFromCache && !fileListFromSibling && VPBConfig.IsLogConfigPerfEnabled())
+            {
+                try { LogUtil.Log("[VPB] Gallery file-list snapshot cache HIT"); } catch { }
+            }
+            List<FileEntry> files = (fileListFromCache && snapList != null) ? snapList : new List<FileEntry>();
+            if (fileListFromSibling && canFileListCache && fileListSnapKey != null && files.Count > 0)
+                GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
+
+            // Start creator/category metadata build immediately so it overlaps package scanning (same work as the block after the grid, previously sequential).
+            string metaBuildGroupId = currentLoadingGroupId;
+            bool earlyBuildCreators = !creatorsCached;
+            bool earlyBuildCats = !categoriesCached;
+            bool earlyMetaNeeded = earlyBuildCreators || earlyBuildCats;
+            List<CreatorCacheEntry> earlyNewCreators = null;
+            Dictionary<string, int> earlyNewCatCounts = null;
+            bool earlyMetaBuildDone = !earlyMetaNeeded;
+            string sideMetaCacheKey = null;
+            bool skipEarlyMetaThread = false;
+
+            if (earlyMetaNeeded && earlyBuildCreators && earlyBuildCats)
+            {
+                InvalidateSharedSideMetaIfPackageScanAdvanced();
+                sideMetaCacheKey = BuildSharedSideMetaCacheKey(
+                    currentCreator, currentExtension, currentPath, currentPaths, categories);
+                List<CreatorCacheEntry> sharedCreators;
+                Dictionary<string, int> sharedCounts;
+                if (TryGetSharedSideMeta(sideMetaCacheKey, out sharedCreators, out sharedCounts))
+                {
+                    earlyNewCreators = sharedCreators;
+                    earlyNewCatCounts = sharedCounts;
+                    earlyMetaBuildDone = true;
+                    skipEarlyMetaThread = true;
+                }
+            }
+
+            if (earlyMetaNeeded && !skipEarlyMetaThread)
+            {
+                string _bCreator = currentCreator;
+                string _bExtension = currentExtension;
+                List<string> _bPaths = currentPaths != null ? new List<string>(currentPaths) : null;
+                string _bPath = currentPath;
+                var _bCategories = categories != null ? new List<Gallery.Category>(categories) : null;
+                bool _buildCreators = earlyBuildCreators;
+                bool _buildCats = earlyBuildCats;
+
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        if (_buildCreators)
+                        {
+                            var counts = new Dictionary<string, int>();
+                            string[] exts2 = string.IsNullOrEmpty(_bExtension) ? new string[0] : _bExtension.Split('|');
+                            var tExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var e in exts2) if (!string.IsNullOrEmpty(e)) tExts.Add(e.Trim());
+
+                            if (FileManager.PackagesByUid != null)
+                            {
+                                foreach (var pkg in FileManager.PackagesByUid.Values)
+                                {
+                                    if (string.IsNullOrEmpty(pkg.Creator)) continue;
+                                    if (pkg.FileEntries == null) continue;
+                                    int cnt = pkg.FileEntries.Count;
+                                    for (int i = 0; i < cnt; i++)
+                                    {
+                                        string ip = pkg.FileEntries[i].InternalPath;
+                                        int dot = ip.LastIndexOf('.');
+                                        if (dot < 0 || dot == ip.Length - 1) continue;
+                                        if (!tExts.Contains(ip.Substring(dot + 1))) continue;
+                                        bool match = false;
+                                        if (_bPaths != null && _bPaths.Count > 0)
+                                        { for (int k = 0; k < _bPaths.Count; k++) if (GalleryInternalPathStartsWithPrefix(ip, _bPaths[k])) { match = true; break; } }
+                                        else if (!string.IsNullOrEmpty(_bPath))
+                                            match = GalleryInternalPathStartsWithPrefix(ip, _bPath);
+                                        else match = true;
+                                        if (match) { int cur; counts.TryGetValue(pkg.Creator, out cur); counts[pkg.Creator] = cur + 1; }
+                                    }
+                                }
+                            }
+                            earlyNewCreators = counts.Select(kv => new CreatorCacheEntry { Name = kv.Key, Count = kv.Value })
+                                                     .OrderBy(c => c.Name).ToList();
+                        }
+
+                        if (_buildCats && _bCategories != null)
+                        {
+                            var catCounts2 = new Dictionary<string, int>();
+                            var extToCats2 = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var c in _bCategories)
+                            {
+                                catCounts2[c.name] = 0;
+                                if (string.IsNullOrEmpty(c.extension)) continue;
+                                foreach (string ce in c.extension.Split('|'))
+                                {
+                                    if (string.IsNullOrEmpty(ce)) continue;
+                                    string et = ce.Trim();
+                                    if (!extToCats2.ContainsKey(et)) extToCats2[et] = new List<Gallery.Category>();
+                                    extToCats2[et].Add(c);
+                                }
+                            }
+                            if (FileManager.PackagesByUid != null)
+                            {
+                                foreach (var pkg in FileManager.PackagesByUid.Values)
+                                {
+                                    if (!string.IsNullOrEmpty(_bCreator) && (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != _bCreator)) continue;
+                                    if (pkg.FileEntries == null) continue;
+                                    int cnt = pkg.FileEntries.Count;
+                                    for (int i = 0; i < cnt; i++)
+                                    {
+                                        string ip = pkg.FileEntries[i].InternalPath;
+                                        int dot = ip.LastIndexOf('.');
+                                        if (dot < 0 || dot == ip.Length - 1) continue;
+                                        List<Gallery.Category> cands2;
+                                        if (extToCats2.TryGetValue(ip.Substring(dot + 1), out cands2))
+                                        {
+                                            for (int j = 0; j < cands2.Count; j++)
+                                            {
+                                                var cat2 = cands2[j];
+                                                bool pm = false;
+                                                if (cat2.paths != null && cat2.paths.Count > 0)
+                                                { for (int k = 0; k < cat2.paths.Count; k++) if (GalleryInternalPathStartsWithPrefix(ip, cat2.paths[k])) { pm = true; break; } }
+                                                else if (!string.IsNullOrEmpty(cat2.path)) pm = GalleryInternalPathStartsWithPrefix(ip, cat2.path);
+                                                else pm = true;
+                                                if (pm) { catCounts2[cat2.name]++; break; }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            AddLocalCustomScriptsCountToCategory(catCounts2);
+                            earlyNewCatCounts = catCounts2;
+                        }
+                    }
+                    catch { }
+                    finally { earlyMetaBuildDone = true; }
+                });
+            }
+
+            if (!fileListFromCache)
+            {
             if (FileManager.PackagesByUid != null)
             {
                 string localLoadingGroupId = currentLoadingGroupId;
@@ -1688,6 +2040,7 @@ namespace VPB
                     {
                         HideLoadingOverlay();
                         refreshCoroutine = null;
+                        CompletePaneLoadTimingIfPending("(refresh superseded)");
                         yield break;
                     }
 
@@ -1845,10 +2198,16 @@ namespace VPB
                     }
                 }
             }
+            }
 
-            yield return null; // Yield before sorting
-            var sortState = GetSortState("Files");
-            GallerySortManager.Instance.SortFiles(files, sortState);
+            if (!fileListFromCache)
+            {
+                yield return null; // Yield before sorting
+                var sortState = GetSortState("Files");
+                GallerySortManager.Instance.SortFiles(files, sortState);
+                if (canFileListCache && fileListSnapKey != null)
+                    GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
+            }
 
             // Cache the filtered list for selection operations (Select All, counts, etc)
             lastFilteredFiles.Clear();
@@ -1925,131 +2284,30 @@ namespace VPB
 
             UpdatePaginationText();
 
-            // Build creator and category caches on a background thread so the main thread
-            // doesn't block for ~2 s iterating all 19k+ packages synchronously.
-            if (!creatorsCached || !categoriesCached)
+            if (earlyMetaNeeded)
             {
-                // Snapshot all state the background thread will need.
-                string _bCreator    = currentCreator;
-                string _bExtension  = currentExtension;
-                List<string> _bPaths = currentPaths != null ? new List<string>(currentPaths) : null;
-                string _bPath       = currentPath;
-                var _bCategories    = categories != null ? new List<Gallery.Category>(categories) : null;
+                if (!skipEarlyMetaThread)
+                    while (!earlyMetaBuildDone) yield return null;
 
-                bool _buildCreators = !creatorsCached;
-                bool _buildCats     = !categoriesCached;
-
-                List<CreatorCacheEntry> _newCreators = null;
-                Dictionary<string, int> _newCatCounts = null;
-                bool _buildDone = false;
-
-                ThreadPool.QueueUserWorkItem(_ =>
+                if (metaBuildGroupId == currentLoadingGroupId)
                 {
-                    try
+                    if (earlyBuildCreators)
                     {
-                        if (_buildCreators)
-                        {
-                            var counts = new Dictionary<string, int>();
-                            string[] exts2 = string.IsNullOrEmpty(_bExtension) ? new string[0] : _bExtension.Split('|');
-                            var tExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                            foreach (var e in exts2) if (!string.IsNullOrEmpty(e)) tExts.Add(e.Trim());
-
-                            if (FileManager.PackagesByUid != null)
-                            {
-                                foreach (var pkg in FileManager.PackagesByUid.Values)
-                                {
-                                    if (string.IsNullOrEmpty(pkg.Creator)) continue;
-                                    if (pkg.FileEntries == null) continue;
-                                    int cnt = pkg.FileEntries.Count;
-                                    for (int i = 0; i < cnt; i++)
-                                    {
-                                        string ip = pkg.FileEntries[i].InternalPath;
-                                        int dot = ip.LastIndexOf('.');
-                                        if (dot < 0 || dot == ip.Length - 1) continue;
-                                        if (!tExts.Contains(ip.Substring(dot + 1))) continue;
-                                        bool match = false;
-                                        if (_bPaths != null && _bPaths.Count > 0)
-                                        { for (int k = 0; k < _bPaths.Count; k++) if (GalleryInternalPathStartsWithPrefix(ip, _bPaths[k])) { match = true; break; } }
-                                        else if (!string.IsNullOrEmpty(_bPath))
-                                            match = GalleryInternalPathStartsWithPrefix(ip, _bPath);
-                                        else match = true;
-                                        if (match) { int cur; counts.TryGetValue(pkg.Creator, out cur); counts[pkg.Creator] = cur + 1; }
-                                    }
-                                }
-                            }
-                            _newCreators = counts.Select(kv => new CreatorCacheEntry { Name = kv.Key, Count = kv.Value })
-                                                 .OrderBy(c => c.Name).ToList();
-                        }
-
-                        if (_buildCats && _bCategories != null)
-                        {
-                            var catCounts2 = new Dictionary<string, int>();
-                            var extToCats2 = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
-                            foreach (var c in _bCategories)
-                            {
-                                catCounts2[c.name] = 0;
-                                if (string.IsNullOrEmpty(c.extension)) continue;
-                                foreach (string ce in c.extension.Split('|'))
-                                {
-                                    if (string.IsNullOrEmpty(ce)) continue;
-                                    string et = ce.Trim();
-                                    if (!extToCats2.ContainsKey(et)) extToCats2[et] = new List<Gallery.Category>();
-                                    extToCats2[et].Add(c);
-                                }
-                            }
-                            if (FileManager.PackagesByUid != null)
-                            {
-                                foreach (var pkg in FileManager.PackagesByUid.Values)
-                                {
-                                    if (!string.IsNullOrEmpty(_bCreator) && (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != _bCreator)) continue;
-                                    if (pkg.FileEntries == null) continue;
-                                    int cnt = pkg.FileEntries.Count;
-                                    for (int i = 0; i < cnt; i++)
-                                    {
-                                        string ip = pkg.FileEntries[i].InternalPath;
-                                        int dot = ip.LastIndexOf('.');
-                                        if (dot < 0 || dot == ip.Length - 1) continue;
-                                        List<Gallery.Category> cands2;
-                                        if (extToCats2.TryGetValue(ip.Substring(dot + 1), out cands2))
-                                        {
-                                            for (int j = 0; j < cands2.Count; j++)
-                                            {
-                                                var cat2 = cands2[j];
-                                                bool pm = false;
-                                                if (cat2.paths != null && cat2.paths.Count > 0)
-                                                { for (int k = 0; k < cat2.paths.Count; k++) if (GalleryInternalPathStartsWithPrefix(ip, cat2.paths[k])) { pm = true; break; } }
-                                                else if (!string.IsNullOrEmpty(cat2.path)) pm = GalleryInternalPathStartsWithPrefix(ip, cat2.path);
-                                                else pm = true;
-                                                if (pm) { catCounts2[cat2.name]++; break; }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            AddLocalCustomScriptsCountToCategory(catCounts2);
-                            _newCatCounts = catCounts2;
-                        }
+                        cachedCreators = earlyNewCreators ?? new List<CreatorCacheEntry>();
+                        creatorsCached = true;
                     }
-                    catch { }
-                    finally { _buildDone = true; }
-                });
-
-                while (!_buildDone) yield return null;
-
-                // Apply results on the main thread.
-                if (_buildCreators)
-                {
-                    cachedCreators = _newCreators ?? new List<CreatorCacheEntry>();
-                    creatorsCached = true;
-                }
-                if (_buildCats)
-                {
-                    if (_newCatCounts != null)
+                    if (earlyBuildCats)
                     {
-                        categoryCounts.Clear();
-                        foreach (var kv in _newCatCounts) categoryCounts[kv.Key] = kv.Value;
+                        if (earlyNewCatCounts != null)
+                        {
+                            categoryCounts.Clear();
+                            foreach (var kv in earlyNewCatCounts) categoryCounts[kv.Key] = kv.Value;
+                        }
+                        categoriesCached = true;
                     }
-                    categoriesCached = true;
+                    if (!skipEarlyMetaThread && sideMetaCacheKey != null && earlyBuildCreators && earlyBuildCats
+                        && earlyNewCreators != null && earlyNewCatCounts != null)
+                        StoreSharedSideMetaIfRoom(sideMetaCacheKey, earlyNewCreators, earlyNewCatCounts);
                 }
             }
 
@@ -2066,9 +2324,19 @@ namespace VPB
                 }
             }
 
+            // Hide overlay and stop pane timing before full UpdateTabs(): side-tab rebuild (hundreds of buttons) is not the file grid
+            // and was inflating "until grid ready" by 1–2+ s. Thumbnails for visible rows use memory cache + threaded queue (BindFileButton/LoadThumbnail), not a full-grid decode here.
+            bool deferSideTabs = _sideTabsNeedFullRebuildAfterFirstRefresh || isPoseCategory;
+            if (_sideTabsNeedFullRebuildAfterFirstRefresh)
+                _sideTabsNeedFullRebuildAfterFirstRefresh = false;
+
             HideLoadingOverlay();
             hasLoadedContent = true;
             refreshCoroutine = null;
+            CompletePaneLoadTimingIfPending();
+
+            if (deferSideTabs)
+                StartCoroutine(DeferredGallerySideTabsAfterGridReady());
 
             // Defer hide filtering until after the grid is visible (prescan .hide markers then filter in a coroutine).
             // Always run follow-up: hide strip (unless sort needs hidden rows), then Hidden-only / AutoInstall-only narrowing, then re-sort.
@@ -2091,7 +2359,6 @@ namespace VPB
 
             if (isPoseCategory)
             {
-                try { UpdateTabs(); } catch { }
                 try { PosePeopleCountIndex.Instance.Save(); } catch { }
 
                 // Start background indexing for unknown pose json entries.
@@ -2102,6 +2369,12 @@ namespace VPB
                     try { StartPosePeopleIndexCoroutine(currentLoadingGroupId); } catch { }
                 }
             }
+        }
+
+        private IEnumerator DeferredGallerySideTabsAfterGridReady()
+        {
+            yield return null;
+            try { UpdateTabs(); } catch { }
         }
 
         private bool FilesSortKeepsHiddenInList()

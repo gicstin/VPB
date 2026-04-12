@@ -112,6 +112,7 @@ namespace VPB
                 return;
 
             LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
+            GalleryFileListSnapshotCache.Clear();
             lastObservedPackageRefreshTime = refreshTime;
 
             _hasHadInitialRefresh = true;
@@ -212,6 +213,21 @@ namespace VPB
 
         public const int MaxPanels = 20;
 
+        private static System.Diagnostics.Stopwatch _pendingCreatePaneStopwatch;
+
+        /// <summary>Call when the user invokes Create Gallery Pane (hotkey / UI) so timing includes category init until the new pane's grid is ready.</summary>
+        public static void MarkCreateGalleryPaneRequested()
+        {
+            _pendingCreatePaneStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        }
+
+        internal static System.Diagnostics.Stopwatch TakePendingCreatePaneStopwatch()
+        {
+            var s = _pendingCreatePaneStopwatch;
+            _pendingCreatePaneStopwatch = null;
+            return s;
+        }
+
         public void ClonePanel(GalleryPanel original, bool toRight)
         {
             if (panels.Count >= MaxPanels)
@@ -219,6 +235,8 @@ namespace VPB
                 // Optionally warn user?
                 return;
             }
+
+            var cloneTiming = System.Diagnostics.Stopwatch.StartNew();
 
             GameObject go = new GameObject("GalleryPanel_Clone");
             GalleryPanel p = go.AddComponent<GalleryPanel>();
@@ -305,6 +323,7 @@ namespace VPB
             }
             
             p.hasBeenPositioned = true;
+            p.BeginPaneLoadTiming(cloneTiming, "clone");
             p.Show(original.GetTitle(), original.GetCurrentExtension(), original.GetCurrentPath());
         }
 
@@ -353,6 +372,8 @@ namespace VPB
             {
                 return;
             }
+
+            System.Diagnostics.Stopwatch createTiming = TakePendingCreatePaneStopwatch();
 
             GameObject go = new GameObject("GalleryPanel_New");
             GalleryPanel p = go.AddComponent<GalleryPanel>();
@@ -429,7 +450,15 @@ namespace VPB
                 }
 
                 if (showAfterCreate)
+                {
+                    if (createTiming != null)
+                        p.BeginPaneLoadTiming(createTiming, "create");
                     p.Show(initial.name, initial.extension, initial.path);
+                }
+            }
+            else if (createTiming != null)
+            {
+                createTiming.Stop();
             }
         }
 

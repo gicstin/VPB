@@ -343,6 +343,13 @@ namespace VPB
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
         private bool _cacheRetryPending = false;
+
+        /// <summary>When set, logs elapsed time when the first file-list load finishes after create/clone pane.</summary>
+        private System.Diagnostics.Stopwatch _paneLoadTimingStopwatch;
+        private string _paneLoadTimingKind;
+
+        /// <summary>True when SetCategories skipped a full side-tab rebuild; first RefreshFilesRoutine completes it after caches exist.</summary>
+        private bool _sideTabsNeedFullRebuildAfterFirstRefresh;
         
         private string nameFilter = "";
         private string nameFilterLower = "";

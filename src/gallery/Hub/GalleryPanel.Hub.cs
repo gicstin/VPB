@@ -365,6 +365,7 @@ namespace VPB
                 if (paginationText != null) paginationText.text = "Error: " + msg;
                 HideLoadingOverlay();
                 refreshCoroutine = null;
+                CompletePaneLoadTimingIfPending("(hub: " + msg + ")");
                 yield break;
             }
 
@@ -389,6 +390,7 @@ namespace VPB
             
             HideLoadingOverlay();
             refreshCoroutine = null;
+            CompletePaneLoadTimingIfPending();
         }
 
         private void CreateHubItemButton(GalleryHubItem item)
