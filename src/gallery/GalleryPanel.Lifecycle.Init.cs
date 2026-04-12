@@ -393,6 +393,15 @@ namespace VPB
             // Immediately left of search: search left = -40 - 120 = -160; 4px gap; P half-width 20 → center -184
             qfToggleRT.anchoredPosition = new Vector2(-184, 0);
             VPBUiFont.ApplyTo(quickFiltersToggleBtnText);
+            {
+                var s = UI.LoadIconSprite("vpb_icons/filter.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                if (s != null)
+                {
+                    UI.AddIconToButton(qfToggleBtn, s);
+                    Transform iconT = qfToggleBtn.transform.Find("Icon");
+                    quickFiltersToggleBtnIconImage = iconT != null ? iconT.GetComponent<Image>() : null;
+                }
+            }
             AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets");
 
             // Register inner pane button scale actions (title bar)
@@ -412,6 +421,17 @@ namespace VPB
             if (true)
             {
                 float tabAreaWidth = 220f;
+
+                {
+                    Color iconTint = new Color(0.78f, 0.78f, 0.78f, 1f);
+                    sceneSourceSortModeSprites = new Sprite[]
+                    {
+                        UI.LoadIconSprite("vpb_icons/sort_name_asc.png", iconTint),
+                        UI.LoadIconSprite("vpb_icons/sort_name_desc.png", iconTint),
+                        UI.LoadIconSprite("vpb_icons/sort_number_asc.png", iconTint),
+                        UI.LoadIconSprite("vpb_icons/sort_number_desc.png", iconTint),
+                    };
+                }
                 
                 // 1. Right Tab Area
                 rightTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero);
@@ -438,30 +458,50 @@ namespace VPB
                 rightSubTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
                 rightSubTabScrollGO.SetActive(false); // Hidden by default
 
-                // Right Sub Sort Button
-                rightSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.sort.az_up", "Az↑"), 14, 0, 0, AnchorPresets.topRight, null);
-                rightSubSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
-                rightSubSortBtn.GetComponentInChildren<Text>().color = Color.white;
-                RectTransform rsSubRT = rightSubSortBtn.GetComponent<RectTransform>();
-                rsSubRT.anchorMin = new Vector2(1, 0.5f);
-                rsSubRT.anchorMax = new Vector2(1, 0.5f);
-                rsSubRT.pivot = new Vector2(1, 1);
-                rsSubRT.anchoredPosition = new Vector2(-190, -10); // Below split line
-                
-                rightSubSortBtnText = rightSubSortBtn.GetComponentInChildren<Text>();
-                { var rt = rsSubRT; var t = rightSubSortBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
-                // (right sub-search and sub-clear scale actions added below after their RTs are declared)
-                Button rightSubSortButton = rightSubSortBtn.GetComponent<Button>();
-                rightSubSortButton.onClick.RemoveAllListeners();
-                rightSubSortButton.onClick.AddListener(() => {
-                    CycleSort("Tags", rightSubSortBtnText);
-                });
-                AddRightClickDelegate(rightSubSortBtn, () => {
-                    ToggleSortDirection("Tags", rightSubSortBtnText);
-                });
+                // Right Sub Sort Button (tags split: same 35² icon cycle as upper row)
+                {
+                    Color sortBackdropCol = new Color(0.15f, 0.15f, 0.15f, 1f);
+                    rightSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topRight, null);
+                    if (sceneSourceSortModeSprites != null && sceneSourceSortModeSprites[0] != null)
+                        UI.AddIconToButton(rightSubSortBtn, sceneSourceSortModeSprites[0], 4f, sortBackdropCol);
+                    rightSubSortBtnBackdrop = rightSubSortBtn.GetComponent<Image>();
+                    rightSubSortBtnIconImage = rightSubSortBtn.transform.Find("Icon") != null
+                        ? rightSubSortBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    rightSubSortBtnText = rightSubSortBtn.GetComponentInChildren<Text>(true);
+                    RectTransform rsSubRT = rightSubSortBtn.GetComponent<RectTransform>();
+                    rsSubRT.anchorMin = new Vector2(1, 0.5f);
+                    rsSubRT.anchorMax = new Vector2(1, 0.5f);
+                    rsSubRT.pivot = new Vector2(1, 1);
+                    rsSubRT.anchoredPosition = new Vector2(-10f, -10f);
+                    rsSubRT.sizeDelta = new Vector2(35f, 35f);
+                    { var rt = rsSubRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
+                    Button rightSubSortButton = rightSubSortBtn.GetComponent<Button>();
+                    rightSubSortButton.onClick.RemoveAllListeners();
+                    rightSubSortButton.onClick.AddListener(CycleSidePaneSubTagSort);
+                }
+
+                {
+                    Color backdrop = new Color(0.15f, 0.15f, 0.15f, 1f);
+                    rightSubSceneSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topRight, null);
+                    rightSubSceneSortBtn.name = "SceneSortRight";
+                    RectTransform rsSceneRT = rightSubSceneSortBtn.GetComponent<RectTransform>();
+                    rsSceneRT.anchorMin = new Vector2(1, 0.5f);
+                    rsSceneRT.anchorMax = new Vector2(1, 0.5f);
+                    rsSceneRT.pivot = new Vector2(1, 1);
+                    rsSceneRT.anchoredPosition = new Vector2(-10f, -10f);
+                    rsSceneRT.sizeDelta = new Vector2(35f, 35f);
+                    if (sceneSourceSortModeSprites != null && sceneSourceSortModeSprites[0] != null)
+                        UI.AddIconToButton(rightSubSceneSortBtn, sceneSourceSortModeSprites[0], 4f, backdrop);
+                    rightSubSceneSortBtnBackdrop = rightSubSceneSortBtn.GetComponent<Image>();
+                    rightSubSceneSortIconImage = rightSubSceneSortBtn.transform.Find("Icon") != null
+                        ? rightSubSceneSortBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    rightSubSceneSortBtn.GetComponent<Button>().onClick.RemoveAllListeners();
+                    rightSubSceneSortBtn.GetComponent<Button>().onClick.AddListener(CycleSceneSourceTabSort);
+                    rightSubSceneSortBtn.SetActive(false);
+                }
 
                 // Right Sub Search
-                rightSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
+                rightSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 60f, (val) => {
                     tagFilter = val;
                     hubTagPage = 0;
                     UpdateTabs();
@@ -471,7 +511,35 @@ namespace VPB
                 rSubSearchRT.anchorMax = new Vector2(1, 0.5f);
                 rSubSearchRT.pivot = new Vector2(1, 1);
                 rSubSearchRT.anchoredPosition = new Vector2(-10, -10);
-                { var rt = rSubSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
+                {
+                    innerPaneScaleActions.Add(s =>
+                    {
+                        ApplyRightSubSearchLayoutScaled(s);
+                        SyncSceneSourceSortButtonHighlights();
+                    });
+                }
+                {
+                    var go = rightSubSceneSortBtn;
+                    innerPaneScaleActions.Add(s =>
+                    {
+                        if (go == null) return;
+                        float sz = 35f * s;
+                        RectTransform brt = go.GetComponent<RectTransform>();
+                        brt.sizeDelta = new Vector2(sz, sz);
+                        brt.anchoredPosition = new Vector2(-10f, -10f);
+                    });
+                }
+                {
+                    var go = rightSubSortBtn;
+                    innerPaneScaleActions.Add(s =>
+                    {
+                        if (go == null) return;
+                        float sz = 35f * s;
+                        RectTransform brt = go.GetComponent<RectTransform>();
+                        brt.sizeDelta = new Vector2(sz, sz);
+                        brt.anchoredPosition = new Vector2(-10f, -10f);
+                    });
+                }
                 
                 // Right Sub Clear Button
                 rightSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomRight, () => {
@@ -493,32 +561,30 @@ namespace VPB
                 { var rt = rSubClearRT; var t = rightSubClearBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(220f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
                 rightSubClearBtn.SetActive(false);
 
-                // Init Sub Sort Text
-                UpdateSortButtonText(rightSubSortBtnText, GetSortState("Tags"));
-                
                 rightSubSortBtn.SetActive(false);
                 rightSubSearchInput.gameObject.SetActive(false);
 
-                // Right Sort Button
-                rightSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.sort.az_up", "Az↑"), 14, 0, 0, AnchorPresets.topRight, null);
-                rightSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
-                rightSortBtn.GetComponentInChildren<Text>().color = Color.white;
-                RectTransform rsRT = rightSortBtn.GetComponent<RectTransform>();
-                rsRT.anchorMin = new Vector2(1, 1);
-                rsRT.anchorMax = new Vector2(1, 1);
-                rsRT.pivot = new Vector2(1, 1);
-                rsRT.anchoredPosition = new Vector2(-190, -55); // Left of Search
-                
-                rightSortBtnText = rightSortBtn.GetComponentInChildren<Text>();
-                { var rt = rsRT; var t = rightSortBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
-                Button rightSortButton = rightSortBtn.GetComponent<Button>();
-                rightSortButton.onClick.RemoveAllListeners();
-                rightSortButton.onClick.AddListener(() => {
-                    if (rightActiveContent.HasValue) CycleSort(rightActiveContent.Value.ToString(), rightSortBtnText);
-                });
-                AddRightClickDelegate(rightSortBtn, () => {
-                    if (rightActiveContent.HasValue) ToggleSortDirection(rightActiveContent.Value.ToString(), rightSortBtnText);
-                });
+                // Right Sort Button (upper pane: same icon + 4-mode cycle as scene row)
+                {
+                    Color sortBackdropCol = new Color(0.15f, 0.15f, 0.15f, 1f);
+                    rightSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topRight, null);
+                    if (sceneSourceSortModeSprites != null && sceneSourceSortModeSprites[0] != null)
+                        UI.AddIconToButton(rightSortBtn, sceneSourceSortModeSprites[0], 4f, sortBackdropCol);
+                    rightSortBtnBackdrop = rightSortBtn.GetComponent<Image>();
+                    rightSortBtnIconImage = rightSortBtn.transform.Find("Icon") != null
+                        ? rightSortBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    rightSortBtnText = rightSortBtn.GetComponentInChildren<Text>(true);
+                    RectTransform rsRT = rightSortBtn.GetComponent<RectTransform>();
+                    rsRT.anchorMin = new Vector2(1, 1);
+                    rsRT.anchorMax = new Vector2(1, 1);
+                    rsRT.pivot = new Vector2(1, 1);
+                    rsRT.anchoredPosition = new Vector2(-190, -55);
+                    rsRT.sizeDelta = new Vector2(35f, 35f);
+                    { var rt = rsRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
+                    Button rightSortButton = rightSortBtn.GetComponent<Button>();
+                    rightSortButton.onClick.RemoveAllListeners();
+                    rightSortButton.onClick.AddListener(() => { CycleSidePaneTopSort(false); });
+                }
 
                 // Right Refresh Button (to the right of Sort, still left of Search)
                 rightRefreshBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.icon.refresh", "⟳"), 18, 0, 0, AnchorPresets.topRight, null);
@@ -583,29 +649,51 @@ namespace VPB
                 leftSubTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
                 leftSubTabScrollGO.SetActive(false); // Hidden by default
 
-                // Left Sub Sort Button
-                leftSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.sort.az_up", "Az↑"), 14, 0, 0, AnchorPresets.topLeft, null);
-                leftSubSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
-                leftSubSortBtn.GetComponentInChildren<Text>().color = Color.white;
-                RectTransform lsSubRT = leftSubSortBtn.GetComponent<RectTransform>();
-                lsSubRT.anchorMin = new Vector2(0, 0.5f);
-                lsSubRT.anchorMax = new Vector2(0, 0.5f);
-                lsSubRT.pivot = new Vector2(0, 1);
-                lsSubRT.anchoredPosition = new Vector2(10, -10); // Below split line
-                
-                leftSubSortBtnText = leftSubSortBtn.GetComponentInChildren<Text>();
-                { var rt = lsSubRT; var t = leftSubSortBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
-                Button leftSubSortButton = leftSubSortBtn.GetComponent<Button>();
-                leftSubSortButton.onClick.RemoveAllListeners();
-                leftSubSortButton.onClick.AddListener(() => {
-                    CycleSort("Tags", leftSubSortBtnText);
-                });
-                AddRightClickDelegate(leftSubSortBtn, () => {
-                    ToggleSortDirection("Tags", leftSubSortBtnText);
-                });
+                // Left Sub Sort Button (tags split: same 35² icon cycle as upper row)
+                {
+                    Color sortBackdropCol = new Color(0.15f, 0.15f, 0.15f, 1f);
+                    leftSubSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topLeft, null);
+                    if (sceneSourceSortModeSprites != null && sceneSourceSortModeSprites[0] != null)
+                        UI.AddIconToButton(leftSubSortBtn, sceneSourceSortModeSprites[0], 4f, sortBackdropCol);
+                    leftSubSortBtnBackdrop = leftSubSortBtn.GetComponent<Image>();
+                    leftSubSortBtnIconImage = leftSubSortBtn.transform.Find("Icon") != null
+                        ? leftSubSortBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    leftSubSortBtnText = leftSubSortBtn.GetComponentInChildren<Text>(true);
+                    RectTransform lsSubRT = leftSubSortBtn.GetComponent<RectTransform>();
+                    lsSubRT.anchorMin = new Vector2(0, 0.5f);
+                    lsSubRT.anchorMax = new Vector2(0, 0.5f);
+                    lsSubRT.pivot = new Vector2(0, 1);
+                    lsSubRT.anchoredPosition = new Vector2(10f, -10f);
+                    lsSubRT.sizeDelta = new Vector2(35f, 35f);
+                    { var rt = lsSubRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
+                    Button leftSubSortButton = leftSubSortBtn.GetComponent<Button>();
+                    leftSubSortButton.onClick.RemoveAllListeners();
+                    leftSubSortButton.onClick.AddListener(CycleSidePaneSubTagSort);
+                }
+
+                // Scene sub-pane: one square button cycling 4 file-sort modes
+                {
+                    Color backdrop = new Color(0.15f, 0.15f, 0.15f, 1f);
+                    leftSubSceneSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topLeft, null);
+                    leftSubSceneSortBtn.name = "SceneSortLeft";
+                    RectTransform lsSceneRT = leftSubSceneSortBtn.GetComponent<RectTransform>();
+                    lsSceneRT.anchorMin = new Vector2(0, 0.5f);
+                    lsSceneRT.anchorMax = new Vector2(0, 0.5f);
+                    lsSceneRT.pivot = new Vector2(0, 1);
+                    lsSceneRT.anchoredPosition = new Vector2(10f, -10f);
+                    lsSceneRT.sizeDelta = new Vector2(35f, 35f);
+                    if (sceneSourceSortModeSprites != null && sceneSourceSortModeSprites[0] != null)
+                        UI.AddIconToButton(leftSubSceneSortBtn, sceneSourceSortModeSprites[0], 4f, backdrop);
+                    leftSubSceneSortBtnBackdrop = leftSubSceneSortBtn.GetComponent<Image>();
+                    leftSubSceneSortIconImage = leftSubSceneSortBtn.transform.Find("Icon") != null
+                        ? leftSubSceneSortBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    leftSubSceneSortBtn.GetComponent<Button>().onClick.RemoveAllListeners();
+                    leftSubSceneSortBtn.GetComponent<Button>().onClick.AddListener(CycleSceneSourceTabSort);
+                    leftSubSceneSortBtn.SetActive(false);
+                }
 
                 // Left Sub Search
-                leftSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
+                leftSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 60f, (val) => {
                     tagFilter = val;
                     hubTagPage = 0;
                     UpdateTabs();
@@ -614,8 +702,37 @@ namespace VPB
                 lSubSearchRT.anchorMin = new Vector2(0, 0.5f);
                 lSubSearchRT.anchorMax = new Vector2(0, 0.5f);
                 lSubSearchRT.pivot = new Vector2(0, 1);
-                lSubSearchRT.anchoredPosition = new Vector2(55, -10);
-                { var rt = lSubSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
+                lSubSearchRT.anchoredPosition = new Vector2(50, -10);
+                {
+                    var rt = lSubSearchRT;
+                    innerPaneScaleActions.Add(s =>
+                    {
+                        ApplyLeftSubSearchLayoutScaled(s);
+                        SyncSceneSourceSortButtonHighlights();
+                    });
+                }
+                {
+                    var go = leftSubSceneSortBtn;
+                    innerPaneScaleActions.Add(s =>
+                    {
+                        if (go == null) return;
+                        float sz = 35f * s;
+                        RectTransform brt = go.GetComponent<RectTransform>();
+                        brt.sizeDelta = new Vector2(sz, sz);
+                        brt.anchoredPosition = new Vector2(10f, -10f);
+                    });
+                }
+                {
+                    var go = leftSubSortBtn;
+                    innerPaneScaleActions.Add(s =>
+                    {
+                        if (go == null) return;
+                        float sz = 35f * s;
+                        RectTransform brt = go.GetComponent<RectTransform>();
+                        brt.sizeDelta = new Vector2(sz, sz);
+                        brt.anchoredPosition = new Vector2(10f, -10f);
+                    });
+                }
 
                 // Left Sub Clear Button
                 leftSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomLeft, () => {
@@ -637,32 +754,30 @@ namespace VPB
                 { var rt = lSubClearRT; var t = leftSubClearBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(220f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
                 leftSubClearBtn.SetActive(false);
 
-                // Init Sub Sort Text
-                UpdateSortButtonText(leftSubSortBtnText, GetSortState("Tags"));
-
                 leftSubSortBtn.SetActive(false);
                 leftSubSearchInput.gameObject.SetActive(false);
 
-                // Left Sort Button
-                leftSortBtn = UI.CreateUIButton(backgroundBoxGO, 40, 35, VPBTranslation.T("gallery.sort.az_up", "Az↑"), 14, 0, 0, AnchorPresets.topLeft, null);
-                leftSortBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
-                leftSortBtn.GetComponentInChildren<Text>().color = Color.white;
-                RectTransform lsRT = leftSortBtn.GetComponent<RectTransform>();
-                lsRT.anchorMin = new Vector2(0, 1);
-                lsRT.anchorMax = new Vector2(0, 1);
-                lsRT.pivot = new Vector2(0, 1);
-                lsRT.anchoredPosition = new Vector2(10, -55);
-                
-                leftSortBtnText = leftSortBtn.GetComponentInChildren<Text>();
-                { var rt = lsRT; var t = leftSortBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
-                Button leftSortButton = leftSortBtn.GetComponent<Button>();
-                leftSortButton.onClick.RemoveAllListeners();
-                leftSortButton.onClick.AddListener(() => {
-                    if (leftActiveContent.HasValue) CycleSort(leftActiveContent.Value.ToString(), leftSortBtnText);
-                });
-                AddRightClickDelegate(leftSortBtn, () => {
-                    if (leftActiveContent.HasValue) ToggleSortDirection(leftActiveContent.Value.ToString(), leftSortBtnText);
-                });
+                // Left Sort Button (upper pane: same icon + 4-mode cycle as scene row)
+                {
+                    Color sortBackdropCol = new Color(0.15f, 0.15f, 0.15f, 1f);
+                    leftSortBtn = UI.CreateUIButton(backgroundBoxGO, 35f, 35f, " ", 8, 0, 0, AnchorPresets.topLeft, null);
+                    if (sceneSourceSortModeSprites != null && sceneSourceSortModeSprites[0] != null)
+                        UI.AddIconToButton(leftSortBtn, sceneSourceSortModeSprites[0], 4f, sortBackdropCol);
+                    leftSortBtnBackdrop = leftSortBtn.GetComponent<Image>();
+                    leftSortBtnIconImage = leftSortBtn.transform.Find("Icon") != null
+                        ? leftSortBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    leftSortBtnText = leftSortBtn.GetComponentInChildren<Text>(true);
+                    RectTransform lsRT = leftSortBtn.GetComponent<RectTransform>();
+                    lsRT.anchorMin = new Vector2(0, 1);
+                    lsRT.anchorMax = new Vector2(0, 1);
+                    lsRT.pivot = new Vector2(0, 1);
+                    lsRT.anchoredPosition = new Vector2(10, -55);
+                    lsRT.sizeDelta = new Vector2(35f, 35f);
+                    { var rt = lsRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
+                    Button leftSortButton = leftSortBtn.GetComponent<Button>();
+                    leftSortButton.onClick.RemoveAllListeners();
+                    leftSortButton.onClick.AddListener(() => { CycleSidePaneTopSort(true); });
+                }
 
                 leftSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
                     if (leftActiveContent == ContentType.Category) categoryFilter = val;
@@ -681,7 +796,7 @@ namespace VPB
                 lSearchRT.anchorMin = new Vector2(0, 1);
                 lSearchRT.anchorMax = new Vector2(0, 1);
                 lSearchRT.pivot = new Vector2(0, 1);
-                lSearchRT.anchoredPosition = new Vector2(55, -55);
+                lSearchRT.anchoredPosition = new Vector2(50, -55);
                 { var rt = lSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
 
                 // Right Button Container
@@ -716,64 +831,262 @@ namespace VPB
                 int btnFontSize = 20;
                 float btnWidth = 120;
                 float btnHeight = 50;
+                const float sideIconBtn = 50f;
+                const float sideIconPad = 6f;
                 float spacing = 60f;
                 float groupGap = 10f;
                 float startY = 320f;
 
-                // Fixed/Floating (Topmost)
-                GameObject rightDesktopBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.desktop.floating", "Floating"), btnFontSize, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
+                {
+                    Color sideTint = new Color(0.78f, 0.78f, 0.78f, 1f);
+                    galleryFloatSprite = UI.LoadIconSprite("vpb_icons/gallery_float.png", sideTint);
+                    galleryFixedSprite = UI.LoadIconSprite("vpb_icons/gallery_fixed.png", sideTint);
+                    galleryFollowOnSprite = UI.LoadIconSprite("vpb_icons/gallery_follow_on.png", sideTint);
+                    galleryFollowOffSprite = UI.LoadIconSprite("vpb_icons/gallery_follow_off.png", sideTint);
+                    galleryCloneSprite = UI.LoadIconSprite("vpb_icons/gallery_clone.png", sideTint);
+                    gallerySaveSprite = UI.LoadIconSprite("vpb_icons/gallery_save.png", sideTint);
+                    galleryCategorySprite = UI.LoadIconSprite("vpb_icons/gallery_category.png", sideTint);
+                    galleryCreatorSprite = UI.LoadIconSprite("vpb_icons/gallery_creator.png", sideTint);
+                    galleryTargetSprite = UI.LoadIconSprite("vpb_icons/gallery_target.png", sideTint);
+                    galleryApplySprite = UI.LoadIconSprite("vpb_icons/gallery_apply.png", sideTint);
+                    galleryApplyOneClickSprite = UI.LoadIconSprite("vpb_icons/gallery_apply_1click.png", sideTint);
+                    galleryApplyTwoClickSprite = UI.LoadIconSprite("vpb_icons/gallery_apply_2click.png", sideTint);
+                    if (galleryApplyOneClickSprite == null) galleryApplyOneClickSprite = galleryApplySprite;
+                    if (galleryApplyTwoClickSprite == null) galleryApplyTwoClickSprite = galleryApplySprite ?? galleryApplyOneClickSprite;
+                    galleryAddSprite = UI.LoadIconSprite("vpb_icons/gallery_add.png", sideTint);
+                    galleryReplaceSprite = UI.LoadIconSprite("vpb_icons/gallery_replace.png", sideTint);
+                    galleryRemoveSprite = UI.LoadIconSprite("vpb_icons/gallery_remove.png", sideTint)
+                        ?? UI.LoadIconSprite("vpb_icons/gallery_remove_atom.png", sideTint);
+                }
+
+                float removeCtxW = galleryRemoveSprite != null ? sideIconBtn : btnWidth;
+                float removeCtxH = galleryRemoveSprite != null ? sideIconBtn : btnHeight;
+                float removeExpandX = (104f / 120f) * removeCtxW;
+                bool applyIconMode = galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null;
+
+                // Fixed/Floating (Topmost) — square icon; sprite matches next toggle action (see UpdateDesktopModeButton)
+                float deskW = (galleryFloatSprite != null || galleryFixedSprite != null) ? sideIconBtn : btnWidth;
+                float deskH = (galleryFloatSprite != null || galleryFixedSprite != null) ? sideIconBtn : btnHeight;
+                GameObject rightDesktopBtn = UI.CreateUIButton(rightSideContainer, deskW, deskH, " ", 8, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
                 rightDesktopModeBtnImage = rightDesktopBtn.GetComponent<Image>();
-                rightDesktopModeBtnText = rightDesktopBtn.GetComponentInChildren<Text>();
+                rightDesktopModeBtnText = rightDesktopBtn.GetComponentInChildren<Text>(true);
+                {
+                    Sprite s0 = isFixedLocally ? galleryFloatSprite : galleryFixedSprite;
+                    if (s0 != null)
+                    {
+                        Color c0 = isFixedLocally ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.15f, 0.15f, 0.15f, 1f);
+                        UI.AddIconToButton(rightDesktopBtn, s0, sideIconPad, c0);
+                        rightDesktopModeBtnIconImage = rightDesktopBtn.transform.Find("Icon") != null
+                            ? rightDesktopBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        rightDesktopModeBtnIconImage = null;
+                        if (rightDesktopModeBtnText != null)
+                        {
+                            rightDesktopModeBtnText.text = isFixedLocally
+                                ? VPBTranslation.T("gallery.desktop.floating", "Floating")
+                                : VPBTranslation.T("gallery.desktop.fixed", "Fixed");
+                            rightDesktopModeBtnText.fontSize = btnFontSize;
+                            rightDesktopModeBtnText.gameObject.SetActive(true);
+                        }
+                        rightDesktopModeBtnImage.color = isFixedLocally
+                            ? new Color(0.15f, 0.45f, 0.6f, 1f)
+                            : new Color(0.15f, 0.15f, 0.15f, 1f);
+                    }
+                }
                 rightSideButtons.Add(rightDesktopBtn.GetComponent<RectTransform>());
+                AddTooltip(rightDesktopBtn, "gallery.tooltip.desktop_mode", "Toggle fixed vs floating panel (desktop only).");
 
-                // Follow
-                GameObject rightFollowBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.follow.static", "Static"), btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
+                // Follow — square icon
+                float folW = (galleryFollowOnSprite != null || galleryFollowOffSprite != null) ? sideIconBtn : btnWidth;
+                float folH = (galleryFollowOnSprite != null || galleryFollowOffSprite != null) ? sideIconBtn : btnHeight;
+                GameObject rightFollowBtn = UI.CreateUIButton(rightSideContainer, folW, folH, " ", 8, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
                 rightFollowBtnImage = rightFollowBtn.GetComponent<Image>();
-                rightFollowBtnText = rightFollowBtn.GetComponentInChildren<Text>();
-                rightFollowBtnImage.color = new Color(0.15f, 0.45f, 0.6f, 1f); // Darker Follow Blue
+                rightFollowBtnText = rightFollowBtn.GetComponentInChildren<Text>(true);
+                {
+                    Sprite f0 = followUser ? galleryFollowOnSprite : galleryFollowOffSprite;
+                    if (f0 != null)
+                    {
+                        Color fc = followUser ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.3f, 0.3f, 0.3f, 1f);
+                        UI.AddIconToButton(rightFollowBtn, f0, sideIconPad, fc);
+                        rightFollowBtnIconImage = rightFollowBtn.transform.Find("Icon") != null
+                            ? rightFollowBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        rightFollowBtnIconImage = null;
+                        if (rightFollowBtnText != null)
+                        {
+                            rightFollowBtnText.text = followUser
+                                ? VPBTranslation.T("gallery.follow.follow", "Follow")
+                                : VPBTranslation.T("gallery.follow.static", "Static");
+                            rightFollowBtnText.fontSize = btnFontSize;
+                            rightFollowBtnText.gameObject.SetActive(true);
+                        }
+                        rightFollowBtnImage.color = followUser
+                            ? new Color(0.15f, 0.45f, 0.6f, 1f)
+                            : new Color(0.3f, 0.3f, 0.3f, 1f);
+                    }
+                }
                 rightSideButtons.Add(rightFollowBtn.GetComponent<RectTransform>());
+                AddTooltip(rightFollowBtn, "gallery.tooltip.follow_mode", "Toggle camera follow for the panel.");
 
-                // Clone (Gray)
-                GameObject rightCloneBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.clone", "Clone"), btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, () => {
+                // Clone — square icon (gray)
+                float clW = galleryCloneSprite != null ? sideIconBtn : btnWidth;
+                float clH = galleryCloneSprite != null ? sideIconBtn : btnHeight;
+                GameObject rightCloneBtn = UI.CreateUIButton(rightSideContainer, clW, clH, " ", 8, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, true);
                 });
-                rightCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
-                rightCloneBtnText = rightCloneBtn.GetComponentInChildren<Text>();
+                rightCloneBtnText = rightCloneBtn.GetComponentInChildren<Text>(true);
+                {
+                    Color cloneBackdrop = new Color(0.3f, 0.3f, 0.3f, 1f);
+                    if (galleryCloneSprite != null)
+                    {
+                        UI.AddIconToButton(rightCloneBtn, galleryCloneSprite, sideIconPad, cloneBackdrop);
+                        rightCloneBtnIconImage = rightCloneBtn.transform.Find("Icon") != null
+                            ? rightCloneBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        rightCloneBtn.GetComponent<Image>().color = cloneBackdrop;
+                        if (rightCloneBtnText != null)
+                        {
+                            rightCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
+                            rightCloneBtnText.gameObject.SetActive(true);
+                        }
+                        rightCloneBtnIconImage = null;
+                    }
+                }
                 rightSideButtons.Add(rightCloneBtn.GetComponent<RectTransform>());
+                AddTooltip(rightCloneBtn, "gallery.tooltip.clone_pane", "Clone this gallery pane.");
 
                 // Category (Red)
-                GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.category", "Category"), btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => {
-                    if (isFixedLocally) ToggleLeft(ContentType.Category); else ToggleRight(ContentType.Category);
-                });
-                rightCategoryBtnImage = rightCatBtn.GetComponent<Image>();
-                rightCategoryBtnImage.color = ColorCategory;
-                rightCategoryBtnText = rightCatBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightCatBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(rightCatBtn, () => ToggleRight(ContentType.Category));
-                
+                {
+                    float cW = galleryCategorySprite != null ? sideIconBtn : btnWidth;
+                    float cH = galleryCategorySprite != null ? sideIconBtn : btnHeight;
+                    GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, cW, cH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => {
+                        if (isFixedLocally) ToggleLeft(ContentType.Category); else ToggleRight(ContentType.Category);
+                    });
+                    rightCategoryBtnImage = rightCatBtn.GetComponent<Image>();
+                    rightCategoryBtnText = rightCatBtn.GetComponentInChildren<Text>(true);
+                    if (galleryCategorySprite != null)
+                    {
+                        UI.AddIconToButton(rightCatBtn, galleryCategorySprite, sideIconPad, ColorCategory);
+                        rightCategoryBtnIconImage = rightCatBtn.transform.Find("Icon") != null
+                            ? rightCatBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        rightCategoryBtnImage.color = ColorCategory;
+                        if (rightCategoryBtnText != null)
+                        {
+                            rightCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
+                            rightCategoryBtnText.fontSize = btnFontSize;
+                            rightCategoryBtnText.gameObject.SetActive(true);
+                        }
+                        rightCategoryBtnIconImage = null;
+                    }
+                    rightSideButtons.Add(rightCatBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightCatBtn, () => ToggleRight(ContentType.Category));
+                    AddTooltip(rightCatBtn, "gallery.tooltip.category_list", "Open category list.");
+                }
+
                 // Creator (Green)
-                GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.creator", "Creator"), btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
-                    if (isFixedLocally) ToggleLeft(ContentType.Creator); else ToggleRight(ContentType.Creator);
-                });
-                rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
-                rightCreatorBtnImage.color = ColorCreator;
-                rightCreatorBtnText = rightCreatorBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightCreatorBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
+                {
+                    float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
+                    float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
+                    GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, crW, crH, " ", 8, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
+                        if (isFixedLocally) ToggleLeft(ContentType.Creator); else ToggleRight(ContentType.Creator);
+                    });
+                    rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
+                    rightCreatorBtnText = rightCreatorBtn.GetComponentInChildren<Text>(true);
+                    if (galleryCreatorSprite != null)
+                    {
+                        UI.AddIconToButton(rightCreatorBtn, galleryCreatorSprite, sideIconPad, ColorCreator);
+                        rightCreatorBtnIconImage = rightCreatorBtn.transform.Find("Icon") != null
+                            ? rightCreatorBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        rightCreatorBtnImage.color = ColorCreator;
+                        if (rightCreatorBtnText != null)
+                        {
+                            rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
+                            rightCreatorBtnText.fontSize = btnFontSize;
+                            rightCreatorBtnText.gameObject.SetActive(true);
+                        }
+                        rightCreatorBtnIconImage = null;
+                    }
+                    rightSideButtons.Add(rightCreatorBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
+                    AddTooltip(rightCreatorBtn, "gallery.tooltip.creator_list", "Open creator list.");
+                }
 
                 // Target (Dropdown-like)
-                GameObject rightTargetBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.target_none", "Target: None"), 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
-                rightTargetBtnImage = rightTargetBtn.GetComponent<Image>();
-                rightTargetBtnImage.color = new Color(0.15f, 0.15f, 0.15f, 1f);
-                rightTargetBtnText = rightTargetBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightTargetBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(rightTargetBtn, () => CycleTarget(false));
+                {
+                    float tW = galleryTargetSprite != null ? sideIconBtn : btnWidth;
+                    float tH = galleryTargetSprite != null ? sideIconBtn : btnHeight;
+                    GameObject rightTargetBtn = UI.CreateUIButton(rightSideContainer, tW, tH, " ", 8, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
+                    Color targetCol = new Color(0.15f, 0.15f, 0.15f, 1f);
+                    rightTargetBtnImage = rightTargetBtn.GetComponent<Image>();
+                    rightTargetBtnText = rightTargetBtn.GetComponentInChildren<Text>(true);
+                    if (galleryTargetSprite != null)
+                    {
+                        UI.AddIconToButton(rightTargetBtn, galleryTargetSprite, sideIconPad, targetCol);
+                        rightTargetBtnIconImage = rightTargetBtn.transform.Find("Icon") != null
+                            ? rightTargetBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        rightTargetBtnImage.color = targetCol;
+                        if (rightTargetBtnText != null)
+                        {
+                            rightTargetBtnText.text = VPBTranslation.T("gallery.side.target_none", "Target: None");
+                            rightTargetBtnText.fontSize = 14;
+                            rightTargetBtnText.gameObject.SetActive(true);
+                        }
+                        rightTargetBtnIconImage = null;
+                    }
+                    rightSideButtons.Add(rightTargetBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightTargetBtn, () => CycleTarget(false));
+                    WireSideTargetTooltipHover(rightTargetBtn);
+                }
 
-                // Apply Mode (Right)
-                GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.apply.two_click", "2-Click"), btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
-                rightApplyModeBtnImage = rightApplyModeBtn.GetComponent<Image>();
-                rightApplyModeBtnText = rightApplyModeBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightApplyModeBtn.GetComponent<RectTransform>());
+                // Apply Mode (Right) — icon swaps 1-click vs 2-click when both assets exist
+                {
+                    float apW = applyIconMode ? sideIconBtn : btnWidth;
+                    float apH = applyIconMode ? sideIconBtn : btnHeight;
+                    GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, apW, apH, " ", 8, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                    rightApplyModeBtnImage = rightApplyModeBtn.GetComponent<Image>();
+                    rightApplyModeBtnText = rightApplyModeBtn.GetComponentInChildren<Text>(true);
+                    if (applyIconMode)
+                    {
+                        Sprite apInitSpr = ItemApplyMode == ApplyMode.SingleClick
+                            ? (galleryApplyOneClickSprite ?? galleryApplyTwoClickSprite)
+                            : (galleryApplyTwoClickSprite ?? galleryApplyOneClickSprite);
+                        Color apInit = ItemApplyMode == ApplyMode.SingleClick
+                            ? new Color(0.6f, 0.45f, 0.15f, 1f)
+                            : new Color(0.15f, 0.15f, 0.45f, 1f);
+                        UI.AddIconToButton(rightApplyModeBtn, apInitSpr, sideIconPad, apInit);
+                        rightApplyModeBtnIconImage = rightApplyModeBtn.transform.Find("Icon") != null
+                            ? rightApplyModeBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        if (rightApplyModeBtnText != null)
+                        {
+                            rightApplyModeBtnText.text = ItemApplyMode == ApplyMode.SingleClick
+                                ? VPBTranslation.T("gallery.apply.one_click", "1-Click")
+                                : VPBTranslation.T("gallery.apply.two_click", "2-Click");
+                            rightApplyModeBtnText.fontSize = btnFontSize;
+                            rightApplyModeBtnText.gameObject.SetActive(true);
+                        }
+                        rightApplyModeBtnIconImage = null;
+                    }
+                    rightSideButtons.Add(rightApplyModeBtn.GetComponent<RectTransform>());
+                    AddTooltip(rightApplyModeBtn, "gallery.tooltip.apply_mode", "Toggle 1-click vs 2-click apply.");
+                }
 
                 // Appearance outfit: keep current vs load from preset (Right)
                 rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
@@ -782,26 +1095,79 @@ namespace VPB
                 rightSideButtons.Add(rightKeepClothingBtnGO.GetComponent<RectTransform>());
                 rightKeepClothingBtnGO.SetActive(false);
 
-                // Replace Toggle (Right)
-                GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.add", "Add"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
-                rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
-                rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
+                // Replace Toggle (Right): one button cycles Add ↔ Replace (distinct icons when both assets exist)
+                {
+                    bool replaceIcons = galleryAddSprite != null || galleryReplaceSprite != null;
+                    float rpW = replaceIcons ? sideIconBtn : btnWidth;
+                    float rpH = replaceIcons ? sideIconBtn : btnHeight;
+                    GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                    rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
+                    rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>(true);
+                    if (replaceIcons)
+                    {
+                        Sprite rpInit = DragDropReplaceMode
+                            ? (galleryReplaceSprite ?? galleryAddSprite)
+                            : (galleryAddSprite ?? galleryReplaceSprite);
+                        Color rpCol = DragDropReplaceMode ? new Color(0.6f, 0.15f, 0.15f, 1f) : new Color(0.15f, 0.45f, 0.15f, 1f);
+                        UI.AddIconToButton(rightReplaceBtn, rpInit, sideIconPad, rpCol);
+                        rightReplaceBtnIconImage = rightReplaceBtn.transform.Find("Icon") != null
+                            ? rightReplaceBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        if (rightReplaceBtnText != null)
+                        {
+                            rightReplaceBtnText.text = DragDropReplaceMode
+                                ? VPBTranslation.T("gallery.side.replace", "Replace")
+                                : VPBTranslation.T("gallery.side.add", "Add");
+                            rightReplaceBtnText.fontSize = btnFontSize;
+                            rightReplaceBtnText.gameObject.SetActive(true);
+                        }
+                        rightReplaceBtnImage.color = DragDropReplaceMode
+                            ? new Color(0.6f, 0.15f, 0.15f, 1f)
+                            : new Color(0.15f, 0.45f, 0.15f, 1f);
+                        rightReplaceBtnIconImage = null;
+                    }
+                    rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
+                    AddTooltip(rightReplaceBtn, "gallery.tooltip.replace_mode", "Toggle Add vs Replace when dropping on a person (same button).");
+                }
 
-                rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.save", "Save"), btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
-                    try
+                {
+                    float saveW = gallerySaveSprite != null ? sideIconBtn : btnWidth;
+                    float saveH = gallerySaveSprite != null ? sideIconBtn : btnHeight;
+                    rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
+                        try
+                        {
+                            ToggleSaveSubmenuFromSideButtons();
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("[VPB] Save (Right) exception: " + ex);
+                        }
+                    });
+                    Color saveCol = new Color(0.2f, 0.4f, 0.2f, 1f);
+                    if (gallerySaveSprite != null)
                     {
-                        ToggleSaveSubmenuFromSideButtons();
+                        UI.AddIconToButton(rightSaveBtnGO, gallerySaveSprite, sideIconPad, saveCol);
+                        rightSaveBtnIconImage = rightSaveBtnGO.transform.Find("Icon") != null
+                            ? rightSaveBtnGO.transform.Find("Icon").GetComponent<Image>() : null;
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        LogUtil.LogError("[VPB] Save (Right) exception: " + ex);
+                        rightSaveBtnGO.GetComponent<Image>().color = saveCol;
+                        var st = rightSaveBtnGO.GetComponentInChildren<Text>(true);
+                        if (st != null)
+                        {
+                            st.text = VPBTranslation.T("gallery.side.save", "Save");
+                            st.fontSize = btnFontSize;
+                            st.gameObject.SetActive(true);
+                        }
+                        rightSaveBtnIconImage = null;
                     }
-                });
-                rightSaveBtnGO.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.2f, 1f);
-                rightSaveBtnGO.GetComponentInChildren<Text>().color = Color.white;
-                rightSideButtons.Add(rightSaveBtnGO.GetComponent<RectTransform>());
-                rightSaveBtnGO.SetActive(false);
+                    rightSideButtons.Add(rightSaveBtnGO.GetComponent<RectTransform>());
+                    rightSaveBtnGO.SetActive(false);
+                    AddTooltip(rightSaveBtnGO, "gallery.tooltip.save_pane", "Save presets and related actions.");
+                }
 
                 try
                 {
@@ -918,22 +1284,46 @@ namespace VPB
                     catch { }
                 }
 
-                // Scene Context (Right)
-                rightRemoveAtomBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_atom", "Remove\nAtom"), 18, 0, 0, AnchorPresets.centre, () => {
-                    try
+                // Scene Context (Right) — same remove icon as clothing/hair; action depends on active category
+                {
+                    float rmW = removeCtxW;
+                    float rmH = removeCtxH;
+                    Color rmCol = new Color(0.6f, 0.2f, 0.2f, 1f);
+                    rightRemoveAtomBtn = UI.CreateUIButton(rightSideContainer, rmW, rmH, " ", 8, 0, 0, AnchorPresets.centre, () => {
+                        try
+                        {
+                            if (SuperController.singleton == null) return;
+                            ToggleAtomSubmenuFromSideButtons();
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("[VPB] Remove (scene) (Right) exception: " + ex);
+                        }
+                    });
+                    if (galleryRemoveSprite != null)
                     {
-                        if (SuperController.singleton == null) return;
-                        ToggleAtomSubmenuFromSideButtons();
+                        UI.AddIconToButton(rightRemoveAtomBtn, galleryRemoveSprite, sideIconPad, rmCol);
+                        rightRemoveAtomBtnIconImage = rightRemoveAtomBtn.transform.Find("Icon") != null
+                            ? rightRemoveAtomBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                        var tx = rightRemoveAtomBtn.GetComponentInChildren<Text>(true);
+                        if (tx != null) tx.gameObject.SetActive(false);
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        LogUtil.LogError("[VPB] Remove Atom (Right) exception: " + ex);
+                        rightRemoveAtomBtn.GetComponent<Image>().color = rmCol;
+                        var tx = rightRemoveAtomBtn.GetComponentInChildren<Text>(true);
+                        if (tx != null)
+                        {
+                            tx.text = VPBTranslation.T("gallery.side.remove", "Remove");
+                            tx.fontSize = 18;
+                            tx.gameObject.SetActive(true);
+                        }
+                        rightRemoveAtomBtnIconImage = null;
                     }
-                });
-                rightRemoveAtomBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
-                rightRemoveAtomBtn.GetComponentInChildren<Text>().color = Color.white;
-                rightSideButtons.Add(rightRemoveAtomBtn.GetComponent<RectTransform>());
-                rightRemoveAtomBtn.SetActive(false);
+                    rightSideButtons.Add(rightRemoveAtomBtn.GetComponent<RectTransform>());
+                    rightRemoveAtomBtn.SetActive(false);
+                    AddTooltip(rightRemoveAtomBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
+                }
 
                 try
                 {
@@ -968,7 +1358,7 @@ namespace VPB
                 catch { }
 
                 // Context Actions (Right)
-                rightRemoveAllClothingBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
+                rightRemoveAllClothingBtn = UI.CreateUIButton(rightSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Right)");
                     try
                     {
@@ -994,9 +1384,28 @@ namespace VPB
                     }
                 });
                 rightRemoveAllClothingBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
-                rightRemoveAllClothingBtn.GetComponentInChildren<Text>().color = Color.white;
+                {
+                    var tx0 = rightRemoveAllClothingBtn.GetComponentInChildren<Text>(true);
+                    if (galleryRemoveSprite != null)
+                    {
+                        UI.AddIconToButton(rightRemoveAllClothingBtn, galleryRemoveSprite, sideIconPad, new Color(0.6f, 0.2f, 0.2f, 1f));
+                        rightRemoveAllClothingBtnIconImage = rightRemoveAllClothingBtn.transform.Find("Icon") != null
+                            ? rightRemoveAllClothingBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                        if (tx0 != null) tx0.gameObject.SetActive(false);
+                    }
+                    else
+                    {
+                        rightRemoveAllClothingBtnIconImage = null;
+                        if (tx0 != null)
+                        {
+                            tx0.color = Color.white;
+                            tx0.gameObject.SetActive(true);
+                        }
+                    }
+                }
                 rightSideButtons.Add(rightRemoveAllClothingBtn.GetComponent<RectTransform>());
                 rightRemoveAllClothingBtn.SetActive(false);
+                AddTooltip(rightRemoveAllClothingBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
 
                 try
                 {
@@ -1032,7 +1441,7 @@ namespace VPB
                 }
                 catch { }
 
-                rightRemoveClothingExpandBtn = UI.CreateUIButton(rightRemoveAllClothingBtn, btnHeight, btnHeight, ">", 18, 104, 0, AnchorPresets.middleCenter, () => {
+                rightRemoveClothingExpandBtn = UI.CreateUIButton(rightRemoveAllClothingBtn, btnHeight, btnHeight, ">", 18, removeExpandX, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
                         Atom target = GetBestTargetAtom();
@@ -1245,7 +1654,7 @@ namespace VPB
                     catch { }
                 }
 
-                rightRemoveAllHairBtn = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_hair", "Remove\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
+                rightRemoveAllHairBtn = UI.CreateUIButton(rightSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_hair", "Remove\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Right)");
                     try
                     {
@@ -1267,9 +1676,28 @@ namespace VPB
                     }
                 });
                 rightRemoveAllHairBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
-                rightRemoveAllHairBtn.GetComponentInChildren<Text>().color = Color.white;
+                {
+                    var tx1 = rightRemoveAllHairBtn.GetComponentInChildren<Text>(true);
+                    if (galleryRemoveSprite != null)
+                    {
+                        UI.AddIconToButton(rightRemoveAllHairBtn, galleryRemoveSprite, sideIconPad, new Color(0.6f, 0.2f, 0.2f, 1f));
+                        rightRemoveAllHairBtnIconImage = rightRemoveAllHairBtn.transform.Find("Icon") != null
+                            ? rightRemoveAllHairBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                        if (tx1 != null) tx1.gameObject.SetActive(false);
+                    }
+                    else
+                    {
+                        rightRemoveAllHairBtnIconImage = null;
+                        if (tx1 != null)
+                        {
+                            tx1.color = Color.white;
+                            tx1.gameObject.SetActive(true);
+                        }
+                    }
+                }
                 rightSideButtons.Add(rightRemoveAllHairBtn.GetComponent<RectTransform>());
                 rightRemoveAllHairBtn.SetActive(false);
+                AddTooltip(rightRemoveAllHairBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
 
                 try
                 {
@@ -1305,7 +1733,7 @@ namespace VPB
                 }
                 catch { }
 
-                rightRemoveHairExpandBtn = UI.CreateUIButton(rightRemoveAllHairBtn, btnHeight, btnHeight, ">", 18, 104, 0, AnchorPresets.middleCenter, () => {
+                rightRemoveHairExpandBtn = UI.CreateUIButton(rightRemoveAllHairBtn, btnHeight, btnHeight, ">", 18, removeExpandX, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
                         Atom target = GetBestTargetAtom();
@@ -1460,57 +1888,220 @@ namespace VPB
                 sideButtonGroups.Add(leftClearCreatorBtn.AddComponent<CanvasGroup>());
                 leftClearCreatorBtn.SetActive(false);
 
-                // Left Toggle Buttons
+                // Left Toggle Buttons (same 50×50 icon row as right; sprites already loaded above)
                 // Fixed/Floating (Topmost)
-                GameObject leftDesktopBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.desktop.floating", "Floating"), btnFontSize, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
+                GameObject leftDesktopBtn = UI.CreateUIButton(leftSideContainer, deskW, deskH, " ", 8, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
                 leftDesktopModeBtnImage = leftDesktopBtn.GetComponent<Image>();
-                leftDesktopModeBtnText = leftDesktopBtn.GetComponentInChildren<Text>();
+                leftDesktopModeBtnText = leftDesktopBtn.GetComponentInChildren<Text>(true);
+                {
+                    Sprite s0 = isFixedLocally ? galleryFloatSprite : galleryFixedSprite;
+                    if (s0 != null)
+                    {
+                        Color c0 = isFixedLocally ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.15f, 0.15f, 0.15f, 1f);
+                        UI.AddIconToButton(leftDesktopBtn, s0, sideIconPad, c0);
+                        leftDesktopModeBtnIconImage = leftDesktopBtn.transform.Find("Icon") != null
+                            ? leftDesktopBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        leftDesktopModeBtnIconImage = null;
+                        if (leftDesktopModeBtnText != null)
+                        {
+                            leftDesktopModeBtnText.text = isFixedLocally
+                                ? VPBTranslation.T("gallery.desktop.floating", "Floating")
+                                : VPBTranslation.T("gallery.desktop.fixed", "Fixed");
+                            leftDesktopModeBtnText.fontSize = btnFontSize;
+                            leftDesktopModeBtnText.gameObject.SetActive(true);
+                        }
+                        leftDesktopModeBtnImage.color = isFixedLocally
+                            ? new Color(0.15f, 0.45f, 0.6f, 1f)
+                            : new Color(0.15f, 0.15f, 0.15f, 1f);
+                    }
+                }
                 leftSideButtons.Add(leftDesktopBtn.GetComponent<RectTransform>());
+                AddTooltip(leftDesktopBtn, "gallery.tooltip.desktop_mode", "Toggle fixed vs floating panel (desktop only).");
 
                 // Follow
-                GameObject leftFollowBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.follow.static", "Static"), btnFontSize, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
+                GameObject leftFollowBtn = UI.CreateUIButton(leftSideContainer, folW, folH, " ", 8, 0, startY - spacing - groupGap, AnchorPresets.centre, ToggleFollowMode);
                 leftFollowBtnImage = leftFollowBtn.GetComponent<Image>();
-                leftFollowBtnText = leftFollowBtn.GetComponentInChildren<Text>();
-                leftFollowBtnImage.color = new Color(0.15f, 0.45f, 0.6f, 1f); // Darker Follow Blue
+                leftFollowBtnText = leftFollowBtn.GetComponentInChildren<Text>(true);
+                {
+                    Sprite f0 = followUser ? galleryFollowOnSprite : galleryFollowOffSprite;
+                    if (f0 != null)
+                    {
+                        Color fc = followUser ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.3f, 0.3f, 0.3f, 1f);
+                        UI.AddIconToButton(leftFollowBtn, f0, sideIconPad, fc);
+                        leftFollowBtnIconImage = leftFollowBtn.transform.Find("Icon") != null
+                            ? leftFollowBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        leftFollowBtnIconImage = null;
+                        if (leftFollowBtnText != null)
+                        {
+                            leftFollowBtnText.text = followUser
+                                ? VPBTranslation.T("gallery.follow.follow", "Follow")
+                                : VPBTranslation.T("gallery.follow.static", "Static");
+                            leftFollowBtnText.fontSize = btnFontSize;
+                            leftFollowBtnText.gameObject.SetActive(true);
+                        }
+                        leftFollowBtnImage.color = followUser
+                            ? new Color(0.15f, 0.45f, 0.6f, 1f)
+                            : new Color(0.3f, 0.3f, 0.3f, 1f);
+                    }
+                }
                 leftSideButtons.Add(leftFollowBtn.GetComponent<RectTransform>());
+                AddTooltip(leftFollowBtn, "gallery.tooltip.follow_mode", "Toggle camera follow for the panel.");
 
                 // Clone (Gray)
-                GameObject leftCloneBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.clone", "Clone"), btnFontSize, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, () => {
+                GameObject leftCloneBtn = UI.CreateUIButton(leftSideContainer, clW, clH, " ", 8, 0, startY - spacing * 2 - groupGap * 2, AnchorPresets.centre, () => {
                     if (Gallery.singleton != null) Gallery.singleton.ClonePanel(this, false);
                 });
-                leftCloneBtn.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.3f, 1f); // Darker Gray
-                leftCloneBtnText = leftCloneBtn.GetComponentInChildren<Text>();
+                leftCloneBtnText = leftCloneBtn.GetComponentInChildren<Text>(true);
+                {
+                    Color cloneBackdrop = new Color(0.3f, 0.3f, 0.3f, 1f);
+                    if (galleryCloneSprite != null)
+                    {
+                        UI.AddIconToButton(leftCloneBtn, galleryCloneSprite, sideIconPad, cloneBackdrop);
+                        leftCloneBtnIconImage = leftCloneBtn.transform.Find("Icon") != null
+                            ? leftCloneBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        leftCloneBtn.GetComponent<Image>().color = cloneBackdrop;
+                        if (leftCloneBtnText != null)
+                        {
+                            leftCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
+                            leftCloneBtnText.gameObject.SetActive(true);
+                        }
+                        leftCloneBtnIconImage = null;
+                    }
+                }
                 leftSideButtons.Add(leftCloneBtn.GetComponent<RectTransform>());
+                AddTooltip(leftCloneBtn, "gallery.tooltip.clone_pane", "Clone this gallery pane.");
 
                 // Category (Red)
-                GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.category", "Category"), btnFontSize, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
-                leftCategoryBtnImage = leftCatBtn.GetComponent<Image>();
-                leftCategoryBtnImage.color = ColorCategory;
-                leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftCatBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(leftCatBtn, () => ToggleRight(ContentType.Category));
-                
+                {
+                    float cW = galleryCategorySprite != null ? sideIconBtn : btnWidth;
+                    float cH = galleryCategorySprite != null ? sideIconBtn : btnHeight;
+                    GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, cW, cH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
+                    leftCategoryBtnImage = leftCatBtn.GetComponent<Image>();
+                    leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>(true);
+                    if (galleryCategorySprite != null)
+                    {
+                        UI.AddIconToButton(leftCatBtn, galleryCategorySprite, sideIconPad, ColorCategory);
+                        leftCategoryBtnIconImage = leftCatBtn.transform.Find("Icon") != null
+                            ? leftCatBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        leftCategoryBtnImage.color = ColorCategory;
+                        if (leftCategoryBtnText != null)
+                        {
+                            leftCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
+                            leftCategoryBtnText.fontSize = btnFontSize;
+                            leftCategoryBtnText.gameObject.SetActive(true);
+                        }
+                        leftCategoryBtnIconImage = null;
+                    }
+                    leftSideButtons.Add(leftCatBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftCatBtn, () => ToggleRight(ContentType.Category));
+                    AddTooltip(leftCatBtn, "gallery.tooltip.category_list", "Open category list.");
+                }
+
                 // Creator (Green)
-                GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.creator", "Creator"), btnFontSize, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
-                leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
-                leftCreatorBtnImage.color = ColorCreator;
-                leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftCreatorBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
+                {
+                    float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
+                    float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
+                    GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, crW, crH, " ", 8, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
+                    leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
+                    leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>(true);
+                    if (galleryCreatorSprite != null)
+                    {
+                        UI.AddIconToButton(leftCreatorBtn, galleryCreatorSprite, sideIconPad, ColorCreator);
+                        leftCreatorBtnIconImage = leftCreatorBtn.transform.Find("Icon") != null
+                            ? leftCreatorBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        leftCreatorBtnImage.color = ColorCreator;
+                        if (leftCreatorBtnText != null)
+                        {
+                            leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
+                            leftCreatorBtnText.fontSize = btnFontSize;
+                            leftCreatorBtnText.gameObject.SetActive(true);
+                        }
+                        leftCreatorBtnIconImage = null;
+                    }
+                    leftSideButtons.Add(leftCreatorBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
+                    AddTooltip(leftCreatorBtn, "gallery.tooltip.creator_list", "Open creator list.");
+                }
 
                 // Target (Dropdown-like)
-                GameObject leftTargetBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.target_none", "Target: None"), 14, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
-                leftTargetBtnImage = leftTargetBtn.GetComponent<Image>();
-                leftTargetBtnImage.color = new Color(0.15f, 0.15f, 0.15f, 1f);
-                leftTargetBtnText = leftTargetBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftTargetBtn.GetComponent<RectTransform>());
-                AddRightClickDelegate(leftTargetBtn, () => CycleTarget(false));
+                {
+                    float tW = galleryTargetSprite != null ? sideIconBtn : btnWidth;
+                    float tH = galleryTargetSprite != null ? sideIconBtn : btnHeight;
+                    GameObject leftTargetBtn = UI.CreateUIButton(leftSideContainer, tW, tH, " ", 8, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => CycleTarget(true));
+                    Color targetCol = new Color(0.15f, 0.15f, 0.15f, 1f);
+                    leftTargetBtnImage = leftTargetBtn.GetComponent<Image>();
+                    leftTargetBtnText = leftTargetBtn.GetComponentInChildren<Text>(true);
+                    if (galleryTargetSprite != null)
+                    {
+                        UI.AddIconToButton(leftTargetBtn, galleryTargetSprite, sideIconPad, targetCol);
+                        leftTargetBtnIconImage = leftTargetBtn.transform.Find("Icon") != null
+                            ? leftTargetBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        leftTargetBtnImage.color = targetCol;
+                        if (leftTargetBtnText != null)
+                        {
+                            leftTargetBtnText.text = VPBTranslation.T("gallery.side.target_none", "Target: None");
+                            leftTargetBtnText.fontSize = 14;
+                            leftTargetBtnText.gameObject.SetActive(true);
+                        }
+                        leftTargetBtnIconImage = null;
+                    }
+                    leftSideButtons.Add(leftTargetBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftTargetBtn, () => CycleTarget(false));
+                    WireSideTargetTooltipHover(leftTargetBtn);
+                }
 
                 // Apply Mode (Left)
-                GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.apply.two_click", "2-Click"), btnFontSize, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
-                leftApplyModeBtnImage = leftApplyModeBtn.GetComponent<Image>();
-                leftApplyModeBtnText = leftApplyModeBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftApplyModeBtn.GetComponent<RectTransform>());
+                {
+                    float apW = applyIconMode ? sideIconBtn : btnWidth;
+                    float apH = applyIconMode ? sideIconBtn : btnHeight;
+                    GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, apW, apH, " ", 8, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                    leftApplyModeBtnImage = leftApplyModeBtn.GetComponent<Image>();
+                    leftApplyModeBtnText = leftApplyModeBtn.GetComponentInChildren<Text>(true);
+                    if (applyIconMode)
+                    {
+                        Sprite apInitSpr = ItemApplyMode == ApplyMode.SingleClick
+                            ? (galleryApplyOneClickSprite ?? galleryApplyTwoClickSprite)
+                            : (galleryApplyTwoClickSprite ?? galleryApplyOneClickSprite);
+                        Color apInit = ItemApplyMode == ApplyMode.SingleClick
+                            ? new Color(0.6f, 0.45f, 0.15f, 1f)
+                            : new Color(0.15f, 0.15f, 0.45f, 1f);
+                        UI.AddIconToButton(leftApplyModeBtn, apInitSpr, sideIconPad, apInit);
+                        leftApplyModeBtnIconImage = leftApplyModeBtn.transform.Find("Icon") != null
+                            ? leftApplyModeBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        if (leftApplyModeBtnText != null)
+                        {
+                            leftApplyModeBtnText.text = ItemApplyMode == ApplyMode.SingleClick
+                                ? VPBTranslation.T("gallery.apply.one_click", "1-Click")
+                                : VPBTranslation.T("gallery.apply.two_click", "2-Click");
+                            leftApplyModeBtnText.fontSize = btnFontSize;
+                            leftApplyModeBtnText.gameObject.SetActive(true);
+                        }
+                        leftApplyModeBtnIconImage = null;
+                    }
+                    leftSideButtons.Add(leftApplyModeBtn.GetComponent<RectTransform>());
+                    AddTooltip(leftApplyModeBtn, "gallery.tooltip.apply_mode", "Toggle 1-click vs 2-click apply.");
+                }
 
                 // Appearance outfit: keep current vs load from preset (Left)
                 leftKeepClothingBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
@@ -1520,25 +2111,78 @@ namespace VPB
                 leftKeepClothingBtnGO.SetActive(false);
 
                 // Replace Toggle (Left)
-                GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.add", "Add"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
-                leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
-                leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
+                {
+                    bool replaceIcons = galleryAddSprite != null || galleryReplaceSprite != null;
+                    float rpW = replaceIcons ? sideIconBtn : btnWidth;
+                    float rpH = replaceIcons ? sideIconBtn : btnHeight;
+                    GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                    leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
+                    leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>(true);
+                    if (replaceIcons)
+                    {
+                        Sprite rpInit = DragDropReplaceMode
+                            ? (galleryReplaceSprite ?? galleryAddSprite)
+                            : (galleryAddSprite ?? galleryReplaceSprite);
+                        Color rpCol = DragDropReplaceMode ? new Color(0.6f, 0.15f, 0.15f, 1f) : new Color(0.15f, 0.45f, 0.15f, 1f);
+                        UI.AddIconToButton(leftReplaceBtn, rpInit, sideIconPad, rpCol);
+                        leftReplaceBtnIconImage = leftReplaceBtn.transform.Find("Icon") != null
+                            ? leftReplaceBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        if (leftReplaceBtnText != null)
+                        {
+                            leftReplaceBtnText.text = DragDropReplaceMode
+                                ? VPBTranslation.T("gallery.side.replace", "Replace")
+                                : VPBTranslation.T("gallery.side.add", "Add");
+                            leftReplaceBtnText.fontSize = btnFontSize;
+                            leftReplaceBtnText.gameObject.SetActive(true);
+                        }
+                        leftReplaceBtnImage.color = DragDropReplaceMode
+                            ? new Color(0.6f, 0.15f, 0.15f, 1f)
+                            : new Color(0.15f, 0.45f, 0.15f, 1f);
+                        leftReplaceBtnIconImage = null;
+                    }
+                    leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
+                    AddTooltip(leftReplaceBtn, "gallery.tooltip.replace_mode", "Toggle Add vs Replace when dropping on a person (same button).");
+                }
 
-                leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.save", "Save"), btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
-                    try
+                {
+                    float saveW = gallerySaveSprite != null ? sideIconBtn : btnWidth;
+                    float saveH = gallerySaveSprite != null ? sideIconBtn : btnHeight;
+                    leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
+                        try
+                        {
+                            ToggleSaveSubmenuFromSideButtons();
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("[VPB] Save (Left) exception: " + ex);
+                        }
+                    });
+                    Color saveCol = new Color(0.2f, 0.4f, 0.2f, 1f);
+                    if (gallerySaveSprite != null)
                     {
-                        ToggleSaveSubmenuFromSideButtons();
+                        UI.AddIconToButton(leftSaveBtnGO, gallerySaveSprite, sideIconPad, saveCol);
+                        leftSaveBtnIconImage = leftSaveBtnGO.transform.Find("Icon") != null
+                            ? leftSaveBtnGO.transform.Find("Icon").GetComponent<Image>() : null;
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        LogUtil.LogError("[VPB] Save (Left) exception: " + ex);
+                        leftSaveBtnGO.GetComponent<Image>().color = saveCol;
+                        var st = leftSaveBtnGO.GetComponentInChildren<Text>(true);
+                        if (st != null)
+                        {
+                            st.text = VPBTranslation.T("gallery.side.save", "Save");
+                            st.fontSize = btnFontSize;
+                            st.gameObject.SetActive(true);
+                        }
+                        leftSaveBtnIconImage = null;
                     }
-                });
-                leftSaveBtnGO.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.2f, 1f);
-                leftSaveBtnGO.GetComponentInChildren<Text>().color = Color.white;
-                leftSideButtons.Add(leftSaveBtnGO.GetComponent<RectTransform>());
-                leftSaveBtnGO.SetActive(false);
+                    leftSideButtons.Add(leftSaveBtnGO.GetComponent<RectTransform>());
+                    leftSaveBtnGO.SetActive(false);
+                    AddTooltip(leftSaveBtnGO, "gallery.tooltip.save_pane", "Save presets and related actions.");
+                }
 
                 try
                 {
@@ -1656,21 +2300,45 @@ namespace VPB
                 }
 
                 // Scene Context (Left)
-                leftRemoveAtomBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_atom", "Remove\nAtom"), 18, 0, 0, AnchorPresets.centre, () => {
-                    try
+                {
+                    float rmW = removeCtxW;
+                    float rmH = removeCtxH;
+                    Color rmCol = new Color(0.6f, 0.2f, 0.2f, 1f);
+                    leftRemoveAtomBtn = UI.CreateUIButton(leftSideContainer, rmW, rmH, " ", 8, 0, 0, AnchorPresets.centre, () => {
+                        try
+                        {
+                            if (SuperController.singleton == null) return;
+                            ToggleAtomSubmenuFromSideButtons();
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("[VPB] Remove (scene) (Left) exception: " + ex);
+                        }
+                    });
+                    if (galleryRemoveSprite != null)
                     {
-                        if (SuperController.singleton == null) return;
-                        ToggleAtomSubmenuFromSideButtons();
+                        UI.AddIconToButton(leftRemoveAtomBtn, galleryRemoveSprite, sideIconPad, rmCol);
+                        leftRemoveAtomBtnIconImage = leftRemoveAtomBtn.transform.Find("Icon") != null
+                            ? leftRemoveAtomBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                        var tx = leftRemoveAtomBtn.GetComponentInChildren<Text>(true);
+                        if (tx != null) tx.gameObject.SetActive(false);
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        LogUtil.LogError("[VPB] Remove Atom (Left) exception: " + ex);
+                        leftRemoveAtomBtn.GetComponent<Image>().color = rmCol;
+                        var tx = leftRemoveAtomBtn.GetComponentInChildren<Text>(true);
+                        if (tx != null)
+                        {
+                            tx.text = VPBTranslation.T("gallery.side.remove", "Remove");
+                            tx.fontSize = 18;
+                            tx.gameObject.SetActive(true);
+                        }
+                        leftRemoveAtomBtnIconImage = null;
                     }
-                });
-                leftRemoveAtomBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
-                leftRemoveAtomBtn.GetComponentInChildren<Text>().color = Color.white;
-                leftSideButtons.Add(leftRemoveAtomBtn.GetComponent<RectTransform>());
-                leftRemoveAtomBtn.SetActive(false);
+                    leftSideButtons.Add(leftRemoveAtomBtn.GetComponent<RectTransform>());
+                    leftRemoveAtomBtn.SetActive(false);
+                    AddTooltip(leftRemoveAtomBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
+                }
 
                 try
                 {
@@ -1705,7 +2373,7 @@ namespace VPB
                 catch { }
 
                 // Context Actions (Left)
-                leftRemoveAllClothingBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
+                leftRemoveAllClothingBtn = UI.CreateUIButton(leftSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Left)");
                     try
                     {
@@ -1731,9 +2399,28 @@ namespace VPB
                     }
                 });
                 leftRemoveAllClothingBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
-                leftRemoveAllClothingBtn.GetComponentInChildren<Text>().color = Color.white;
+                {
+                    var tx0 = leftRemoveAllClothingBtn.GetComponentInChildren<Text>(true);
+                    if (galleryRemoveSprite != null)
+                    {
+                        UI.AddIconToButton(leftRemoveAllClothingBtn, galleryRemoveSprite, sideIconPad, new Color(0.6f, 0.2f, 0.2f, 1f));
+                        leftRemoveAllClothingBtnIconImage = leftRemoveAllClothingBtn.transform.Find("Icon") != null
+                            ? leftRemoveAllClothingBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                        if (tx0 != null) tx0.gameObject.SetActive(false);
+                    }
+                    else
+                    {
+                        leftRemoveAllClothingBtnIconImage = null;
+                        if (tx0 != null)
+                        {
+                            tx0.color = Color.white;
+                            tx0.gameObject.SetActive(true);
+                        }
+                    }
+                }
                 leftSideButtons.Add(leftRemoveAllClothingBtn.GetComponent<RectTransform>());
                 leftRemoveAllClothingBtn.SetActive(false);
+                AddTooltip(leftRemoveAllClothingBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
 
                 try { UpdateUndoRedoButtonLabels(); } catch { }
 
@@ -1771,7 +2458,7 @@ namespace VPB
                 }
                 catch { }
 
-                leftRemoveClothingExpandBtn = UI.CreateUIButton(leftRemoveAllClothingBtn, btnHeight, btnHeight, "<", 18, -104, 0, AnchorPresets.middleCenter, () => {
+                leftRemoveClothingExpandBtn = UI.CreateUIButton(leftRemoveAllClothingBtn, btnHeight, btnHeight, "<", 18, -removeExpandX, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
                         Atom target = GetBestTargetAtom();
@@ -1984,7 +2671,7 @@ namespace VPB
                     catch { }
                 }
 
-                leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.side.remove_hair", "Remove\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
+                leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_hair", "Remove\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Left)");
                     try
                     {
@@ -2006,9 +2693,28 @@ namespace VPB
                     }
                 });
                 leftRemoveAllHairBtn.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f);
-                leftRemoveAllHairBtn.GetComponentInChildren<Text>().color = Color.white;
+                {
+                    var tx1 = leftRemoveAllHairBtn.GetComponentInChildren<Text>(true);
+                    if (galleryRemoveSprite != null)
+                    {
+                        UI.AddIconToButton(leftRemoveAllHairBtn, galleryRemoveSprite, sideIconPad, new Color(0.6f, 0.2f, 0.2f, 1f));
+                        leftRemoveAllHairBtnIconImage = leftRemoveAllHairBtn.transform.Find("Icon") != null
+                            ? leftRemoveAllHairBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                        if (tx1 != null) tx1.gameObject.SetActive(false);
+                    }
+                    else
+                    {
+                        leftRemoveAllHairBtnIconImage = null;
+                        if (tx1 != null)
+                        {
+                            tx1.color = Color.white;
+                            tx1.gameObject.SetActive(true);
+                        }
+                    }
+                }
                 leftSideButtons.Add(leftRemoveAllHairBtn.GetComponent<RectTransform>());
                 leftRemoveAllHairBtn.SetActive(false);
+                AddTooltip(leftRemoveAllHairBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
 
                 try
                 {
@@ -2044,7 +2750,7 @@ namespace VPB
                 }
                 catch { }
 
-                leftRemoveHairExpandBtn = UI.CreateUIButton(leftRemoveAllHairBtn, btnHeight, btnHeight, "<", 18, -104, 0, AnchorPresets.middleCenter, () => {
+                leftRemoveHairExpandBtn = UI.CreateUIButton(leftRemoveAllHairBtn, btnHeight, btnHeight, "<", 18, -removeExpandX, 0, AnchorPresets.middleCenter, () => {
                     try
                     {
                         Atom target = GetBestTargetAtom();
@@ -2172,6 +2878,10 @@ namespace VPB
                 }
 
 UpdateDesktopModeButton();
+                UpdateFollowButtonState();
+                try { UpdateTargetDropdownUI(); } catch { }
+                try { UpdateReplaceButtonState(); } catch { }
+                try { UpdateApplyModeButtonState(); } catch { }
             }
 
             // Main Content Area

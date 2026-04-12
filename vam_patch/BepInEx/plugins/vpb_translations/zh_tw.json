@@ -38,6 +38,8 @@
   "gallery.side.target_val_none": "無",
   "gallery.side.save": "儲存",
   "gallery.side.remove_atom": "移除\n原子",
+  "gallery.side.remove": "移除",
+  "gallery.tooltip.remove_context": "依目前類別（服裝、頭髮或場景）移除或開啟移除子選單。",
   "gallery.side.undo": "復原",
   "gallery.side.redo": "重做",
   "gallery.side.remove_clothing": "移除\n服裝",

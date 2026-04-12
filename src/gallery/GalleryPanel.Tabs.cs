@@ -167,8 +167,6 @@ namespace VPB
 
             if (leftActiveContent.HasValue) 
             {
-                UpdateSortButtonText(leftSortBtnText, GetSortState(leftActiveContent.Value.ToString()));
-                
                 // Split View Logic
                 bool splitView = false;
                 if (leftActiveContent == ContentType.Category)
@@ -192,18 +190,31 @@ namespace VPB
                 {
                     // Split Layout
                     leftSubTabScrollGO.SetActive(true);
-                    
-                    if (leftSubSortBtn != null) 
+
+                    ContentType subType = ContentType.Tags;
+                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    else if (leftActiveContent == ContentType.Category)
                     {
-                        leftSubSortBtn.SetActive(true);
-                        UpdateSortButtonText(leftSubSortBtnText, GetSortState("Tags"));
+                        string titleSub = titleText != null ? titleText.text : "";
+                        if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
+                            subType = ContentType.SceneSource;
+                        else if (titleSub.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                            subType = ContentType.AppearanceSource;
                     }
-                    if (leftSubSearchInput != null) 
+
+                    bool sceneSourceLeft = leftActiveContent == ContentType.Category && subType == ContentType.SceneSource;
+                    leftSubSceneSortBarActive = sceneSourceLeft;
+                    if (leftSubSortBtn != null)
+                        leftSubSortBtn.SetActive(!sceneSourceLeft);
+                    if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(sceneSourceLeft);
+                    if (leftSubSearchInput != null)
                     {
                         leftSubSearchInput.gameObject.SetActive(true);
                         if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
                     }
-                    
+                    ApplyLeftSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
+                    if (sceneSourceLeft) SyncSceneSourceSortButtonHighlights();
+
                     RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
                     leftRT.anchorMin = new Vector2(0, 0.5f);
                     leftRT.anchorMax = new Vector2(0, 1);
@@ -219,23 +230,8 @@ namespace VPB
                     // Populate Top (Category / Hub Category / Status)
                     if (rebuildSideTabLists)
                         UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
-                    
+
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
-                    ContentType subType = ContentType.Tags;
-                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (leftActiveContent == ContentType.Category)
-                    {
-                        string title = titleText != null ? titleText.text : "";
-                        if (title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            subType = ContentType.SceneSource;
-                        }
-                        else if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            subType = ContentType.AppearanceSource;
-                        }
-                    }
-                    
                     if (rebuildSideTabLists)
                         UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
                 }
@@ -243,7 +239,9 @@ namespace VPB
                 {
                     // Full Layout
                     if (leftSubTabScrollGO != null) leftSubTabScrollGO.SetActive(false);
+                    leftSubSceneSortBarActive = false;
                     if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
+                    if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(false);
                     if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
                     if (leftSubClearBtn != null) leftSubClearBtn.SetActive(false);
 
@@ -257,10 +255,13 @@ namespace VPB
                         UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                 }
             }
+            else
+            {
+                leftSubSceneSortBarActive = false;
+                if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(false);
+            }
             if (rightActiveContent.HasValue) 
             {
-                UpdateSortButtonText(rightSortBtnText, GetSortState(rightActiveContent.Value.ToString()));
-                
                 // Right Split View Logic
                 bool splitView = false;
                 if (rightActiveContent == ContentType.Category)
@@ -284,30 +285,39 @@ namespace VPB
                 {
                     // Split Layout
                     rightSubTabScrollGO.SetActive(true);
-                    
-                    if (rightSubSortBtn != null) 
+
+                    ContentType subType = ContentType.Tags;
+                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    else if (rightActiveContent == ContentType.Category)
                     {
-                        rightSubSortBtn.SetActive(true);
-                        UpdateSortButtonText(rightSubSortBtnText, GetSortState("Tags"));
+                        string titleSub = titleText != null ? titleText.text : "";
+                        if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
+                            subType = ContentType.SceneSource;
+                        else if (titleSub.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                            subType = ContentType.AppearanceSource;
                     }
-                    if (rightSubSearchInput != null) 
+
+                    bool sceneSourceRight = rightActiveContent == ContentType.Category && subType == ContentType.SceneSource;
+                    rightSubSceneSortBarActive = sceneSourceRight;
+                    if (rightSubSortBtn != null)
+                    {
+                        rightSubSortBtn.SetActive(!sceneSourceRight);
+                        RectTransform srt = rightSubSortBtn.GetComponent<RectTransform>();
+                        srt.anchorMin = new Vector2(1, 0.5f);
+                        srt.anchorMax = new Vector2(1, 0.5f);
+                    }
+                    if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(sceneSourceRight);
+                    if (rightSubSearchInput != null)
                     {
                         rightSubSearchInput.gameObject.SetActive(true);
                         if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
-                        
-                        // Reset anchor to 0.5f for non-Hub split
                         RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
                         rt.anchorMin = new Vector2(1, 0.5f);
                         rt.anchorMax = new Vector2(1, 0.5f);
                     }
+                    ApplyRightSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
+                    if (sceneSourceRight) SyncSceneSourceSortButtonHighlights();
 
-                    if (rightSubSortBtn != null)
-                    {
-                        RectTransform rt = rightSubSortBtn.GetComponent<RectTransform>();
-                        rt.anchorMin = new Vector2(1, 0.5f);
-                        rt.anchorMax = new Vector2(1, 0.5f);
-                    }
-                    
                     RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
                     rightRT.anchorMin = new Vector2(1, 0.5f);
                     rightRT.anchorMax = new Vector2(1, 1);
@@ -323,23 +333,8 @@ namespace VPB
                     // Populate Top (Category / Hub Category / Status)
                     if (rebuildSideTabLists)
                         UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
-                    
-                    // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
-                    ContentType subType = ContentType.Tags;
-                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (rightActiveContent == ContentType.Category)
-                    {
-                        string title = titleText != null ? titleText.text : "";
-                        if (title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            subType = ContentType.SceneSource;
-                        }
-                        else if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            subType = ContentType.AppearanceSource;
-                        }
-                    }
 
+                    // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     if (rebuildSideTabLists)
                         UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
@@ -347,7 +342,9 @@ namespace VPB
                 {
                     // Full Layout
                     if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
+                    rightSubSceneSortBarActive = false;
                     if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
+                    if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
                     if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
                     if (rightSubClearBtn != null) rightSubClearBtn.SetActive(false);
 
@@ -361,7 +358,13 @@ namespace VPB
                         UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                 }
             }
+            else
+            {
+                rightSubSceneSortBarActive = false;
+                if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
+            }
 
+            SyncSidePaneTopSortButtonVisuals();
             UpdateSideButtonsVisibility();
         }
 
@@ -454,6 +457,27 @@ namespace VPB
                     UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
                     UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
+            }
+
+            SyncSidePaneTopSortButtonVisuals();
+        }
+
+        /// <summary>All/Addon/Custom row order from persisted <c>SceneSource</c> sort (same 4 modes as icon cycle).</summary>
+        private List<string> GetOrderedSceneSourceFilterLabels()
+        {
+            SortState st = GetSortState("SceneSource");
+            int mode = TryGetSidePaneFourModeIndex(st);
+            if (mode < 0) mode = 0;
+            switch (mode)
+            {
+                case 1:
+                    return new List<string> { "Custom Scenes", "Addon Scenes", "All Scenes" };
+                case 2:
+                    return new List<string> { "Addon Scenes", "All Scenes", "Custom Scenes" };
+                case 3:
+                    return new List<string> { "Custom Scenes", "All Scenes", "Addon Scenes" };
+                default:
+                    return new List<string> { "All Scenes", "Addon Scenes", "Custom Scenes" };
             }
         }
 
@@ -661,7 +685,7 @@ namespace VPB
             }
             else if (contentType == ContentType.SceneSource)
             {
-                var sceneFilters = new List<string> { "All Scenes", "Addon Scenes", "Custom Scenes" };
+                var sceneFilters = GetOrderedSceneSourceFilterLabels();
                 Color sceneColor = new Color(0.2f, 0.4f, 0.7f, 1f); // Blue-ish
 
                 foreach (var filter in sceneFilters)

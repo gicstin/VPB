@@ -251,7 +251,6 @@ namespace VPB
                 saveSubmenuLastOptionsHoverTime = Time.unscaledTime;
                 PopulateSaveSubmenuButtons();
                 SetSaveSubmenuButtonsVisible(true);
-                PositionSaveSubmenuButtons();
             }
             else
             {
@@ -259,87 +258,6 @@ namespace VPB
             }
 
             UpdateSideButtonPositions();
-        }
-
-        private void PositionSaveSubmenuButtons()
-        {
-            try
-            {
-                float scale = VPBConfig.Instance != null ? VPBConfig.Instance.SideButtonScale : 1f;
-                float spacing = 60f * scale;
-                float btnWidth = 200f * scale; // Width of a single button
-
-                // Position right side submenu buttons
-                if (rightSaveBtnGO != null && rightSaveBtnGO.activeInHierarchy)
-                {
-                    RectTransform saveBtnRT = rightSaveBtnGO.GetComponent<RectTransform>();
-                    float startX = saveBtnRT.anchoredPosition.x + 110f * scale; // To the right of Save button
-                    float startY = saveBtnRT.anchoredPosition.y;
-
-                    int maxActiveIndex = -1;
-                    for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
-                    {
-                        GameObject btn = rightSaveSubmenuButtons[i];
-                        if (btn == null || !btn.activeSelf) continue;
-                        RectTransform rt = btn.GetComponent<RectTransform>();
-                        if (rt != null)
-                        {
-                            // Use fixed index i to prevent "jumping" when the list expands/contracts
-                            rt.anchoredPosition = new Vector2(startX, startY + (i + 1) * spacing);
-                            maxActiveIndex = i;
-                        }
-                    }
-
-                    // Position the submenu panel
-                    if (rightSaveSubmenuPanelGO != null)
-                    {
-                        RectTransform panelRT = rightSaveSubmenuPanelGO.GetComponent<RectTransform>();
-                        if (panelRT != null)
-                        {
-                            // Anchor to bottom so it grows UP without moving the bottom edge
-                            panelRT.pivot = new Vector2(0.5f, 0f);
-                            panelRT.anchoredPosition = new Vector2(startX, startY + spacing / 2f);
-                            panelRT.sizeDelta = new Vector2(btnWidth, (maxActiveIndex + 1) * spacing);
-                        }
-                    }
-                }
-
-                // Position left side submenu buttons
-                if (leftSaveBtnGO != null && leftSaveBtnGO.activeInHierarchy)
-                {
-                    RectTransform saveBtnRT = leftSaveBtnGO.GetComponent<RectTransform>();
-                    float startX = saveBtnRT.anchoredPosition.x - 110f * scale; // To the left of Save button
-                    float startY = saveBtnRT.anchoredPosition.y;
-
-                    int maxActiveIndex = -1;
-                    for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
-                    {
-                        GameObject btn = leftSaveSubmenuButtons[i];
-                        if (btn == null || !btn.activeSelf) continue;
-                        RectTransform rt = btn.GetComponent<RectTransform>();
-                        if (rt != null)
-                        {
-                            // Use fixed index i to prevent "jumping" when the list expands/contracts
-                            rt.anchoredPosition = new Vector2(startX, startY + (i + 1) * spacing);
-                            maxActiveIndex = i;
-                        }
-                    }
-
-                    // Position the submenu panel
-                    if (leftSaveSubmenuPanelGO != null)
-                    {
-                        RectTransform panelRT = leftSaveSubmenuPanelGO.GetComponent<RectTransform>();
-                        if (panelRT != null)
-                        {
-                            // Anchor to bottom so it grows UP without moving the bottom edge
-                            panelRT.pivot = new Vector2(0.5f, 0f);
-                            panelRT.anchoredPosition = new Vector2(startX, startY + spacing / 2f);
-                            panelRT.sizeDelta = new Vector2(btnWidth, (maxActiveIndex + 1) * spacing);
-                        }
-                    }
-                }
-            }
-            catch { }
         }
 
         private void CloseSaveSubmenuUI()
@@ -1404,6 +1322,36 @@ namespace VPB
             };
         }
 
+        /// <summary>Shows <see cref="sideTargetTooltipLive"/> on hover when target uses an icon.</summary>
+        private void WireSideTargetTooltipHover(GameObject targetBtnGO)
+        {
+            if (targetBtnGO == null) return;
+            var del = targetBtnGO.GetComponent<UIHoverDelegate>();
+            if (del == null) del = targetBtnGO.AddComponent<UIHoverDelegate>();
+            del.OnHoverChange += OnSideTargetTooltipHover;
+        }
+
+        private void OnSideTargetTooltipHover(bool enter)
+        {
+            if (enter)
+            {
+                string s = sideTargetTooltipLive;
+                if (string.IsNullOrEmpty(s)) return;
+                if (temporaryStatusCoroutine != null)
+                {
+                    StopCoroutine(temporaryStatusCoroutine);
+                    temporaryStatusCoroutine = null;
+                }
+                temporaryStatusMsg = s;
+            }
+            else
+            {
+                string s = sideTargetTooltipLive;
+                if (!string.IsNullOrEmpty(s) && temporaryStatusMsg == s)
+                    temporaryStatusMsg = null;
+            }
+        }
+
 
         private void UpdateDesktopModeButton()
         {
@@ -1417,19 +1365,40 @@ namespace VPB
                 ? VPBTranslation.T("gallery.desktop.floating", "Floating")
                 : VPBTranslation.T("gallery.desktop.fixed", "Fixed");
             Color color = fixedMode ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.15f, 0.15f, 0.15f, 1f);
+            Sprite deskSpr = fixedMode ? galleryFloatSprite : galleryFixedSprite;
 
-            if (rightDesktopModeBtnText != null) 
+            GameObject rightDeskGo = rightDesktopModeBtnImage != null ? rightDesktopModeBtnImage.gameObject : null;
+            if (rightDeskGo != null) rightDeskGo.SetActive(!isVR);
+
+            if (rightDesktopModeBtnIconImage != null && deskSpr != null)
             {
-                rightDesktopModeBtnText.text = text;
-                rightDesktopModeBtnText.transform.parent.gameObject.SetActive(!isVR);
+                rightDesktopModeBtnIconImage.sprite = deskSpr;
+                rightDesktopModeBtnIconImage.enabled = true;
+                if (rightDesktopModeBtnText != null) rightDesktopModeBtnText.gameObject.SetActive(false);
             }
+            else if (rightDesktopModeBtnText != null)
+            {
+                rightDesktopModeBtnText.gameObject.SetActive(true);
+                rightDesktopModeBtnText.text = text;
+            }
+
             if (rightDesktopModeBtnImage != null) rightDesktopModeBtnImage.color = color;
 
-            if (leftDesktopModeBtnText != null) 
+            GameObject leftDeskGo = leftDesktopModeBtnImage != null ? leftDesktopModeBtnImage.gameObject : null;
+            if (leftDeskGo != null) leftDeskGo.SetActive(!isVR);
+
+            if (leftDesktopModeBtnIconImage != null && deskSpr != null)
             {
-                leftDesktopModeBtnText.text = text;
-                leftDesktopModeBtnText.transform.parent.gameObject.SetActive(!isVR);
+                leftDesktopModeBtnIconImage.sprite = deskSpr;
+                leftDesktopModeBtnIconImage.enabled = true;
+                if (leftDesktopModeBtnText != null) leftDesktopModeBtnText.gameObject.SetActive(false);
             }
+            else if (leftDesktopModeBtnText != null)
+            {
+                leftDesktopModeBtnText.gameObject.SetActive(true);
+                leftDesktopModeBtnText.text = text;
+            }
+
             if (leftDesktopModeBtnImage != null) leftDesktopModeBtnImage.color = color;
 
             if (footerFollowAngleBtn != null) footerFollowAngleBtn.SetActive(!fixedMode);
@@ -1438,7 +1407,17 @@ namespace VPB
             if (footerHeightBtn != null) footerHeightBtn.SetActive(fixedMode);
             if (footerAutoHideBtn != null) footerAutoHideBtn.SetActive(fixedMode);
 
+            SyncSideFollowRailButtonsVisibility();
+
             UpdateSideButtonPositions();
+        }
+
+        /// <summary>Camera-follow is only meaningful when the panel is not fixed; hide side-rail follow controls in fixed mode.</summary>
+        private void SyncSideFollowRailButtonsVisibility()
+        {
+            bool show = !isFixedLocally;
+            if (rightFollowBtnImage != null) rightFollowBtnImage.gameObject.SetActive(show);
+            if (leftFollowBtnImage != null) leftFollowBtnImage.gameObject.SetActive(show);
         }
 
         private void PopulateClothingSubmenuButtons(Atom target)
@@ -1817,6 +1796,16 @@ namespace VPB
             UpdateSideButtonPositions();
         }
 
+        private bool RemoveContextRowUsesIcon(GameObject btn)
+        {
+            if (btn == null) return false;
+            if (btn == rightRemoveAllClothingBtn && rightRemoveAllClothingBtnIconImage != null) return true;
+            if (btn == leftRemoveAllClothingBtn && leftRemoveAllClothingBtnIconImage != null) return true;
+            if (btn == rightRemoveAllHairBtn && rightRemoveAllHairBtnIconImage != null) return true;
+            if (btn == leftRemoveAllHairBtn && leftRemoveAllHairBtnIconImage != null) return true;
+            return false;
+        }
+
         private void UpdateRemoveButtonLabels(GameObject leftBtn, GameObject rightBtn, string baseLabel, int optionCount)
         {
             try
@@ -1824,12 +1813,12 @@ namespace VPB
                 bool hasOptions = optionCount > 0;
                 string suffix = hasOptions ? (" (" + optionCount.ToString() + ")") : "";
 
-                if (leftBtn != null)
+                if (leftBtn != null && !RemoveContextRowUsesIcon(leftBtn))
                 {
                     Text t = leftBtn.GetComponentInChildren<Text>();
                     if (t != null) t.text = hasOptions ? ("< " + baseLabel + suffix) : baseLabel;
                 }
-                if (rightBtn != null)
+                if (rightBtn != null && !RemoveContextRowUsesIcon(rightBtn))
                 {
                     Text t = rightBtn.GetComponentInChildren<Text>();
                     if (t != null) t.text = hasOptions ? (baseLabel + " >" + suffix) : baseLabel;
@@ -2249,10 +2238,34 @@ namespace VPB
                 : VPBTranslation.T("gallery.side.add", "Add");
             Color color = DragDropReplaceMode ? new Color(0.6f, 0.15f, 0.15f, 1f) : new Color(0.15f, 0.45f, 0.15f, 1f);
 
-            if (rightReplaceBtnText != null) rightReplaceBtnText.text = text;
+            Sprite modeSprite = DragDropReplaceMode
+                ? (galleryReplaceSprite ?? galleryAddSprite)
+                : (galleryAddSprite ?? galleryReplaceSprite);
+
+            if (rightReplaceBtnIconImage != null && modeSprite != null)
+            {
+                if (rightReplaceBtnText != null) rightReplaceBtnText.gameObject.SetActive(false);
+                rightReplaceBtnIconImage.sprite = modeSprite;
+                rightReplaceBtnIconImage.enabled = true;
+            }
+            else if (rightReplaceBtnText != null)
+            {
+                rightReplaceBtnText.gameObject.SetActive(true);
+                rightReplaceBtnText.text = text;
+            }
             if (rightReplaceBtnImage != null) rightReplaceBtnImage.color = color;
-            
-            if (leftReplaceBtnText != null) leftReplaceBtnText.text = text;
+
+            if (leftReplaceBtnIconImage != null && modeSprite != null)
+            {
+                if (leftReplaceBtnText != null) leftReplaceBtnText.gameObject.SetActive(false);
+                leftReplaceBtnIconImage.sprite = modeSprite;
+                leftReplaceBtnIconImage.enabled = true;
+            }
+            else if (leftReplaceBtnText != null)
+            {
+                leftReplaceBtnText.gameObject.SetActive(true);
+                leftReplaceBtnText.text = text;
+            }
             if (leftReplaceBtnImage != null) leftReplaceBtnImage.color = color;
         }
 
@@ -2314,10 +2327,34 @@ namespace VPB
                 : VPBTranslation.T("gallery.apply.two_click", "2-Click");
             Color color = ItemApplyMode == ApplyMode.SingleClick ? new Color(0.6f, 0.45f, 0.15f, 1f) : new Color(0.15f, 0.15f, 0.45f, 1f);
 
-            if (rightApplyModeBtnText != null) rightApplyModeBtnText.text = text;
+            Sprite modeSprite = ItemApplyMode == ApplyMode.SingleClick
+                ? (galleryApplyOneClickSprite ?? galleryApplyTwoClickSprite)
+                : (galleryApplyTwoClickSprite ?? galleryApplyOneClickSprite);
+
+            if (rightApplyModeBtnIconImage != null && modeSprite != null)
+            {
+                if (rightApplyModeBtnText != null) rightApplyModeBtnText.gameObject.SetActive(false);
+                rightApplyModeBtnIconImage.sprite = modeSprite;
+                rightApplyModeBtnIconImage.enabled = true;
+            }
+            else if (rightApplyModeBtnText != null)
+            {
+                rightApplyModeBtnText.gameObject.SetActive(true);
+                rightApplyModeBtnText.text = text;
+            }
             if (rightApplyModeBtnImage != null) rightApplyModeBtnImage.color = color;
-            
-            if (leftApplyModeBtnText != null) leftApplyModeBtnText.text = text;
+
+            if (leftApplyModeBtnIconImage != null && modeSprite != null)
+            {
+                if (leftApplyModeBtnText != null) leftApplyModeBtnText.gameObject.SetActive(false);
+                leftApplyModeBtnIconImage.sprite = modeSprite;
+                leftApplyModeBtnIconImage.enabled = true;
+            }
+            else if (leftApplyModeBtnText != null)
+            {
+                leftApplyModeBtnText.gameObject.SetActive(true);
+                leftApplyModeBtnText.text = text;
+            }
             if (leftApplyModeBtnImage != null) leftApplyModeBtnImage.color = color;
         }
 

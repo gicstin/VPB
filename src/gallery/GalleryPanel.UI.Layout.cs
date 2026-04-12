@@ -98,6 +98,8 @@ namespace VPB
                 
                 // Ensure sub controls are hidden if main panel is closed
                 if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
+                leftSubSceneSortBarActive = false;
+                if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(false);
                 if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
             }
             
@@ -138,6 +140,8 @@ namespace VPB
                 
                 // Ensure sub controls are hidden if main panel is closed
                 if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
+                rightSubSceneSortBarActive = false;
+                if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
                 if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
             }
             
@@ -216,6 +220,48 @@ namespace VPB
         {
             if (rt == null) return false;
             return rt.anchorMax.y >= 0.92f && rt.anchorMin.y >= 0.25f;
+        }
+
+        private static float SceneSourceSortBarBreadth(float s) => 35f * s;
+
+        private void ApplyLeftSubSearchLayoutScaled(float s)
+        {
+            if (leftSubSearchInput == null) return;
+            RectTransform rt = leftSubSearchInput.GetComponent<RectTransform>();
+            const float tabAreaW = 220f;
+            float bar = SceneSourceSortBarBreadth(s);
+            bool reserveSortBar = leftSubSceneSortBarActive
+                || (leftSubSortBtn != null && leftSubSortBtn.activeSelf);
+            if (reserveSortBar)
+            {
+                rt.anchoredPosition = new Vector2(10f + bar + 5f * s, -10f);
+                rt.sizeDelta = new Vector2(tabAreaW - 10f - bar - 5f * s - 10f, 35f * s);
+            }
+            else
+            {
+                rt.anchoredPosition = new Vector2(10f, -10f);
+                rt.sizeDelta = new Vector2(tabAreaW - 20f, 35f * s);
+            }
+        }
+
+        private void ApplyRightSubSearchLayoutScaled(float s)
+        {
+            if (rightSubSearchInput == null) return;
+            RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
+            const float tabAreaW = 220f;
+            float bar = SceneSourceSortBarBreadth(s);
+            bool reserveSortBar = rightSubSceneSortBarActive
+                || (rightSubSortBtn != null && rightSubSortBtn.activeSelf);
+            if (reserveSortBar)
+            {
+                rt.anchoredPosition = new Vector2(-10f - bar - 5f * s, -10f);
+                rt.sizeDelta = new Vector2(tabAreaW - 10f - bar - 5f * s - 10f, 35f * s);
+            }
+            else
+            {
+                rt.anchoredPosition = new Vector2(-10f, -10f);
+                rt.sizeDelta = new Vector2(tabAreaW - 20f, 35f * s);
+            }
         }
 
         /// <summary>Top inset for sub-tab scroll rects (anchors end at mid-split / hub line). Do not use TabScrollTopOffset (title-bar row — far too large here).</summary>
@@ -329,11 +375,34 @@ namespace VPB
                 ? VPBTranslation.T("gallery.follow.follow", "Follow")
                 : VPBTranslation.T("gallery.follow.static", "Static");
             Color color = followUser ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.3f, 0.3f, 0.3f, 1f);
-            
-            if (rightFollowBtnText != null) rightFollowBtnText.text = text;
+            Sprite spr = followUser ? galleryFollowOnSprite : galleryFollowOffSprite;
+
+            if (rightFollowBtnIconImage != null && spr != null)
+            {
+                rightFollowBtnIconImage.sprite = spr;
+                rightFollowBtnIconImage.enabled = true;
+                if (rightFollowBtnText != null) rightFollowBtnText.gameObject.SetActive(false);
+            }
+            else if (rightFollowBtnText != null)
+            {
+                rightFollowBtnText.gameObject.SetActive(true);
+                rightFollowBtnText.text = text;
+            }
+
             if (rightFollowBtnImage != null) rightFollowBtnImage.color = color;
-            
-            if (leftFollowBtnText != null) leftFollowBtnText.text = text;
+
+            if (leftFollowBtnIconImage != null && spr != null)
+            {
+                leftFollowBtnIconImage.sprite = spr;
+                leftFollowBtnIconImage.enabled = true;
+                if (leftFollowBtnText != null) leftFollowBtnText.gameObject.SetActive(false);
+            }
+            else if (leftFollowBtnText != null)
+            {
+                leftFollowBtnText.gameObject.SetActive(true);
+                leftFollowBtnText.text = text;
+            }
+
             if (leftFollowBtnImage != null) leftFollowBtnImage.color = color;
         }
 
@@ -357,18 +426,23 @@ namespace VPB
             float containerW = 130f * scale;
             float containerOffset = 140f * scale;
 
-            foreach (var rt in rightSideButtons)
+            float squareW = 50f * scale;
+            for (int i = 0; i < rightSideButtons.Count; i++)
             {
+                RectTransform rt = rightSideButtons[i];
                 if (rt == null) continue;
-                rt.sizeDelta = new Vector2(w, h);
-                var t = rt.GetComponentInChildren<Text>();
+                bool square = UsesSquareChromeSideButton(rt, rightSideButtons);
+                rt.sizeDelta = new Vector2(square ? squareW : w, h);
+                var t = rt.GetComponentInChildren<Text>(true);
                 if (t != null) t.fontSize = fontSize;
             }
-            foreach (var rt in leftSideButtons)
+            for (int i = 0; i < leftSideButtons.Count; i++)
             {
+                RectTransform rt = leftSideButtons[i];
                 if (rt == null) continue;
-                rt.sizeDelta = new Vector2(w, h);
-                var t = rt.GetComponentInChildren<Text>();
+                bool square = UsesSquareChromeSideButton(rt, leftSideButtons);
+                rt.sizeDelta = new Vector2(square ? squareW : w, h);
+                var t = rt.GetComponentInChildren<Text>(true);
                 if (t != null) t.fontSize = fontSize;
             }
 
@@ -414,7 +488,6 @@ namespace VPB
             }
 
             UpdateSideButtonPositions();
-            PositionSaveSubmenuButtons();
         }
 
         public void UpdateSideButtonPositions()
@@ -430,8 +503,6 @@ namespace VPB
             UpdateListPositions(rightSideButtons, topY, spacing, groupGap);
             UpdateListPositions(leftSideButtons, topY, spacing, groupGap);
 
-            if (saveSubmenuOpen) PositionSaveSubmenuButtons();
-
             try
             {
                 string title = currentCategoryTitle ?? "";
@@ -441,7 +512,7 @@ namespace VPB
                 bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
                 if (isHair && hairSubmenuOpen)
                 {
-                    float xPad = 80f;
+                    float removeHorizGap = 3f * scale;
 
                     RectTransform leftBaseRT = leftRemoveAllHairBtn != null ? leftRemoveAllHairBtn.GetComponent<RectTransform>() : null;
                     RectTransform rightBaseRT = rightRemoveAllHairBtn != null ? rightRemoveAllHairBtn.GetComponent<RectTransform>() : null;
@@ -468,6 +539,7 @@ namespace VPB
                     if (leftBaseRT != null)
                     {
                         float baseY = leftBaseRT.anchoredPosition.y;
+                        RectTransform pr = leftBaseRT.parent as RectTransform;
                         for (int i = 0; i < leftRemoveHairSubmenuButtons.Count; i++)
                         {
                             GameObject go = leftRemoveHairSubmenuButtons[i];
@@ -475,7 +547,10 @@ namespace VPB
                             RectTransform rt = go.GetComponent<RectTransform>();
                             if (rt == null) continue;
                             float w = rt.sizeDelta.x;
-                            rt.anchoredPosition = new Vector2(-(w * 0.5f) - xPad, baseY + yStart + spacing * i);
+                            float cx;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(leftBaseRT, pr, anchorOnRightSidePanel: false, removeHorizGap, w * 0.5f, out cx))
+                                cx = -(w * 0.5f) - 80f * scale;
+                            rt.anchoredPosition = new Vector2(cx, baseY + yStart + spacing * i);
                         }
 
                         try
@@ -499,7 +574,10 @@ namespace VPB
 
                                     panelH = Mathf.Max(panelH, visibleCount * spacing);
                                     prt.sizeDelta = new Vector2(panelW, panelH);
-                                    prt.anchoredPosition = new Vector2(-(panelW * 0.5f) - xPad, baseY);
+                                    float pcx;
+                                    if (!TryComputeOuterSubmenuAnchoredCenterX(leftBaseRT, pr, anchorOnRightSidePanel: false, removeHorizGap, panelW * 0.5f, out pcx))
+                                        pcx = -(panelW * 0.5f) - 80f * scale;
+                                    prt.anchoredPosition = new Vector2(pcx, baseY);
                                     leftRemoveHairSubmenuGapPanelGO.transform.SetAsFirstSibling();
                                 }
                             }
@@ -510,6 +588,7 @@ namespace VPB
                     if (rightBaseRT != null)
                     {
                         float baseY = rightBaseRT.anchoredPosition.y;
+                        RectTransform pr = rightBaseRT.parent as RectTransform;
                         for (int i = 0; i < rightRemoveHairSubmenuButtons.Count; i++)
                         {
                             GameObject go = rightRemoveHairSubmenuButtons[i];
@@ -517,7 +596,10 @@ namespace VPB
                             RectTransform rt = go.GetComponent<RectTransform>();
                             if (rt == null) continue;
                             float w = rt.sizeDelta.x;
-                            rt.anchoredPosition = new Vector2((w * 0.5f) + xPad, baseY + yStart + spacing * i);
+                            float cx;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(rightBaseRT, pr, anchorOnRightSidePanel: true, removeHorizGap, w * 0.5f, out cx))
+                                cx = (w * 0.5f) + 80f * scale;
+                            rt.anchoredPosition = new Vector2(cx, baseY + yStart + spacing * i);
                         }
 
                         try
@@ -541,7 +623,10 @@ namespace VPB
 
                                     panelH = Mathf.Max(panelH, visibleCount * spacing);
                                     prt.sizeDelta = new Vector2(panelW, panelH);
-                                    prt.anchoredPosition = new Vector2((panelW * 0.5f) + xPad, baseY);
+                                    float pcx;
+                                    if (!TryComputeOuterSubmenuAnchoredCenterX(rightBaseRT, pr, anchorOnRightSidePanel: true, removeHorizGap, panelW * 0.5f, out pcx))
+                                        pcx = (panelW * 0.5f) + 80f * scale;
+                                    prt.anchoredPosition = new Vector2(pcx, baseY);
                                     rightRemoveHairSubmenuGapPanelGO.transform.SetAsFirstSibling();
                                 }
                             }
@@ -552,7 +637,7 @@ namespace VPB
 
                 if (isClothing && clothingSubmenuOpen)
                 {
-                    float xPad = 80f;
+                    float removeHorizGap = 3f * scale;
                     float colGap = 10f;
 
                     RectTransform leftBaseRT = leftRemoveAllClothingBtn != null ? leftRemoveAllClothingBtn.GetComponent<RectTransform>() : null;
@@ -580,6 +665,7 @@ namespace VPB
                     if (leftBaseRT != null)
                     {
                         float baseY = leftBaseRT.anchoredPosition.y;
+                        RectTransform pr = leftBaseRT.parent as RectTransform;
                         for (int i = 0; i < leftRemoveClothingSubmenuButtons.Count; i++)
                         {
                             GameObject go = leftRemoveClothingSubmenuButtons[i];
@@ -587,7 +673,10 @@ namespace VPB
                             RectTransform rt = go.GetComponent<RectTransform>();
                             if (rt == null) continue;
                             float w = rt.sizeDelta.x;
-                            rt.anchoredPosition = new Vector2(-(w * 0.5f) - xPad, baseY + yStart + spacing * i);
+                            float cx;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(leftBaseRT, pr, anchorOnRightSidePanel: false, removeHorizGap, w * 0.5f, out cx))
+                                cx = -(w * 0.5f) - 80f * scale;
+                            rt.anchoredPosition = new Vector2(cx, baseY + yStart + spacing * i);
                         }
 
                         for (int i = 0; i < leftRemoveClothingVisibilityToggleButtons.Count; i++)
@@ -610,7 +699,9 @@ namespace VPB
                             if (itemW <= 0f) itemW = 200f;
 
                             float w = rt.sizeDelta.x;
-                            float itemCenterX = -(itemW * 0.5f) - xPad;
+                            float itemCenterX;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(leftBaseRT, pr, anchorOnRightSidePanel: false, removeHorizGap, itemW * 0.5f, out itemCenterX))
+                                itemCenterX = -(itemW * 0.5f) - 80f * scale;
                             rt.anchoredPosition = new Vector2(itemCenterX - (itemW * 0.5f) - (w * 0.5f) - colGap, baseY + yStart + spacing * i);
                         }
 
@@ -645,7 +736,10 @@ namespace VPB
 
                                     panelH = Mathf.Max(panelH, visibleCount * spacing);
                                     prt.sizeDelta = new Vector2(panelW, panelH);
-                                    prt.anchoredPosition = new Vector2(-(panelW * 0.5f) - xPad, baseY);
+                                    float pcx;
+                                    if (!TryComputeOuterSubmenuAnchoredCenterX(leftBaseRT, pr, anchorOnRightSidePanel: false, removeHorizGap, panelW * 0.5f, out pcx))
+                                        pcx = -(panelW * 0.5f) - 80f * scale;
+                                    prt.anchoredPosition = new Vector2(pcx, baseY);
                                     leftRemoveClothingSubmenuPanelGO.transform.SetAsFirstSibling();
                                 }
                             }
@@ -656,6 +750,7 @@ namespace VPB
                     if (rightBaseRT != null)
                     {
                         float baseY = rightBaseRT.anchoredPosition.y;
+                        RectTransform pr = rightBaseRT.parent as RectTransform;
                         for (int i = 0; i < rightRemoveClothingSubmenuButtons.Count; i++)
                         {
                             GameObject go = rightRemoveClothingSubmenuButtons[i];
@@ -663,7 +758,10 @@ namespace VPB
                             RectTransform rt = go.GetComponent<RectTransform>();
                             if (rt == null) continue;
                             float w = rt.sizeDelta.x;
-                            rt.anchoredPosition = new Vector2((w * 0.5f) + xPad, baseY + yStart + spacing * i);
+                            float cx;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(rightBaseRT, pr, anchorOnRightSidePanel: true, removeHorizGap, w * 0.5f, out cx))
+                                cx = (w * 0.5f) + 80f * scale;
+                            rt.anchoredPosition = new Vector2(cx, baseY + yStart + spacing * i);
                         }
 
                         for (int i = 0; i < rightRemoveClothingVisibilityToggleButtons.Count; i++)
@@ -686,7 +784,9 @@ namespace VPB
                             if (itemW <= 0f) itemW = 200f;
 
                             float w = rt.sizeDelta.x;
-                            float itemCenterX = (itemW * 0.5f) + xPad;
+                            float itemCenterX;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(rightBaseRT, pr, anchorOnRightSidePanel: true, removeHorizGap, itemW * 0.5f, out itemCenterX))
+                                itemCenterX = (itemW * 0.5f) + 80f * scale;
                             rt.anchoredPosition = new Vector2(itemCenterX + (itemW * 0.5f) + (w * 0.5f) + colGap, baseY + yStart + spacing * i);
                         }
 
@@ -721,7 +821,10 @@ namespace VPB
 
                                     panelH = Mathf.Max(panelH, visibleCount * spacing);
                                     prt.sizeDelta = new Vector2(panelW, panelH);
-                                    prt.anchoredPosition = new Vector2((panelW * 0.5f) + xPad, baseY);
+                                    float pcx;
+                                    if (!TryComputeOuterSubmenuAnchoredCenterX(rightBaseRT, pr, anchorOnRightSidePanel: true, removeHorizGap, panelW * 0.5f, out pcx))
+                                        pcx = (panelW * 0.5f) + 80f * scale;
+                                    prt.anchoredPosition = new Vector2(pcx, baseY);
                                     rightRemoveClothingSubmenuPanelGO.transform.SetAsFirstSibling();
                                 }
                             }
@@ -732,7 +835,7 @@ namespace VPB
 
                 if (isScene && atomSubmenuOpen)
                 {
-                    float xPad = 80f;
+                    float removeHorizGap = 3f * scale;
 
                     RectTransform leftBaseRT = leftRemoveAtomBtn != null ? leftRemoveAtomBtn.GetComponent<RectTransform>() : null;
                     RectTransform rightBaseRT = rightRemoveAtomBtn != null ? rightRemoveAtomBtn.GetComponent<RectTransform>() : null;
@@ -756,6 +859,7 @@ namespace VPB
                     if (leftBaseRT != null)
                     {
                         float baseY = leftBaseRT.anchoredPosition.y;
+                        RectTransform pr = leftBaseRT.parent as RectTransform;
                         for (int i = 0; i < leftRemoveAtomSubmenuButtons.Count; i++)
                         {
                             GameObject go = leftRemoveAtomSubmenuButtons[i];
@@ -763,13 +867,17 @@ namespace VPB
                             RectTransform rt = go.GetComponent<RectTransform>();
                             if (rt == null) continue;
                             float w = rt.sizeDelta.x;
-                            rt.anchoredPosition = new Vector2(-(w * 0.5f) - xPad, baseY + yStart + spacing * i);
+                            float cx;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(leftBaseRT, pr, anchorOnRightSidePanel: false, removeHorizGap, w * 0.5f, out cx))
+                                cx = -(w * 0.5f) - 80f * scale;
+                            rt.anchoredPosition = new Vector2(cx, baseY + yStart + spacing * i);
                         }
                     }
 
                     if (rightBaseRT != null)
                     {
                         float baseY = rightBaseRT.anchoredPosition.y;
+                        RectTransform pr = rightBaseRT.parent as RectTransform;
                         for (int i = 0; i < rightRemoveAtomSubmenuButtons.Count; i++)
                         {
                             GameObject go = rightRemoveAtomSubmenuButtons[i];
@@ -777,14 +885,19 @@ namespace VPB
                             RectTransform rt = go.GetComponent<RectTransform>();
                             if (rt == null) continue;
                             float w = rt.sizeDelta.x;
-                            rt.anchoredPosition = new Vector2((w * 0.5f) + xPad, baseY + yStart + spacing * i);
+                            float cx;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(rightBaseRT, pr, anchorOnRightSidePanel: true, removeHorizGap, w * 0.5f, out cx))
+                                cx = (w * 0.5f) + 80f * scale;
+                            rt.anchoredPosition = new Vector2(cx, baseY + yStart + spacing * i);
                         }
                     }
                 }
 
                 if (saveSubmenuOpen)
                 {
-                    float xPad = 80f;
+                    // Tighter than main-rail spacing; row height follows actual submenu <see cref="RectTransform.sizeDelta"/>.y.
+                    const float saveSubGapY = 2f;
+                    float horizGap = 3f * scale;
 
                     RectTransform leftBaseRT = leftSaveBtnGO != null ? leftSaveBtnGO.GetComponent<RectTransform>() : null;
                     RectTransform rightBaseRT = rightSaveBtnGO != null ? rightSaveBtnGO.GetComponent<RectTransform>() : null;
@@ -803,11 +916,21 @@ namespace VPB
                             if (go != null && go.activeSelf) visibleCount++;
                         }
                     }
-                    float yStart = -(visibleCount - 1) * 0.5f * spacing;
+
+                    GameObject sampleGo = leftSaveSubmenuButtons.FirstOrDefault(g => g != null && g.activeSelf)
+                        ?? rightSaveSubmenuButtons.FirstOrDefault(g => g != null && g.activeSelf);
+                    RectTransform sampleRt = sampleGo != null ? sampleGo.GetComponent<RectTransform>() : null;
+                    float rowH = sampleRt != null && sampleRt.sizeDelta.y > 2f
+                        ? sampleRt.sizeDelta.y
+                        : (50f * scale);
+                    float saveSubRowStep = rowH + (saveSubGapY * scale);
+                    float yStart = -(visibleCount - 1) * 0.5f * saveSubRowStep;
 
                     if (leftBaseRT != null)
                     {
                         float baseY = leftBaseRT.anchoredPosition.y;
+                        RectTransform pr = leftBaseRT.parent as RectTransform;
+
                         for (int i = 0; i < leftSaveSubmenuButtons.Count; i++)
                         {
                             GameObject go = leftSaveSubmenuButtons[i];
@@ -815,7 +938,10 @@ namespace VPB
                             RectTransform rt = go.GetComponent<RectTransform>();
                             if (rt == null) continue;
                             float w = rt.sizeDelta.x;
-                            rt.anchoredPosition = new Vector2(-(w * 0.5f) - xPad, baseY + yStart + spacing * i);
+                            float cx;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(leftBaseRT, pr, anchorOnRightSidePanel: false, horizGap, w * 0.5f, out cx))
+                                cx = -(w * 0.5f) - 80f * scale;
+                            rt.anchoredPosition = new Vector2(cx, baseY + yStart + saveSubRowStep * i);
                         }
 
                         try
@@ -833,13 +959,16 @@ namespace VPB
                                         if (sample == null) sample = rightSaveSubmenuButtons.FirstOrDefault(g => g != null && g.activeSelf);
                                         RectTransform srt = sample != null ? sample.GetComponent<RectTransform>() : null;
                                         panelW = srt != null ? srt.sizeDelta.x : 200f;
-                                        panelH = srt != null ? srt.sizeDelta.y : spacing;
+                                        panelH = srt != null ? srt.sizeDelta.y : saveSubRowStep;
                                     }
-                                    catch { panelW = 200f; panelH = spacing; }
+                                    catch { panelW = 200f; panelH = saveSubRowStep; }
 
-                                    panelH = Mathf.Max(panelH, visibleCount * spacing);
+                                    panelH = Mathf.Max(panelH, visibleCount * saveSubRowStep);
                                     prt.sizeDelta = new Vector2(panelW, panelH);
-                                    prt.anchoredPosition = new Vector2(-(panelW * 0.5f) - xPad, baseY);
+                                    float pcx;
+                                    if (!TryComputeOuterSubmenuAnchoredCenterX(leftBaseRT, pr, anchorOnRightSidePanel: false, horizGap, panelW * 0.5f, out pcx))
+                                        pcx = -(panelW * 0.5f) - 80f * scale;
+                                    prt.anchoredPosition = new Vector2(pcx, baseY);
                                     leftSaveSubmenuPanelGO.transform.SetAsFirstSibling();
                                 }
                             }
@@ -850,6 +979,8 @@ namespace VPB
                     if (rightBaseRT != null)
                     {
                         float baseY = rightBaseRT.anchoredPosition.y;
+                        RectTransform pr = rightBaseRT.parent as RectTransform;
+
                         for (int i = 0; i < rightSaveSubmenuButtons.Count; i++)
                         {
                             GameObject go = rightSaveSubmenuButtons[i];
@@ -857,7 +988,10 @@ namespace VPB
                             RectTransform rt = go.GetComponent<RectTransform>();
                             if (rt == null) continue;
                             float w = rt.sizeDelta.x;
-                            rt.anchoredPosition = new Vector2((w * 0.5f) + xPad, baseY + yStart + spacing * i);
+                            float cx;
+                            if (!TryComputeOuterSubmenuAnchoredCenterX(rightBaseRT, pr, anchorOnRightSidePanel: true, horizGap, w * 0.5f, out cx))
+                                cx = (w * 0.5f) + 80f * scale;
+                            rt.anchoredPosition = new Vector2(cx, baseY + yStart + saveSubRowStep * i);
                         }
 
                         try
@@ -875,13 +1009,16 @@ namespace VPB
                                         if (sample == null) sample = leftSaveSubmenuButtons.FirstOrDefault(g => g != null && g.activeSelf);
                                         RectTransform srt = sample != null ? sample.GetComponent<RectTransform>() : null;
                                         panelW = srt != null ? srt.sizeDelta.x : 200f;
-                                        panelH = srt != null ? srt.sizeDelta.y : spacing;
+                                        panelH = srt != null ? srt.sizeDelta.y : saveSubRowStep;
                                     }
-                                    catch { panelW = 200f; panelH = spacing; }
+                                    catch { panelW = 200f; panelH = saveSubRowStep; }
 
-                                    panelH = Mathf.Max(panelH, visibleCount * spacing);
+                                    panelH = Mathf.Max(panelH, visibleCount * saveSubRowStep);
                                     prt.sizeDelta = new Vector2(panelW, panelH);
-                                    prt.anchoredPosition = new Vector2((panelW * 0.5f) + xPad, baseY);
+                                    float pcx;
+                                    if (!TryComputeOuterSubmenuAnchoredCenterX(rightBaseRT, pr, anchorOnRightSidePanel: true, horizGap, panelW * 0.5f, out pcx))
+                                        pcx = (panelW * 0.5f) + 80f * scale;
+                                    prt.anchoredPosition = new Vector2(pcx, baseY);
                                     rightSaveSubmenuPanelGO.transform.SetAsFirstSibling();
                                 }
                             }
@@ -891,6 +1028,31 @@ namespace VPB
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Edge-anchored side button vs centre-anchored submenu rows: submenu opens on the outer side of the rail
+        /// (left rail: left of anchor; right rail: right of anchor), away from the gallery. Used for Save and Remove submenus.
+        /// </summary>
+        private static bool TryComputeOuterSubmenuAnchoredCenterX(RectTransform anchorBtnRT, RectTransform parentRT, bool anchorOnRightSidePanel, float horizGap, float subHalfW, out float anchoredCenterX)
+        {
+            anchoredCenterX = 0f;
+            if (anchorBtnRT == null || parentRT == null) return false;
+            try
+            {
+                Bounds b = RectTransformUtility.CalculateRelativeRectTransformBounds(parentRT, anchorBtnRT);
+                // Outer edge away from gallery: left rail uses anchor's left (min.x); right rail uses anchor's right (max.x).
+                float outerEdgeX = anchorOnRightSidePanel ? b.max.x : b.min.x;
+                float pivotLocalX = anchorOnRightSidePanel
+                    ? (outerEdgeX + horizGap + subHalfW)
+                    : (outerEdgeX - horizGap - subHalfW);
+                anchoredCenterX = pivotLocalX - parentRT.rect.center.x;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private SideButtonLayoutEntry[] GetSideButtonsLayout()
@@ -923,7 +1085,7 @@ namespace VPB
                     int FindIndexByTextRef(Text t)
                     {
                         if (t == null) return -1;
-                        return refList.FindIndex(rt => rt != null && rt.GetComponentInChildren<Text>() == t);
+                        return refList.FindIndex(rt => rt != null && rt.GetComponentInChildren<Text>(true) == t);
                     }
 
 
@@ -983,9 +1145,9 @@ namespace VPB
                 new SideButtonLayoutEntry(idxKeepOutfit, 0, 0), // Keep body clothes vs preset
                 new SideButtonLayoutEntry(idxReplace, 0, 0), // Replace
 
-                new SideButtonLayoutEntry(idxRemoveClothing, 0, 0), // Remove Clothing (context)
-                new SideButtonLayoutEntry(idxRemoveAtom, 0, 0), // Remove Atom (scene)
-                new SideButtonLayoutEntry(idxRemoveHair, 0, 0), // Remove Hair (context)
+                new SideButtonLayoutEntry(idxRemoveClothing, 0, 0), // Remove (clothing context)
+                new SideButtonLayoutEntry(idxRemoveAtom, 0, 0), // Remove (scene context)
+                new SideButtonLayoutEntry(idxRemoveHair, 0, 0), // Remove (hair context)
             };
 
             return layout.ToArray();
@@ -1880,6 +2042,90 @@ namespace VPB
             return (visibleCount - 1) * spacing + gapUnits * gap;
         }
 
+        /// <summary>Square icon chrome on side rails: 50×50 when loaded sprites exist.</summary>
+        private bool UsesSquareChromeSideButton(RectTransform rt, List<RectTransform> list)
+        {
+            if (rt == null || list == null) return false;
+            int idx = list.IndexOf(rt);
+            if (idx < 0) return false;
+            bool isRight = ReferenceEquals(list, rightSideButtons);
+            if (idx < GalleryLeadingIconButtonCount)
+            {
+                if (isRight)
+                {
+                    return (idx == 0 && rightDesktopModeBtnIconImage != null)
+                        || (idx == 1 && rightFollowBtnIconImage != null)
+                        || (idx == 2 && rightCloneBtnIconImage != null);
+                }
+                return (idx == 0 && leftDesktopModeBtnIconImage != null)
+                    || (idx == 1 && leftFollowBtnIconImage != null)
+                    || (idx == 2 && leftCloneBtnIconImage != null);
+            }
+            GameObject go = rt.gameObject;
+            if (rightSaveBtnGO != null && go == rightSaveBtnGO) return rightSaveBtnIconImage != null;
+            if (leftSaveBtnGO != null && go == leftSaveBtnGO) return leftSaveBtnIconImage != null;
+            if (isRight)
+            {
+                if (galleryCategorySprite != null && rightCategoryBtnIconImage != null && rightCategoryBtnImage != null && go == rightCategoryBtnImage.gameObject)
+                    return true;
+                if (galleryCreatorSprite != null && rightCreatorBtnIconImage != null && rightCreatorBtnImage != null && go == rightCreatorBtnImage.gameObject)
+                    return true;
+                if (galleryTargetSprite != null && rightTargetBtnIconImage != null && rightTargetBtnImage != null && go == rightTargetBtnImage.gameObject)
+                    return true;
+                if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && rightApplyModeBtnIconImage != null && rightApplyModeBtnImage != null && go == rightApplyModeBtnImage.gameObject)
+                    return true;
+                if ((galleryAddSprite != null || galleryReplaceSprite != null) && rightReplaceBtnIconImage != null && rightReplaceBtnImage != null && go == rightReplaceBtnImage.gameObject)
+                    return true;
+                if (galleryRemoveSprite != null && rightRemoveAtomBtnIconImage != null && rightRemoveAtomBtn != null && go == rightRemoveAtomBtn)
+                    return true;
+                if (galleryRemoveSprite != null && rightRemoveAllClothingBtnIconImage != null && rightRemoveAllClothingBtn != null && go == rightRemoveAllClothingBtn)
+                    return true;
+                if (galleryRemoveSprite != null && rightRemoveAllHairBtnIconImage != null && rightRemoveAllHairBtn != null && go == rightRemoveAllHairBtn)
+                    return true;
+            }
+            else
+            {
+                if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
+                    return true;
+                if (galleryCreatorSprite != null && leftCreatorBtnIconImage != null && leftCreatorBtnImage != null && go == leftCreatorBtnImage.gameObject)
+                    return true;
+                if (galleryTargetSprite != null && leftTargetBtnIconImage != null && leftTargetBtnImage != null && go == leftTargetBtnImage.gameObject)
+                    return true;
+                if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && leftApplyModeBtnIconImage != null && leftApplyModeBtnImage != null && go == leftApplyModeBtnImage.gameObject)
+                    return true;
+                if ((galleryAddSprite != null || galleryReplaceSprite != null) && leftReplaceBtnIconImage != null && leftReplaceBtnImage != null && go == leftReplaceBtnImage.gameObject)
+                    return true;
+                if (galleryRemoveSprite != null && leftRemoveAtomBtnIconImage != null && leftRemoveAtomBtn != null && go == leftRemoveAtomBtn)
+                    return true;
+                if (galleryRemoveSprite != null && leftRemoveAllClothingBtnIconImage != null && leftRemoveAllClothingBtn != null && go == leftRemoveAllClothingBtn)
+                    return true;
+                if (galleryRemoveSprite != null && leftRemoveAllHairBtnIconImage != null && leftRemoveAllHairBtn != null && go == leftRemoveAllHairBtn)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>Right rail: hug inner edge toward gallery. Left rail: hug inner edge toward gallery.</summary>
+        private void ApplySquareSideButtonEdgeAlignment(RectTransform rt, List<RectTransform> list, float y)
+        {
+            if (rt == null || list == null) return;
+            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.SideButtonScale : 1f;
+            float inset = 6f * scale;
+            bool isRightRail = ReferenceEquals(list, rightSideButtons);
+            if (UsesSquareChromeSideButton(rt, list))
+            {
+                rt.anchorMin = rt.anchorMax = isRightRail ? new Vector2(0f, 0.5f) : new Vector2(1f, 0.5f);
+                rt.pivot = isRightRail ? new Vector2(0f, 0.5f) : new Vector2(1f, 0.5f);
+                rt.anchoredPosition = new Vector2(isRightRail ? inset : -inset, y);
+            }
+            else
+            {
+                rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.anchoredPosition = new Vector2(0f, y);
+            }
+        }
+
         private void UpdateListPositions(List<RectTransform> buttons, float startY, float spacing, float gap)
         {
             if (buttons == null) return;
@@ -1893,7 +2139,7 @@ namespace VPB
                 if (rt == null || !rt.gameObject.activeSelf) continue;
 
                 if (!firstVisible) y -= (spacing + gap * layout[i].gapTier);
-                rt.anchoredPosition = new Vector2(0, y);
+                ApplySquareSideButtonEdgeAlignment(rt, buttons, y);
                 firstVisible = false;
             }
 

@@ -104,10 +104,12 @@ namespace VPB
 
         public void SyncQuickFilterToggleState()
         {
-            if (quickFiltersToggleBtnText != null && quickFiltersUI != null)
-            {
-                quickFiltersToggleBtnText.color = quickFiltersUI.IsVisible ? Color.green : Color.white;
-            }
+            if (quickFiltersUI == null) return;
+            bool on = quickFiltersUI.IsVisible;
+            if (quickFiltersToggleBtnIconImage != null)
+                quickFiltersToggleBtnIconImage.color = on ? Color.green : Color.white;
+            else if (quickFiltersToggleBtnText != null)
+                quickFiltersToggleBtnText.color = on ? Color.green : Color.white;
         }
     }
 }

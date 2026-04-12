@@ -104,10 +104,64 @@ namespace VPB
                 }
                 else
                 {
-                    RefreshFiles();
+                    if (!TryReapplyFilesSortWithoutFullRefresh())
+                        RefreshFiles();
                 }
             }
             else UpdateTabs();
+        }
+
+        /// <summary>
+        /// Re-sorts the loaded file list and refreshes the recycling grid without re-running
+        /// <see cref="GalleryPanel.RefreshFiles"/> (package scan / coroutine). Preserves the centered item when possible.
+        /// </summary>
+        private bool TryReapplyFilesSortWithoutFullRefresh()
+        {
+            if (IsHubMode) return false;
+            if (!hasLoadedContent || currentFilteredFiles == null || recyclingGrid == null) return false;
+            if (refreshCoroutine != null) return false;
+
+            try
+            {
+                string anchorUid = null;
+                int centerIdx = recyclingGrid.GetCenterItemIndex();
+                if (centerIdx >= 0 && centerIdx < currentFilteredFiles.Count)
+                    anchorUid = currentFilteredFiles[centerIdx]?.Uid;
+
+                SortState st = GetSortState("Files");
+                ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
+                GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
+
+                if (lastFilteredFiles != null)
+                {
+                    lastFilteredFiles.Clear();
+                    lastFilteredFiles.AddRange(currentFilteredFiles);
+                }
+
+                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                recyclingGrid.Refresh();
+
+                if (anchorUid != null)
+                {
+                    int newIdx = -1;
+                    for (int i = 0; i < currentFilteredFiles.Count; i++)
+                    {
+                        if (string.Equals(currentFilteredFiles[i]?.Uid, anchorUid, StringComparison.OrdinalIgnoreCase))
+                        {
+                            newIdx = i;
+                            break;
+                        }
+                    }
+                    if (newIdx >= 0) recyclingGrid.ScrollToCenterItem(newIdx);
+                }
+
+                UpdatePaginationText();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static readonly SortType[] FileSortDropdownOrder =
@@ -294,7 +348,8 @@ namespace VPB
                 }
                 else
                 {
-                    RefreshFiles();
+                    if (!TryReapplyFilesSortWithoutFullRefresh())
+                        RefreshFiles();
                 }
             }
             else UpdateTabs();
@@ -307,11 +362,135 @@ namespace VPB
                 return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly;
             }
-            else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags")
+            else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
             {
                 return type == SortType.Name || type == SortType.Count;
             }
             return false;
+        }
+
+        private static bool SupportsSidePaneFourModeSort(string context)
+        {
+            return context == "Category" || context == "Creator" || context == "Status" || context == "Tags" || context == "Hub";
+        }
+
+        /// <summary>Upper side pane: name A→Z, name Z→A, count low→high, count high→low (same icons as scene file sort).</summary>
+        private static void SidePaneFourModeToState(int mode, out SortType type, out SortDirection dir)
+        {
+            switch (mode)
+            {
+                case 1: type = SortType.Name; dir = SortDirection.Descending; break;
+                case 2: type = SortType.Count; dir = SortDirection.Ascending; break;
+                case 3: type = SortType.Count; dir = SortDirection.Descending; break;
+                default: type = SortType.Name; dir = SortDirection.Ascending; break;
+            }
+        }
+
+        private static int TryGetSidePaneFourModeIndex(SortState st)
+        {
+            if (st == null) return -1;
+            if (st.Type == SortType.Name && st.Direction == SortDirection.Ascending) return 0;
+            if (st.Type == SortType.Name && st.Direction == SortDirection.Descending) return 1;
+            if (st.Type == SortType.Count && st.Direction == SortDirection.Ascending) return 2;
+            if (st.Type == SortType.Count && st.Direction == SortDirection.Descending) return 3;
+            return -1;
+        }
+
+        private void CycleSidePaneTopSort(bool isLeft)
+        {
+            ContentType? ct = isLeft ? leftActiveContent : rightActiveContent;
+            if (!ct.HasValue) return;
+            string ctx = ct.Value.ToString();
+            if (!SupportsSidePaneFourModeSort(ctx))
+            {
+                Text t = isLeft ? leftSortBtnText : rightSortBtnText;
+                CycleSort(ctx, t);
+                return;
+            }
+            SortState st = GetSortState(ctx);
+            int i = TryGetSidePaneFourModeIndex(st);
+            int next = (i < 0) ? 0 : (i + 1) % 4;
+            SidePaneFourModeToState(next, out SortType ty, out SortDirection d);
+            ApplySidePaneFourModeSort(ctx, ty, d);
+        }
+
+        /// <summary>Lower split row (tags / hub tags): same 4-mode cycle as upper pane, persisted as <c>Tags</c>.</summary>
+        private void CycleSidePaneSubTagSort()
+        {
+            const string ctx = "Tags";
+            SortState st = GetSortState(ctx);
+            int i = TryGetSidePaneFourModeIndex(st);
+            int next = (i < 0) ? 0 : (i + 1) % 4;
+            SidePaneFourModeToState(next, out SortType ty, out SortDirection d);
+            ApplySidePaneFourModeSort(ctx, ty, d);
+        }
+
+        private void ApplySidePaneFourModeSort(string context, SortType type, SortDirection direction)
+        {
+            if (!IsSortTypeValid(context, type)) return;
+            SortState state = GetSortState(context);
+            state.Type = type;
+            state.Direction = direction;
+            SaveSortState(context, state);
+            UpdateTabs();
+        }
+
+        /// <summary>Upper side sort + tag sub-row: one place for vpb_icons vs legacy text.</summary>
+        private void SyncSidePaneTopSortButtonVisuals()
+        {
+            if (leftSortBtn != null && leftActiveContent.HasValue)
+            {
+                string ctx = leftActiveContent.Value.ToString();
+                SyncSidePaneFourModeSortButtonVisual(leftSortBtnBackdrop, leftSortBtnIconImage, leftSortBtnText, GetSortState(ctx), SupportsSidePaneFourModeSort(ctx));
+            }
+            if (rightSortBtn != null && rightActiveContent.HasValue)
+            {
+                string ctx = rightActiveContent.Value.ToString();
+                SyncSidePaneFourModeSortButtonVisual(rightSortBtnBackdrop, rightSortBtnIconImage, rightSortBtnText, GetSortState(ctx), SupportsSidePaneFourModeSort(ctx));
+            }
+
+            const string tagCtx = "Tags";
+            SortState tagSt = GetSortState(tagCtx);
+            bool tagIcon = SupportsSidePaneFourModeSort(tagCtx);
+            if (leftSubSortBtn != null && leftSubSortBtn.activeSelf)
+                SyncSidePaneFourModeSortButtonVisual(leftSubSortBtnBackdrop, leftSubSortBtnIconImage, leftSubSortBtnText, tagSt, tagIcon);
+            if (rightSubSortBtn != null && rightSubSortBtn.activeSelf)
+                SyncSidePaneFourModeSortButtonVisual(rightSubSortBtnBackdrop, rightSubSortBtnIconImage, rightSubSortBtnText, tagSt, tagIcon);
+        }
+
+        private void SyncSidePaneFourModeSortButtonVisual(Image backdrop, Image iconImg, Text legacyText, SortState st, bool iconMode)
+        {
+            if (backdrop == null) return;
+            if (iconMode && sceneSourceSortModeSprites != null && iconImg != null)
+            {
+                if (legacyText != null) legacyText.gameObject.SetActive(false);
+                iconImg.gameObject.SetActive(true);
+                int idx = TryGetSidePaneFourModeIndex(st);
+                int spIdx = idx >= 0 ? idx : 0;
+                Sprite sp = spIdx >= 0 && spIdx < sceneSourceSortModeSprites.Length ? sceneSourceSortModeSprites[spIdx] : null;
+                if (sp != null)
+                {
+                    iconImg.sprite = sp;
+                    iconImg.enabled = true;
+                }
+                else
+                    iconImg.enabled = false;
+                backdrop.color = idx >= 0 ? SceneSourceSortBtnActive : SceneSourceSortBtnIdle;
+            }
+            else
+            {
+                if (iconImg != null)
+                {
+                    iconImg.enabled = false;
+                    iconImg.gameObject.SetActive(false);
+                }
+                if (legacyText != null)
+                {
+                    legacyText.gameObject.SetActive(true);
+                    if (st != null) UpdateSortButtonText(legacyText, st);
+                }
+                backdrop.color = SceneSourceSortBtnIdle;
+            }
         }
 
         // Overload: Old method for combined button
@@ -383,6 +562,59 @@ namespace VPB
         {
             contentSortStates[context] = state;
             GallerySortManager.Instance.SaveSortState(context, state);
+        }
+
+        /// <summary>Scene sub-pane: cycle sort order of All/Addon/Custom tabs only (not main file list).</summary>
+        private void CycleSceneSourceTabSort()
+        {
+            SortState st = GetSortState("SceneSource");
+            int i = TryGetSidePaneFourModeIndex(st);
+            int next = (i < 0) ? 0 : (i + 1) % 4;
+            SidePaneFourModeToState(next, out SortType t, out SortDirection d);
+            ApplySceneSourceTabSort(t, d);
+        }
+
+        private void ApplySceneSourceTabSort(SortType type, SortDirection direction)
+        {
+            if (!IsSortTypeValid("SceneSource", type)) return;
+            SortState state = GetSortState("SceneSource");
+            state.Type = type;
+            state.Direction = direction;
+            SaveSortState("SceneSource", state);
+            SyncSceneSourceSortButtonHighlights();
+            UpdateTabs();
+        }
+
+        private static readonly Color SceneSourceSortBtnIdle = new Color(0.15f, 0.15f, 0.15f, 1f);
+        private static readonly Color SceneSourceSortBtnActive = new Color(0.15f, 0.30f, 0.52f, 1f);
+
+        private void SyncSceneSourceSortButtonHighlights()
+        {
+            SortState st = GetSortState("SceneSource");
+            int idx = TryGetSidePaneFourModeIndex(st);
+            int spriteIdx = idx >= 0 ? idx : 0;
+            Sprite sp = null;
+            if (sceneSourceSortModeSprites != null && spriteIdx >= 0 && spriteIdx < sceneSourceSortModeSprites.Length)
+                sp = sceneSourceSortModeSprites[spriteIdx];
+            Color backdropCol = idx >= 0 ? SceneSourceSortBtnActive : SceneSourceSortBtnIdle;
+
+            void ApplyOne(Image backdropImg, Image iconImg)
+            {
+                if (backdropImg != null) backdropImg.color = backdropCol;
+                if (iconImg != null)
+                {
+                    if (sp != null)
+                    {
+                        iconImg.sprite = sp;
+                        iconImg.enabled = true;
+                    }
+                    else
+                        iconImg.enabled = false;
+                }
+            }
+
+            ApplyOne(leftSubSceneSortBtnBackdrop, leftSubSceneSortIconImage);
+            ApplyOne(rightSubSceneSortBtnBackdrop, rightSubSceneSortIconImage);
         }
     }
 }

@@ -38,6 +38,8 @@
   "gallery.side.target_val_none": "なし",
   "gallery.side.save": "保存",
   "gallery.side.remove_atom": "アトムを\n削除",
+  "gallery.side.remove": "削除",
+  "gallery.tooltip.remove_context": "現在のカテゴリ（衣装・髪・シーン）に応じて削除するか、サブメニューを開きます。",
   "gallery.side.undo": "元に戻す",
   "gallery.side.redo": "やり直し",
   "gallery.side.remove_clothing": "衣装を\nすべて削除",

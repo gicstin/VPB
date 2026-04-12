@@ -1349,8 +1349,31 @@ namespace VPB
             string valText = (raw == "None") ? VPBTranslation.T("gallery.side.target_val_none", "None") : raw;
             string fullText = VPBTranslation.T("gallery.side.target_prefix", "Target: ") + valText;
 
-            if (leftTargetBtnText != null) leftTargetBtnText.text = fullText;
-            if (rightTargetBtnText != null) rightTargetBtnText.text = fullText;
+            sideTargetTooltipLive = fullText;
+
+            bool iconMode = galleryTargetSprite != null
+                && leftTargetBtnIconImage != null
+                && rightTargetBtnIconImage != null;
+            if (iconMode)
+            {
+                if (leftTargetBtnText != null) leftTargetBtnText.gameObject.SetActive(false);
+                if (rightTargetBtnText != null) rightTargetBtnText.gameObject.SetActive(false);
+                if (leftTargetBtnIconImage != null) leftTargetBtnIconImage.enabled = true;
+                if (rightTargetBtnIconImage != null) rightTargetBtnIconImage.enabled = true;
+            }
+            else
+            {
+                if (leftTargetBtnText != null)
+                {
+                    leftTargetBtnText.gameObject.SetActive(true);
+                    leftTargetBtnText.text = fullText;
+                }
+                if (rightTargetBtnText != null)
+                {
+                    rightTargetBtnText.gameObject.SetActive(true);
+                    rightTargetBtnText.text = fullText;
+                }
+            }
         }
 
         private void Undo()

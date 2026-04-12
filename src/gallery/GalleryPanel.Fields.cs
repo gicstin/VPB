@@ -121,8 +121,10 @@ namespace VPB
         // Buttons
         private Text rightCategoryBtnText;
         private Image rightCategoryBtnImage;
+        private Image rightCategoryBtnIconImage;
         private Text rightCreatorBtnText;
         private Image rightCreatorBtnImage;
+        private Image rightCreatorBtnIconImage;
         
         private Text footerHubBtnText;
         private Image footerHubBtnImage;
@@ -130,13 +132,17 @@ namespace VPB
 
         private Text leftCategoryBtnText;
         private Image leftCategoryBtnImage;
+        private Image leftCategoryBtnIconImage;
         private Text leftCreatorBtnText;
         private Image leftCreatorBtnImage;
+        private Image leftCreatorBtnIconImage;
 
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
+        private Image rightReplaceBtnIconImage;
         private Text leftReplaceBtnText;
         private Image leftReplaceBtnImage;
+        private Image leftReplaceBtnIconImage;
 
         private GameObject rightKeepClothingBtnGO;
         private Text rightKeepClothingBtnText;
@@ -149,11 +155,17 @@ namespace VPB
         private GameObject footerRedoBtnGO;
 
         private GameObject rightRemoveAllClothingBtn;
+        private Image rightRemoveAllClothingBtnIconImage;
         private GameObject rightRemoveAllHairBtn;
+        private Image rightRemoveAllHairBtnIconImage;
         private GameObject rightRemoveAtomBtn;
+        private Image rightRemoveAtomBtnIconImage;
         private GameObject leftRemoveAllClothingBtn;
+        private Image leftRemoveAllClothingBtnIconImage;
         private GameObject leftRemoveAllHairBtn;
+        private Image leftRemoveAllHairBtnIconImage;
         private GameObject leftRemoveAtomBtn;
+        private Image leftRemoveAtomBtnIconImage;
 
         private GameObject rightRemoveClothingExpandBtn;
         private GameObject leftRemoveClothingExpandBtn;
@@ -275,6 +287,10 @@ namespace VPB
         private Text rightSortBtnText;
         private GameObject leftSortBtn;
         private GameObject rightSortBtn;
+        private Image leftSortBtnBackdrop;
+        private Image leftSortBtnIconImage;
+        private Image rightSortBtnBackdrop;
+        private Image rightSortBtnIconImage;
 
         private GameObject rightRefreshBtn;
         private Text rightRefreshBtnText;
@@ -282,10 +298,25 @@ namespace VPB
         // Sub Sort/Search
         private GameObject leftSubSortBtn;
         private Text leftSubSortBtnText;
+        private Image leftSubSortBtnBackdrop;
+        private Image leftSubSortBtnIconImage;
         private InputField leftSubSearchInput;
+
+        /// <summary>Scene split (All/Addon/Custom): one square button cycling 4 file-sort modes; replaces <see cref="leftSubSortBtn"/>.</summary>
+        private GameObject leftSubSceneSortBtn;
+        private Image leftSubSceneSortBtnBackdrop;
+        private Image leftSubSceneSortIconImage;
+        private GameObject rightSubSceneSortBtn;
+        private Image rightSubSceneSortBtnBackdrop;
+        private Image rightSubSceneSortIconImage;
+        private Sprite[] sceneSourceSortModeSprites;
+        private bool leftSubSceneSortBarActive;
+        private bool rightSubSceneSortBarActive;
         
         private GameObject rightSubSortBtn;
         private Text rightSubSortBtnText;
+        private Image rightSubSortBtnBackdrop;
+        private Image rightSubSortBtnIconImage;
         private InputField rightSubSearchInput;
         private GameObject rightSubClearBtn; // NEW
         private Text rightSubClearBtnText; // NEW
@@ -399,8 +430,10 @@ namespace VPB
         private InputField titleSearchInput;
         private Text leftTargetBtnText;
         private Image leftTargetBtnImage;
+        private Image leftTargetBtnIconImage;
         private Text rightTargetBtnText;
         private Image rightTargetBtnImage;
+        private Image rightTargetBtnIconImage;
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
 
@@ -652,13 +685,46 @@ namespace VPB
         }
         private Text rightApplyModeBtnText;
         private Image rightApplyModeBtnImage;
+        private Image rightApplyModeBtnIconImage;
         private Text leftApplyModeBtnText;
         private Image leftApplyModeBtnImage;
+        private Image leftApplyModeBtnIconImage;
 
         private Text rightDesktopModeBtnText;
         private Image rightDesktopModeBtnImage;
+        private Image rightDesktopModeBtnIconImage;
         private Text leftDesktopModeBtnText;
         private Image leftDesktopModeBtnImage;
+        private Image leftDesktopModeBtnIconImage;
+
+        /// <summary>First N entries in <see cref="rightSideButtons"/> / <see cref="leftSideButtons"/> are 50×50 icon buttons (desktop float/fixed, follow, clone).</summary>
+        internal const int GalleryLeadingIconButtonCount = 3;
+
+        private Sprite galleryFloatSprite;
+        private Sprite galleryFixedSprite;
+        private Sprite galleryFollowOnSprite;
+        private Sprite galleryFollowOffSprite;
+        private Sprite galleryCloneSprite;
+        private Sprite gallerySaveSprite;
+        private Sprite galleryCategorySprite;
+        private Sprite galleryCreatorSprite;
+        private Sprite galleryTargetSprite;
+        private Sprite galleryApplySprite;
+        private Sprite galleryApplyOneClickSprite;
+        private Sprite galleryApplyTwoClickSprite;
+        private Sprite galleryAddSprite;
+        private Sprite galleryReplaceSprite;
+        private Sprite galleryRemoveSprite;
+
+        /// <summary>Current target line for status tooltip when target side button uses an icon.</summary>
+        private string sideTargetTooltipLive = "";
+
+        private Image rightFollowBtnIconImage;
+        private Image leftFollowBtnIconImage;
+        private Image rightCloneBtnIconImage;
+        private Image leftCloneBtnIconImage;
+        private Image rightSaveBtnIconImage;
+        private Image leftSaveBtnIconImage;
 
         public List<FileEntry> selectedFiles = new List<FileEntry>();
         private HashSet<string> selectedFilePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -733,6 +799,7 @@ namespace VPB
         private GameObject fileSortTypeMenuRoot;
         private GameObject fileSortTypeMenuPanelGO;
         private Text quickFiltersToggleBtnText; // NEW
+        private Image quickFiltersToggleBtnIconImage;
         private GameObject ratingSortToggleBtn;
         private Text ratingSortToggleBtnText;
         private Text titleBarRefreshBtnText;

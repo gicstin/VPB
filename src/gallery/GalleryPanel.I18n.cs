@@ -100,45 +100,47 @@ namespace VPB
                 titleBarRefreshBtnText.text = VPBTranslation.T("gallery.title.refresh", "Refresh");
 
             UpdateSortButtonText(fileSortTypeText, fileSortDirText, GetSortState("Files"));
+            try { SyncSceneSourceSortButtonHighlights(); } catch { }
             try { RebuildFileSortTypeMenuOptions(); } catch { }
-            if (leftActiveContent.HasValue)
-                UpdateSortButtonText(leftSortBtnText, GetSortState(leftActiveContent.Value.ToString()));
-            if (rightActiveContent.HasValue)
-                UpdateSortButtonText(rightSortBtnText, GetSortState(rightActiveContent.Value.ToString()));
-            UpdateSortButtonText(leftSubSortBtnText, GetSortState("Tags"));
-            UpdateSortButtonText(rightSubSortBtnText, GetSortState("Tags"));
+            try { SyncSidePaneTopSortButtonVisuals(); } catch { }
 
             if (leftSubClearBtnText != null)
                 leftSubClearBtnText.text = VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected");
             if (rightSubClearBtnText != null)
                 rightSubClearBtnText.text = VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected");
 
-            if (rightCategoryBtnText != null)
+            if (rightCategoryBtnIconImage == null && rightCategoryBtnText != null)
                 rightCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
-            if (leftCategoryBtnText != null)
+            if (leftCategoryBtnIconImage == null && leftCategoryBtnText != null)
                 leftCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
-            if (rightCreatorBtnText != null)
+            if (rightCreatorBtnIconImage == null && rightCreatorBtnText != null)
                 rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
-            if (leftCreatorBtnText != null)
+            if (leftCreatorBtnIconImage == null && leftCreatorBtnText != null)
                 leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
             RefreshGoText(footerHubBtnGO, "gallery.side.hub", "Hub");
-            if (rightReplaceBtnText != null)
+            if (rightReplaceBtnIconImage == null && rightReplaceBtnText != null)
                 rightReplaceBtnText.text = VPBTranslation.T("gallery.side.add", "Add");
-            if (leftReplaceBtnText != null)
+            if (leftReplaceBtnIconImage == null && leftReplaceBtnText != null)
                 leftReplaceBtnText.text = VPBTranslation.T("gallery.side.add", "Add");
             try { UpdateTargetDropdownUI(); } catch { }
 
             // Buttons that store Text refs directly
             if (titleBarSettingsBtnText != null) titleBarSettingsBtnText.text = VPBTranslation.T("gallery.title.settings_abbrev", "S");
-            if (rightCloneBtnText    != null) rightCloneBtnText.text    = VPBTranslation.T("gallery.side.clone",    "Clone");
-            if (leftCloneBtnText     != null) leftCloneBtnText.text     = VPBTranslation.T("gallery.side.clone",    "Clone");
+            if (rightCloneBtnIconImage == null && rightCloneBtnText != null)
+                rightCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
+            if (leftCloneBtnIconImage == null && leftCloneBtnText != null)
+                leftCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
 
             // Buttons stored as GOs – reach the Text child at refresh time
             RefreshGoText(footerLoadRandomBtn, "gallery.footer.random_abbrev", "Rdm");
-            RefreshGoText(rightSaveBtnGO,     "gallery.side.save",        "Save");
-            RefreshGoText(leftSaveBtnGO,      "gallery.side.save",        "Save");
-            RefreshGoText(rightRemoveAtomBtn,  "gallery.side.remove_atom", "Remove\nAtom");
-            RefreshGoText(leftRemoveAtomBtn,   "gallery.side.remove_atom", "Remove\nAtom");
+            if (rightSaveBtnIconImage == null) RefreshGoText(rightSaveBtnGO, "gallery.side.save", "Save");
+            if (leftSaveBtnIconImage == null) RefreshGoText(leftSaveBtnGO, "gallery.side.save", "Save");
+            if (rightRemoveAtomBtnIconImage == null) RefreshGoText(rightRemoveAtomBtn, "gallery.side.remove", "Remove");
+            if (leftRemoveAtomBtnIconImage == null) RefreshGoText(leftRemoveAtomBtn, "gallery.side.remove", "Remove");
+            if (rightRemoveAllClothingBtnIconImage == null) RefreshGoText(rightRemoveAllClothingBtn, "gallery.side.remove_clothing", "Remove\nClothing");
+            if (leftRemoveAllClothingBtnIconImage == null) RefreshGoText(leftRemoveAllClothingBtn, "gallery.side.remove_clothing", "Remove\nClothing");
+            if (rightRemoveAllHairBtnIconImage == null) RefreshGoText(rightRemoveAllHairBtn, "gallery.side.remove_hair", "Remove\nHair");
+            if (leftRemoveAllHairBtnIconImage == null) RefreshGoText(leftRemoveAllHairBtn, "gallery.side.remove_hair", "Remove\nHair");
 
             // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
             try { RefreshTboxConditionalActionButtons(); } catch { }
