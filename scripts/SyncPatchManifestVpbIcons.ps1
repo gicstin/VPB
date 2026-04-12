@@ -5,7 +5,7 @@
 .DESCRIPTION
   Removes every manifest row whose RelativePath starts with BepInEx/plugins/vpb_icons,
   then inserts a directory row plus one row per file (sorted), immediately before the
-  first BepInEx/plugins/zstd entry. Run after adding or removing PNGs under vpb_icons.
+  first BepInEx/plugins/zstd entry. Run after adding or removing files under vpb_icons.
 #>
 param(
     [string] $ProjectDir = (Split-Path -Parent $PSScriptRoot)
