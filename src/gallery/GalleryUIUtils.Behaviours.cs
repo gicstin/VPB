@@ -899,7 +899,6 @@ namespace VPB
 
             int startIndex = startRow * colCount;
             int endIndex = Mathf.Min(itemsCount - 1, (endRow * colCount) + colCount - 1); 
-
             // Recycle items out of range
             for (int i = activeItems.Count - 1; i >= 0; i--)
             {

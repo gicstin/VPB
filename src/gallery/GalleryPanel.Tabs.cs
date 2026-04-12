@@ -1711,9 +1711,12 @@ namespace VPB
                 }
 
                 RawImage thumbImg = thumbTr.GetComponent<RawImage>();
-                thumbImg.texture = null; // Clear prev
-                thumbImg.color = new Color(0, 0, 0, 0); // Transparent until loaded
-                LoadThumbnail(file, thumbImg);
+                if (thumbImg != null)
+                {
+                    // Let LoadThumbnail decide whether this is a true rebind or the same
+                    // thumbnail; unconditional clearing causes a visible flash on reopen.
+                    LoadThumbnail(file, thumbImg);
+                }
             }
 
             // Hide NavText

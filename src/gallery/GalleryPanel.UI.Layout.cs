@@ -14,15 +14,26 @@ using UnityEngine.Events;
 namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
-{        public void UpdateLayout()
+{
+        public void UpdateLayout()
+        {
+            UpdateLayout(true);
+        }
+
+        /// <param name="allowSynchronousCatalogCaches">When false, skips main-thread scans of all VARs for creator/category tab counts.
+        /// <see cref="GalleryPanel.RefreshFilesRoutine"/> builds the same data on a worker thread during a pending full refresh.</param>
+        public void UpdateLayout(bool allowSynchronousCatalogCaches)
         {
             if (backgroundBoxGO != null)
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(backgroundBoxGO.GetComponent<RectTransform>());
             }
             Canvas.ForceUpdateCanvases();
-            if (!creatorsCached) CacheCreators();
-            if (!categoriesCached) CacheCategoryCounts();
+            if (allowSynchronousCatalogCaches)
+            {
+                if (!creatorsCached) CacheCreators();
+                if (!categoriesCached) CacheCategoryCounts();
+            }
 
             if (contentScrollRT == null) return;
 

@@ -56,8 +56,9 @@ namespace VPB
         
         private float lastClickTime = 0f;
         
-        public bool IsVisible => canvas != null && canvas.gameObject.activeSelf;
-        
+        public bool IsVisible => canvas != null && canvas.gameObject.activeInHierarchy && canvas.enabled;
+        public bool HasLoadedContent => hasLoadedContent;
+
         private bool refreshOnNextShow;
         private bool hasLoadedContent = false;
         private Dictionary<string, float> categoryScrollPositions = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);

@@ -282,9 +282,9 @@ namespace VPB
             {
                 foreach (var p in Gallery.singleton.Panels)
                 {
-                    if (p != null && p.canvas != null && p.canvas.gameObject.activeSelf)
+                    if (p != null && p.IsVisible)
                     {
-                        p.canvas.gameObject.SetActive(false);
+                        p.Hide();
                         _canvasesHiddenForSave.Add(p.canvas);
                     }
                 }

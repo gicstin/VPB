@@ -544,10 +544,49 @@ namespace VPB
             return buttonGO;
         }
 
+        private static readonly Dictionary<string, Sprite> _iconSpriteCache = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Pre-loads all PNGs from the vpb_icons/ directory into the sprite cache.
+        /// Call this at plugin startup (e.g. from a coroutine in Start) so the cache is warm
+        /// before the user first opens the gallery panel.
+        /// </summary>
+        public static System.Collections.IEnumerator PrewarmIconCacheCoroutine()
+        {
+            string iconsDir = Path.Combine(BepInEx.Paths.PluginPath, "vpb_icons");
+            if (!Directory.Exists(iconsDir)) yield break;
+
+            string[] pngFiles;
+            try { pngFiles = Directory.GetFiles(iconsDir, "*.png"); }
+            catch { yield break; }
+
+            Color stdColor = new Color(0.78f, 0.78f, 0.78f, 1f);
+
+            foreach (string fullPath in pngFiles)
+            {
+                try
+                {
+                    string relPath = "vpb_icons/" + Path.GetFileName(fullPath);
+                    // Load uncolored and standard-colored variants
+                    LoadIconSprite(relPath);
+                    LoadIconSprite(relPath, stdColor);
+                }
+                catch { }
+                yield return null; // Spread across frames to avoid stutter
+            }
+        }
+
         public static Sprite LoadIconSprite(string relativePathFromPluginsDir, Color? recolorTo = null)
         {
             try
             {
+                string cacheKey = recolorTo.HasValue
+                    ? relativePathFromPluginsDir + "|" + recolorTo.Value.r.ToString("F3") + "," + recolorTo.Value.g.ToString("F3") + "," + recolorTo.Value.b.ToString("F3")
+                    : relativePathFromPluginsDir;
+
+                if (_iconSpriteCache.TryGetValue(cacheKey, out Sprite cached) && cached != null)
+                    return cached;
+
                 string fullPath = Path.Combine(BepInEx.Paths.PluginPath, relativePathFromPluginsDir);
                 if (!File.Exists(fullPath)) return null;
                 byte[] bytes = File.ReadAllBytes(fullPath);
@@ -563,7 +602,9 @@ namespace VPB
                     tex.SetPixels(pixels);
                     tex.Apply();
                 }
-                return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+                Sprite sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+                _iconSpriteCache[cacheKey] = sprite;
+                return sprite;
             }
             catch { return null; }
         }

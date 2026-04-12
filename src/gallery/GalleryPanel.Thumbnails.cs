@@ -303,6 +303,17 @@ namespace VPB
             {
                 bind = target.GetComponent<ThumbnailBindingTag>();
                 if (bind == null) bind = target.gameObject.AddComponent<ThumbnailBindingTag>();
+
+                // Rebinding the same visible item after a hide/show should keep the current
+                // thumbnail in place. Otherwise the grid briefly blanks every image, then
+                // immediately restores it from cache, which looks like a full redraw.
+                if (bind.ExpectedTag == expectedTag && bind.CurrentTexture != null && target.texture == bind.CurrentTexture)
+                {
+                    target.color = Color.white;
+                    UpdateAspectRatio(target, bind.CurrentTexture);
+                    return;
+                }
+
                 bind.ExpectedTag = expectedTag;
 
                 if (bind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)

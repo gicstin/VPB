@@ -89,7 +89,7 @@ namespace VPB
 
                 // First open this session: use InitialGalleryCategory unless set to LastUsed (then restore saved tab).
                 // Reopen within session: always restore last used category.
-                bool isFirstOpen = Gallery.singleton.PanelCount == 0;
+                bool isFirstOpen = !Gallery.singleton.AnyPanelHasLoadedContent;
                 if (!isFirstOpen)
                     TryFillLastGalleryPageFromPersisted(ref lastPageName);
                 else if (VPBConfig.Instance != null)

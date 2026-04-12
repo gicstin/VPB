@@ -839,6 +839,7 @@ namespace VPB
                 lastPageName = VPBConfig.Instance.LastGalleryCategory;
             else if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
                 lastPageName = Settings.Instance.LastGalleryPage.Value;
+            LogUtil.Log("[Gallery] SetCategories: currentPath='" + currentPath + "' memoryLastCat='" + (VPBConfig.Instance != null ? VPBConfig.Instance.LastGalleryCategory : "null") + "' resolvedLastPage='" + (lastPageName ?? "null") + "'");
 
             if (string.IsNullOrEmpty(currentPath) && !string.IsNullOrEmpty(lastPageName))
             {
@@ -864,6 +865,7 @@ namespace VPB
                     currentPath = cat.path;
                     currentPaths = cat.paths;
                     currentExtension = cat.extension;
+                    currentCategoryTitle = cat.name;
                     titleText.text = cat.name;
                     activeTags.Clear();
                 }
@@ -875,10 +877,12 @@ namespace VPB
                 currentPath = categories[0].path;
                 currentPaths = categories[0].paths;
                 currentExtension = categories[0].extension;
+                currentCategoryTitle = categories[0].name;
                 titleText.text = categories[0].name;
                 activeTags.Clear();
             }
 
+            LogUtil.Log("[Gallery] SetCategories resolved: currentPath='" + currentPath + "' currentCategoryTitle='" + currentCategoryTitle + "'");
             UpdateTabs();
             // If we have categories but no path, set title to first category
             if (categories.Count > 0 && string.IsNullOrEmpty(currentPath))

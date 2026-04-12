@@ -65,6 +65,7 @@ namespace VPB
 
         public int PanelCount => panels.Count;
         public List<GalleryPanel> Panels => panels;
+        public bool AnyPanelHasLoadedContent => panels.Any(p => p != null && p.HasLoadedContent);
 
         private Coroutine autoRefreshCoroutine;
         private bool autoRefreshPending;
@@ -153,9 +154,14 @@ namespace VPB
                         bool changed = false;
                         try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
 
-                        if (!p.IsVisible) continue;
-                        if (changed)
+                        if (changed && (p.IsVisible || p.HasLoadedContent))
+                        {
+                            // Keep hidden panels warm too. Otherwise hidden panels only set
+                            // refreshOnNextShow=true and pay a full RefreshFiles() stall on the
+                            // next open (~1-2s with large libraries) instead of applying the
+                            // incremental delta while the panel is out of view.
                             p.ApplyPackageDelta(added, removed);
+                        }
                     }
 
                     if (!autoRefreshPending) break;
@@ -304,7 +310,8 @@ namespace VPB
 
         public void Show(string title, string extension, string path)
         {
-            if (panels.Count == 0) 
+            LogUtil.Log("[Gallery] Gallery.Show: title='" + title + "' path='" + path + "' panelCount=" + panels.Count + " anyLoaded=" + AnyPanelHasLoadedContent);
+            if (panels.Count == 0)
             {
                 // Create the panel without its internal Show() so we can call Show() exactly
                 // once below with the caller's own title/extension/path.  This avoids the old
@@ -316,20 +323,24 @@ namespace VPB
             }
             else
             {
-                // Show ALL panes (restore session)
+                // Show ALL panes: if visible, update with caller's category; if hidden, restore session
                 foreach(var p in panels)
                 {
-                    if (!p.IsVisible)
+                    if (p.IsVisible)
                     {
-                        // Restore state
-                        if (!string.IsNullOrEmpty(p.GetCurrentPath()))
+                        // Panel is already visible: update it with the caller's category
+                        p.Show(title, extension, path);
+                    }
+                    else
+                    {
+                        // Panel is hidden: restore previous state unless it has never loaded content
+                        if (!p.HasLoadedContent || string.IsNullOrEmpty(p.GetCurrentPath()))
                         {
-                             p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
+                             p.Show(title, extension, path);
                         }
                         else
                         {
-                             // Fallback
-                             p.Show(title, extension, path);
+                             p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
                         }
                     }
                 }

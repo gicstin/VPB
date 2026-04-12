@@ -248,7 +248,10 @@ namespace VPB
         public void Show(string title, string extension, string path)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            if (canvas == null) Init();
+            bool needsInit = canvas == null;
+            LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
+            if (needsInit) Init();
+            LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
             // Lazy-load per-category scroll cache; capture key for the category we may be leaving.
             if (!_scrollCacheLoaded) LoadCategoryScrollCache();
@@ -256,9 +259,19 @@ namespace VPB
 
             DateTime pkgRefreshTime = DateTime.MinValue;
             try { pkgRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
-            bool packagesChanged = refreshOnNextShow;
+            // Init() often runs before FileManager stamps lastPackageRefreshTime; lastApplied stayed MinValue
+            // and the first Show then treated every open as "packages changed". Adopt the current clock once.
+            if (lastAppliedPackageRefreshTime == DateTime.MinValue && pkgRefreshTime > DateTime.MinValue)
+                lastAppliedPackageRefreshTime = pkgRefreshTime;
+
+            bool packageTimestampAdvanced = false;
             if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryManualRefreshOnly)
-                packagesChanged = packagesChanged || (pkgRefreshTime > lastAppliedPackageRefreshTime);
+                packageTimestampAdvanced = (pkgRefreshTime > lastAppliedPackageRefreshTime);
+
+            // After the panel has loaded once, package updates should flow through
+            // Gallery.NotifyPackagesChanged -> ApplyPackageDelta instead of forcing
+            // a full RefreshFiles() during Show(). This avoids hide/open race stalls.
+            bool packagesChanged = refreshOnNextShow || (!hasLoadedContent && packageTimestampAdvanced);
 
             titleText.text = title;
             currentCategoryTitle = title;
@@ -279,6 +292,8 @@ namespace VPB
                 tagsCached = false;
                 categoriesCached = false;
             }
+
+            bool sameViewReopen = hasLoadedContent && !paramsChanged;
 
             // Save scroll for the category we're leaving; prime the restore target for the new one.
             if (paramsChanged && hasLoadedContent && scrollRect != null)
@@ -305,23 +320,16 @@ namespace VPB
             {
                 canvas.worldCamera = Camera.main;
             }
-            
-            UpdateSideButtonsVisibility();
-            UpdateLayout();
-            RefreshTargetDropdown();
 
-            canvas.gameObject.SetActive(true);
-            
-            // Only refresh if params changed OR if we have never loaded (first run) OR explicit refresh needed
-            // BUT skip if gallery refresh is suppressed (loading content from gallery)
+            // Decide refresh before UpdateLayout so we can avoid synchronous full-library cache scans
+            // (CacheCreators / CacheCategoryCounts) when RefreshFilesRoutine will rebuild them on a worker thread.
             bool shouldRefresh = paramsChanged || !hasLoadedContent || packagesChanged;
-            
+
             try
             {
                 if (shouldRefresh && Gallery.IsSuppressed())
                 {
                     LogUtil.Log("[VPB] GalleryPanel.Show: Skipping RefreshFiles (suppressed)");
-                    // Update timestamp to prevent refresh on next show
                     lastAppliedPackageRefreshTime = pkgRefreshTime;
                     shouldRefresh = false;
                 }
@@ -330,16 +338,41 @@ namespace VPB
             {
                 LogUtil.LogError($"[VPB] Error checking suppress state: {suppressEx.Message}");
             }
-            
+
+            // Fast reopen path: same already-loaded view should just become visible again.
+            // Do not run layout/tabs/refresh logic here; it causes the redraw/flicker you reported.
+            if (sameViewReopen && hasLoadedContent)
+            {
+                SetCanvasVisible(true);
+                if (refreshOnNextShow)
+                {
+                    refreshOnNextShow = false;
+                    lastAppliedPackageRefreshTime = pkgRefreshTime;
+                }
+                LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
+                return;
+            }
+
+            UpdateSideButtonsVisibility();
+            UpdateLayout(!shouldRefresh && !sameViewReopen);
+            RefreshTargetDropdown();
+
+            SetCanvasVisible(true);
+
             if (shouldRefresh)
             {
                 RefreshFiles(!paramsChanged);
                 refreshOnNextShow = false;
                 lastAppliedPackageRefreshTime = pkgRefreshTime;
             }
-            
-            UpdateTabs();
-            UpdateLayout();
+
+            // Same-view reopen: keep the existing side-tab/button tree and avoid synchronous count rebuilds.
+            // Full refresh path: keep UI lightweight while RefreshFilesRoutine rebuilds caches in the background.
+            if (sameViewReopen || refreshCoroutine != null)
+                UpdateTabsImpl(rebuildSideTabLists: false);
+            else
+                UpdateTabs();
+            UpdateLayout(!sameViewReopen && refreshCoroutine == null);
 
             // Position it in front of the user if in VR, ONLY ONCE
             if (!hasBeenPositioned)
@@ -364,14 +397,24 @@ namespace VPB
                     hasBeenPositioned = true;
                 }
             }
+            LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
         }
 
         public void Hide()
         {
-            if (canvas != null)
-                canvas.gameObject.SetActive(false);
+            SetCanvasVisible(false);
 
             hoverCount = 0;
+        }
+
+        private void SetCanvasVisible(bool visible)
+        {
+            if (canvas == null) return;
+
+            canvas.enabled = visible;
+
+            var raycaster = canvas.GetComponent<GraphicRaycaster>();
+            if (raycaster != null) raycaster.enabled = visible;
         }
 
         private static string MakeCategoryScrollKey(string title, string path)
@@ -809,11 +852,17 @@ namespace VPB
             if (refreshTime <= DateTime.MinValue) refreshTime = DateTime.Now;
             if (refreshTime <= lastAppliedPackageRefreshTime) return false;
 
-            refreshOnNextShow = true;
-            creatorsCached = false;
-            tagsCached = false;
-            categoriesCached = false;
-			try { if (IsVisible) UpdateTabs(); } catch { }
+            // If content is already loaded, Gallery.AutoRefreshAfterPackageScan will apply
+            // an incremental delta immediately. Do not arm refreshOnNextShow here, otherwise
+            // a hide/open race can trigger a one-off full RefreshFiles() stall on Show().
+            if (!hasLoadedContent || recyclingGrid == null || scrollRect == null)
+            {
+                refreshOnNextShow = true;
+                creatorsCached = false;
+                tagsCached = false;
+                categoriesCached = false;
+			    try { if (IsVisible) UpdateTabs(); } catch { }
+            }
             return true;
         }
     }

@@ -3,6 +3,7 @@ using HarmonyLib;
 using ICSharpCode.SharpZipLib.Zip;
 using Prime31.MessageKit;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -915,7 +916,9 @@ namespace VPB
             });
 
             AutoLoadALPackages();
-            
+            StartCoroutine(UI.PrewarmIconCacheCoroutine());
+            StartCoroutine(PrewarmGalleryPanelCoroutine());
+
             // Auto-create gallery pane on startup if enabled
             if (VPBConfig.Instance != null && VPBConfig.Instance.EnableAutoFixedGallery)
             {
@@ -929,6 +932,23 @@ namespace VPB
             }
         }
         
+        private IEnumerator PrewarmGalleryPanelCoroutine()
+        {
+            // Wait until the UI and file manager are both ready
+            while (!m_UIInited || !IsFileManagerInited)
+                yield return null;
+
+            // Skip if auto-fixed gallery already created a panel, or singleton is missing
+            if (Gallery.singleton == null || Gallery.singleton.PanelCount > 0) yield break;
+
+            if (!m_GalleryCatsInited) InitGalleryCategories();
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Gallery.singleton.CreatePane(showAfterCreate: false);
+            sw.Stop();
+            LogUtil.Log("[VPB] Gallery panel pre-warmed in " + sw.ElapsedMilliseconds + "ms");
+        }
+
         void AutoLoadALPackages()
         {
             System.Threading.ThreadPool.QueueUserWorkItem((state) => {
@@ -1246,8 +1266,9 @@ namespace VPB
                     m_BringFrontButtonGO.SetActive(shouldShow);
                 }
                 
-                if (shouldShow && m_ShowHideButton != null)
+                if (shouldShow && m_ShowHideButton != null && count != m_ShowHideButtonLastCount)
                 {
+                    m_ShowHideButtonLastCount = count;
                     m_ShowHideButton.label = VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide") + " (" + count + ")";
                 }
             }
@@ -1507,6 +1528,7 @@ namespace VPB
         Canvas m_QuickMenuCanvas;
         GameObject m_ShowHideButtonGO;
         UIDynamicButton m_ShowHideButton;
+        int m_ShowHideButtonLastCount = -1;
         GameObject m_CreateGalleryButtonGO;
         GameObject m_CloseAllButtonGO;
         GameObject m_BringFrontButtonGO;

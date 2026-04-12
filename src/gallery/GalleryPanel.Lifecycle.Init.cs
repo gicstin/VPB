@@ -2991,6 +2991,13 @@ UpdateDesktopModeButton();
             UpdateLayout();
             SubscribeLocaleChanged();
             RefreshLocalizedUi();
+
+            // Default lastAppliedPackageRefreshTime was DateTime.MinValue, so the first Show() always saw
+            // pkgRefreshTime > lastApplied, set packagesChanged, cleared creator/category caches, and
+            // UpdateLayout rebuilt them synchronously on the main thread (~seconds). Align to the current
+            // FileManager baseline so only real refreshes invalidate caches (RefreshFilesRoutine already
+            // rebuilds counts on a worker thread when needed).
+            try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
         }
     }
 
