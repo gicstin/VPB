@@ -54,6 +54,7 @@
   "gallery.icon.refresh": "⟳",
   "gallery.status.refreshing_packages": "正在重新整理資源包…",
   "gallery.status.refresh_failed": "重新整理失敗，請查看記錄。",
+  "gallery.status.select_all_too_many": "目前清單項目過多，無法全選（{0} 項，上限 {1}）。",
   "gallery.desktop.floating": "浮動",
   "gallery.desktop.fixed": "固定",
   "gallery.follow.static": "靜止",

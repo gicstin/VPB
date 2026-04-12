@@ -54,6 +54,7 @@
   "gallery.icon.refresh": "⟳",
   "gallery.status.refreshing_packages": "正在刷新资源包…",
   "gallery.status.refresh_failed": "刷新失败，请查看日志。",
+  "gallery.status.select_all_too_many": "当前列表项目过多，无法全选（{0} 项，上限 {1}）。",
   "gallery.desktop.floating": "浮动",
   "gallery.desktop.fixed": "固定",
   "gallery.follow.static": "静止",

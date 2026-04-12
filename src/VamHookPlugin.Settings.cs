@@ -112,7 +112,6 @@ namespace VPB
                     if (changed)
                     {
                         VPBConfig.Instance.Save();
-                        VPBConfig.Instance.TriggerChange();
                     }
                 }
                 UIKey = parsed;

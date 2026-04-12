@@ -54,6 +54,7 @@
   "gallery.icon.refresh": "⟳",
   "gallery.status.refreshing_packages": "パッケージを更新しています…",
   "gallery.status.refresh_failed": "更新に失敗しました。ログを確認してください。",
+  "gallery.status.select_all_too_many": "項目が多すぎるため全選択できません（{0} 件表示、上限 {1} 件）。",
   "gallery.desktop.floating": "フローティング",
   "gallery.desktop.fixed": "固定",
   "gallery.follow.static": "静止",

@@ -446,7 +446,7 @@
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 
   <PropertyGroup>
-    <!-- DLL + vpb_translations + vpb_fonts: same PostBuildEvent so copies always run with the DLL (AfterTargets=PostBuildEvent is unreliable across MSBuild/VS). Robocopy: exit 0-7 = success. -->
+    <!-- DLL + vpb_translations + vpb_fonts + vpb_icons: same PostBuildEvent so copies always run with the DLL (AfterTargets=PostBuildEvent is unreliable across MSBuild/VS). Robocopy: exit 0-7 = success. -->
     <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\scripts\VPB.dll"
 copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB.dll"
 if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations\" (
@@ -459,6 +459,12 @@ if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts\" (
 robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts" "$(VaMPath)\BepInEx\plugins\vpb_fonts" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 if errorlevel 8 exit 1
 robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+)
+if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons\" (
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" "$(VaMPath)\BepInEx\plugins\vpb_icons" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 if errorlevel 8 exit 1
 )</PostBuildEvent>
   </PropertyGroup>

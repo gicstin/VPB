@@ -48,7 +48,7 @@ namespace VPB
                 if (VPBConfig.Instance != null)
                 {
                     VPBConfig.Instance.GalleryLayoutMode = (int)layoutMode;
-                    VPBConfig.Instance.Save();
+                    VPBConfig.Instance.Save(true, true);
                 }
             }
             catch { }

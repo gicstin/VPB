@@ -582,7 +582,7 @@ namespace VPB
                     if (VPBConfig.Instance != null)
                     {
                         VPBConfig.Instance.GalleryTboxToolbarPinned = tboxPinned;
-                        try { VPBConfig.Instance.Save(); } catch { }
+                        try { VPBConfig.Instance.Save(true, true); } catch { }
                     }
                     RefreshTboxPinVisual();
                 }
@@ -592,11 +592,15 @@ namespace VPB
             var pinRT = tboxPinBtn.GetComponent<RectTransform>();
             pinRT.anchorMin        = new Vector2(1f, 0f);
             pinRT.anchorMax        = new Vector2(1f, 0f);
-            pinRT.pivot            = new Vector2(1f, 0f);
-            pinRT.anchoredPosition = Vector2.zero;
-            pinRT.sizeDelta        = new Vector2(44f, tboxInfoRowHeight);
+            pinRT.pivot            = new Vector2(1f, 0.5f);
+            pinRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight * 0.5f);
+            pinRT.sizeDelta        = new Vector2(44f, 44f);
 
             tboxPinBtnText = tboxPinBtn.GetComponentInChildren<Text>();
+
+            tboxPinOnSprite  = UI.LoadIconSprite("vpb_icons/pin_on.png",  new Color(0.78f, 0.78f, 0.78f, 1f));
+            tboxPinOffSprite = UI.LoadIconSprite("vpb_icons/pin_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            { Sprite init = tboxPinOffSprite ?? tboxPinOnSprite; if (init != null) { UI.AddIconToButton(tboxPinBtn, init); tboxPinIconImage = tboxPinBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
             // Left border line on pin button (visual separator)
             {
@@ -644,7 +648,7 @@ namespace VPB
                     tboxInfoRowHeight = rowH;
                     if (lRT != null) lRT.sizeDelta = new Vector2(lRT.sizeDelta.x, rowH);
                     if (bRT != null) bRT.anchoredPosition = new Vector2(0f, rowH);
-                    if (pRT != null) pRT.sizeDelta = new Vector2(pRT.sizeDelta.x, rowH);
+                    if (pRT != null) pRT.sizeDelta = new Vector2(44f * s, 44f * s);
                     try { TboxSetAllFlexActionButtonHeights(Mathf.Max(34f, rowH - 8f)); } catch { }
                     try { RefreshTboxFlexButtonLayout(); } catch { }
                 });
@@ -663,15 +667,13 @@ namespace VPB
             {
                 tboxPinBtnText.text  = "●";
                 tboxPinBtnText.color = new Color(0.45f, 0.75f, 0.90f, 1f); // teal accent
-                var pinImg = tboxPinBtn != null ? tboxPinBtn.GetComponent<Image>() : null;
-                if (pinImg != null) pinImg.color = new Color(0.10f, 0.22f, 0.30f, 1f);
+                if (tboxPinIconImage != null && tboxPinOnSprite != null) tboxPinIconImage.sprite = tboxPinOnSprite;
             }
             else
             {
                 tboxPinBtnText.text  = "○";
                 tboxPinBtnText.color = new Color(0.45f, 0.45f, 0.45f, 1f);
-                var pinImg = tboxPinBtn != null ? tboxPinBtn.GetComponent<Image>() : null;
-                if (pinImg != null) pinImg.color = new Color(0.20f, 0.20f, 0.20f, 1f);
+                if (tboxPinIconImage != null && tboxPinOffSprite != null) tboxPinIconImage.sprite = tboxPinOffSprite;
             }
         }
 

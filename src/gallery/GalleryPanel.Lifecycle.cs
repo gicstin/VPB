@@ -172,6 +172,34 @@ namespace VPB
             del.OnRightClick = action;
         }
 
+        /// <summary>
+        /// Single place for gallery panel <see cref="VPBConfig.ConfigChanged"/> wiring.
+        /// REGRESSION GUARD: never subscribe <see cref="UpdateTabs"/> here — it repopulates O(n) side-tab buttons and freezes the UI on every Save/TriggerChange.
+        /// </summary>
+        private void SubscribeGalleryPanelToVpBConfigChanged()
+        {
+            if (VPBConfig.Instance == null) return;
+            VPBConfig.Instance.ConfigChanged += ApplySideButtonScale;
+            VPBConfig.Instance.ConfigChanged += ApplyInnerPaneScale;
+            VPBConfig.Instance.ConfigChanged += UpdateSideButtonsVisibility;
+            VPBConfig.Instance.ConfigChanged += UpdateFooterFollowStates;
+            VPBConfig.Instance.ConfigChanged += UpdateDesktopModeButton;
+            VPBConfig.Instance.ConfigChanged += UpdateLayout;
+            VPBConfig.Instance.ConfigChanged += RefreshSideTabAreasForConfigChange;
+        }
+
+        private void UnsubscribeGalleryPanelFromVpBConfigChanged()
+        {
+            if (VPBConfig.Instance == null) return;
+            VPBConfig.Instance.ConfigChanged -= ApplySideButtonScale;
+            VPBConfig.Instance.ConfigChanged -= ApplyInnerPaneScale;
+            VPBConfig.Instance.ConfigChanged -= UpdateSideButtonsVisibility;
+            VPBConfig.Instance.ConfigChanged -= UpdateFooterFollowStates;
+            VPBConfig.Instance.ConfigChanged -= UpdateDesktopModeButton;
+            VPBConfig.Instance.ConfigChanged -= UpdateLayout;
+            VPBConfig.Instance.ConfigChanged -= RefreshSideTabAreasForConfigChange;
+        }
+
         void OnDestroy()
         {
             // Re-enable saving on teardown so the cache isn't left permanently paused.
@@ -180,15 +208,7 @@ namespace VPB
 
             UnsubscribeLocaleChanged();
 
-            if (VPBConfig.Instance != null)
-            {
-                VPBConfig.Instance.ConfigChanged -= ApplySideButtonScale;
-                VPBConfig.Instance.ConfigChanged -= ApplyInnerPaneScale;
-                VPBConfig.Instance.ConfigChanged -= UpdateSideButtonsVisibility;
-                VPBConfig.Instance.ConfigChanged -= UpdateFooterFollowStates;
-                VPBConfig.Instance.ConfigChanged -= UpdateDesktopModeButton;
-                VPBConfig.Instance.ConfigChanged -= UpdateLayout;
-            }
+            UnsubscribeGalleryPanelFromVpBConfigChanged();
 
             if (canvas != null)
             {

@@ -22,7 +22,9 @@ namespace VPB
         Hidden,
         HiddenOnly,
         AutoInstall,
-        AutoInstallOnly
+        AutoInstallOnly,
+        /// <summary>File / package creation time (not last modified).</summary>
+        DateCreated
     }
 
     public enum SortDirection
@@ -89,6 +91,17 @@ namespace VPB
                         int res = (state.Direction == SortDirection.Ascending) 
                             ? a.LastWriteTime.CompareTo(b.LastWriteTime)
                             : b.LastWriteTime.CompareTo(a.LastWriteTime);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    break;
+                case SortType.DateCreated:
+                    files.Sort((a, b) => {
+                        DateTime ca = GetSortCreationTime(a);
+                        DateTime cb = GetSortCreationTime(b);
+                        int res = (state.Direction == SortDirection.Ascending)
+                            ? ca.CompareTo(cb)
+                            : cb.CompareTo(ca);
                         if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
                         return res;
                     });
@@ -165,6 +178,27 @@ namespace VPB
                         return res;
                     });
                     break;
+            }
+        }
+
+        /// <summary>Creation time for sorting: .var package time, on-disk file creation, or <see cref="DateTime.MinValue"/> if unknown.</summary>
+        private static DateTime GetSortCreationTime(FileEntry file)
+        {
+            if (file == null) return DateTime.MinValue;
+            try
+            {
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                    return vfe.Package.CreationTime;
+                if (file is PackageListEntry ple && ple.Package != null)
+                    return ple.Package.CreationTime;
+                string p = file.Path;
+                if (string.IsNullOrEmpty(p) || p.StartsWith("[MISSING]", StringComparison.OrdinalIgnoreCase))
+                    return DateTime.MinValue;
+                return FileStat.GetCreationTimeOrMin(p);
+            }
+            catch
+            {
+                return DateTime.MinValue;
             }
         }
 

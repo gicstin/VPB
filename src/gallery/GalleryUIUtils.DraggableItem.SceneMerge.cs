@@ -793,6 +793,35 @@ namespace VPB
         /// <summary>
         /// Reduces an appearance preset JSON to garment clothing only (body outfit), for merge load without replacing face/hair/morphs.
         /// </summary>
+        /// <summary>Strip clothing: and hair: boolParams from the geometry storable in a preset, so Keep mode doesn't load new clothing.</summary>
+        private void StripClothingFromPresetGeometry(JSONClass presetJSON)
+        {
+            if (presetJSON == null || presetJSON["storables"] == null) return;
+            JSONArray storables = presetJSON["storables"].AsArray;
+            if (storables == null) return;
+            foreach (JSONNode node in storables)
+            {
+                JSONClass sn = node as JSONClass;
+                if (sn == null) continue;
+                string id = sn["id"]?.Value ?? "";
+                if (!string.Equals(id, "geometry", StringComparison.OrdinalIgnoreCase)) continue;
+                JSONArray boolParams = sn["boolParams"]?.AsArray;
+                if (boolParams != null)
+                {
+                    JSONArray kept = new JSONArray();
+                    foreach (JSONNode bp in boolParams)
+                    {
+                        string name = bp["name"]?.Value ?? "";
+                        if (!name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase) &&
+                            !name.StartsWith("hair:", StringComparison.OrdinalIgnoreCase))
+                            kept.Add(bp);
+                    }
+                    sn["boolParams"] = kept;
+                }
+                break;
+            }
+        }
+
         private void FilterAppearancePresetToGarmentClothingOnly(JSONClass presetJSON)
         {
             if (presetJSON == null || presetJSON["storables"] == null) return;

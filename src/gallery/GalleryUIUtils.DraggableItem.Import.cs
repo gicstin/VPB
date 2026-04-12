@@ -34,8 +34,8 @@ namespace VPB
         {
             if (clothingMode == "replace") return "Replace Clothing";
             if (clothingMode == "merge") return "Merge Clothing";
-            if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase)) return "Clothes Only (keep person)";
-            return "Keep Existing Clothing";
+            if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase)) return "Steal Clothing";
+            return "Keep Clothing";
         }
 
         private void ApplyAppearanceMode(string clothingMode, Action<string> action)
@@ -48,7 +48,7 @@ namespace VPB
                 else if (clothingMode == "replace") VPBConfig.Instance.AppearanceClothingApplyMode = "replace";
                 else if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
                     VPBConfig.Instance.AppearanceClothingApplyMode = "clothingonly";
-                try { VPBConfig.Instance.Save(); } catch { }
+                try { VPBConfig.Instance.Save(true, true); } catch { }
             }
             action(clothingMode);
         }
@@ -62,7 +62,7 @@ namespace VPB
                 ApplyAppearanceMode(mode, handler);
             }));
 
-            options.Add(new ContextMenuPanel.Option("Keep Existing Clothing", () => {
+            options.Add(new ContextMenuPanel.Option("Keep Clothing", () => {
                 ApplyAppearanceMode("keep", handler);
             }));
 
@@ -74,7 +74,7 @@ namespace VPB
                 ApplyAppearanceMode("merge", handler);
             }));
 
-            options.Add(new ContextMenuPanel.Option("Clothes Only (keep person)", () => {
+            options.Add(new ContextMenuPanel.Option("Steal Clothing", () => {
                 ApplyAppearanceMode("clothingonly", handler);
             }));
         }
@@ -184,6 +184,9 @@ namespace VPB
 
             if (category == "Appearance" && string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
                 FilterAppearancePresetToGarmentClothingOnly(preset);
+
+            if (category == "Appearance" && clothingMode == "keep")
+                StripClothingFromPresetGeometry(preset);
 
             if (preset["storables"] != null) storables = preset["storables"].AsArray;
 

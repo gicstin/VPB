@@ -669,19 +669,8 @@ namespace VPB
 
             if (ctrl && a)
             {
-                // Select All
-                if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
-                
-                selectedFiles.Clear();
-                selectedFilePaths.Clear();
-                foreach (var f in currentFilteredFiles)
-                {
-                    selectedFiles.Add(f);
-                    selectedFilePaths.Add(f.Path);
-                }
-                
-                RefreshSelectionVisuals();
-                UpdatePaginationText();
+                if (IsHubMode) return;
+                TrySelectAllCurrentGalleryView("ctrl+a");
                 return;
             }
 

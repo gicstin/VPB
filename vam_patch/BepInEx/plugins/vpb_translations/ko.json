@@ -54,6 +54,7 @@
   "gallery.icon.refresh": "⟳",
   "gallery.status.refreshing_packages": "패키지를 새로 고치는 중…",
   "gallery.status.refresh_failed": "새로 고침에 실패했습니다. 로그를 확인하세요.",
+  "gallery.status.select_all_too_many": "항목이 너무 많아 모두 선택할 수 없습니다(표시 {0}개, 최대 {1}개).",
   "gallery.desktop.floating": "떠 있음",
   "gallery.desktop.fixed": "고정",
   "gallery.follow.static": "정지",

@@ -544,6 +544,62 @@ namespace VPB
             return buttonGO;
         }
 
+        public static Sprite LoadIconSprite(string relativePathFromPluginsDir, Color? recolorTo = null)
+        {
+            try
+            {
+                string fullPath = Path.Combine(BepInEx.Paths.PluginPath, relativePathFromPluginsDir);
+                if (!File.Exists(fullPath)) return null;
+                byte[] bytes = File.ReadAllBytes(fullPath);
+                Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                tex.LoadImage(bytes);
+                if (recolorTo.HasValue)
+                {
+                    Color c = recolorTo.Value;
+                    Color[] pixels = tex.GetPixels();
+                    for (int i = 0; i < pixels.Length; i++)
+                        if (pixels[i].a > 0.05f)
+                            pixels[i] = new Color(c.r, c.g, c.b, pixels[i].a);
+                    tex.SetPixels(pixels);
+                    tex.Apply();
+                }
+                return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Standard translucent-black backdrop applied to every icon button.</summary>
+        public static readonly Color IconButtonBackdrop = new Color(0f, 0f, 0f, 0.5f);
+
+        /// <summary>
+        /// Adds an icon Image child to <paramref name="buttonGO"/>, hides its text label, and sets
+        /// the button's background to <paramref name="backdropOverride"/> (or <see cref="IconButtonBackdrop"/>
+        /// when null). Pass an override only for buttons that have a meaningful accent colour (e.g. Hub).
+        /// </summary>
+        public static void AddIconToButton(GameObject buttonGO, Sprite icon, float padding = 4f, Color? backdropOverride = null)
+        {
+            // Apply unified backdrop (or explicit override for special-case buttons)
+            Image btnImg = buttonGO.GetComponent<Image>();
+            if (btnImg != null) btnImg.color = backdropOverride ?? IconButtonBackdrop;
+
+            // Hide text — icon replaces it; text remains as fallback when icon is absent
+            Text t = buttonGO.GetComponentInChildren<Text>(true);
+            if (t != null) t.gameObject.SetActive(false);
+
+            GameObject iconGO = new GameObject("Icon");
+            iconGO.transform.SetParent(buttonGO.transform, false);
+            Image img = iconGO.AddComponent<Image>();
+            img.sprite = icon;
+            img.color = Color.white;
+            img.preserveAspect = true;
+            img.raycastTarget = false;
+            RectTransform rt = iconGO.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.sizeDelta = new Vector2(-padding * 2, -padding * 2);
+            rt.anchoredPosition = Vector2.zero;
+        }
+
         public static GameObject CreateUIToggle(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction<bool> onValueChanged)
         {
             GameObject toggleGO = AddChildGOImage(parentGO, new Color(0, 0, 0, 0), anchorPreset, width, height, new Vector2(xOffset, yOffset));

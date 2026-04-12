@@ -72,8 +72,7 @@ namespace VPB
             set { 
                 if (VPBConfig.Instance != null) {
                     VPBConfig.Instance.DragDropReplaceMode = value;
-                    VPBConfig.Instance.TriggerChange();
-                    try { VPBConfig.Instance.Save(); } catch { }
+                    try { VPBConfig.Instance.Save(true, true); } catch { }
                 }
             }
         }
@@ -86,8 +85,7 @@ namespace VPB
                 if (VPBConfig.Instance != null)
                 {
                     VPBConfig.Instance.AppearanceClothingApplyMode = value;
-                    VPBConfig.Instance.TriggerChange();
-                    try { VPBConfig.Instance.Save(); } catch { }
+                    try { VPBConfig.Instance.Save(true, true); } catch { }
                 }
             }
         }
@@ -100,8 +98,7 @@ namespace VPB
                 if (VPBConfig.Instance != null)
                 {
                     VPBConfig.Instance.KeepClothingWhenApplyingAppearance = value;
-                    VPBConfig.Instance.TriggerChange();
-                    try { VPBConfig.Instance.Save(); } catch { }
+                    try { VPBConfig.Instance.Save(true, true); } catch { }
                 }
             }
         }
@@ -532,6 +529,23 @@ namespace VPB
         private GameObject footerRemoveAllHairBtn;
         private Image footerRemoveAllHairBtnImage;
         private Text footerRemoveAllHairBtnText;
+        // Icon swap fields for multi-state footer buttons
+        private Image footerLayoutIconImage;
+        private Sprite footerLayoutGridSprite;
+        private Sprite footerLayoutListSprite;
+        private Image footerHeightIconImage;
+        private Sprite footerHeightFreeSprite;
+        private Sprite footerHeightFixedSprite;
+        private Image footerAutoHideIconImage;
+        private Sprite footerAutoHideOffSprite;
+        private Sprite footerAutoHideOnSprite;
+        private Image footerShowHiddenIconImage;
+        private Sprite footerShowHiddenOffSprite;
+        private Sprite footerShowHiddenOnSprite;
+        // Tbox pin icon swap
+        private Image  tboxPinIconImage;
+        private Sprite tboxPinOnSprite;
+        private Sprite tboxPinOffSprite;
 
         // Side buttons for dynamic positioning
         private List<RectTransform> rightSideButtons = new List<RectTransform>();
@@ -576,6 +590,8 @@ namespace VPB
         private GameObject clearSelectionBtn;
         private GameObject gridSizeMinusBtn;
         private GameObject gridSizePlusBtn;
+        private GameObject footerScrollTopBtn;
+        private GameObject footerScrollBottomBtn;
         // lastTotalItems removed
         private int lastTotalPages = 1;
         // lastShownCount removed
@@ -585,8 +601,7 @@ namespace VPB
             set {
                 if (VPBConfig.Instance != null) {
                     VPBConfig.Instance.GridColumnCount = value;
-                    VPBConfig.Instance.TriggerChange();
-                    try { VPBConfig.Instance.Save(); } catch { }
+                    try { VPBConfig.Instance.Save(true, true); } catch { }
                 }
             }
         }
@@ -599,8 +614,7 @@ namespace VPB
             set {
                 if (VPBConfig.Instance != null) {
                     VPBConfig.Instance.ListRowHeight = value;
-                    VPBConfig.Instance.TriggerChange();
-                    try { VPBConfig.Instance.Save(); } catch { }
+                    try { VPBConfig.Instance.Save(true, true); } catch { }
                 }
             }
         }
@@ -628,9 +642,8 @@ namespace VPB
                         return;
                     }
                     VPBConfig.Instance.ApplyMode = value.ToString();
-                    VPBConfig.Instance.TriggerChange();
                     try {
-                        VPBConfig.Instance.Save();
+                        VPBConfig.Instance.Save(true, true);
                     } catch (System.Exception ex) {
                         LogUtil.LogError("[GalleryPanel] ItemApplyMode save failed: " + ex.Message);
                     }
@@ -652,6 +665,9 @@ namespace VPB
         private string selectionAnchorPath = null;
 
         private List<FileEntry> lastFilteredFiles = new List<FileEntry>();
+
+        /// <summary>Refuse select-all (toolbar and Ctrl+A) when the filtered gallery has more than this many items.</summary>
+        private const int SelectAllSafetyMaxItemCount = 1000;
         public FileEntry selectedFile
         {
             get { return selectedFiles.Count > 0 ? selectedFiles[0] : null; }
@@ -708,6 +724,12 @@ namespace VPB
         private Text fileSortBtnText; // NEW
         private Text fileSortTypeText; // Sort Type button text (Az/Dt/Sz/Rt)
         private Text fileSortDirText; // Sort Direction button text (↑/↓)
+        private Image fileSortDirIconImage; // Icon image on the sort-direction button (swapped asc/desc)
+        private Sprite fileSortDirAscSprite;
+        private Sprite fileSortDirDescSprite;
+        private Image ratingSortIconImage; // Icon image on the star toggle (swapped on/off)
+        private Sprite ratingStarNormalSprite; // star.png — shown when filter is OFF
+        private Sprite ratingStarOffSprite;    // star-off.png — shown when filter is ON
         private GameObject fileSortTypeMenuRoot;
         private GameObject fileSortTypeMenuPanelGO;
         private Text quickFiltersToggleBtnText; // NEW

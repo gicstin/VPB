@@ -26,6 +26,11 @@ namespace VPB
             {
                 ratingSortToggleBtnText.color = isRatingSortToggleEnabled ? Color.green : Color.white;
             }
+            if (ratingSortIconImage != null)
+            {
+                Sprite target = isRatingSortToggleEnabled ? ratingStarOffSprite : ratingStarNormalSprite;
+                if (target != null) ratingSortIconImage.sprite = target;
+            }
         }
 
         private SortState GetSortState(string context)
@@ -107,7 +112,7 @@ namespace VPB
 
         private static readonly SortType[] FileSortDropdownOrder =
         {
-            SortType.Name, SortType.Date, SortType.Size, SortType.Rating,
+            SortType.Name, SortType.Date, SortType.DateCreated, SortType.Size, SortType.Rating,
             SortType.Deps, SortType.Dependents, SortType.Missing,
             SortType.Hidden, SortType.HiddenOnly, SortType.AutoInstall, SortType.AutoInstallOnly
         };
@@ -118,6 +123,7 @@ namespace VPB
             {
                 case SortType.Name: return VPBTranslation.T("gallery.sort.full.name", "Alphabetical (name)");
                 case SortType.Date: return VPBTranslation.T("gallery.sort.full.date", "Date modified");
+                case SortType.DateCreated: return VPBTranslation.T("gallery.sort.full.date_created", "Date created");
                 case SortType.Size: return VPBTranslation.T("gallery.sort.full.size", "File size");
                 case SortType.Rating: return VPBTranslation.T("gallery.sort.full.rating", "Rating");
                 case SortType.Deps: return VPBTranslation.T("gallery.sort.full.deps", "Dependencies");
@@ -298,7 +304,7 @@ namespace VPB
         {
             if (context == "Files")
             {
-                return type == SortType.Name || type == SortType.Date || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
+                return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly;
             }
             else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags")
@@ -317,6 +323,7 @@ namespace VPB
             {
                 case SortType.Name: symbol = "Az"; break;
                 case SortType.Date: symbol = "Dt"; break;
+                case SortType.DateCreated: symbol = "Dc"; break;
                 case SortType.Size: symbol = "Sz"; break;
                 case SortType.Count: symbol = "#"; break;
                 case SortType.Score: symbol = "Sc"; break;
@@ -343,6 +350,7 @@ namespace VPB
                 {
                     case SortType.Name: symbol = "Az"; break;
                     case SortType.Date: symbol = "Dt"; break;
+                    case SortType.DateCreated: symbol = "Dc"; break;
                     case SortType.Size: symbol = "Sz"; break;
                     case SortType.Count: symbol = "#"; break;
                     case SortType.Score: symbol = "Sc"; break;
@@ -361,6 +369,13 @@ namespace VPB
             {
                 string arrow = state.Direction == SortDirection.Ascending ? "↑" : "↓";
                 dirText.text = arrow;
+            }
+
+            // Swap sort-direction icon sprite
+            if (fileSortDirIconImage != null)
+            {
+                Sprite target = state.Direction == SortDirection.Ascending ? fileSortDirAscSprite : fileSortDirDescSprite;
+                if (target != null) fileSortDirIconImage.sprite = target;
             }
         }
 

@@ -850,6 +850,20 @@ namespace VPB
             UpdateVisibleItems();
         }
 
+        /// <summary>Jump scroll to the first row (Unity: vertical normalized 1 = top).</summary>
+        public void ScrollToTopImmediate()
+        {
+            if (_scrollRect != null) _scrollRect.verticalNormalizedPosition = 1f;
+            UpdateVisibleItems();
+        }
+
+        /// <summary>Jump scroll to the last row (Unity: vertical normalized 0 = bottom).</summary>
+        public void ScrollToBottomImmediate()
+        {
+            if (_scrollRect != null) _scrollRect.verticalNormalizedPosition = 0f;
+            UpdateVisibleItems();
+        }
+
         private void OnScroll(Vector2 pos)
         {
             _needsVisibleUpdate = true;

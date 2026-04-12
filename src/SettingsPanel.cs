@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -104,6 +105,23 @@ namespace VPB
         private Text settingsCancelBtnText;
         private Text settingsSaveBtnText;
 
+        private bool _settingsScrollUiBuilt;
+        private bool _settingsScrollUiBuiltForFixed;
+        private bool _settingsScrollUiBuiltForDevSection;
+        private readonly List<System.Action> _settingsScrollSync = new List<System.Action>();
+
+        private sealed class RefBool { public bool Value; }
+        private sealed class RefString { public string Value; }
+
+        /// <summary>Set to false to stop writing [VPB][SettingsPerf] lines to the BepInEx log.</summary>
+        private static bool LogSettingsOpenCloseTiming = true;
+
+        private static void SettingsPerfLog(string message)
+        {
+            if (!LogSettingsOpenCloseTiming) return;
+            LogUtil.Log("[VPB][SettingsPerf] " + message);
+        }
+
         public SettingsPanel(GalleryPanel parentPanel, GameObject backgroundBoxGO)
         {
             this.parentPanel = parentPanel;
@@ -124,13 +142,37 @@ namespace VPB
 
         public void Open(bool onRight)
         {
-            if (settingsPaneGO == null) CreatePane();
-            
+            bool logOpen = LogSettingsOpenCloseTiming;
+            Stopwatch swOpen = new Stopwatch();
+            if (logOpen) swOpen.Start();
+            long mark = 0;
+            if (logOpen) mark = swOpen.ElapsedMilliseconds;
+
+            if (settingsPaneGO == null)
+            {
+                CreatePane();
+                if (logOpen)
+                {
+                    SettingsPerfLog($"Open.CreatePane {swOpen.ElapsedMilliseconds - mark}ms");
+                    mark = swOpen.ElapsedMilliseconds;
+                }
+            }
+
             isSettingsOpen = true;
             settingsOnRight = onRight;
             settingsPaneGO.SetActive(true);
-            VPBConfig.Instance.TriggerChange();
-            
+            // Local layout only: do not call VPBConfig.TriggerChange() here — it runs GalleryPanel's
+            // ConfigChanged handlers (UpdateLayout → ForceRebuildLayoutImmediate on the whole gallery)
+            // even though no config value changed yet. Side tab *button lists* are not rebuilt on
+            // ConfigChanged (only scroll chrome/layout); full lists refresh via explicit UpdateTabs().
+            if (settingsPaneRT != null)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(settingsPaneRT);
+            if (logOpen)
+            {
+                SettingsPerfLog($"Open.SetActiveAndLocalLayout {swOpen.ElapsedMilliseconds - mark}ms");
+                mark = swOpen.ElapsedMilliseconds;
+            }
+
             // Initialize pending settings from current config
             pendingEnableButtonGaps = VPBConfig.Instance.EnableButtonGaps;
             backupEnableButtonGaps = VPBConfig.Instance.EnableButtonGaps;
@@ -209,6 +251,12 @@ namespace VPB
             pendingGalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName;
             backupGalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName;
 
+            if (logOpen)
+            {
+                SettingsPerfLog($"Open.copyPendingFromConfig {swOpen.ElapsedMilliseconds - mark}ms");
+                mark = swOpen.ElapsedMilliseconds;
+            }
+
             RectTransform rt = settingsPaneRT;
             if (onRight)
             {
@@ -225,8 +273,50 @@ namespace VPB
                 rt.anchoredPosition = new Vector2(-SettingsPaneDockOffsetX, 0); 
             }
 
-            RefreshUI();
-            ApplySettingsFonts();
+            if (logOpen)
+            {
+                SettingsPerfLog($"Open.dockLayout {swOpen.ElapsedMilliseconds - mark}ms");
+                mark = swOpen.ElapsedMilliseconds;
+            }
+
+            bool fixedNow = parentPanel != null && parentPanel.isFixedLocally;
+            bool devNow = VPBConfig.Instance.IsDevMode;
+            bool needRebuild = !_settingsScrollUiBuilt
+                || _settingsScrollUiBuiltForFixed != fixedNow
+                || _settingsScrollUiBuiltForDevSection != devNow;
+            if (logOpen)
+                SettingsPerfLog($"Open.scroll path={(needRebuild ? "rebuild" : "sync")} fixed={fixedNow} devSection={devNow}");
+
+            if (needRebuild)
+            {
+                RebuildSettingsScrollContent();
+                if (logOpen)
+                {
+                    SettingsPerfLog($"Open.RebuildSettingsScrollContent {swOpen.ElapsedMilliseconds - mark}ms");
+                    mark = swOpen.ElapsedMilliseconds;
+                }
+                _settingsScrollUiBuilt = true;
+                _settingsScrollUiBuiltForFixed = fixedNow;
+                _settingsScrollUiBuiltForDevSection = devNow;
+                ApplySettingsFonts();
+                if (logOpen)
+                {
+                    SettingsPerfLog($"Open.ApplySettingsFonts {swOpen.ElapsedMilliseconds - mark}ms");
+                    mark = swOpen.ElapsedMilliseconds;
+                }
+            }
+            else
+            {
+                SyncSettingsScrollContent();
+                if (logOpen)
+                {
+                    SettingsPerfLog($"Open.SyncSettingsScrollContent(wall, includes inner log) {swOpen.ElapsedMilliseconds - mark}ms");
+                    mark = swOpen.ElapsedMilliseconds;
+                }
+            }
+
+            if (logOpen)
+                SettingsPerfLog($"Open.TOTAL {swOpen.ElapsedMilliseconds}ms");
         }
 
         public void RefreshLocalizedUi()
@@ -235,7 +325,11 @@ namespace VPB
             if (settingsTitleText != null) settingsTitleText.text = VPBTranslation.T("settings.title", "Settings");
             if (settingsCancelBtnText != null) settingsCancelBtnText.text = VPBTranslation.T("settings.cancel", "Cancel");
             if (settingsSaveBtnText != null) settingsSaveBtnText.text = VPBTranslation.T("settings.save", "Save");
-            RefreshUI();
+            _settingsScrollUiBuilt = false;
+            RebuildSettingsScrollContent();
+            _settingsScrollUiBuilt = true;
+            _settingsScrollUiBuiltForFixed = parentPanel != null && parentPanel.isFixedLocally;
+            _settingsScrollUiBuiltForDevSection = VPBConfig.Instance.IsDevMode;
             ApplySettingsFonts();
         }
 
@@ -246,12 +340,86 @@ namespace VPB
                 VPBUiFont.ApplyTo(tx);
         }
 
+        private static bool HiddenCategorySetsEqual(HashSet<string> a, HashSet<string> b)
+        {
+            if (a == null && b == null) return true;
+            if (a == null || b == null) return false;
+            if (a.Count != b.Count) return false;
+            foreach (var x in a)
+            {
+                if (!b.Contains(x)) return false;
+            }
+            return true;
+        }
+
+        /// <summary>True when nothing was changed since this settings session opened (live preview already matches backup).</summary>
+        private bool PendingMatchesBackup()
+        {
+            if (pendingEnableButtonGaps != backupEnableButtonGaps) return false;
+            if (!string.Equals(pendingShowSideButtons ?? "", backupShowSideButtons ?? "", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(pendingFollowAngle ?? "", backupFollowAngle ?? "", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(pendingFollowDistance ?? "", backupFollowDistance ?? "", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(pendingFollowEyeHeight ?? "", backupFollowEyeHeight ?? "", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!Mathf.Approximately(pendingReorientStartAngle, backupReorientStartAngle)) return false;
+            if (!Mathf.Approximately(pendingMovementThreshold, backupMovementThreshold)) return false;
+            if (!Mathf.Approximately(pendingBringToFrontDistance, backupBringToFrontDistance)) return false;
+            if (pendingEnableGalleryFade != backupEnableGalleryFade) return false;
+            if (pendingEnableGalleryTranslucency != backupEnableGalleryTranslucency) return false;
+            if (pendingGalleryManualRefreshOnly != backupGalleryManualRefreshOnly) return false;
+            if (!Mathf.Approximately(pendingGalleryOpacity, backupGalleryOpacity)) return false;
+            if (!Mathf.Approximately(pendingSideButtonScale, backupSideButtonScale)) return false;
+            if (!Mathf.Approximately(pendingInnerPaneScale, backupInnerPaneScale)) return false;
+            if (pendingDragDropReplaceMode != backupDragDropReplaceMode) return false;
+            if (!string.Equals(NormalizeSettingsAppearanceClothingMode(pendingAppearanceClothingApplyMode), NormalizeSettingsAppearanceClothingMode(backupAppearanceClothingApplyMode), StringComparison.OrdinalIgnoreCase)) return false;
+            if (pendingEnableDragDrop != backupEnableDragDrop) return false;
+            if (!Mathf.Approximately(pendingDragHoldThreshold, backupDragHoldThreshold)) return false;
+            if (pendingIsDevMode != backupIsDevMode) return false;
+            if (pendingEnableAutoFixedGallery != backupEnableAutoFixedGallery) return false;
+            if (!string.Equals(pendingInitialGalleryCategory ?? "", backupInitialGalleryCategory ?? "", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(pendingGalleryDefaultLeftSidePanel ?? "", backupGalleryDefaultLeftSidePanel ?? "", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(pendingGalleryDefaultRightSidePanel ?? "", backupGalleryDefaultRightSidePanel ?? "", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!HiddenCategorySetsEqual(pendingHiddenCategories, backupHiddenCategories)) return false;
+            if (pendingPluginGalleryGridThumbnails != backupPluginGalleryGridThumbnails) return false;
+            if (pendingGalleryListNamesLegacyFileName != backupGalleryListNamesLegacyFileName) return false;
+            return true;
+        }
+
+        /// <summary>After persisting settings, run ConfigChanged only if something changed that did not already fire it during live preview.</summary>
+        private bool SaveNeedsDeferredConfigNotify()
+        {
+            if (PendingMatchesBackup()) return false;
+            if (pendingIsDevMode != backupIsDevMode) return true;
+            if (pendingEnableDragDrop != backupEnableDragDrop) return true;
+            if (!Mathf.Approximately(pendingDragHoldThreshold, backupDragHoldThreshold)) return true;
+            if (!Mathf.Approximately(pendingBringToFrontDistance, backupBringToFrontDistance)) return true;
+            return false;
+        }
+
         public void Close()
         {
+            bool logClose = LogSettingsOpenCloseTiming;
+            Stopwatch swClose = new Stopwatch();
+            if (logClose) swClose.Start();
+            long mark = 0;
+            if (logClose) mark = swClose.ElapsedMilliseconds;
+
             isSettingsOpen = false;
             if (settingsPaneGO != null) settingsPaneGO.SetActive(false);
             if (tooltipGO != null) tooltipGO.SetActive(false);
-            
+
+            if (logClose)
+            {
+                SettingsPerfLog($"Close.SetActiveOff {swClose.ElapsedMilliseconds - mark}ms");
+                mark = swClose.ElapsedMilliseconds;
+            }
+
+            if (PendingMatchesBackup())
+            {
+                if (logClose)
+                    SettingsPerfLog($"Close.TOTAL {swClose.ElapsedMilliseconds}ms (no changes; skipped revert & TriggerChange)");
+                return;
+            }
+
             // Revert live changes from memory backup
             VPBConfig.Instance.EnableButtonGaps = backupEnableButtonGaps;
             VPBConfig.Instance.ShowSideButtons = backupShowSideButtons;
@@ -266,9 +434,8 @@ namespace VPB
             VPBConfig.Instance.GalleryManualRefreshOnly = backupGalleryManualRefreshOnly;
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.SideButtonScale = backupSideButtonScale;
-            if (parentPanel != null) parentPanel.ApplySideButtonScale();
             VPBConfig.Instance.InnerPaneScale = backupInnerPaneScale;
-            if (parentPanel != null) parentPanel.ApplyInnerPaneScale();
+            // ApplySideButtonScale / ApplyInnerPaneScale run from ConfigChanged after TriggerChange below.
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
             VPBConfig.Instance.AppearanceClothingApplyMode = backupAppearanceClothingApplyMode;
             VPBConfig.Instance.EnableDragDrop = backupEnableDragDrop;
@@ -285,10 +452,41 @@ namespace VPB
             bool galleryListLegacyWasPending = pendingGalleryListNamesLegacyFileName != backupGalleryListNamesLegacyFileName;
             VPBConfig.Instance.GalleryListNamesLegacyFileName = backupGalleryListNamesLegacyFileName;
             pendingGalleryListNamesLegacyFileName = backupGalleryListNamesLegacyFileName;
+
+            if (logClose)
+            {
+                SettingsPerfLog($"Close.revertConfigFields {swClose.ElapsedMilliseconds - mark}ms");
+                mark = swClose.ElapsedMilliseconds;
+            }
+
             VPBConfig.Instance.TriggerChange();
+            if (logClose)
+            {
+                SettingsPerfLog($"Close.TriggerChange {swClose.ElapsedMilliseconds - mark}ms");
+                mark = swClose.ElapsedMilliseconds;
+            }
+
             if (parentPanel != null && galleryListLegacyWasPending) parentPanel.RefreshFiles(true);
+            if (logClose)
+            {
+                SettingsPerfLog($"Close.RefreshFiles(conditional) {swClose.ElapsedMilliseconds - mark}ms");
+                mark = swClose.ElapsedMilliseconds;
+            }
+
             if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
+            if (logClose)
+            {
+                SettingsPerfLog($"Close.RefreshAppearanceClothingSideButton {swClose.ElapsedMilliseconds - mark}ms");
+                mark = swClose.ElapsedMilliseconds;
+            }
+
             if (parentPanel != null) parentPanel.ApplySidePanelDefaultsFromConfig();
+            if (logClose)
+            {
+                SettingsPerfLog($"Close.ApplySidePanelDefaultsFromConfig {swClose.ElapsedMilliseconds - mark}ms");
+                mark = swClose.ElapsedMilliseconds;
+                SettingsPerfLog($"Close.TOTAL {swClose.ElapsedMilliseconds}ms");
+            }
         }
 
         private void CreatePane()
@@ -340,39 +538,44 @@ namespace VPB
             settingsCancelBtnText.color = Color.white;
             
             GameObject saveBtn = UI.CreateUIButton(settingsPaneGO, btnW, btnH, VPBTranslation.T("settings.save", "Save"), 24, 120, footerY, AnchorPresets.bottomMiddle, () => {
-                VPBConfig.Instance.EnableButtonGaps = pendingEnableButtonGaps;
-                VPBConfig.Instance.ShowSideButtons = pendingShowSideButtons;
-                VPBConfig.Instance.FollowAngle = pendingFollowAngle;
-                VPBConfig.Instance._followDistance = pendingFollowDistance;
-                VPBConfig.Instance._followEyeHeight = pendingFollowEyeHeight;
-                VPBConfig.Instance.ReorientStartAngle = pendingReorientStartAngle;
-                VPBConfig.Instance.MovementThreshold = pendingMovementThreshold;
-                VPBConfig.Instance.BringToFrontDistance = pendingBringToFrontDistance;
-                VPBConfig.Instance.EnableGalleryFade = pendingEnableGalleryFade;
-                VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
-                VPBConfig.Instance.GalleryManualRefreshOnly = pendingGalleryManualRefreshOnly;
-                VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
-                VPBConfig.Instance.SideButtonScale = pendingSideButtonScale;
-                VPBConfig.Instance.InnerPaneScale = pendingInnerPaneScale;
-                VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
-                VPBConfig.Instance.AppearanceClothingApplyMode = pendingAppearanceClothingApplyMode;
-                VPBConfig.Instance.EnableDragDrop = pendingEnableDragDrop;
-                VPBConfig.Instance.DragHoldThreshold = pendingDragHoldThreshold;
-                VPBConfig.Instance.IsDevMode = pendingIsDevMode;
-                VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
-                VPBConfig.Instance.InitialGalleryCategory = pendingInitialGalleryCategory;
-                VPBConfig.Instance.GalleryDefaultLeftSidePanel = pendingGalleryDefaultLeftSidePanel;
-                VPBConfig.Instance.GalleryDefaultRightSidePanel = pendingGalleryDefaultRightSidePanel;
-                backupGalleryDefaultLeftSidePanel = pendingGalleryDefaultLeftSidePanel;
-                backupGalleryDefaultRightSidePanel = pendingGalleryDefaultRightSidePanel;
-                VPBConfig.Instance.PluginGalleryGridThumbnails = pendingPluginGalleryGridThumbnails;
-                backupPluginGalleryGridThumbnails = pendingPluginGalleryGridThumbnails;
-                VPBConfig.Instance.GalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
-                backupGalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
-                VPBConfig.Instance.Save();
-                if (parentPanel != null) parentPanel.ApplySidePanelDefaultsFromConfig();
-                if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
-                
+                if (!PendingMatchesBackup())
+                {
+                    VPBConfig.Instance.EnableButtonGaps = pendingEnableButtonGaps;
+                    VPBConfig.Instance.ShowSideButtons = pendingShowSideButtons;
+                    VPBConfig.Instance.FollowAngle = pendingFollowAngle;
+                    VPBConfig.Instance._followDistance = pendingFollowDistance;
+                    VPBConfig.Instance._followEyeHeight = pendingFollowEyeHeight;
+                    VPBConfig.Instance.ReorientStartAngle = pendingReorientStartAngle;
+                    VPBConfig.Instance.MovementThreshold = pendingMovementThreshold;
+                    VPBConfig.Instance.BringToFrontDistance = pendingBringToFrontDistance;
+                    VPBConfig.Instance.EnableGalleryFade = pendingEnableGalleryFade;
+                    VPBConfig.Instance.EnableGalleryTranslucency = pendingEnableGalleryTranslucency;
+                    VPBConfig.Instance.GalleryManualRefreshOnly = pendingGalleryManualRefreshOnly;
+                    VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
+                    VPBConfig.Instance.SideButtonScale = pendingSideButtonScale;
+                    VPBConfig.Instance.InnerPaneScale = pendingInnerPaneScale;
+                    VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
+                    VPBConfig.Instance.AppearanceClothingApplyMode = pendingAppearanceClothingApplyMode;
+                    VPBConfig.Instance.EnableDragDrop = pendingEnableDragDrop;
+                    VPBConfig.Instance.DragHoldThreshold = pendingDragHoldThreshold;
+                    VPBConfig.Instance.IsDevMode = pendingIsDevMode;
+                    VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
+                    VPBConfig.Instance.InitialGalleryCategory = pendingInitialGalleryCategory;
+                    VPBConfig.Instance.GalleryDefaultLeftSidePanel = pendingGalleryDefaultLeftSidePanel;
+                    VPBConfig.Instance.GalleryDefaultRightSidePanel = pendingGalleryDefaultRightSidePanel;
+                    backupGalleryDefaultLeftSidePanel = pendingGalleryDefaultLeftSidePanel;
+                    backupGalleryDefaultRightSidePanel = pendingGalleryDefaultRightSidePanel;
+                    VPBConfig.Instance.PluginGalleryGridThumbnails = pendingPluginGalleryGridThumbnails;
+                    backupPluginGalleryGridThumbnails = pendingPluginGalleryGridThumbnails;
+                    VPBConfig.Instance.GalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
+                    backupGalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
+                    // Avoid ConfigChanged from Save: live preview already ran it for most controls (expensive full gallery layout).
+                    VPBConfig.Instance.Save(false);
+                    if (SaveNeedsDeferredConfigNotify())
+                        VPBConfig.Instance.TriggerChange();
+                    if (parentPanel != null) parentPanel.ApplySidePanelDefaultsFromConfig();
+                }
+
                 isSettingsOpen = false;
                 if (settingsPaneGO != null) settingsPaneGO.SetActive(false);
                 if (tooltipGO != null) tooltipGO.SetActive(false);
@@ -403,9 +606,43 @@ namespace VPB
             ttRT.sizeDelta = new Vector2(-20, -20);
         }
 
-        private void RefreshUI()
+        private void SyncSettingsScrollContent()
         {
+            if (!LogSettingsOpenCloseTiming)
+            {
+                for (int i = 0; i < _settingsScrollSync.Count; i++)
+                {
+                    try { _settingsScrollSync[i](); }
+                    catch { }
+                }
+                return;
+            }
+
+            Stopwatch sw = Stopwatch.StartNew();
+            for (int i = 0; i < _settingsScrollSync.Count; i++)
+            {
+                try { _settingsScrollSync[i](); }
+                catch { }
+            }
+            SettingsPerfLog($"SyncSettingsScrollContent rows={_settingsScrollSync.Count} {sw.ElapsedMilliseconds}ms");
+        }
+
+        private void RebuildSettingsScrollContent()
+        {
+            bool logRebuild = LogSettingsOpenCloseTiming;
+            Stopwatch sw = new Stopwatch();
+            if (logRebuild) sw.Start();
+            long mark = 0;
+            if (logRebuild) mark = sw.ElapsedMilliseconds;
+
+            _settingsScrollSync.Clear();
             foreach (Transform child in settingsScrollContent.transform) GameObject.Destroy(child.gameObject);
+
+            if (logRebuild)
+            {
+                SettingsPerfLog($"Rebuild.DestroyScrollChildren {sw.ElapsedMilliseconds - mark}ms (Unity Destroy is deferred; real GC/layout cost may land on a later frame)");
+                mark = sw.ElapsedMilliseconds;
+            }
 
             // CATEGORY: Visuals
             CreateHeader(VPBTranslation.T("settings.header.visuals", "Visuals"));
@@ -415,45 +652,45 @@ namespace VPB
                 pendingEnableGalleryFade = val;
                 VPBConfig.Instance.EnableGalleryFade = val;
                 VPBConfig.Instance.TriggerChange();
-            }, VPBTranslation.T("settings.tip.side_button_fade", "Fades out side buttons when not hovering over them."));
+            }, VPBTranslation.T("settings.tip.side_button_fade", "Fades out side buttons when not hovering over them."), () => pendingEnableGalleryFade);
 
             // Gallery Translucency
             CreateToggleSetting(VPBTranslation.T("settings.gallery_translucency", "Gallery Translucency"), pendingEnableGalleryTranslucency, (val) => {
                 pendingEnableGalleryTranslucency = val;
                 VPBConfig.Instance.EnableGalleryTranslucency = val;
                 VPBConfig.Instance.TriggerChange();
-            }, VPBTranslation.T("settings.tip.gallery_translucency", "Makes the entire gallery pane translucent."));
+            }, VPBTranslation.T("settings.tip.gallery_translucency", "Makes the entire gallery pane translucent."), () => pendingEnableGalleryTranslucency);
 
             CreateToggleSetting(VPBTranslation.T("settings.gallery_manual_refresh_only", "Manual gallery refresh only"), pendingGalleryManualRefreshOnly, (val) => {
                 pendingGalleryManualRefreshOnly = val;
                 VPBConfig.Instance.GalleryManualRefreshOnly = val;
                 VPBConfig.Instance.TriggerChange();
-            }, VPBTranslation.T("settings.tip.gallery_manual_refresh_only", "When enabled, package scans do not update the file grid until you press Refresh in the gallery. Reduces scroll jumps and load when the package index changes often."));
+            }, VPBTranslation.T("settings.tip.gallery_manual_refresh_only", "When enabled, package scans do not update the file grid until you press Refresh in the gallery. Reduces scroll jumps and load when the package index changes often."), () => pendingGalleryManualRefreshOnly);
 
             CreateSliderSetting(VPBTranslation.T("settings.gallery_opacity", "Gallery Opacity"), pendingGalleryOpacity, 0.1f, 1.0f, (val) => {
                 pendingGalleryOpacity = val;
                 VPBConfig.Instance.GalleryOpacity = val;
                 VPBConfig.Instance.TriggerChange();
-            }, VPBTranslation.T("settings.tip.gallery_opacity", "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque."));
+            }, VPBTranslation.T("settings.tip.gallery_opacity", "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque."), () => pendingGalleryOpacity);
 
             CreateSliderSetting(VPBTranslation.T("settings.side_button_scale", "Side Button Scale"), pendingSideButtonScale, 0.5f, 2.0f, (val) => {
                 pendingSideButtonScale = val;
                 VPBConfig.Instance.SideButtonScale = val;
                 if (parentPanel != null) parentPanel.ApplySideButtonScale();
-            }, VPBTranslation.T("settings.tip.side_button_scale", "Scales the size of the side buttons. 1.0 = default size."));
+            }, VPBTranslation.T("settings.tip.side_button_scale", "Scales the size of the side buttons. 1.0 = default size."), () => pendingSideButtonScale);
 
             CreateSliderSetting(VPBTranslation.T("settings.inner_pane_scale", "Inner Pane Scale"), pendingInnerPaneScale, 0.5f, 2.0f, (val) => {
                 pendingInnerPaneScale = val;
                 VPBConfig.Instance.InnerPaneScale = val;
-                if (parentPanel != null) parentPanel.ApplyInnerPaneScale();
-            }, VPBTranslation.T("settings.tip.inner_pane_scale", "Scales all UI elements inside the gallery pane. 1.0 = default size."));
+                VPBConfig.Instance.TriggerChange();
+            }, VPBTranslation.T("settings.tip.inner_pane_scale", "Scales all UI elements inside the gallery pane. 1.0 = default size."), () => pendingInnerPaneScale);
 
             // Side Button Gaps
             CreateToggleSetting(VPBTranslation.T("settings.side_button_gaps", "Side Button Gaps"), pendingEnableButtonGaps, (val) => {
                 pendingEnableButtonGaps = val;
                 VPBConfig.Instance.EnableButtonGaps = val;
                 VPBConfig.Instance.TriggerChange(); 
-            }, VPBTranslation.T("settings.tip.side_button_gaps", "Adds small gaps between groups of side buttons for better visual separation."));
+            }, VPBTranslation.T("settings.tip.side_button_gaps", "Adds small gaps between groups of side buttons for better visual separation."), () => pendingEnableButtonGaps);
             
             bool isFixed = parentPanel != null && parentPanel.isFixedLocally;
 
@@ -470,7 +707,7 @@ namespace VPB
                     pendingShowSideButtons = val;
                     VPBConfig.Instance.ShowSideButtons = val;
                     VPBConfig.Instance.TriggerChange();
-                }, VPBTranslation.T("settings.tip.show_side_buttons", "Choose which sides of the gallery show the action buttons."));
+                }, VPBTranslation.T("settings.tip.show_side_buttons", "Choose which sides of the gallery show the action buttons."), () => pendingShowSideButtons);
             }
 
             // CATEGORY: Interaction
@@ -492,41 +729,41 @@ namespace VPB
                     pendingFollowAngle = val;
                     VPBConfig.Instance.FollowAngle = val;
                     VPBConfig.Instance.TriggerChange();
-                }, VPBTranslation.T("settings.tip.follow_angle", "When enabled, the panel will rotate to face the user. 'Both' = both VR and Desktop."));
+                }, VPBTranslation.T("settings.tip.follow_angle", "When enabled, the panel will rotate to face the user. 'Both' = both VR and Desktop."), () => pendingFollowAngle);
 
                 // Follow Eye Height
                 CreateCycleSetting(VPBTranslation.T("settings.follow_eye_height", "Follow Eye Height"), pendingFollowEyeHeight, followOptions, followLabels, (val) => {
                     pendingFollowEyeHeight = val;
                     VPBConfig.Instance.FollowEyeHeight = val;
                     VPBConfig.Instance.TriggerChange();
-                }, VPBTranslation.T("settings.tip.follow_eye_height", "When enabled, the panel will stay at eye level. 'Both' = both VR and Desktop."));
+                }, VPBTranslation.T("settings.tip.follow_eye_height", "When enabled, the panel will stay at eye level. 'Both' = both VR and Desktop."), () => pendingFollowEyeHeight);
 
                 // Follow Distance (ON/OFF)
                 CreateCycleSetting(VPBTranslation.T("settings.follow_distance", "Follow Distance"), pendingFollowDistance, followOptions, followLabels, (val) => {
                     pendingFollowDistance = val;
                     VPBConfig.Instance.FollowDistance = val;
                     VPBConfig.Instance.TriggerChange();
-                }, VPBTranslation.T("settings.tip.follow_distance", "When enabled, the panel will maintain its distance from the user. 'Both' = both VR and Desktop."));
+                }, VPBTranslation.T("settings.tip.follow_distance", "When enabled, the panel will maintain its distance from the user. 'Both' = both VR and Desktop."), () => pendingFollowDistance);
 
                 // Reorient Start Angle
                 CreateSliderSetting(VPBTranslation.T("settings.reorient_angle", "Reorient Angle"), pendingReorientStartAngle, 5f, 90f, (val) => {
                     pendingReorientStartAngle = val;
                     VPBConfig.Instance.ReorientStartAngle = val;
                     VPBConfig.Instance.TriggerChange();
-                }, VPBTranslation.T("settings.tip.reorient_angle", "The angle difference required before the panel starts rotating to face you. Higher values reduce frequent rotations."));
+                }, VPBTranslation.T("settings.tip.reorient_angle", "The angle difference required before the panel starts rotating to face you. Higher values reduce frequent rotations."), () => pendingReorientStartAngle);
 
                 // Movement Threshold
                 CreateSliderSetting(VPBTranslation.T("settings.move_threshold", "Move Threshold"), pendingMovementThreshold, 0.01f, 1.0f, (val) => {
                     pendingMovementThreshold = val;
                     VPBConfig.Instance.MovementThreshold = val;
                     VPBConfig.Instance.TriggerChange();
-                }, VPBTranslation.T("settings.tip.move_threshold", "The distance you must move before the panel updates its position. Higher values provide more stable 'discrete' updates."));
+                }, VPBTranslation.T("settings.tip.move_threshold", "The distance you must move before the panel updates its position. Higher values provide more stable 'discrete' updates."), () => pendingMovementThreshold);
 
                 // Bring to Front Distance
                 CreateSliderSetting(VPBTranslation.T("settings.bring_front_dist", "Bring Front Dist"), pendingBringToFrontDistance, 0.5f, 2.5f, (val) => {
                     pendingBringToFrontDistance = val;
                     VPBConfig.Instance.BringToFrontDistance = val;
-                }, VPBTranslation.T("settings.tip.bring_front_dist", "The distance (in meters) from your view where panels will appear when using 'Bring to Front'."));
+                }, VPBTranslation.T("settings.tip.bring_front_dist", "The distance (in meters) from your view where panels will appear when using 'Bring to Front'."), () => pendingBringToFrontDistance);
             }
 
             // CATEGORY: Interaction
@@ -534,12 +771,12 @@ namespace VPB
             CreateToggleSetting(VPBTranslation.T("settings.enable_drag_drop", "Enable Drag & Drop"), pendingEnableDragDrop, (val) => {
                 pendingEnableDragDrop = val;
                 VPBConfig.Instance.EnableDragDrop = val;
-            }, VPBTranslation.T("settings.tip.enable_drag_drop", "When disabled, gallery items can only be applied via click — no drag & drop. Disables the context popup that appears on drag."));
+            }, VPBTranslation.T("settings.tip.enable_drag_drop", "When disabled, gallery items can only be applied via click — no drag & drop. Disables the context popup that appears on drag."), () => pendingEnableDragDrop);
 
             CreateSliderSetting(VPBTranslation.T("settings.drag_hold_threshold", "Drag Hold Threshold (s)"), pendingDragHoldThreshold, 0.1f, 1.0f, (val) => {
                 pendingDragHoldThreshold = val;
                 VPBConfig.Instance.DragHoldThreshold = val;
-            }, VPBTranslation.T("settings.tip.drag_hold_threshold", "How long (in seconds) the mouse button must be held before a drag is initiated. Increase to reduce accidental drags on quick clicks."));
+            }, VPBTranslation.T("settings.tip.drag_hold_threshold", "How long (in seconds) the mouse button must be held before a drag is initiated. Increase to reduce accidental drags on quick clicks."), () => pendingDragHoldThreshold);
 
             string[] appearanceClothingOptions = { "replace", "keep", "clothingonly" };
             string[] appearanceClothingLabels = {
@@ -552,7 +789,7 @@ namespace VPB
                 VPBConfig.Instance.AppearanceClothingApplyMode = val;
                 VPBConfig.Instance.TriggerChange();
                 if (parentPanel != null) parentPanel.RefreshAppearanceClothingSideButton();
-            }, VPBTranslation.T("settings.tip.appearance_clothing", "Preset outfit: full appearance. Keep body clothes: face/body/hair from preset, keep your garments. Clothes only: keep current person; apply only garment clothing from the preset (not hair or makeup-type items)."));
+            }, VPBTranslation.T("settings.tip.appearance_clothing", "Preset outfit: full appearance. Keep body clothes: face/body/hair from preset, keep your garments. Clothes only: keep current person; apply only garment clothing from the preset (not hair or makeup-type items)."), () => pendingAppearanceClothingApplyMode);
 
             // CATEGORY: Desktop
             CreateHeader(VPBTranslation.T("settings.header.desktop", "Desktop"));
@@ -560,7 +797,7 @@ namespace VPB
                 pendingEnableAutoFixedGallery = val;
                 VPBConfig.Instance.EnableAutoFixedGallery = val;
                 VPBConfig.Instance.TriggerChange();
-            }, VPBTranslation.T("settings.tip.startup_fixed_gallery", "When enabled, a pinned (Fixed) gallery pane with Autohide enabled will be automatically created on the right side of the screen when the plugin starts."));
+            }, VPBTranslation.T("settings.tip.startup_fixed_gallery", "When enabled, a pinned (Fixed) gallery pane with Autohide enabled will be automatically created on the right side of the screen when the plugin starts."), () => pendingEnableAutoFixedGallery);
 
             string[] initialGalleryOptions = { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "Plugins", "LastUsed" };
             string[] initialGalleryLabels = {
@@ -576,7 +813,7 @@ namespace VPB
                 pendingInitialGalleryCategory = val;
                 VPBConfig.Instance.InitialGalleryCategory = val;
                 VPBConfig.Instance.TriggerChange();
-            }, VPBTranslation.T("settings.tip.initial_gallery_category", "Which category is shown when the gallery first opens this session or when a new pane is created. Default is Scenes. Last used restores the tab saved when you last left the gallery."));
+            }, VPBTranslation.T("settings.tip.initial_gallery_category", "Which category is shown when the gallery first opens this session or when a new pane is created. Default is Scenes. Last used restores the tab saved when you last left the gallery."), () => pendingInitialGalleryCategory);
 
             CreateSettingsSectionSeparator();
             CreateHeader(VPBTranslation.T("settings.header.gallery_side_lists", "Gallery side lists"));
@@ -591,14 +828,14 @@ namespace VPB
                 VPBConfig.Instance.GalleryDefaultLeftSidePanel = val;
                 VPBConfig.Instance.TriggerChange();
                 if (parentPanel != null) parentPanel.ApplySidePanelDefaultsFromConfig();
-            }, VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list is open on the left when a gallery pane is created. None leaves that side closed. If left and right are the same, only the left opens. Floating mode: if both are None, Category opens on the right (same as before)."));
+            }, VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list is open on the left when a gallery pane is created. None leaves that side closed. If left and right are the same, only the left opens. Floating mode: if both are None, Category opens on the right (same as before)."), () => pendingGalleryDefaultLeftSidePanel);
 
             CreateCycleSetting(VPBTranslation.T("settings.gallery_default_right_panel", "Right side list (default)"), pendingGalleryDefaultRightSidePanel, sidePanelOptions, sidePanelLabels, (val) => {
                 pendingGalleryDefaultRightSidePanel = val;
                 VPBConfig.Instance.GalleryDefaultRightSidePanel = val;
                 VPBConfig.Instance.TriggerChange();
                 if (parentPanel != null) parentPanel.ApplySidePanelDefaultsFromConfig();
-            }, VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list is open on the right when a gallery pane is created. None leaves that side closed unless floating mode applies the Category-on-right fallback when both sides are None."));
+            }, VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list is open on the right when a gallery pane is created. None leaves that side closed unless floating mode applies the Category-on-right fallback when both sides are None."), () => pendingGalleryDefaultRightSidePanel);
             CreateSettingsSectionSeparator();
 
             CreateToggleSetting(VPBTranslation.T("settings.plugin_gallery_grid_thumbnails", "Plugin thumbnails in grid"), pendingPluginGalleryGridThumbnails, (val) => {
@@ -606,14 +843,14 @@ namespace VPB
                 VPBConfig.Instance.PluginGalleryGridThumbnails = val;
                 VPBConfig.Instance.TriggerChange();
                 if (parentPanel != null) parentPanel.RefreshFiles(true);
-            }, VPBTranslation.T("settings.tip.plugin_gallery_grid_thumbnails", "When on, .cs/.cslist/.dll under Custom/Scripts use the same sister-image rule as other files: MyPlugin.jpg or MyPlugin.png next to MyPlugin.cs shows in the grid. When off, the grid stays blank for plugins; select an item and expand the info strip to see a preview if a sister image exists."));
+            }, VPBTranslation.T("settings.tip.plugin_gallery_grid_thumbnails", "When on, .cs/.cslist/.dll under Custom/Scripts use the same sister-image rule as other files: MyPlugin.jpg or MyPlugin.png next to MyPlugin.cs shows in the grid. When off, the grid stays blank for plugins; select an item and expand the info strip to see a preview if a sister image exists."), () => pendingPluginGalleryGridThumbnails);
 
             CreateToggleSetting(VPBTranslation.T("settings.gallery_list_legacy_names", "Legacy gallery list names"), pendingGalleryListNamesLegacyFileName, (val) => {
                 pendingGalleryListNamesLegacyFileName = val;
                 VPBConfig.Instance.GalleryListNamesLegacyFileName = val;
                 VPBConfig.Instance.TriggerChange();
                 if (parentPanel != null) parentPanel.RefreshFiles(true);
-            }, VPBTranslation.T("settings.tip.gallery_list_legacy_names", "When off (default), list layout shows the package id (Creator.Package.Version, without .var) for items inside packages. When on, list rows use the file or item name like before."));
+            }, VPBTranslation.T("settings.tip.gallery_list_legacy_names", "When off (default), list layout shows the package id (Creator.Package.Version, without .var) for items inside packages. When on, list rows use the file or item name like before."), () => pendingGalleryListNamesLegacyFileName);
 
             if (isFixed)
             {
@@ -621,7 +858,7 @@ namespace VPB
                 CreateSliderSetting(VPBTranslation.T("settings.bring_front_dist", "Bring Front Dist"), pendingBringToFrontDistance, 0.5f, 2.5f, (val) => {
                     pendingBringToFrontDistance = val;
                     VPBConfig.Instance.BringToFrontDistance = val;
-                }, VPBTranslation.T("settings.tip.bring_front_dist", "The distance (in meters) from your view where panels will appear when using 'Bring to Front'."));
+                }, VPBTranslation.T("settings.tip.bring_front_dist", "The distance (in meters) from your view where panels will appear when using 'Bring to Front'."), () => pendingBringToFrontDistance);
             }
 
             // CATEGORY: Gallery Categories
@@ -639,8 +876,15 @@ namespace VPB
                     else     pendingHiddenCategories.Remove(cn);
                     VPBConfig.Instance.HiddenCategories = new HashSet<string>(pendingHiddenCategories, StringComparer.OrdinalIgnoreCase);
                     VPBConfig.Instance.TriggerChange();
-                    if (parentPanel != null) parentPanel.UpdateTabs();
-                }, VPBTranslation.T("settings.tip.hide_category", "Hide this category from the Categories tab list. The category is still accessible via search."));
+                    if (Gallery.singleton != null)
+                    {
+                        foreach (var p in Gallery.singleton.Panels)
+                        {
+                            try { p.UpdateTabs(); } catch { }
+                        }
+                    }
+                    else if (parentPanel != null) parentPanel.UpdateTabs();
+                }, VPBTranslation.T("settings.tip.hide_category", "Hide this category from the Categories tab list. The category is still accessible via search."), () => pendingHiddenCategories != null && pendingHiddenCategories.Contains(cn));
             }
 
             if (VPBConfig.Instance.IsDevMode)
@@ -648,7 +892,13 @@ namespace VPB
                 CreateHeader(VPBTranslation.T("settings.header.developer", "Developer"));
                 CreateToggleSetting(VPBTranslation.T("settings.developer_mode", "Developer Mode"), pendingIsDevMode, (val) => {
                     pendingIsDevMode = val;
-                }, VPBTranslation.T("settings.tip.developer_mode", "Enables developer-only features and debug tools. Requires restart to fully hide/show some elements."));
+                }, VPBTranslation.T("settings.tip.developer_mode", "Enables developer-only features and debug tools. Requires restart to fully hide/show some elements."), () => pendingIsDevMode);
+            }
+
+            if (logRebuild)
+            {
+                SettingsPerfLog($"Rebuild.createAllRows {sw.ElapsedMilliseconds - mark}ms");
+                SettingsPerfLog($"Rebuild.TOTAL {sw.ElapsedMilliseconds}ms");
             }
         }
 
@@ -755,7 +1005,7 @@ namespace VPB
             };
         }
 
-        private void CreateSliderSetting(string label, float currentVal, float min, float max, Action<float> onChange, string tooltip)
+        private void CreateSliderSetting(string label, float currentVal, float min, float max, Action<float> onChange, string tooltip, Func<float> syncGetPending)
         {
             GameObject container = new GameObject("Setting_" + label);
             container.transform.SetParent(settingsScrollContent.transform, false);
@@ -910,9 +1160,20 @@ namespace VPB
                     inputField.text = slider.value.ToString("F1");
                 }
             });
+
+            if (syncGetPending != null)
+            {
+                _settingsScrollSync.Add(() =>
+                {
+                    float v = syncGetPending();
+                    v = Mathf.Clamp(v, min, max);
+                    slider.value = v;
+                    inputField.text = v.ToString("F1");
+                });
+            }
         }
 
-        private void CreateCycleSetting(string label, string currentVal, string[] options, string[] labels, Action<string> onCycle, string tooltip)
+        private void CreateCycleSetting(string label, string currentVal, string[] options, string[] labels, Action<string> onCycle, string tooltip, Func<string> syncGetPending)
         {
             GameObject container = new GameObject("Setting_" + label);
             container.transform.SetParent(settingsScrollContent.transform, false);
@@ -940,22 +1201,40 @@ namespace VPB
             float btnH = 45;
             float btnX = 300;
 
-            GameObject cycleBtn = UI.CreateUIButton(container, btnW, btnH, labels[Array.IndexOf(options, currentVal)], 18, btnX, 0, AnchorPresets.middleLeft, null);
+            var cur = new RefString { Value = currentVal };
+            int initIdx = Array.IndexOf(options, cur.Value);
+            if (initIdx < 0) initIdx = 0;
+            cur.Value = options[initIdx];
+
+            GameObject cycleBtn = UI.CreateUIButton(container, btnW, btnH, labels[initIdx], 18, btnX, 0, AnchorPresets.middleLeft, null);
             cycleBtn.AddComponent<UIHoverBorder>();
             Text cycleTxt = cycleBtn.GetComponentInChildren<Text>();
             cycleTxt.color = Color.white;
             cycleBtn.GetComponent<Image>().color = new Color(0.25f, 0.5f, 0.8f, 1f);
 
             cycleBtn.GetComponent<Button>().onClick.AddListener(() => {
-                int index = Array.IndexOf(options, currentVal);
+                int index = Array.IndexOf(options, cur.Value);
+                if (index < 0) index = 0;
                 index = (index + 1) % options.Length;
-                currentVal = options[index];
+                cur.Value = options[index];
                 cycleTxt.text = labels[index];
-                onCycle(currentVal);
+                onCycle(cur.Value);
             });
+
+            if (syncGetPending != null)
+            {
+                _settingsScrollSync.Add(() =>
+                {
+                    string v = syncGetPending() ?? "";
+                    int idx = Array.IndexOf(options, v);
+                    if (idx < 0) idx = 0;
+                    cur.Value = options[idx];
+                    cycleTxt.text = labels[idx];
+                });
+            }
         }
 
-        private void CreateToggleSetting(string label, bool currentVal, Action<bool> onToggle, string tooltip)
+        private void CreateToggleSetting(string label, bool currentVal, Action<bool> onToggle, string tooltip, Func<bool> syncGetPending)
         {
             GameObject container = new GameObject("Setting_" + label);
             container.transform.SetParent(settingsScrollContent.transform, false);
@@ -982,7 +1261,9 @@ namespace VPB
 
             float btnW = 70;
             float btnH = 45;
-            float btnX = 300; 
+            float btnX = 300;
+
+            var cur = new RefBool { Value = currentVal };
 
             GameObject offBtn = UI.CreateUIButton(container, btnW, btnH, VPBTranslation.T("settings.toggle.off", "OFF"), 18, btnX, 0, AnchorPresets.middleLeft, null);
             GameObject onBtn = UI.CreateUIButton(container, btnW, btnH, VPBTranslation.T("settings.toggle.on", "ON"), 18, btnX + btnW + 5, 0, AnchorPresets.middleLeft, null);
@@ -996,28 +1277,37 @@ namespace VPB
             Text onTxt = onBtn.GetComponentInChildren<Text>();
 
             Action updateColors = () => {
-                offImg.color = currentVal ? new Color(0.2f, 0.2f, 0.2f) : new Color(0.6f, 0.2f, 0.2f);
+                offImg.color = cur.Value ? new Color(0.2f, 0.2f, 0.2f) : new Color(0.6f, 0.2f, 0.2f);
                 offTxt.color = Color.white;
-                onImg.color = currentVal ? new Color(0.2f, 0.6f, 0.2f) : new Color(0.2f, 0.2f, 0.2f);
+                onImg.color = cur.Value ? new Color(0.2f, 0.6f, 0.2f) : new Color(0.2f, 0.2f, 0.2f);
                 onTxt.color = Color.white;
             };
             updateColors();
 
             offBtn.GetComponent<Button>().onClick.AddListener(() => {
-                if (currentVal) {
-                    currentVal = false;
+                if (cur.Value) {
+                    cur.Value = false;
                     updateColors();
                     onToggle(false);
                 }
             });
 
             onBtn.GetComponent<Button>().onClick.AddListener(() => {
-                if (!currentVal) {
-                    currentVal = true;
+                if (!cur.Value) {
+                    cur.Value = true;
                     updateColors();
                     onToggle(true);
                 }
             });
+
+            if (syncGetPending != null)
+            {
+                _settingsScrollSync.Add(() =>
+                {
+                    cur.Value = syncGetPending();
+                    updateColors();
+                });
+            }
         }
 
     }

@@ -82,8 +82,65 @@ namespace VPB
             return -(55f + 35f * s + 5f);
         }
 
+        /// <summary>Header/footer/side chrome without recreating category/creator/tag tab buttons when <see cref="VPBConfig.Save(bool,bool)"/> used <c>preferLightGalleryTabChromeOnly: true</c>.</summary>
+        private void UpdateTabsLightChromeOnlyStandardGallery()
+        {
+            if (titleText != null)
+            {
+                bool showTitle = !IsFilterActive;
+                if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
+                if (showTitle)
+                    titleText.text = currentCategoryTitle;
+            }
+            UpdateFooterContextActions();
+            UpdateSideContextActions();
+            UpdateSideButtonsVisibility();
+        }
+
+        /// <summary>
+        /// Rebuilds every side-tab button list (categories / creators / tags / hub). Can take seconds with large libraries.
+        /// </summary>
+        /// <remarks>
+        /// INVARIANT: Do not subscribe this method to <see cref="VPBConfig.ConfigChanged"/>. Use
+        /// <see cref="RefreshSideTabAreasForConfigChange"/> for that channel. A runtime guard downgrades mistaken calls during dispatch.
+        /// </remarks>
         internal void UpdateTabs()
         {
+            UpdateTabsImpl(rebuildSideTabLists: true);
+        }
+
+        /// <summary>
+        /// <see cref="VPBConfig.ConfigChanged"/> handler: title/footer/side chrome, sort labels, and tab scroll rect layout
+        /// without destroying and recreating hundreds of side-tab buttons (avoids multi-second stalls on resize/scale).
+        /// </summary>
+        private void RefreshSideTabAreasForConfigChange()
+        {
+            UpdateTabsImpl(rebuildSideTabLists: false);
+        }
+
+        private void UpdateTabsImpl(bool rebuildSideTabLists)
+        {
+            if (!IsHubMode && (leftTabContainerGO != null || rightTabContainerGO != null)
+                && VPBConfig.Instance != null && VPBConfig.Instance.TryConsumeLightweightGalleryTabRefreshSlot())
+            {
+                if (VPBConfig.IsLogConfigPerfEnabled())
+                {
+                    try
+                    {
+                        LogUtil.Log("[VPBConfig.Perf] UpdateTabs: lightweight path (side tab buttons not rebuilt)");
+                    }
+                    catch { }
+                }
+                UpdateTabsLightChromeOnlyStandardGallery();
+                return;
+            }
+
+            if (rebuildSideTabLists && VPBConfig.ConfigChangedInvocationDepth > 0)
+            {
+                LogUtil.LogError("[VPB] GalleryPanel: full UpdateTabs (side-tab list rebuild) was invoked during ConfigChanged. Downgrading to chrome/layout only. Fix: remove UpdateTabs from ConfigChanged; keep RefreshSideTabAreasForConfigChange.");
+                rebuildSideTabLists = false;
+            }
+
             if (titleText != null)
             {
                 // When filtering by deps/dependents, the active category title is not meaningful.
@@ -103,7 +160,7 @@ namespace VPB
 
             if (IsHubMode)
             {
-                UpdateHubLayout();
+                UpdateHubLayout(rebuildSideTabLists);
                 UpdateSideButtonsVisibility();
                 return;
             }
@@ -160,7 +217,8 @@ namespace VPB
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
                     // Populate Top (Category / Hub Category / Status)
-                    UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
+                    if (rebuildSideTabLists)
+                        UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                     
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     ContentType subType = ContentType.Tags;
@@ -178,7 +236,8 @@ namespace VPB
                         }
                     }
                     
-                    UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+                    if (rebuildSideTabLists)
+                        UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
                 }
                 else
                 {
@@ -194,7 +253,8 @@ namespace VPB
                     leftRT.offsetMin = new Vector2(10, SideTabDefaultBottomOffset); // Restore default
                     leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
 
-                    UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
+                    if (rebuildSideTabLists)
+                        UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
                 }
             }
             if (rightActiveContent.HasValue) 
@@ -261,7 +321,8 @@ namespace VPB
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
                     // Populate Top (Category / Hub Category / Status)
-                    UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
+                    if (rebuildSideTabLists)
+                        UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                     
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     ContentType subType = ContentType.Tags;
@@ -279,7 +340,8 @@ namespace VPB
                         }
                     }
 
-                    UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
+                    if (rebuildSideTabLists)
+                        UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
                 else
                 {
@@ -295,14 +357,15 @@ namespace VPB
                     rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabDefaultBottomOffset); // Restore default
                     rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
 
-                    UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
+                    if (rebuildSideTabLists)
+                        UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
                 }
             }
 
             UpdateSideButtonsVisibility();
         }
 
-        private void UpdateHubLayout()
+        private void UpdateHubLayout(bool populateSideTabLists = true)
         {
             // Left Side: Category (Top) / Tags (Bottom)
             if (leftTabScrollGO != null && leftSubTabScrollGO != null)
@@ -338,8 +401,11 @@ namespace VPB
                 subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
                 subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
-                UpdateTabs(ContentType.Hub, leftTabContainerGO, leftActiveTabButtons, true);
-                UpdateTabs(ContentType.HubTags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+                if (populateSideTabLists)
+                {
+                    UpdateTabs(ContentType.Hub, leftTabContainerGO, leftActiveTabButtons, true);
+                    UpdateTabs(ContentType.HubTags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+                }
             }
 
             // Right Side: Pay Type (Top 20%) / Creator (Bottom 80%)
@@ -383,8 +449,11 @@ namespace VPB
                 subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
                 subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
-                UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
-                UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);
+                if (populateSideTabLists)
+                {
+                    UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
+                    UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);
+                }
             }
         }
 
@@ -900,8 +969,27 @@ namespace VPB
             RectTransform textAreaRT = textArea.AddComponent<RectTransform>();
             textAreaRT.anchorMin = Vector2.zero;
             textAreaRT.anchorMax = Vector2.one;
-            textAreaRT.offsetMin = new Vector2(10, 0);
+            textAreaRT.offsetMin = new Vector2(38, 0); // Left offset accounts for search icon
             textAreaRT.offsetMax = new Vector2(-45, 0); // Room for X button
+
+            // Search icon (left side of input)
+            {
+                var s = UI.LoadIconSprite("vpb_icons/search.png", new Color(0.5f, 0.5f, 0.5f, 1f));
+                if (s != null)
+                {
+                    GameObject iconGO = new GameObject("SearchIcon");
+                    iconGO.transform.SetParent(inputGO.transform, false);
+                    Image iconImg = iconGO.AddComponent<Image>();
+                    iconImg.sprite = s;
+                    iconImg.color = new Color(0.5f, 0.5f, 0.5f, 1f);
+                    RectTransform iconRT = iconGO.GetComponent<RectTransform>();
+                    iconRT.anchorMin = new Vector2(0, 0.5f);
+                    iconRT.anchorMax = new Vector2(0, 0.5f);
+                    iconRT.pivot = new Vector2(0, 0.5f);
+                    iconRT.anchoredPosition = new Vector2(6, 0);
+                    iconRT.sizeDelta = new Vector2(24, 24);
+                }
+            }
             
             // Placeholder
             GameObject placeholder = new GameObject("Placeholder");

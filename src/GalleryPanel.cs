@@ -41,12 +41,26 @@ namespace VPB
             ContentType? r = SidePanelStringToContentType(rs);
             if (l.HasValue && r.HasValue && l.Value == r.Value)
                 r = null;
-            leftActiveContent = l;
-            rightActiveContent = r;
-            if (!isFixedLocally && !l.HasValue && !r.HasValue)
-                rightActiveContent = ContentType.Category;
+
+            ContentType? targetL = l;
+            ContentType? targetR = r;
+            if (!isFixedLocally && !targetL.HasValue && !targetR.HasValue)
+                targetR = ContentType.Category;
+
+            if (NullableContentTypeEqual(leftActiveContent, targetL) && NullableContentTypeEqual(rightActiveContent, targetR))
+                return;
+
+            leftActiveContent = targetL;
+            rightActiveContent = targetR;
             UpdateLayout();
             UpdateTabs();
+        }
+
+        private static bool NullableContentTypeEqual(ContentType? a, ContentType? b)
+        {
+            if (!a.HasValue && !b.HasValue) return true;
+            if (!a.HasValue || !b.HasValue) return false;
+            return a.Value == b.Value;
         }
 
         private static ContentType? SidePanelStringToContentType(string normalized)

@@ -679,19 +679,24 @@ namespace VPB
             
             HorizontalLayoutGroup leftHLG = leftSection.AddComponent<HorizontalLayoutGroup>();
             leftHLG.childControlWidth = false;
+            leftHLG.childControlHeight = false;
             leftHLG.childForceExpandWidth = false;
+            leftHLG.childForceExpandHeight = false;
             leftHLG.childAlignment = TextAnchor.MiddleLeft;
             leftHLG.spacing = 10;
 
             // Undo / Redo / Random (footer left; compact labels U/R/Rdm)
-            footerUndoBtnGO = UI.CreateUIButton(leftSection, 52, 40, VPBTranslation.T("gallery.footer.undo_abbrev", "U") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Undo);
-            footerUndoBtnGO.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f);
-            footerRedoBtnGO = UI.CreateUIButton(leftSection, 52, 40, VPBTranslation.T("gallery.footer.redo_abbrev", "R") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Redo);
-            footerRedoBtnGO.GetComponent<Image>().color = new Color(0.45f, 0.3f, 0.15f, 1f);
-            footerLoadRandomBtn = UI.CreateUIButton(leftSection, 50, 40, VPBTranslation.T("gallery.footer.random_abbrev", "Rdm"), 14, 0, 0, AnchorPresets.middleCenter, LoadRandom);
-            footerLoadRandomBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.55f, 1f);
+            footerUndoBtnGO = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.footer.undo_abbrev", "U") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Undo);
+            footerUndoBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
+            { var s = UI.LoadIconSprite("vpb_icons/undo.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerUndoBtnGO, s); }
+            footerRedoBtnGO = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.footer.redo_abbrev", "R") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Redo);
+            footerRedoBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
+            { var s = UI.LoadIconSprite("vpb_icons/redo.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerRedoBtnGO, s); }
+            footerLoadRandomBtn = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.footer.random_abbrev", "Rdm"), 14, 0, 0, AnchorPresets.middleCenter, LoadRandom);
+            footerLoadRandomBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
+            { var s = UI.LoadIconSprite("vpb_icons/random.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerLoadRandomBtn, s); }
 
-            footerHubBtnGO = UI.CreateUIButton(leftSection, 52, 40, VPBTranslation.T("gallery.side.hub", "Hub"), 14, 0, 0, AnchorPresets.middleCenter, () => {
+            footerHubBtnGO = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.side.hub", "Hub"), 14, 0, 0, AnchorPresets.middleCenter, () => {
                 if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
                 {
                     if (isFixedLocally) ToggleLeft(ContentType.Hub); else ToggleRight(ContentType.Hub);
@@ -703,7 +708,7 @@ namespace VPB
                 }
             });
             footerHubBtnImage = footerHubBtnGO.GetComponent<Image>();
-            footerHubBtnImage.color = ColorHub;
+            footerHubBtnImage.color = UI.IconButtonBackdrop;
             footerHubBtnText = footerHubBtnGO.GetComponentInChildren<Text>();
             AddRightClickDelegate(footerHubBtnGO, () => {
                 if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
@@ -716,6 +721,7 @@ namespace VPB
                     Hide();
                 }
             });
+            { var s = UI.LoadIconSprite("vpb_icons/hub.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerHubBtnGO, s); }
 
             // Follow Quick Toggles
             footerFollowAngleBtn = UI.CreateUIButton(leftSection, 40, 40, "∡", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Angle"));
@@ -739,6 +745,8 @@ namespace VPB
             HorizontalLayoutGroup centerHLG = centerSection.AddComponent<HorizontalLayoutGroup>();
             centerHLG.childControlWidth = false;
             centerHLG.childForceExpandWidth = false;
+            centerHLG.childControlHeight = false;
+            centerHLG.childForceExpandHeight = false;
             centerHLG.childAlignment = TextAnchor.MiddleCenter;
             centerHLG.spacing = 10;
 
@@ -817,31 +825,53 @@ namespace VPB
             
             HorizontalLayoutGroup rightHLG = rightSection.AddComponent<HorizontalLayoutGroup>();
             rightHLG.childControlWidth = false;
+            rightHLG.childControlHeight = false;
             rightHLG.childForceExpandWidth = false;
+            rightHLG.childForceExpandHeight = false;
             rightHLG.childAlignment = TextAnchor.MiddleRight;
             rightHLG.spacing = 10;
 
             selectAllBtn = UI.CreateUIButton(rightSection, 40, 40, "A", 20, 0, 0, AnchorPresets.middleCenter, SelectAll);
+            { var s = UI.LoadIconSprite("vpb_icons/select_all.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(selectAllBtn, s); }
             clearSelectionBtn = UI.CreateUIButton(rightSection, 40, 40, "C", 20, 0, 0, AnchorPresets.middleCenter, ClearSelection);
+            { var s = UI.LoadIconSprite("vpb_icons/clear_selection.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(clearSelectionBtn, s); }
             gridSizeMinusBtn = UI.CreateUIButton(rightSection, 40, 40, "-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
+            { var s = UI.LoadIconSprite("vpb_icons/zoom_out.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(gridSizeMinusBtn, s); }
             gridSizePlusBtn = UI.CreateUIButton(rightSection, 40, 40, "+", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(-1));
-            
+            { var s = UI.LoadIconSprite("vpb_icons/zoom_in.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(gridSizePlusBtn, s); }
+            footerScrollTopBtn = UI.CreateUIButton(rightSection, 40, 40, "↑", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToTop);
+            { var s = UI.LoadIconSprite("vpb_icons/scroll_top.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerScrollTopBtn, s); }
+            footerScrollBottomBtn = UI.CreateUIButton(rightSection, 40, 40, "↓", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToBottom);
+            { var s = UI.LoadIconSprite("vpb_icons/scroll_bottom.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerScrollBottomBtn, s); }
+
             footerLayoutBtn = UI.CreateUIButton(rightSection, 40, 40, "▤", 20, 0, 0, AnchorPresets.middleCenter, ToggleLayoutMode);
             footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
             footerLayoutBtnText = footerLayoutBtn.GetComponentInChildren<Text>();
+            footerLayoutGridSprite = UI.LoadIconSprite("vpb_icons/layout_grid.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            footerLayoutListSprite = UI.LoadIconSprite("vpb_icons/layout_list.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            { Sprite init = footerLayoutGridSprite ?? footerLayoutListSprite; if (init != null) { UI.AddIconToButton(footerLayoutBtn, init); footerLayoutIconImage = footerLayoutBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
             footerHeightBtn = UI.CreateUIButton(rightSection, 40, 40, "↕", 20, 0, 0, AnchorPresets.middleCenter, ToggleFixedHeightMode);
             footerHeightBtnImage = footerHeightBtn.GetComponent<Image>();
             footerHeightBtnText = footerHeightBtn.GetComponentInChildren<Text>();
+            footerHeightFreeSprite  = UI.LoadIconSprite("vpb_icons/height_free.png",  new Color(0.78f, 0.78f, 0.78f, 1f));
+            footerHeightFixedSprite = UI.LoadIconSprite("vpb_icons/height_fixed.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            { Sprite init = footerHeightFreeSprite ?? footerHeightFixedSprite; if (init != null) { UI.AddIconToButton(footerHeightBtn, init); footerHeightIconImage = footerHeightBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
             footerShowHiddenPackagesBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleGalleryShowHiddenPackages);
             footerShowHiddenPackagesBtnImage = footerShowHiddenPackagesBtn.GetComponent<Image>();
             footerShowHiddenPackagesBtnText = footerShowHiddenPackagesBtn.GetComponentInChildren<Text>();
             footerShowHiddenPackagesBtn.name = "Footer_ShowHiddenPackages";
+            footerShowHiddenOffSprite = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            footerShowHiddenOnSprite  = UI.LoadIconSprite("vpb_icons/show_hidden.png",     new Color(0.78f, 0.78f, 0.78f, 1f));
+            { Sprite init = footerShowHiddenOffSprite ?? footerShowHiddenOnSprite; if (init != null) { UI.AddIconToButton(footerShowHiddenPackagesBtn, init); footerShowHiddenIconImage = footerShowHiddenPackagesBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
             footerAutoHideBtn = UI.CreateUIButton(rightSection, 40, 40, "A", 20, 0, 0, AnchorPresets.middleCenter, ToggleAutoHideMode);
             footerAutoHideBtnImage = footerAutoHideBtn.GetComponent<Image>();
             footerAutoHideBtnText = footerAutoHideBtn.GetComponentInChildren<Text>();
+            footerAutoHideOffSprite = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            footerAutoHideOnSprite  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  new Color(0.78f, 0.78f, 0.78f, 1f));
+            { Sprite init = footerAutoHideOffSprite ?? footerAutoHideOnSprite; if (init != null) { UI.AddIconToButton(footerAutoHideBtn, init); footerAutoHideIconImage = footerAutoHideBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
             // --- Context Actions (Category-aware) ---
             footerRemoveAllHairBtn = UI.CreateUIButton(rightSection, 40, 40, "Hr", 16, 0, 0, AnchorPresets.middleCenter, () => {
@@ -860,6 +890,7 @@ namespace VPB
             footerRemoveAllHairBtnImage = footerRemoveAllHairBtn.GetComponent<Image>();
             footerRemoveAllHairBtnText = footerRemoveAllHairBtn.GetComponentInChildren<Text>();
             AddTooltip(footerRemoveAllHairBtn, "gallery.tooltip.remove_all_hair", "Remove All Hair from Target");
+            { var s = UI.LoadIconSprite("vpb_icons/remove_hair.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerRemoveAllHairBtn, s); }
 
             // Hover support for pagination (Hub mode)
             AddHoverDelegate(paginationFirstBtn);
@@ -883,6 +914,10 @@ namespace VPB
             AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease Columns");
             AddHoverDelegate(gridSizePlusBtn);
             AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase Columns");
+            AddHoverDelegate(footerScrollTopBtn);
+            AddTooltip(footerScrollTopBtn, "gallery.tooltip.scroll_top", "Jump to top of list");
+            AddHoverDelegate(footerScrollBottomBtn);
+            AddTooltip(footerScrollBottomBtn, "gallery.tooltip.scroll_bottom", "Jump to bottom of list");
             AddHoverDelegate(footerClearFilterBtn);
             AddTooltip(footerClearFilterBtn, "gallery.tooltip.clear_filter", "Clear Filter");
             AddHoverDelegate(footerUndoBtnGO);
@@ -918,10 +953,10 @@ namespace VPB
                 var hRT = footerHubBtnGO != null ? footerHubBtnGO.GetComponent<RectTransform>() : null;
                 var hT = footerHubBtnText;
                 innerPaneScaleActions.Add(s => {
-                    if (uRT != null) uRT.sizeDelta = new Vector2(52f * s, 40f * s);
-                    if (rRT != null) rRT.sizeDelta = new Vector2(52f * s, 40f * s);
-                    if (rndRT != null) rndRT.sizeDelta = new Vector2(50f * s, 40f * s);
-                    if (hRT != null) hRT.sizeDelta = new Vector2(52f * s, 40f * s);
+                    if (uRT != null) uRT.sizeDelta = new Vector2(40f * s, 40f * s);
+                    if (rRT != null) rRT.sizeDelta = new Vector2(40f * s, 40f * s);
+                    if (rndRT != null) rndRT.sizeDelta = new Vector2(40f * s, 40f * s);
+                    if (hRT != null) hRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (uT != null) uT.fontSize = Mathf.RoundToInt(14 * s);
                     if (rT != null) rT.fontSize = Mathf.RoundToInt(14 * s);
                     if (rndT != null) rndT.fontSize = Mathf.RoundToInt(14 * s);
@@ -934,6 +969,7 @@ namespace VPB
                 paginationNextBtn, paginationNext10Btn, paginationLastBtn,
                 selectAllBtn, clearSelectionBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
+                footerScrollTopBtn, footerScrollBottomBtn,
                 footerLayoutBtn, footerHeightBtn, footerShowHiddenPackagesBtn, footerAutoHideBtn,
                 footerRemoveAllHairBtn,
             };
@@ -943,6 +979,7 @@ namespace VPB
                 20, 18, 18,
                 20, 20,
                 24, 24,
+                22, 22,
                 20, 20, 20, 20,
                 16,
             };
@@ -1080,6 +1117,12 @@ namespace VPB
                     paginationLastBtn.SetActive(true);
                     paginationLastBtn.GetComponent<Button>().interactable = canGoNext;
                 }
+
+                if (selectAllBtn != null)
+                {
+                    Button sab = selectAllBtn.GetComponent<Button>();
+                    if (sab != null) sab.interactable = false;
+                }
             }
             else
             {
@@ -1126,6 +1169,16 @@ namespace VPB
                     paginationText.text = VPBTranslation.T("gallery.items.zero", "0 Items");
                 }
 
+                if (selectAllBtn != null)
+                {
+                    Button sab = selectAllBtn.GetComponent<Button>();
+                    if (sab != null)
+                    {
+                        int totalForSelectAll = currentFilteredFiles != null ? currentFilteredFiles.Count : 0;
+                        sab.interactable = totalForSelectAll > 0 && totalForSelectAll <= SelectAllSafetyMaxItemCount;
+                    }
+                }
+
                 if (paginationFirstBtn != null) paginationFirstBtn.SetActive(false);
                 if (paginationPrev10Btn != null) paginationPrev10Btn.SetActive(false);
                 if (paginationPrevBtn != null) paginationPrevBtn.SetActive(false);
@@ -1165,10 +1218,16 @@ namespace VPB
             {
                 footerLayoutBtnImage.color = (layoutMode == GalleryLayoutMode.List) ? activeColor : inactiveColor;
             }
-            
+
             if (footerLayoutBtnText != null)
             {
                 footerLayoutBtnText.text = (layoutMode == GalleryLayoutMode.List) ? "≡" : "▤";
+            }
+
+            if (footerLayoutIconImage != null)
+            {
+                Sprite target = (layoutMode == GalleryLayoutMode.List) ? footerLayoutListSprite : footerLayoutGridSprite;
+                if (target != null) footerLayoutIconImage.sprite = target;
             }
         }
 
@@ -1199,6 +1258,12 @@ namespace VPB
                     case 1: footerHeightBtnText.text = VPBTranslation.T("gallery.footer.height_hc", "HC"); break;
                 }
             }
+
+            if (footerHeightIconImage != null)
+            {
+                Sprite target = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? footerHeightFixedSprite : footerHeightFreeSprite;
+                if (target != null) footerHeightIconImage.sprite = target;
+            }
         }
 
         private void ToggleGalleryShowHiddenPackages()
@@ -1222,6 +1287,12 @@ namespace VPB
 
             if (footerShowHiddenPackagesBtnText != null)
                 footerShowHiddenPackagesBtnText.text = "H";
+
+            if (footerShowHiddenIconImage != null)
+            {
+                Sprite target = VPBConfig.Instance.GalleryShowHiddenPackages ? footerShowHiddenOnSprite : footerShowHiddenOffSprite;
+                if (target != null) footerShowHiddenIconImage.sprite = target;
+            }
         }
 
         private void ToggleAutoHideMode()
@@ -1248,6 +1319,12 @@ namespace VPB
                 footerAutoHideBtnText.text = VPBConfig.Instance.DesktopFixedAutoCollapse
                     ? VPBTranslation.T("gallery.footer.autohide_on", "AH")
                     : VPBTranslation.T("gallery.footer.autohide_off", "AO");
+            }
+
+            if (footerAutoHideIconImage != null)
+            {
+                Sprite target = VPBConfig.Instance.DesktopFixedAutoCollapse ? footerAutoHideOnSprite : footerAutoHideOffSprite;
+                if (target != null) footerAutoHideIconImage.sprite = target;
             }
         }
 
@@ -1996,15 +2073,33 @@ namespace VPB
             }
         }
 
-        private void SelectAll()
+        /// <summary>Select every item in <see cref="currentFilteredFiles"/> when within <see cref="SelectAllSafetyMaxItemCount"/>.</summary>
+        /// <returns>True if selection was applied.</returns>
+        private bool TrySelectAllCurrentGalleryView(string source)
         {
+            if (IsHubMode) return false;
+
+            var list = currentFilteredFiles;
+            if (list == null || list.Count == 0) return false;
+
+            if (list.Count > SelectAllSafetyMaxItemCount)
+            {
+                string msg = string.Format(
+                    VPBTranslation.T("gallery.status.select_all_too_many", "Too many items to select all ({0} shown). Maximum is {1}."),
+                    list.Count,
+                    SelectAllSafetyMaxItemCount);
+                LogUtil.LogWarning("[VPB] Select all skipped (" + source + "): " + list.Count + " items (safety limit " + SelectAllSafetyMaxItemCount + ").");
+                ShowTemporaryStatus(msg, 3.5f);
+                return false;
+            }
+
             selectedFiles.Clear();
             selectedFilePaths.Clear();
             selectionAnchorPath = null;
 
-            for (int i = 0; i < lastFilteredFiles.Count; i++)
+            for (int i = 0; i < list.Count; i++)
             {
-                var f = lastFilteredFiles[i];
+                var f = list[i];
                 if (f == null || string.IsNullOrEmpty(f.Path)) continue;
                 if (selectedFilePaths.Add(f.Path)) selectedFiles.Add(f);
             }
@@ -2021,8 +2116,14 @@ namespace VPB
                 SetHoverPath("");
             }
 
-            RefreshFiles(true);
+            RefreshSelectionVisuals();
             UpdatePaginationText();
+            return true;
+        }
+
+        private void SelectAll()
+        {
+            TrySelectAllCurrentGalleryView("select_all_button");
         }
 
         private void ClearSelection()
@@ -2033,7 +2134,7 @@ namespace VPB
             selectedPath = null;
             selectedHubItem = null;
             SetHoverPath("");
-            RefreshFiles(true);
+            RefreshSelectionVisuals();
             UpdatePaginationText();
         }
 
@@ -2089,6 +2190,22 @@ namespace VPB
                     // No need to RefreshFiles, rgv handles column changes via its Update/RecalculateLayout
                 }
             }
+        }
+
+        private void ScrollGalleryToTop()
+        {
+            if (recyclingGrid != null)
+                recyclingGrid.ScrollToTopImmediate();
+            else if (scrollRect != null)
+                scrollRect.verticalNormalizedPosition = 1f;
+        }
+
+        private void ScrollGalleryToBottom()
+        {
+            if (recyclingGrid != null)
+                recyclingGrid.ScrollToBottomImmediate();
+            else if (scrollRect != null)
+                scrollRect.verticalNormalizedPosition = 0f;
         }
 
         private void ToggleRight(ContentType type)

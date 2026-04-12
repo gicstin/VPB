@@ -52,12 +52,7 @@ namespace VPB
                     LogUtil.LogError("[GalleryPanel.Init] Error loading ApplyMode: " + ex.Message);
                 }
 
-                VPBConfig.Instance.ConfigChanged += ApplySideButtonScale;
-                VPBConfig.Instance.ConfigChanged += ApplyInnerPaneScale;
-                VPBConfig.Instance.ConfigChanged += UpdateSideButtonsVisibility;
-                VPBConfig.Instance.ConfigChanged += UpdateFooterFollowStates;
-                VPBConfig.Instance.ConfigChanged += UpdateDesktopModeButton;
-                VPBConfig.Instance.ConfigChanged += UpdateLayout;
+                SubscribeGalleryPanelToVpBConfigChanged();
             }
 
             // ... standard Init code follows ...
@@ -232,7 +227,35 @@ namespace VPB
             titleSearchRT.anchorMax = new Vector2(0.5f, 0.5f);
             titleSearchRT.pivot = new Vector2(0.5f, 0.5f);
             titleSearchRT.anchoredPosition = new Vector2(-40, 0);
-            titleSearchRT.sizeDelta = new Vector2(240, 40);
+            titleSearchRT.sizeDelta = new Vector2(40, 40); // Collapsed (icon-only) by default
+
+            // Expand search to full width on focus; collapse back when cleared
+            {
+                const float collapsedW = 40f, expandedW = 240f;
+                Transform clearBtnT = titleSearchInput.transform.Find("Button_X");
+                GameObject clearBtnGO = clearBtnT != null ? clearBtnT.gameObject : null;
+                if (clearBtnGO != null) clearBtnGO.SetActive(false);
+
+                EventTrigger searchTrigger = titleSearchInput.gameObject.GetComponent<EventTrigger>()
+                                             ?? titleSearchInput.gameObject.AddComponent<EventTrigger>();
+
+                var onSelect = new EventTrigger.Entry { eventID = EventTriggerType.Select };
+                onSelect.callback.AddListener(_ => {
+                    titleSearchRT.sizeDelta = new Vector2(expandedW, 40f);
+                    if (clearBtnGO != null) clearBtnGO.SetActive(true);
+                });
+                searchTrigger.triggers.Add(onSelect);
+
+                var onDeselect = new EventTrigger.Entry { eventID = EventTriggerType.Deselect };
+                onDeselect.callback.AddListener(_ => {
+                    if (string.IsNullOrEmpty(titleSearchInput.text))
+                    {
+                        titleSearchRT.sizeDelta = new Vector2(collapsedW, 40f);
+                        if (clearBtnGO != null) clearBtnGO.SetActive(false);
+                    }
+                });
+                searchTrigger.triggers.Add(onDeselect);
+            }
 
             // File Sort Type Button
             GameObject fileSortTypeBtn = UI.CreateUIButton(titleBarGO, 35, 40, VPBTranslation.T("gallery.sort.az", "Az"), 16, 0, 0, AnchorPresets.middleCenter, null);
@@ -282,6 +305,16 @@ namespace VPB
             fileSortDirButton.onClick.AddListener(() => ToggleSortDirection("Files", fileSortTypeText, fileSortDirText));
             AddTooltip(fileSortDirBtn, "gallery.tooltip.sort_toggle_dir", "Toggle sort direction (↑/↓)");
 
+            // Sort direction icon — load both sprites; initial sprite set by UpdateSortButtonText after state is read
+            fileSortDirAscSprite = UI.LoadIconSprite("vpb_icons/sort_asc.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            fileSortDirDescSprite = UI.LoadIconSprite("vpb_icons/sort_desc.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            if (fileSortDirAscSprite != null || fileSortDirDescSprite != null)
+            {
+                Sprite initial = fileSortDirAscSprite ?? fileSortDirDescSprite;
+                UI.AddIconToButton(fileSortDirBtn, initial);
+                fileSortDirIconImage = fileSortDirBtn.transform.Find("Icon")?.GetComponent<Image>();
+            }
+
             // Keep fileSortBtnText for compatibility with existing code
             fileSortBtnText = fileSortTypeText;
 
@@ -292,6 +325,16 @@ namespace VPB
             ratingSortToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             ratingSortToggleBtnText = ratingSortToggleBtn.GetComponentInChildren<Text>();
             ratingSortToggleBtnText.color = Color.white;
+            ratingStarNormalSprite = UI.LoadIconSprite("vpb_icons/star.png",     new Color(0.78f, 0.78f, 0.78f, 1f));
+            ratingStarOffSprite    = UI.LoadIconSprite("vpb_icons/star-off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            {
+                Sprite initial = ratingStarNormalSprite ?? ratingStarOffSprite;
+                if (initial != null)
+                {
+                    UI.AddIconToButton(ratingSortToggleBtn, initial);
+                    ratingSortIconImage = ratingSortToggleBtn.transform.Find("Icon")?.GetComponent<Image>();
+                }
+            }
             RectTransform ratingSortToggleRT = ratingSortToggleBtn.GetComponent<RectTransform>();
             ratingSortToggleRT.anchorMin = new Vector2(0.5f, 0.5f);
             ratingSortToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -303,15 +346,15 @@ namespace VPB
             AddTooltip(ratingSortToggleBtn, "gallery.tooltip.rated_only", "Show Only Rated Items");
             SyncRatingSortToggleState();
 
-            // Refresh Button (to the right of Star)
-            GameObject refreshBtn = UI.CreateUIButton(titleBarGO, 90, 40, VPBTranslation.T("gallery.title.refresh", "Refresh"), 16, 0, 0, AnchorPresets.middleCenter, null);
+            // Refresh Button (to the right of Star) — square icon button
+            GameObject refreshBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.title.refresh", "Refresh"), 16, 0, 0, AnchorPresets.middleCenter, null);
             refreshBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             refreshBtn.GetComponentInChildren<Text>().color = Color.white;
             RectTransform refreshRT = refreshBtn.GetComponent<RectTransform>();
             refreshRT.anchorMin = new Vector2(0.5f, 0.5f);
             refreshRT.anchorMax = new Vector2(0.5f, 0.5f);
             refreshRT.pivot = new Vector2(0.5f, 0.5f);
-            refreshRT.anchoredPosition = new Vector2(270, 0);
+            refreshRT.anchoredPosition = new Vector2(245, 0); // adjusted for narrower width
 
             Button refreshButton = refreshBtn.GetComponent<Button>();
             refreshButton.onClick.RemoveAllListeners();
@@ -319,14 +362,16 @@ namespace VPB
             titleBarRefreshBtnText = refreshBtn.GetComponentInChildren<Text>();
             VPBUiFont.ApplyTo(titleBarRefreshBtnText);
             AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
+            { var s = UI.LoadIconSprite("vpb_icons/refresh.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(refreshBtn, s); }
 
             // Settings (title bar, left of filter presets; side rails no longer host Settings)
             GameObject titleBarSettingsBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.title.settings_abbrev", "S"), 16, 0, 0, AnchorPresets.middleCenter, () => {
                 ToggleSettings(!isFixedLocally);
             });
-            titleBarSettingsBtn.GetComponent<Image>().color = new Color(0.15f, 0.3f, 0.45f, 1f);
+            titleBarSettingsBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             titleBarSettingsBtnText = titleBarSettingsBtn.GetComponentInChildren<Text>();
             titleBarSettingsBtnText.color = Color.white;
+            { var s = UI.LoadIconSprite("vpb_icons/settings.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(titleBarSettingsBtn, s); }
             RectTransform titleBarSettingsRT = titleBarSettingsBtn.GetComponent<RectTransform>();
             titleBarSettingsRT.anchorMin = new Vector2(0.5f, 0.5f);
             titleBarSettingsRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -359,7 +404,7 @@ namespace VPB
             { var rt = fileSortTypeRT; var t = fileSortTypeText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
             { var rt = fileSortDirRT; var t = fileSortDirText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
             { var rt = ratingSortToggleRT; var t = ratingSortToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(18*s); }); }
-            { var rt = refreshRT; var t = titleBarRefreshBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(90f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
+            { var rt = refreshRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); }); }
             { var rt = titleBarSettingsRT; var t = titleBarSettingsBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
             { var rt = qfToggleRT; var t = quickFiltersToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
 
@@ -2215,6 +2260,7 @@ UpdateDesktopModeButton();
             minRT.anchoredPosition = new Vector2(-55, 0);
             minimizeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(minimizeBtn);
+            { var s = UI.LoadIconSprite("vpb_icons/minimize.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(minimizeBtn, s); }
 
             // Close button - Rendered last to be on top
             GameObject closeBtn = UI.CreateUIButton(backgroundBoxGO, 50, 50, "X", 30, 0, 0, AnchorPresets.topRight, () => {
@@ -2222,6 +2268,7 @@ UpdateDesktopModeButton();
             });
             closeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(closeBtn);
+            { var s = UI.LoadIconSprite("vpb_icons/close.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(closeBtn, s); }
 
             // Register inner pane button scale actions (close/minimize)
             { var rt = minRT; var t = minimizeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(50f*s, 50f*s); if (t) t.fontSize = Mathf.RoundToInt(30*s); }); }

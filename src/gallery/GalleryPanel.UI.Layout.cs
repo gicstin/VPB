@@ -344,8 +344,8 @@ namespace VPB
             {
                 try { action(s); } catch { }
             }
-            UpdateLayout();
-            UpdateTabs();
+            // Layout / tab scroll chrome: rely on VPBConfig.ConfigChanged (UpdateLayout then
+            // RefreshSideTabAreasForConfigChange — no side-tab list rebuild) when callers TriggerChange.
         }
 
         public void ApplySideButtonScale()

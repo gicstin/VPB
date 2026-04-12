@@ -2157,7 +2157,6 @@ namespace VPB
             try { showHidden = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages; } catch { }
             bool keepHiddenForSort = FilesSortKeepsHiddenInList();
 
-            bool anyRemoved = false;
             if (!showHidden && !keepHiddenForSort)
             {
                 for (int i = currentFilteredFiles.Count - 1; i >= 0; i--)
@@ -2168,7 +2167,6 @@ namespace VPB
                         if (PackageHidePrefs.IsExcludedByGalleryHideFilter(currentFilteredFiles[i]))
                         {
                             currentFilteredFiles.RemoveAt(i);
-                            anyRemoved = true;
                         }
                     }
                     catch { }
@@ -2185,8 +2183,7 @@ namespace VPB
                 SortState st = GetSortState("Files");
                 int beforeExclusive = currentFilteredFiles.Count;
                 ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
-                if (currentFilteredFiles.Count != beforeExclusive)
-                    anyRemoved = true;
+
                 GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
             }
             catch { }
