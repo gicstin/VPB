@@ -23,6 +23,17 @@ namespace VPB
         private Coroutine thumbnailCacheCoroutine;
         private int _nextThumbPriority = 10;
 
+        /// <summary>
+        /// BepInEx builds use the normal csproj (DEBUG/TRACE only): UNITY_EDITOR is never defined here.
+        /// Default on for Debug configuration; set true at runtime to profile Release builds.
+        /// </summary>
+#if DEBUG
+        public static bool LogCategoryCreatorSideTabSwitchTiming = true;
+#else
+        public static bool LogCategoryCreatorSideTabSwitchTiming = false;
+#endif
+        private Coroutine _categoryCreatorSideTabSwitchTimingCoroutine;
+
         // Thumbnail cache progress UI
         private GameObject _thumbCacheProgressGO;
         private RectTransform _thumbCacheBarFillRT;
@@ -49,6 +60,22 @@ namespace VPB
         private List<GameObject> leftSubActiveTabButtons = new List<GameObject>(); // NEW
         private List<GameObject> rightActiveTabButtons = new List<GameObject>();
         private List<GameObject> rightSubActiveTabButtons = new List<GameObject>(); // NEW
+
+        // Dual-buffer Category/Creator main side-tab lists (avoids destroying hundreds of buttons on each toggle).
+        private GameObject leftCategoryTabHolder;
+        private GameObject leftCreatorTabHolder;
+        private GameObject rightCategoryTabHolder;
+        private GameObject rightCreatorTabHolder;
+        private List<GameObject> leftCategoryTabButtons = new List<GameObject>();
+        private List<GameObject> leftCreatorTabButtons = new List<GameObject>();
+        private List<GameObject> rightCategoryTabButtons = new List<GameObject>();
+        private List<GameObject> rightCreatorTabButtons = new List<GameObject>();
+        private string leftCategoryTabsLastSig;
+        private string leftCreatorTabsLastSig;
+        private string rightCategoryTabsLastSig;
+        private string rightCreatorTabsLastSig;
+        private int categorySideTabDataRevision;
+        private int creatorSideTabDataRevision;
 
         private string currentPath = "";
         private string currentExtension = "json";

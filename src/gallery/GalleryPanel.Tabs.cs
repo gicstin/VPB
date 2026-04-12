@@ -160,6 +160,7 @@ namespace VPB
 
             if (IsHubMode)
             {
+                TeardownCategoryCreatorDualBufferForHub();
                 UpdateHubLayout(rebuildSideTabLists);
                 UpdateSideButtonsVisibility();
                 return;
@@ -229,7 +230,13 @@ namespace VPB
 
                     // Populate Top (Category / Hub Category / Status)
                     if (rebuildSideTabLists)
-                        UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
+                    {
+                        if (!TryUpdateCategoryCreatorDualBufferMainPane(leftActiveContent.Value, leftTabContainerGO, true))
+                        {
+                            TeardownCategoryCreatorDualBufferOneSide(true);
+                            UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
+                        }
+                    }
 
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     if (rebuildSideTabLists)
@@ -252,7 +259,13 @@ namespace VPB
                     leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
 
                     if (rebuildSideTabLists)
-                        UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
+                    {
+                        if (!TryUpdateCategoryCreatorDualBufferMainPane(leftActiveContent.Value, leftTabContainerGO, true))
+                        {
+                            TeardownCategoryCreatorDualBufferOneSide(true);
+                            UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
+                        }
+                    }
                 }
             }
             else
@@ -332,7 +345,13 @@ namespace VPB
 
                     // Populate Top (Category / Hub Category / Status)
                     if (rebuildSideTabLists)
-                        UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
+                    {
+                        if (!TryUpdateCategoryCreatorDualBufferMainPane(rightActiveContent.Value, rightTabContainerGO, false))
+                        {
+                            TeardownCategoryCreatorDualBufferOneSide(false);
+                            UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
+                        }
+                    }
 
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
                     if (rebuildSideTabLists)
@@ -355,7 +374,13 @@ namespace VPB
                     rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
 
                     if (rebuildSideTabLists)
-                        UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
+                    {
+                        if (!TryUpdateCategoryCreatorDualBufferMainPane(rightActiveContent.Value, rightTabContainerGO, false))
+                        {
+                            TeardownCategoryCreatorDualBufferOneSide(false);
+                            UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
+                        }
+                    }
                 }
             }
             else
@@ -366,6 +391,196 @@ namespace VPB
 
             SyncSidePaneTopSortButtonVisuals();
             UpdateSideButtonsVisibility();
+        }
+
+        private void TeardownCategoryCreatorDualBufferForHub()
+        {
+            TeardownCategoryCreatorDualBufferOneSide(true);
+            TeardownCategoryCreatorDualBufferOneSide(false);
+        }
+
+        private void TeardownCategoryCreatorDualBufferOneSide(bool isLeft)
+        {
+            List<GameObject> catList = isLeft ? leftCategoryTabButtons : rightCategoryTabButtons;
+            List<GameObject> crList = isLeft ? leftCreatorTabButtons : rightCreatorTabButtons;
+            GameObject catH = isLeft ? leftCategoryTabHolder : rightCategoryTabHolder;
+            GameObject crH = isLeft ? leftCreatorTabHolder : rightCreatorTabHolder;
+
+            if (catList != null)
+            {
+                foreach (var b in catList) ReturnTabButton(b);
+                catList.Clear();
+            }
+            if (crList != null)
+            {
+                foreach (var b in crList) ReturnTabButton(b);
+                crList.Clear();
+            }
+            if (catH != null)
+            {
+                try { UnityEngine.Object.Destroy(catH); } catch { }
+            }
+            if (crH != null)
+            {
+                try { UnityEngine.Object.Destroy(crH); } catch { }
+            }
+            if (isLeft)
+            {
+                leftCategoryTabHolder = null;
+                leftCreatorTabHolder = null;
+                leftCategoryTabsLastSig = null;
+                leftCreatorTabsLastSig = null;
+            }
+            else
+            {
+                rightCategoryTabHolder = null;
+                rightCreatorTabHolder = null;
+                rightCategoryTabsLastSig = null;
+                rightCreatorTabsLastSig = null;
+            }
+        }
+
+        private void ClearTabContainerChildrenForDualBufferInit(GameObject tabContainer)
+        {
+            if (tabContainer == null) return;
+            Transform t = tabContainer.transform;
+            for (int i = t.childCount - 1; i >= 0; i--)
+            {
+                GameObject go = t.GetChild(i).gameObject;
+                if (go.GetComponent<Button>() != null)
+                    ReturnTabButton(go);
+                else
+                    UnityEngine.Object.Destroy(go);
+            }
+        }
+
+        private GameObject CreateCategoryCreatorTabStackHolder(string name, Transform parent)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, 0);
+            rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.sizeDelta = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+            VerticalLayoutGroup v = go.AddComponent<VerticalLayoutGroup>();
+            v.spacing = 2f;
+            v.padding = new RectOffset(5, 5, 0, 0);
+            v.childAlignment = TextAnchor.UpperCenter;
+            v.childControlWidth = true;
+            v.childControlHeight = true;
+            v.childForceExpandWidth = true;
+            v.childForceExpandHeight = false;
+            ContentSizeFitter csf = go.AddComponent<ContentSizeFitter>();
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            le.flexibleWidth = 1f;
+            return go;
+        }
+
+        private void EnsureCategoryCreatorHolders(GameObject tabContainer, bool isLeft)
+        {
+            GameObject catH = isLeft ? leftCategoryTabHolder : rightCategoryTabHolder;
+            GameObject crH = isLeft ? leftCreatorTabHolder : rightCreatorTabHolder;
+            if (catH != null && crH != null) return;
+
+            List<GameObject> legacy = isLeft ? leftActiveTabButtons : rightActiveTabButtons;
+            if (legacy != null)
+            {
+                foreach (var b in legacy) ReturnTabButton(b);
+                legacy.Clear();
+            }
+            ClearTabContainerChildrenForDualBufferInit(tabContainer);
+
+            catH = CreateCategoryCreatorTabStackHolder("_VPB_CategoryTabs", tabContainer.transform);
+            crH = CreateCategoryCreatorTabStackHolder("_VPB_CreatorTabs", tabContainer.transform);
+            if (isLeft)
+            {
+                leftCategoryTabHolder = catH;
+                leftCreatorTabHolder = crH;
+            }
+            else
+            {
+                rightCategoryTabHolder = catH;
+                rightCreatorTabHolder = crH;
+            }
+        }
+
+        private string CurrentPathsSignatureFragment()
+        {
+            if (currentPaths == null || currentPaths.Count == 0)
+                return currentPath ?? "";
+            var arr = new List<string>(currentPaths);
+            arr.Sort(StringComparer.OrdinalIgnoreCase);
+            return string.Join("\x1e", arr.ToArray());
+        }
+
+        private string ComputeCategorySideTabSignature()
+        {
+            SortState st = GetSortState("Category");
+            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            return categorySideTabDataRevision + "|" + (categoryFilter ?? "") + "|" + (currentPath ?? "") + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R") + "|" + (categories != null ? categories.Count : 0);
+        }
+
+        private string ComputeCreatorSideTabSignature()
+        {
+            SortState st = GetSortState("Creator");
+            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            return creatorSideTabDataRevision + "|" + (creatorFilter ?? "") + "|" + CurrentPathsSignatureFragment() + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R");
+        }
+
+        /// <summary>
+        /// Keeps Category and Creator side-tab UIs in sibling holders and toggles visibility when switching,
+        /// rebuilding only when cache/sort/filter/scale data changes.
+        /// </summary>
+        private bool TryUpdateCategoryCreatorDualBufferMainPane(ContentType activeContent, GameObject tabContainer, bool isLeft)
+        {
+            if (tabContainer == null) return false;
+            if (activeContent != ContentType.Category && activeContent != ContentType.Creator) return false;
+
+            EnsureCategoryCreatorHolders(tabContainer, isLeft);
+
+            GameObject catH = isLeft ? leftCategoryTabHolder : rightCategoryTabHolder;
+            GameObject crH = isLeft ? leftCreatorTabHolder : rightCreatorTabHolder;
+            List<GameObject> catList = isLeft ? leftCategoryTabButtons : rightCategoryTabButtons;
+            List<GameObject> crList = isLeft ? leftCreatorTabButtons : rightCreatorTabButtons;
+
+            string catSig = ComputeCategorySideTabSignature();
+            string crSig = ComputeCreatorSideTabSignature();
+
+            string lastCat = isLeft ? leftCategoryTabsLastSig : rightCategoryTabsLastSig;
+            string lastCr = isLeft ? leftCreatorTabsLastSig : rightCreatorTabsLastSig;
+
+            // Avoid building the hidden pane on first open; build it once the user switches or after it existed and data changed.
+            bool categoryPaneEverBuilt = lastCat != null;
+            if (!categoriesCached || lastCat != catSig)
+            {
+                if (activeContent == ContentType.Category || categoryPaneEverBuilt)
+                {
+                    UpdateTabs(ContentType.Category, catH, catList, isLeft);
+                    lastCat = catSig;
+                    if (isLeft) leftCategoryTabsLastSig = lastCat;
+                    else rightCategoryTabsLastSig = lastCat;
+                }
+            }
+            bool creatorPaneEverBuilt = lastCr != null;
+            if (!creatorsCached || lastCr != crSig)
+            {
+                if (activeContent == ContentType.Creator || creatorPaneEverBuilt)
+                {
+                    UpdateTabs(ContentType.Creator, crH, crList, isLeft);
+                    lastCr = crSig;
+                    if (isLeft) leftCreatorTabsLastSig = lastCr;
+                    else rightCreatorTabsLastSig = lastCr;
+                }
+            }
+
+            if (catH != null) catH.SetActive(activeContent == ContentType.Category);
+            if (crH != null) crH.SetActive(activeContent == ContentType.Creator);
+
+            return true;
         }
 
         private void UpdateHubLayout(bool populateSideTabLists = true)

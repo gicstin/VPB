@@ -2197,8 +2197,39 @@ namespace VPB
                 scrollRect.verticalNormalizedPosition = 0f;
         }
 
+        /// <summary>
+        /// Debug: wall time from Category/Creator side-button click through tab list layout and first frame presented.
+        /// </summary>
+        private void ScheduleCategoryCreatorSideTabSwitchTimingComplete(string sideLabel, float clickRealtimeSinceStartup)
+        {
+            if (_categoryCreatorSideTabSwitchTimingCoroutine != null)
+            {
+                try { StopCoroutine(_categoryCreatorSideTabSwitchTimingCoroutine); } catch { }
+                _categoryCreatorSideTabSwitchTimingCoroutine = null;
+            }
+            _categoryCreatorSideTabSwitchTimingCoroutine = StartCoroutine(CategoryCreatorSideTabSwitchTimingEndRoutine(sideLabel, clickRealtimeSinceStartup));
+        }
+
+        private IEnumerator CategoryCreatorSideTabSwitchTimingEndRoutine(string sideLabel, float clickRealtimeSinceStartup)
+        {
+            yield return null;
+            try { Canvas.ForceUpdateCanvases(); } catch { }
+            yield return new WaitForEndOfFrame();
+            float ms = (Time.realtimeSinceStartup - clickRealtimeSinceStartup) * 1000f;
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Debug] Side tab Category/Creator switch " + sideLabel + " click-to-drawn=" + ms.ToString("F1") + "ms (layout forced + end of frame)");
+            }
+            catch { }
+            _categoryCreatorSideTabSwitchTimingCoroutine = null;
+        }
+
         private void ToggleRight(ContentType type)
         {
+            bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
+                && (type == ContentType.Category || type == ContentType.Creator);
+            float clickT = timeCategoryCreatorSwitch ? Time.realtimeSinceStartup : 0f;
+
             if (rightActiveContent == type) 
             {
                 rightActiveContent = null;
@@ -2212,10 +2243,17 @@ namespace VPB
             
             UpdateLayout();
             UpdateTabs();
+
+            if (timeCategoryCreatorSwitch)
+                ScheduleCategoryCreatorSideTabSwitchTimingComplete("right", clickT);
         }
 
         private void ToggleLeft(ContentType type)
         {
+            bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
+                && (type == ContentType.Category || type == ContentType.Creator);
+            float clickT = timeCategoryCreatorSwitch ? Time.realtimeSinceStartup : 0f;
+
             if (leftActiveContent == type)
             {
                 leftActiveContent = null;
@@ -2229,6 +2267,9 @@ namespace VPB
             
             UpdateLayout();
             UpdateTabs();
+
+            if (timeCategoryCreatorSwitch)
+                ScheduleCategoryCreatorSideTabSwitchTimingComplete("left", clickT);
         }
 
         private void UpdateReplaceButtonState()

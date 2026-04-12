@@ -194,6 +194,7 @@ namespace VPB
             AddLocalCustomScriptsCountToCategory(categoryCounts);
 
             categoriesCached = true;
+            unchecked { categorySideTabDataRevision++; }
         }
 
         /// <summary>
@@ -280,6 +281,7 @@ namespace VPB
             cachedCreators = counts.Select(kv => new CreatorCacheEntry { Name = kv.Key, Count = kv.Value })
                                    .OrderBy(c => c.Name).ToList();
             creatorsCached = true;
+            unchecked { creatorSideTabDataRevision++; }
         }
 
         public void InvalidateTags()
