@@ -9,6 +9,23 @@ namespace VPB
 	{
 		public bool isVar = false;
 		public VarPackage package;
+
+		/// <summary>
+		/// Fast-path constructor when caller already knows file stat. Avoids per-entry FileInfo calls
+		/// (used by SQLite-cached loose-file listings).
+		/// </summary>
+		public SystemFileEntry(string path, DateTime lastWriteTime, long size, bool exists)
+			: base(path)
+		{
+			Exists = exists;
+			LastWriteTime = lastWriteTime;
+			Size = size;
+
+			// Do not use GetPackage(uid) default (ensureInstalled: true): that runs InstallRecursive()
+			package = FileManager.GetPackage(System.IO.Path.GetFileNameWithoutExtension(Path), false);
+			if (package != null) isVar = true;
+		}
+
 		public SystemFileEntry(string path)
 			: base(path)
 		{

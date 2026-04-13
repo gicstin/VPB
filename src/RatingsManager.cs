@@ -116,7 +116,7 @@ namespace VPB
                 if (!string.IsNullOrEmpty(prefsDir) && Directory.Exists(prefsDir))
                 {
                     string[] favFiles;
-                    try { favFiles = Directory.GetFiles(prefsDir, "*.fav", SearchOption.AllDirectories); }
+                    try { favFiles = TryGetCachedMarkerFiles(prefsDir, "*.fav"); }
                     catch { favFiles = new string[0]; }
 
                     foreach (var favFile in favFiles)
@@ -154,7 +154,7 @@ namespace VPB
                     if (!Directory.Exists(fullDir)) continue;
 
                     string[] favFiles;
-                    try { favFiles = Directory.GetFiles(fullDir, "*.fav", SearchOption.AllDirectories); }
+                    try { favFiles = TryGetCachedMarkerFiles(fullDir, "*.fav"); }
                     catch { favFiles = new string[0]; }
 
                     foreach (var favFile in favFiles)
@@ -174,6 +174,49 @@ namespace VPB
             }
 
             if (anyAdded) Save();
+        }
+
+        private static string[] TryGetCachedMarkerFiles(string root, string pattern)
+        {
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return new string[0];
+            string sig = "0";
+            try { sig = Directory.GetLastWriteTimeUtc(root).ToBinary().ToString(); } catch { sig = "0"; }
+            string cacheKey = "markers:fav|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|pat=" + (pattern ?? "");
+
+            var cached = new List<VpbLocalDatabase.SystemFileRow>();
+            bool hit = false;
+            try { hit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached); } catch { hit = false; }
+
+            if (hit && cached.Count > 0)
+            {
+                var arr = new string[cached.Count];
+                for (int i = 0; i < cached.Count; i++) arr[i] = cached[i].Path;
+                return arr;
+            }
+
+            string[] files;
+            try { files = Directory.GetFiles(root, pattern, SearchOption.AllDirectories); }
+            catch { files = new string[0]; }
+
+            try
+            {
+                var rows = new List<VpbLocalDatabase.SystemFileRow>(files.Length);
+                for (int i = 0; i < files.Length; i++)
+                {
+                    string p = files[i];
+                    if (string.IsNullOrEmpty(p)) continue;
+                    var r = new VpbLocalDatabase.SystemFileRow();
+                    try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
+                    r.LastWriteBinaryOrInvalid = long.MinValue;
+                    r.SizeOrInvalid = long.MinValue;
+                    rows.Add(r);
+                }
+                if (rows.Count > 0)
+                    VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
+            }
+            catch { }
+
+            return files;
         }
 
         private int TryReadLegacyFavRating(string favPath)

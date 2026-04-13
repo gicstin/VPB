@@ -106,7 +106,7 @@ namespace VPB
         /// </remarks>
         internal void UpdateTabs()
         {
-            UpdateTabsImpl(rebuildSideTabLists: true);
+            UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true);
         }
 
         /// <summary>
@@ -115,10 +115,11 @@ namespace VPB
         /// </summary>
         private void RefreshSideTabAreasForConfigChange()
         {
-            UpdateTabsImpl(rebuildSideTabLists: false);
+            UpdateTabsImpl(rebuildSideTabLists: false, rebuildSubPaneSideTabLists: true);
         }
 
-        private void UpdateTabsImpl(bool rebuildSideTabLists)
+        /// <param name="rebuildSubPaneSideTabLists">When false, skips tag/hub-sub/scene-source side lists (split bottom). Main category/creator strips still rebuild when <paramref name="rebuildSideTabLists"/> is true.</param>
+        private void UpdateTabsImpl(bool rebuildSideTabLists, bool rebuildSubPaneSideTabLists = true)
         {
             if (!IsHubMode && (leftTabContainerGO != null || rightTabContainerGO != null)
                 && VPBConfig.Instance != null && VPBConfig.Instance.TryConsumeLightweightGalleryTabRefreshSlot())
@@ -239,7 +240,12 @@ namespace VPB
                     }
 
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
-                    if (rebuildSideTabLists)
+                    if (rebuildSideTabLists && !rebuildSubPaneSideTabLists)
+                    {
+                        foreach (var b in leftSubActiveTabButtons) ReturnTabButton(b);
+                        leftSubActiveTabButtons.Clear();
+                    }
+                    if (rebuildSideTabLists && rebuildSubPaneSideTabLists)
                         UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
                 }
                 else
@@ -354,7 +360,12 @@ namespace VPB
                     }
 
                     // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
-                    if (rebuildSideTabLists)
+                    if (rebuildSideTabLists && !rebuildSubPaneSideTabLists)
+                    {
+                        foreach (var b in rightSubActiveTabButtons) ReturnTabButton(b);
+                        rightSubActiveTabButtons.Clear();
+                    }
+                    if (rebuildSideTabLists && rebuildSubPaneSideTabLists)
                         UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
                 else
@@ -391,6 +402,82 @@ namespace VPB
 
             SyncSidePaneTopSortButtonVisuals();
             UpdateSideButtonsVisibility();
+        }
+
+        /// <summary>
+        /// Rebuilds only split-view bottom panes (tags, hub tags, scene/appearance source rows). Used after
+        /// <see cref="UpdateTabsImpl(bool,bool)"/> with <c>rebuildSubPaneSideTabLists: false</c> so heavy tag UI
+        /// can run on the next frame while category/creator strips already match the new category.
+        /// </summary>
+        private void RebuildSubPaneSideTabListsOnly()
+        {
+            if (IsHubMode) return;
+
+            if (leftActiveContent.HasValue)
+            {
+                bool splitView = false;
+                if (leftActiveContent == ContentType.Category)
+                {
+                    string title = titleText != null ? titleText.text : "";
+                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
+                        splitView = true;
+                }
+                else if (leftActiveContent == ContentType.Hub)
+                    splitView = true;
+
+                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub) &&
+                    leftSubTabScrollGO != null && leftSubTabContainerGO != null)
+                {
+                    ContentType subType = ContentType.Tags;
+                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    else if (leftActiveContent == ContentType.Category)
+                    {
+                        string titleSub = titleText != null ? titleText.text : "";
+                        if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
+                            subType = ContentType.SceneSource;
+                        else if (titleSub.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                            subType = ContentType.AppearanceSource;
+                    }
+                    UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+                }
+            }
+
+            if (rightActiveContent.HasValue)
+            {
+                bool splitView = false;
+                if (rightActiveContent == ContentType.Category)
+                {
+                    string title = titleText != null ? titleText.text : "";
+                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
+                        splitView = true;
+                }
+                else if (rightActiveContent == ContentType.Hub)
+                    splitView = true;
+
+                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub) &&
+                    rightSubTabScrollGO != null && rightSubTabContainerGO != null)
+                {
+                    ContentType subType = ContentType.Tags;
+                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    else if (rightActiveContent == ContentType.Category)
+                    {
+                        string titleSub = titleText != null ? titleText.text : "";
+                        if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
+                            subType = ContentType.SceneSource;
+                        else if (titleSub.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                            subType = ContentType.AppearanceSource;
+                    }
+                    UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
+                }
+            }
         }
 
         private void TeardownCategoryCreatorDualBufferForHub()
@@ -734,6 +821,8 @@ namespace VPB
                     string label = c.name + " (" + count + ")";
 
                     CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                        if (LogGalleryCategoryTypeSwitchTiming)
+                            BeginGalleryCategoryTypeNavigationTiming(c.name);
                         Show(c.name, c.extension, c.path);
                         if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
                         {
@@ -742,9 +831,12 @@ namespace VPB
                         if (VPBConfig.Instance != null)
                         {
                             VPBConfig.Instance.LastGalleryCategory = c.name;
-                            try { VPBConfig.Instance.Save(); } catch { }
+                            // Write disk only: Save(true) runs ConfigChanged -> UpdateLayout (~seconds). Show/UpdateTabs already refreshed UI.
+                            try { VPBConfig.Instance.Save(false); } catch { }
                         }
-                        UpdateTabs();
+                        // Show() already ran UpdateTabs or UpdateTabsImpl(false) while refresh runs; a second
+                        // full UpdateTabs() here blocked the UI for seconds. Side strips refresh when
+                        // RefreshFilesRoutine finishes (DeferredGallerySideTabsAfterGridReady).
                     }, trackedButtons, () => {
                         currentPath = "";
                         currentPaths = null;
@@ -814,7 +906,7 @@ namespace VPB
             {
                 Color appearanceColor = new Color(0.2f, 0.4f, 0.7f, 1f);
 
-                if (!tagsCached) CacheTagCounts();
+                if (!tagsCached) ScheduleTagCountsForSideTabsNonBlocking();
 
                 int allCount = appearanceSourceCountAll;
                 int presetsCount = appearanceSourceCountPresets;
@@ -935,7 +1027,7 @@ namespace VPB
             }
             else if (contentType == ContentType.Tags)
             {
-                if (!tagsCached) CacheTagCounts();
+                if (!tagsCached) ScheduleTagCountsForSideTabsNonBlocking();
 
                 // Determine which tags to show
                 List<string> tagsToShow = new List<string>();

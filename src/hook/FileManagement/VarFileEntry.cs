@@ -14,7 +14,20 @@ namespace VPB
 
 	public class VarFileEntry : FileEntry
 	{
-		public VarPackage Package { get; protected set; }
+		private VarPackage _packageStore;
+
+		public VarPackage Package
+		{
+			get { EnsurePackageResolved(); return _packageStore; }
+			protected set { _packageStore = value; }
+		}
+
+		/// <summary>When set, <see cref="Package"/> is resolved on first use via <see cref="FileManager.TryResolveVarPackageForIndexedGalleryRow"/>.</summary>
+		private string _deferredPackageUid;
+		private string _deferredVarPathHint;
+
+		/// <summary>Package <see cref="VarPackage.CreationTime"/> from SQLite (<c>pkg.pctime</c>); avoids resolving <see cref="Package"/> for DateCreated sort.</summary>
+		private long _galleryIndexedCreationTicks = long.MinValue;
 
 		public string InternalPath { get; protected set; }
 
@@ -25,17 +38,113 @@ namespace VPB
 
 		public override long Size
 		{
-			get { return Package != null ? Package.Size : base.Size; }
+			get
+			{
+				// Do not resolve the package for sorting/listing — use indexed size until something needs a live package.
+				if (_deferredPackageUid != null)
+					return base.Size;
+				return _packageStore != null ? _packageStore.Size : base.Size;
+			}
 			protected set { base.Size = value; }
 		}
 
-		public VarFileEntry(VarPackage vp, string entryName, DateTime lastWriteTime, long size, bool simulated = false)
+		public VarFileEntry(VarPackage vp, string entryName, DateTime lastWriteTime, long size, bool simulated)
+			: this(vp, entryName, lastWriteTime, size, null, simulated)
+		{
+		}
+
+		/// <summary>Gallery path string from SQLite index (avoids per-row string concat when set).</summary>
+		public VarFileEntry(VarPackage vp, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath)
+			: this(vp, entryName, lastWriteTime, size, indexedGalleryPath, false)
+		{
+		}
+
+		public VarFileEntry(VarPackage vp, string entryName, DateTime lastWriteTime, long size)
+			: this(vp, entryName, lastWriteTime, size, null, false)
+		{
+		}
+
+		/// <summary>
+		/// Gallery fast path: listing fields come from SQLite; <see cref="Package"/> is resolved lazily when the file is opened or other package state is needed.
+		/// </summary>
+		public VarFileEntry(string packageUid, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath, string indexedVarPathHint)
+			: this(packageUid, entryName, lastWriteTime, size, indexedGalleryPath, indexedVarPathHint, long.MinValue)
+		{
+		}
+
+		public VarFileEntry(string packageUid, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath, string indexedVarPathHint, long packageCreationTicksOrMin)
+		{
+			if (string.IsNullOrEmpty(packageUid))
+				throw new ArgumentException("packageUid must not be null or empty.", "packageUid");
+			_deferredPackageUid = packageUid;
+			_deferredVarPathHint = indexedVarPathHint ?? "";
+			_galleryIndexedCreationTicks = packageCreationTicksOrMin;
+			Package = null;
+			InternalPath = entryName ?? "";
+			Uid = packageUid + ":/" + InternalPath;
+			Path = indexedGalleryPath ?? "";
+			int lastSlash = Path.LastIndexOf('/');
+			Name = (lastSlash >= 0 && lastSlash + 1 < Path.Length) ? Path.Substring(lastSlash + 1) : Path;
+			Exists = true;
+			LastWriteTime = lastWriteTime;
+			base.Size = size;
+		}
+
+		/// <summary>Package UID for this row (deferred or resolved), for matching scoped path refresh.</summary>
+		internal string GetRowPackageUid()
+		{
+			if (_deferredPackageUid != null) return _deferredPackageUid;
+			if (_packageStore != null && !string.IsNullOrEmpty(_packageStore.Uid)) return _packageStore.Uid;
+			string u = Uid ?? "";
+			int idx = u.IndexOf(":/", StringComparison.Ordinal);
+			if (idx > 0) return u.Substring(0, idx);
+			return u;
+		}
+
+		internal bool TryGetGalleryIndexedPackageCreationTime(out DateTime dt)
+		{
+			dt = DateTime.MinValue;
+			if (_galleryIndexedCreationTicks == long.MinValue) return false;
+			try
+			{
+				dt = DateTime.FromBinary(_galleryIndexedCreationTicks);
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
+		private void EnsurePackageResolved()
+		{
+			if (_packageStore != null || _deferredPackageUid == null) return;
+			string uid = _deferredPackageUid;
+			string hint = _deferredVarPathHint ?? "";
+			_deferredPackageUid = null;
+			VarPackage p;
+			if (FileManager.TryResolveVarPackageForIndexedGalleryRow(uid, hint, out p))
+			{
+				_packageStore = p;
+				RefreshDisplayPathsFromPackage();
+				Exists = true;
+			}
+			else
+			{
+				Exists = false;
+			}
+		}
+
+		private VarFileEntry(VarPackage vp, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath, bool simulated)
 		{
 			Package = vp;
 			InternalPath = entryName;
 			Uid = vp.Uid + ":/" + InternalPath;
-			// If internal path is meta.json, show the package path directly without the internal path suffix
-			if (string.Equals(InternalPath, "meta.json", System.StringComparison.OrdinalIgnoreCase))
+			if (!string.IsNullOrEmpty(indexedGalleryPath))
+			{
+				Path = indexedGalleryPath;
+			}
+			else if (string.Equals(InternalPath, "meta.json", System.StringComparison.OrdinalIgnoreCase))
 			{
 				Path = vp.Path;
 			}
@@ -52,6 +161,9 @@ namespace VPB
 
 		public override FileEntryStream OpenStream()
 		{
+			EnsurePackageResolved();
+			if (_packageStore == null)
+				throw new IOException("VAR package not found for " + (Uid ?? ""));
 			return new VarFileEntryStream(this);
 		}
 
@@ -60,6 +172,9 @@ namespace VPB
 
 		public override FileEntryStreamReader OpenStreamReader()
 		{
+			EnsurePackageResolved();
+			if (_packageStore == null)
+				throw new IOException("VAR package not found for " + (Uid ?? ""));
 			return new VarFileEntryStreamReader(this);
 		}
 
@@ -86,19 +201,23 @@ namespace VPB
 
 		public override bool IsInstalled()
 		{
-			if(Package.Path.StartsWith("AddonPackages/"))
+			EnsurePackageResolved();
+			if (_packageStore == null) return false;
+			if(_packageStore.Path.StartsWith("AddonPackages/"))
             {
-				return File.Exists(Package.Path);
+				return File.Exists(_packageStore.Path);
             }
-			else if (Package.Path.StartsWith("AllPackages/"))
+			else if (_packageStore.Path.StartsWith("AllPackages/"))
             {
-				return File.Exists("AddonPackages" + Package.Path.Substring("AllPackages".Length));
+				return File.Exists("AddonPackages" + _packageStore.Path.Substring("AllPackages".Length));
             }
 			return false;
 		}
 		public override bool IsAutoInstall()
 		{
-			string key = this.Package.Uid;
+			EnsurePackageResolved();
+			if (_packageStore == null) return false;
+			string key = _packageStore.Uid;
 
 			if (AutoInstallLookup.Contains(key))
 				return true;
@@ -107,7 +226,9 @@ namespace VPB
 
         public override bool SetAutoInstall(bool b)
         {
-			string key = this.Package.Uid;
+			EnsurePackageResolved();
+			if (_packageStore == null) return false;
+			string key = _packageStore.Uid;
 			SetAutoInstallInternal(key, b);
 
 			// Do not call InstallSelf() here: moving AllPackages → AddonPackages is deferred to
@@ -118,15 +239,40 @@ namespace VPB
 		/// <summary>After <see cref="VarPackage.InstallSelf"/> / recursive install moves the .var on disk, sync Path/Uid/Name.</summary>
 		public void RefreshDisplayPathsFromPackage()
 		{
-			if (Package == null) return;
+			if (_packageStore == null) return;
 			if (string.Equals(InternalPath, "meta.json", StringComparison.OrdinalIgnoreCase))
-				Path = Package.Path;
+				Path = _packageStore.Path;
 			else
-				Path = Package.Path + ":/" + InternalPath;
-			Uid = Package.Uid + ":/" + InternalPath;
+				Path = _packageStore.Path + ":/" + InternalPath;
+			Uid = _packageStore.Uid + ":/" + InternalPath;
 			int lastSlash = Path.LastIndexOf('/');
 			Name = (lastSlash >= 0 && lastSlash + 1 < Path.Length) ? Path.Substring(lastSlash + 1) : Path;
 			InvalidateUidLowerInvariantCache();
+		}
+
+		/// <summary>
+		/// Sync <see cref="FileEntry.Path"/> from <see cref="FileManager"/> after a path-only move (AllPackages ↔ AddonPackages).
+		/// Resolves deferred SQLite-backed rows when possible so <see cref="RefreshDisplayPathsFromPackage"/> can run.
+		/// </summary>
+		public bool TryRefreshPathsFromLivePackage()
+		{
+			if (_packageStore != null)
+			{
+				RefreshDisplayPathsFromPackage();
+				return true;
+			}
+			if (_deferredPackageUid == null) return false;
+			string uid = _deferredPackageUid;
+			string hint = _deferredVarPathHint ?? "";
+			VarPackage p;
+			if (!FileManager.TryResolveVarPackageForIndexedGalleryRow(uid, hint, out p) || p == null)
+				return false;
+			_packageStore = p;
+			_deferredPackageUid = null;
+			_deferredVarPathHint = null;
+			RefreshDisplayPathsFromPackage();
+			Exists = true;
+			return true;
 		}
 
 	}

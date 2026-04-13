@@ -167,6 +167,19 @@ namespace VPB
 
 		private static List<string> GetDirectDependencyIds(VarPackage pkg)
 		{
+			// Prefer the persisted SQLite dependency edges when available. This avoids requiring
+			// per-package meta parsing just to answer dependency queries on startup.
+			try
+			{
+				if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
+				{
+					var depsFromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+					if (VpbLocalDatabase.TryReadRecursiveDependencyUids(pkg.Uid, depsFromSql))
+						return depsFromSql.Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+				}
+			}
+			catch { }
+
 			try
 			{
 				// Prefer a direct list if one exists; otherwise fall back to recursive list.

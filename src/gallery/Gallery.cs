@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Prime31.MessageKit;
 using UnityEngine;
@@ -73,6 +74,21 @@ namespace VPB
         void Awake()
         {
             singleton = this;
+            try
+            {
+                string gameRoot = Path.GetDirectoryName(Application.dataPath);
+                if (!string.IsNullOrEmpty(gameRoot))
+                    VpbSqlite3.SetGameInstallRootForNativeDll(gameRoot);
+            }
+            catch { }
+        }
+
+        void Start()
+        {
+            // Do not rebuild the SQLite index here: FileManager.lastPackageRefreshTime is often still
+            // DateTime.MinValue, which would publish scan stamp 0 and disable TryQueryGalleryCategoryRows until
+            // a full rebuild runs after a real package refresh. Rebuild is scheduled from
+            // OnFileManagerRefresh / SetCategories instead.
         }
 
         void OnEnable()
@@ -92,6 +108,12 @@ namespace VPB
                 if (_hasHadInitialRefresh)
                 {
                     LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
+                    try
+                    {
+                        if (!VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory())
+                            VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan();
+                    }
+                    catch { try { VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan(); } catch { } }
                     return;
                 }
                 LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh INITIAL (manual refresh only, first-run exemption)");
@@ -113,6 +135,13 @@ namespace VPB
 
             LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
             GalleryFileListSnapshotCache.Clear();
+            GalleryTagCountSnapshotCache.Clear();
+            try
+            {
+                if (!VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory())
+                    VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan();
+            }
+            catch { try { VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan(); } catch { } }
             lastObservedPackageRefreshTime = refreshTime;
 
             _hasHadInitialRefresh = true;
@@ -205,10 +234,46 @@ namespace VPB
         public void SetCategories(List<Category> cats)
         {
             categories = cats;
+            bool hydrated = false;
+            try { hydrated = VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory(); } catch { }
+            if (!hydrated)
+            {
+                try { VpbLocalDatabase.InvalidateReadyStateOnCategoriesChanged(); } catch { }
+                try { VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan(); } catch { }
+            }
             foreach (var p in panels)
             {
                 p.SetCategories(categories);
             }
+        }
+
+        internal List<Category> CloneCategoriesForIndex()
+        {
+            int n = categories != null ? categories.Count : 0;
+            var r = new List<Category>(n);
+            if (categories == null) return r;
+            for (int i = 0; i < categories.Count; i++)
+            {
+                Category c = categories[i];
+                Category copy = new Category();
+                copy.name = c.name;
+                copy.extension = c.extension;
+                copy.path = c.path;
+                copy.paths = c.paths != null ? new List<string>(c.paths) : null;
+                r.Add(copy);
+            }
+            return r;
+        }
+
+        internal Category FindCategoryByName(string title)
+        {
+            if (string.IsNullOrEmpty(title) || categories == null) return new Category();
+            for (int i = 0; i < categories.Count; i++)
+            {
+                if (string.Equals(categories[i].name, title, StringComparison.OrdinalIgnoreCase))
+                    return categories[i];
+            }
+            return new Category();
         }
 
         public const int MaxPanels = 20;
@@ -526,6 +591,25 @@ namespace VPB
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// After <see cref="FileManager.NotifyInstalled"/> resyncs path dictionaries, refresh cached
+        /// <see cref="FileEntry.Path"/> only for rows whose package UID is in <paramref name="packageUids"/>.
+        /// </summary>
+        public static void NotifyDisplayedPathsAfterPackagePathChanges(ICollection<string> packageUids)
+        {
+            if (packageUids == null || packageUids.Count == 0) return;
+            if (singleton == null) return;
+            List<GalleryPanel> pl = singleton.Panels;
+            if (pl == null) return;
+            var set = new HashSet<string>(packageUids, StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < pl.Count; i++)
+            {
+                GalleryPanel p = pl[i];
+                if (p == null) continue;
+                try { p.RefreshDisplayedVarPathsAfterPackageMoves(set); } catch { }
+            }
         }
     }
 }

@@ -396,6 +396,12 @@ namespace VPB
 
         public static bool EnsureInstalled(FileEntry entry)
         {
+            return EnsureInstalled(entry, null);
+        }
+
+        /// <param name="outMovedPackageUids">When non-null, receives UIDs for packages whose .var was moved during this call.</param>
+        public static bool EnsureInstalled(FileEntry entry, List<string> outMovedPackageUids)
+        {
             if (entry == null) return false;
 
             try
@@ -403,11 +409,15 @@ namespace VPB
                 bool flag = false;
                 if (entry is VarFileEntry varEntry && varEntry.Package != null)
                 {
-                    flag = varEntry.Package.InstallRecursive();
+                    flag = outMovedPackageUids != null
+                        ? varEntry.Package.InstallRecursive(outMovedPackageUids)
+                        : varEntry.Package.InstallRecursive();
                 }
                 else if (entry is SystemFileEntry sysEntry && sysEntry.package != null)
                 {
-                    flag = sysEntry.package.InstallRecursive();
+                    flag = outMovedPackageUids != null
+                        ? sysEntry.package.InstallRecursive(outMovedPackageUids)
+                        : sysEntry.package.InstallRecursive();
                 }
 
                 // Scan for internal dependencies if it's a JSON-like file
@@ -456,7 +466,7 @@ namespace VPB
                                     }
                                     catch { }
 
-                                    bool depsChanged = FileButton.EnsureInstalledBySet(deps);
+                                    bool depsChanged = FileButton.EnsureInstalledBySet(deps, outMovedPackageUids);
                                     if (depsChanged) flag = true;
                                 }
                             }
@@ -479,13 +489,22 @@ namespace VPB
         /// </summary>
         public static bool InstallHostPackageRecursive(FileEntry entry)
         {
+            return InstallHostPackageRecursive(entry, null);
+        }
+
+        public static bool InstallHostPackageRecursive(FileEntry entry, List<string> outMovedPackageUids)
+        {
             if (entry == null) return false;
             try
             {
                 if (entry is VarFileEntry varEntry && varEntry.Package != null)
-                    return varEntry.Package.InstallRecursive();
+                    return outMovedPackageUids != null
+                        ? varEntry.Package.InstallRecursive(outMovedPackageUids)
+                        : varEntry.Package.InstallRecursive();
                 if (entry is SystemFileEntry sysEntry && sysEntry.package != null)
-                    return sysEntry.package.InstallRecursive();
+                    return outMovedPackageUids != null
+                        ? sysEntry.package.InstallRecursive(outMovedPackageUids)
+                        : sysEntry.package.InstallRecursive();
             }
             catch (Exception ex)
             {

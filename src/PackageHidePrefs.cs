@@ -33,8 +33,42 @@ namespace VPB
 				string root = GetAddonPackagesFilePrefsDir();
 				if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
 				{
-					// .NET 3.5: use GetFiles (EnumerateFiles is 4.0+).
-					string[] paths = Directory.GetFiles(root, "*.hide", SearchOption.AllDirectories);
+					// Prefer SQLite-cached marker enumeration to avoid recursive Directory.GetFiles on every rebuild.
+					string sig = "0";
+					try { sig = Directory.GetLastWriteTimeUtc(root).ToBinary().ToString(); } catch { sig = "0"; }
+					string cacheKey = "markers:hide|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/'));
+
+					var cached = new List<VpbLocalDatabase.SystemFileRow>();
+					bool hit = false;
+					try { hit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached); } catch { hit = false; }
+
+					string[] paths;
+					if (hit && cached.Count > 0)
+					{
+						paths = new string[cached.Count];
+						for (int i = 0; i < cached.Count; i++) paths[i] = cached[i].Path;
+					}
+					else
+					{
+						// .NET 3.5: use GetFiles (EnumerateFiles is 4.0+).
+						paths = Directory.GetFiles(root, "*.hide", SearchOption.AllDirectories);
+						try
+						{
+							var rows = new List<VpbLocalDatabase.SystemFileRow>(paths.Length);
+							for (int i = 0; i < paths.Length; i++)
+							{
+								string p = paths[i];
+								if (string.IsNullOrEmpty(p)) continue;
+								var r = new VpbLocalDatabase.SystemFileRow();
+								try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
+								r.LastWriteBinaryOrInvalid = long.MinValue;
+								r.SizeOrInvalid = long.MinValue;
+								rows.Add(r);
+							}
+							if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
+						}
+						catch { }
+					}
 					for (int i = 0; i < paths.Length; i++)
 					{
 						try

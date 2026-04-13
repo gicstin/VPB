@@ -50,10 +50,15 @@ namespace VPB
 
         public static bool EnsureInstalled(FileEntry entry)
         {
+            return EnsureInstalled(entry, null);
+        }
+
+        public static bool EnsureInstalled(FileEntry entry, List<string> outMovedPackageUids)
+        {
             if (entry == null) return false;
             try
             {
-                return SceneLoadingUtils.EnsureInstalled(entry);
+                return SceneLoadingUtils.EnsureInstalled(entry, outMovedPackageUids);
             }
             catch (Exception ex)
             {

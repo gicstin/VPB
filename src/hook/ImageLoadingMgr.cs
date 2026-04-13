@@ -612,7 +612,43 @@ namespace VPB
 
         private void BulkZstdWorker(string nativeCacheDir, string vpbCacheDir)
         {
-            string[] files = Directory.GetFiles(nativeCacheDir, "*.vamcache", SearchOption.TopDirectoryOnly);
+            string[] files;
+            try
+            {
+                string sig = "0";
+                try { sig = Directory.GetLastWriteTimeUtc(nativeCacheDir).ToBinary().ToString(); } catch { sig = "0"; }
+                string cacheKey = "cache:list|dir=" + (Path.GetFullPath(nativeCacheDir).Replace('\\', '/').TrimEnd('/')) + "|pat=*.vamcache";
+                var cached = new List<VpbLocalDatabase.SystemFileRow>();
+                if (VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached) && cached.Count > 0)
+                {
+                    files = new string[cached.Count];
+                    for (int i = 0; i < cached.Count; i++) files[i] = cached[i].Path;
+                }
+                else
+                {
+                    files = Directory.GetFiles(nativeCacheDir, "*.vamcache", SearchOption.TopDirectoryOnly);
+                    try
+                    {
+                        var rows = new List<VpbLocalDatabase.SystemFileRow>(files.Length);
+                        for (int i = 0; i < files.Length; i++)
+                        {
+                            string p = files[i];
+                            if (string.IsNullOrEmpty(p)) continue;
+                            var r = new VpbLocalDatabase.SystemFileRow();
+                            try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
+                            r.LastWriteBinaryOrInvalid = long.MinValue;
+                            r.SizeOrInvalid = long.MinValue;
+                            rows.Add(r);
+                        }
+                        if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
+                    }
+                    catch { }
+                }
+            }
+            catch
+            {
+                files = Directory.GetFiles(nativeCacheDir, "*.vamcache", SearchOption.TopDirectoryOnly);
+            }
             CurrentZstdStats.TotalFiles = files.Length;
 
             int compressionLevel = Settings.Instance.ZstdCompressionLevel.Value;
@@ -767,7 +803,43 @@ namespace VPB
 
         private void BulkZstdDecompressWorker(string nativeCacheDir, string vpbCacheDir)
         {
-            string[] files = Directory.GetFiles(vpbCacheDir, "*.zvamcache", SearchOption.TopDirectoryOnly);
+            string[] files;
+            try
+            {
+                string sig = "0";
+                try { sig = Directory.GetLastWriteTimeUtc(vpbCacheDir).ToBinary().ToString(); } catch { sig = "0"; }
+                string cacheKey = "cache:list|dir=" + (Path.GetFullPath(vpbCacheDir).Replace('\\', '/').TrimEnd('/')) + "|pat=*.zvamcache";
+                var cached = new List<VpbLocalDatabase.SystemFileRow>();
+                if (VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached) && cached.Count > 0)
+                {
+                    files = new string[cached.Count];
+                    for (int i = 0; i < cached.Count; i++) files[i] = cached[i].Path;
+                }
+                else
+                {
+                    files = Directory.GetFiles(vpbCacheDir, "*.zvamcache", SearchOption.TopDirectoryOnly);
+                    try
+                    {
+                        var rows = new List<VpbLocalDatabase.SystemFileRow>(files.Length);
+                        for (int i = 0; i < files.Length; i++)
+                        {
+                            string p = files[i];
+                            if (string.IsNullOrEmpty(p)) continue;
+                            var r = new VpbLocalDatabase.SystemFileRow();
+                            try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
+                            r.LastWriteBinaryOrInvalid = long.MinValue;
+                            r.SizeOrInvalid = long.MinValue;
+                            rows.Add(r);
+                        }
+                        if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
+                    }
+                    catch { }
+                }
+            }
+            catch
+            {
+                files = Directory.GetFiles(vpbCacheDir, "*.zvamcache", SearchOption.TopDirectoryOnly);
+            }
             CurrentZstdStats.TotalFiles = files.Length;
 
             if (!Directory.Exists(nativeCacheDir)) Directory.CreateDirectory(nativeCacheDir);

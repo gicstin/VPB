@@ -198,10 +198,12 @@ namespace VPB
             {
                 Gallery.SuppressAutoRefresh(true);
                 
-                if (FileButton.EnsureInstalledByText(presetJson))
+                var movedUids = new List<string>();
+                if (FileButton.EnsureInstalledByText(presetJson, movedUids))
                 {
                     MVR.FileManagement.FileManager.Refresh();
-                    FileManager.NotifyInstalled();
+                    if (movedUids.Count > 0)
+                        FileManager.NotifyInstalled(movedUids);
                 }
                 
                 // Start coroutine to disable suppression after preset import completes

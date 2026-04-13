@@ -113,11 +113,14 @@ namespace VPB
                                 using (StreamReader streamReader = new StreamReader(fileEntryStream.Stream))
                                 {
                                     string aJSON = streamReader.ReadToEnd();
-                                    bool dirty = EnsureInstalledByText(aJSON);
+                                    var movedUids = new List<string>();
+                                    bool dirty = EnsureInstalledByText(aJSON, movedUids);
                                     if (dirty)
                                     {
                                         MVR.FileManagement.FileManager.Refresh();
                                         VPB.FileManager.Refresh();
+                                        if (movedUids.Count > 0)
+                                            VPB.FileManager.NotifyInstalled(movedUids);
                                     }
                                 }
                             }
@@ -162,11 +165,14 @@ namespace VPB
                                 using (StreamReader streamReader = new StreamReader(fileEntryStream.Stream))
                                 {
                                     string aJSON = streamReader.ReadToEnd();
-                                    bool dirty = EnsureInstalledByText(aJSON);
+                                    var movedUids = new List<string>();
+                                    bool dirty = EnsureInstalledByText(aJSON, movedUids);
                                     if (dirty)
                                     {
                                         MVR.FileManagement.FileManager.Refresh();
                                         VPB.FileManager.Refresh();
+                                        if (movedUids.Count > 0)
+                                            VPB.FileManager.NotifyInstalled(movedUids);
                                     }
                                 }
                             }
@@ -227,19 +233,22 @@ namespace VPB
         }
         public static bool EnsureInstalledByText(string text)
         {
-            //Regex varInVapRegex = new Regex(@"""([^\\\/\:\*\?\""\<\>\.]+)\.([^\\\/\:\*\?\""\<\>\.]+)\.(\w+):");
-            //var ms = varInVapRegex.Matches(text);
-            //HashSet<string> set = new HashSet<string>();
+            return EnsureInstalledByText(text, null);
+        }
 
-            //foreach (Match item in ms)
-            //{
-            //    set.Add(string.Format("{0}.{1}.{2}", item.Groups[1], item.Groups[2], item.Groups[3]));
-            //}
-            var set= VarNameParser.Parse(text);
-            return EnsureInstalledBySet(set);
+        /// <param name="outMovedPackageUids">When non-null, receives UIDs for every package whose install actually moved a .var (including dependencies).</param>
+        public static bool EnsureInstalledByText(string text, List<string> outMovedPackageUids)
+        {
+            var set = VarNameParser.Parse(text);
+            return EnsureInstalledBySet(set, outMovedPackageUids);
         }
 
         public static bool EnsureInstalledBySet(HashSet<string> set)
+        {
+            return EnsureInstalledBySet(set, null);
+        }
+
+        public static bool EnsureInstalledBySet(HashSet<string> set, List<string> outMovedPackageUids)
         {
             if (set == null)
                 return false;
@@ -251,7 +260,9 @@ namespace VPB
                 if (package != null)
                 {
                     string path = package.Path;
-                    bool dirty = package.InstallRecursive();
+                    bool dirty = outMovedPackageUids != null
+                        ? package.InstallRecursive(outMovedPackageUids)
+                        : package.InstallRecursive();
                     if (dirty)
                     {
                         LogUtil.Log("Installed " + key + " path=" + path);
@@ -270,17 +281,20 @@ namespace VPB
 
         public static void EnsureInstalledInternal(string text)
         {
-            bool dirty=EnsureInstalledByText(text);
+            var movedUids = new List<string>();
+            bool dirty = EnsureInstalledByText(text, movedUids);
             if (dirty)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                VPB.FileManager.NotifyInstalled();
+                if (movedUids.Count > 0)
+                    VPB.FileManager.NotifyInstalled(movedUids);
             }
         }
 
         public void OnInstalled(bool b)
         {
             bool flag = false;
+            var movedUids = new List<string>(2);
             FileEntry fileEntry = FileManager.GetFileEntry(fullPath, true);// Without the AllPackages prefix
             if (fileEntry != null && (fileEntry is VarFileEntry))
             {
@@ -293,11 +307,12 @@ namespace VPB
                     {
                         LogUtil.Log("Uninstalled " + entry.Package.Uid + " path=" + entry.Package.Path);
                         flag = true;
+                        if (!string.IsNullOrEmpty(entry.Package.Uid)) movedUids.Add(entry.Package.Uid);
                     }
                 }
                 else
                 {
-                    bool dirty = entry.Package.InstallRecursive();
+                    bool dirty = entry.Package.InstallRecursive(movedUids);
                     if (dirty)
                     {
                         LogUtil.Log("Installed " + entry.Package.Uid + " path=" + entry.Package.Path);
@@ -317,6 +332,8 @@ namespace VPB
                     {
                         LogUtil.Log("Uninstalled " + entry.Uid + " path=" + entry.Path);
                         flag = true;
+                        if (entry.package != null && !string.IsNullOrEmpty(entry.package.Uid))
+                            movedUids.Add(entry.package.Uid);
                     }
                     }
 
@@ -327,6 +344,8 @@ namespace VPB
                         {
                             LogUtil.Log("Installed " + entry.Uid + " path=" + entry.Path);
                             flag = true;
+                            if (entry.package != null && !string.IsNullOrEmpty(entry.package.Uid))
+                                movedUids.Add(entry.package.Uid);
                         }
                     }
                 }
@@ -338,7 +357,8 @@ namespace VPB
             if (flag)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                VPB.FileManager.NotifyInstalled();
+                if (movedUids.Count > 0)
+                    VPB.FileManager.NotifyInstalled(movedUids);
             }
         }
 

@@ -349,12 +349,15 @@ namespace VPB
                     refreshOnNextShow = false;
                     lastAppliedPackageRefreshTime = pkgRefreshTime;
                 }
+                CancelGalleryCategoryTypeNavigationTiming("same_view_reopen");
                 LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
                 return;
             }
 
+            LogGalleryCategoryTypeNavPhase("Show_before_UpdateLayout_1");
             UpdateSideButtonsVisibility();
             UpdateLayout(!shouldRefresh && !sameViewReopen);
+            LogGalleryCategoryTypeNavPhase("Show_after_UpdateLayout_1");
             RefreshTargetDropdown();
 
             SetCanvasVisible(true);
@@ -364,7 +367,10 @@ namespace VPB
                 RefreshFiles(!paramsChanged);
                 refreshOnNextShow = false;
                 lastAppliedPackageRefreshTime = pkgRefreshTime;
+                LogGalleryCategoryTypeNavPhase("Show_after_RefreshFiles_invoke");
             }
+            else
+                LogGalleryCategoryTypeNavPhase("Show_skip_RefreshFiles");
 
             // Same-view reopen: keep the existing side-tab/button tree and avoid synchronous count rebuilds.
             // Full refresh path: keep UI lightweight while RefreshFilesRoutine rebuilds caches in the background.
@@ -372,7 +378,9 @@ namespace VPB
                 UpdateTabsImpl(rebuildSideTabLists: false);
             else
                 UpdateTabs();
+            LogGalleryCategoryTypeNavPhase("Show_after_UpdateTabs");
             UpdateLayout(!sameViewReopen && refreshCoroutine == null);
+            LogGalleryCategoryTypeNavPhase("Show_after_UpdateLayout_2");
 
             // Position it in front of the user if in VR, ONLY ONCE
             if (!hasBeenPositioned)
@@ -399,6 +407,8 @@ namespace VPB
             }
             if (_paneLoadTimingStopwatch != null && refreshCoroutine == null)
                 CompletePaneLoadTimingIfPending("(Show finished without async refresh)");
+            if (refreshCoroutine == null)
+                FinalizeGalleryCategoryTypeNavigationSync("(Show end, no async refresh)");
             LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
         }
 

@@ -26,13 +26,18 @@ namespace VPB
                 }
 
                 int moved = 0;
+                var movedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < pkgs.Count; i++)
                 {
                     VarPackage p = pkgs[i];
                     if (p == null) continue;
                     try
                     {
-                        if (p.InstallSelf()) moved++;
+                        if (p.InstallSelf())
+                        {
+                            moved++;
+                            if (!string.IsNullOrEmpty(p.Uid)) movedUids.Add(p.Uid);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -40,8 +45,8 @@ namespace VPB
                     }
                 }
 
-                if (moved > 0)
-                    RefreshAfterTboxPackageFileMoves();
+                if (movedUids.Count > 0)
+                    RefreshAfterTboxPackageFileMoves(movedUids);
                 ShowTemporaryStatus(moved > 0
                     ? $"Load: moved {moved} package(s) to AddonPackages."
                     : "Load: nothing to move (already installed or blocked).", 2.5f);
@@ -72,13 +77,18 @@ namespace VPB
                 }
 
                 int moved = 0;
+                var movedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < pkgs.Count; i++)
                 {
                     VarPackage p = pkgs[i];
                     if (p == null) continue;
                     try
                     {
-                        if (p.UninstallSelf()) moved++;
+                        if (p.UninstallSelf())
+                        {
+                            moved++;
+                            if (!string.IsNullOrEmpty(p.Uid)) movedUids.Add(p.Uid);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -86,8 +96,8 @@ namespace VPB
                     }
                 }
 
-                if (moved > 0)
-                    RefreshAfterTboxPackageFileMoves();
+                if (movedUids.Count > 0)
+                    RefreshAfterTboxPackageFileMoves(movedUids);
                 ShowTemporaryStatus(moved > 0
                     ? $"Unload: moved {moved} package(s) to AllPackages."
                     : "Unload: nothing to move (not in AddonPackages or blocked).", 2.5f);
@@ -118,13 +128,22 @@ namespace VPB
                 }
 
                 int moved = 0;
+                var movedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var buf = new List<string>(32);
                 for (int i = 0; i < pkgs.Count; i++)
                 {
                     VarPackage p = pkgs[i];
                     if (p == null) continue;
                     try
                     {
-                        if (p.InstallRecursive()) moved++;
+                        buf.Clear();
+                        if (!p.InstallRecursive(buf)) continue;
+                        moved++;
+                        for (int j = 0; j < buf.Count; j++)
+                        {
+                            string u = buf[j];
+                            if (!string.IsNullOrEmpty(u)) movedUids.Add(u);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -132,8 +151,8 @@ namespace VPB
                     }
                 }
 
-                if (moved > 0)
-                    RefreshAfterTboxPackageFileMoves();
+                if (movedUids.Count > 0)
+                    RefreshAfterTboxPackageFileMoves(movedUids);
                 ShowTemporaryStatus(moved > 0
                     ? $"Load deps: installed {moved} tree(s) (self + dependencies per settings)."
                     : "Load deps: nothing to install.", 2.5f);
@@ -215,10 +234,10 @@ namespace VPB
             }
         }
 
-        private void RefreshAfterTboxPackageFileMoves()
+        private void RefreshAfterTboxPackageFileMoves(HashSet<string> movedPackageUids)
         {
             try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-            try { FileManager.NotifyInstalled(); } catch { }
+            try { FileManager.NotifyInstalled(movedPackageUids); } catch { }
             try { FileManager.Refresh(true, false, false); } catch { }
             ResyncTboxSelectionPathsAfterVarMoves();
             try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
@@ -248,7 +267,7 @@ namespace VPB
                 try
                 {
                     if (f is VarFileEntry vfe)
-                        vfe.RefreshDisplayPathsFromPackage();
+                        vfe.TryRefreshPathsFromLivePackage();
                     else if (f is PackageListEntry ple)
                         ple.RefreshPathsFromPackage();
                     else if (f is SystemFileEntry sfe && sfe.isVar && sfe.package != null)

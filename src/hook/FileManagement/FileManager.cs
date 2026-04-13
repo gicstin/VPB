@@ -1,4 +1,4 @@
-﻿using ICSharpCode.SharpZipLib.Core;
+using ICSharpCode.SharpZipLib.Core;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -35,7 +35,7 @@ namespace VPB
         bool m_RefreshPendingClean = false;
         bool m_RefreshPendingRemoveOldVersion = false;
 
-        protected static readonly object packagesLock = new object();
+        internal static readonly object packagesLock = new object();
         protected static Dictionary<string, VarPackage> packagesByUid;
         public static Dictionary<string, VarPackage> PackagesByUid
         {
@@ -605,7 +605,10 @@ namespace VPB
         /// spurious change and trigger a RefreshFiles: the file list is identical before and after
         /// a path-only move (AllPackages ↔ AddonPackages).
         /// </summary>
-        public static void NotifyInstalled()
+        /// <param name="galleryPathRefreshForPackageUids">
+        /// When non-null and non-empty, refresh cached <see cref="FileEntry.Path"/> only for gallery rows for these package UIDs.
+        /// </param>
+        public static void NotifyInstalled(ICollection<string> galleryPathRefreshForPackageUids)
         {
             lock (packagesLock)
             {
@@ -630,6 +633,11 @@ namespace VPB
                 }
             }
             // No lastPackageRefreshTime update, no MessageKit.post — gallery content is unchanged.
+            if (galleryPathRefreshForPackageUids != null && galleryPathRefreshForPackageUids.Count > 0)
+            {
+                try { Gallery.NotifyDisplayedPathsAfterPackagePathChanges(galleryPathRefreshForPackageUids); } catch { }
+                try { VpbLocalDatabase.TryUpdatePkgPathAndLoadedForUids(galleryPathRefreshForPackageUids); } catch { }
+            }
         }
 
         public static void Refresh(bool init = false, bool clean = false, bool removeOldVersion = false)
@@ -1222,7 +1230,35 @@ namespace VPB
 				for (int i = 0; i < snapshot.Length; i++)
 					snapshot[i].DependentCount = 0;
 
-				// Each package's RecursivePackageDependencies is already a de-duped set,
+				// Prefer the persisted SQLite dependency edges when available to avoid forcing
+				// package meta parsing/scans just to compute dependent counts.
+				try
+				{
+					var depsFromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+					bool usedSql = false;
+					for (int i = 0; i < snapshot.Length; i++)
+					{
+						var pkg = snapshot[i];
+						if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) continue;
+						depsFromSql.Clear();
+						if (!VpbLocalDatabase.TryReadRecursiveDependencyUids(pkg.Uid, depsFromSql))
+						{
+							usedSql = false;
+							break;
+						}
+						usedSql = true;
+						foreach (var depId in depsFromSql)
+						{
+							if (string.IsNullOrEmpty(depId)) continue;
+							VarPackage dep = GetPackageForDependency(depId, false);
+							if (dep != null) dep.DependentCount++;
+						}
+					}
+					if (usedSql) return;
+				}
+				catch { }
+
+				// Fallback: Each package's RecursivePackageDependencies is already a de-duped set,
 				// so we can increment directly without per-package seen-tracking.
 				for (int i = 0; i < snapshot.Length; i++)
 				{
@@ -1283,6 +1319,23 @@ namespace VPB
 			if (string.IsNullOrEmpty(uid) || maxDepth <= 0) return result;
 			VarPackage root = GetPackage(uid, false);
 			if (root == null) return result;
+
+			// If SQLite has a ready dependency index, use it to avoid scanning the package.
+			if (maxDepth >= 2)
+			{
+				try
+				{
+					var depsFromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+					if (VpbLocalDatabase.TryReadRecursiveDependencyUids(uid, depsFromSql))
+					{
+						foreach (var dep in depsFromSql)
+							if (!string.IsNullOrEmpty(dep)) result.Add(dep);
+						return result;
+					}
+				}
+				catch { }
+			}
+
 			try { if (!root.Scaned) root.Scan(); } catch { }
 
 			if (maxDepth >= 2 && root.RecursivePackageDependencies != null)
@@ -1352,7 +1405,9 @@ namespace VPB
         {
             string input = path.Replace('\\', '/');
             string packageUidOrPath = Regex.Replace(input, ":/.*", string.Empty);
-            VarPackage package = GetPackage(packageUidOrPath);
+            // IMPORTANT: do not use GetPackage default (ensureInstalled: true) here.
+            // IsPackagePath is called from UI / thumbnail / filtering codepaths and must not trigger installs.
+            VarPackage package = GetPackage(packageUidOrPath, ensureInstalled: false);
             return package != null;
         }
 
@@ -1360,7 +1415,7 @@ namespace VPB
         {
             string input = path.Replace('\\', '/');
             string packageUidOrPath = Regex.Replace(input, ":/.*", string.Empty);
-            return GetPackage(packageUidOrPath)?.IsSimulated ?? false;
+            return GetPackage(packageUidOrPath, ensureInstalled: false)?.IsSimulated ?? false;
         }
 
         public static string ConvertSimulatedPackagePathToNormalPath(string path)
@@ -1369,7 +1424,8 @@ namespace VPB
             if (text.Contains(":/"))
             {
                 string packageUidOrPath = Regex.Replace(text, ":/.*", string.Empty);
-                VarPackage package = GetPackage(packageUidOrPath);
+                // Avoid unintended installs when normalizing UI paths.
+                VarPackage package = GetPackage(packageUidOrPath, ensureInstalled: false);
                 if (package != null && package.IsSimulated)
                 {
                     string str = Regex.Replace(text, ".*:/", string.Empty);
@@ -1773,6 +1829,45 @@ namespace VPB
 			{
 				return true;
 			}
+			return false;
+		}
+
+		/// <summary>
+		/// Resolve a <see cref="VarPackage"/> for an indexed gallery row without assuming the on-disk path is still correct:
+		/// prefer <c>packagesByUid</c>, then last-known path from the index, then <c>AddonPackages/</c> / <c>AllPackages/</c> by .var file name.
+		/// </summary>
+		public static bool TryResolveVarPackageForIndexedGalleryRow(string packageUid, string lastKnownVarPath, out VarPackage pkg)
+		{
+			pkg = null;
+			if (string.IsNullOrEmpty(packageUid)) return false;
+
+			lock (packagesLock)
+			{
+				if (packagesByUid != null && packagesByUid.TryGetValue(packageUid, out pkg) && pkg != null)
+					return true;
+			}
+
+			if (!string.IsNullOrEmpty(lastKnownVarPath))
+			{
+				pkg = GetPackage(lastKnownVarPath, false);
+				if (pkg != null && string.Equals(pkg.Uid, packageUid, StringComparison.OrdinalIgnoreCase))
+					return true;
+				pkg = null;
+			}
+
+			string fn = string.IsNullOrEmpty(lastKnownVarPath) ? null : Path.GetFileName(lastKnownVarPath.TrimEnd('/'));
+			if (!string.IsNullOrEmpty(fn) && fn.IndexOf('.') >= 0)
+			{
+				pkg = GetPackage("AddonPackages/" + fn, false);
+				if (pkg != null && string.Equals(pkg.Uid, packageUid, StringComparison.OrdinalIgnoreCase))
+					return true;
+				pkg = null;
+				pkg = GetPackage("AllPackages/" + fn, false);
+				if (pkg != null && string.Equals(pkg.Uid, packageUid, StringComparison.OrdinalIgnoreCase))
+					return true;
+				pkg = null;
+			}
+
 			return false;
 		}
 

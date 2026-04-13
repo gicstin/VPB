@@ -249,7 +249,10 @@ namespace VPB
             get { return string.Equals(AppearanceClothingApplyMode, "keep", StringComparison.OrdinalIgnoreCase); }
             set { AppearanceClothingApplyMode = value ? "keep" : "replace"; }
         }
-        public bool EnableDragDrop = true;
+        /// <summary>Gallery item drag-and-drop to atoms/scene. Off by default (VR jitter / accidental drags); enable in Settings → Interaction.</summary>
+        public bool EnableDragDrop = false;
+        /// <summary>When false (default), drag starts immediately once drag-and-drop is on (legacy). When true, <see cref="DragHoldThreshold"/> is enforced.</summary>
+        public bool RequireDragHoldBeforeMove = false;
         public float DragHoldThreshold = 0.5f;
         public string ApplyMode = "DoubleClick";
         public string LastGalleryCategory = "";
@@ -416,7 +419,8 @@ namespace VPB
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
             AppearanceClothingApplyMode = "replace";
-            EnableDragDrop = true;
+            EnableDragDrop = false;
+            RequireDragHoldBeforeMove = false;
             DragHoldThreshold = 0.5f;
             ApplyMode = "DoubleClick";
             LastGalleryCategory = "";
@@ -495,7 +499,10 @@ namespace VPB
                         else if (node["KeepClothingWhenApplyingAppearance"] != null)
                             AppearanceClothingApplyMode = node["KeepClothingWhenApplyingAppearance"].AsBool ? "keep" : "replace";
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
-                        if (node["DragHoldThreshold"] != null) DragHoldThreshold = node["DragHoldThreshold"].AsFloat;
+                        if (node["DragHoldThreshold"] != null)
+                            DragHoldThreshold = Mathf.Clamp(node["DragHoldThreshold"].AsFloat, 0f, 3f);
+                        if (node["RequireDragHoldBeforeMove"] != null)
+                            RequireDragHoldBeforeMove = node["RequireDragHoldBeforeMove"].AsBool;
                         if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
                         if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
                         if (node["InitialGalleryCategory"] != null)
@@ -623,6 +630,7 @@ namespace VPB
                 node["AppearanceClothingApplyMode"] = AppearanceClothingApplyMode;
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
+                node["RequireDragHoldBeforeMove"].AsBool = RequireDragHoldBeforeMove;
                 node["DragHoldThreshold"].AsFloat = DragHoldThreshold;
                 node["ApplyMode"] = ApplyMode;
                 node["LastGalleryCategory"] = LastGalleryCategory;

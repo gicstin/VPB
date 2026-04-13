@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Diagnostics;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -32,7 +33,28 @@ namespace VPB
 #else
         public static bool LogCategoryCreatorSideTabSwitchTiming = false;
 #endif
-        private Coroutine _categoryCreatorSideTabSwitchTimingCoroutine;
+        private Stopwatch _sideTabCategoryCreatorTimingSw;
+        private string _sideTabCategoryCreatorTimingSide;
+
+#if DEBUG
+        public static bool LogGalleryCategoryTypeSwitchTiming = true;
+#else
+        public static bool LogGalleryCategoryTypeSwitchTiming = false;
+#endif
+        private Stopwatch _categoryTypeNavStopwatch;
+        private int _categoryTypeNavTargetSession;
+        private string _categoryTypeNavLabel;
+        /// <summary>Set when <see cref="GalleryPanel.RefreshFiles"/> starts a routine; copied at coroutine entry for correct timing when clicks overlap.</summary>
+        private int _boundCategoryNavSessionForCurrentRefresh;
+
+        /// <summary>Incremented at each <see cref="GalleryPanel.RefreshFiles"/> so deferred sub-pane tag counting aborts when a newer refresh supersedes it.</summary>
+        private int _deferredSubPaneSessionId;
+
+        /// <summary>Deferred phase1/phase2 side-tab work after the grid is shown; stopped when a new <see cref="GalleryPanel.RefreshFiles"/> supersedes it.</summary>
+        private Coroutine _deferredGallerySideTabsCoroutine;
+
+        /// <summary>Sliced tag/facet scan started from <see cref="GalleryPanel.UpdateTabs"/> (e.g. clothing subfilter) so we never block the main thread like <c>CacheTagCounts()</c>.</summary>
+        private Coroutine _sideTabsTagCountSliceCo;
 
         // Thumbnail cache progress UI
         private GameObject _thumbCacheProgressGO;
@@ -386,7 +408,7 @@ namespace VPB
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         [Flags]
-        private enum ClothingSubfilter
+        internal enum ClothingSubfilter
         {
             RealClothing = 1 << 0,
             Presets = 1 << 1,
@@ -398,7 +420,7 @@ namespace VPB
         }
 
         [Flags]
-        private enum AppearanceSubfilter
+        internal enum AppearanceSubfilter
         {
             Presets = 1 << 0,
             Custom = 1 << 1,
@@ -635,6 +657,11 @@ namespace VPB
         
         private Dictionary<string, int> tagCounts = new Dictionary<string, int>();
         private bool tagsCached = false;
+
+        /// <summary>Incremented on each full <see cref="GalleryPanel.RefreshFiles"/> so background tag scans can abort when superseded.</summary>
+        private int galleryFileRefreshSequence;
+        internal int GalleryFileRefreshSequence { get { return System.Threading.Thread.VolatileRead(ref galleryFileRefreshSequence); } }
+        private TagParallelWaiter tagParallelWaiter;
 
         // Pagination
         private int currentPage = 0;

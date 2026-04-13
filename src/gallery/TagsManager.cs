@@ -11,6 +11,7 @@ namespace VPB
         private static TagsManager _instance;
         public static TagsManager Instance => _instance ?? (_instance = new TagsManager());
 
+        private readonly object userTagsLock = new object();
         private Dictionary<string, HashSet<string>> userTags = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         private string tagsPath => Path.Combine(GlobalInfo.PluginInfoDirectory, "UserTags.json");
 
@@ -21,30 +22,33 @@ namespace VPB
 
         public void Load()
         {
-            userTags.Clear();
-            if (File.Exists(tagsPath))
+            lock (userTagsLock)
             {
-                try
+                userTags.Clear();
+                if (File.Exists(tagsPath))
                 {
-                    string json = File.ReadAllText(tagsPath);
-                    JSONClass root = JSON.Parse(json).AsObject;
-                    if (root != null)
+                    try
                     {
-                        foreach (string key in root.Keys)
+                        string json = File.ReadAllText(tagsPath);
+                        JSONClass root = JSON.Parse(json).AsObject;
+                        if (root != null)
                         {
-                            JSONArray tagsArray = root[key].AsArray;
-                            HashSet<string> tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                            foreach (JSONNode node in tagsArray)
+                            foreach (string key in root.Keys)
                             {
-                                tags.Add(node.Value);
+                                JSONArray tagsArray = root[key].AsArray;
+                                HashSet<string> tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                                foreach (JSONNode node in tagsArray)
+                                {
+                                    tags.Add(node.Value);
+                                }
+                                userTags[key] = tags;
                             }
-                            userTags[key] = tags;
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("[VPB] Failed to load UserTags: " + ex);
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Failed to load UserTags: " + ex);
+                    }
                 }
             }
         }
@@ -54,15 +58,18 @@ namespace VPB
             try
             {
                 JSONClass root = new JSONClass();
-                foreach (var kvp in userTags)
+                lock (userTagsLock)
                 {
-                    if (kvp.Value.Count == 0) continue;
-                    JSONArray tagsArray = new JSONArray();
-                    foreach (var tag in kvp.Value)
+                    foreach (var kvp in userTags)
                     {
-                        tagsArray.Add(tag);
+                        if (kvp.Value.Count == 0) continue;
+                        JSONArray tagsArray = new JSONArray();
+                        foreach (var tag in kvp.Value)
+                        {
+                            tagsArray.Add(tag);
+                        }
+                        root[kvp.Key] = tagsArray;
                     }
-                    root[kvp.Key] = tagsArray;
                 }
 
                 if (!Directory.Exists(GlobalInfo.PluginInfoDirectory))
@@ -78,31 +85,43 @@ namespace VPB
 
         public HashSet<string> GetTags(string uid)
         {
-            if (userTags.TryGetValue(uid, out HashSet<string> tags))
-                return new HashSet<string>(tags, StringComparer.OrdinalIgnoreCase);
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            lock (userTagsLock)
+            {
+                if (userTags.TryGetValue(uid, out HashSet<string> tags))
+                    return new HashSet<string>(tags, StringComparer.OrdinalIgnoreCase);
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
         }
 
         public void AddTag(string uid, string tag)
         {
             if (string.IsNullOrEmpty(tag)) return;
-            if (!userTags.ContainsKey(uid))
-                userTags[uid] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            
-            if (userTags[uid].Add(tag))
-                Save();
+            bool added = false;
+            lock (userTagsLock)
+            {
+                if (!userTags.ContainsKey(uid))
+                    userTags[uid] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                added = userTags[uid].Add(tag);
+            }
+            if (added) Save();
         }
 
         public void RemoveTag(string uid, string tag)
         {
-            if (userTags.TryGetValue(uid, out HashSet<string> tags))
+            bool changed = false;
+            lock (userTagsLock)
             {
-                if (tags.Remove(tag))
+                if (userTags.TryGetValue(uid, out HashSet<string> tags))
                 {
-                    if (tags.Count == 0) userTags.Remove(uid);
-                    Save();
+                    if (tags.Remove(tag))
+                    {
+                        if (tags.Count == 0) userTags.Remove(uid);
+                        changed = true;
+                    }
                 }
             }
+            if (changed) Save();
         }
         
         public void ToggleTag(string uid, string tag)
@@ -113,17 +132,23 @@ namespace VPB
 
         public bool HasTag(string uid, string tag)
         {
-            if (userTags.TryGetValue(uid, out HashSet<string> tags))
-                return tags.Contains(tag);
-            return false;
+            lock (userTagsLock)
+            {
+                if (userTags.TryGetValue(uid, out HashSet<string> tags))
+                    return tags.Contains(tag);
+                return false;
+            }
         }
 
         public List<string> GetAllUserTags()
         {
             HashSet<string> allTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var tags in userTags.Values)
+            lock (userTagsLock)
             {
-                foreach (var tag in tags) allTags.Add(tag);
+                foreach (var tags in userTags.Values)
+                {
+                    foreach (var tag in tags) allTags.Add(tag);
+                }
             }
             return new List<string>(allTags);
         }

@@ -260,11 +260,72 @@ namespace VPB
                 {
                     try
                     {
-                        foreach (string atomPath in Directory.GetDirectories(atomRoot))
+                        // Cache directory enumeration to avoid walking the Custom/Atom tree repeatedly.
+                        List<string> atomDirs = null;
+                        try
+                        {
+                            string sig = "0";
+                            try { sig = Directory.GetLastWriteTimeUtc(atomRoot).ToBinary().ToString(); } catch { sig = "0"; }
+                            string cacheKey = "dirs:custom_atom|root=" + (Path.GetFullPath(atomRoot).Replace('\\', '/').TrimEnd('/'));
+                            var cached = new List<VpbLocalDatabase.SystemFileRow>();
+                            if (VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached) && cached.Count > 0)
+                            {
+                                atomDirs = new List<string>(cached.Count);
+                                for (int i = 0; i < cached.Count; i++) atomDirs.Add(cached[i].Path);
+                            }
+                            else
+                            {
+                                atomDirs = new List<string>(Directory.GetDirectories(atomRoot));
+                                var rows = new List<VpbLocalDatabase.SystemFileRow>(atomDirs.Count);
+                                for (int i = 0; i < atomDirs.Count; i++)
+                                {
+                                    var r = new VpbLocalDatabase.SystemFileRow();
+                                    r.Path = atomDirs[i];
+                                    r.LastWriteBinaryOrInvalid = long.MinValue;
+                                    r.SizeOrInvalid = long.MinValue;
+                                    rows.Add(r);
+                                }
+                                if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
+                            }
+                        }
+                        catch { atomDirs = null; }
+
+                        var atomDirEnum = atomDirs != null ? atomDirs : new List<string>(Directory.GetDirectories(atomRoot));
+                        foreach (string atomPath in atomDirEnum)
                         {
                             string atomType = Path.GetFileName(atomPath);
                             
-                            foreach (string resourcePath in Directory.GetDirectories(atomPath))
+                            List<string> resDirs = null;
+                            try
+                            {
+                                string sig2 = "0";
+                                try { sig2 = Directory.GetLastWriteTimeUtc(atomPath).ToBinary().ToString(); } catch { sig2 = "0"; }
+                                string cacheKey2 = "dirs:custom_atom_child|root=" + (Path.GetFullPath(atomPath).Replace('\\', '/').TrimEnd('/'));
+                                var cached2 = new List<VpbLocalDatabase.SystemFileRow>();
+                                if (VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey2, sig2, cached2) && cached2.Count > 0)
+                                {
+                                    resDirs = new List<string>(cached2.Count);
+                                    for (int i = 0; i < cached2.Count; i++) resDirs.Add(cached2[i].Path);
+                                }
+                                else
+                                {
+                                    resDirs = new List<string>(Directory.GetDirectories(atomPath));
+                                    var rows2 = new List<VpbLocalDatabase.SystemFileRow>(resDirs.Count);
+                                    for (int i = 0; i < resDirs.Count; i++)
+                                    {
+                                        var r = new VpbLocalDatabase.SystemFileRow();
+                                        r.Path = resDirs[i];
+                                        r.LastWriteBinaryOrInvalid = long.MinValue;
+                                        r.SizeOrInvalid = long.MinValue;
+                                        rows2.Add(r);
+                                    }
+                                    if (rows2.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey2, sig2, rows2);
+                                }
+                            }
+                            catch { resDirs = null; }
+
+                            var resEnum = resDirs != null ? resDirs : new List<string>(Directory.GetDirectories(atomPath));
+                            foreach (string resourcePath in resEnum)
                             {
                                 string resourceName = Path.GetFileName(resourcePath);
                                 string finalName = resourceName;
@@ -341,7 +402,7 @@ namespace VPB
                                 if (string.Equals(c.name, name, StringComparison.OrdinalIgnoreCase))
                                 {
                                     VPBConfig.Instance.LastGalleryCategory = c.name;
-                                    try { VPBConfig.Instance.Save(); } catch { }
+                                    try { VPBConfig.Instance.Save(false); } catch { } // disk only; Show() below updates UI (Save(true) would ConfigChanged/UpdateLayout)
                                     break;
                                 }
                             }
@@ -521,11 +582,16 @@ namespace VPB
         //https://stackoverflow.com/questions/2811509/c-sharp-remove-all-empty-subdirectories
         private static void RemoveEmptyFolder(string startLocation)
         {
-            foreach (var directory in Directory.GetDirectories(startLocation))
+            // Cache listing to avoid repeated recursion costs during bulk uninstall cleanup.
+            string[] subdirs;
+            try { subdirs = Directory.GetDirectories(startLocation); } catch { return; }
+            foreach (var directory in subdirs)
             {
                 RemoveEmptyFolder(directory);
-                if (Directory.GetFiles(directory).Length == 0 &&
-                    Directory.GetDirectories(directory).Length == 0)
+                int fileN = 0, dirN = 0;
+                try { fileN = Directory.GetFiles(directory).Length; } catch { fileN = 0; }
+                try { dirN = Directory.GetDirectories(directory).Length; } catch { dirN = 0; }
+                if (fileN == 0 && dirN == 0)
                 {
                     Directory.Delete(directory, false);
                 }

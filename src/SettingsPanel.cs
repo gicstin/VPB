@@ -72,6 +72,9 @@ namespace VPB
         private bool pendingEnableDragDrop;
         private bool backupEnableDragDrop;
 
+        private bool pendingRequireDragHoldBeforeMove;
+        private bool backupRequireDragHoldBeforeMove;
+
         private float pendingDragHoldThreshold;
         private float backupDragHoldThreshold;
         
@@ -109,6 +112,8 @@ namespace VPB
         private bool _settingsScrollUiBuiltForFixed;
         private bool _settingsScrollUiBuiltForDevSection;
         private readonly List<System.Action> _settingsScrollSync = new List<System.Action>();
+        /// <summary>Refreshes hold-duration slider/input when drag or "require hold" toggles change.</summary>
+        private System.Action _syncDragHoldDelayRowInteractable;
 
         private sealed class RefBool { public bool Value; }
         private sealed class RefString { public string Value; }
@@ -224,6 +229,9 @@ namespace VPB
 
             pendingEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
             backupEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
+
+            pendingRequireDragHoldBeforeMove = VPBConfig.Instance.RequireDragHoldBeforeMove;
+            backupRequireDragHoldBeforeMove = VPBConfig.Instance.RequireDragHoldBeforeMove;
 
             pendingDragHoldThreshold = VPBConfig.Instance.DragHoldThreshold;
             backupDragHoldThreshold = VPBConfig.Instance.DragHoldThreshold;
@@ -372,6 +380,7 @@ namespace VPB
             if (pendingDragDropReplaceMode != backupDragDropReplaceMode) return false;
             if (!string.Equals(NormalizeSettingsAppearanceClothingMode(pendingAppearanceClothingApplyMode), NormalizeSettingsAppearanceClothingMode(backupAppearanceClothingApplyMode), StringComparison.OrdinalIgnoreCase)) return false;
             if (pendingEnableDragDrop != backupEnableDragDrop) return false;
+            if (pendingRequireDragHoldBeforeMove != backupRequireDragHoldBeforeMove) return false;
             if (!Mathf.Approximately(pendingDragHoldThreshold, backupDragHoldThreshold)) return false;
             if (pendingIsDevMode != backupIsDevMode) return false;
             if (pendingEnableAutoFixedGallery != backupEnableAutoFixedGallery) return false;
@@ -390,6 +399,7 @@ namespace VPB
             if (PendingMatchesBackup()) return false;
             if (pendingIsDevMode != backupIsDevMode) return true;
             if (pendingEnableDragDrop != backupEnableDragDrop) return true;
+            if (pendingRequireDragHoldBeforeMove != backupRequireDragHoldBeforeMove) return true;
             if (!Mathf.Approximately(pendingDragHoldThreshold, backupDragHoldThreshold)) return true;
             if (!Mathf.Approximately(pendingBringToFrontDistance, backupBringToFrontDistance)) return true;
             return false;
@@ -439,6 +449,7 @@ namespace VPB
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
             VPBConfig.Instance.AppearanceClothingApplyMode = backupAppearanceClothingApplyMode;
             VPBConfig.Instance.EnableDragDrop = backupEnableDragDrop;
+            VPBConfig.Instance.RequireDragHoldBeforeMove = backupRequireDragHoldBeforeMove;
             VPBConfig.Instance.DragHoldThreshold = backupDragHoldThreshold;
             VPBConfig.Instance.IsDevMode = backupIsDevMode;
             VPBConfig.Instance.EnableAutoFixedGallery = backupEnableAutoFixedGallery;
@@ -557,6 +568,7 @@ namespace VPB
                     VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
                     VPBConfig.Instance.AppearanceClothingApplyMode = pendingAppearanceClothingApplyMode;
                     VPBConfig.Instance.EnableDragDrop = pendingEnableDragDrop;
+                    VPBConfig.Instance.RequireDragHoldBeforeMove = pendingRequireDragHoldBeforeMove;
                     VPBConfig.Instance.DragHoldThreshold = pendingDragHoldThreshold;
                     VPBConfig.Instance.IsDevMode = pendingIsDevMode;
                     VPBConfig.Instance.EnableAutoFixedGallery = pendingEnableAutoFixedGallery;
@@ -636,6 +648,7 @@ namespace VPB
             if (logRebuild) mark = sw.ElapsedMilliseconds;
 
             _settingsScrollSync.Clear();
+            _syncDragHoldDelayRowInteractable = null;
             foreach (Transform child in settingsScrollContent.transform) GameObject.Destroy(child.gameObject);
 
             if (logRebuild)
@@ -771,12 +784,19 @@ namespace VPB
             CreateToggleSetting(VPBTranslation.T("settings.enable_drag_drop", "Enable Drag & Drop"), pendingEnableDragDrop, (val) => {
                 pendingEnableDragDrop = val;
                 VPBConfig.Instance.EnableDragDrop = val;
-            }, VPBTranslation.T("settings.tip.enable_drag_drop", "When disabled, gallery items can only be applied via click — no drag & drop. Disables the context popup that appears on drag."), () => pendingEnableDragDrop);
+                _syncDragHoldDelayRowInteractable?.Invoke();
+            }, VPBTranslation.T("settings.tip.enable_drag_drop", "Off by default. Turn on to drag items from the gallery onto atoms or the scene. When off, apply by click only; no drag context menu."), () => pendingEnableDragDrop);
 
-            CreateSliderSetting(VPBTranslation.T("settings.drag_hold_threshold", "Drag Hold Threshold (s)"), pendingDragHoldThreshold, 0.1f, 1.0f, (val) => {
+            CreateToggleSetting(VPBTranslation.T("settings.require_drag_hold", "Require hold before drag"), pendingRequireDragHoldBeforeMove, (val) => {
+                pendingRequireDragHoldBeforeMove = val;
+                VPBConfig.Instance.RequireDragHoldBeforeMove = val;
+                _syncDragHoldDelayRowInteractable?.Invoke();
+            }, VPBTranslation.T("settings.tip.require_drag_hold", "Off = classic behavior: no hold delay (same as before the hold feature). On = use the duration below so the pointer must stay still before a drag starts (helps VR jitter and mis-clicks)."), () => pendingRequireDragHoldBeforeMove);
+
+            CreateSliderSetting(VPBTranslation.T("settings.drag_hold_threshold", "Hold duration (s)"), pendingDragHoldThreshold, 0f, 3f, (val) => {
                 pendingDragHoldThreshold = val;
                 VPBConfig.Instance.DragHoldThreshold = val;
-            }, VPBTranslation.T("settings.tip.drag_hold_threshold", "How long (in seconds) the mouse button must be held before a drag is initiated. Increase to reduce accidental drags on quick clicks."), () => pendingDragHoldThreshold);
+            }, VPBTranslation.T("settings.tip.drag_hold_threshold", "Only when drag-and-drop and Require hold before drag are both on. How long to hold still before the drag starts. Use 0 for immediate drag once hold mode is on, or increase for shaky pointers."), () => pendingDragHoldThreshold, () => pendingEnableDragDrop && pendingRequireDragHoldBeforeMove);
 
             string[] appearanceClothingOptions = { "replace", "keep", "clothingonly" };
             string[] appearanceClothingLabels = {
@@ -1005,7 +1025,7 @@ namespace VPB
             };
         }
 
-        private void CreateSliderSetting(string label, float currentVal, float min, float max, Action<float> onChange, string tooltip, Func<float> syncGetPending)
+        private void CreateSliderSetting(string label, float currentVal, float min, float max, Action<float> onChange, string tooltip, Func<float> syncGetPending, Func<bool> enabledWhen = null)
         {
             GameObject container = new GameObject("Setting_" + label);
             container.transform.SetParent(settingsScrollContent.transform, false);
@@ -1170,6 +1190,19 @@ namespace VPB
                     slider.value = v;
                     inputField.text = v.ToString("F1");
                 });
+            }
+
+            if (enabledWhen != null)
+            {
+                System.Action applyRowInteractable = () =>
+                {
+                    bool en = enabledWhen();
+                    slider.interactable = en;
+                    inputField.interactable = en;
+                };
+                applyRowInteractable();
+                _settingsScrollSync.Add(applyRowInteractable);
+                _syncDragHoldDelayRowInteractable = applyRowInteractable;
             }
         }
 

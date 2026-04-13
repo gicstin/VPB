@@ -181,6 +181,79 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Sort using only fields already on <see cref="FileEntry"/> / package metadata (no Unity singletons, no disk I/O).
+        /// Used from a background thread after SQLite bulk list build so the main thread can skip <see cref="SortFiles"/>.
+        /// </summary>
+        /// <returns><c>true</c> if the list was sorted (or trivially needs no sort); <c>false</c> if the caller must run <see cref="SortFiles"/> on the main thread.</returns>
+        public static bool TrySortFilesEntryFieldsOnly(List<FileEntry> files, SortState state)
+        {
+            if (files == null || state == null) return false;
+            if (files.Count < 2) return true;
+
+            switch (state.Type)
+            {
+                case SortType.Name:
+                case SortType.HiddenOnly:
+                case SortType.AutoInstallOnly:
+                    if (state.Direction == SortDirection.Ascending)
+                        files.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                    else
+                        files.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+                    return true;
+                case SortType.Date:
+                    files.Sort((a, b) => {
+                        int res = (state.Direction == SortDirection.Ascending)
+                            ? a.LastWriteTime.CompareTo(b.LastWriteTime)
+                            : b.LastWriteTime.CompareTo(a.LastWriteTime);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    return true;
+                case SortType.Size:
+                    files.Sort((a, b) => {
+                        int res = (state.Direction == SortDirection.Ascending)
+                            ? a.Size.CompareTo(b.Size)
+                            : b.Size.CompareTo(a.Size);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    return true;
+                case SortType.DateCreated:
+                    for (int i = 0; i < files.Count; i++)
+                    {
+                        if (!(files[i] is VarFileEntry)) return false;
+                    }
+                    files.Sort((a, b) => {
+                        DateTime ca = GetSortCreationTimeVarOnly(a as VarFileEntry);
+                        DateTime cb = GetSortCreationTimeVarOnly(b as VarFileEntry);
+                        int res = (state.Direction == SortDirection.Ascending)
+                            ? ca.CompareTo(cb)
+                            : cb.CompareTo(ca);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static DateTime GetSortCreationTimeVarOnly(VarFileEntry vfe)
+        {
+            if (vfe == null) return DateTime.MinValue;
+            DateTime fromIndex;
+            if (vfe.TryGetGalleryIndexedPackageCreationTime(out fromIndex))
+                return fromIndex;
+            try
+            {
+                if (vfe.Package != null)
+                    return vfe.Package.CreationTime;
+            }
+            catch { }
+            return DateTime.MinValue;
+        }
+
         /// <summary>Creation time for sorting: .var package time, on-disk file creation, or <see cref="DateTime.MinValue"/> if unknown.</summary>
         private static DateTime GetSortCreationTime(FileEntry file)
         {

@@ -1756,17 +1756,38 @@ namespace VPB
 			{
 				return InstallSelf();
 			}
-            return InstallRecursive(new HashSet<string>());
+            return InstallRecursive(new HashSet<string>(), null);
         }
 
-		public bool InstallRecursive(HashSet<string> visited)
+		/// <summary>
+		/// When <paramref name="outMovedPackageUids"/> is non-null, appends the <see cref="Uid"/> of every package whose
+		/// <see cref="InstallSelf"/> actually moved the .var (this package and any recursive dependency).
+		/// </summary>
+		public bool InstallRecursive(List<string> outMovedPackageUids)
+		{
+			if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null && !Settings.Instance.LoadDependenciesWithPackage.Value)
+			{
+				bool moved = InstallSelf();
+				if (moved && outMovedPackageUids != null && !string.IsNullOrEmpty(Uid))
+					outMovedPackageUids.Add(Uid);
+				return moved;
+			}
+			return InstallRecursive(new HashSet<string>(), outMovedPackageUids);
+		}
+
+		private bool InstallRecursive(HashSet<string> visited, List<string> outMovedPackageUids)
 		{
             if (visited.Contains(this.Uid)) return false;
             visited.Add(this.Uid);
 
 			bool flag = false;
 			bool dirty= InstallSelf();
-			if (dirty) flag = true;
+			if (dirty)
+			{
+				flag = true;
+				if (outMovedPackageUids != null && !string.IsNullOrEmpty(Uid))
+					outMovedPackageUids.Add(Uid);
+			}
 			
 			//string linkvar = "AddonPackages/" + this.Uid + ".var";
             if (this.RecursivePackageDependencies != null)
@@ -1776,7 +1797,7 @@ namespace VPB
 					VarPackage package = FileManager.GetPackageForDependency(key, false);
 					if (package != null)
 					{
-						bool dirty2= package.InstallRecursive(visited);
+						bool dirty2= package.InstallRecursive(visited, outMovedPackageUids);
 						if (dirty2) flag = true;
 					}
 				}

@@ -39,6 +39,12 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Native SQLite: never copy next to VPB.dll in bin — users often paste bin into BepInEx\scripts and break Script Engine. Deploy only via PostBuild to BepInEx\plugins. -->
+    <Content Include="lib\sqlite-native\sqlite3.dll">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="0Harmony20">
       <HintPath>$(VaMPath)\BepInEx\core\0Harmony20.dll</HintPath>
     </Reference>
@@ -329,6 +335,10 @@
     <Compile Include="src\ContextMenuPanel.cs" />
     <Compile Include="src\gallery\Gallery.cs" />
     <Compile Include="src\gallery\GalleryFileListSnapshotCache.cs" />
+    <Compile Include="src\gallery\GalleryTagCountSnapshotCache.cs" />
+    <Compile Include="src\gallery\GalleryTagCountBackgroundScan.cs" />
+    <Compile Include="src\gallery\index\VpbSqlite3.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
@@ -337,6 +347,7 @@
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.Helpers.cs" />
     <Compile Include="src\gallery\GalleryPanel.IO.cs" />
+    <Compile Include="src\gallery\GalleryPanel.NavigationTiming.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Init.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.cs" />
@@ -461,6 +472,13 @@
     <!-- DLL + vpb_translations + vpb_fonts + vpb_icons: same PostBuildEvent so copies always run with the DLL (AfterTargets=PostBuildEvent is unreliable across MSBuild/VS). Robocopy: exit 0-7 = success. -->
     <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\scripts\VPB.dll"
 copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB.dll"
+if exist "$(VaMPath)\BepInEx\scripts\sqlite3.dll" del /F /Q "$(VaMPath)\BepInEx\scripts\sqlite3.dll"
+if exist "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" (
+if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
+copy /Y "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" "$(VaMPath)\BepInEx\plugins\sqlite3.dll"
+if not exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins" mkdir "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins"
+copy /Y "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\sqlite3.dll"
+)
 if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations\" (
 robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations" "$(VaMPath)\BepInEx\plugins\vpb_translations" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 if errorlevel 8 exit 1

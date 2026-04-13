@@ -126,10 +126,12 @@ namespace VPB
                 {
                     Gallery.SuppressAutoRefresh(true);
                     
-                    if (FileButton.EnsureInstalledByText(root.ToString()))
+                    var movedUids = new List<string>();
+                    if (FileButton.EnsureInstalledByText(root.ToString(), movedUids))
                     {
                         MVR.FileManagement.FileManager.Refresh();
-                        FileManager.NotifyInstalled();
+                        if (movedUids.Count > 0)
+                            FileManager.NotifyInstalled(movedUids);
                     }
                     
                     // Start coroutine to disable suppression after scene merge completes
@@ -1630,15 +1632,17 @@ namespace VPB
             if (ext == ".json" && atom.type == "Person" && (itemType == ItemType.Other || itemType == ItemType.Scene || isPoseCategory)) itemType = ItemType.Pose;
 
             bool installed;
+            var movedUids = new List<string>();
             if (itemType == ItemType.Appearance && string.Equals(appearanceMode, "clothingOnly", StringComparison.Ordinal))
-                installed = SceneLoadingUtils.InstallHostPackageRecursive(FileEntry);
+                installed = SceneLoadingUtils.InstallHostPackageRecursive(FileEntry, movedUids);
             else
-                installed = EnsureInstalled();
+                installed = UI.EnsureInstalled(FileEntry, movedUids);
 
             if (installed)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                FileManager.NotifyInstalled();
+                if (movedUids.Count > 0)
+                    FileManager.NotifyInstalled(movedUids);
             }
 
             LogUtil.Log($"[DragDropDebug] Attempting to apply. FullPath: {normalizedPath}, LegacyPath: {legacyPath}, Installed: {installed}");

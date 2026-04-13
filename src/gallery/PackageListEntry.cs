@@ -8,16 +8,34 @@ namespace VPB
     /// </summary>
     public class PackageListEntry : FileEntry
     {
-        public VarPackage Package { get; private set; }
+        private VarPackage _packageStore;
+
+        /// <summary>When set, <see cref="Package"/> is resolved on first use via <see cref="FileManager.TryResolveVarPackageForIndexedGalleryRow"/>.</summary>
+        private string _deferredPackageUid;
+        private string _deferredVarPathHint;
+
+        public VarPackage Package
+        {
+            get { EnsurePackageResolved(); return _packageStore; }
+            private set { _packageStore = value; }
+        }
 
         public override long Size
         {
-            get { return Package != null ? Package.Size : base.Size; }
+            get
+            {
+                // Do not resolve the package for sorting/listing — use indexed size until something needs a live package.
+                if (_deferredPackageUid != null)
+                    return base.Size;
+                return _packageStore != null ? _packageStore.Size : base.Size;
+            }
             protected set { base.Size = value; }
         }
 
         public PackageListEntry(VarPackage pkg)
         {
+            _deferredPackageUid = null;
+            _deferredVarPathHint = null;
             Package = pkg;
             if (pkg != null)
             {
@@ -41,6 +59,46 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// SQLite fast path: listing fields come from the local index; <see cref="Package"/> is resolved lazily when package state is needed.
+        /// </summary>
+        public PackageListEntry(string packageUid, string indexedVarPathHint, DateTime lastWriteTime, long size, long packageCreationTicksOrMin)
+        {
+            if (string.IsNullOrEmpty(packageUid))
+                throw new ArgumentException("packageUid must not be null or empty.", "packageUid");
+            _deferredPackageUid = packageUid;
+            _deferredVarPathHint = indexedVarPathHint ?? "";
+            Package = null;
+
+            // Ratings are keyed by FileEntry.Uid. For packages on disk that is the package path.
+            // Use the indexed var path hint when available; else fall back to the package UID.
+            Path = _deferredVarPathHint.Replace('\\', '/');
+            Uid = !string.IsNullOrEmpty(Path) ? Path : packageUid;
+            Name = packageUid + ".var";
+            Exists = true;
+            LastWriteTime = lastWriteTime;
+            base.Size = size;
+        }
+
+        private void EnsurePackageResolved()
+        {
+            if (_packageStore != null || _deferredPackageUid == null) return;
+            string uid = _deferredPackageUid;
+            string hint = _deferredVarPathHint ?? "";
+            _deferredPackageUid = null;
+            VarPackage p;
+            if (FileManager.TryResolveVarPackageForIndexedGalleryRow(uid, hint, out p))
+            {
+                _packageStore = p;
+                RefreshPathsFromPackage();
+                Exists = true;
+            }
+            else
+            {
+                Exists = false;
+            }
+        }
+
         public override FileEntryStream OpenStream()
         {
             // Package list entries are not real file entries and are never meant to be opened as streams.
@@ -55,20 +113,21 @@ namespace VPB
 
         public override bool IsAutoInstall()
         {
-            if (Package == null) return false;
-            try { return AutoInstallLookup != null && AutoInstallLookup.Contains(Package.Uid); }
+            var p = Package;
+            if (p == null) return false;
+            try { return AutoInstallLookup != null && AutoInstallLookup.Contains(p.Uid); }
             catch { return false; }
         }
 
         /// <summary>After the backing <see cref="VarPackage"/> path changes (install/uninstall), sync list row fields.</summary>
         public void RefreshPathsFromPackage()
         {
-            if (Package == null) return;
-            Path = string.IsNullOrEmpty(Package.Path) ? "" : Package.Path.Replace('\\', '/');
-            Uid = !string.IsNullOrEmpty(Path) ? Path : Package.Uid;
-            Name = Package.Uid + ".var";
-            LastWriteTime = Package.LastWriteTime;
-            base.Size = Package.Size;
+            if (_packageStore == null) return;
+            Path = string.IsNullOrEmpty(_packageStore.Path) ? "" : _packageStore.Path.Replace('\\', '/');
+            Uid = !string.IsNullOrEmpty(Path) ? Path : _packageStore.Uid;
+            Name = _packageStore.Uid + ".var";
+            LastWriteTime = _packageStore.LastWriteTime;
+            base.Size = _packageStore.Size;
             InvalidateUidLowerInvariantCache();
         }
     }

@@ -126,11 +126,21 @@ namespace VPB
                 _pointerDownTime = Time.unscaledTime;
         }
 
+        /// <summary>Hold delay in seconds; 0 when drag is off, hold requirement is off, or threshold is 0.</summary>
+        private static float EffectiveDragHoldSeconds()
+        {
+            var c = VPBConfig.Instance;
+            if (c == null || !c.EnableDragDrop || !c.RequireDragHoldBeforeMove) return 0f;
+            return Mathf.Max(0f, c.DragHoldThreshold);
+        }
+
         public bool IsLongPress
         {
             get
             {
-                float threshold = VPBConfig.Instance != null ? VPBConfig.Instance.DragHoldThreshold : 0.5f;
+                if (VPBConfig.Instance != null && !VPBConfig.Instance.EnableDragDrop) return false;
+                float threshold = EffectiveDragHoldSeconds();
+                if (threshold <= 0f) return false;
                 return _pointerDownTime >= 0f && (Time.unscaledTime - _pointerDownTime >= threshold);
             }
         }
@@ -141,7 +151,7 @@ namespace VPB
             try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
             if (!isVR && eventData.button != PointerEventData.InputButton.Left) return;
             if (VPBConfig.Instance != null && !VPBConfig.Instance.EnableDragDrop) return;
-            float threshold = VPBConfig.Instance != null ? VPBConfig.Instance.DragHoldThreshold : 0.5f;
+            float threshold = EffectiveDragHoldSeconds();
             if (Time.unscaledTime - _pointerDownTime < threshold) return;
 
             _isDualPose = null;

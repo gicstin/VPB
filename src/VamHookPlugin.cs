@@ -2831,7 +2831,43 @@ namespace VPB
             {
                 if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
                 
-                string[] files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
+                string[] files;
+                try
+                {
+                    string sig = "0";
+                    try { sig = Directory.GetLastWriteTimeUtc(path).ToBinary().ToString(); } catch { sig = "0"; }
+                    string cacheKey = "cache:list|dir=" + (Path.GetFullPath(path).Replace('\\', '/').TrimEnd('/')) + "|pat=*.vamcache";
+                    var cached = new List<VpbLocalDatabase.SystemFileRow>();
+                    if (VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached) && cached.Count > 0)
+                    {
+                        files = new string[cached.Count];
+                        for (int i = 0; i < cached.Count; i++) files[i] = cached[i].Path;
+                    }
+                    else
+                    {
+                        files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
+                        try
+                        {
+                            var rows = new List<VpbLocalDatabase.SystemFileRow>(files.Length);
+                            for (int i = 0; i < files.Length; i++)
+                            {
+                                string p = files[i];
+                                if (string.IsNullOrEmpty(p)) continue;
+                                var r = new VpbLocalDatabase.SystemFileRow();
+                                try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
+                                r.LastWriteBinaryOrInvalid = long.MinValue;
+                                r.SizeOrInvalid = long.MinValue;
+                                rows.Add(r);
+                            }
+                            if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
+                        }
+                        catch { }
+                    }
+                }
+                catch
+                {
+                    files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
+                }
                 int count = 0;
                 foreach (var file in files)
                 {
@@ -2873,7 +2909,43 @@ namespace VPB
                 if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
                 
                 long size = 0;
-                string[] files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
+                string[] files;
+                try
+                {
+                    string sig = "0";
+                    try { sig = Directory.GetLastWriteTimeUtc(path).ToBinary().ToString(); } catch { sig = "0"; }
+                    string cacheKey = "cache:list|dir=" + (Path.GetFullPath(path).Replace('\\', '/').TrimEnd('/')) + "|pat=*.vamcache";
+                    var cached = new List<VpbLocalDatabase.SystemFileRow>();
+                    if (VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached) && cached.Count > 0)
+                    {
+                        files = new string[cached.Count];
+                        for (int i = 0; i < cached.Count; i++) files[i] = cached[i].Path;
+                    }
+                    else
+                    {
+                        files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
+                        try
+                        {
+                            var rows = new List<VpbLocalDatabase.SystemFileRow>(files.Length);
+                            for (int i = 0; i < files.Length; i++)
+                            {
+                                string p = files[i];
+                                if (string.IsNullOrEmpty(p)) continue;
+                                var r = new VpbLocalDatabase.SystemFileRow();
+                                try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
+                                r.LastWriteBinaryOrInvalid = long.MinValue;
+                                r.SizeOrInvalid = long.MinValue;
+                                rows.Add(r);
+                            }
+                            if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
+                        }
+                        catch { }
+                    }
+                }
+                catch
+                {
+                    files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
+                }
                 int threshold = Settings.Instance.ThumbnailThreshold.Value;
                 foreach (var file in files)
                 {
