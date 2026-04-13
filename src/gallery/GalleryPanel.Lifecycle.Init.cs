@@ -326,7 +326,7 @@ namespace VPB
             ratingSortToggleBtnText = ratingSortToggleBtn.GetComponentInChildren<Text>();
             ratingSortToggleBtnText.color = Color.white;
             ratingStarNormalSprite = UI.LoadIconSprite("vpb_icons/star.png",     new Color(0.78f, 0.78f, 0.78f, 1f));
-            ratingStarOffSprite    = UI.LoadIconSprite("vpb_icons/star-off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            ratingStarOffSprite    = UI.LoadIconSprite("vpb_icons/star_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
             {
                 Sprite initial = ratingStarNormalSprite ?? ratingStarOffSprite;
                 if (initial != null)

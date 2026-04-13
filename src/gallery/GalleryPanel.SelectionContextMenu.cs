@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -23,6 +24,28 @@ namespace VPB
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
+
+        private static void SetTboxButtonEnabledVisual(GameObject go, bool enabled, float disabledAlpha = 0.35f)
+        {
+            if (go == null) return;
+            try
+            {
+                var btn = go.GetComponent<Button>();
+                if (btn != null) btn.interactable = enabled;
+
+                var cg = go.GetComponent<CanvasGroup>();
+                if (cg == null) cg = go.AddComponent<CanvasGroup>();
+                cg.alpha = enabled ? 1f : disabledAlpha;
+                cg.blocksRaycasts = enabled;
+            }
+            catch { }
+        }
+
+        // Copy Names icon swap (clipboard list -> clipboard check on success)
+        private Sprite tboxClipboardListSprite;
+        private Sprite tboxClipboardCheckSprite;
+        private Image  tboxCopyNamesIconImage;
+        private Coroutine tboxCopyNamesIconPulseCo;
 
         // Responsive tbox action buttons: 1–2 rows, flexible widths
         private GameObject    tboxButtonsFlexRoot;
@@ -168,10 +191,11 @@ namespace VPB
             }
 
             var ltr = new List<GameObject>(14);
-            if (tboxDisableAutoInstallBtn != null && tboxDisableAutoInstallBtn.activeSelf) ltr.Add(tboxDisableAutoInstallBtn);
-            if (tboxUnhideBtn != null && tboxUnhideBtn.activeSelf) ltr.Add(tboxUnhideBtn);
-            if (tboxHideBtn != null && tboxHideBtn.activeSelf) ltr.Add(tboxHideBtn);
-            if (tboxAutoInstallBtn != null && tboxAutoInstallBtn.activeSelf) ltr.Add(tboxAutoInstallBtn);
+            // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
+            if (tboxDisableAutoInstallBtn != null) ltr.Add(tboxDisableAutoInstallBtn);
+            if (tboxUnhideBtn != null) ltr.Add(tboxUnhideBtn);
+            if (tboxHideBtn != null) ltr.Add(tboxHideBtn);
+            if (tboxAutoInstallBtn != null) ltr.Add(tboxAutoInstallBtn);
             if (tboxDeleteBtn != null) ltr.Add(tboxDeleteBtn);
             if (tboxLoadBtn != null) ltr.Add(tboxLoadBtn);
             if (tboxUnloadBtn != null) ltr.Add(tboxUnloadBtn);
@@ -449,7 +473,6 @@ namespace VPB
             const float tboxWLoadDeps = 118f;
             const float tboxWUnload = 90f;
             const float tboxWLoad = 88f;
-            const float tboxWDelete = 180f;
             const float tboxWAi = 168f;
             const float tboxWHide = 100f;
             const float tboxMinCopy = 108f;
@@ -457,7 +480,6 @@ namespace VPB
             const float tboxMinLoadDeps = 72f;
             const float tboxMinUnload = 64f;
             const float tboxMinLoad = 56f;
-            const float tboxMinDelete = 80f;
             const float tboxMinAi = 104f;
             const float tboxMinHide = 56f;
             const float tboxMinUnhide = 64f;
@@ -471,106 +493,214 @@ namespace VPB
                 CopySelectedPackageNamesToClipboard
             );
             tboxCopyPkgNamesBtn.name = "Tbox_CopyPackageNames";
-            TboxConfigureActionButtonFlex(tboxCopyPkgNamesBtn, tboxMinCopy, tboxWCopy, innerRowH);
+            TboxConfigureActionButtonFlex(tboxCopyPkgNamesBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxCopyPkgNamesBtn, "gallery.tooltip.tbox_copy_names", "Copy package .var names and local Saves/scene paths (one per line) to clipboard");
+            try
+            {
+                tboxClipboardListSprite  = UI.LoadIconSprite("vpb_icons/clipboard_list.png",  new Color(0.92f, 0.92f, 0.92f, 1f));
+                tboxClipboardCheckSprite = UI.LoadIconSprite("vpb_icons/clipboard_check.png", new Color(1f, 1f, 1f, 1f));
+                if (tboxClipboardListSprite != null)
+                {
+                    UI.AddIconToButton(tboxCopyPkgNamesBtn, tboxClipboardListSprite, padding: 6f);
+                    tboxCopyNamesIconImage = tboxCopyPkgNamesBtn.transform.Find("Icon")?.GetComponent<Image>();
+                }
+            }
+            catch { }
 
             tboxCacheTexturesBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cache_textures", "Cache Textures"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxCacheTexturesSelected
             );
             tboxCacheTexturesBtn.name = "Tbox_CacheTextures";
-            TboxConfigureActionButtonFlex(tboxCacheTexturesBtn, tboxMinCache, tboxWCache, innerRowH);
+            TboxConfigureActionButtonFlex(tboxCacheTexturesBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxCacheTexturesBtn, "gallery.tooltip.tbox_cache_textures", "Build VPB texture cache for selected .var packages (same as F3 for packages)");
+            try
+            {
+                var cacheTextureIcon = UI.LoadIconSprite("vpb_icons/cache_texture.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (cacheTextureIcon != null) UI.AddIconToButton(tboxCacheTexturesBtn, cacheTextureIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxCacheTexturesBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.cache_textures", "Cache Textures");
+                }
+            }
+            catch { }
 
             tboxLoadDepsBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.load_deps", "Load Deps"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxLoadDepsSelectedPackages
             );
             tboxLoadDepsBtn.name = "Tbox_LoadDeps";
-            TboxConfigureActionButtonFlex(tboxLoadDepsBtn, tboxMinLoadDeps, tboxWLoadDeps, innerRowH);
+            TboxConfigureActionButtonFlex(tboxLoadDepsBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxLoadDepsBtn, "gallery.tooltip.tbox_load_deps", "Copy selected packages and their dependencies from AllPackages to AddonPackages (respects Settings → load deps with package)");
+            try
+            {
+                var loadDepsIcon = UI.LoadIconSprite("vpb_icons/load_deps.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (loadDepsIcon != null) UI.AddIconToButton(tboxLoadDepsBtn, loadDepsIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxLoadDepsBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.load_deps", "Load Deps");
+                }
+            }
+            catch { }
 
             tboxUnloadBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.unload", "Unload"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxUnloadSelectedPackages
             );
             tboxUnloadBtn.name = "Tbox_Unload";
-            TboxConfigureActionButtonFlex(tboxUnloadBtn, tboxMinUnload, tboxWUnload, innerRowH);
+            TboxConfigureActionButtonFlex(tboxUnloadBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxUnloadBtn, "gallery.tooltip.tbox_unload", "Move selected installed .var files from AddonPackages back to AllPackages");
+            try
+            {
+                var unloadIcon = UI.LoadIconSprite("vpb_icons/unload.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (unloadIcon != null) UI.AddIconToButton(tboxUnloadBtn, unloadIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxUnloadBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.unload", "Unload");
+                }
+            }
+            catch { }
 
             tboxLoadBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.load", "Load"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxLoadSelectedPackages
             );
             tboxLoadBtn.name = "Tbox_Load";
-            TboxConfigureActionButtonFlex(tboxLoadBtn, tboxMinLoad, tboxWLoad, innerRowH);
+            TboxConfigureActionButtonFlex(tboxLoadBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxLoadBtn, "gallery.tooltip.tbox_load", "Copy selected .var from AllPackages to AddonPackages (this package only, no dependencies)");
+            try
+            {
+                var loadIcon = UI.LoadIconSprite("vpb_icons/load.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (loadIcon != null) UI.AddIconToButton(tboxLoadBtn, loadIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxLoadBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.load", "Load");
+                }
+            }
+            catch { }
 
             tboxDeleteBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.delete", "Delete"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxDeleteSelectedPackages
             );
             tboxDeleteBtn.name = "Tbox_Delete";
-            TboxConfigureActionButtonFlex(tboxDeleteBtn, tboxMinDelete, tboxWDelete, innerRowH);
+            TboxConfigureActionButtonFlex(tboxDeleteBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes");
             try
             {
-                var delImg = tboxDeleteBtn.GetComponent<Image>();
-                if (delImg != null) delImg.color = new Color(0.35f, 0.15f, 0.15f, 1f);
+                var delIcon = UI.LoadIconSprite("vpb_icons/delete.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (delIcon != null)
+                    UI.AddIconToButton(tboxDeleteBtn, delIcon, padding: 6f, backdropOverride: new Color(0.35f, 0.15f, 0.15f, 1f));
+                else
+                {
+                    // Fallback: keep text label if icon missing
+                    Text t = tboxDeleteBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.delete", "Delete");
+                }
             }
             catch { }
 
             tboxAutoInstallBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.autoinstall", "Autoinstall"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxAutoInstallSelectedPackages
             );
             tboxAutoInstallBtn.name = "Tbox_AutoInstall";
-            TboxConfigureActionButtonFlex(tboxAutoInstallBtn, tboxMinAi, tboxWAi, innerRowH);
+            TboxConfigureActionButtonFlex(tboxAutoInstallBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxAutoInstallBtn, "gallery.tooltip.tbox_autoinstall", "Flag selected packages for auto-install and auto-load. Packages in AllPackages are copied to AddonPackages on the next VaM start (not immediately).");
+            try
+            {
+                var autoLoadIcon = UI.LoadIconSprite("vpb_icons/auto.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (autoLoadIcon != null) UI.AddIconToButton(tboxAutoInstallBtn, autoLoadIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxAutoInstallBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.autoinstall", "Autoinstall");
+                }
+            }
+            catch { }
 
             tboxHideBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.hide", "Hide"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxHideSelectedPackages
             );
             tboxHideBtn.name = "Tbox_Hide";
-            TboxConfigureActionButtonFlex(tboxHideBtn, tboxMinHide, tboxWHide, innerRowH);
+            TboxConfigureActionButtonFlex(tboxHideBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxHideBtn, "gallery.tooltip.tbox_hide", "Hide selected packages in VaM file lists (AddonPackagesFilePrefs … .hide)");
+            try
+            {
+                // Hide = show_hidden ON
+                var hideIcon = UI.LoadIconSprite("vpb_icons/show_hidden.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (hideIcon != null)
+                    UI.AddIconToButton(tboxHideBtn, hideIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxHideBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.hide", "Hide");
+                }
+            }
+            catch { }
 
             tboxUnhideBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.unhide", "Unhide"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxUnhideSelectedPackages
             );
             tboxUnhideBtn.name = "Tbox_Unhide";
-            tboxUnhideBtn.SetActive(false);
-            TboxConfigureActionButtonFlex(tboxUnhideBtn, tboxMinUnhide, tboxWHide, innerRowH);
+            TboxConfigureActionButtonFlex(tboxUnhideBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxUnhideBtn, "gallery.tooltip.tbox_unhide", "Remove .hide markers for selected packages");
+            try
+            {
+                // Unhide = show_hidden OFF
+                var unhideIcon = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (unhideIcon != null)
+                    UI.AddIconToButton(tboxUnhideBtn, unhideIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxUnhideBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.unhide", "Unhide");
+                }
+            }
+            catch { }
 
             tboxDisableAutoInstallBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.no_autoinstall", "No autoinstall"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxDisableAutoInstallSelectedPackages
             );
             tboxDisableAutoInstallBtn.name = "Tbox_NoAutoInstall";
-            tboxDisableAutoInstallBtn.SetActive(false);
-            TboxConfigureActionButtonFlex(tboxDisableAutoInstallBtn, tboxMinNoAi, tboxWAi, innerRowH);
+            TboxConfigureActionButtonFlex(tboxDisableAutoInstallBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxDisableAutoInstallBtn, "gallery.tooltip.tbox_no_autoinstall", "Clear auto-install and VPB auto-load for selected packages");
+            try
+            {
+                var autoLoadOffIcon = UI.LoadIconSprite("vpb_icons/auto_off.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (autoLoadOffIcon != null) UI.AddIconToButton(tboxDisableAutoInstallBtn, autoLoadOffIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxDisableAutoInstallBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.no_autoinstall", "No autoinstall");
+                }
+            }
+            catch { }
 
             // ── Pin toggle (right edge, always visible) ───────────────────────────
             tboxPinBtn = UI.CreateUIButton(
@@ -806,6 +936,8 @@ namespace VPB
         private void RefreshTboxConditionalActionButtons()
         {
             int copyN = 0, deleteN = 0, hideN = 0, unhideN = 0, aiN = 0, noAiN = 0;
+            bool anyPkgInstalled = false;     // in AddonPackages
+            bool anyPkgNotInstalled = false;  // in AllPackages
             if (selectedFiles != null && selectedFiles.Count > 0)
             {
                 copyN = CollectUniquePackageUidsFromSelection(selectedFiles).Count
@@ -817,20 +949,41 @@ namespace VPB
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out bool hidden, out bool fiAi, out bool uidAl))
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out FileEntry diskFe, out bool hidden, out bool fiAi, out bool uidAl))
                         continue;
                     if (!seen.Add(uid)) continue;
                     if (hidden) unhideN++;
                     else hideN++;
                     if (fiAi || uidAl) noAiN++;
                     if (!fiAi || !uidAl) aiN++;
+
+                    // Fast install-state summary for Load/Unload buttons.
+                    // Use the resolved disk FileEntry (already computed by TryGetTboxResolvablePackageState) and
+                    // infer from its path prefix; avoids any rescans or heavy indexing work.
+                    try
+                    {
+                        // Local scenes (Saves/scene JSON) do not participate in load/unload.
+                        if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
+                            continue;
+
+                        string p = null;
+                        try { p = diskFe != null ? (diskFe.Path ?? diskFe.Uid) : null; } catch { p = null; }
+                        if (!string.IsNullOrEmpty(p))
+                        {
+                            p = p.Replace('\\', '/');
+                            int internalSep = p.IndexOf(":/", StringComparison.Ordinal);
+                            if (internalSep >= 0) p = p.Substring(0, internalSep);
+                            if (p.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgInstalled = true;
+                            else if (p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgNotInstalled = true;
+                        }
+                    }
+                    catch { }
                 }
             }
 
             if (tboxCopyPkgNamesBtn != null)
                 SetTboxCountButtonLabel(tboxCopyPkgNamesBtn, "gallery.tbox.copy_names_count", "Copy Names ({0})", copyN);
-            if (tboxDeleteBtn != null)
-                SetTboxCountButtonLabel(tboxDeleteBtn, "gallery.tbox.delete_count", "Delete ({0})", deleteN);
+            // Delete is an icon button; count is intentionally not shown on the label.
 
             bool showHide = hideN > 0;
             bool showUnhide = unhideN > 0;
@@ -839,24 +992,30 @@ namespace VPB
 
             if (tboxHideBtn != null)
             {
-                tboxHideBtn.SetActive(showHide);
-                if (showHide) SetTboxCountButtonLabel(tboxHideBtn, "gallery.tbox.hide_count", "Hide ({0})", hideN);
+                SetTboxButtonEnabledVisual(tboxHideBtn, showHide);
+                // Hide is an icon button; count is intentionally not shown on the label.
             }
             if (tboxUnhideBtn != null)
             {
-                tboxUnhideBtn.SetActive(showUnhide);
-                if (showUnhide) SetTboxCountButtonLabel(tboxUnhideBtn, "gallery.tbox.unhide_count", "Unhide ({0})", unhideN);
+                SetTboxButtonEnabledVisual(tboxUnhideBtn, showUnhide);
+                // Unhide is an icon button; count is intentionally not shown on the label.
             }
             if (tboxAutoInstallBtn != null)
             {
-                tboxAutoInstallBtn.SetActive(showAi);
-                if (showAi) SetTboxCountButtonLabel(tboxAutoInstallBtn, "gallery.tbox.autoinstall_count", "Autoinstall ({0})", aiN);
+                SetTboxButtonEnabledVisual(tboxAutoInstallBtn, showAi);
+                // Auto install is an icon button; count is intentionally not shown on the label.
             }
             if (tboxDisableAutoInstallBtn != null)
             {
-                tboxDisableAutoInstallBtn.SetActive(showNoAi);
-                if (showNoAi) SetTboxCountButtonLabel(tboxDisableAutoInstallBtn, "gallery.tbox.no_autoinstall_count", "No autoinstall ({0})", noAiN);
+                SetTboxButtonEnabledVisual(tboxDisableAutoInstallBtn, showNoAi);
+                // No auto install is an icon button; count is intentionally not shown on the label.
             }
+
+            // Load/Unload/LoadDeps: keep buttons in place; enable/disable based on selection mix.
+            bool hasAnyPkg = anyPkgInstalled || anyPkgNotInstalled;
+            if (tboxLoadBtn != null) SetTboxButtonEnabledVisual(tboxLoadBtn, hasAnyPkg && anyPkgNotInstalled);
+            if (tboxLoadDepsBtn != null) SetTboxButtonEnabledVisual(tboxLoadDepsBtn, hasAnyPkg && anyPkgNotInstalled);
+            if (tboxUnloadBtn != null) SetTboxButtonEnabledVisual(tboxUnloadBtn, hasAnyPkg && anyPkgInstalled);
 
             RefreshTboxFlexButtonLayout();
         }
@@ -962,11 +1121,59 @@ namespace VPB
 
                 GUIUtility.systemCopyBuffer = text;
                 ShowTemporaryStatus($"Copied {list.Count} name(s) to clipboard.", 2f);
+                TryPulseTboxCopyNamesIcon();
             }
             catch (Exception ex)
             {
                 LogUtil.LogError("[VPB] CopySelectedPackageNamesToClipboard error: " + ex.Message);
                 ShowTemporaryStatus("Copy failed. See log.", 2f);
+            }
+        }
+
+        private void TryPulseTboxCopyNamesIcon()
+        {
+            try
+            {
+                if (tboxCopyNamesIconImage == null || tboxClipboardListSprite == null || tboxClipboardCheckSprite == null)
+                    return;
+
+                if (tboxCopyNamesIconPulseCo != null)
+                {
+                    StopCoroutine(tboxCopyNamesIconPulseCo);
+                    tboxCopyNamesIconPulseCo = null;
+                }
+                tboxCopyNamesIconPulseCo = StartCoroutine(PulseCopyNamesIconCoroutine());
+            }
+            catch { }
+        }
+
+        private IEnumerator PulseCopyNamesIconCoroutine()
+        {
+            Sprite prevSprite = null;
+            Color prevColor = Color.white;
+            try
+            {
+                if (tboxCopyNamesIconImage == null) yield break;
+                prevSprite = tboxCopyNamesIconImage.sprite;
+                prevColor = tboxCopyNamesIconImage.color;
+
+                tboxCopyNamesIconImage.sprite = tboxClipboardCheckSprite;
+                tboxCopyNamesIconImage.color = new Color(0.25f, 0.85f, 0.35f, 1f);
+
+                yield return new WaitForSecondsRealtime(0.8f);
+            }
+            finally
+            {
+                try
+                {
+                    if (tboxCopyNamesIconImage != null)
+                    {
+                        tboxCopyNamesIconImage.sprite = tboxClipboardListSprite;
+                        tboxCopyNamesIconImage.color = Color.white;
+                    }
+                }
+                catch { }
+                tboxCopyNamesIconPulseCo = null;
             }
         }
 

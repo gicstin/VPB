@@ -859,7 +859,7 @@ namespace VPB
         private Sprite fileSortDirDescSprite;
         private Image ratingSortIconImage; // Icon image on the star toggle (swapped on/off)
         private Sprite ratingStarNormalSprite; // star.png — shown when filter is OFF
-        private Sprite ratingStarOffSprite;    // star-off.png — shown when filter is ON
+        private Sprite ratingStarOffSprite;    // star_off.png — shown when filter is ON
         private GameObject fileSortTypeMenuRoot;
         private GameObject fileSortTypeMenuPanelGO;
         private Text quickFiltersToggleBtnText; // NEW

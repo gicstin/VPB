@@ -140,6 +140,10 @@
         "IsDirectory":  true
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/auto.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/auto_hide_off.png",
         "IsDirectory":  false
     },
@@ -148,7 +152,23 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/auto_off.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/cache_texture.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/clear_selection.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/clipboard_check.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/clipboard_list.png",
         "IsDirectory":  false
     },
     {
@@ -240,7 +260,15 @@
         "IsDirectory":  false
     },
     {
-        "RelativePath":  "BepInEx/plugins/vpb_icons/list-search.png",
+        "RelativePath":  "BepInEx/plugins/vpb_icons/list_search.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/load.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/load_deps.png",
         "IsDirectory":  false
     },
     {
@@ -328,7 +356,7 @@
         "IsDirectory":  false
     },
     {
-        "RelativePath":  "BepInEx/plugins/vpb_icons/star-off.png",
+        "RelativePath":  "BepInEx/plugins/vpb_icons/star_off.png",
         "IsDirectory":  false
     },
     {
@@ -337,6 +365,10 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/undo.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/unload.png",
         "IsDirectory":  false
     },
     {
