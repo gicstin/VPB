@@ -2025,6 +2025,14 @@ namespace VPB
                     // Let LoadThumbnail decide whether this is a true rebind or the same
                     // thumbnail; unconditional clearing causes a visible flash on reopen.
                     LoadThumbnail(file, thumbImg);
+
+                    // List-layout hover preview: bind hover handler to the thumbnail only.
+                    // (Use the thumbnail rect so the full row doesn't trigger the popup.)
+                    var hp = thumbTr.GetComponent<UIHoverPreviewTrigger>();
+                    if (hp == null) hp = thumbTr.gameObject.AddComponent<UIHoverPreviewTrigger>();
+                    hp.panel = this;
+                    hp.file = file;
+                    thumbImg.raycastTarget = true;
                 }
             }
 

@@ -471,22 +471,6 @@ namespace VPB
             tboxBtnRow1GO.SetActive(false);
 
             const int tboxActionBtnFont = 16;
-            const float tboxWCopy = 210f;
-            const float tboxWCache = 142f;
-            const float tboxWLoadDeps = 118f;
-            const float tboxWUnload = 90f;
-            const float tboxWLoad = 88f;
-            const float tboxWAi = 168f;
-            const float tboxWHide = 100f;
-            const float tboxMinCopy = 108f;
-            const float tboxMinCache = 72f;
-            const float tboxMinLoadDeps = 72f;
-            const float tboxMinUnload = 64f;
-            const float tboxMinLoad = 56f;
-            const float tboxMinAi = 104f;
-            const float tboxMinHide = 56f;
-            const float tboxMinUnhide = 64f;
-            const float tboxMinNoAi = 104f;
 
             // Placeholders — layout is resolved in RefreshTboxFlexButtonLayout (stretch + LayoutElement).
             tboxCopyPkgNamesBtn = UI.CreateUIButton(

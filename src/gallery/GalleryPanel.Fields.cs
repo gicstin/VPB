@@ -677,6 +677,12 @@ namespace VPB
         private RectTransform hoverPathRT;
         private CanvasGroup hoverPathCanvasGroup;
         private Coroutine hoverFadeCoroutine;
+        // Hover preview overlay (bottom-left above tbox)
+        private GameObject hoverPreviewGO;
+        private RectTransform hoverPreviewRT;
+        private RawImage hoverPreviewImage;
+        private FileEntry hoverPreviewFile;
+        private bool hoverPreviewDummyActive;
         private GameObject paginationPrevBtn;
         private GameObject paginationPrev10Btn;
         private GameObject paginationNextBtn;

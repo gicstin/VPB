@@ -102,6 +102,18 @@ namespace VPB
         private bool pendingGalleryListNamesLegacyFileName;
         private bool backupGalleryListNamesLegacyFileName;
 
+        private string pendingGalleryHoverPreviewMode;
+        private string backupGalleryHoverPreviewMode;
+
+        private float pendingGalleryListHoverPreviewSize;
+        private float backupGalleryListHoverPreviewSize;
+
+        private float pendingGalleryListHoverPreviewOffsetX;
+        private float backupGalleryListHoverPreviewOffsetX;
+
+        private float pendingGalleryListHoverPreviewOffsetY;
+        private float backupGalleryListHoverPreviewOffsetY;
+
         private GameObject tooltipGO;
         private Text tooltipText;
         private Text settingsTitleText;
@@ -259,6 +271,18 @@ namespace VPB
             pendingGalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName;
             backupGalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName;
 
+            pendingGalleryHoverPreviewMode = VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode);
+            backupGalleryHoverPreviewMode = pendingGalleryHoverPreviewMode;
+
+            pendingGalleryListHoverPreviewSize = VPBConfig.Instance.GalleryListHoverPreviewSize;
+            backupGalleryListHoverPreviewSize = VPBConfig.Instance.GalleryListHoverPreviewSize;
+
+            pendingGalleryListHoverPreviewOffsetX = VPBConfig.Instance.GalleryListHoverPreviewOffsetX;
+            backupGalleryListHoverPreviewOffsetX = VPBConfig.Instance.GalleryListHoverPreviewOffsetX;
+
+            pendingGalleryListHoverPreviewOffsetY = VPBConfig.Instance.GalleryListHoverPreviewOffsetY;
+            backupGalleryListHoverPreviewOffsetY = VPBConfig.Instance.GalleryListHoverPreviewOffsetY;
+
             if (logOpen)
             {
                 SettingsPerfLog($"Open.copyPendingFromConfig {swOpen.ElapsedMilliseconds - mark}ms");
@@ -390,6 +414,10 @@ namespace VPB
             if (!HiddenCategorySetsEqual(pendingHiddenCategories, backupHiddenCategories)) return false;
             if (pendingPluginGalleryGridThumbnails != backupPluginGalleryGridThumbnails) return false;
             if (pendingGalleryListNamesLegacyFileName != backupGalleryListNamesLegacyFileName) return false;
+            if (!string.Equals(pendingGalleryHoverPreviewMode ?? "", backupGalleryHoverPreviewMode ?? "", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!Mathf.Approximately(pendingGalleryListHoverPreviewSize, backupGalleryListHoverPreviewSize)) return false;
+            if (!Mathf.Approximately(pendingGalleryListHoverPreviewOffsetX, backupGalleryListHoverPreviewOffsetX)) return false;
+            if (!Mathf.Approximately(pendingGalleryListHoverPreviewOffsetY, backupGalleryListHoverPreviewOffsetY)) return false;
             return true;
         }
 
@@ -463,6 +491,17 @@ namespace VPB
             bool galleryListLegacyWasPending = pendingGalleryListNamesLegacyFileName != backupGalleryListNamesLegacyFileName;
             VPBConfig.Instance.GalleryListNamesLegacyFileName = backupGalleryListNamesLegacyFileName;
             pendingGalleryListNamesLegacyFileName = backupGalleryListNamesLegacyFileName;
+            VPBConfig.Instance.GalleryHoverPreviewMode = backupGalleryHoverPreviewMode;
+            pendingGalleryHoverPreviewMode = backupGalleryHoverPreviewMode;
+            VPBConfig.Instance.GalleryListHoverPreviewSize = backupGalleryListHoverPreviewSize;
+            pendingGalleryListHoverPreviewSize = backupGalleryListHoverPreviewSize;
+            VPBConfig.Instance.GalleryListHoverPreviewOffsetX = backupGalleryListHoverPreviewOffsetX;
+            pendingGalleryListHoverPreviewOffsetX = backupGalleryListHoverPreviewOffsetX;
+            VPBConfig.Instance.GalleryListHoverPreviewOffsetY = backupGalleryListHoverPreviewOffsetY;
+            pendingGalleryListHoverPreviewOffsetY = backupGalleryListHoverPreviewOffsetY;
+
+            VPBConfig.Instance.GalleryListHoverPreviewSize = backupGalleryListHoverPreviewSize;
+            pendingGalleryListHoverPreviewSize = backupGalleryListHoverPreviewSize;
 
             if (logClose)
             {
@@ -581,6 +620,14 @@ namespace VPB
                     backupPluginGalleryGridThumbnails = pendingPluginGalleryGridThumbnails;
                     VPBConfig.Instance.GalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
                     backupGalleryListNamesLegacyFileName = pendingGalleryListNamesLegacyFileName;
+                    VPBConfig.Instance.GalleryHoverPreviewMode = pendingGalleryHoverPreviewMode;
+                    backupGalleryHoverPreviewMode = pendingGalleryHoverPreviewMode;
+                    VPBConfig.Instance.GalleryListHoverPreviewSize = pendingGalleryListHoverPreviewSize;
+                    backupGalleryListHoverPreviewSize = pendingGalleryListHoverPreviewSize;
+                    VPBConfig.Instance.GalleryListHoverPreviewOffsetX = pendingGalleryListHoverPreviewOffsetX;
+                    backupGalleryListHoverPreviewOffsetX = pendingGalleryListHoverPreviewOffsetX;
+                    VPBConfig.Instance.GalleryListHoverPreviewOffsetY = pendingGalleryListHoverPreviewOffsetY;
+                    backupGalleryListHoverPreviewOffsetY = pendingGalleryListHoverPreviewOffsetY;
                     // Avoid ConfigChanged from Save: live preview already ran it for most controls (expensive full gallery layout).
                     VPBConfig.Instance.Save(false);
                     if (SaveNeedsDeferredConfigNotify())
@@ -872,6 +919,59 @@ namespace VPB
                 if (parentPanel != null) parentPanel.RefreshFiles(true);
             }, VPBTranslation.T("settings.tip.gallery_list_legacy_names", "When off (default), list layout shows the package id (Creator.Package.Version, without .var) for items inside packages. When on, list rows use the file or item name like before."), () => pendingGalleryListNamesLegacyFileName);
 
+            CreateSettingsSectionSeparator();
+            CreateHeader(VPBTranslation.T("settings.header.hover_preview", "Hover preview"));
+
+            // Hover Preview (Grid/List/Both/Off)
+            string[] hoverPreviewModeOptions = { "Off", "List", "Grid", "Both" };
+            string[] hoverPreviewModeLabels = {
+                VPBTranslation.T("settings.hover_preview.off", "OFF"),
+                VPBTranslation.T("settings.hover_preview.list", "List"),
+                VPBTranslation.T("settings.hover_preview.grid", "Grid"),
+                VPBTranslation.T("settings.hover_preview.both", "Both"),
+            };
+            CreateCycleSetting(VPBTranslation.T("settings.hover_preview_mode", "Hover preview"), pendingGalleryHoverPreviewMode, hoverPreviewModeOptions, hoverPreviewModeLabels, (val) => {
+                pendingGalleryHoverPreviewMode = VPBConfig.NormalizeHoverPreviewMode(val);
+                VPBConfig.Instance.GalleryHoverPreviewMode = pendingGalleryHoverPreviewMode;
+                VPBConfig.Instance.TriggerChange();
+            }, VPBTranslation.T("settings.tip.hover_preview_mode", "Show a larger square image preview when hovering thumbnails. Choose where it applies: List, Grid, Both, or OFF."), () => pendingGalleryHoverPreviewMode);
+
+            CreateSliderSetting(VPBTranslation.T("settings.hover_preview_size", "Hover preview size"), pendingGalleryListHoverPreviewSize, 200f, 600f, (val) => {
+                pendingGalleryListHoverPreviewSize = val;
+                VPBConfig.Instance.GalleryListHoverPreviewSize = val;
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) { try { parentPanel.SetHoverPreviewDummyActive(true); parentPanel.RefreshHoverPreviewLayoutImmediate(); } catch { } }
+            }, VPBTranslation.T("settings.tip.hover_preview_size", "Size (in pixels) of the square hover preview."), () => pendingGalleryListHoverPreviewSize,
+                onLiveDrag: (v) => { try { if (parentPanel != null) { VPBConfig.Instance.GalleryListHoverPreviewSize = v; parentPanel.SetHoverPreviewDummyActive(true); parentPanel.RefreshHoverPreviewLayoutImmediate(); } } catch { } });
+
+            CreateSliderSetting(VPBTranslation.T("settings.hover_preview_offset_x", "Hover preview X offset"), pendingGalleryListHoverPreviewOffsetX, -2000f, 2000f, (val) => {
+                pendingGalleryListHoverPreviewOffsetX = val;
+                VPBConfig.Instance.GalleryListHoverPreviewOffsetX = val;
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) { try { parentPanel.SetHoverPreviewDummyActive(true); parentPanel.RefreshHoverPreviewLayoutImmediate(); } catch { } }
+            }, VPBTranslation.T("settings.tip.hover_preview_offset_x", "Move the hover preview left/right (pixels) relative to the default docked bottom-left position."), () => pendingGalleryListHoverPreviewOffsetX, allowNegative: true,
+                onLiveDrag: (v) => { try { if (parentPanel != null) { VPBConfig.Instance.GalleryListHoverPreviewOffsetX = v; parentPanel.SetHoverPreviewDummyActive(true); parentPanel.RefreshHoverPreviewLayoutImmediate(); } } catch { } });
+
+            CreateSliderSetting(VPBTranslation.T("settings.hover_preview_offset_y", "Hover preview Y offset"), pendingGalleryListHoverPreviewOffsetY, -2000f, 2000f, (val) => {
+                pendingGalleryListHoverPreviewOffsetY = val;
+                VPBConfig.Instance.GalleryListHoverPreviewOffsetY = val;
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) { try { parentPanel.SetHoverPreviewDummyActive(true); parentPanel.RefreshHoverPreviewLayoutImmediate(); } catch { } }
+            }, VPBTranslation.T("settings.tip.hover_preview_offset_y", "Move the hover preview up/down (pixels) relative to the default docked bottom-left position."), () => pendingGalleryListHoverPreviewOffsetY, allowNegative: true,
+                onLiveDrag: (v) => { try { if (parentPanel != null) { VPBConfig.Instance.GalleryListHoverPreviewOffsetY = v; parentPanel.SetHoverPreviewDummyActive(true); parentPanel.RefreshHoverPreviewLayoutImmediate(); } } catch { } });
+
+            CreateActionButtonSetting(VPBTranslation.T("settings.hover_preview_position", "Hover preview position"), VPBTranslation.T("settings.reset", "Reset"), () => {
+                pendingGalleryListHoverPreviewOffsetX = 0f;
+                pendingGalleryListHoverPreviewOffsetY = 0f;
+                VPBConfig.Instance.GalleryListHoverPreviewOffsetX = 0f;
+                VPBConfig.Instance.GalleryListHoverPreviewOffsetY = 0f;
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) { try { parentPanel.SetHoverPreviewDummyActive(true); parentPanel.RefreshHoverPreviewLayoutImmediate(); } catch { } }
+                SyncSettingsNow();
+            }, VPBTranslation.T("settings.tip.hover_preview_position", "Reset the hover preview position offsets back to the docked default."));
+
+            CreateSettingsSectionSeparator();
+
             if (isFixed)
             {
                 // Bring to Front Distance (for Fixed Mode too, as requested)
@@ -1025,7 +1125,16 @@ namespace VPB
             };
         }
 
-        private void CreateSliderSetting(string label, float currentVal, float min, float max, Action<float> onChange, string tooltip, Func<float> syncGetPending, Func<bool> enabledWhen = null)
+        private void SyncSettingsNow()
+        {
+            if (_settingsScrollSync == null) return;
+            for (int i = 0; i < _settingsScrollSync.Count; i++)
+            {
+                try { _settingsScrollSync[i](); } catch { }
+            }
+        }
+
+        private void CreateSliderSetting(string label, float currentVal, float min, float max, Action<float> onChange, string tooltip, Func<float> syncGetPending, Func<bool> enabledWhen = null, bool allowNegative = false, Action<float> onLiveDrag = null)
         {
             GameObject container = new GameObject("Setting_" + label);
             container.transform.SetParent(settingsScrollContent.transform, false);
@@ -1076,7 +1185,28 @@ namespace VPB
             inputTextRT.sizeDelta = Vector2.zero;
             inputField.textComponent = inputText;
             inputField.text = currentVal.ToString("F1");
-            inputField.contentType = InputField.ContentType.DecimalNumber;
+            inputField.contentType = allowNegative ? InputField.ContentType.Standard : InputField.ContentType.DecimalNumber;
+            if (allowNegative)
+            {
+                inputField.onValidateInput = (string text, int charIndex, char addedChar) =>
+                {
+                    if (char.IsDigit(addedChar)) return addedChar;
+                    if (addedChar == '.')
+                    {
+                        // One decimal separator max
+                        if (text != null && text.IndexOf('.') >= 0) return '\0';
+                        return addedChar;
+                    }
+                    if (addedChar == '-')
+                    {
+                        // Only allow leading '-' and only once
+                        if (charIndex != 0) return '\0';
+                        if (text != null && text.IndexOf('-') >= 0) return '\0';
+                        return addedChar;
+                    }
+                    return '\0';
+                };
+            }
 
             // Row 2: Slider
             GameObject sliderGO = new GameObject("Slider");
@@ -1155,6 +1285,7 @@ namespace VPB
             // Synchronization
             slider.onValueChanged.AddListener((val) => {
                 inputField.text = val.ToString("F1");
+                try { onLiveDrag?.Invoke(val); } catch { }
                 // We don't call onChange here to avoid loops during drag
             });
 
@@ -1204,6 +1335,41 @@ namespace VPB
                 _settingsScrollSync.Add(applyRowInteractable);
                 _syncDragHoldDelayRowInteractable = applyRowInteractable;
             }
+        }
+
+        private void CreateActionButtonSetting(string label, string buttonText, Action onClick, string tooltip)
+        {
+            GameObject container = new GameObject("Setting_" + label);
+            container.transform.SetParent(settingsScrollContent.transform, false);
+            RectTransform containerRT = container.AddComponent<RectTransform>();
+            LayoutElement le = container.AddComponent<LayoutElement>();
+            le.minHeight = 60; le.preferredHeight = 60;
+            le.flexibleWidth = 1;
+
+            AddTooltipIcon(container, tooltip);
+
+            GameObject labelGO = new GameObject("Label");
+            labelGO.transform.SetParent(container.transform, false);
+            Text t = labelGO.AddComponent<Text>();
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.text = label; t.fontSize = 22; t.color = Color.white;
+            t.alignment = TextAnchor.MiddleLeft;
+            RectTransform labelRT = labelGO.GetComponent<RectTransform>();
+            labelRT.anchorMin = new Vector2(0, 0);
+            labelRT.anchorMax = new Vector2(0.55f, 1);
+            labelRT.pivot = new Vector2(0, 0.5f);
+            labelRT.anchoredPosition = new Vector2(40, 0);
+            labelRT.sizeDelta = Vector2.zero;
+
+            float btnW = 150;
+            float btnH = 45;
+            float btnX = 300;
+            GameObject btn = UI.CreateUIButton(container, btnW, btnH, buttonText ?? "Reset", 18, btnX, 0, AnchorPresets.middleLeft, () => { try { onClick?.Invoke(); } catch { } });
+            btn.AddComponent<UIHoverBorder>();
+            Text bt = btn.GetComponentInChildren<Text>();
+            if (bt != null) bt.color = Color.white;
+            var bi = btn.GetComponent<Image>();
+            if (bi != null) bi.color = new Color(0.35f, 0.35f, 0.35f, 1f);
         }
 
         private void CreateCycleSetting(string label, string currentVal, string[] options, string[] labels, Action<string> onCycle, string tooltip, Func<string> syncGetPending)

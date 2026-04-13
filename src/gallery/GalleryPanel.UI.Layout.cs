@@ -203,6 +203,8 @@ namespace VPB
             }
 
             UpdateFooterLayoutState();
+
+            try { RefreshHoverPreviewLayoutImmediate(); } catch { }
         }
 
         /// <summary>Distance from panel bottom to the top edge of the bottom chrome (pagination + info/tbox bar).</summary>

@@ -939,6 +939,8 @@ namespace VPB
             pathGO.AddComponent<RectMask2D>();                 // clips buttons row until bar grows
             hoverPathRT = pathGO.GetComponent<RectTransform>();
 
+            CreateHoverPreviewOverlay(backgroundBoxGO);
+
             // HoverPathText — anchored to the bottom (tooltip) row; CanvasGroup fades only the text
             GameObject hoverPathTextGO = new GameObject("HoverPathText");
             hoverPathTextGO.transform.SetParent(pathGO.transform, false);
@@ -985,6 +987,137 @@ namespace VPB
             UpdateFooterContextActions();
             UpdatePaginationText();
             try { UpdateUndoRedoButtonLabels(); } catch { }
+        }
+
+        private void CreateHoverPreviewOverlay(GameObject parentGO)
+        {
+            if (parentGO == null) return;
+            if (hoverPreviewGO != null) return;
+
+            hoverPreviewGO = new GameObject("HoverPreview");
+            hoverPreviewGO.transform.SetParent(parentGO.transform, false);
+            hoverPreviewRT = hoverPreviewGO.AddComponent<RectTransform>();
+            hoverPreviewRT.anchorMin = new Vector2(0f, 0f);
+            hoverPreviewRT.anchorMax = new Vector2(0f, 0f);
+            hoverPreviewRT.pivot = new Vector2(0f, 0f);
+
+            // Backdrop
+            var bg = hoverPreviewGO.AddComponent<Image>();
+            bg.color = new Color(0f, 0f, 0f, 0.55f);
+            bg.raycastTarget = false;
+
+            // Actual preview
+            var imgGO = new GameObject("Image");
+            imgGO.transform.SetParent(hoverPreviewGO.transform, false);
+            var rt = imgGO.AddComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = new Vector2(4f, 4f);
+            rt.offsetMax = new Vector2(-4f, -4f);
+
+            hoverPreviewImage = imgGO.AddComponent<RawImage>();
+            hoverPreviewImage.color = new Color(1f, 1f, 1f, 1f);
+            hoverPreviewImage.raycastTarget = false;
+
+            // Keep it hidden until first hover
+            hoverPreviewGO.SetActive(false);
+        }
+
+        private bool CanShowHoverPreviewForLayout(GalleryLayoutMode mode)
+        {
+            if (VPBConfig.Instance == null) return false;
+            string m = VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode);
+            if (string.Equals(m, "Off", StringComparison.OrdinalIgnoreCase)) return false;
+            if (string.Equals(m, "Both", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(m, "List", StringComparison.OrdinalIgnoreCase)) return mode == GalleryLayoutMode.List;
+            if (string.Equals(m, "Grid", StringComparison.OrdinalIgnoreCase)) return mode == GalleryLayoutMode.Grid;
+            return mode == GalleryLayoutMode.List;
+        }
+
+        public void ShowHoverPreview(FileEntry file)
+        {
+            if (!CanShowHoverPreviewForLayout(layoutMode)) { HideHoverPreview(file); return; }
+            if (file == null) { HideHoverPreview(file); return; }
+            if (hoverPreviewGO == null || hoverPreviewRT == null || hoverPreviewImage == null) return;
+
+            hoverPreviewDummyActive = false;
+            hoverPreviewFile = file;
+            UpdateHoverPreviewLayout();
+            hoverPreviewGO.SetActive(true);
+
+            // Use the same thumbnail resolution logic, but ignore grid-only plugin hiding.
+            hoverPreviewImage.color = Color.white;
+            LoadThumbnail(file, hoverPreviewImage, gridThumbnailContext: false);
+        }
+
+        public void HideHoverPreview(FileEntry file)
+        {
+            if (hoverPreviewGO == null) return;
+            if (file != null && hoverPreviewFile != null && !ReferenceEquals(file, hoverPreviewFile)) return;
+            hoverPreviewFile = null;
+            if (!hoverPreviewDummyActive)
+                hoverPreviewGO.SetActive(false);
+        }
+
+        public void SetHoverPreviewDummyActive(bool active)
+        {
+            hoverPreviewDummyActive = active;
+            if (!active && hoverPreviewGO != null && hoverPreviewFile == null)
+            {
+                hoverPreviewGO.SetActive(false);
+            }
+            UpdateHoverPreviewLayout();
+        }
+
+        public void RefreshHoverPreviewLayoutImmediate()
+        {
+            UpdateHoverPreviewLayout();
+        }
+
+        private void UpdateHoverPreviewLayout()
+        {
+            if (hoverPreviewRT == null) return;
+            if (hoverPreviewGO != null)
+            {
+                bool shouldBeVisible = CanShowHoverPreviewForLayout(layoutMode) && (hoverPreviewFile != null || hoverPreviewDummyActive);
+                if (!shouldBeVisible)
+                {
+                    hoverPreviewGO.SetActive(false);
+                    return;
+                }
+            }
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+
+            float size = 300f;
+            if (VPBConfig.Instance != null) size = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewSize, 200f, 600f);
+
+            float ox = 0f;
+            float oy = 0f;
+            if (VPBConfig.Instance != null)
+            {
+                ox = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetX, -2000f, 2000f);
+                oy = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetY, -2000f, 2000f);
+            }
+
+            float x = (10f + ox) * s;
+            float y = GalleryMainAreaBottomInset() + ((6f + oy) * s);
+
+            hoverPreviewRT.anchoredPosition = new Vector2(x, y);
+            hoverPreviewRT.sizeDelta = new Vector2(size, size);
+
+            if (hoverPreviewGO != null)
+                hoverPreviewGO.SetActive(true);
+            if (hoverPreviewImage != null && hoverPreviewDummyActive && hoverPreviewFile == null)
+            {
+                hoverPreviewImage.texture = null;
+                hoverPreviewImage.color = new Color(1f, 1f, 1f, 0.18f);
+            }
+            else if (hoverPreviewImage != null && hoverPreviewFile != null)
+            {
+                // Ensure dummy alpha doesn't stick while the real preview loads.
+                if (hoverPreviewImage.color.a < 0.95f) hoverPreviewImage.color = Color.white;
+            }
         }
 
         public void UpdatePaginationText()

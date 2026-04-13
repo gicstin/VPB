@@ -265,8 +265,29 @@ namespace VPB
         public bool PluginGalleryGridThumbnails = true;
         /// <summary>When true, gallery list layout uses each item's file name (legacy). When false (default), .var rows show Creator.Package.Version (package uid, no .var suffix).</summary>
         public bool GalleryListNamesLegacyFileName = false;
+        /// <summary>Which layout(s) show the hover preview. Off, List, Grid, or Both. Default: List.</summary>
+        public string GalleryHoverPreviewMode = "List";
+        /// <summary>Square preview size (pixels) for List layout hover preview.</summary>
+        public float GalleryListHoverPreviewSize = 300f;
+        /// <summary>X offset (pixels) from the default bottom-left dock point for the List layout hover preview.</summary>
+        public float GalleryListHoverPreviewOffsetX = 0f;
+        /// <summary>Y offset (pixels) from the default bottom-left dock point for the List layout hover preview.</summary>
+        public float GalleryListHoverPreviewOffsetY = 0f;
         /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
         public bool GalleryTboxToolbarPinned = false;
+
+        private static readonly string[] s_HoverPreviewModeCanonical = { "Off", "List", "Grid", "Both" };
+        public static string NormalizeHoverPreviewMode(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "List";
+            string v = value.Trim();
+            for (int i = 0; i < s_HoverPreviewModeCanonical.Length; i++)
+            {
+                if (string.Equals(v, s_HoverPreviewModeCanonical[i], StringComparison.OrdinalIgnoreCase))
+                    return s_HoverPreviewModeCanonical[i];
+            }
+            return "List";
+        }
 
         /// <summary>Maps user/config values to a canonical option; unknown values become "Scenes".</summary>
         public static string NormalizeInitialGalleryCategory(string value)
@@ -523,6 +544,13 @@ namespace VPB
                         if (node["GalleryShowHiddenPackages"] != null) GalleryShowHiddenPackages = node["GalleryShowHiddenPackages"].AsBool;
                         if (node["PluginGalleryGridThumbnails"] != null) PluginGalleryGridThumbnails = node["PluginGalleryGridThumbnails"].AsBool;
                         if (node["GalleryListNamesLegacyFileName"] != null) GalleryListNamesLegacyFileName = node["GalleryListNamesLegacyFileName"].AsBool;
+                        if (node["GalleryHoverPreviewMode"] != null)
+                            GalleryHoverPreviewMode = NormalizeHoverPreviewMode(node["GalleryHoverPreviewMode"].Value);
+                        else if (node["GalleryListHoverPreviewEnabled"] != null)
+                            GalleryHoverPreviewMode = node["GalleryListHoverPreviewEnabled"].AsBool ? "List" : "Off";
+                        if (node["GalleryListHoverPreviewSize"] != null) GalleryListHoverPreviewSize = Mathf.Clamp(node["GalleryListHoverPreviewSize"].AsFloat, 200f, 600f);
+                        if (node["GalleryListHoverPreviewOffsetX"] != null) GalleryListHoverPreviewOffsetX = Mathf.Clamp(node["GalleryListHoverPreviewOffsetX"].AsFloat, -2000f, 2000f);
+                        if (node["GalleryListHoverPreviewOffsetY"] != null) GalleryListHoverPreviewOffsetY = Mathf.Clamp(node["GalleryListHoverPreviewOffsetY"].AsFloat, -2000f, 2000f);
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["InnerPaneScale"] != null) InnerPaneScale = node["InnerPaneScale"].AsFloat;
@@ -649,6 +677,10 @@ namespace VPB
                 node["GalleryShowHiddenPackages"].AsBool = GalleryShowHiddenPackages;
                 node["PluginGalleryGridThumbnails"].AsBool = PluginGalleryGridThumbnails;
                 node["GalleryListNamesLegacyFileName"].AsBool = GalleryListNamesLegacyFileName;
+                node["GalleryHoverPreviewMode"] = NormalizeHoverPreviewMode(GalleryHoverPreviewMode);
+                node["GalleryListHoverPreviewSize"].AsFloat = GalleryListHoverPreviewSize;
+                node["GalleryListHoverPreviewOffsetX"].AsFloat = GalleryListHoverPreviewOffsetX;
+                node["GalleryListHoverPreviewOffsetY"].AsFloat = GalleryListHoverPreviewOffsetY;
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["InnerPaneScale"].AsFloat = InnerPaneScale;

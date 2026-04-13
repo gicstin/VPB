@@ -501,6 +501,26 @@ namespace VPB
     }
 
     /// <summary>
+    /// Hovering the thumbnail shows an anchored larger preview (bottom-left above the tbox).
+    /// Bound per-row because list/grid rows are recycled.
+    /// </summary>
+    public class UIHoverPreviewTrigger : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public GalleryPanel panel;
+        public FileEntry file;
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            try { if (panel != null && file != null) panel.ShowHoverPreview(file); } catch { }
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            try { if (panel != null) panel.HideHoverPreview(file); } catch { }
+        }
+    }
+
+    /// <summary>
     /// Forces a layout element to have a height based on its current width (or vice versa).
     /// Used for 1:1 aspect ratio thumbnails in VerticalLayoutGroups.
     /// </summary>
