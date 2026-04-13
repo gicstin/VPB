@@ -263,7 +263,10 @@
   "gallery.hub.loading": "載入中心...",
   "gallery.hub.all": "全部",
 
+  "gallery.tbox.copy_names": "複製名稱",
   "gallery.tbox.copy_names_count": "複製名稱 ({0})",
+  "gallery.tooltip.tbox_copy_names": "將所選 .var 名稱與本地 Saves/scene 路徑複製到剪貼簿。按住 Ctrl 可複製完整路徑。",
+  "gallery.tooltip.tbox_copy_names_fullpaths": "將所選套件與本地場景的磁碟完整路徑複製到剪貼簿。放開 Ctrl 可複製名稱。",
   "gallery.tbox.delete_count": "刪除 ({0})",
   "gallery.tbox.unhide": "取消隱藏",
   "gallery.tbox.hide_count": "隱藏 ({0})",

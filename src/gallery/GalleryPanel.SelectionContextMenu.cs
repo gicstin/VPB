@@ -46,6 +46,9 @@ namespace VPB
         private Sprite tboxClipboardCheckSprite;
         private Image  tboxCopyNamesIconImage;
         private Coroutine tboxCopyNamesIconPulseCo;
+        private Coroutine tboxCopyNamesTooltipCo;
+        private bool tboxCopyNamesTooltipHovered = false;
+        private string tboxCopyNamesTooltipLast = null;
 
         // Responsive tbox action buttons: 1–2 rows, flexible widths
         private GameObject    tboxButtonsFlexRoot;
@@ -494,7 +497,7 @@ namespace VPB
             );
             tboxCopyPkgNamesBtn.name = "Tbox_CopyPackageNames";
             TboxConfigureActionButtonFlex(tboxCopyPkgNamesBtn, innerRowH, innerRowH, innerRowH); // square icon button
-            AddTooltip(tboxCopyPkgNamesBtn, "gallery.tooltip.tbox_copy_names", "Copy package .var names and local Saves/scene paths (one per line) to clipboard");
+            WireCopyNamesTooltip(tboxCopyPkgNamesBtn);
             try
             {
                 tboxClipboardListSprite  = UI.LoadIconSprite("vpb_icons/clipboard_list.png",  new Color(0.92f, 0.92f, 0.92f, 1f));
@@ -1092,6 +1095,109 @@ namespace VPB
 
         // ─────────────────────────────────────────────────────────────────────────
 
+        private static bool IsCtrlHeld()
+        {
+            try
+            {
+                return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            }
+            catch { return false; }
+        }
+
+        private string GetCopyNamesTooltipText(bool ctrlHeld)
+        {
+            if (ctrlHeld)
+                return VPBTranslation.T(
+                    "gallery.tooltip.tbox_copy_names_fullpaths",
+                    "Copy full disk paths for selected packages and local scenes to clipboard. Release Ctrl to copy names."
+                );
+
+            return VPBTranslation.T(
+                "gallery.tooltip.tbox_copy_names",
+                "Copy selected package .var names and local Saves/scene paths to clipboard. Hold Ctrl to copy full paths."
+            );
+        }
+
+        private void WireCopyNamesTooltip(GameObject copyNamesBtn)
+        {
+            if (copyNamesBtn == null) return;
+            var del = copyNamesBtn.GetComponent<UIHoverDelegate>();
+            if (del == null) del = copyNamesBtn.AddComponent<UIHoverDelegate>();
+            del.OnHoverChange += OnCopyNamesTooltipHoverChange;
+        }
+
+        private void OnCopyNamesTooltipHoverChange(bool enter)
+        {
+            try
+            {
+                if (enter)
+                {
+                    tboxCopyNamesTooltipHovered = true;
+
+                    if (temporaryStatusCoroutine != null)
+                    {
+                        StopCoroutine(temporaryStatusCoroutine);
+                        temporaryStatusCoroutine = null;
+                    }
+
+                    if (tboxCopyNamesTooltipCo != null)
+                    {
+                        StopCoroutine(tboxCopyNamesTooltipCo);
+                        tboxCopyNamesTooltipCo = null;
+                    }
+
+                    // Set immediately, then keep it responsive to Ctrl state while hovered.
+                    tboxCopyNamesTooltipLast = GetCopyNamesTooltipText(IsCtrlHeld());
+                    temporaryStatusMsg = tboxCopyNamesTooltipLast;
+                    tboxCopyNamesTooltipCo = StartCoroutine(CopyNamesTooltipCoroutine());
+                }
+                else
+                {
+                    tboxCopyNamesTooltipHovered = false;
+                    if (tboxCopyNamesTooltipCo != null)
+                    {
+                        StopCoroutine(tboxCopyNamesTooltipCo);
+                        tboxCopyNamesTooltipCo = null;
+                    }
+
+                    // Only clear if we still own the tooltip text.
+                    if (!string.IsNullOrEmpty(tboxCopyNamesTooltipLast) && temporaryStatusMsg == tboxCopyNamesTooltipLast)
+                        temporaryStatusMsg = null;
+                    tboxCopyNamesTooltipLast = null;
+                }
+            }
+            catch { }
+        }
+
+        private IEnumerator CopyNamesTooltipCoroutine()
+        {
+            // Update at a low rate; this is just for modifier-key responsiveness.
+            var wait = new WaitForSecondsRealtime(0.05f);
+            while (tboxCopyNamesTooltipHovered)
+            {
+                string msg = null;
+                try { msg = GetCopyNamesTooltipText(IsCtrlHeld()); } catch { msg = null; }
+
+                if (!string.IsNullOrEmpty(msg) && msg != tboxCopyNamesTooltipLast)
+                {
+                    // Only replace if we still own the tooltip slot.
+                    if (temporaryStatusMsg == tboxCopyNamesTooltipLast || string.IsNullOrEmpty(temporaryStatusMsg))
+                    {
+                        temporaryStatusMsg = msg;
+                        tboxCopyNamesTooltipLast = msg;
+                    }
+                    else
+                    {
+                        // Another tooltip/status took over; stop updating.
+                        break;
+                    }
+                }
+
+                yield return wait;
+            }
+            tboxCopyNamesTooltipCo = null;
+        }
+
         private void CopySelectedPackageNamesToClipboard()
         {
             try
@@ -1102,25 +1208,59 @@ namespace VPB
                     return;
                 }
 
+                bool fullPaths = IsCtrlHeld();
+
                 var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
-                var localScenes = CollectUniqueLocalSceneGalleryRelativePathsFromSelection(selectedFiles);
-                if (uids.Count == 0 && localScenes.Count == 0)
+                var list = new List<string>(uids.Count + 32);
+
+                // Packages
+                foreach (var uid in uids)
+                {
+                    if (string.IsNullOrEmpty(uid)) continue;
+                    if (!fullPaths)
+                    {
+                        list.Add(uid + ".var");
+                        continue;
+                    }
+
+                    string p = null;
+                    try { p = ResolveVarPathForUid(uid); } catch { p = null; }
+                    if (!string.IsNullOrEmpty(p))
+                    {
+                        try { p = FileManager.GetFullPath(p); } catch { }
+                    }
+                    list.Add(!string.IsNullOrEmpty(p) ? p : (uid + ".var"));
+                }
+
+                // Local scenes (Saves/scene/*.json)
+                if (selectedFiles != null)
+                {
+                    for (int i = 0; i < selectedFiles.Count; i++)
+                    {
+                        var f = selectedFiles[i];
+                        if (f == null) continue;
+                        if (!LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out string abs, out string rel, false))
+                            continue;
+
+                        string add = fullPaths ? abs : rel;
+                        if (!string.IsNullOrEmpty(add))
+                            list.Add(add.Replace('\\', '/'));
+                    }
+                }
+
+                if (list.Count == 0)
                 {
                     ShowTemporaryStatus("No package or local scene paths in selection.");
                     return;
                 }
-
-                var list = new List<string>(uids.Count + localScenes.Count);
-                foreach (var uid in uids)
-                    list.Add(uid + ".var");
-                foreach (var rel in localScenes)
-                    list.Add(rel);
                 list.Sort(StringComparer.OrdinalIgnoreCase);
 
                 string text = string.Join("\n", list.ToArray());
 
                 GUIUtility.systemCopyBuffer = text;
-                ShowTemporaryStatus($"Copied {list.Count} name(s) to clipboard.", 2f);
+                ShowTemporaryStatus(fullPaths
+                    ? $"Copied {list.Count} full path(s) to clipboard."
+                    : $"Copied {list.Count} name(s) to clipboard.", 2f);
                 TryPulseTboxCopyNamesIcon();
             }
             catch (Exception ex)
