@@ -14,6 +14,41 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
+        /// <summary>
+        /// Splits a search query into lowercase terms (whitespace separated), removing empties.
+        /// </summary>
+        internal static string[] SplitSearchTerms(string query)
+        {
+            // .NET 3.5 compatibility: no string.IsNullOrWhiteSpace / Array.Empty<T>()
+            if (query == null) return new string[0];
+            query = query.Trim();
+            if (query.Length == 0) return new string[0];
+
+            // Avoid allocations for common small queries.
+            string[] raw = query.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            if (raw.Length == 0) return new string[0];
+            for (int i = 0; i < raw.Length; i++)
+                raw[i] = raw[i].ToLowerInvariant();
+            return raw;
+        }
+
+        /// <summary>True if every term appears in either <paramref name="a"/> or <paramref name="b"/> (case-insensitive).</summary>
+        internal static bool MatchesAllTermsInEither(string a, string b, string[] termsLower)
+        {
+            if (termsLower == null || termsLower.Length == 0) return true;
+            if (a == null) a = "";
+            if (b == null) b = "";
+            for (int i = 0; i < termsLower.Length; i++)
+            {
+                string t = termsLower[i];
+                if (string.IsNullOrEmpty(t)) continue;
+                if (a.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                if (b.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                return false;
+            }
+            return true;
+        }
+
         /// <summary>VAR zip paths often use '\'; category roots use '/'. Matches Browser Assist-style Custom/Scripts checks.</summary>
         private static string GalleryNormalizePathSlashes(string p)
         {

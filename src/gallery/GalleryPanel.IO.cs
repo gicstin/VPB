@@ -465,7 +465,7 @@ namespace VPB
 
             // If filter mode is entered while the top search is narrowing the list, "Clear Filter"
             // should return to the full category list (not the search snapshot).
-            try { filterEnteredFromTopSearch = !string.IsNullOrEmpty(nameFilterLower); } catch { filterEnteredFromTopSearch = false; }
+            try { filterEnteredFromTopSearch = nameFilterTerms != null && nameFilterTerms.Length > 0; } catch { filterEnteredFromTopSearch = false; }
         }
 
         private void ApplyFilteredList(List<FileEntry> filtered, string desc)
@@ -476,7 +476,7 @@ namespace VPB
             if (IsFilterActive)
             {
                 filterSearchBaseFiles = new List<FileEntry>(filtered);
-                filterSearchLower = string.IsNullOrEmpty(nameFilterLower) ? "" : nameFilterLower;
+                filterSearchLower = nameFilter ?? "";
                 filtered = BuildFilterModeView(filterSearchBaseFiles, filterSearchLower);
             }
 
@@ -500,7 +500,7 @@ namespace VPB
         public void ApplySearchWithinFilter(string query)
         {
             if (!IsFilterActive) return;
-            filterSearchLower = string.IsNullOrEmpty(query) ? "" : query.ToLowerInvariant();
+            filterSearchLower = query ?? "";
 
             if (filterSearchBaseFiles == null) filterSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
 
@@ -521,10 +521,11 @@ namespace VPB
             ScrollGalleryToTop();
         }
 
-        private List<FileEntry> BuildFilterModeView(List<FileEntry> baseList, string searchLower)
+        private List<FileEntry> BuildFilterModeView(List<FileEntry> baseList, string searchQuery)
         {
             var source = baseList ?? new List<FileEntry>();
-            bool needSearch = !string.IsNullOrEmpty(searchLower);
+            string[] terms = SplitSearchTerms(searchQuery);
+            bool needSearch = terms != null && terms.Length > 0;
             var result = new List<FileEntry>();
 
             for (int i = 0; i < source.Count; i++)
@@ -547,8 +548,7 @@ namespace VPB
                 string n = null;
                 try { p = e.Path; } catch { }
                 try { n = e.Name; } catch { }
-                if ((!string.IsNullOrEmpty(p) && p.IndexOf(searchLower, StringComparison.OrdinalIgnoreCase) >= 0) ||
-                    (!string.IsNullOrEmpty(n) && n.IndexOf(searchLower, StringComparison.OrdinalIgnoreCase) >= 0))
+                if (MatchesAllTermsInEither(p, n, terms))
                     result.Add(e);
             }
             return result;
@@ -637,7 +637,8 @@ namespace VPB
             // but restrict the package set to the UID list.
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             bool hasExt = extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
-            bool hasNameFilt = !string.IsNullOrEmpty(nameFilterLower);
+            string[] nameTerms = nameFilterTerms;
+            bool hasNameFilt = nameTerms != null && nameTerms.Length > 0;
 
             foreach (var uid in uids)
             {
@@ -722,9 +723,7 @@ namespace VPB
                     if (!pathOk) continue;
 
                     // Name filter
-                    if (hasNameFilt &&
-                        pkg.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0 &&
-                        ip.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (hasNameFilt && !MatchesAllTermsInEither(pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
 
                     var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
 
@@ -1432,11 +1431,9 @@ namespace VPB
             }
 
             // Name Filter
-            if (!string.IsNullOrEmpty(nameFilterLower))
-            {
-                if (entry.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
+            if (nameFilterTerms != null && nameFilterTerms.Length > 0)
+                if (!MatchesAllTermsInEither(entry.Path, "", nameFilterTerms))
                     return false;
-            }
 
             // Tag Filter
             if (activeTags != null && activeTags.Count > 0)
@@ -1621,7 +1618,8 @@ namespace VPB
                     ? new string[0]
                     : currentExtension.Split('|');
                 bool hasExt = extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
-                bool hasNameFilt = !string.IsNullOrEmpty(nameFilterLower);
+                string[] nameTerms = nameFilterTerms;
+                bool hasNameFilt = nameTerms != null && nameTerms.Length > 0;
 
                 var newEntries = new List<FileEntry>();
                 foreach (var pkg in added)
@@ -1688,9 +1686,7 @@ namespace VPB
                         if (!pathOk) continue;
 
                         // Name filter
-                        if (hasNameFilt &&
-                            pkg.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0 &&
-                            ip.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        if (hasNameFilt && !MatchesAllTermsInEither(pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
 
                         var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
 
@@ -1816,7 +1812,7 @@ namespace VPB
             if (!string.IsNullOrEmpty(currentRatingFilter)) return false;
             if (!string.IsNullOrEmpty(currentSizeFilter)) return false;
             if (!string.IsNullOrEmpty(currentSceneSourceFilter)) return false;
-            if (!string.IsNullOrEmpty(nameFilterLower)) return false;
+            if (nameFilterTerms != null && nameFilterTerms.Length > 0) return false;
             if (activeTags != null && activeTags.Count > 0) return false;
             if (wantsPoseCountsLocal || posePeopleFilter != PosePeopleFilter.All) return false;
 
@@ -1943,7 +1939,8 @@ namespace VPB
             }
             
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
-            bool hasNameFilter = !string.IsNullOrEmpty(nameFilterLower);
+            string[] nameTerms = nameFilterTerms;
+            bool hasNameFilter = nameTerms != null && nameTerms.Length > 0;
 
             int tagScanRefreshSeq = GalleryFileRefreshSequence;
             TagParallelWaiter tagParallelWaiterForThisRun = null;
@@ -2272,9 +2269,7 @@ namespace VPB
 
                                 if (hasNameFilter)
                                 {
-                                    if (listPath.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0
-                                        && internalPath.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
-                                        continue;
+                                    if (!MatchesAllTermsInEither(listPath, internalPath, nameTerms)) continue;
                                 }
 
                                 // Clothing: with an active subfilter, avoid ClassifyClothingHairPath per row when the SQLite
@@ -2377,11 +2372,7 @@ namespace VPB
 
                                     if (hasNameFilter)
                                     {
-                                        if (pkg.Path.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0
-                                            && internalPath.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) < 0)
-                                        {
-                                            continue;
-                                        }
+                                        if (!MatchesAllTermsInEither(pkg != null ? pkg.Path : "", internalPath, nameTerms)) continue;
                                     }
 
                                     DateTime entryTime = pkg != null ? pkg.LastWriteTime : DateTime.MinValue;
@@ -3402,6 +3393,7 @@ namespace VPB
                     {
                         nameFilter = "";
                         nameFilterLower = "";
+                            nameFilterTerms = new string[0];
                         if (titleSearchInput != null) titleSearchInput.text = "";
                     }
                     catch { }

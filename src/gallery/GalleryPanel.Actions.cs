@@ -532,6 +532,7 @@ namespace VPB
             if (f == nameFilter) return;
             nameFilter = f;
             nameFilterLower = string.IsNullOrEmpty(f) ? "" : f.ToLowerInvariant();
+            nameFilterTerms = SplitSearchTerms(f);
 
             // In package filter mode, keep search scoped to the current filtered list
             // (do not refresh the whole gallery, which would clear filter mode).
@@ -546,7 +547,7 @@ namespace VPB
             if (topSearchBaseFiles == null)
                 topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
 
-            if (string.IsNullOrEmpty(nameFilterLower))
+            if (nameFilterTerms == null || nameFilterTerms.Length == 0)
             {
                 currentFilteredFiles.Clear();
                 currentFilteredFiles.AddRange(topSearchBaseFiles);
@@ -554,25 +555,105 @@ namespace VPB
             }
             else
             {
-                var filtered = new List<FileEntry>();
-                for (int i = 0; i < topSearchBaseFiles.Count; i++)
+                // Fast path for package list rows (dependency filters): query SQLite for matching packages,
+                // then rebuild results in the same order as the base list.
+                bool isPackageList = false;
+                try
                 {
-                    var e = topSearchBaseFiles[i];
-                    if (e == null) continue;
-                    string p = null;
-                    try { p = e.Path; } catch { p = null; }
-                    if (!string.IsNullOrEmpty(p) && p.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (topSearchBaseFiles.Count > 0)
                     {
-                        filtered.Add(e);
-                        continue;
+                        var head = topSearchBaseFiles[0];
+                        isPackageList = head is PackageListEntry || head is MissingPackageListEntry;
                     }
-                    string n = null;
-                    try { n = e.Name; } catch { n = null; }
-                    if (!string.IsNullOrEmpty(n) && n.IndexOf(nameFilterLower, StringComparison.OrdinalIgnoreCase) >= 0)
-                        filtered.Add(e);
                 }
-                currentFilteredFiles.Clear();
-                currentFilteredFiles.AddRange(filtered);
+                catch { isPackageList = false; }
+
+                if (isPackageList)
+                {
+                    var allowedUids = new List<string>(topSearchBaseFiles.Count);
+                    for (int i = 0; i < topSearchBaseFiles.Count; i++)
+                    {
+                        var e = topSearchBaseFiles[i];
+                        if (e == null) continue;
+                        // PackageListEntry.Name is "<uid>.var" for both live and indexed rows.
+                        string n = null;
+                        try { n = e.Name; } catch { n = null; }
+                        if (string.IsNullOrEmpty(n)) continue;
+                        if (n.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+                            n = n.Substring(0, n.Length - 4);
+                        if (!string.IsNullOrEmpty(n))
+                            allowedUids.Add(n);
+                    }
+
+                    var pkgRows = new List<VpbLocalDatabase.PackageRow>();
+                    bool gotSql = false;
+                    try
+                    {
+                        gotSql = VpbLocalDatabase.TryQueryPackageRowsForUidsWithAllTerms(allowedUids, nameFilterTerms, pkgRows);
+                    }
+                    catch { gotSql = false; }
+
+                    if (gotSql)
+                    {
+                        var byUid = new Dictionary<string, VpbLocalDatabase.PackageRow>(pkgRows.Count, StringComparer.OrdinalIgnoreCase);
+                        for (int i = 0; i < pkgRows.Count; i++)
+                        {
+                            var r = pkgRows[i];
+                            if (!string.IsNullOrEmpty(r.PackageUid))
+                                byUid[r.PackageUid] = r;
+                        }
+
+                        currentFilteredFiles.Clear();
+                        for (int i = 0; i < allowedUids.Count; i++)
+                        {
+                            var uid = allowedUids[i];
+                            if (string.IsNullOrEmpty(uid)) continue;
+                            if (!byUid.TryGetValue(uid, out var r)) continue;
+                            DateTime wt = DateTime.MinValue;
+                            if (r.LastWriteTicksOrInvalid != long.MinValue)
+                            {
+                                try { wt = DateTime.FromBinary(r.LastWriteTicksOrInvalid); } catch { wt = DateTime.MinValue; }
+                            }
+                            currentFilteredFiles.Add(new PackageListEntry(r.PackageUid, r.VarPath, wt, r.PackageSizeOrInvalid, r.PackageCreationTicksOrInvalid));
+                        }
+                    }
+                    else
+                    {
+                        // Fallback: tokenized in-memory filter.
+                        var filtered = new List<FileEntry>();
+                        for (int i = 0; i < topSearchBaseFiles.Count; i++)
+                        {
+                            var e = topSearchBaseFiles[i];
+                            if (e == null) continue;
+                            string p = null;
+                            string n = null;
+                            try { p = e.Path; } catch { p = null; }
+                            try { n = e.Name; } catch { n = null; }
+                            if (MatchesAllTermsInEither(p, n, nameFilterTerms))
+                                filtered.Add(e);
+                        }
+                        currentFilteredFiles.Clear();
+                        currentFilteredFiles.AddRange(filtered);
+                    }
+                }
+                else
+                {
+                    // Default: tokenized in-memory search (AND semantics across terms).
+                    var filtered = new List<FileEntry>();
+                    for (int i = 0; i < topSearchBaseFiles.Count; i++)
+                    {
+                        var e = topSearchBaseFiles[i];
+                        if (e == null) continue;
+                        string p = null;
+                        string n = null;
+                        try { p = e.Path; } catch { p = null; }
+                        try { n = e.Name; } catch { n = null; }
+                        if (MatchesAllTermsInEither(p, n, nameFilterTerms))
+                            filtered.Add(e);
+                    }
+                    currentFilteredFiles.Clear();
+                    currentFilteredFiles.AddRange(filtered);
+                }
             }
 
             if (recyclingGrid != null)

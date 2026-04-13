@@ -1775,6 +1775,143 @@ namespace VPB
             }
         }
 
+        private static string EscapeLike(string term)
+        {
+            if (string.IsNullOrEmpty(term)) return "";
+            // Escape LIKE wildcards and the escape character itself.
+            return term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+        }
+
+        /// <summary>
+        /// Reads package rows for a scoped ordered list of UIDs, applying an AND-of-terms filter on <c>pkg.uid</c> using SQL LIKE.
+        /// Returns false if the index is unavailable or stale.
+        /// </summary>
+        internal static bool TryQueryPackageRowsForUidsWithAllTerms(List<string> orderedUids, string[] termsLower, List<PackageRow> outRows)
+        {
+            outRows.Clear();
+            if (orderedUids == null || orderedUids.Count == 0) return true;
+            if (termsLower == null || termsLower.Length == 0) return TryQueryPackageRowsForUids(new HashSet<string>(orderedUids, StringComparer.OrdinalIgnoreCase), outRows);
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            long scanBin = 0;
+            try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+
+            long readyScan = long.MinValue;
+            string catSig = null;
+            lock (s_Sync)
+            {
+                readyScan = s_ReadyScanBinary;
+                catSig = s_ReadyCategoriesSig;
+            }
+
+            // Require a published index for the current package inventory.
+            if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+                return false;
+
+            try
+            {
+                const int chunkSize = 350; // leave headroom for term binds
+                var chunk = new List<string>(chunkSize);
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    for (int i = 0; i < orderedUids.Count; i++)
+                    {
+                        string uid = orderedUids[i];
+                        if (string.IsNullOrEmpty(uid)) continue;
+                        chunk.Add(uid);
+                        if (chunk.Count < chunkSize) continue;
+                        if (!TryQueryPackageRowsChunkWithTerms(conn, chunk, termsLower, outRows)) return false;
+                        chunk.Clear();
+                    }
+                    if (chunk.Count > 0)
+                    {
+                        if (!TryQueryPackageRowsChunkWithTerms(conn, chunk, termsLower, outRows)) return false;
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                outRows.Clear();
+                return false;
+            }
+        }
+
+        private static bool TryQueryPackageRowsChunkWithTerms(VpbSqlite3.Connection conn, List<string> chunkUids, string[] termsLower, List<PackageRow> outRows)
+        {
+            if (conn == null || chunkUids == null || chunkUids.Count == 0) return true;
+
+            var sb = new StringBuilder(128 + chunkUids.Count * 2 + (termsLower != null ? termsLower.Length * 32 : 0));
+            sb.Append("SELECT uid, ifnull(var_path,''), wtime, psize, pctime, ifnull(loaded,'') FROM pkg WHERE uid IN (");
+            for (int i = 0; i < chunkUids.Count; i++)
+            {
+                if (i != 0) sb.Append(',');
+                sb.Append('?');
+            }
+            sb.Append(')');
+            if (termsLower != null && termsLower.Length > 0)
+            {
+                for (int t = 0; t < termsLower.Length; t++)
+                {
+                    if (string.IsNullOrEmpty(termsLower[t])) continue;
+                    sb.Append(" AND uid LIKE ? ESCAPE '\\'");
+                }
+            }
+            sb.Append(';');
+
+            using (var st = conn.Prepare(sb.ToString()))
+            {
+                int bind = 1;
+                for (int i = 0; i < chunkUids.Count; i++)
+                    st.BindText(bind++, chunkUids[i]);
+
+                if (termsLower != null && termsLower.Length > 0)
+                {
+                    for (int t = 0; t < termsLower.Length; t++)
+                    {
+                        string term = termsLower[t];
+                        if (string.IsNullOrEmpty(term)) continue;
+                        string pat = "%" + EscapeLike(term) + "%";
+                        st.BindText(bind++, pat);
+                    }
+                }
+
+                int step;
+                while ((step = st.Step()) == VpbSqlite3.SqliteRow)
+                {
+                    PackageRow r;
+                    r.PackageUid = st.ColumnText(0) ?? "";
+                    r.VarPath = st.ColumnText(1) ?? "";
+                    r.LastWriteTicksOrInvalid = long.MinValue;
+                    r.PackageSizeOrInvalid = long.MinValue;
+                    r.PackageCreationTicksOrInvalid = long.MinValue;
+                    r.PackageIsLoaded = false;
+
+                    string wtxt = st.ColumnText(2);
+                    string sztxt = st.ColumnText(3);
+                    string ctxt = st.ColumnText(4);
+                    string loadedTxt = st.ColumnText(5) ?? "";
+
+                    long wtL, szL, ctL;
+                    if (!string.IsNullOrEmpty(wtxt) && long.TryParse(wtxt, out wtL))
+                        r.LastWriteTicksOrInvalid = wtL;
+                    if (!string.IsNullOrEmpty(sztxt) && long.TryParse(sztxt, out szL))
+                        r.PackageSizeOrInvalid = szL;
+                    if (!string.IsNullOrEmpty(ctxt) && long.TryParse(ctxt, out ctL))
+                        r.PackageCreationTicksOrInvalid = ctL;
+                    int loadedInt = 0;
+                    if (!string.IsNullOrEmpty(loadedTxt) && int.TryParse(loadedTxt, out loadedInt))
+                        r.PackageIsLoaded = loadedInt != 0;
+                    else
+                        r.PackageIsLoaded = ComputePackageLoadedFlagFromVarPath(r.VarPath) != 0;
+
+                    if (!string.IsNullOrEmpty(r.PackageUid))
+                        outRows.Add(r);
+                }
+            }
+            return true;
+        }
+
         private static bool TryQueryPackageRowsChunk(VpbSqlite3.Connection conn, List<string> chunkUids, List<PackageRow> outRows)
         {
             if (conn == null || chunkUids == null || chunkUids.Count == 0) return true;

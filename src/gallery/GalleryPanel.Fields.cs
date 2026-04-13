@@ -402,6 +402,8 @@ namespace VPB
         
         private string nameFilter = "";
         private string nameFilterLower = "";
+        // Tokenized search terms (lowercased, whitespace-split). Enables multi-term search like "acid timeline".
+        private string[] nameFilterTerms = new string[0];
 
         // Tagging
         private List<string> currentPaths = new List<string>();
