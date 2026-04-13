@@ -578,6 +578,9 @@ namespace VPB
             if (recyclingGrid != null)
             {
                 recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                // Search should start at the top of results; otherwise the previous scroll position
+                // can clamp to the bottom when the filtered list is shorter.
+                ScrollGalleryToTop();
                 recyclingGrid.Refresh();
             }
             try { UpdatePaginationText(); } catch { }

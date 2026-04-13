@@ -517,6 +517,8 @@ namespace VPB
             catch { }
             try { UpdatePaginationText(); } catch { }
             RefreshRecycleGridAfterFilterChange();
+            // Filter-mode search should also start at top of the narrowed results.
+            ScrollGalleryToTop();
         }
 
         private List<FileEntry> BuildFilterModeView(List<FileEntry> baseList, string searchLower)
