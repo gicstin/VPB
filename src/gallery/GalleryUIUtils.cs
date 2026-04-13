@@ -17,6 +17,28 @@ namespace VPB
     {
         private static float _lastLoadSceneStartTime = -9999f;
 
+        private static void TryRefreshEntryDisplayPathAfterVarMoves(FileEntry entry)
+        {
+            if (entry == null) return;
+            try
+            {
+                if (entry is VarFileEntry vfe)
+                {
+                    vfe.TryRefreshPathsFromLivePackage();
+                }
+                else if (entry is PackageListEntry ple)
+                {
+                    ple.RefreshPathsFromPackage();
+                }
+                else if (entry is SystemFileEntry sfe)
+                {
+                    if (sfe.isVar && sfe.package != null)
+                        sfe.RefreshVarDisplayPathFromPackage();
+                }
+            }
+            catch { }
+        }
+
         private static IEnumerator DisableSuppressionAfterSceneLoad()
         {
             LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Waiting for scene to finish loading...");
@@ -69,6 +91,11 @@ namespace VPB
 
         public static void LoadSceneFile(FileEntry entry)
         {
+            LoadSceneFile(entry, null);
+        }
+
+        public static void LoadSceneFile(FileEntry entry, GalleryPanel panel)
+        {
             if (entry == null) return;
 
             // Guard against duplicate triggers in the same click/frame burst.
@@ -87,6 +114,7 @@ namespace VPB
                 LogUtil.Log($"[VPB] UI.LoadSceneFile started for: {path}");
                 
                 bool installed = false;
+                List<string> movedUids = null;
                 
                 // Suppress gallery auto-refresh to preserve scroll position and state
                 // Must activate BEFORE EnsureInstalled since it may trigger FileManager.Refresh internally
@@ -96,7 +124,8 @@ namespace VPB
                 {
                     Gallery.SuppressAutoRefresh(true);
                     
-                    installed = EnsureInstalled(entry);
+                    movedUids = new List<string>(32);
+                    installed = EnsureInstalled(entry, movedUids);
                     LogUtil.Log($"[VPB] UI.EnsureInstalled (with dependency scan) depsChanged: {installed}");
                     if (!installed)
                     {
@@ -111,6 +140,45 @@ namespace VPB
                             MVR.FileManagement.FileManager.Refresh();
                         
                         FileManager.Refresh();
+
+                        try
+                        {
+                            // EnsureInstalled reports depsChanged=true when host/deps were installed (moved).
+                            // Some entry types / edge cases may not populate movedUids even though the host .var moved,
+                            // so fall back to refreshing by host package UID to keep the hover path accurate.
+                            List<string> refreshUids = movedUids;
+                            if (refreshUids == null || refreshUids.Count == 0)
+                            {
+                                string hostUid = null;
+                                try
+                                {
+                                    if (entry is VarFileEntry vfe)
+                                        hostUid = vfe.GetRowPackageUid();
+                                    else if (entry is PackageListEntry ple && ple.Package != null)
+                                        hostUid = ple.Package.Uid;
+                                    else if (entry is SystemFileEntry sfe && sfe.isVar && sfe.package != null)
+                                        hostUid = sfe.package.Uid;
+                                }
+                                catch { hostUid = null; }
+
+                                if (!string.IsNullOrEmpty(hostUid))
+                                {
+                                    refreshUids = new List<string>(1) { hostUid };
+                                }
+                            }
+
+                            if (refreshUids != null && refreshUids.Count > 0)
+                            {
+                                // Updates packagesByPath + refreshes displayed row FileEntry.Path strings (via Gallery.NotifyDisplayedPathsAfterPackagePathChanges)
+                                // without forcing a full rescan (lastPackageRefreshTime is intentionally unchanged).
+                                FileManager.NotifyInstalled(refreshUids);
+                            }
+                        }
+                        catch { }
+
+                        // The .var may have moved (AllPackages -> AddonPackages) so refresh this row's display path.
+                        TryRefreshEntryDisplayPathAfterVarMoves(entry);
+                        try { if (panel != null) panel.SetHoverPath(entry); } catch { }
                     }
                 }
                 catch (Exception installEx)

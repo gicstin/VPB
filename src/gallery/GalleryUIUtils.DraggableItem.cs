@@ -627,7 +627,7 @@ namespace VPB
 
                 if (entry != null)
                 {
-                    UI.LoadSceneFile(entry);
+                    UI.LoadSceneFile(entry, Panel);
                 }
                 else if (!string.IsNullOrEmpty(path) && SuperController.singleton != null)
                 {

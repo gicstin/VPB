@@ -203,7 +203,7 @@ namespace VPB
 
                 if (isScene)
                 {
-                    UI.LoadSceneFile(file);
+                    UI.LoadSceneFile(file, this);
                     return;
                 }
 
@@ -838,7 +838,7 @@ namespace VPB
                 }
                 else
                 {
-                    UI.LoadSceneFile(applyFile);
+                    UI.LoadSceneFile(applyFile, this);
                 }
             }
         }
