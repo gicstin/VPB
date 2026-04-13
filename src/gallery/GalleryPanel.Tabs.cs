@@ -1380,6 +1380,8 @@ namespace VPB
             // ESC key handling to clear and refocus
             Button clearBtnComponent = clearBtn.GetComponent<Button>();
             inputGO.AddComponent<SearchInputESCHandler>().Initialize(input, clearBtnComponent);
+            // Standard editor shortcut: Ctrl+Backspace deletes previous word
+            inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
 
             return input;
         }

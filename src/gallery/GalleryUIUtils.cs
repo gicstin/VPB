@@ -909,6 +909,9 @@ namespace VPB
             placeholderRT.anchoredPosition = new Vector2(5, 0);
             
             inputField.placeholder = p;
+
+            // Standard editor shortcut: Ctrl+Backspace deletes previous word.
+            inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(inputField);
             
             if (onEndEdit != null) inputField.onEndEdit.AddListener(onEndEdit);
             

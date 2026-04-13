@@ -218,6 +218,8 @@ namespace VPB
 
             input.textComponent = t;
             input.text = initialValue;
+            // Match typical text field behavior: Ctrl+Backspace deletes previous word.
+            inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
 
             // Buttons
             GameObject confirmBtn = UI.CreateUIButton(panelGO, 140, 45, "Confirm", 18, 80, -60, AnchorPresets.middleCenter, () => {

@@ -166,6 +166,9 @@ namespace VPB
             
             input.textComponent = t;
             input.text = defaultText;
+
+            // Standard editor shortcut: Ctrl+Backspace deletes previous word.
+            go.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
             
             if (onValueChanged != null) input.onValueChanged.AddListener(onValueChanged);
 

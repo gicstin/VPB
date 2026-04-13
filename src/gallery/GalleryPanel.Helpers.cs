@@ -214,6 +214,78 @@ namespace VPB
         }
     }
 
+    /// <summary>
+    /// Adds standard Ctrl+Backspace (delete previous word) behavior to Unity <see cref="InputField"/>.
+    /// Unity's built-in InputField handling often lacks typical editor shortcuts.
+    /// </summary>
+    public class CtrlBackspaceWordDeleteHandler : MonoBehaviour
+    {
+        private InputField inputField;
+
+        public void Initialize(InputField input)
+        {
+            inputField = input;
+        }
+
+        private void OnGUI()
+        {
+            if (inputField == null || !inputField.isFocused) return;
+            Event e = Event.current;
+            if (e == null || e.type != EventType.KeyDown) return;
+
+            // Ctrl+Backspace (Windows/Linux) / Cmd+Backspace (macOS): delete previous word
+            bool accel = e.control || e.command;
+            if (!accel || e.keyCode != KeyCode.Backspace) return;
+
+            string text = inputField.text ?? "";
+            if (text.Length == 0)
+            {
+                e.Use();
+                return;
+            }
+
+            // If there's an active selection, delete it.
+            int a = inputField.selectionAnchorPosition;
+            int b = inputField.selectionFocusPosition;
+            if (a != b)
+            {
+                int start = Mathf.Clamp(Math.Min(a, b), 0, text.Length);
+                int end = Mathf.Clamp(Math.Max(a, b), 0, text.Length);
+                string newText = text.Remove(start, end - start);
+                inputField.text = newText;
+                inputField.caretPosition = start;
+                inputField.selectionAnchorPosition = start;
+                inputField.selectionFocusPosition = start;
+                e.Use();
+                return;
+            }
+
+            int caret = Mathf.Clamp(inputField.caretPosition, 0, text.Length);
+            if (caret == 0)
+            {
+                e.Use();
+                return;
+            }
+
+            int i = caret;
+            // First delete any whitespace directly behind the caret (so repeated Ctrl+Backspace behaves naturally).
+            while (i > 0 && char.IsWhiteSpace(text[i - 1])) i--;
+            // Then delete the previous "word" chunk.
+            while (i > 0 && !char.IsWhiteSpace(text[i - 1])) i--;
+
+            if (i < caret)
+            {
+                string newText = text.Remove(i, caret - i);
+                inputField.text = newText;
+                inputField.caretPosition = i;
+                inputField.selectionAnchorPosition = i;
+                inputField.selectionFocusPosition = i;
+            }
+
+            e.Use();
+        }
+    }
+
     public class UIScrollWheelHandler : MonoBehaviour, IScrollHandler
     {
         public Action<float> OnScrollValue;
