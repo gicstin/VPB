@@ -1464,7 +1464,7 @@ namespace VPB
         /// Fills side-tab category totals from <c>cat_mem</c> when the index matches the current package scan (avoids scanning every VAR on disk).
         /// Only keys already present in <paramref name="countsByCategoryName"/> are updated.
         /// </summary>
-        internal static bool TryReadCategoryMemberCounts(Dictionary<string, int> countsByCategoryName)
+        internal static bool TryReadCategoryMemberCounts(Dictionary<string, int> countsByCategoryName, string creatorFilter = "")
         {
             if (!VpbSqlite3.IsAvailable || countsByCategoryName == null || countsByCategoryName.Count == 0) return false;
 
@@ -1484,16 +1484,28 @@ namespace VPB
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
-                using (var stmt = conn.Prepare("SELECT category, COUNT(*) FROM cat_mem GROUP BY category"))
                 {
-                    int step;
-                    while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
+                    if (conn == null) return false;
+                    string sql = "SELECT category, COUNT(*) FROM cat_mem GROUP BY category";
+                    bool hasFilter = !string.IsNullOrEmpty(creatorFilter);
+                    if (hasFilter)
                     {
-                        string cname = stmt.ColumnText(0);
-                        int n;
-                        if (!int.TryParse(stmt.ColumnText(1), out n)) n = 0;
-                        if (countsByCategoryName.ContainsKey(cname))
-                            countsByCategoryName[cname] = n;
+                        sql = "SELECT m.category, COUNT(*) FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE p.creator = ? GROUP BY m.category";
+                    }
+
+                    using (var stmt = conn.Prepare(sql))
+                    {
+                        if (hasFilter) stmt.BindText(1, creatorFilter);
+
+                        int step;
+                        while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
+                        {
+                            string cname = stmt.ColumnText(0);
+                            int n;
+                            if (!int.TryParse(stmt.ColumnText(1), out n)) n = 0;
+                            if (countsByCategoryName.ContainsKey(cname))
+                                countsByCategoryName[cname] = n;
+                        }
                     }
                 }
                 return true;

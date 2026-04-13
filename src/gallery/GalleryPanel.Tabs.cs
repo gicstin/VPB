@@ -503,6 +503,11 @@ namespace VPB
                 foreach (var b in crList) ReturnTabButton(b);
                 crList.Clear();
             }
+            
+            // Clear virtual pool references
+            if (isLeft) _leftCreatorVirtButtons.Clear();
+            else _rightCreatorVirtButtons.Clear();
+
             if (catH != null)
             {
                 try { UnityEngine.Object.Destroy(catH); } catch { }
@@ -517,6 +522,8 @@ namespace VPB
                 leftCreatorTabHolder = null;
                 leftCategoryTabsLastSig = null;
                 leftCreatorTabsLastSig = null;
+                _leftCreatorVirtHooked = false;
+                _leftCreatorVirtScroll = null;
             }
             else
             {
@@ -524,6 +531,8 @@ namespace VPB
                 rightCreatorTabHolder = null;
                 rightCategoryTabsLastSig = null;
                 rightCreatorTabsLastSig = null;
+                _rightCreatorVirtHooked = false;
+                _rightCreatorVirtScroll = null;
             }
         }
 
@@ -567,6 +576,24 @@ namespace VPB
             return go;
         }
 
+        private GameObject CreateCreatorVirtualHolder(string name, Transform parent)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, 1);
+            rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(0, 0);
+
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            le.flexibleWidth = 1f;
+            le.minHeight = 1f;
+            le.preferredHeight = 1f;
+            return go;
+        }
+
         private void EnsureCategoryCreatorHolders(GameObject tabContainer, bool isLeft)
         {
             GameObject catH = isLeft ? leftCategoryTabHolder : rightCategoryTabHolder;
@@ -582,7 +609,7 @@ namespace VPB
             ClearTabContainerChildrenForDualBufferInit(tabContainer);
 
             catH = CreateCategoryCreatorTabStackHolder("_VPB_CategoryTabs", tabContainer.transform);
-            crH = CreateCategoryCreatorTabStackHolder("_VPB_CreatorTabs", tabContainer.transform);
+            crH = CreateCreatorVirtualHolder("_VPB_CreatorTabs_Virt", tabContainer.transform);
             if (isLeft)
             {
                 leftCategoryTabHolder = catH;
@@ -592,6 +619,228 @@ namespace VPB
             {
                 rightCategoryTabHolder = catH;
                 rightCreatorTabHolder = crH;
+            }
+        }
+
+        private string ComputeCreatorVirtViewSignature()
+        {
+            SortState st = GetSortState("Creator");
+            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            // Include cache revision + filter + sort + scale so we rebuild view list only when needed.
+            return "v1|" + creatorSideTabDataRevision
+                + "|" + (creatorFilter ?? "")
+                + "|" + (currentExtension ?? "")
+                + "|" + CurrentPathsSignatureFragment()
+                + "|" + (int)(st != null ? st.Type : 0)
+                + "|" + (int)(st != null ? st.Direction : 0)
+                + "|" + scale.ToString("R");
+        }
+
+        private void EnsureCreatorVirtScrollHook(bool isLeft, GameObject holder)
+        {
+            if (holder == null) return;
+            ScrollRect sr = holder.GetComponentInParent<ScrollRect>();
+            if (sr == null) return;
+
+            if (isLeft)
+            {
+                _leftCreatorVirtScroll = sr;
+                if (_leftCreatorVirtHooked) return;
+                _leftCreatorVirtHooked = true;
+                sr.onValueChanged.AddListener(_ =>
+                {
+                    try { UpdateCreatorVirtualVisible(true); } catch { }
+                });
+            }
+            else
+            {
+                _rightCreatorVirtScroll = sr;
+                if (_rightCreatorVirtHooked) return;
+                _rightCreatorVirtHooked = true;
+                sr.onValueChanged.AddListener(_ =>
+                {
+                    try { UpdateCreatorVirtualVisible(false); } catch { }
+                });
+            }
+        }
+
+        private float CreatorVirtRowHeight()
+        {
+            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            // Match CreateTabButton size (35*s) plus the old VerticalLayoutGroup spacing (2).
+            return (35f * s) + 2f;
+        }
+
+        private void EnsureCreatorVirtPool(bool isLeft, Transform parent, int desired)
+        {
+            if (parent == null) return;
+            if (desired < 8) desired = 8;
+            List<GameObject> pool = isLeft ? _leftCreatorVirtButtons : _rightCreatorVirtButtons;
+
+            // If we have buttons in the pool that are parented elsewhere (e.g. returned to shared pool), 
+            // we need to clear our local list and start fresh.
+            for (int i = 0; i < pool.Count; i++)
+            {
+                if (pool[i] == null || pool[i].transform.parent != parent)
+                {
+                    pool.Clear();
+                    break;
+                }
+            }
+
+            while (pool.Count < desired)
+            {
+                // Create private buttons for the virtual list that are NOT part of the shared tabButtonPool.
+                // This prevents UpdateTabs from stealing them back every frame.
+                GameObject btnGO = UI.CreateUIButton(parent.gameObject, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
+                AddHoverDelegate(btnGO);
+                btnGO.SetActive(true);
+
+                // Positioning is manual; stretch horizontally.
+                RectTransform rt = btnGO.GetComponent<RectTransform>();
+                if (rt != null)
+                {
+                    float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                    rt.anchorMin = new Vector2(0, 1);
+                    rt.anchorMax = new Vector2(1, 1);
+                    rt.pivot = new Vector2(0.5f, 1f);
+                    rt.anchoredPosition = Vector2.zero;
+                    rt.sizeDelta = new Vector2(-10f, 35f * s); // -10 accounts for the 5+5 padding
+                    rt.offsetMin = new Vector2(5f, rt.offsetMin.y);
+                    rt.offsetMax = new Vector2(-5f, rt.offsetMax.y);
+                }
+
+                pool.Add(btnGO);
+            }
+        }
+
+        /// <summary>
+        /// Binds a pooled button to a specific creator entry.
+        /// </summary>
+        private void BindCreatorVirtButton(GameObject btnGO, CreatorCacheEntry creator)
+        {
+            if (btnGO == null) return;
+            string cName = creator.Name ?? "";
+            bool isActive = (currentCreator == cName);
+            Color btnColor = isActive ? ColorCreator : new Color(0.25f, 0.25f, 0.25f, 1f);
+            string label = cName + " (" + creator.Count + ")";
+
+            Button btnComp = btnGO.GetComponent<Button>();
+            if (btnComp != null)
+            {
+                btnComp.onClick.RemoveAllListeners();
+                btnComp.onClick.AddListener(() =>
+                {
+                    if (currentCreator == cName) currentCreator = "";
+                    else currentCreator = cName;
+                    categoriesCached = false;
+                    tagsCached = false;
+                    RefreshFiles();
+                    UpdateTabs();
+                });
+            }
+            UIRightClickDelegate rightClickDelegate = btnGO.GetComponent<UIRightClickDelegate>();
+            if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();
+            rightClickDelegate.OnRightClick = () =>
+            {
+                currentCreator = "";
+                categoriesCached = false;
+                tagsCached = false;
+                RefreshFiles();
+                UpdateTabs();
+            };
+
+            Image img = btnGO.GetComponent<Image>();
+            if (img != null) img.color = btnColor;
+
+            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            Text txt = btnGO.GetComponentInChildren<Text>();
+            if (txt != null)
+            {
+                txt.text = label;
+                txt.fontSize = Mathf.RoundToInt(18 * s);
+                txt.color = Color.white;
+            }
+
+            LayoutElement le = btnGO.GetComponent<LayoutElement>();
+            if (le == null) le = btnGO.AddComponent<LayoutElement>();
+            le.minWidth = 140f * s;
+            le.preferredWidth = 170f * s;
+            le.minHeight = 35f * s;
+            le.preferredHeight = 35f * s;
+            le.flexibleWidth = 1;
+        }
+
+        /// <summary>
+        /// Updates the visible creators in the virtualized list based on the current scroll position.
+        /// </summary>
+        private void UpdateCreatorVirtualVisible(bool isLeft)
+        {
+            if (_creatorVirtView == null) return;
+            GameObject holder = isLeft ? leftCreatorTabHolder : rightCreatorTabHolder;
+            if (holder == null || !holder.activeInHierarchy) return;
+
+            ScrollRect sr = isLeft ? _leftCreatorVirtScroll : _rightCreatorVirtScroll;
+            if (sr == null) sr = holder.GetComponentInParent<ScrollRect>();
+            if (sr == null) return;
+
+            float rowH = CreatorVirtRowHeight();
+            if (rowH <= 1f) rowH = 37f;
+
+            RectTransform viewport = sr.viewport != null ? sr.viewport : (sr.transform as RectTransform);
+            float viewportH = viewport != null ? viewport.rect.height : 600f;
+
+            int total = _creatorVirtView != null ? _creatorVirtView.Count : 0;
+            LayoutElement holderLe = holder.GetComponent<LayoutElement>();
+            if (total == 0)
+            {
+                if (isLeft) foreach (var b in _leftCreatorVirtButtons) b.SetActive(false);
+                else foreach (var b in _rightCreatorVirtButtons) b.SetActive(false);
+                if (holderLe != null) holderLe.preferredHeight = 0f;
+                return;
+            }
+            float contentH = total * rowH;
+
+            if (holderLe != null) holderLe.preferredHeight = contentH;
+
+            // Compute scroll position in pixels.
+            float scrollRange = Mathf.Max(0f, contentH - viewportH);
+            float scrollY = (1f - Mathf.Clamp01(sr.verticalNormalizedPosition)) * scrollRange;
+            int firstIdx = (rowH > 0f) ? Mathf.FloorToInt(scrollY / rowH) : 0;
+            if (firstIdx < 0) firstIdx = 0;
+            if (firstIdx > total - 1) firstIdx = Mathf.Max(0, total - 1);
+
+            int visible = Mathf.CeilToInt(viewportH / rowH) + 10; // buffer
+            EnsureCreatorVirtPool(isLeft, holder.transform, visible);
+
+            List<GameObject> pool = isLeft ? _leftCreatorVirtButtons : _rightCreatorVirtButtons;
+            if (isLeft) _leftCreatorVirtLastFirstIdx = firstIdx;
+            else _rightCreatorVirtLastFirstIdx = firstIdx;
+
+            for (int i = 0; i < pool.Count; i++)
+            {
+                int idx = firstIdx + i;
+                GameObject btnGO = pool[i];
+                if (btnGO == null) continue;
+
+                if (idx >= 0 && idx < total)
+                {
+                    btnGO.SetActive(true);
+                    BindCreatorVirtButton(btnGO, _creatorVirtView[idx]);
+
+                    RectTransform rt = btnGO.GetComponent<RectTransform>();
+                    if (rt != null)
+                    {
+                        float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                        rt.sizeDelta = new Vector2(-10f, 35f * s);
+                        float y = -idx * rowH;
+                        rt.anchoredPosition = new Vector2(0f, y);
+                    }
+                }
+                else
+                {
+                    btnGO.SetActive(false);
+                }
             }
         }
 
@@ -850,37 +1099,57 @@ namespace VPB
             else if (contentType == ContentType.Creator)
             {
                 if (!creatorsCached) CacheCreators();
-                if (cachedCreators == null) return;
+                if (cachedCreators == null || cachedCreators.Count == 0)
+                {
+                    _creatorVirtView.Clear();
+                    _creatorVirtViewSig = null;
+                    UpdateCreatorVirtualVisible(isLeft);
+                    return;
+                }
                 
-                // Sort
+                // Sort once (in-place) then virtualize visible rows only.
                 var sortState = GetSortState("Creator");
                 GallerySortManager.Instance.SortCreators(cachedCreators, sortState);
 
-                foreach (var creator in cachedCreators)
+                string sig = ComputeCreatorVirtViewSignature();
+                if (!string.Equals(_creatorVirtViewSig, sig, StringComparison.Ordinal))
                 {
-                    if (!string.IsNullOrEmpty(creatorFilter) && creator.Name.IndexOf(creatorFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    _creatorVirtViewSig = sig;
+                    _creatorVirtView.Clear();
+                    string filterNow = creatorFilter ?? "";
+                    if (string.IsNullOrEmpty(filterNow))
+                    {
+                        for (int i = 0; i < cachedCreators.Count; i++)
+                        {
+                            var c = cachedCreators[i];
+                            if (string.IsNullOrEmpty(c.Name)) continue;
+                            _creatorVirtView.Add(c);
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < cachedCreators.Count; i++)
+                        {
+                            var c = cachedCreators[i];
+                            if (string.IsNullOrEmpty(c.Name)) continue;
+                            if (c.Name.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                            _creatorVirtView.Add(c);
+                        }
+                    }
 
-                    string cName = creator.Name;
-                    bool isActive = (currentCreator == cName);
-                    Color btnColor = isActive ? ColorCreator : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    string label = cName + " (" + creator.Count + ")";
-
-                    CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                        if (currentCreator == cName) currentCreator = "";
-                        else currentCreator = cName;
-                        categoriesCached = false;
-                        tagsCached = false;
-                        RefreshFiles();
-                        UpdateTabs();
-                    }, trackedButtons, () => {
-                        currentCreator = "";
-                        categoriesCached = false;
-                        tagsCached = false;
-                        RefreshFiles();
-                        UpdateTabs();
-                    });
+                    // New view list: reset scroll to top for stability.
+                    ScrollRect sr = container.GetComponentInParent<ScrollRect>();
+                    if (sr != null) sr.verticalNormalizedPosition = 1f;
+                    if (isLeft) _leftCreatorVirtLastFirstIdx = -1;
+                    else _rightCreatorVirtLastFirstIdx = -1;
                 }
+
+                EnsureCreatorVirtScrollHook(isLeft, container);
+
+                // UpdateCreatorVirtualVisible handles its own pooling and tracking.
+                // We do NOT add them to trackedButtons because that would return them to the shared pool
+                // every time UpdateTabs is called, causing massive churn.
+                UpdateCreatorVirtualVisible(isLeft);
             }
             else if (contentType == ContentType.Ratings)
             {

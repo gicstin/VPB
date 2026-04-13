@@ -184,85 +184,95 @@ namespace VPB
         {
             if (categories == null) return;
             categoryCounts.Clear();
-            
-            // Build optimized lookup map for categories by extension
-            // Map: Extension (lowercase, no dot) -> List of Categories
-            Dictionary<string, List<Gallery.Category>> extToCats = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
-            
-            foreach (var c in categories) 
+            foreach (var c in categories) categoryCounts[c.name] = 0;
+
+            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator))
             {
-                categoryCounts[c.name] = 0;
-                if (string.IsNullOrEmpty(c.extension)) continue;
-                string[] exts = c.extension.Split('|');
-                foreach(string ext in exts)
-                {
-                    if (string.IsNullOrEmpty(ext)) continue;
-                    string e = ext.Trim();
-                    if (!extToCats.ContainsKey(e)) extToCats[e] = new List<Gallery.Category>();
-                    extToCats[e].Add(c);
-                }
+                // SQL path succeeded.
             }
-
-            if (FileManager.PackagesByUid != null)
+            else
             {
-                foreach (var pkg in FileManager.PackagesByUid.Values)
+                // Fallback: manual scan (O(N_files))
+                // Build optimized lookup map for categories by extension
+                // Map: Extension (lowercase, no dot) -> List of Categories
+                Dictionary<string, List<Gallery.Category>> extToCats = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
+                
+                foreach (var c in categories) 
                 {
-                    // Filter by creator if set
-                    if (!string.IsNullOrEmpty(currentCreator))
+                    if (string.IsNullOrEmpty(c.extension)) continue;
+                    string[] exts = c.extension.Split('|');
+                    foreach(string ext in exts)
                     {
-                        if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
+                        if (string.IsNullOrEmpty(ext)) continue;
+                        string e = ext.Trim();
+                        if (!extToCats.ContainsKey(e)) extToCats[e] = new List<Gallery.Category>();
+                        extToCats[e].Add(c);
                     }
+                }
 
-                    if (pkg.FileEntries == null) continue;
-                    
-                    int count = pkg.FileEntries.Count;
-                    for (int i = 0; i < count; i++)
+                if (FileManager.PackagesByUid != null)
+                {
+                    var snapshot = FileManager.PackagesByUid.Values;
+                    foreach (var pkg in snapshot)
                     {
-                        var entry = pkg.FileEntries[i];
-                        string internalPath = entry.InternalPath;
-                        
-                        // Fast extension extraction
-                        int lastDot = internalPath.LastIndexOf('.');
-                        if (lastDot < 0 || lastDot == internalPath.Length - 1) continue;
-                        
-                        string ext = internalPath.Substring(lastDot + 1);
-                        
-                        List<Gallery.Category> candidates;
-                        if (extToCats.TryGetValue(ext, out candidates))
+                        if (pkg == null) continue;
+                        // Filter by creator if set
+                        if (!string.IsNullOrEmpty(currentCreator))
                         {
-                            int candCount = candidates.Count;
-                            for (int j = 0; j < candCount; j++)
+                            if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
+                        }
+
+                        if (pkg.FileEntries == null) continue;
+                        
+                        int count = pkg.FileEntries.Count;
+                        for (int i = 0; i < count; i++)
+                        {
+                            var entry = pkg.FileEntries[i];
+                            string internalPath = entry.InternalPath;
+                            
+                            // Fast extension extraction
+                            int lastDot = internalPath.LastIndexOf('.');
+                            if (lastDot < 0 || lastDot == internalPath.Length - 1) continue;
+                            
+                            string ext = internalPath.Substring(lastDot + 1);
+                            
+                            List<Gallery.Category> candidates;
+                            if (extToCats.TryGetValue(ext, out candidates))
                             {
-                                var cat = candidates[j];
-                                // Check path match
-                                bool pathMatch = false;
-                                if (cat.paths != null && cat.paths.Count > 0)
+                                int candCount = candidates.Count;
+                                for (int j = 0; j < candCount; j++)
                                 {
-                                    int pCount = cat.paths.Count;
-                                    for(int k=0; k<pCount; k++)
+                                    var cat = candidates[j];
+                                    // Check path match
+                                    bool pathMatch = false;
+                                    if (cat.paths != null && cat.paths.Count > 0)
                                     {
-                                        if (GalleryInternalPathStartsWithPrefix(internalPath, cat.paths[k]))
+                                        int pCount = cat.paths.Count;
+                                        for(int k=0; k<pCount; k++)
                                         {
-                                            pathMatch = true;
-                                            break;
+                                            if (GalleryInternalPathStartsWithPrefix(internalPath, cat.paths[k]))
+                                            {
+                                                pathMatch = true;
+                                                break;
+                                            }
                                         }
                                     }
-                                }
-                                else if (!string.IsNullOrEmpty(cat.path))
-                                {
-                                    if (GalleryInternalPathStartsWithPrefix(internalPath, cat.path))
+                                    else if (!string.IsNullOrEmpty(cat.path))
+                                    {
+                                        if (GalleryInternalPathStartsWithPrefix(internalPath, cat.path))
+                                            pathMatch = true;
+                                    }
+                                    else
+                                    {
+                                        // No path specified means match all (unlikely for category but possible)
                                         pathMatch = true;
-                                }
-                                else
-                                {
-                                    // No path specified means match all (unlikely for category but possible)
-                                    pathMatch = true;
-                                }
+                                    }
 
-                                if (pathMatch)
-                                {
-                                    categoryCounts[cat.name]++;
-                                    break; // File belongs to one category
+                                    if (pathMatch)
+                                    {
+                                        categoryCounts[cat.name]++;
+                                        break; // File belongs to one category
+                                    }
                                 }
                             }
                         }

@@ -379,6 +379,19 @@ namespace VPB
         private string currentSizeFilter = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
+        
+        // Creator side-tab virtualization (fast: pool + rebind visible rows on scroll)
+        private readonly List<CreatorCacheEntry> _creatorVirtView = new List<CreatorCacheEntry>(512);
+        private string _creatorVirtViewSig = null;
+
+        private readonly List<GameObject> _leftCreatorVirtButtons = new List<GameObject>(64);
+        private readonly List<GameObject> _rightCreatorVirtButtons = new List<GameObject>(64);
+        private ScrollRect _leftCreatorVirtScroll;
+        private ScrollRect _rightCreatorVirtScroll;
+        private bool _leftCreatorVirtHooked;
+        private bool _rightCreatorVirtHooked;
+        private int _leftCreatorVirtLastFirstIdx = -1;
+        private int _rightCreatorVirtLastFirstIdx = -1;
         private string tagFilter = ""; // NEW
         private string currentSceneSourceFilter = ""; // NEW
         private string currentAppearanceSourceFilter = "";
