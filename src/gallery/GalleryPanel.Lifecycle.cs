@@ -49,9 +49,6 @@ namespace VPB
 
             if (leftClearCreatorBtn != null) leftClearCreatorBtn.SetActive(showLeftSide && !string.IsNullOrEmpty(currentCreator));
             if (rightClearCreatorBtn != null) rightClearCreatorBtn.SetActive(showRightSide && !string.IsNullOrEmpty(currentCreator));
-
-            if (leftClearCreatorBtn != null && leftClearCreatorBtn.activeSelf) UpdateClearButtonPosition(false, ContentType.Creator);
-            if (rightClearCreatorBtn != null && rightClearCreatorBtn.activeSelf) UpdateClearButtonPosition(true, ContentType.Creator);
         }
 
         private void UpdateClearButtonPosition(bool isRight, ContentType type)
@@ -99,53 +96,20 @@ namespace VPB
             if (targetBtnRT != null && targetBtnRT.gameObject.activeInHierarchy)
             {
                 RectTransform btnRT = btn.GetComponent<RectTransform>();
-                // Position "outside" means further away from the center panel.
-                // Left side: To the left of the button.
-                // Right side: To the right of the button.
-                
-                float xOffset = isRight ? 65f : -65f; // Button width is 120, center to edge is 60. +5 padding
-                
-                // But wait, the side containers are at -120 and +120.
-                // The clear button is parented to backgroundBoxGO.
-                // The side button is parented to sideContainer.
-                // We need to convert or just use fixed offsets relative to side container position.
-                
-                // Side container anchors:
-                // Left: (-120, 0)
-                // Right: (120, 0)
-                
-                // Side Button anchor is (0, Y) inside that container.
-                // So world position logic or just parent relative logic.
-                // The Clear Button is child of backgroundBoxGO.
-                
-                float btnY = targetBtnRT.anchoredPosition.y; // Y inside container
-                
-                // The container is centered vertically? No, container anchor is middleLeft/Right.
-                // Let's check container setup in CreateUI.
-                // leftSideContainer = UI.AddChildGOImage(..., AnchorPresets.middleLeft, ..., new Vector2(-120, 0));
-                // So container (0,0) is at (-120, 0) from background left edge?
-                // No, AnchorPresets.middleLeft means (0, 0.5) anchor.
-                // AnchoredPosition (-120, 0) means shifted left by 120.
-                
-                // backgroundBoxGO is the parent of ClearButton.
-                // ClearButton anchor is middleLeft/Right.
-                
-                // If ClearButton has AnchorPresets.middleLeft (Left) or middleRight (Right):
-                // Left Button X: containerX + xOffset
-                // Right Button X: containerX + xOffset
-                
-                // Wait, "Outside" relative to the gallery.
-                // Left Side: Outside is further Left (Negative X).
-                // Right Side: Outside is further Right (Positive X).
-                
-                // Left container is at -120. Button is at 0 X inside it.
-                // So button center is at -120.
-                // We want clear button at -120 - 60 - 25 = -205?
-                // Or maybe just -80 relative to the button center.
-                
-                float targetX = isRight ? (140f + 65f) : (-140f - 65f);
-                
-                btnRT.anchoredPosition = new Vector2(targetX, btnY);
+                // Clear creator button now lives in the side container, so position it relative to the Creator icon:
+                // always immediately to the LEFT of the creator button (same Y).
+                float gap = 6f;
+                float tw = 0f;
+                float bw = 0f;
+                try { tw = targetBtnRT.rect.width; } catch { tw = targetBtnRT.sizeDelta.x; }
+                try { bw = btnRT.rect.width; } catch { bw = btnRT.sizeDelta.x; }
+                if (tw <= 0f) tw = targetBtnRT.sizeDelta.x;
+                if (bw <= 0f) bw = btnRT.sizeDelta.x;
+
+                // anchoredPosition is at the pivot (typically center), so use half-widths.
+                float targetX = targetBtnRT.anchoredPosition.x - (tw * 0.5f + bw * 0.5f + gap);
+                float targetY = targetBtnRT.anchoredPosition.y;
+                btnRT.anchoredPosition = new Vector2(targetX, targetY);
             }
         }
 

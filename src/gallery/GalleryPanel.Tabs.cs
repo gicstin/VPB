@@ -2241,9 +2241,10 @@ namespace VPB
                             }
                             catch { catLabel = ""; }
 
-                            t.text = string.IsNullOrEmpty(catLabel) ? "" : ("Cat: " + catLabel);
-                            // Reset to default color
-                            try { t.color = Color.white; } catch { }
+                            // Display just the category value (no "Cat:" prefix).
+                            t.text = string.IsNullOrEmpty(catLabel) ? "" : catLabel;
+                            // Color category label based on type.
+                            try { t.color = GetCategoryTintColor(catLabel); } catch { try { t.color = Color.white; } catch { } }
                         }
                     }
                 }
@@ -2304,7 +2305,8 @@ namespace VPB
                     Text t = dateTr.GetComponent<Text>();
                     if (t != null)
                     {
-                        try { t.text = file.LastWriteTime.ToString("yyyy-MM-dd"); }
+                        // Use 2-digit year (e.g. 25-09-15 instead of 2025-09-15).
+                        try { t.text = file.LastWriteTime.ToString("yy-MM-dd"); }
                         catch { t.text = ""; }
                     }
                 }
@@ -2441,6 +2443,33 @@ namespace VPB
             catch { }
 
             return result;
+        }
+
+        private static Color GetCategoryTintColor(string categoryLabel)
+        {
+            if (string.IsNullOrEmpty(categoryLabel)) return Color.white;
+
+            string s = categoryLabel.Trim();
+            if (s.Length == 0) return Color.white;
+            string sl = s.ToLowerInvariant();
+
+            // Special / meta
+            if (sl == "unknown") return new Color(0.65f, 0.65f, 0.65f, 1f);
+            if (sl == "mixed") return new Color(0.85f, 0.65f, 0.15f, 1f);
+
+            // Common VPB/VaM gallery types (heuristic)
+            if (sl.Contains("scene")) return new Color(0.95f, 0.55f, 0.10f, 1f);     // orange
+            if (sl.Contains("subscene")) return new Color(0.95f, 0.55f, 0.10f, 1f);  // orange
+            if (sl.Contains("hair")) return new Color(0.85f, 0.35f, 0.85f, 1f);      // purple
+            if (sl.Contains("clothing")) return new Color(0.35f, 0.70f, 0.95f, 1f);  // blue
+            if (sl.Contains("skin")) return new Color(0.90f, 0.75f, 0.55f, 1f);      // tan
+            if (sl.Contains("morph")) return new Color(0.40f, 0.85f, 0.65f, 1f);     // green-teal
+            if (sl.Contains("appearance")) return new Color(0.55f, 0.80f, 0.40f, 1f);// green
+            if (sl.Contains("pose")) return new Color(0.95f, 0.85f, 0.30f, 1f);      // yellow
+            if (sl.Contains("asset") || sl.Contains("cua")) return new Color(0.55f, 0.85f, 0.95f, 1f); // cyan
+            if (sl.Contains("plugin") || sl.Contains("script")) return new Color(0.70f, 0.70f, 0.95f, 1f); // lavender
+
+            return Color.white;
         }
 
         /// <summary>Update filter indicator UI when filter state changes.</summary>

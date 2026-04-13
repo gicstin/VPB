@@ -220,6 +220,10 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/gallery_creator_off.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/gallery_fixed.png",
         "IsDirectory":  false
     },

@@ -12,6 +12,7 @@ namespace VPB
     {
         public Canvas canvas;
         public Text statusBarText;
+        private bool _registeredWithSuperController;
         private GameObject backgroundBoxGO;
         private CanvasGroup backgroundCanvasGroup;
         private GameObject contentGO;
@@ -645,6 +646,8 @@ namespace VPB
         private GameObject leftClearCreatorBtn;
         private GameObject rightClearCreatorBtn;
 
+        private Sprite galleryCreatorOffSprite;
+
         private GameObject footerLoadRandomBtn;
 
         // Settings Pane
@@ -895,6 +898,12 @@ namespace VPB
         private Sprite ratingStarOffSprite;    // star_off.png — shown when filter is ON
         private GameObject fileSortTypeMenuRoot;
         private GameObject fileSortTypeMenuPanelGO;
+        
+        // Side-pane sort dropdown (Category/Creator/Tags/etc)
+        private GameObject sidePaneSortMenuRoot;
+        private GameObject sidePaneSortMenuPanelGO;
+        private RectTransform sidePaneSortMenuPanelRT;
+        private string sidePaneSortMenuContext;
         private Text quickFiltersToggleBtnText; // NEW
         private Image quickFiltersToggleBtnIconImage;
         private GameObject ratingSortToggleBtn;

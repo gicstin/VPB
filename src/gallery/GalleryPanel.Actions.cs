@@ -11,6 +11,31 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private void EnsureCanvasRegisteredWithSuperController()
+        {
+            if (_registeredWithSuperController) return;
+            if (canvas == null) return;
+            if (SuperController.singleton == null) return;
+
+            try
+            {
+                SuperController.singleton.AddCanvas(canvas);
+                _registeredWithSuperController = true;
+            }
+            catch { }
+        }
+
+        private IEnumerator RefreshRaycasterNextFrame()
+        {
+            yield return null;
+            if (canvas == null) yield break;
+            var raycaster = canvas.GetComponent<GraphicRaycaster>();
+            if (raycaster == null) yield break;
+            // Toggle to force Unity/VaM to rebuild internal raycast state.
+            raycaster.enabled = false;
+            raycaster.enabled = true;
+        }
+
         private Atom GetBestTargetAtom()
         {
             if (SuperController.singleton == null) return null;
@@ -260,6 +285,9 @@ namespace VPB
             if (needsInit) Init();
             LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
+            bool registeredBefore = _registeredWithSuperController;
+            EnsureCanvasRegisteredWithSuperController();
+
             // Lazy-load per-category scroll cache; capture key for the category we may be leaving.
             if (!_scrollCacheLoaded) LoadCategoryScrollCache();
             string _prevCategoryKey = MakeCategoryScrollKey(currentCategoryTitle, currentPath);
@@ -325,7 +353,9 @@ namespace VPB
 
             if (Application.isPlaying && canvas.renderMode == RenderMode.WorldSpace)
             {
-                canvas.worldCamera = Camera.main;
+                // In VR on startup, Camera.main can be null briefly. Rebind whenever it becomes available.
+                if (Camera.main != null)
+                    canvas.worldCamera = Camera.main;
             }
 
             // Decide refresh before UpdateLayout so we can avoid synchronous full-library cache scans
@@ -368,6 +398,12 @@ namespace VPB
             RefreshTargetDropdown();
 
             SetCanvasVisible(true);
+
+            // If we had to register late (startup ordering), refresh raycast state deterministically.
+            if (!registeredBefore && _registeredWithSuperController)
+            {
+                try { StartCoroutine(RefreshRaycasterNextFrame()); } catch { }
+            }
 
             if (shouldRefresh)
             {

@@ -248,6 +248,181 @@ namespace VPB
             RebuildFileSortTypeMenuOptions();
         }
 
+        private static string SidePaneSortFullLabel(SortType type, SortDirection dir)
+        {
+            // Side panes generally only support Name / Count; include direction in the label.
+            if (type == SortType.Name)
+            {
+                return dir == SortDirection.Ascending
+                    ? VPBTranslation.T("gallery.sort.full.name_az", "Name (A→Z)")
+                    : VPBTranslation.T("gallery.sort.full.name_za", "Name (Z→A)");
+            }
+            if (type == SortType.Count)
+            {
+                return dir == SortDirection.Ascending
+                    ? VPBTranslation.T("gallery.sort.full.count_low_high", "Count (low→high)")
+                    : VPBTranslation.T("gallery.sort.full.count_high_low", "Count (high→low)");
+            }
+            return type.ToString() + " " + (dir == SortDirection.Ascending ? "↑" : "↓");
+        }
+
+        private void SetupSidePaneSortMenu()
+        {
+            if (sidePaneSortMenuRoot != null || backgroundBoxGO == null) return;
+
+            sidePaneSortMenuRoot = new GameObject("SidePaneSortMenu");
+            sidePaneSortMenuRoot.transform.SetParent(backgroundBoxGO.transform, false);
+            RectTransform rootRT = sidePaneSortMenuRoot.AddComponent<RectTransform>();
+            rootRT.anchorMin = Vector2.zero;
+            rootRT.anchorMax = Vector2.one;
+            rootRT.offsetMin = Vector2.zero;
+            rootRT.offsetMax = Vector2.zero;
+
+            GameObject backdropGO = new GameObject("Backdrop");
+            backdropGO.transform.SetParent(sidePaneSortMenuRoot.transform, false);
+            RectTransform backdropRT = backdropGO.AddComponent<RectTransform>();
+            backdropRT.anchorMin = Vector2.zero;
+            backdropRT.anchorMax = Vector2.one;
+            backdropRT.offsetMin = Vector2.zero;
+            backdropRT.offsetMax = Vector2.zero;
+            Image backdropImg = backdropGO.AddComponent<Image>();
+            backdropImg.color = new Color(0f, 0f, 0f, 0.001f);
+            backdropImg.raycastTarget = true;
+            Button backdropBtn = backdropGO.AddComponent<Button>();
+            backdropBtn.transition = Selectable.Transition.None;
+            backdropBtn.onClick.AddListener(CloseSidePaneSortMenu);
+
+            sidePaneSortMenuPanelGO = new GameObject("SidePaneSortMenuPanel");
+            sidePaneSortMenuPanelGO.transform.SetParent(sidePaneSortMenuRoot.transform, false);
+            sidePaneSortMenuPanelRT = sidePaneSortMenuPanelGO.AddComponent<RectTransform>();
+            // Anchors / position are set at open-time based on which button was clicked.
+            sidePaneSortMenuPanelRT.anchorMin = new Vector2(0f, 1f);
+            sidePaneSortMenuPanelRT.anchorMax = new Vector2(0f, 1f);
+            sidePaneSortMenuPanelRT.pivot = new Vector2(0f, 1f);
+            sidePaneSortMenuPanelRT.anchoredPosition = new Vector2(10f, -95f);
+            sidePaneSortMenuPanelRT.sizeDelta = new Vector2(240f, 50f);
+
+            Image panelImg = sidePaneSortMenuPanelGO.AddComponent<Image>();
+            panelImg.color = new Color(0.09f, 0.09f, 0.16f, 0.97f);
+            var outline = sidePaneSortMenuPanelGO.AddComponent<Outline>();
+            outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            VerticalLayoutGroup vlg = sidePaneSortMenuPanelGO.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(6, 6, 6, 6);
+            vlg.spacing = 4;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childAlignment = TextAnchor.UpperCenter;
+
+            ContentSizeFitter csf = sidePaneSortMenuPanelGO.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            sidePaneSortMenuRoot.SetActive(false);
+        }
+
+        private void CloseSidePaneSortMenu()
+        {
+            if (sidePaneSortMenuRoot != null)
+                sidePaneSortMenuRoot.SetActive(false);
+            sidePaneSortMenuContext = null;
+        }
+
+        private void RebuildSidePaneSortMenuOptions(string context)
+        {
+            if (sidePaneSortMenuPanelGO == null) return;
+            if (string.IsNullOrEmpty(context)) return;
+
+            Transform panel = sidePaneSortMenuPanelGO.transform;
+            for (int i = panel.childCount - 1; i >= 0; i--)
+                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+
+            SortState current = GetSortState(context);
+            if (current == null) current = new SortState(SortType.Name, SortDirection.Ascending);
+
+            // Side panes: offer explicit 4 choices (Name asc/desc, Count asc/desc) when valid.
+            SortType[] optTypes = new SortType[] { SortType.Name, SortType.Name, SortType.Count, SortType.Count };
+            SortDirection[] optDirs = new SortDirection[] { SortDirection.Ascending, SortDirection.Descending, SortDirection.Ascending, SortDirection.Descending };
+            for (int oi = 0; oi < optTypes.Length && oi < optDirs.Length; oi++)
+            {
+                SortType optType = optTypes[oi];
+                SortDirection optDir = optDirs[oi];
+                if (!IsSortTypeValid(context, optType)) continue;
+
+                bool isCurrent = current.Type == optType && current.Direction == optDir;
+                string label = (isCurrent ? "\u2713  " : "    ") + SidePaneSortFullLabel(optType, optDir);
+                SortType capturedType = optType;
+                SortDirection capturedDir = optDir;
+
+                GameObject row = UI.CreateUIButton(
+                    sidePaneSortMenuPanelGO, 228, 34, label, 14, 0, 0,
+                    AnchorPresets.middleCenter,
+                    () =>
+                    {
+                        if (SupportsSidePaneFourModeSort(context))
+                            ApplySidePaneFourModeSort(context, capturedType, capturedDir);
+                        else
+                        {
+                            SortState st = GetSortState(context);
+                            st.Type = capturedType;
+                            st.Direction = capturedDir;
+                            SaveSortState(context, st);
+                            UpdateTabs();
+                        }
+                        CloseSidePaneSortMenu();
+                    });
+
+                Image rowImg = row.GetComponent<Image>();
+                rowImg.color = isCurrent
+                    ? new Color(0.15f, 0.30f, 0.52f, 1f)
+                    : new Color(0.16f, 0.16f, 0.24f, 1f);
+
+                Text rowT = row.GetComponentInChildren<Text>();
+                if (rowT != null)
+                {
+                    rowT.color = isCurrent ? Color.white : new Color(0.82f, 0.82f, 0.92f, 1f);
+                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
+                    rowT.alignment = TextAnchor.MiddleLeft;
+                    VPBUiFont.ApplyTo(rowT);
+                }
+
+                LayoutElement le = row.AddComponent<LayoutElement>();
+                le.preferredHeight = 36f;
+                le.flexibleWidth = 1f;
+            }
+        }
+
+        private void ToggleSidePaneSortMenu(string context, RectTransform anchorButtonRT)
+        {
+            if (sidePaneSortMenuRoot == null) SetupSidePaneSortMenu();
+            if (sidePaneSortMenuRoot == null || sidePaneSortMenuPanelRT == null) return;
+
+            if (sidePaneSortMenuRoot.activeSelf && string.Equals(sidePaneSortMenuContext ?? "", context ?? "", StringComparison.OrdinalIgnoreCase))
+            {
+                CloseSidePaneSortMenu();
+                return;
+            }
+
+            sidePaneSortMenuContext = context ?? "";
+            RebuildSidePaneSortMenuOptions(sidePaneSortMenuContext);
+
+            // Position directly under the clicked sort button.
+            bool isRight = false;
+            try { isRight = anchorButtonRT != null && anchorButtonRT.anchorMin.x > 0.5f; } catch { isRight = false; }
+            float gapY = 6f;
+            Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f, -55f);
+            Vector2 btnSize = anchorButtonRT != null ? anchorButtonRT.sizeDelta : new Vector2(35f, 35f);
+
+            sidePaneSortMenuPanelRT.anchorMin = sidePaneSortMenuPanelRT.anchorMax = (anchorButtonRT != null ? anchorButtonRT.anchorMin : new Vector2(0f, 1f));
+            sidePaneSortMenuPanelRT.pivot = isRight ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
+            sidePaneSortMenuPanelRT.anchoredPosition = btnPos + new Vector2(0f, -(btnSize.y + gapY));
+
+            sidePaneSortMenuRoot.SetActive(true);
+            sidePaneSortMenuRoot.transform.SetAsLastSibling();
+        }
+
         private void ToggleFileSortTypeMenu()
         {
             if (fileSortTypeMenuRoot == null) SetupFileSortTypeMenu();
