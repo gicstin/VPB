@@ -59,6 +59,9 @@ namespace VPB
         private static string s_LastError;
         private static bool s_LoggedSqliteUnavailable;
         private static bool s_LoggedEmptyCategoriesDb;
+        private static long s_CachedInvScanBinary = long.MinValue;
+        private static int s_CachedInvPkgCount;
+        private static string s_CachedInvSig;
 
         private const string DatabaseFileName = "VpbLocalDatabase.sqlite3";
         private const string LegacyDatabaseFileName = "GalleryVarFileIndex.sqlite3";
@@ -661,6 +664,105 @@ namespace VPB
             }
         }
 
+        private static string GetCachedPackageInventorySignature(long scanBin, Dictionary<string, VarPackage> packagesByUid)
+        {
+            int count = packagesByUid != null ? packagesByUid.Count : 0;
+            lock (s_Sync)
+            {
+                if (scanBin != 0
+                    && scanBin == s_CachedInvScanBinary
+                    && count == s_CachedInvPkgCount
+                    && !string.IsNullOrEmpty(s_CachedInvSig))
+                {
+                    return s_CachedInvSig;
+                }
+            }
+
+            string sig = ComputePackageInventorySignature(packagesByUid);
+            lock (s_Sync)
+            {
+                s_CachedInvScanBinary = scanBin;
+                s_CachedInvPkgCount = count;
+                s_CachedInvSig = sig;
+            }
+            return sig;
+        }
+
+        private static string ComputePackageInventorySignatureFromUids(List<string> uids)
+        {
+            if (uids == null || uids.Count == 0) return "0";
+            uids.Sort(StringComparer.Ordinal);
+            unchecked
+            {
+                ulong h = 14695981039346656037UL;
+                for (int i = 0; i < uids.Count; i++)
+                {
+                    string s = uids[i] ?? "";
+                    for (int j = 0; j < s.Length; j++)
+                    {
+                        h ^= s[j];
+                        h *= 1099511628211UL;
+                    }
+                    h ^= 0xFFUL;
+                }
+                return uids.Count.ToString() + ":" + h.ToString();
+            }
+        }
+
+        private static string GetCachedPackageInventorySignatureFromLivePackages(long scanBin, out long invComputeMs)
+        {
+            invComputeMs = 0;
+
+            Dictionary<string, VarPackage> byUid = null;
+            int count = 0;
+            lock (FileManager.packagesLock)
+            {
+                byUid = FileManager.PackagesByUid;
+                if (byUid == null) return null;
+                count = byUid.Count;
+            }
+
+            lock (s_Sync)
+            {
+                if (scanBin != 0
+                    && scanBin == s_CachedInvScanBinary
+                    && count == s_CachedInvPkgCount
+                    && !string.IsNullOrEmpty(s_CachedInvSig))
+                {
+                    return s_CachedInvSig;
+                }
+            }
+
+            // Snapshot only the UIDs under lock (avoid copying the whole dictionary).
+            List<string> uids = new List<string>(count);
+            lock (FileManager.packagesLock)
+            {
+                byUid = FileManager.PackagesByUid;
+                if (byUid == null) return null;
+                foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                {
+                    VarPackage p = kv.Value;
+                    if (p == null) continue;
+                    string u = p.Uid;
+                    if (!string.IsNullOrEmpty(u)) uids.Add(u);
+                }
+                count = byUid.Count;
+            }
+
+            Stopwatch sw = Stopwatch.StartNew();
+            string sig = ComputePackageInventorySignatureFromUids(uids);
+            sw.Stop();
+            invComputeMs = sw.ElapsedMilliseconds;
+
+            lock (s_Sync)
+            {
+                s_CachedInvScanBinary = scanBin;
+                s_CachedInvPkgCount = count;
+                s_CachedInvSig = sig;
+            }
+            return sig;
+        }
+
         /// <summary>
         /// If the SQLite DB was built for the same category list and the same package set, republish the
         /// in-memory gate using the <em>current</em> package scan stamp so <see cref="TryQueryGalleryCategoryRows"/>
@@ -680,16 +782,13 @@ namespace VPB
             string expectSig = BuildCategoriesSignature(catSnap);
             if (string.IsNullOrEmpty(expectSig)) return false;
 
-            Dictionary<string, VarPackage> liveSnap;
-            lock (FileManager.packagesLock)
-            {
-                if (FileManager.PackagesByUid == null) return false;
-                liveSnap = new Dictionary<string, VarPackage>(FileManager.PackagesByUid, StringComparer.OrdinalIgnoreCase);
-            }
-            string liveInv = ComputePackageInventorySignature(liveSnap);
-
+            Stopwatch sw = Stopwatch.StartNew();
+            long metaMs = 0;
+            long invMs = 0;
+            bool ok = false;
             try
             {
+                string metaInv;
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     string metaVer = MetaGet(conn, "schema_version");
@@ -701,21 +800,42 @@ namespace VPB
                     if (!string.Equals(metaSig ?? "", expectSig, StringComparison.Ordinal))
                         return false;
 
-                    string metaInv = MetaGet(conn, "pkg_inv_sig");
-                    if (string.IsNullOrEmpty(metaInv) || !string.Equals(metaInv, liveInv, StringComparison.Ordinal))
+                    metaInv = MetaGet(conn, "pkg_inv_sig");
+                    if (string.IsNullOrEmpty(metaInv))
                         return false;
-
-                    lock (s_Sync)
-                    {
-                        s_ReadyScanBinary = scanBin;
-                        s_ReadyCategoriesSig = expectSig;
-                    }
-                    return true;
                 }
+                metaMs = sw.ElapsedMilliseconds;
+                long invStart = sw.ElapsedMilliseconds;
+                long invComputeMs;
+                string liveInv = GetCachedPackageInventorySignatureFromLivePackages(scanBin, out invComputeMs);
+                invMs = sw.ElapsedMilliseconds - invStart;
+                if (string.IsNullOrEmpty(liveInv))
+                    return false;
+                if (!string.Equals(metaInv, liveInv, StringComparison.Ordinal))
+                    return false;
+
+                lock (s_Sync)
+                {
+                    s_ReadyScanBinary = scanBin;
+                    s_ReadyCategoriesSig = expectSig;
+                }
+                ok = true;
+                return true;
             }
             catch
             {
                 return false;
+            }
+            finally
+            {
+                try
+                {
+                    sw.Stop();
+                    long total = sw.ElapsedMilliseconds;
+                    if (total >= 10)
+                        LogUtil.Log("[VPB.Gallery.Timing] sqlRestore total=" + total + "ms meta_ms=" + metaMs + " inv_ms=" + invMs + " ok=" + (ok ? "1" : "0"));
+                }
+                catch { }
             }
         }
 
@@ -1068,6 +1188,7 @@ namespace VPB
             string rebuildAbortReason = null;
             long tOpenConn = 0;
             long tEnsureSchema = 0;
+            long tBulkPragmas = 0;
             long tBegin = 0;
             long tDelete = 0;
             long tPkgRow = 0;
@@ -1094,6 +1215,19 @@ namespace VPB
                     t0 = Stopwatch.GetTimestamp();
                     EnsureSchema(conn);
                     tEnsureSchema += Stopwatch.GetTimestamp() - t0;
+
+                    // Rebuild-only perf pragmas (connection-local).
+                    // Avoids extra temp-file work and increases cache for bulk insert/index build.
+                    t0 = Stopwatch.GetTimestamp();
+                    try
+                    {
+                        conn.ExecUtf8(
+                            "PRAGMA temp_store=MEMORY;" +
+                            "PRAGMA cache_size=-65536;" +          // ~64MiB page cache (negative = KiB)
+                            "PRAGMA mmap_size=268435456;");        // 256MiB mmap when supported
+                    }
+                    catch { }
+                    tBulkPragmas += Stopwatch.GetTimestamp() - t0;
 
                     t0 = Stopwatch.GetTimestamp();
                     conn.ExecUtf8("BEGIN IMMEDIATE;");
@@ -1125,6 +1259,7 @@ namespace VPB
                                 long sz = 0;
                                 try { sz = pkg.Size; } catch { }
                                 string varPath = pkg.Path ?? "";
+                                string varListPrefix = varPath.Length > 0 ? (varPath + ":/") : ":/";
                                 long ct = DateTime.MinValue.Ticks;
                                 try { ct = pkg.CreationTime.ToBinary(); } catch { }
                                 int loaded = ComputePackageLoadedFlagFromVarPath(varPath);
@@ -1132,11 +1267,11 @@ namespace VPB
                                 long tPkg0 = Stopwatch.GetTimestamp();
                                 insPkg.BindText(1, uid);
                                 insPkg.BindText(2, cr);
-                                insPkg.BindText(3, wt.ToString());
-                                insPkg.BindText(4, sz.ToString());
+                                insPkg.BindInt64(3, wt);
+                                insPkg.BindInt64(4, sz);
                                 insPkg.BindText(5, varPath);
-                                insPkg.BindText(6, ct.ToString());
-                                insPkg.BindText(7, loaded.ToString());
+                                insPkg.BindInt64(6, ct);
+                                insPkg.BindInt64(7, loaded);
                                 insPkg.Step();
                                 insPkg.Reset();
                                 tPkgRow += Stopwatch.GetTimestamp() - tPkg0;
@@ -1189,18 +1324,18 @@ namespace VPB
                                     if (string.Equals(ip, "meta.json", StringComparison.OrdinalIgnoreCase))
                                         listPath = varPath;
                                     else
-                                        listPath = varPath + ":/" + ip;
+                                        listPath = varListPrefix + ip;
 
-                                    string clothAttrTxt = "0";
+                                    long clothAttr = 0;
                                     if (string.Equals(cname, "Clothing", StringComparison.OrdinalIgnoreCase))
-                                        clothAttrTxt = PackClothingGalleryAttrForVarListPath(listPath).ToString();
+                                        clothAttr = PackClothingGalleryAttrForVarListPath(listPath);
 
                                     long tMemSql0 = Stopwatch.GetTimestamp();
                                     insMem.BindText(1, cname);
                                     insMem.BindText(2, uid);
                                     insMem.BindText(3, ip);
                                     insMem.BindText(4, listPath);
-                                    insMem.BindText(5, clothAttrTxt);
+                                    insMem.BindInt64(5, clothAttr);
                                     insMem.Step();
                                     insMem.Reset();
                                     tCatMemSql += Stopwatch.GetTimestamp() - tMemSql0;
@@ -1281,6 +1416,7 @@ namespace VPB
                 sb.Append(" | phases_ms=");
                 sb.Append("open=").Append(ticksToMs(tOpenConn)).Append(',');
                 sb.Append("schema=").Append(ticksToMs(tEnsureSchema)).Append(',');
+                sb.Append("bulkPragmas=").Append(ticksToMs(tBulkPragmas)).Append(',');
                 sb.Append("begin=").Append(ticksToMs(tBegin)).Append(',');
                 sb.Append("delete=").Append(ticksToMs(tDelete)).Append(',');
                 sb.Append("pkg=").Append(ticksToMs(tPkgRow)).Append(',');
@@ -1561,30 +1697,11 @@ namespace VPB
                         r.InternalPath = stmt.ColumnText(1);
                         r.ListPath = stmt.ColumnText(2) ?? "";
                         r.VarPath = stmt.ColumnText(3) ?? "";
-                        r.LastWriteTicksOrInvalid = long.MinValue;
-                        r.PackageSizeOrInvalid = long.MinValue;
-                        r.PackageCreationTicksOrInvalid = long.MinValue;
-                        string wtxt = stmt.ColumnText(4);
-                        string sztxt = stmt.ColumnText(5);
-                        string ctxt = stmt.ColumnText(6);
-                        long wtL, szL, ctL;
-                        if (!string.IsNullOrEmpty(wtxt) && long.TryParse(wtxt, out wtL))
-                            r.LastWriteTicksOrInvalid = wtL;
-                        if (!string.IsNullOrEmpty(sztxt) && long.TryParse(sztxt, out szL))
-                            r.PackageSizeOrInvalid = szL;
-                        if (!string.IsNullOrEmpty(ctxt) && long.TryParse(ctxt, out ctL))
-                            r.PackageCreationTicksOrInvalid = ctL;
-                        string clothTxt = stmt.ColumnText(7) ?? "";
-                        int clothPacked = 0;
-                        if (!string.IsNullOrEmpty(clothTxt))
-                            int.TryParse(clothTxt, out clothPacked);
-                        r.ClothingAttrPacked = clothPacked;
-                        string loadedTxt = stmt.ColumnText(8) ?? "";
-                        int loadedInt = 0;
-                        if (!string.IsNullOrEmpty(loadedTxt) && int.TryParse(loadedTxt, out loadedInt))
-                            r.PackageIsLoaded = loadedInt != 0;
-                        else
-                            r.PackageIsLoaded = ComputePackageLoadedFlagFromVarPath(r.VarPath) != 0;
+                        r.LastWriteTicksOrInvalid = stmt.ColumnInt64(4);
+                        r.PackageSizeOrInvalid = stmt.ColumnInt64(5);
+                        r.PackageCreationTicksOrInvalid = stmt.ColumnInt64(6);
+                        r.ClothingAttrPacked = (int)stmt.ColumnInt64(7);
+                        r.PackageIsLoaded = stmt.ColumnInt64(8) != 0;
                         if (r.PackageUid.Length > 0 && r.InternalPath.Length > 0)
                             outRows.Add(r);
                     }

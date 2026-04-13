@@ -69,7 +69,13 @@ namespace VPB
         private delegate int D_sqlite3_bind_text(IntPtr stmt, int index, IntPtr value, int n, IntPtr destructor);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate int D_sqlite3_bind_int64(IntPtr stmt, int index, long value);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate IntPtr D_sqlite3_column_text(IntPtr stmt, int iCol);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate long D_sqlite3_column_int64(IntPtr stmt, int iCol);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int D_sqlite3_busy_timeout(IntPtr db, int ms);
@@ -83,7 +89,9 @@ namespace VPB
         private static D_sqlite3_reset s_reset;
         private static D_sqlite3_finalize s_finalize;
         private static D_sqlite3_bind_text s_bind_text;
+        private static D_sqlite3_bind_int64 s_bind_int64;
         private static D_sqlite3_column_text s_column_text;
+        private static D_sqlite3_column_int64 s_column_int64;
         private static D_sqlite3_busy_timeout s_busy_timeout;
 
         private static T LoadDelegate<T>(IntPtr module, string name) where T : class
@@ -104,7 +112,9 @@ namespace VPB
             s_reset = null;
             s_finalize = null;
             s_bind_text = null;
+            s_bind_int64 = null;
             s_column_text = null;
+            s_column_int64 = null;
             s_busy_timeout = null;
         }
 
@@ -119,11 +129,13 @@ namespace VPB
             s_reset = LoadDelegate<D_sqlite3_reset>(h, "sqlite3_reset");
             s_finalize = LoadDelegate<D_sqlite3_finalize>(h, "sqlite3_finalize");
             s_bind_text = LoadDelegate<D_sqlite3_bind_text>(h, "sqlite3_bind_text");
+            s_bind_int64 = LoadDelegate<D_sqlite3_bind_int64>(h, "sqlite3_bind_int64");
             s_column_text = LoadDelegate<D_sqlite3_column_text>(h, "sqlite3_column_text");
+            s_column_int64 = LoadDelegate<D_sqlite3_column_int64>(h, "sqlite3_column_int64");
             s_busy_timeout = LoadDelegate<D_sqlite3_busy_timeout>(h, "sqlite3_busy_timeout");
             return s_open_v2 != null && s_close != null && s_exec != null && s_free != null
                 && s_prepare_v2 != null && s_step != null && s_reset != null && s_finalize != null
-                && s_bind_text != null && s_column_text != null && s_busy_timeout != null;
+                && s_bind_text != null && s_bind_int64 != null && s_column_text != null && s_column_int64 != null && s_busy_timeout != null;
         }
 
         private static int NativeOpen(IntPtr filename, out IntPtr db, int flags, IntPtr vfs)
@@ -171,9 +183,19 @@ namespace VPB
             return s_bind_text(stmt, index, value, n, destructor);
         }
 
+        private static int NativeBindInt64(IntPtr stmt, int index, long value)
+        {
+            return s_bind_int64(stmt, index, value);
+        }
+
         private static IntPtr NativeColumnText(IntPtr stmt, int iCol)
         {
             return s_column_text(stmt, iCol);
+        }
+
+        private static long NativeColumnInt64(IntPtr stmt, int iCol)
+        {
+            return s_column_int64(stmt, iCol);
         }
 
         private static int NativeBusyTimeout(IntPtr db, int ms)
@@ -460,6 +482,13 @@ namespace VPB
                 }
             }
 
+            internal void BindInt64(int oneBasedIndex, long value)
+            {
+                int rc = NativeBindInt64(Handle, oneBasedIndex, value);
+                if (rc != SQLITE_OK)
+                    throw new InvalidOperationException("sqlite3_bind_int64 failed: " + rc);
+            }
+
             internal int Step()
             {
                 return NativeStep(Handle);
@@ -480,6 +509,11 @@ namespace VPB
                 byte[] buf = new byte[len];
                 Marshal.Copy(p, buf, 0, len);
                 return Encoding.UTF8.GetString(buf);
+            }
+
+            internal long ColumnInt64(int zeroBased)
+            {
+                return NativeColumnInt64(Handle, zeroBased);
             }
 
             public void Dispose()
