@@ -408,7 +408,7 @@ namespace VPB
             { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, 70f*s); }); }
             { var t = titleText; innerPaneScaleActions.Add(s => { if (t) { t.fontSize = Mathf.RoundToInt(28*s); t.GetComponent<RectTransform>().sizeDelta = new Vector2(300f*s, 40f*s); } }); }
             { var t = fpsText; innerPaneScaleActions.Add(s => { if (t) { t.fontSize = Mathf.RoundToInt(20*s); t.GetComponent<RectTransform>().sizeDelta = new Vector2(100f*s, 40f*s); } }); }
-            { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) go.GetComponent<RectTransform>().sizeDelta = new Vector2(50f*s, 50f*s); if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(16*s); t.resizeTextMinSize = Mathf.RoundToInt(10*s); } }); }
+            { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) go.GetComponent<RectTransform>().sizeDelta = new Vector2(40f*s, 40f*s); if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(16*s); t.resizeTextMinSize = Mathf.RoundToInt(10*s); } }); }
             { var rt = titleSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 40f*s); }); }
             { var rt = fileSortTypeRT; var t = fileSortTypeText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
             { var rt = fileSortDirRT; var t = fileSortDirText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
@@ -2962,27 +2962,35 @@ UpdateDesktopModeButton();
 
             CreateResizeHandles();
 
-            // Minimize button
-            GameObject minimizeBtn = UI.CreateUIButton(backgroundBoxGO, 50, 50, "_", 30, 0, 0, AnchorPresets.topRight, () => {
+            // Minimize button (title bar icon row)
+            GameObject minimizeBtn = UI.CreateUIButton(titleBarGO, 40, 40, "_", 30, 0, 0, AnchorPresets.middleCenter, () => {
                 Hide();
             });
             RectTransform minRT = minimizeBtn.GetComponent<RectTransform>();
-            minRT.anchoredPosition = new Vector2(-55, 0);
+            minRT.anchorMin = new Vector2(1f, 0.5f);
+            minRT.anchorMax = new Vector2(1f, 0.5f);
+            minRT.pivot     = new Vector2(1f, 0.5f);
+            minRT.anchoredPosition = new Vector2(-54f, 0f);
             minimizeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(minimizeBtn);
             { var s = UI.LoadIconSprite("vpb_icons/minimize.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(minimizeBtn, s); }
 
-            // Close button - Rendered last to be on top
-            GameObject closeBtn = UI.CreateUIButton(backgroundBoxGO, 50, 50, "X", 30, 0, 0, AnchorPresets.topRight, () => {
+            // Close button (title bar icon row) - rendered last to be on top
+            GameObject closeBtn = UI.CreateUIButton(titleBarGO, 40, 40, "X", 30, 0, 0, AnchorPresets.middleCenter, () => {
                 Close();
             });
+            RectTransform closeRT = closeBtn.GetComponent<RectTransform>();
+            closeRT.anchorMin = new Vector2(1f, 0.5f);
+            closeRT.anchorMax = new Vector2(1f, 0.5f);
+            closeRT.pivot     = new Vector2(1f, 0.5f);
+            closeRT.anchoredPosition = new Vector2(-10f, 0f);
             closeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(closeBtn);
             { var s = UI.LoadIconSprite("vpb_icons/close.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(closeBtn, s); }
 
             // Register inner pane button scale actions (close/minimize)
-            { var rt = minRT; var t = minimizeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(50f*s, 50f*s); if (t) t.fontSize = Mathf.RoundToInt(30*s); }); }
-            { var rt = closeBtn.GetComponent<RectTransform>(); var t = closeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(50f*s, 50f*s); if (t) t.fontSize = Mathf.RoundToInt(30*s); }); }
+            { var rt = minRT; var t = minimizeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(30*s); }); }
+            { var rt = closeRT; var t = closeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(30*s); }); }
 
             ApplyInnerPaneScale();
             ApplySideButtonScale();

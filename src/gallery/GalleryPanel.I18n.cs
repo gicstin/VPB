@@ -196,7 +196,7 @@ namespace VPB
             // close=[1150,1200], minimize=[1095,1145] are far to the right and unaffected.
 
             languageSwitcherBtnGO = UI.CreateUIButton(
-                titleBarGO, 50, 50,
+                titleBarGO, 40, 40,
                 GetLocaleShortCode(VPBTranslation.CurrentLocale),
                 14, 0, 0, AnchorPresets.middleCenter,
                 ToggleLanguageMenu);
@@ -204,6 +204,17 @@ namespace VPB
 
             _langBtnImage = languageSwitcherBtnGO.GetComponent<Image>();
             _langBtnImage.color = LangBtnColorNormal;
+
+            // Icon
+            try
+            {
+                var icon = UI.LoadIconSprite("vpb_icons/language.png", new Color(1f, 1f, 1f, 1f));
+                if (icon != null)
+                {
+                    UI.AddIconToButton(languageSwitcherBtnGO, icon, padding: 6f);
+                }
+            }
+            catch { }
 
             _langBtnText = languageSwitcherBtnGO.GetComponentInChildren<Text>();
             if (_langBtnText != null)
@@ -217,11 +228,15 @@ namespace VPB
             }
 
             RectTransform langRT = languageSwitcherBtnGO.GetComponent<RectTransform>();
-            langRT.anchorMin = new Vector2(0f, 1f);
-            langRT.anchorMax = new Vector2(0f, 1f);
-            langRT.pivot     = new Vector2(0f, 1f);
-            langRT.anchoredPosition = new Vector2(0f, 0f);
-            langRT.sizeDelta = new Vector2(50f, 50f);
+            // Match the title-bar icon row sizing/centering (like Refresh / Star).
+            langRT.anchorMin = new Vector2(0f, 0.5f);
+            langRT.anchorMax = new Vector2(0f, 0.5f);
+            langRT.pivot     = new Vector2(0f, 0.5f);
+            langRT.anchoredPosition = new Vector2(10f, 0f);
+            langRT.sizeDelta = new Vector2(40f, 40f);
+            // Ensure square sizing (defensive; button factory may override later in some layouts)
+            if (Mathf.Abs(langRT.sizeDelta.x - langRT.sizeDelta.y) > 0.01f)
+                langRT.sizeDelta = new Vector2(langRT.sizeDelta.x, langRT.sizeDelta.x);
 
             AddTooltip(languageSwitcherBtnGO, "i18n.switcher.tooltip", "Language / 语言 / 言語");
 
