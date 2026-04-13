@@ -55,6 +55,29 @@ namespace VPB
                 SubscribeGalleryPanelToVpBConfigChanged();
             }
 
+            // Persisted per-session toggles (shared across panes)
+            try
+            {
+                if (VPBConfig.Instance != null)
+                {
+                    springScrollButtonEnabled = VPBConfig.Instance.SpringScrollButtonEnabled;
+                    holdToLaunchEnabled = VPBConfig.Instance.HoldToLaunchEnabled;
+
+                    // If hold-to-launch is enabled, force drag-drop off to avoid conflicts, remembering prior state.
+                    if (holdToLaunchEnabled)
+                    {
+                        holdToLaunchPrevEnableDragDrop = VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop;
+                        if (VPBConfig.Instance.EnableDragDrop)
+                        {
+                            VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
+                            VPBConfig.Instance.EnableDragDrop = false;
+                            VPBConfig.Instance.Save(false);
+                        }
+                    }
+                }
+            }
+            catch { }
+
             // ... standard Init code follows ...
             // string nameSuffix = isUndocked ? "_Undocked" : "";
             GameObject canvasGO = new GameObject("VPB_GalleryCanvas");
@@ -2898,6 +2921,71 @@ UpdateDesktopModeButton();
                     // LogUtil.Log("Scroll changed: " + v.y);
                 });
             }
+
+            // Spring drag scroll button (WorldSpace and ScreenSpaceOverlay).
+            try
+            {
+                if (scrollRect != null)
+                {
+                    Transform sb = scrollGO.transform.Find("Scrollbar");
+                    if (sb != null)
+                    {
+                        // Parent to the scrollbar so it follows layout/offsets.
+                        float w = isFixedLocally ? 50f : 100f;
+                        float h = w * 1.618f;
+                        GameObject springBtn = SpringScrollButton.Create(sb.gameObject, scrollRect, w, h);
+
+                        // Ensure it doesn't block other interactions outside its square.
+                        springBtn.transform.SetAsLastSibling();
+
+                        // Lower sensitivity for big-button spring scrolling in VR.
+                        SpringScrollButton ssb = springBtn.GetComponent<SpringScrollButton>();
+                        if (ssb != null)
+                        {
+                            // Retuned for practical hand movement: reach high speed without huge drags.
+                            ssb.deadzoneFraction = 0.10f;
+                            ssb.maxViewportHeightsPerSecond = 2.25f;
+                            ssb.speedSmoothing = 12f;
+                            ssb.responsePower = 2.0f;
+                        }
+
+                        // Icon: scroll.png
+                        try
+                        {
+                            Sprite icon = UI.LoadIconSprite("vpb_icons/scroll.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                            if (icon != null)
+                            {
+                                GameObject iconGO = new GameObject("Icon");
+                                iconGO.transform.SetParent(springBtn.transform, false);
+                                Image img = iconGO.AddComponent<Image>();
+                                img.sprite = icon;
+                                img.color = Color.white;
+                                img.preserveAspect = true;
+                                img.raycastTarget = false;
+
+                                RectTransform irt = iconGO.GetComponent<RectTransform>();
+                                irt.anchorMin = Vector2.zero;
+                                irt.anchorMax = Vector2.one;
+                                irt.sizeDelta = new Vector2(-24f, -24f);
+                                irt.anchoredPosition = Vector2.zero;
+                            }
+                        }
+                        catch { }
+
+                        // Tooltip: teach the gesture (localized)
+                        try
+                        {
+                            AddTooltip(springBtn, "gallery.tooltip.spring_scroll_drag", "Hold and drag up/down to scroll (farther = faster). Release to stop.");
+                        }
+                        catch { }
+
+                        // Track + apply default ON/OFF state (footer toggle updates this too).
+                        springScrollButtonGO = springBtn;
+                        springScrollButtonGO.SetActive(springScrollButtonEnabled);
+                    }
+                }
+            }
+            catch { }
             
             contentGO = scrollRect.content.gameObject;
             CreateLoadingOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);

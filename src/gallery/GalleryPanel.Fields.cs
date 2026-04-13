@@ -669,6 +669,8 @@ namespace VPB
         private int currentPage = 0;
         private Text paginationText;
         private RectTransform paginationRT;
+        private HorizontalLayoutGroup footerHLG;
+        private int _footerHLGLastRightPadding = -1;
         private GameObject footerClearFilterBtn;
         private Text footerClearFilterBtnText;
         private Text footerFilterModeText;
@@ -695,6 +697,23 @@ namespace VPB
         private GameObject gridSizePlusBtn;
         private GameObject footerScrollTopBtn;
         private GameObject footerScrollBottomBtn;
+        private GameObject footerSpringScrollToggleBtn;
+        private Image footerSpringScrollToggleBtnImage;
+        private Image footerSpringScrollToggleIconImage;
+
+        // Floating-pane helper (VR): big spring scroll button next to scrollbar (toggleable, default ON).
+        private bool springScrollButtonEnabled = true;
+        private GameObject springScrollButtonGO;
+
+        // Hold-to-launch/apply (VR): hover-hold over an item to apply after a delay.
+        private bool holdToLaunchEnabled = false;
+        internal bool HoldToLaunchEnabled { get { return holdToLaunchEnabled; } }
+        private bool holdToLaunchPrevEnableDragDrop = false;
+        private GameObject footerHoldToLaunchToggleBtn;
+        private Image footerHoldToLaunchToggleBtnImage;
+        private Image footerHoldToLaunchToggleIconImage;
+        private Sprite footerHoldToLaunchOnSprite;
+        private Sprite footerHoldToLaunchOffSprite;
         // lastTotalItems removed
         private int lastTotalPages = 1;
         // lastShownCount removed
@@ -852,10 +871,18 @@ namespace VPB
         private GameObject footerAutoHideBtn;
         private Text footerAutoHideBtnText;
         private Image footerAutoHideBtnImage;
+        private GameObject footerMenuGateBtn;
+        private Image footerMenuGateBtnImage;
+        private Image footerMenuGateIconImage;
+        private Sprite footerMenuGateOffSprite;
+        private Sprite footerMenuGateOnSprite;
 
         private GameObject footerShowHiddenPackagesBtn;
         private Text footerShowHiddenPackagesBtnText;
         private Image footerShowHiddenPackagesBtnImage;
+
+        private bool _userHidden = false;
+        private bool _hiddenByMenuGate = false;
         
         private Text fileSortBtnText; // NEW
         private Text fileSortTypeText; // Sort Type button text (Az/Dt/Sz/Rt)

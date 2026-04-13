@@ -186,6 +186,7 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged += UpdateDesktopModeButton;
             VPBConfig.Instance.ConfigChanged += UpdateLayout;
             VPBConfig.Instance.ConfigChanged += RefreshSideTabAreasForConfigChange;
+            VPBConfig.Instance.ConfigChanged += ApplyVamMenuGateVisibility;
         }
 
         private void UnsubscribeGalleryPanelFromVpBConfigChanged()
@@ -198,6 +199,7 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged -= UpdateDesktopModeButton;
             VPBConfig.Instance.ConfigChanged -= UpdateLayout;
             VPBConfig.Instance.ConfigChanged -= RefreshSideTabAreasForConfigChange;
+            VPBConfig.Instance.ConfigChanged -= ApplyVamMenuGateVisibility;
         }
 
         void OnDestroy()

@@ -168,14 +168,20 @@ namespace VPB
         {
             try
             {
-                if (lastFilteredFiles == null || lastFilteredFiles.Count == 0)
+                // Prefer the currently visible list (includes top search + filter-mode search).
+                // lastFilteredFiles is a post-refresh snapshot and does not change when the user searches.
+                var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
+                    ? currentFilteredFiles
+                    : lastFilteredFiles;
+
+                if (pool == null || pool.Count == 0)
                 {
                     LogUtil.LogWarning("[VPB] Load Random: no items available.");
                     return;
                 }
 
-                int idx = UnityEngine.Random.Range(0, lastFilteredFiles.Count);
-                FileEntry file = lastFilteredFiles[idx];
+                int idx = UnityEngine.Random.Range(0, pool.Count);
+                FileEntry file = pool[idx];
                 if (file == null)
                 {
                     LogUtil.LogWarning("[VPB] Load Random: selected file was null.");
@@ -250,6 +256,7 @@ namespace VPB
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool needsInit = canvas == null;
             LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
+            _userHidden = false;
             if (needsInit) Init();
             LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
@@ -414,6 +421,8 @@ namespace VPB
 
         public void Hide()
         {
+            _userHidden = true;
+            _hiddenByMenuGate = false;
             SetCanvasVisible(false);
 
             hoverCount = 0;
@@ -427,6 +436,52 @@ namespace VPB
 
             var raycaster = canvas.GetComponent<GraphicRaycaster>();
             if (raycaster != null) raycaster.enabled = visible;
+        }
+
+        private static bool IsVamMenuVisible()
+        {
+            try
+            {
+                return SuperController.singleton != null &&
+                       SuperController.singleton.mainHUD != null &&
+                       SuperController.singleton.mainHUD.gameObject != null &&
+                       SuperController.singleton.mainHUD.gameObject.activeInHierarchy;
+            }
+            catch { return true; }
+        }
+
+        private void ApplyVamMenuGateVisibility()
+        {
+            if (VPBConfig.Instance == null || canvas == null) return;
+            bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible;
+            bool menuVisible = IsVamMenuVisible();
+
+            if (!gate)
+            {
+                if (_hiddenByMenuGate && !_userHidden)
+                {
+                    SetCanvasVisible(true);
+                    _hiddenByMenuGate = false;
+                }
+                return;
+            }
+
+            if (!menuVisible)
+            {
+                if (canvas.enabled)
+                {
+                    SetCanvasVisible(false);
+                    _hiddenByMenuGate = true;
+                }
+            }
+            else
+            {
+                if (_hiddenByMenuGate && !_userHidden)
+                {
+                    SetCanvasVisible(true);
+                    _hiddenByMenuGate = false;
+                }
+            }
         }
 
         private static string MakeCategoryScrollKey(string title, string path)
@@ -815,31 +870,47 @@ namespace VPB
             }
 
             // Apply Logic
-            bool shouldApply = (ItemApplyMode == ApplyMode.SingleClick) || (ItemApplyMode == ApplyMode.DoubleClick && isDoubleClick);
+            // Hold-to-launch overrides 1-click apply: clicks should still select, but only 2-click applies while hold mode is on.
+            bool shouldApply = holdToLaunchEnabled
+                ? (ItemApplyMode == ApplyMode.DoubleClick && isDoubleClick)
+                : ((ItemApplyMode == ApplyMode.SingleClick) || (ItemApplyMode == ApplyMode.DoubleClick && isDoubleClick));
             
             if (shouldApply)
             {
-                FileEntry applyFile = file;
-                FileEntry resolvedScene = TryResolveSceneCategoryPackageRowToSceneJson(file);
-                if (resolvedScene != null)
-                    applyFile = resolvedScene;
+                ApplyFileEntryNow(file);
+            }
+        }
 
-                string pathLower = (applyFile.Path ?? "").ToLowerInvariant();
-                // Exclude Scenes from auto-apply, but allow SubScenes
-                bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\")
-                    || (!string.IsNullOrEmpty(currentCategoryTitle) && currentCategoryTitle.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0);
-                bool isScene = !isSubScene && pathLower.EndsWith(".json")
-                    && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene")
-                        || (!string.IsNullOrEmpty(currentCategoryTitle) && currentCategoryTitle.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0));
+        internal void ApplyFileFromHold(FileEntry file)
+        {
+            if (file == null) return;
+            ApplyFileEntryNow(file);
+        }
 
-                if (!isScene)
-                {
-                    ExecuteAutoActionForFile(applyFile);
-                }
-                else
-                {
-                    UI.LoadSceneFile(applyFile, this);
-                }
+        private void ApplyFileEntryNow(FileEntry file)
+        {
+            if (file == null) return;
+
+            FileEntry applyFile = file;
+            FileEntry resolvedScene = TryResolveSceneCategoryPackageRowToSceneJson(file);
+            if (resolvedScene != null)
+                applyFile = resolvedScene;
+
+            string pathLower = (applyFile.Path ?? "").ToLowerInvariant();
+            // Exclude Scenes from auto-apply, but allow SubScenes
+            bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\")
+                || (!string.IsNullOrEmpty(currentCategoryTitle) && currentCategoryTitle.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool isScene = !isSubScene && pathLower.EndsWith(".json")
+                && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene")
+                    || (!string.IsNullOrEmpty(currentCategoryTitle) && currentCategoryTitle.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0));
+
+            if (!isScene)
+            {
+                ExecuteAutoActionForFile(applyFile);
+            }
+            else
+            {
+                UI.LoadSceneFile(applyFile, this);
             }
         }
 

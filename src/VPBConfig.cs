@@ -275,6 +275,14 @@ namespace VPB
         public float GalleryListHoverPreviewOffsetY = 0f;
         /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
         public bool GalleryTboxToolbarPinned = false;
+        /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
+        public bool GalleryOnlyWhenVamMenuVisible = false;
+
+        // Interaction toggles (persisted)
+        public bool SpringScrollButtonEnabled = true;
+        public bool HoldToLaunchEnabled = false;
+        /// <summary>When HoldToLaunch is enabled, drag&drop is forced off; this stores the prior setting for restore.</summary>
+        public bool HoldToLaunchPrevEnableDragDrop = false;
 
         private static readonly string[] s_HoverPreviewModeCanonical = { "Off", "List", "Grid", "Both" };
         public static string NormalizeHoverPreviewMode(string value)
@@ -461,6 +469,9 @@ namespace VPB
             GalleryDefaultRightSidePanel = "None";
             GalleryTboxToolbarPinned = false;
             UiLocale = "";
+            SpringScrollButtonEnabled = true;
+            HoldToLaunchEnabled = false;
+            HoldToLaunchPrevEnableDragDrop = false;
 
             try
             {
@@ -552,8 +563,12 @@ namespace VPB
                         if (node["GalleryListHoverPreviewOffsetX"] != null) GalleryListHoverPreviewOffsetX = Mathf.Clamp(node["GalleryListHoverPreviewOffsetX"].AsFloat, -2000f, 2000f);
                         if (node["GalleryListHoverPreviewOffsetY"] != null) GalleryListHoverPreviewOffsetY = Mathf.Clamp(node["GalleryListHoverPreviewOffsetY"].AsFloat, -2000f, 2000f);
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
+                        if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["InnerPaneScale"] != null) InnerPaneScale = node["InnerPaneScale"].AsFloat;
+                        if (node["SpringScrollButtonEnabled"] != null) SpringScrollButtonEnabled = node["SpringScrollButtonEnabled"].AsBool;
+                        if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
+                        if (node["HoldToLaunchPrevEnableDragDrop"] != null) HoldToLaunchPrevEnableDragDrop = node["HoldToLaunchPrevEnableDragDrop"].AsBool;
                         if (node["UiLocale"] != null) UiLocale = node["UiLocale"].Value;
                         if (node["HiddenCategories"] != null)
                         {
@@ -682,8 +697,12 @@ namespace VPB
                 node["GalleryListHoverPreviewOffsetX"].AsFloat = GalleryListHoverPreviewOffsetX;
                 node["GalleryListHoverPreviewOffsetY"].AsFloat = GalleryListHoverPreviewOffsetY;
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
+                node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["InnerPaneScale"].AsFloat = InnerPaneScale;
+                node["SpringScrollButtonEnabled"].AsBool = SpringScrollButtonEnabled;
+                node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
+                node["HoldToLaunchPrevEnableDragDrop"].AsBool = HoldToLaunchPrevEnableDragDrop;
                 node["UiLocale"] = UiLocale ?? "en";
                 node["HiddenCategories"] = string.Join(",", new List<string>(HiddenCategories ?? new HashSet<string>()).ToArray());
                 long msBuild = sw.ElapsedMilliseconds;

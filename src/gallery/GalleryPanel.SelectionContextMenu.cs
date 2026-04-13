@@ -998,11 +998,11 @@ namespace VPB
                 // No auto install is an icon button; count is intentionally not shown on the label.
             }
 
-            // Load/Unload/LoadDeps: keep buttons in place; enable/disable based on selection mix.
+            // Load/LoadDeps should always be available (requested); Unload still reflects install state.
+            if (tboxLoadBtn != null)     SetTboxButtonEnabledVisual(tboxLoadBtn, true);
+            if (tboxLoadDepsBtn != null) SetTboxButtonEnabledVisual(tboxLoadDepsBtn, true);
             bool hasAnyPkg = anyPkgInstalled || anyPkgNotInstalled;
-            if (tboxLoadBtn != null) SetTboxButtonEnabledVisual(tboxLoadBtn, hasAnyPkg && anyPkgNotInstalled);
-            if (tboxLoadDepsBtn != null) SetTboxButtonEnabledVisual(tboxLoadDepsBtn, hasAnyPkg && anyPkgNotInstalled);
-            if (tboxUnloadBtn != null) SetTboxButtonEnabledVisual(tboxUnloadBtn, hasAnyPkg && anyPkgInstalled);
+            if (tboxUnloadBtn != null)   SetTboxButtonEnabledVisual(tboxUnloadBtn, hasAnyPkg && anyPkgInstalled);
 
             RefreshTboxFlexButtonLayout();
         }

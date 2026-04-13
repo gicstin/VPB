@@ -2044,6 +2044,18 @@ namespace VPB
             UIHoverReveal hover = btnGO.GetComponent<UIHoverReveal>();
             if (hover != null) hover.file = file;
 
+            // Hold-to-launch/apply (VR): hover-hold timer overlay.
+            // Kept always attached for pooling; enabled/disabled by panel toggle at runtime.
+            try
+            {
+                var h = btnGO.GetComponent<HoldToApplyOnHover>();
+                if (h == null) h = btnGO.AddComponent<HoldToApplyOnHover>();
+                h.panel = this;
+                h.file = file;
+                h.holdSeconds = 1.0f;
+            }
+            catch { }
+
             // Label
             Transform labelTr = btnGO.transform.Find("Card/Label");
             if (labelTr != null)

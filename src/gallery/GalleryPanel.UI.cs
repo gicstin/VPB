@@ -583,11 +583,12 @@ namespace VPB
             paginationRT.anchoredPosition = new Vector2(0, 0);
             paginationRT.sizeDelta = new Vector2(0, 40); // Footer bar height for buttons
             
-            HorizontalLayoutGroup footerHLG = pageContainer.AddComponent<HorizontalLayoutGroup>();
-            footerHLG.padding = new RectOffset(60, 10, 0, 0); // 60 padding on left for resize handle
+            footerHLG = pageContainer.AddComponent<HorizontalLayoutGroup>();
+            footerHLG.padding = new RectOffset(60, 10, 0, 0); // left reserved space (existing behavior)
             footerHLG.childControlWidth = true;
             footerHLG.childControlHeight = true;
             footerHLG.childForceExpandWidth = true;
+            _footerHLGLastRightPadding = footerHLG.padding != null ? footerHLG.padding.right : -1;
 
             // --- Left Section (Follow Controls) ---
             GameObject leftSection = new GameObject("LeftSection");
@@ -644,14 +645,17 @@ namespace VPB
             // Follow Quick Toggles
             footerFollowAngleBtn = UI.CreateUIButton(leftSection, 40, 40, "∡", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
+            { var s = UI.LoadIconSprite("vpb_icons/eye_angle.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerFollowAngleBtn, s); }
             AddTooltip(footerFollowAngleBtn, "gallery.tooltip.follow_angle", "Follow Angle");
             
             footerFollowDistanceBtn = UI.CreateUIButton(leftSection, 40, 40, "↕", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Distance"));
             footerFollowDistanceImage = footerFollowDistanceBtn.GetComponent<Image>();
+            { var s = UI.LoadIconSprite("vpb_icons/eye_distance.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerFollowDistanceBtn, s); }
             AddTooltip(footerFollowDistanceBtn, "gallery.tooltip.follow_distance", "Follow Distance");
             
             footerFollowHeightBtn = UI.CreateUIButton(leftSection, 40, 40, "⊙", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Height"));
             footerFollowHeightImage = footerFollowHeightBtn.GetComponent<Image>();
+            { var s = UI.LoadIconSprite("vpb_icons/eye_height.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerFollowHeightBtn, s); }
             AddTooltip(footerFollowHeightBtn, "gallery.tooltip.follow_eye_height", "Follow Eye Height");
 
             // --- Center Section (Pagination) ---
@@ -749,6 +753,14 @@ namespace VPB
             rightHLG.childAlignment = TextAnchor.MiddleRight;
             rightHLG.spacing = 10;
 
+            // VaM Menu Gate (show gallery only when VaM menu is visible) — placed left of Select All
+            footerMenuGateBtn = UI.CreateUIButton(rightSection, 40, 40, "M", 20, 0, 0, AnchorPresets.middleCenter, ToggleVamMenuGateMode);
+            footerMenuGateBtnImage = footerMenuGateBtn.GetComponent<Image>();
+            footerMenuGateOffSprite = UI.LoadIconSprite("vpb_icons/visibility_independent.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+            footerMenuGateOnSprite  = UI.LoadIconSprite("vpb_icons/visibility_linked.png",      new Color(0.92f, 0.92f, 0.92f, 1f));
+            { Sprite init = footerMenuGateOffSprite ?? footerMenuGateOnSprite; if (init != null) { UI.AddIconToButton(footerMenuGateBtn, init); footerMenuGateIconImage = footerMenuGateBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+            AddTooltip(footerMenuGateBtn, "gallery.tooltip.vam_menu_gate", "Show only when VaM menu is visible");
+
             selectAllBtn = UI.CreateUIButton(rightSection, 40, 40, "A", 20, 0, 0, AnchorPresets.middleCenter, SelectAll);
             { var s = UI.LoadIconSprite("vpb_icons/select_all.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(selectAllBtn, s); }
             clearSelectionBtn = UI.CreateUIButton(rightSection, 40, 40, "C", 20, 0, 0, AnchorPresets.middleCenter, ClearSelection);
@@ -761,6 +773,29 @@ namespace VPB
             { var s = UI.LoadIconSprite("vpb_icons/scroll_top.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerScrollTopBtn, s); }
             footerScrollBottomBtn = UI.CreateUIButton(rightSection, 40, 40, "↓", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToBottom);
             { var s = UI.LoadIconSprite("vpb_icons/scroll_bottom.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerScrollBottomBtn, s); }
+
+            // Toggle big spring-scroll drag button (floating panes only; default ON)
+            footerSpringScrollToggleBtn = UI.CreateUIButton(rightSection, 40, 40, "S", 20, 0, 0, AnchorPresets.middleCenter, ToggleSpringScrollButton);
+            footerSpringScrollToggleBtnImage = footerSpringScrollToggleBtn.GetComponent<Image>();
+            { var s = UI.LoadIconSprite("vpb_icons/scroll.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) { UI.AddIconToButton(footerSpringScrollToggleBtn, s); footerSpringScrollToggleIconImage = footerSpringScrollToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+            AddTooltip(footerSpringScrollToggleBtn, "gallery.tooltip.spring_scroll_toggle", "Toggle spring scroll drag button (floating)");
+
+            // Toggle hold-to-launch/apply (hover-hold over an item for 2s)
+            footerHoldToLaunchToggleBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleHoldToLaunch);
+            footerHoldToLaunchToggleBtnImage = footerHoldToLaunchToggleBtn.GetComponent<Image>();
+            footerHoldToLaunchOnSprite  = UI.LoadIconSprite("vpb_icons/hold.png",     new Color(0.78f, 0.78f, 0.78f, 1f));
+            footerHoldToLaunchOffSprite = UI.LoadIconSprite("vpb_icons/hold_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            {
+                // Fallback to old icon if hold icons missing
+                var fallback = UI.LoadIconSprite("vpb_icons/load.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                var init = (holdToLaunchEnabled ? footerHoldToLaunchOnSprite : footerHoldToLaunchOffSprite) ?? footerHoldToLaunchOnSprite ?? footerHoldToLaunchOffSprite ?? fallback;
+                if (init != null)
+                {
+                    UI.AddIconToButton(footerHoldToLaunchToggleBtn, init);
+                    footerHoldToLaunchToggleIconImage = footerHoldToLaunchToggleBtn.transform.Find("Icon")?.GetComponent<Image>();
+                }
+            }
+            AddTooltip(footerHoldToLaunchToggleBtn, "gallery.tooltip.hold_to_launch_toggle", "Hold over an item for 1s to apply/launch");
 
             footerLayoutBtn = UI.CreateUIButton(rightSection, 40, 40, "▤", 20, 0, 0, AnchorPresets.middleCenter, ToggleLayoutMode);
             footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
@@ -837,6 +872,8 @@ namespace VPB
             AddTooltip(footerScrollTopBtn, "gallery.tooltip.scroll_top", "Jump to top of list");
             AddHoverDelegate(footerScrollBottomBtn);
             AddTooltip(footerScrollBottomBtn, "gallery.tooltip.scroll_bottom", "Jump to bottom of list");
+            AddHoverDelegate(footerSpringScrollToggleBtn);
+            AddHoverDelegate(footerHoldToLaunchToggleBtn);
             AddHoverDelegate(footerClearFilterBtn);
             AddTooltip(footerClearFilterBtn, "gallery.tooltip.clear_filter", "Clear Filter");
             AddHoverDelegate(footerUndoBtnGO);
@@ -889,6 +926,8 @@ namespace VPB
                 selectAllBtn, clearSelectionBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
                 footerScrollTopBtn, footerScrollBottomBtn,
+                footerSpringScrollToggleBtn,
+                footerHoldToLaunchToggleBtn,
                 footerLayoutBtn, footerHeightBtn, footerShowHiddenPackagesBtn, footerAutoHideBtn,
                 footerRemoveAllHairBtn,
             };
@@ -899,6 +938,8 @@ namespace VPB
                 20, 20,
                 24, 24,
                 22, 22,
+                20,
+                20,
                 20, 20, 20, 20,
                 16,
             };
@@ -909,6 +950,9 @@ namespace VPB
                 int f = footerBtnFonts[i];
                 innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(f*s); });
             }
+
+            UpdateSpringScrollButtonToggleUI();
+            UpdateHoldToLaunchToggleUI();
 
             // Scale the clear filter button to match the slot
             {
@@ -984,9 +1028,201 @@ namespace VPB
             UpdateFooterHeightState();
             UpdateFooterShowHiddenPackagesState();
             UpdateFooterAutoHideState();
+            UpdateFooterVamMenuGateState();
             UpdateFooterContextActions();
             UpdatePaginationText();
             try { UpdateUndoRedoButtonLabels(); } catch { }
+        }
+
+        private void ToggleSpringScrollButton()
+        {
+            springScrollButtonEnabled = !springScrollButtonEnabled;
+            try
+            {
+                if (VPBConfig.Instance != null)
+                {
+                    VPBConfig.Instance.SpringScrollButtonEnabled = springScrollButtonEnabled;
+                    VPBConfig.Instance.Save(false);
+                }
+            }
+            catch { }
+
+            // Only create when enabling (never create just to immediately hide).
+            if (springScrollButtonEnabled)
+            {
+                EnsureSpringScrollButtonExists();
+            }
+
+            if (springScrollButtonGO != null)
+            {
+                springScrollButtonGO.SetActive(springScrollButtonEnabled);
+            }
+            UpdateSpringScrollButtonToggleUI();
+        }
+
+        private void EnsureSpringScrollButtonExists()
+        {
+            if (springScrollButtonGO != null) return;
+            if (scrollRect == null) return;
+
+            Transform sb = null;
+            try { sb = scrollRect.gameObject != null ? scrollRect.gameObject.transform.Find("Scrollbar") : null; } catch { sb = null; }
+
+            if (sb == null) return;
+
+            float w = isFixedLocally ? 50f : 100f;
+            float h = w * 1.618f;
+            GameObject springBtn = SpringScrollButton.Create(sb.gameObject, scrollRect, w, h);
+            springBtn.transform.SetAsLastSibling();
+
+            SpringScrollButton ssb = springBtn.GetComponent<SpringScrollButton>();
+            if (ssb != null)
+            {
+                ssb.deadzoneFraction = 0.10f;
+                ssb.maxViewportHeightsPerSecond = 2.25f;
+                ssb.speedSmoothing = 12f;
+                ssb.responsePower = 2.0f;
+            }
+
+            try
+            {
+                Sprite icon = UI.LoadIconSprite("vpb_icons/scroll.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                if (icon != null)
+                {
+                    GameObject iconGO = new GameObject("Icon");
+                    iconGO.transform.SetParent(springBtn.transform, false);
+                    Image img = iconGO.AddComponent<Image>();
+                    img.sprite = icon;
+                    img.color = Color.white;
+                    img.preserveAspect = true;
+                    img.raycastTarget = false;
+                    RectTransform irt = iconGO.GetComponent<RectTransform>();
+                    irt.anchorMin = Vector2.zero;
+                    irt.anchorMax = Vector2.one;
+                    irt.sizeDelta = new Vector2(-24f, -24f);
+                    irt.anchoredPosition = Vector2.zero;
+                }
+            }
+            catch { }
+
+            try
+            {
+                AddTooltip(springBtn, "gallery.tooltip.spring_scroll_drag", "Hold and drag up/down to scroll (farther = faster). Release to stop.");
+            }
+            catch { }
+
+            springScrollButtonGO = springBtn;
+        }
+
+        private void ToggleHoldToLaunch()
+        {
+            holdToLaunchEnabled = !holdToLaunchEnabled;
+            try
+            {
+                if (VPBConfig.Instance != null)
+                {
+                    if (holdToLaunchEnabled)
+                    {
+                        // Avoid gesture conflicts: hold-to-launch uses pointer-down hold, same as drag start.
+                        holdToLaunchPrevEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
+                        VPBConfig.Instance.EnableDragDrop = false;
+                        VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop = holdToLaunchPrevEnableDragDrop;
+                        VPBConfig.Instance.HoldToLaunchEnabled = true;
+                    }
+                    else
+                    {
+                        VPBConfig.Instance.EnableDragDrop = holdToLaunchPrevEnableDragDrop;
+                        VPBConfig.Instance.HoldToLaunchEnabled = false;
+                    }
+                    VPBConfig.Instance.Save(false);
+                }
+            }
+            catch { }
+            UpdateHoldToLaunchToggleUI();
+            try { UpdateApplyModeButtonState(); } catch { }
+        }
+
+        private void UpdateHoldToLaunchToggleUI()
+        {
+            if (footerHoldToLaunchToggleBtnImage != null)
+            {
+                // Toggle color: green when enabled, dim when disabled
+                footerHoldToLaunchToggleBtnImage.color = holdToLaunchEnabled
+                    ? new Color(0.12f, 0.55f, 0.18f, 0.85f)
+                    : new Color(0f, 0f, 0f, 0.25f);
+            }
+            if (footerHoldToLaunchToggleIconImage != null)
+            {
+                // Swap icons (hold / hold_off) when available
+                try
+                {
+                    Sprite s = holdToLaunchEnabled ? footerHoldToLaunchOnSprite : footerHoldToLaunchOffSprite;
+                    if (s != null) footerHoldToLaunchToggleIconImage.sprite = s;
+                }
+                catch { }
+
+                footerHoldToLaunchToggleIconImage.color = holdToLaunchEnabled
+                    ? new Color(1f, 1f, 1f, 1f)
+                    : new Color(1f, 1f, 1f, 0.45f);
+            }
+        }
+
+        private void UpdateSpringScrollButtonToggleUI()
+        {
+            // If toggle is ON but the GO was lost (e.g. language/UI rebuild), recreate it.
+            if (springScrollButtonEnabled && springScrollButtonGO == null)
+            {
+                try { EnsureSpringScrollButtonExists(); } catch { }
+            }
+
+            try
+            {
+                if (footerSpringScrollToggleBtn != null)
+                {
+                    var b = footerSpringScrollToggleBtn.GetComponent<Button>();
+                    if (b != null) b.interactable = true;
+                }
+            }
+            catch { }
+
+            if (footerSpringScrollToggleBtnImage != null)
+            {
+                footerSpringScrollToggleBtnImage.color = springScrollButtonEnabled
+                    ? new Color(0f, 0f, 0f, 0.5f)
+                    : new Color(0f, 0f, 0f, 0.25f);
+            }
+            if (footerSpringScrollToggleIconImage != null)
+            {
+                footerSpringScrollToggleIconImage.color = springScrollButtonEnabled
+                    ? new Color(1f, 1f, 1f, 1f)
+                    : new Color(1f, 1f, 1f, 0.45f);
+            }
+
+            // If this pane is fixed (desktop overlay), keep the toggle disabled-looking.
+            try
+            {
+                if (isFixedLocally && footerSpringScrollToggleBtn != null)
+                {
+                    if (footerSpringScrollToggleBtnImage != null)
+                        footerSpringScrollToggleBtnImage.color = springScrollButtonEnabled
+                            ? new Color(0f, 0f, 0f, 0.5f)
+                            : new Color(0f, 0f, 0f, 0.25f);
+                }
+            }
+            catch { }
+
+            // Resize to match fixed vs floating mode
+            try
+            {
+                if (springScrollButtonGO != null)
+                {
+                    float w = isFixedLocally ? 50f : 100f;
+                    float h = w * 1.618f;
+                    var ssb = springScrollButtonGO.GetComponent<SpringScrollButton>();
+                    if (ssb != null) ssb.SetSize(w, h);
+                }
+            }
+            catch { }
         }
 
         private void CreateHoverPreviewOverlay(GameObject parentGO)
@@ -1354,6 +1590,29 @@ namespace VPB
             VPBConfig.Instance.Save();
             UpdateFooterAutoHideState();
             UpdateLayout();
+        }
+
+        private void ToggleVamMenuGateMode()
+        {
+            if (VPBConfig.Instance == null) return;
+            VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = !VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible;
+            VPBConfig.Instance.Save();
+            UpdateFooterVamMenuGateState();
+            try { ApplyVamMenuGateVisibility(); } catch { }
+        }
+
+        private void UpdateFooterVamMenuGateState()
+        {
+            if (VPBConfig.Instance == null) return;
+            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
+            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            if (footerMenuGateBtnImage != null)
+                footerMenuGateBtnImage.color = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible ? activeColor : inactiveColor;
+            if (footerMenuGateIconImage != null)
+            {
+                Sprite target = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible ? footerMenuGateOnSprite : footerMenuGateOffSprite;
+                if (target != null) footerMenuGateIconImage.sprite = target;
+            }
         }
 
         private void UpdateFooterAutoHideState()
@@ -2105,6 +2364,7 @@ namespace VPB
             
             VPBConfig.Instance.Save();
             UpdateDesktopModeButton();
+            try { UpdateSpringScrollButtonToggleUI(); } catch { }
             UpdateLayout();
         }
 
@@ -2121,6 +2381,7 @@ namespace VPB
             isFixedLocally = fixedMode;
             if (!fixedMode) SetCollapsed(false);
             UpdateDesktopModeButton();
+            try { UpdateSpringScrollButtonToggleUI(); } catch { }
             UpdateSideButtonsVisibility();
             UpdateLayout();
         }
@@ -2506,10 +2767,41 @@ namespace VPB
                 leftApplyModeBtnText.text = text;
             }
             if (leftApplyModeBtnImage != null) leftApplyModeBtnImage.color = color;
+
+            // Hold-to-launch overrides 1-click apply: disable the toggle button while hold mode is on.
+            bool disableApplyToggle = holdToLaunchEnabled;
+            try
+            {
+                if (rightApplyModeBtnImage != null)
+                {
+                    var b = rightApplyModeBtnImage.GetComponent<Button>();
+                    if (b != null) b.interactable = !disableApplyToggle;
+                    if (disableApplyToggle) rightApplyModeBtnImage.color = new Color(0.25f, 0.25f, 0.25f, 0.9f);
+                    // Tooltip swap (best-effort)
+                    AddTooltip(rightApplyModeBtnImage.gameObject,
+                        disableApplyToggle ? "gallery.tooltip.apply_mode_disabled_hold_to_launch" : "gallery.tooltip.apply_mode",
+                        disableApplyToggle ? "Hold-to-launch is ON. Turn it off to change 1-click/2-click apply." : "Toggle 1-click vs 2-click apply.");
+                }
+                if (leftApplyModeBtnImage != null)
+                {
+                    var b = leftApplyModeBtnImage.GetComponent<Button>();
+                    if (b != null) b.interactable = !disableApplyToggle;
+                    if (disableApplyToggle) leftApplyModeBtnImage.color = new Color(0.25f, 0.25f, 0.25f, 0.9f);
+                    AddTooltip(leftApplyModeBtnImage.gameObject,
+                        disableApplyToggle ? "gallery.tooltip.apply_mode_disabled_hold_to_launch" : "gallery.tooltip.apply_mode",
+                        disableApplyToggle ? "Hold-to-launch is ON. Turn it off to change 1-click/2-click apply." : "Toggle 1-click vs 2-click apply.");
+                }
+            }
+            catch { }
         }
 
         private void ToggleApplyMode()
         {
+            if (holdToLaunchEnabled)
+            {
+                // Hold-to-launch overrides single-click apply; keep the toggle disabled until hold mode is off.
+                return;
+            }
             ApplyMode oldMode = ItemApplyMode;
             ApplyMode newMode = (oldMode == ApplyMode.SingleClick) ? ApplyMode.DoubleClick : ApplyMode.SingleClick;
             LogUtil.Log("[GalleryPanel] ToggleApplyMode: " + oldMode + " -> " + newMode);

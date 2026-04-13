@@ -382,6 +382,8 @@
     <Compile Include="src\gallery\ChamferedRect.cs" />
     <Compile Include="src\gallery\UIDragBlocker.cs" />
     <Compile Include="src\gallery\UIScrollPassthrough.cs" />
+    <Compile Include="src\gallery\SpringScrollButton.cs" />
+    <Compile Include="src\gallery\HoldToApplyOnHover.cs" />
     <Compile Include="src\gallery\UIRichValueHover.cs" />
     <Compile Include="src\gallery\PackageListEntry.cs" />
     <Compile Include="src\gallery\QuickFilterSettings.cs" />

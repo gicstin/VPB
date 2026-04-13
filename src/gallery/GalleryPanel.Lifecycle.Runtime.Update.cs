@@ -9,7 +9,24 @@ using UnityEngine.Events;
 namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
-{        private void Update()
+    {
+        private void UpdateFooterPaddingForFloatingResizeHandle(bool isFloating)
+        {
+            if (footerHLG == null) return;
+            if (footerHLG.padding == null) footerHLG.padding = new RectOffset(0, 0, 0, 0);
+
+            // In floating mode, reserve one button-width on the bottom-right so footer buttons
+            // don't sit under the bottom-right resize handle.
+            const int reservedRight = 40;
+            int desiredRight = (isFloating ? 10 + reservedRight : 10);
+
+            if (_footerHLGLastRightPadding == desiredRight) return;
+
+            footerHLG.padding = new RectOffset(footerHLG.padding.left, desiredRight, footerHLG.padding.top, footerHLG.padding.bottom);
+            _footerHLGLastRightPadding = desiredRight;
+        }
+
+        private void Update()
         {
             if (canvas != null && VPBConfig.Instance != null)
             {
@@ -55,6 +72,8 @@ namespace VPB
                 catch { }
 
                 try { UpdateSelectionContextMenu(); } catch { }
+
+                try { ApplyVamMenuGateVisibility(); } catch { }
 
                 try
                 {
@@ -276,6 +295,7 @@ namespace VPB
 
                 if (isFixedLocally)
                 {
+                    UpdateFooterPaddingForFloatingResizeHandle(false);
                     bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
                     // Show trigger whenever collapsed (to allow expanding), or when in AH mode expanded (for hover detection)
                     if (collapseTriggerGO != null) collapseTriggerGO.SetActive(isCollapsed || autoCollapse);
@@ -349,7 +369,8 @@ namespace VPB
                     Transform handleBL = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.bottomLeft);
                     if (handleBL != null)
                     {
-                        bool shouldShow = !isFixedLocally;
+                        // Floating mode already has dedicated bottom-left corner controls; hide the generic bottom-left resize handle.
+                        bool shouldShow = false;
                         if (handleBL.gameObject.activeSelf != shouldShow) handleBL.gameObject.SetActive(shouldShow);
                     }
                     Transform handleBR = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.bottomRight);
@@ -392,6 +413,7 @@ namespace VPB
                 }
                 else
                 {
+                    UpdateFooterPaddingForFloatingResizeHandle(true);
                     if (collapseTriggerGO != null) collapseTriggerGO.SetActive(false);
                     if (isCollapsed) SetCollapsed(false);
 
@@ -412,8 +434,12 @@ namespace VPB
                         if (dragger != null) dragger.enabled = true;
                         foreach (Transform child in backgroundBoxGO.transform)
                         {
-                            if (child.name.StartsWith("ResizeHandle_")) child.gameObject.SetActive(true);
+                            // Floating mode uses corner resize handles; do not enable the fixed-mode bottom-left handle.
+                            if (child.name.StartsWith("ResizeHandle_") && child.name != "ResizeHandle_FixedBottom")
+                                child.gameObject.SetActive(true);
                         }
+                        Transform fixedHandle = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottom");
+                        if (fixedHandle != null && fixedHandle.gameObject.activeSelf) fixedHandle.gameObject.SetActive(false);
 
                         RepositionInFront();
                     }

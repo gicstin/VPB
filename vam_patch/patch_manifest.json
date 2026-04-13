@@ -180,6 +180,18 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/eye_angle.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/eye_distance.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/eye_height.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/filter.png",
         "IsDirectory":  false
     },
@@ -248,6 +260,14 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/hold.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/hold_off.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/hub.png",
         "IsDirectory":  false
     },
@@ -301,6 +321,10 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/remove_hair.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/scroll.png",
         "IsDirectory":  false
     },
     {
@@ -373,6 +397,14 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/unload.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/visibility_independent.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/visibility_linked.png",
         "IsDirectory":  false
     },
     {
