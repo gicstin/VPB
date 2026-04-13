@@ -70,8 +70,9 @@ namespace VPB
             if (!IsSortTypeValid(context, newType)) return;
 
             var state = GetSortState(context);
+            SortType prevType = state.Type;
             state.Type = newType;
-            if (state.Type == SortType.Name || state.Type == SortType.HiddenOnly || state.Type == SortType.AutoInstallOnly)
+            if (state.Type == SortType.Name || state.Type == SortType.HiddenOnly || state.Type == SortType.AutoInstallOnly || state.Type == SortType.LoadedOnly || state.Type == SortType.UnloadedOnly)
                 state.Direction = SortDirection.Ascending;
             else
                 state.Direction = SortDirection.Descending;
@@ -104,8 +105,28 @@ namespace VPB
                 }
                 else
                 {
-                    if (!TryReapplyFilesSortWithoutFullRefresh())
-                        RefreshFiles();
+                    bool prevExclusive =
+                        prevType == SortType.HiddenOnly ||
+                        prevType == SortType.AutoInstallOnly ||
+                        prevType == SortType.LoadedOnly ||
+                        prevType == SortType.UnloadedOnly;
+                    bool nextExclusive =
+                        newType == SortType.HiddenOnly ||
+                        newType == SortType.AutoInstallOnly ||
+                        newType == SortType.LoadedOnly ||
+                        newType == SortType.UnloadedOnly;
+
+                    // Exclusive "only" modes prune the list in-place. Switching to/from them must rebuild the base list,
+                    // otherwise the user can't "clear" the mode without changing categories.
+                    if (prevExclusive || nextExclusive)
+                    {
+                        RefreshFiles(keepScroll: true);
+                    }
+                    else
+                    {
+                        if (!TryReapplyFilesSortWithoutFullRefresh())
+                            RefreshFiles();
+                    }
                 }
             }
             else UpdateTabs();
@@ -168,7 +189,7 @@ namespace VPB
         {
             SortType.Name, SortType.Date, SortType.DateCreated, SortType.Size, SortType.Rating,
             SortType.Deps, SortType.Dependents, SortType.Missing,
-            SortType.Hidden, SortType.HiddenOnly, SortType.AutoInstall, SortType.AutoInstallOnly
+            SortType.Hidden, SortType.HiddenOnly, SortType.AutoInstall, SortType.AutoInstallOnly, SortType.LoadedOnly, SortType.UnloadedOnly
         };
 
         private static string FileSortTypeFullLabel(SortType type)
@@ -187,6 +208,8 @@ namespace VPB
                 case SortType.HiddenOnly: return VPBTranslation.T("gallery.sort.full.hidden_only", "Hidden (only)");
                 case SortType.AutoInstall: return VPBTranslation.T("gallery.sort.full.autoinstall", "Auto Install");
                 case SortType.AutoInstallOnly: return VPBTranslation.T("gallery.sort.full.autoinstall_only", "Auto Install (only)");
+                case SortType.LoadedOnly: return VPBTranslation.T("gallery.sort.full.loaded_only", "All Loaded");
+                case SortType.UnloadedOnly: return VPBTranslation.T("gallery.sort.full.unloaded_only", "All Unloaded");
                 default: return type.ToString();
             }
         }
@@ -535,7 +558,7 @@ namespace VPB
             if (context == "Files")
             {
                 return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
-                    || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly;
+                    || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
             }
             else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
             {
@@ -689,6 +712,8 @@ namespace VPB
                 case SortType.HiddenOnly: symbol = "HO"; break;
                 case SortType.AutoInstall: symbol = "Ai"; break;
                 case SortType.AutoInstallOnly: symbol = "AO"; break;
+                case SortType.LoadedOnly: symbol = "LO"; break;
+                case SortType.UnloadedOnly: symbol = "UO"; break;
             }
             string arrow = state.Direction == SortDirection.Ascending ? "↑" : "↓";
             t.text = symbol + arrow;
@@ -716,6 +741,8 @@ namespace VPB
                     case SortType.HiddenOnly: symbol = "HO"; break;
                     case SortType.AutoInstall: symbol = "Ai"; break;
                     case SortType.AutoInstallOnly: symbol = "AO"; break;
+                    case SortType.LoadedOnly: symbol = "LO"; break;
+                    case SortType.UnloadedOnly: symbol = "UO"; break;
                 }
                 typeText.text = symbol;
             }

@@ -1614,7 +1614,8 @@ namespace VPB
             string creatorFilter,
             List<Row> outRows,
             out GalleryCategoryQueryStats stats,
-            GalleryPanel.ClothingSubfilter clothingSubfilterForSql = 0)
+            GalleryPanel.ClothingSubfilter clothingSubfilterForSql = 0,
+            int loadedState = -1)
         {
             stats = new GalleryCategoryQueryStats();
             outRows.Clear();
@@ -1678,11 +1679,28 @@ namespace VPB
                 var swSql = Stopwatch.StartNew();
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
+                    bool pkgHasLoadedCol = false;
+                    try { pkgHasLoadedCol = PkgHasLoadedColumn(conn); } catch { pkgHasLoadedCol = false; }
+
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilterForSql);
+                    string loadedSqlAnd = "";
+                    if (loadedState == 1)
+                    {
+                        // If the column doesn't exist, nothing can be "loaded".
+                        if (!pkgHasLoadedCol) loadedSqlAnd = " AND 0";
+                        else loadedSqlAnd = " AND ifnull(p.loaded,0) != 0";
+                    }
+                    else if (loadedState == 0)
+                    {
+                        // If the column doesn't exist, treat everything as unloaded (no extra filter needed).
+                        if (pkgHasLoadedCol) loadedSqlAnd = " AND ifnull(p.loaded,0) = 0";
+                    }
+
+                    string loadedSelect = pkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
                     string sql =
-                        "SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, p.pctime, ifnull(m.cloth_attr,''), ifnull(p.loaded,'') FROM cat_mem m " +
+                        "SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, p.pctime, ifnull(m.cloth_attr,''), " + loadedSelect + " FROM cat_mem m " +
                         "INNER JOIN pkg p ON p.uid = m.pkg_uid " +
-                        "WHERE m.category = ? AND ((length(trim(?)) = 0) OR (p.creator = ?))" + clothSqlAnd;
+                        "WHERE m.category = ? AND ((length(trim(?)) = 0) OR (p.creator = ?))" + clothSqlAnd + loadedSqlAnd;
                     using (var stmt = conn.Prepare(sql))
                     {
                     stmt.BindText(1, categoryTitle);
@@ -1718,6 +1736,16 @@ namespace VPB
                 s_LastError = ex.Message;
                 stats.RejectReason = "exception:" + ex.Message;
                 return false;
+            }
+        }
+
+        private static bool PkgHasLoadedColumn(VpbSqlite3.Connection conn)
+        {
+            if (conn == null) return false;
+            using (var st = conn.Prepare("SELECT 1 FROM pragma_table_info('pkg') WHERE name='loaded' LIMIT 1;"))
+            {
+                int step = st.Step();
+                return step == VpbSqlite3.SqliteRow;
             }
         }
 

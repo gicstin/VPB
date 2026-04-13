@@ -1815,6 +1815,8 @@ namespace VPB
             if (nameFilterTerms != null && nameFilterTerms.Length > 0) return false;
             if (activeTags != null && activeTags.Count > 0) return false;
             if (wantsPoseCountsLocal || posePeopleFilter != PosePeopleFilter.All) return false;
+            if (FilesSortWantsLoadedOnly()) return false;
+            if (FilesSortWantsUnloadedOnly()) return false;
 
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
             if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -2200,6 +2202,14 @@ namespace VPB
                 string titleForIndexMain = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                 string extForIndexMain = currentExtension ?? "";
                 string creatorForIndexMain = currentCreator ?? "";
+                int wantsLoadedStateForIndexMain = -1;
+                try
+                {
+                    SortType st = GetSortState("Files").Type;
+                    if (st == SortType.LoadedOnly) wantsLoadedStateForIndexMain = 1;
+                    else if (st == SortType.UnloadedOnly) wantsLoadedStateForIndexMain = 0;
+                }
+                catch { }
                 ContentType activeContentSnap = activeContentType;
                 ClothingSubfilter sqliteWorkerClothingSub = clothingSubfilter;
                 bool sqliteDrainSkipClothingGateOnMain = (titleForIndexMain.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0);
@@ -2226,7 +2236,8 @@ namespace VPB
                                 creatorForIndexMain,
                                 idxRows,
                                 out catQueryStats,
-                                sqliteWorkerClothingSub);
+                                sqliteWorkerClothingSub,
+                                loadedState: wantsLoadedStateForIndexMain);
                         }
                         else
                         {
@@ -2266,6 +2277,27 @@ namespace VPB
                                 }
                                 if (string.IsNullOrEmpty(listPath))
                                     continue;
+
+                                // Exclusive filter (Loaded-only) is pushed into SQLite query when possible,
+                                // but keep a defensive check here for any non-indexed paths.
+                                if (wantsLoadedStateForIndexMain != -1)
+                                {
+                                    bool loaded = r.PackageIsLoaded;
+                                    if (!loaded)
+                                    {
+                                        // "Loaded" means the PACKAGE ROOT is under AddonPackages/, or a loose path under Custom/ / Saves/.
+                                        string lp = (listPath ?? "").Replace('\\', '/');
+                                        int sep = lp.IndexOf(":/", StringComparison.Ordinal);
+                                        string root = (sep >= 0) ? lp.Substring(0, sep) : lp;
+                                        loaded =
+                                            root.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
+                                            root.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
+                                            root.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase);
+                                    }
+                                    bool wantsLoaded = wantsLoadedStateForIndexMain == 1;
+                                    if (wantsLoaded && !loaded) continue;
+                                    if (!wantsLoaded && loaded) continue;
+                                }
 
                                 if (hasNameFilter)
                                 {
@@ -3008,6 +3040,18 @@ namespace VPB
             catch { return false; }
         }
 
+        private bool FilesSortWantsLoadedOnly()
+        {
+            try { return GetSortState("Files").Type == SortType.LoadedOnly; }
+            catch { return false; }
+        }
+
+        private bool FilesSortWantsUnloadedOnly()
+        {
+            try { return GetSortState("Files").Type == SortType.UnloadedOnly; }
+            catch { return false; }
+        }
+
         /// <summary>Removes non-matching rows for Hidden-only / AutoInstall-only file sort modes (list is modified in place).</summary>
         private static void ApplyFilesSortExclusiveFiltersInPlace(List<FileEntry> list, SortType type)
         {
@@ -3032,6 +3076,48 @@ namespace VPB
                     {
                         if (list[i] == null || !list[i].IsAutoInstall())
                             list.RemoveAt(i);
+                    }
+                    catch { try { list.RemoveAt(i); } catch { } }
+                }
+            }
+            else if (type == SortType.LoadedOnly)
+            {
+                for (int i = list.Count - 1; i >= 0; i--)
+                {
+                    try
+                    {
+                        FileEntry e = list[i];
+                        if (e == null) { list.RemoveAt(i); continue; }
+                        // IMPORTANT: Only check the package root (before ":/") so internal paths like
+                        // "...var:/Custom/..." don't incorrectly count as "loaded".
+                        string p = (e.Path ?? "").Replace('\\', '/');
+                        int sep = p.IndexOf(":/", StringComparison.Ordinal);
+                        string root = (sep >= 0) ? p.Substring(0, sep) : p;
+                        bool loaded =
+                            root.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
+                            root.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
+                            root.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase);
+                        if (!loaded) list.RemoveAt(i);
+                    }
+                    catch { try { list.RemoveAt(i); } catch { } }
+                }
+            }
+            else if (type == SortType.UnloadedOnly)
+            {
+                for (int i = list.Count - 1; i >= 0; i--)
+                {
+                    try
+                    {
+                        FileEntry e = list[i];
+                        if (e == null) { list.RemoveAt(i); continue; }
+                        string p = (e.Path ?? "").Replace('\\', '/');
+                        int sep = p.IndexOf(":/", StringComparison.Ordinal);
+                        string root = (sep >= 0) ? p.Substring(0, sep) : p;
+                        bool loaded =
+                            root.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
+                            root.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
+                            root.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase);
+                        if (loaded) list.RemoveAt(i);
                     }
                     catch { try { list.RemoveAt(i); } catch { } }
                 }

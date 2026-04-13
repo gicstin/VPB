@@ -10,21 +10,27 @@ namespace VPB
 {
     public enum SortType
     {
-        Name,
-        Date,
-        Size,
-        Count,
-        Score,
-        Rating,
-        Deps,
-        Dependents,
-        Missing,
-        Hidden,
-        HiddenOnly,
-        AutoInstall,
-        AutoInstallOnly,
+        // IMPORTANT: explicit integer values are persisted in cache files and are also used in
+        // snapshot-cache keys. Keep existing values stable and append new values at the end.
+        Name = 0,
+        Date = 1,
+        Size = 2,
+        Count = 3,
+        Score = 4,
+        Rating = 5,
+        Deps = 6,
+        Dependents = 7,
+        Missing = 8,
+        Hidden = 9,
+        HiddenOnly = 10,
+        AutoInstall = 11,
+        AutoInstallOnly = 12,
         /// <summary>File / package creation time (not last modified).</summary>
-        DateCreated
+        DateCreated = 13,
+        /// <summary>Show only loaded packages (AddonPackages/ + Custom/ + Saves/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
+        LoadedOnly = 14,
+        /// <summary>Show only unloaded packages (e.g. AllPackages/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
+        UnloadedOnly = 15
     }
 
     public enum SortDirection
@@ -164,6 +170,8 @@ namespace VPB
                     break;
                 case SortType.HiddenOnly:
                 case SortType.AutoInstallOnly:
+                case SortType.LoadedOnly:
+                case SortType.UnloadedOnly:
                     if (state.Direction == SortDirection.Ascending)
                         files.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
                     else
@@ -196,6 +204,8 @@ namespace VPB
                 case SortType.Name:
                 case SortType.HiddenOnly:
                 case SortType.AutoInstallOnly:
+                case SortType.LoadedOnly:
+                case SortType.UnloadedOnly:
                     if (state.Direction == SortDirection.Ascending)
                         files.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
                     else
