@@ -282,6 +282,7 @@ namespace VPB
 
             // Tab counts are VAR-only above; Custom/Scripts plugins live on local disk (same tree RefreshFiles scans).
             AddLocalCustomScriptsCountToCategory(categoryCounts);
+            AddLocalCustomAppearanceCountToCategory(categoryCounts);
 
             categoriesCached = true;
             unchecked { categorySideTabDataRevision++; }
@@ -345,6 +346,61 @@ namespace VPB
             }
             catch { }
             counts["Plugins"] += n;
+        }
+
+        private static void AddLocalCustomAppearanceCountToCategory(Dictionary<string, int> counts)
+        {
+            if (counts == null || !counts.ContainsKey("Appearance")) return;
+            string[] roots = new[] { "Saves/Person/appearance", "Custom/Atom/Person/Appearance" };
+            int total = 0;
+            foreach (var root in roots)
+            {
+                try
+                {
+                    if (!Directory.Exists(root)) continue;
+                }
+                catch { continue; }
+
+                string sig = "0";
+                try { sig = Directory.GetLastWriteTimeUtc(root).ToBinary().ToString(); } catch { sig = "0"; }
+                string cacheKey = "appearance:custom_presets|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|exts=vap";
+
+                int n = 0;
+                try
+                {
+                    var cached = new List<VpbLocalDatabase.SystemFileRow>();
+                    bool hit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached);
+                    if (hit && cached.Count > 0)
+                    {
+                        n = cached.Count;
+                    }
+                    else
+                    {
+                        var rows = new List<VpbLocalDatabase.SystemFileRow>(256);
+                        var buf = new List<string>();
+                        try
+                        {
+                            FileManager.SafeGetFiles(root, "*.vap", buf);
+                            n = buf.Count;
+                            for (int i = 0; i < buf.Count; i++)
+                            {
+                                string p = buf[i];
+                                if (string.IsNullOrEmpty(p)) continue;
+                                var r = new VpbLocalDatabase.SystemFileRow();
+                                try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
+                                r.LastWriteBinaryOrInvalid = long.MinValue;
+                                r.SizeOrInvalid = long.MinValue;
+                                rows.Add(r);
+                            }
+                        }
+                        catch { }
+                        if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
+                    }
+                }
+                catch { }
+                total += n;
+            }
+            counts["Appearance"] += total;
         }
 
         private void CacheCreators()
