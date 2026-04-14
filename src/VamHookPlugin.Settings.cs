@@ -234,9 +234,9 @@ namespace VPB
             DrawInfoCard(ref m_ShowPluginsAlwaysEnabledInfo, VPBTranslation.T("hook.settings.plugins_always_enabled", "Plugins always enabled"), () =>
             {
                 GUILayout.Space(4);
-                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_1", "When this is ON, plugins are treated as always enabled."), m_StyleInfoCardText);
+                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_1", "When this is ON, plugins are treated as always enabled."), m_StyleInfoCardTextWrapped);
                 GUILayout.Space(2);
-                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_2", "Tip: Leave this OFF if you want VaM to respect per-package/per-scene plugin enable state."), m_StyleInfoCardText);
+                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_2", "Tip: Leave this OFF if you want VaM to respect per-package/per-scene plugin enable state."), m_StyleInfoCardTextWrapped);
             });
 
             GUILayout.BeginHorizontal();
@@ -282,7 +282,7 @@ namespace VPB
             if (!string.IsNullOrEmpty(m_SettingsError))
             {
                 GUILayout.Space(4);
-                GUILayout.Label(m_SettingsError, m_StyleInfoCardText);
+                GUILayout.Label(m_SettingsError, m_StyleInfoCardTextWrapped);
             }
 
             GUILayout.Space(10);
