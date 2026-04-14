@@ -1549,7 +1549,8 @@ namespace VPB
             string extensionPipeSeparated,
             List<string> pathPrefixes,
             string singlePathPrefix,
-            HashSet<string> activeTags = null)
+            HashSet<string> activeTags = null,
+            string categoryTitle = null)
         {
             if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
             countsOut.Clear();
@@ -1583,10 +1584,13 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     bool hasTags = activeTags != null && activeTags.Count > 0;
+                    bool hasCat = !string.IsNullOrEmpty(categoryTitle);
                     var sb = new StringBuilder();
-                    sb.Append("SELECT p.creator, COUNT(DISTINCT m.pkg_uid || m.internal_path) ");
+                    string countExpr = hasCat ? "COUNT(*)" : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
+                    sb.Append("SELECT p.creator, ").Append(countExpr).Append(" ");
                     sb.Append("FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid ");
                     sb.Append("WHERE length(trim(coalesce(p.creator,''))) > 0");
+                    if (hasCat) sb.Append(" AND m.category = ?");
                     
                     List<string> tagsList = null;
                     if (hasTags)
@@ -1603,6 +1607,7 @@ namespace VPB
                     using (var stmt = conn.Prepare(sb.ToString()))
                     {
                         int bind = 1;
+                        if (hasCat) stmt.BindText(bind++, categoryTitle);
                         if (hasTags)
                         {
                             foreach (var tag in tagsList)

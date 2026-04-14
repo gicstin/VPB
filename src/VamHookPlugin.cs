@@ -675,22 +675,18 @@ namespace VPB
             m_StylesInited = true;
         }
 
-        static string cacheDir;
         public static string GetCacheDir()
         {
-            if (string.IsNullOrEmpty(cacheDir))
+            // Move Zstd texture cache to a subfolder of native Textures cache
+            string baseCache = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+            if (string.IsNullOrEmpty(baseCache))
             {
-                // Move Zstd texture cache to a subfolder of native Textures cache
-                string baseCache = MVR.FileManagement.CacheManager.GetTextureCacheDir();
-                if (string.IsNullOrEmpty(baseCache))
-                {
-                    baseCache = Path.GetFullPath(Path.Combine(Application.dataPath, "../Cache/Textures"));
-                }
-                cacheDir = Path.Combine(baseCache, "Zstd");
-                if (!Directory.Exists(cacheDir))
-                {
-                    Directory.CreateDirectory(cacheDir);
-                }
+                baseCache = Path.GetFullPath(Path.Combine(Application.dataPath, "../Cache/Textures"));
+            }
+            string cacheDir = Path.Combine(baseCache, "Zstd");
+            if (!Directory.Exists(cacheDir))
+            {
+                Directory.CreateDirectory(cacheDir);
             }
             return cacheDir;
         }

@@ -408,7 +408,7 @@ namespace VPB
             if (FileManager.PackagesByUid == null) return;
 
             Dictionary<string, int> counts = new Dictionary<string, int>();
-            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags))
+            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle))
             {
                 string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
                 HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

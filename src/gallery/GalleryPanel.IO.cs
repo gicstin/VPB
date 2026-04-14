@@ -56,10 +56,11 @@ namespace VPB
             }
         }
 
-        private static string BuildSharedSideMetaCacheKey(string creator, string ext, string path, List<string> paths, List<Gallery.Category> cats)
+        private static string BuildSharedSideMetaCacheKey(string creator, string ext, string path, List<string> paths, List<Gallery.Category> cats, string categoryTitle = null)
         {
             var sb = new StringBuilder(512);
             sb.Append(creator ?? ""); sb.Append('\u001E');
+            sb.Append(categoryTitle ?? ""); sb.Append('\u001E');
             sb.Append(ext ?? ""); sb.Append('\u001E');
             sb.Append(path ?? ""); sb.Append('\u001E');
             if (paths != null)
@@ -2063,7 +2064,7 @@ namespace VPB
             {
                 InvalidateSharedSideMetaIfPackageScanAdvanced();
                 sideMetaCacheKey = BuildSharedSideMetaCacheKey(
-                    currentCreator, currentExtension, currentPath, currentPaths, categories);
+                    currentCreator, currentExtension, currentPath, currentPaths, categories, currentCategoryTitle);
                 List<CreatorCacheEntry> sharedCreators;
                 Dictionary<string, int> sharedCounts;
                 if (TryGetSharedSideMeta(sideMetaCacheKey, out sharedCreators, out sharedCounts))
@@ -2081,6 +2082,7 @@ namespace VPB
                 string _bExtension = currentExtension;
                 List<string> _bPaths = currentPaths != null ? new List<string>(currentPaths) : null;
                 string _bPath = currentPath;
+                string _bCategoryTitle = currentCategoryTitle;
                 var _bCategories = categories != null ? new List<Gallery.Category>(categories) : null;
                 bool _buildCreators = earlyBuildCreators;
                 bool _buildCats = earlyBuildCats;
@@ -2092,7 +2094,7 @@ namespace VPB
                         if (_buildCreators)
                         {
                             var counts = new Dictionary<string, int>();
-                            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath))
+                            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath, null, _bCategoryTitle))
                             {
                                 string[] exts2 = string.IsNullOrEmpty(_bExtension) ? new string[0] : _bExtension.Split('|');
                                 var tExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2132,7 +2134,7 @@ namespace VPB
                             foreach (var c in _bCategories)
                                 catCounts2[c.name] = 0;
 
-                            if (!VpbLocalDatabase.TryReadCategoryMemberCounts(catCounts2))
+                            if (!VpbLocalDatabase.TryReadCategoryMemberCounts(catCounts2, _bCreator))
                             {
                                 var extToCats2 = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
                                 foreach (var c in _bCategories)
@@ -2865,6 +2867,7 @@ namespace VPB
                     {
                         cachedCreators = earlyNewCreators ?? new List<CreatorCacheEntry>();
                         creatorsCached = true;
+                        unchecked { creatorSideTabDataRevision++; }
                     }
                     if (earlyBuildCats)
                     {
@@ -2874,6 +2877,7 @@ namespace VPB
                             foreach (var kv in earlyNewCatCounts) categoryCounts[kv.Key] = kv.Value;
                         }
                         categoriesCached = true;
+                        unchecked { categorySideTabDataRevision++; }
                     }
                     if (!skipEarlyMetaThread && sideMetaCacheKey != null && earlyBuildCreators && earlyBuildCats
                         && earlyNewCreators != null && earlyNewCatCounts != null)

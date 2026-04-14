@@ -551,6 +551,7 @@ namespace VPB
             go.transform.SetParent(parentGO.transform, false);
             Image img = go.AddComponent<Image>();
             img.color = color;
+            img.raycastTarget = true;
 
             RectTransform rt = go.GetComponent<RectTransform>();
             rt.anchorMin = AnchorPresets.GetAnchorMin(anchorPreset);
