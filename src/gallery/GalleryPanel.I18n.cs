@@ -62,6 +62,10 @@ namespace VPB
                 case ContentType.HubCreators:  return VPBTranslation.T("gallery.search.creators", "Search Creators...");
                 case ContentType.Tags:
                 case ContentType.HubTags:      return VPBTranslation.T("gallery.search.tags", "Search Tags...");
+                case ContentType.RemoveClothing: return VPBTranslation.T("gallery.search.clothing", "Filter Clothing...");
+                case ContentType.RemoveHair:     return VPBTranslation.T("gallery.search.hair", "Filter Hair...");
+                case ContentType.RemoveAtom:     return VPBTranslation.T("gallery.search.atoms", "Filter Atoms...");
+                case ContentType.Target:         return VPBTranslation.T("gallery.search.target", "Filter Targets...");
                 default:                       return VPBTranslation.T("gallery.search.main", "Search...");
             }
         }

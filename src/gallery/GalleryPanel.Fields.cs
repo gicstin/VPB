@@ -158,6 +158,8 @@ namespace VPB
         
         private ContentType? leftActiveContent = null;
         private ContentType? rightActiveContent = null;
+        private ContentType? leftPrevActiveContent = null;
+        private ContentType? rightPrevActiveContent = null;
         
         private GameObject leftTabScrollGO;
         private GameObject leftSubTabScrollGO; // NEW: For split view
@@ -218,61 +220,30 @@ namespace VPB
         private GameObject leftRemoveAtomBtn;
         private Image leftRemoveAtomBtnIconImage;
 
-        private GameObject rightRemoveClothingExpandBtn;
-        private GameObject leftRemoveClothingExpandBtn;
-
-        private GameObject rightRemoveClothingSubmenuPanelGO;
-        private GameObject leftRemoveClothingSubmenuPanelGO;
-
-        private GameObject rightRemoveHairExpandBtn;
-        private GameObject leftRemoveHairExpandBtn;
-
         private GameObject clothingSlotPickerOverlayGO;
         private GameObject clothingSlotPickerPanelGO;
 
         private GameObject hairSlotPickerOverlayGO;
         private GameObject hairSlotPickerPanelGO;
 
-        private GameObject rightRemoveHairSubmenuPanelGO;
         private GameObject leftRemoveHairSubmenuPanelGO;
+        private GameObject rightRemoveHairSubmenuPanelGO;
 
         private GameObject rightSaveBtnGO;
         private GameObject leftSaveBtnGO;
-
-        private GameObject rightSaveSubmenuPanelGO;
-        private GameObject leftSaveSubmenuPanelGO;
 
         private bool saveSubmenuOpen = false;
         private List<GameObject> rightSaveSubmenuButtons = new List<GameObject>();
         private List<GameObject> leftSaveSubmenuButtons = new List<GameObject>();
 
-        private bool saveSubmenuParentHovered = false;
-        private bool saveSubmenuOptionsHovered = false;
-        private int saveSubmenuParentHoverCount = 0;
-        private int saveSubmenuOptionsHoverCount = 0;
-        private float saveSubmenuLastHoverTime = 0f;
-        private float saveSubmenuLastOptionsHoverTime = 0f;
         private const float SaveSubmenuAutoHideDelay = 1.5f;
-
-        private GameObject rightRemoveHairSubmenuGapPanelGO;
-        private GameObject leftRemoveHairSubmenuGapPanelGO;
 
         private bool hairSubmenuOpen = false;
         private List<GameObject> rightRemoveHairSubmenuButtons = new List<GameObject>();
         private List<GameObject> leftRemoveHairSubmenuButtons = new List<GameObject>();
 
-        private bool hairSubmenuParentHovered = false;
-        private bool hairSubmenuOptionsHovered = false;
-        private int hairSubmenuParentHoverCount = 0;
-        private int hairSubmenuOptionsHoverCount = 0;
-        private float hairSubmenuLastHoverTime = 0f;
-        private const float HairSubmenuAutoHideDelay = 1.5f;
-
-        private string hairSubmenuTargetAtomUid = null;
-
         private int hairSubmenuLastOptionCount = 0;
 
-        private float hairSubmenuLastSyncTime = 0f;
         private const float HairSubmenuSyncInterval = 0.5f;
 
         private string previewRemoveHairAtomUid = null;
@@ -286,17 +257,7 @@ namespace VPB
         private List<GameObject> rightRemoveClothingVisibilityToggleButtons = new List<GameObject>();
         private List<GameObject> leftRemoveClothingVisibilityToggleButtons = new List<GameObject>();
 
-        private bool clothingSubmenuParentHovered = false;
-        private bool clothingSubmenuOptionsHovered = false;
-        private int clothingSubmenuParentHoverCount = 0;
-        private int clothingSubmenuOptionsHoverCount = 0;
-        private float clothingSubmenuLastHoverTime = 0f;
-        private const float ClothingSubmenuAutoHideDelay = 1.5f;
-
-        private string clothingSubmenuTargetAtomUid = null;
-
         private int clothingSubmenuLastOptionCount = 0;
-        private float clothingSubmenuLastSyncTime = 0f;
         private const float ClothingSubmenuSyncInterval = 0.5f;
 
         // 5a — anchor yStart captured on first submenu open; reused on removal resyncs to prevent button jump
@@ -314,20 +275,18 @@ namespace VPB
         private string previewRemoveClothingAtomUid = null;
         private string previewRemoveClothingItemUid = null;
         private bool? previewRemoveClothingPrevGeometryVal = null;
+        private bool isPreviewRemoveClothingAll = false;
+        private List<string> previewRemoveClothingAllItemUids = new List<string>();
+        private List<bool> previewRemoveClothingAllPrevVals = new List<bool>();
+
+        private bool isPreviewRemoveHairAll = false;
+        private List<string> previewRemoveHairAllItemUids = new List<string>();
+        private List<bool> previewRemoveHairAllPrevVals = new List<bool>();
 
         private bool atomSubmenuOpen = false;
         private List<GameObject> rightRemoveAtomSubmenuButtons = new List<GameObject>();
         private List<GameObject> leftRemoveAtomSubmenuButtons = new List<GameObject>();
 
-        private bool atomSubmenuParentHovered = false;
-        private bool atomSubmenuOptionsHovered = false;
-        private int atomSubmenuParentHoverCount = 0;
-        private int atomSubmenuOptionsHoverCount = 0;
-        private float atomSubmenuLastHoverTime = 0f;
-        private const float AtomSubmenuAutoHideDelay = 0.75f;
-
-        private int rightRemoveHairSubmenuStartIndex = -1;
-        private int leftRemoveHairSubmenuStartIndex = -1;
         private const int HairSubmenuMaxButtons = 10;
         private const int ClothingSubmenuMaxButtons = 30;
         private const int AtomSubmenuMaxButtons = 20;
@@ -379,6 +338,10 @@ namespace VPB
         private string currentSizeFilter = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
+        private string removeClothingFilter = "";
+        private string removeHairFilter = "";
+        private string removeAtomFilter = "";
+        private string targetFilter = "";
         
         // Creator side-tab virtualization (fast: pool + rebind visible rows on scroll)
         private readonly List<CreatorCacheEntry> _creatorVirtView = new List<CreatorCacheEntry>(512);

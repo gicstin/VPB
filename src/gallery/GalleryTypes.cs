@@ -4,7 +4,7 @@ using MeshVR;
 
 namespace VPB
 {
-    public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource }
+    public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource, RemoveClothing, RemoveHair, RemoveAtom, SavePresets, Target }
     public enum ApplyMode { SingleClick, DoubleClick }
     public enum TabSide { Hidden, Left, Right }
     public enum GalleryLayoutMode { Grid, List }
