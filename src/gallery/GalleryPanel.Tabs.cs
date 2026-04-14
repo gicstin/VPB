@@ -1252,7 +1252,7 @@ namespace VPB
                     UpdateTabs();
                 };
 
-                CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
+                CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
 
                 bool hasRealPersons = personAtoms.Count > 0 && personAtoms[0] != null;
                 int startIndex = trackedButtons.Count;
@@ -1295,7 +1295,7 @@ namespace VPB
 
                 if (hasRealPersons)
                 {
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
+                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
                 }
             }
             else if (contentType == ContentType.Size)
@@ -1546,217 +1546,239 @@ namespace VPB
             }
             else if (contentType == ContentType.RemoveClothing)
             {
-                Atom target = GetBestTargetAtom();
-                if (target != null)
-                {
-                    var items = new List<KeyValuePair<string, string>>();
-                    JSONStorable geometry = target.GetStorableByID("geometry");
-                    if (geometry != null)
-                    {
-                        foreach (var name in geometry.GetBoolParamNames())
-                        {
-                            if (string.IsNullOrEmpty(name) || !name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
-                            string clothingUid = name.Substring(9);
-                            JSONStorableBool jsb = geometry.GetBoolJSONParam(name);
-                            if (jsb != null && jsb.val)
-                            {
-                                string p = clothingUid.Replace("\\", "/");
-                                string[] parts = p.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-                                
-                                string typeFolder = null;
-                                int clothingIdx = -1;
-                                for (int i = 0; i < parts.Length; i++)
-                                {
-                                    if (string.Equals(parts[i], "clothing", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        clothingIdx = i;
-                                        break;
-                                    }
-                                }
-                                if (clothingIdx >= 0 && clothingIdx + 1 < parts.Length) typeFolder = parts[clothingIdx + 1];
+                List<Atom> personAtoms = SuperController.singleton != null
+                    ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
+                    : new List<Atom>();
 
-                                string fileName = parts.Length > 0 ? Path.GetFileNameWithoutExtension(parts[parts.Length - 1]) : "";
-                                string label = !string.IsNullOrEmpty(typeFolder)
-                                    ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + fileName)
-                                    : fileName;
-                                if (!string.IsNullOrEmpty(label)) items.Add(new KeyValuePair<string, string>(clothingUid, label));
-                            }
-                        }
-                    }
-                    var options = items.GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase).ToList();
-                    
-                    // Apply filter
-                    if (!string.IsNullOrEmpty(removeClothingFilter))
-                    {
-                        string filterLower = removeClothingFilter.ToLowerInvariant();
-                        options = options.Where(kvp => kvp.Value.ToLowerInvariant().Contains(filterLower)).ToList();
-                    }
+                if (personAtoms.Count > 0)
+                {
                     Color removeColor = new Color(0.6f, 0.2f, 0.2f, 1f);
                     Color cancelColor = new Color(0.35f, 0.35f, 0.35f, 1f);
                     Color allColor = new Color(0.8f, 0.2f, 0.2f, 1f);
+                    Color groupColor = new Color(0.2f, 0.2f, 0.2f, 1f);
 
                     UnityAction cancelAction = () => {
                         if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
                         UpdateTabs();
                     };
 
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
+                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
 
-                    if (options.Count > 0)
+                    foreach (Atom target in personAtoms)
                     {
-                        CreateTabButton(container.transform, "REMOVE ALL", allColor, false, () => {
-                            UIDraggableItem dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.GetComponent<UIDraggableItem>();
-                            if (dragger == null) dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.AddComponent<UIDraggableItem>();
-                            if (dragger != null) { dragger.Panel = this; dragger.RemoveAllClothing(target); }
-                            if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
-                            UpdateTabs();
-                        }, trackedButtons, null, "Remove ALL clothing from " + target.uid);
+                        var items = new List<KeyValuePair<string, string>>();
+                        JSONStorable geometry = target.GetStorableByID("geometry");
+                        if (geometry != null)
+                        {
+                            foreach (var name in geometry.GetBoolParamNames())
+                            {
+                                if (string.IsNullOrEmpty(name) || !name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+                                string clothingUid = name.Substring(9);
+                                JSONStorableBool jsb = geometry.GetBoolJSONParam(name);
+                                if (jsb != null && jsb.val)
+                                {
+                                    string p = clothingUid.Replace("\\", "/");
+                                    string[] parts = p.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                                    
+                                    string typeFolder = null;
+                                    int clothingIdx = -1;
+                                    for (int i = 0; i < parts.Length; i++)
+                                    {
+                                        if (string.Equals(parts[i], "clothing", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            clothingIdx = i;
+                                            break;
+                                        }
+                                    }
+                                    if (clothingIdx >= 0 && clothingIdx + 1 < parts.Length) typeFolder = parts[clothingIdx + 1];
+
+                                    string fileName = parts.Length > 0 ? Path.GetFileNameWithoutExtension(parts[parts.Length - 1]) : "";
+                                    string label = !string.IsNullOrEmpty(typeFolder)
+                                        ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + fileName)
+                                        : fileName;
+                                    if (!string.IsNullOrEmpty(label)) items.Add(new KeyValuePair<string, string>(clothingUid, label));
+                                }
+                            }
+                        }
+                        var options = items.GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase).ToList();
                         
-                        // Add hover preview for REMOVE ALL
-                        GameObject btnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
-                        if (btnGO != null)
+                        // Apply filter
+                        if (!string.IsNullOrEmpty(removeClothingFilter))
                         {
-                            UIHoverDelegate del = btnGO.GetComponent<UIHoverDelegate>();
-                            if (del == null) del = btnGO.AddComponent<UIHoverDelegate>();
-                            del.OnHoverChange += (enter) => {
-                                if (enter) ApplyClothingAllPreview(target);
-                                else ClearClothingAllPreview(target);
-                            };
+                            string filterLower = removeClothingFilter.ToLowerInvariant();
+                            options = options.Where(kvp => kvp.Value.ToLowerInvariant().Contains(filterLower)).ToList();
+                        }
+
+                        if (options.Count > 0)
+                        {
+                            if (personAtoms.Count > 1)
+                            {
+                                // Person label
+                                CreateTabButton(container.transform, " PERSON: " + target.uid + " ", groupColor, true, null, trackedButtons);
+                            }
+
+                            CreateTabButton(container.transform, "REMOVE ALL (" + target.uid + ")", allColor, false, () => {
+                                UIDraggableItem dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.GetComponent<UIDraggableItem>();
+                                if (dragger == null) dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.AddComponent<UIDraggableItem>();
+                                if (dragger != null) { dragger.Panel = this; dragger.RemoveAllClothing(target); }
+                                UpdateTabs();
+                            }, trackedButtons, null, "Remove ALL clothing from " + target.uid);
+                            
+                            // Add hover preview for REMOVE ALL
+                            GameObject btnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
+                            if (btnGO != null)
+                            {
+                                UIHoverDelegate del = btnGO.GetComponent<UIHoverDelegate>();
+                                if (del == null) del = btnGO.AddComponent<UIHoverDelegate>();
+                                del.OnHoverChange += (enter) => {
+                                    if (enter) ApplyClothingAllPreview(target);
+                                    else ClearClothingAllPreview(target);
+                                };
+                            }
+
+                            foreach (var opt in options)
+                            {
+                                string uid = opt.Key;
+                                string label = opt.Value;
+                                string tooltip = "Remove: " + label + " from " + target.uid;
+                                CreateTabButton(container.transform, label, removeColor, false, () => {
+                                    ClearClothingPreview();
+                                    UIDraggableItem dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.GetComponent<UIDraggableItem>();
+                                    if (dragger == null) dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.AddComponent<UIDraggableItem>();
+                                    if (dragger != null) { dragger.Panel = this; dragger.RemoveClothingItemByUid(target, uid); }
+                                    UpdateTabs();
+                                }, trackedButtons, null, tooltip);
+                                // Add hover preview for removal tabs
+                                GameObject itemBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
+                                if (itemBtnGO != null)
+                                {
+                                    UIHoverDelegate del = itemBtnGO.GetComponent<UIHoverDelegate>();
+                                    if (del == null) del = itemBtnGO.AddComponent<UIHoverDelegate>();
+                                    del.OnHoverChange += (enter) => {
+                                        if (enter) ApplyClothingPreview(target, uid);
+                                        else ClearClothingPreview(target, uid);
+                                    };
+                                }
+                            }
                         }
                     }
 
-                    foreach (var opt in options)
-                    {
-                        string uid = opt.Key;
-                        string label = opt.Value;
-                        string tooltip = "Remove: " + label + " from " + target.uid;
-                        CreateTabButton(container.transform, label, removeColor, false, () => {
-                            ClearClothingPreview();
-                            UIDraggableItem dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.GetComponent<UIDraggableItem>();
-                            if (dragger == null) dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.AddComponent<UIDraggableItem>();
-                            if (dragger != null) { dragger.Panel = this; dragger.RemoveClothingItemByUid(target, uid); }
-                            if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
-                            UpdateTabs();
-                        }, trackedButtons, null, tooltip);
-                        // Add hover preview for removal tabs
-                        GameObject btnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
-                        if (btnGO != null)
-                        {
-                            UIHoverDelegate del = btnGO.GetComponent<UIHoverDelegate>();
-                            if (del == null) del = btnGO.AddComponent<UIHoverDelegate>();
-                            del.OnHoverChange += (enter) => {
-                                if (enter) ApplyClothingPreview(target, uid);
-                                else ClearClothingPreview(target, uid);
-                            };
-                        }
-                    }
-
-                    if (options.Count > 0)
-                    {
-                        CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
-                    }
+                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
                 }
             }
             else if (contentType == ContentType.RemoveHair)
             {
-                Atom target = GetBestTargetAtom();
-                if (target != null)
+                List<Atom> personAtoms = SuperController.singleton != null
+                    ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
+                    : new List<Atom>();
+
+                if (personAtoms.Count > 0)
                 {
-                    var items = new List<KeyValuePair<string, string>>();
-                    DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
-                    if (dcs != null && dcs.hairItems != null)
-                    {
-                        foreach (var item in dcs.hairItems)
-                        {
-                            if (item == null || !item.active) continue;
-                            string path = item.uid;
-                            if (string.IsNullOrEmpty(path)) continue;
-                            string p = path.Replace("\\", "/");
-                            int idx = p.ToLowerInvariant().IndexOf("/hair/");
-                            if (idx >= 0)
-                            {
-                                string[] parts = p.Substring(idx).Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-                                string typeFolder = (parts.Length >= 2) ? parts[1] : null;
-                                string fileName = Path.GetFileNameWithoutExtension(p);
-                                string label = !string.IsNullOrEmpty(typeFolder)
-                                    ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + fileName)
-                                    : fileName;
-                                if (!string.IsNullOrEmpty(label)) items.Add(new KeyValuePair<string, string>(item.uid, label));
-                            }
-                        }
-                    }
-                    var options = items.GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase).ToList();
-                    
-                    // Apply filter
-                    if (!string.IsNullOrEmpty(removeHairFilter))
-                    {
-                        string filterLower = removeHairFilter.ToLowerInvariant();
-                        options = options.Where(kvp => kvp.Value.ToLowerInvariant().Contains(filterLower)).ToList();
-                    }
                     Color removeColor = new Color(0.6f, 0.2f, 0.2f, 1f);
                     Color cancelColor = new Color(0.35f, 0.35f, 0.35f, 1f);
                     Color allColor = new Color(0.8f, 0.2f, 0.2f, 1f);
+                    Color groupColor = new Color(0.2f, 0.2f, 0.2f, 1f);
 
                     UnityAction cancelAction = () => {
                         if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
                         UpdateTabs();
                     };
 
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
+                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
 
-                    CreateTabButton(container.transform, "REMOVE ALL", allColor, false, () => {
-                        UIDraggableItem dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.GetComponent<UIDraggableItem>();
-                        if (dragger == null) dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.AddComponent<UIDraggableItem>();
-                        if (dragger != null) { dragger.Panel = this; dragger.RemoveAllHair(target); }
-                        if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
-                        UpdateTabs();
-                    }, trackedButtons, null, "Remove ALL hair from " + target.uid);
-
-                    // Add hover preview for REMOVE ALL
-                    GameObject btnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
-                    if (btnGO != null)
+                    foreach (Atom target in personAtoms)
                     {
-                        UIHoverDelegate del = btnGO.GetComponent<UIHoverDelegate>();
-                        if (del == null) del = btnGO.AddComponent<UIHoverDelegate>();
-                        del.OnHoverChange += (enter) => {
-                            if (enter) ApplyHairAllPreview(target);
-                            else ClearHairAllPreview(target);
-                        };
-                    }
-
-                    if (options.Count > 0)
-                    {
-                    }
-
-                    foreach (var opt in options)
-                    {
-                        string uid = opt.Key;
-                        string label = opt.Value;
-                        string tooltip = "Remove: " + label + " from " + target.uid;
-                        CreateTabButton(container.transform, label, removeColor, false, () => {
-                            ClearHairPreview();
-                            UIDraggableItem dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.GetComponent<UIDraggableItem>();
-                            if (dragger == null) dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.AddComponent<UIDraggableItem>();
-                            if (dragger != null) { dragger.Panel = this; dragger.RemoveHairItemByUid(target, uid); }
-                            if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
-                            UpdateTabs();
-                        }, trackedButtons, null, tooltip);
-                        GameObject itemBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
-                        if (itemBtnGO != null)
+                        var items = new List<KeyValuePair<string, string>>();
+                        DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
+                        if (dcs != null && dcs.hairItems != null)
                         {
-                            UIHoverDelegate del = itemBtnGO.GetComponent<UIHoverDelegate>();
-                            if (del == null) del = itemBtnGO.AddComponent<UIHoverDelegate>();
-                            del.OnHoverChange += (enter) => {
-                                if (enter) ApplyHairPreview(target, uid);
-                                else ClearHairPreview(target, uid);
-                            };
+                            foreach (var item in dcs.hairItems)
+                            {
+                                if (item == null || !item.active) continue;
+                                string path = item.uid;
+                                if (string.IsNullOrEmpty(path)) continue;
+                                string p = path.Replace("\\", "/");
+                                int idx = p.ToLowerInvariant().IndexOf("/hair/");
+                                string label;
+                                if (idx >= 0)
+                                {
+                                    string[] parts = p.Substring(idx).Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                                    string typeFolder = (parts.Length >= 2) ? parts[1] : null;
+                                    string fileName = Path.GetFileNameWithoutExtension(p);
+                                    label = !string.IsNullOrEmpty(typeFolder)
+                                        ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + fileName)
+                                        : fileName;
+                                }
+                                else
+                                {
+                                    label = Path.GetFileNameWithoutExtension(p);
+                                }
+                                if (!string.IsNullOrEmpty(label)) items.Add(new KeyValuePair<string, string>(item.uid, label));
+                            }
+                        }
+                        var options = items.GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase).ToList();
+                        
+                        // Apply filter
+                        if (!string.IsNullOrEmpty(removeHairFilter))
+                        {
+                            string filterLower = removeHairFilter.ToLowerInvariant();
+                            options = options.Where(kvp => kvp.Value.ToLowerInvariant().Contains(filterLower)).ToList();
+                        }
+
+                        if (options.Count > 0)
+                        {
+                            if (personAtoms.Count > 1)
+                            {
+                                // Person label
+                                CreateTabButton(container.transform, " PERSON: " + target.uid + " ", groupColor, true, null, trackedButtons);
+                            }
+
+                            CreateTabButton(container.transform, "REMOVE ALL (" + target.uid + ")", allColor, false, () => {
+                                UIDraggableItem dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.GetComponent<UIDraggableItem>();
+                                if (dragger == null) dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.AddComponent<UIDraggableItem>();
+                                if (dragger != null) { dragger.Panel = this; dragger.RemoveAllHair(target); }
+                                UpdateTabs();
+                            }, trackedButtons, null, "Remove ALL hair from " + target.uid);
+
+                            // Add hover preview for REMOVE ALL
+                            GameObject btnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
+                            if (btnGO != null)
+                            {
+                                UIHoverDelegate del = btnGO.GetComponent<UIHoverDelegate>();
+                                if (del == null) del = btnGO.AddComponent<UIHoverDelegate>();
+                                del.OnHoverChange += (enter) => {
+                                    if (enter) ApplyHairAllPreview(target);
+                                    else ClearHairAllPreview(target);
+                                };
+                            }
+
+                            foreach (var opt in options)
+                            {
+                                string uid = opt.Key;
+                                string label = opt.Value;
+                                string tooltip = "Remove: " + label + " from " + target.uid;
+                                CreateTabButton(container.transform, label, removeColor, false, () => {
+                                    ClearHairPreview();
+                                    UIDraggableItem dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.GetComponent<UIDraggableItem>();
+                                    if (dragger == null) dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.AddComponent<UIDraggableItem>();
+                                    if (dragger != null) { dragger.Panel = this; dragger.RemoveHairItemByUid(target, uid); }
+                                    UpdateTabs();
+                                }, trackedButtons, null, tooltip);
+                                GameObject itemBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
+                                if (itemBtnGO != null)
+                                {
+                                    UIHoverDelegate del = itemBtnGO.GetComponent<UIHoverDelegate>();
+                                    if (del == null) del = itemBtnGO.AddComponent<UIHoverDelegate>();
+                                    del.OnHoverChange += (enter) => {
+                                        if (enter) ApplyHairPreview(target, uid);
+                                        else ClearHairPreview(target, uid);
+                                    };
+                                }
+                            }
                         }
                     }
 
-                    if (options.Count > 0)
-                    {
-                        CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
-                    }
+                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
                 }
             }
             else if (contentType == ContentType.RemoveAtom)
@@ -1782,7 +1804,7 @@ namespace VPB
                         UpdateTabs();
                     };
 
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
+                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
 
                     foreach (var opt in options)
                     {
@@ -1792,14 +1814,13 @@ namespace VPB
                         CreateTabButton(container.transform, label, removeColor, false, () => {
                             Atom a = SuperController.singleton.GetAtomByUid(uid);
                             if (a != null) { PushUndoSnapshotForAtomRemoval(a); SuperController.singleton.RemoveAtom(a); }
-                            if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
                             UpdateTabs();
                         }, trackedButtons, null, tooltip);
                     }
 
                     if (options.Count > 0)
                     {
-                        CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
+                        CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
                     }
                 }
             }
@@ -1814,7 +1835,7 @@ namespace VPB
                     UpdateTabs();
                 };
 
-                CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
+                CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
 
                 foreach (var opt in options)
                 {
@@ -1827,7 +1848,7 @@ namespace VPB
 
                 if (options.Count > 0)
                 {
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.cancel", "Cancel"), cancelColor, false, cancelAction, trackedButtons);
+                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
                 }
             }
             

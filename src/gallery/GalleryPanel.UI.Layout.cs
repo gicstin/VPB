@@ -1419,71 +1419,33 @@ namespace VPB
             // Update arrow indicators immediately (not only after submenu hover).
             if (isClothing)
             {
-                Atom tgt = null;
-                try { tgt = GetBestTargetAtom(); } catch { }
-
                 int count = 0;
                 try
                 {
-                    if (tgt != null)
+                    List<Atom> targets = SuperController.singleton != null
+                        ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
+                        : new List<Atom>();
+
+                    foreach (Atom tgt in targets)
                     {
-                        // When submenu is open, keep label count stable by using the cached submenu option count.
-                        bool subOpen = (leftActiveContent == ContentType.RemoveClothing || rightActiveContent == ContentType.RemoveClothing);
-                        if (subOpen)
+                        JSONStorable geometry = tgt.GetStorableByID("geometry");
+                        if (geometry != null)
                         {
-                            count = clothingSubmenuLastOptionCount;
-                        }
-                        else
-                        {
-                            bool shouldCheck = true;
-                            try
+                            foreach (var name in geometry.GetBoolParamNames())
                             {
-                                if (!string.IsNullOrEmpty(clothingLabelLastAtomUid) && string.Equals(clothingLabelLastAtomUid, tgt.uid, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    if (Time.unscaledTime - clothingLabelLastCheckTime < 0.25f) shouldCheck = false;
-                                }
-                            }
-                            catch { }
+                                if (string.IsNullOrEmpty(name) || !name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+                                string clothingUid = name.Substring(9);
+                                if (!clothingUid.Contains("/")) continue;
 
-                            if (!shouldCheck)
-                            {
-                                count = clothingLabelLastCount;
-                            }
-                            else
-                            {
-                                try
-                                {
-                                    JSONStorable geometry = tgt.GetStorableByID("geometry");
-                                    if (geometry != null)
-                                    {
-                                        foreach (var name in geometry.GetBoolParamNames())
-                                        {
-                                            if (string.IsNullOrEmpty(name) || !name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
-                                            string clothingUid = name.Substring(9);
-                                            if (!clothingUid.Contains("/")) continue;
+                                bool isPreviewItem = (!string.IsNullOrEmpty(previewRemoveClothingAtomUid)
+                                    && !string.IsNullOrEmpty(previewRemoveClothingItemUid)
+                                    && string.Equals(previewRemoveClothingAtomUid, tgt.uid, StringComparison.OrdinalIgnoreCase)
+                                    && string.Equals(previewRemoveClothingItemUid, clothingUid, StringComparison.OrdinalIgnoreCase)
+                                    && previewRemoveClothingPrevGeometryVal.HasValue
+                                    && previewRemoveClothingPrevGeometryVal.Value);
 
-                                            bool isPreviewItem = (!string.IsNullOrEmpty(previewRemoveClothingAtomUid)
-                                                && !string.IsNullOrEmpty(previewRemoveClothingItemUid)
-                                                && string.Equals(previewRemoveClothingAtomUid, tgt.uid, StringComparison.OrdinalIgnoreCase)
-                                                && string.Equals(previewRemoveClothingItemUid, clothingUid, StringComparison.OrdinalIgnoreCase)
-                                                && previewRemoveClothingPrevGeometryVal.HasValue
-                                                && previewRemoveClothingPrevGeometryVal.Value);
-
-                                            JSONStorableBool jsb = geometry.GetBoolJSONParam(name);
-                                            if (jsb != null && (jsb.val || isPreviewItem)) count++;
-                                        }
-                                    }
-                                }
-                                catch { }
-
-                                try
-                                {
-                                    clothingLabelLastCheckTime = Time.unscaledTime;
-                                    clothingLabelLastAtomUid = tgt.uid;
-                                    clothingLabelLastHasOptions = count > 0;
-                                    clothingLabelLastCount = count;
-                                }
-                                catch { }
+                                JSONStorableBool jsb = geometry.GetBoolJSONParam(name);
+                                if (jsb != null && (jsb.val || isPreviewItem)) count++;
                             }
                         }
                     }
@@ -1502,23 +1464,18 @@ namespace VPB
                 int count = 0;
                 try
                 {
-                    Atom tgt = GetBestTargetAtom();
-                    if (tgt != null)
+                    List<Atom> targets = SuperController.singleton != null
+                        ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
+                        : new List<Atom>();
+
+                    foreach (Atom tgt in targets)
                     {
-                        bool subOpen = (leftActiveContent == ContentType.RemoveHair || rightActiveContent == ContentType.RemoveHair);
-                        if (subOpen)
+                        DAZCharacterSelector dcs = tgt.GetComponentInChildren<DAZCharacterSelector>();
+                        if (dcs != null && dcs.hairItems != null)
                         {
-                            count = hairSubmenuLastOptionCount;
-                        }
-                        else
-                        {
-                            DAZCharacterSelector dcs = tgt.GetComponentInChildren<DAZCharacterSelector>();
-                            if (dcs != null && dcs.hairItems != null)
+                            foreach (var it in dcs.hairItems)
                             {
-                                foreach (var it in dcs.hairItems)
-                                {
-                                    if (it != null && it.active) count++;
-                                }
+                                if (it != null && it.active) count++;
                             }
                         }
                     }
