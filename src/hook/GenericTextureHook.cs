@@ -564,11 +564,19 @@ namespace VPB
 
             try
             {
+                var srcQI = ImageLoadingMgr.currentProcessingQI;
                 var qi = new ImageLoaderThreaded.QueuedImage();
                 qi.imgPath = path;
                 qi.tex = tex;
                 qi.compress = true;
-                qi.linear = false; 
+                if (srcQI != null && srcQI.imgPath == path)
+                {
+                    qi.linear = srcQI.linear;
+                    qi.isNormalMap = srcQI.isNormalMap;
+                    qi.createAlphaFromGrayscale = srcQI.createAlphaFromGrayscale;
+                    qi.createNormalFromBump = srcQI.createNormalFromBump;
+                    qi.invert = srcQI.invert;
+                }
 
                 bool isSim = SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
                 string baseZstdPath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength, isSim);
@@ -629,14 +637,34 @@ namespace VPB
                                     return false;
                                 }
 
-                                if (tex.width != targetW || tex.height != targetH)
-                                {
-                                    tex.Resize(targetW, targetH, tf, false);
-                                }
-
-                                tex.LoadRawTextureData(bytes);
                                 bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(path);
-                                tex.Apply(false, markNonReadable && !isSimTexture);
+                                bool needsReinit = tex.width != targetW || tex.height != targetH || tex.format != tf;
+                                bool isCompressedTarget = tf == TextureFormat.DXT1 || tf == TextureFormat.DXT5;
+
+                                if (needsReinit && isCompressedTarget)
+                                {
+                                    Texture2D tmp = new Texture2D(targetW, targetH, tf, false, tex.anisoLevel > 0);
+                                    try
+                                    {
+                                        tmp.LoadRawTextureData(bytes);
+                                        tmp.Apply(false, false);
+                                        Graphics.CopyTexture(tmp, tex);
+                                        UnityEngine.Object.Destroy(tmp);
+                                    }
+                                    catch
+                                    {
+                                        try { UnityEngine.Object.Destroy(tmp); } catch { }
+                                        tex.Resize(targetW, targetH, tf, false);
+                                        tex.LoadRawTextureData(bytes);
+                                        tex.Apply(false, markNonReadable && !isSimTexture);
+                                    }
+                                }
+                                else
+                                {
+                                    if (needsReinit) tex.Resize(targetW, targetH, tf, false);
+                                    tex.LoadRawTextureData(bytes);
+                                    tex.Apply(false, markNonReadable && !isSimTexture);
+                                }
 
                                 if (isSimTexture)
                                 {

@@ -417,7 +417,7 @@ namespace VPB
             }
         }
 
-        private static void EnsureZstdInitialized()
+        internal static void EnsureZstdInitialized()
         {
             if (s_ZstdInitialized) return;
             try
@@ -1804,7 +1804,7 @@ namespace VPB
                     if (string.IsNullOrEmpty(cachePath)) continue;
 
                     bool wantNative = (s_JobWriteMode == CacheWriteMode.NativeOnly || s_JobWriteMode == CacheWriteMode.NativeAndZstd);
-                    bool wantZstd = (s_JobWriteMode == CacheWriteMode.ZstdOnly || s_JobWriteMode == CacheWriteMode.NativeAndZstd);
+                    bool wantZstd = (s_JobWriteMode == CacheWriteMode.ZstdOnly || s_JobWriteMode == CacheWriteMode.NativeAndZstd) && !flags.createAlphaFromGrayscale;
                     string zstdPath = null;
                     if (wantZstd)
                     {
@@ -2545,6 +2545,41 @@ namespace VPB
             sourceWidth = 0;
             sourceHeight = 0;
 
+            try
+            {
+                string nativePath = GetNativeCachePathDynamic(imgUidPath, flags, 0, default(DateTime), targetWidth, targetHeight);
+                string nativeMetaPath = nativePath != null ? nativePath + "meta" : null;
+                if (!string.IsNullOrEmpty(nativePath) && File.Exists(nativePath) && File.Exists(nativeMetaPath))
+                {
+                    try
+                    {
+                        var nmeta = SimpleJSON.JSON.Parse(File.ReadAllText(nativeMetaPath));
+                        int nw = nmeta["width"].AsInt;
+                        int nh = nmeta["height"].AsInt;
+                        string nfmtStr = nmeta["format"].Value;
+                        TextureFormat nfmt = TextureFormat.RGBA32;
+                        if (!string.IsNullOrEmpty(nfmtStr)) try { nfmt = (TextureFormat)Enum.Parse(typeof(TextureFormat), nfmtStr, true); } catch { }
+                        if (nw > 0 && nh > 0)
+                        {
+                            byte[] ndata = File.ReadAllBytes(nativePath);
+                            int expectedNative = TextureUtil.GetExpectedRawDataSize(nw, nh, nfmt);
+                            if (expectedNative > 0 && ndata.Length >= expectedNative)
+                            {
+                                payload = ndata.Length == expectedNative ? ndata : ndata;
+                                width = nw;
+                                height = nh;
+                                format = nfmt;
+                                hasAlpha = (nfmt == TextureFormat.DXT5 || nfmt == TextureFormat.RGBA32);
+                                try { int lvl2 = Settings.Instance != null ? Settings.Instance.TextureLogLevel.Value : 0; if (lvl2 >= 1) LogUtil.Log("[VPB ALPHA] NativeHit: fmt=" + nfmt + " " + nw + "x" + nh + " path=" + System.IO.Path.GetFileName(nativePath)); } catch { }
+                                return true;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
             byte[] src = null;
             try { src = FileManager.ReadAllBytes(imgUidPath); }
             catch (Exception ex)
@@ -2570,6 +2605,27 @@ namespace VPB
 
                 sourceWidth = tex.width;
                 sourceHeight = tex.height;
+
+                if (tex.format != TextureFormat.RGBA32)
+                {
+                    RenderTexture blit = RenderTexture.GetTemporary(tex.width, tex.height, 0, RenderTextureFormat.ARGB32, flags.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
+                    Graphics.Blit(tex, blit);
+                    RenderTexture prevBlit = RenderTexture.active;
+                    try
+                    {
+                        RenderTexture.active = blit;
+                        Texture2D rgba = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false, flags.linear);
+                        rgba.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0, false);
+                        rgba.Apply(false, false);
+                        UnityEngine.Object.Destroy(tex);
+                        tex = rgba;
+                    }
+                    finally
+                    {
+                        RenderTexture.active = prevBlit;
+                        RenderTexture.ReleaseTemporary(blit);
+                    }
+                }
 
                 int effTargetW = targetWidth;
                 int effTargetH = targetHeight;
@@ -2626,28 +2682,6 @@ namespace VPB
                     Color32[] colors = working.GetPixels32();
                     if (colors != null && colors.Length > 0)
                     {
-                        if (flags.createAlphaFromGrayscale)
-                        {
-                            // LoadImage can yield RGB24 textures for PNGs without alpha.
-                            // If we intend to write alpha, we must convert to an alpha-capable format first,
-                            // otherwise SetPixels32/Apply will drop alpha and Compress() will choose DXT1.
-                            if (working.format == TextureFormat.RGB24 || working.format == TextureFormat.DXT1)
-                            {
-                                Texture2D conv = new Texture2D(working.width, working.height, TextureFormat.RGBA32, false, flags.linear);
-                                try
-                                {
-                                    conv.SetPixels32(colors);
-                                    conv.Apply(false, false);
-                                    if (working != null && working != tex) UnityEngine.Object.Destroy(working);
-                                    working = conv;
-                                    colors = working.GetPixels32();
-                                }
-                                catch
-                                {
-                                    try { UnityEngine.Object.Destroy(conv); } catch { }
-                                }
-                            }
-                        }
 
                         if (flags.isNormalMap)
                         {
@@ -2672,40 +2706,6 @@ namespace VPB
                             }
                         }
 
-                        if (flags.createAlphaFromGrayscale)
-                        {
-                            bool hasExistingAlpha = false;
-                            for (int i = 0; i < colors.Length; i++)
-                            {
-                                if (colors[i].a != 255)
-                                {
-                                    hasExistingAlpha = true;
-                                    break;
-                                }
-                            }
-
-                            if (!hasExistingAlpha)
-                            {
-                                for (int i = 0; i < colors.Length; i++)
-                                {
-                                    var c = colors[i];
-                                    int avg = (c.r + c.g + c.b) / 3;
-                                    c.a = (byte)avg;
-                                    colors[i] = c;
-                                }
-                            }
-
-                            bool enforceDxt5 = flags.compress && !string.IsNullOrEmpty(internalPath) && internalPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
-                            if (enforceDxt5)
-                            {
-                                if (colors != null && colors.Length > 0)
-                                {
-                                    var c0 = colors[0];
-                                    c0.a = 128;
-                                    colors[0] = c0;
-                                }
-                            }
-                        }
 
                         if (flags.createNormalFromBump)
                         {

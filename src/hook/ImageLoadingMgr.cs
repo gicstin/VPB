@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using SimpleJSON;
 using UnityEngine;
+using ZstdNet;
 
 namespace VPB
 {
@@ -17,6 +18,7 @@ namespace VPB
         public static ImageLoadingMgr singleton;
         public static string currentProcessingPath;
         public static bool currentProcessingIsThumbnail;
+        public static ImageLoaderThreaded.QueuedImage currentProcessingQI;
         
         private void Awake()
         {
@@ -318,6 +320,70 @@ namespace VPB
             DoCallback(qi);
         }
 
+        public bool RequestImmediate(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return false;
+            if (Settings.Instance == null || Settings.Instance.ThumbnailThreshold == null) return false;
+
+            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "") + (qi.createAlphaFromGrayscale ? "_A" : "") + (qi.isNormalMap ? "_N" : "") + (qi.invert ? "_I" : "") + (qi.createNormalFromBump ? "_BN" : "");
+
+            if (qi.tex == null)
+            {
+                var cached = GetTextureFromCache(cacheKey);
+                if (cached != null)
+                {
+                    qi.tex = cached;
+                    return true;
+                }
+            }
+
+            string vpbCachePath = GetCachePath(qi);
+            if (vpbCachePath == null) return false;
+
+            try
+            {
+                var meta = FastLoadMetadata(vpbCachePath);
+                if (meta == null) return false;
+
+                byte[] data = FastGetDecompressed(vpbCachePath);
+                if (data == null) return false;
+
+                int expectedSize = TextureUtil.GetExpectedRawDataSize(meta.Width, meta.Height, meta.Format);
+                if (expectedSize > 0 && data.Length < expectedSize) return false;
+
+                bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
+                Texture2D tex = qi.tex;
+                bool reusingExisting = tex != null;
+                if (tex == null)
+                {
+                    tex = new Texture2D(meta.Width, meta.Height, meta.Format, false, qi.linear);
+                }
+                else
+                {
+                    bool isCompressedFmt = tex.format == TextureFormat.DXT1 || tex.format == TextureFormat.DXT5;
+                    bool needsResize = tex.width != meta.Width || tex.height != meta.Height || tex.format != meta.Format;
+                    if (needsResize || isCompressedFmt)
+                    {
+                        tex = new Texture2D(meta.Width, meta.Height, meta.Format, false, qi.linear);
+                        reusingExisting = false;
+                    }
+                }
+                TextureUtil.SafeLoadRawTextureData(tex, data, meta.Width, meta.Height, meta.Format);
+                tex.Apply(false, !isSimTexture);
+
+                qi.tex = tex;
+                RegisterTexture(cacheKey, tex);
+                if (meta.IsDownscaled)
+                    TextureUtil.MarkDownscaledActive(GetDownscaledKey(cacheKey));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("RequestImmediate failed for " + vpbCachePath + ": " + ex.Message);
+                return false;
+            }
+        }
+
         public bool Request(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return false;
@@ -330,7 +396,7 @@ namespace VPB
             if (qi.setSize && qi.width > 0 && qi.width <= threshold && qi.height > 0 && qi.height <= threshold)
                 return false;
 
-            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "");
+            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "") + (qi.createAlphaFromGrayscale ? "_A" : "") + (qi.isNormalMap ? "_N" : "") + (qi.invert ? "_I" : "") + (qi.createNormalFromBump ? "_BN" : "");
             
             var cacheTexture = GetTextureFromCache(cacheKey);
             if (cacheTexture != null)
@@ -368,6 +434,10 @@ namespace VPB
                     return true;
                 }
 
+                try {
+                    int lvl = Settings.Instance != null && Settings.Instance.TextureLogLevel != null ? Settings.Instance.TextureLogLevel.Value : 0;
+                    if (lvl >= 1) LogUtil.Log("[VPB Req] MISS path=" + qi.imgPath + " C=" + qi.compress + " L=" + qi.linear + " A=" + qi.createAlphaFromGrayscale + " N=" + qi.isNormalMap + " key=" + cacheKey);
+                } catch { }
                 return false;
             }
         }
@@ -407,6 +477,10 @@ namespace VPB
                 }
 
                 int expectedSize = TextureUtil.GetExpectedRawDataSize(meta.Width, meta.Height, meta.Format);
+                try {
+                    int lvl = Settings.Instance != null && Settings.Instance.TextureLogLevel != null ? Settings.Instance.TextureLogLevel.Value : 0;
+                    if (lvl >= 1) LogUtil.Log("[VPB Load] path=" + cachePath + " fmt=" + meta.Format + " " + meta.Width + "x" + meta.Height + " expected=" + expectedSize + " got=" + decompressedData.Length);
+                } catch { }
                 if (expectedSize > 0 && decompressedData.Length < expectedSize)
                 {
                     LogUtil.LogError($"LoadAndDecompress: Decompressed data size mismatch. Expected {expectedSize}, got {decompressedData.Length} for {cachePath}");
@@ -465,14 +539,13 @@ namespace VPB
 
                 Texture2D tex = new Texture2D(data.Meta.Width, data.Meta.Height, data.Meta.Format, false, data.OriginalQI.linear);
                 TextureUtil.SafeLoadRawTextureData(tex, data.Data, data.Meta.Width, data.Meta.Height, data.Meta.Format);
-                
                 tex.Apply(false, !isSimTexture);
                 
                 if (isSimTexture)
                 {
                     LogUtil.Log($"[VPB SIM] Created READABLE sim texture from cache: {path}");
                 }
-                
+
                 data.OriginalQI.tex = tex;
 
                 RegisterTexture(data.CacheKey, tex);
@@ -505,7 +578,7 @@ namespace VPB
         public void ResolveInflightForQueuedImage(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
-            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "");
+            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "") + (qi.createAlphaFromGrayscale ? "_A" : "") + (qi.isNormalMap ? "_N" : "") + (qi.invert ? "_I" : "") + (qi.createNormalFromBump ? "_BN" : "");
             
             if (qi.tex != null)
             {
@@ -922,6 +995,63 @@ namespace VPB
             CurrentZstdStats.Completed = true;
             CurrentZstdStats.CurrentFile = "Restored";
             LogUtil.Log(string.Format("Bulk decompression completed: {0} processed, {1} failed", CurrentZstdStats.ProcessedFiles, CurrentZstdStats.FailedCount));
+        }
+
+        public static void WriteAlphaTextureToZstdCache(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null || qi.tex == null || string.IsNullOrEmpty(qi.imgPath)) return;
+            try
+            {
+                string zstdPath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength, false);
+                if (string.IsNullOrEmpty(zstdPath)) return;
+                if (File.Exists(zstdPath) && File.Exists(zstdPath + "meta")) return;
+
+                var src = qi.tex;
+                RenderTexture rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32, qi.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
+                Graphics.Blit(src, rt);
+                RenderTexture prev = RenderTexture.active;
+                Texture2D rgba = null;
+                try
+                {
+                    RenderTexture.active = rt;
+                    rgba = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, qi.linear);
+                    rgba.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0, false);
+                    rgba.Apply(false, false);
+                }
+                finally
+                {
+                    RenderTexture.active = prev;
+                    RenderTexture.ReleaseTemporary(rt);
+                }
+
+                byte[] raw = rgba.GetRawTextureData();
+                UnityEngine.Object.Destroy(rgba);
+                if (raw == null || raw.Length == 0) return;
+
+                int level = 3;
+                try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
+
+                byte[] compressed;
+                NativeTextureOnDemandCache.EnsureZstdInitialized();
+                using (var compressor = new Compressor(new CompressionOptions(level)))
+                    compressed = compressor.Wrap(raw, 0, raw.Length);
+
+                string zdir = Path.GetDirectoryName(zstdPath);
+                if (!string.IsNullOrEmpty(zdir) && !Directory.Exists(zdir)) Directory.CreateDirectory(zdir);
+
+                File.WriteAllBytes(zstdPath, compressed);
+
+                var zmeta = new SimpleJSON.JSONClass();
+                zmeta["type"] = "compressed";
+                zmeta["width"] = src.width.ToString();
+                zmeta["height"] = src.height.ToString();
+                zmeta["format"] = TextureFormat.RGBA32.ToString();
+                File.WriteAllText(zstdPath + "meta", zmeta.ToString(string.Empty));
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB ALPHA WRITE] Failed for " + qi.imgPath + ": " + ex.Message);
+            }
         }
 
         // --- Compatibility Stubs (Removed from Settings but kept here as no-ops to avoid immediate breaking of other hooks) ---

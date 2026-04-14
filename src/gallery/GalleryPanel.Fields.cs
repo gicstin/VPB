@@ -242,8 +242,6 @@ namespace VPB
         private List<GameObject> rightRemoveHairSubmenuButtons = new List<GameObject>();
         private List<GameObject> leftRemoveHairSubmenuButtons = new List<GameObject>();
 
-        private int hairSubmenuLastOptionCount = 0;
-
         private const float HairSubmenuSyncInterval = 0.5f;
 
         private string previewRemoveHairAtomUid = null;
@@ -257,17 +255,11 @@ namespace VPB
         private List<GameObject> rightRemoveClothingVisibilityToggleButtons = new List<GameObject>();
         private List<GameObject> leftRemoveClothingVisibilityToggleButtons = new List<GameObject>();
 
-        private int clothingSubmenuLastOptionCount = 0;
         private const float ClothingSubmenuSyncInterval = 0.5f;
 
         // 5a — anchor yStart captured on first submenu open; reused on removal resyncs to prevent button jump
         private float _clothingSubmenuAnchorYStart = float.NaN;
         private float _hairSubmenuAnchorYStart = float.NaN;
-
-        private float clothingLabelLastCheckTime = 0f;
-        private string clothingLabelLastAtomUid = null;
-        private bool clothingLabelLastHasOptions = false;
-        private int clothingLabelLastCount = 0;
 
         private float sideContextLastUpdateTime = 0f;
         private const float SideContextUpdateInterval = 0.25f;

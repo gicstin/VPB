@@ -613,12 +613,14 @@ namespace VPB
 
             ImageLoadingMgr.currentProcessingPath = qi.imgPath;
             ImageLoadingMgr.currentProcessingIsThumbnail = qi.isThumbnail;
+            ImageLoadingMgr.currentProcessingQI = qi;
 
             if (!Settings.Instance.EnableZstdCompression.Value) return;
 
-            if (ImageLoadingMgr.singleton.Request(qi))
+            bool immOk = ImageLoadingMgr.singleton.RequestImmediate(qi);
+            try { int lvl = Settings.Instance != null && Settings.Instance.TextureLogLevel != null ? Settings.Instance.TextureLogLevel.Value : 0; if (lvl >= 1 && (qi.createAlphaFromGrayscale || (qi.imgPath != null && qi.imgPath.IndexOf("Alphamidpart", StringComparison.OrdinalIgnoreCase) >= 0))) LogUtil.Log("[VPB IMM] path=" + qi.imgPath + " A=" + qi.createAlphaFromGrayscale + " ok=" + immOk + " tex=" + (qi.tex != null ? qi.tex.format.ToString() + " " + qi.tex.width + "x" + qi.tex.height : "null")); } catch { }
+            if (immOk)
             {
-                // Skip the original logic
                 qi.skipCache = true;
                 qi.processed = true;
                 qi.finished = true;
@@ -631,6 +633,7 @@ namespace VPB
         {
             ImageLoadingMgr.currentProcessingPath = null;
             ImageLoadingMgr.currentProcessingIsThumbnail = false;
+            ImageLoadingMgr.currentProcessingQI = null;
 
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
             if (!Settings.Instance.EnableZstdCompression.Value) return;
@@ -824,9 +827,10 @@ namespace VPB
 
             if (ImageLoadingMgr.singleton.Request(qi))
             {
-                // Skip VaM threaded processing for this request.
                 return false;
             }
+
+            try { int lvl = Settings.Instance != null && Settings.Instance.TextureLogLevel != null ? Settings.Instance.TextureLogLevel.Value : 0; if (lvl >= 1 && (qi.createAlphaFromGrayscale || (qi.imgPath != null && qi.imgPath.IndexOf("Alphamidpart", StringComparison.OrdinalIgnoreCase) >= 0))) LogUtil.Log("[VPB QUEUE] MISS path=" + qi.imgPath + " A=" + qi.createAlphaFromGrayscale); } catch { }
 
             try
             {
@@ -901,6 +905,11 @@ namespace VPB
                     {
                         LogUtil.LogError($"[VPB SIM] PostFinish: Failed to fix up sim texture {__instance.imgPath}: {ex.Message}");
                     }
+                }
+
+                if (__instance.createAlphaFromGrayscale)
+                {
+                    ImageLoadingMgr.WriteAlphaTextureToZstdCache(__instance);
                 }
 
                 if (ImageLoadingMgr.singleton != null)
