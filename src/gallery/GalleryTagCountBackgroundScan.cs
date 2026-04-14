@@ -367,20 +367,44 @@ namespace VPB
             if (VpbSqlite3.IsAvailable)
             {
                 string extKey = JoinExtensionsForTagScan(input.ExtensionsSplit);
-                var idxRows = new List<VpbLocalDatabase.Row>();
-                if (VpbLocalDatabase.TryQueryGalleryCategoryRows(input.Title, extKey, input.CurrentCreator ?? "", idxRows, out _))
+                VpbLocalDatabase.TagScanTotals sqlFacets;
+                if (VpbLocalDatabase.TryReadTagCounts(input.Title, extKey, input.CurrentCreator ?? "", input.TagsToCount, tagCounts, out sqlFacets, input.ClothingSubfilterVal, input.AppearanceSubfilterVal, input.TagsToCount)) // Note: input.TagsToCount used as activeTags for filtering
                 {
                     varScanFromSql = true;
-                    for (int ri = 0; ri < idxRows.Count; ri++)
-                    {
-                        if ((ri & 0x3F) == 0 && panel.GalleryFileRefreshSequence != refreshSequence)
-                        {
-                            outcome.Aborted = true;
-                            return outcome;
-                        }
-                        VpbLocalDatabase.Row row = idxRows[ri];
-                        TagScanProcessOneVarRow(input, row.InternalPath, row.PackageUid ?? "", targetExts, tagCounts, foundTags, t);
-                    }
+                    // Map sqlFacets back to our local totals object
+                    t.AppearanceSourceCountAll = sqlFacets.AppearanceSourceCountAll;
+                    t.AppearanceSourceCountPresets = sqlFacets.AppearanceSourceCountPresets;
+                    t.AppearanceSourceCountCustom = sqlFacets.AppearanceSourceCountCustom;
+                    t.ClothingSubfilterCountAll = sqlFacets.ClothingSubfilterCountAll;
+                    t.ClothingSubfilterCountReal = sqlFacets.ClothingSubfilterCountReal;
+                    t.ClothingSubfilterCountPresets = sqlFacets.ClothingSubfilterCountPresets;
+                    t.ClothingSubfilterCountCustom = sqlFacets.ClothingSubfilterCountCustom;
+                    t.ClothingSubfilterCountItems = sqlFacets.ClothingSubfilterCountItems;
+                    t.ClothingSubfilterCountMale = sqlFacets.ClothingSubfilterCountMale;
+                    t.ClothingSubfilterCountFemale = sqlFacets.ClothingSubfilterCountFemale;
+                    t.ClothingSubfilterCountDecals = sqlFacets.ClothingSubfilterCountDecals;
+                    t.AppearanceSubfilterCountAll = sqlFacets.AppearanceSubfilterCountAll;
+                    t.AppearanceSubfilterCountPresets = sqlFacets.AppearanceSubfilterCountPresets;
+                    t.AppearanceSubfilterCountCustom = sqlFacets.AppearanceSubfilterCountCustom;
+                    t.AppearanceSubfilterCountMale = sqlFacets.AppearanceSubfilterCountMale;
+                    t.AppearanceSubfilterCountFemale = sqlFacets.AppearanceSubfilterCountFemale;
+                    t.AppearanceSubfilterCountFuta = sqlFacets.AppearanceSubfilterCountFuta;
+                    t.ClothingSubfilterFacetCountReal = sqlFacets.ClothingSubfilterFacetCountReal;
+                    t.ClothingSubfilterFacetCountPresets = sqlFacets.ClothingSubfilterFacetCountPresets;
+                    t.ClothingSubfilterFacetCountCustom = sqlFacets.ClothingSubfilterFacetCountCustom;
+                    t.ClothingSubfilterFacetCountItems = sqlFacets.ClothingSubfilterFacetCountItems;
+                    t.ClothingSubfilterFacetCountMale = sqlFacets.ClothingSubfilterFacetCountMale;
+                    t.ClothingSubfilterFacetCountFemale = sqlFacets.ClothingSubfilterFacetCountFemale;
+                    t.ClothingSubfilterFacetCountDecals = sqlFacets.ClothingSubfilterFacetCountDecals;
+                    t.AppearanceSubfilterFacetCountPresets = sqlFacets.AppearanceSubfilterFacetCountPresets;
+                    t.AppearanceSubfilterFacetCountCustom = sqlFacets.AppearanceSubfilterFacetCountCustom;
+                    t.AppearanceSubfilterFacetCountMale = sqlFacets.AppearanceSubfilterFacetCountMale;
+                    t.AppearanceSubfilterFacetCountFemale = sqlFacets.AppearanceSubfilterFacetCountFemale;
+                    t.AppearanceSubfilterFacetCountFuta = sqlFacets.AppearanceSubfilterFacetCountFuta;
+                    t.AppearanceSubfilterCurrentCountAll = sqlFacets.AppearanceSubfilterCurrentCountAll;
+                    t.AppearanceSubfilterCurrentCountMale = sqlFacets.AppearanceSubfilterCurrentCountMale;
+                    t.AppearanceSubfilterCurrentCountFemale = sqlFacets.AppearanceSubfilterCurrentCountFemale;
+                    t.AppearanceSubfilterCurrentCountFuta = sqlFacets.AppearanceSubfilterCurrentCountFuta;
                 }
             }
 

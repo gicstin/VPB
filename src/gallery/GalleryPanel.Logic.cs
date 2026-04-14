@@ -186,7 +186,7 @@ namespace VPB
             categoryCounts.Clear();
             foreach (var c in categories) categoryCounts[c.name] = 0;
 
-            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator))
+            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, activeTags))
             {
                 // SQL path succeeded.
             }
@@ -352,7 +352,7 @@ namespace VPB
             if (FileManager.PackagesByUid == null) return;
 
             Dictionary<string, int> counts = new Dictionary<string, int>();
-            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath))
+            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags))
             {
                 string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
                 HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -627,22 +627,45 @@ namespace VPB
             }
             if (tagParForScan != null && VpbSqlite3.IsAvailable)
             {
-                var tagSqlRowsCo = new List<VpbLocalDatabase.Row>();
+                VpbLocalDatabase.TagScanTotals sqlFacets;
                 string extJ = GalleryTagCountBackgroundScan.JoinExtensionsForTagScan(tagParForScan.ExtensionsSplit);
-                if (VpbLocalDatabase.TryQueryGalleryCategoryRows(tagParForScan.Title, extJ, tagParForScan.CurrentCreator ?? "", tagSqlRowsCo, out _))
+                if (VpbLocalDatabase.TryReadTagCounts(tagParForScan.Title, extJ, tagParForScan.CurrentCreator ?? "", tagsToCount, tagCounts, out sqlFacets, clothingSubfilter, appearanceSubfilter, activeTags))
                 {
                     coVarFromSql = true;
-                    for (int ri = 0; ri < tagSqlRowsCo.Count; ri++)
-                    {
-                        if ((ri & 0xFF) == 0xFF)
-                        {
-                            if (TagCountScanShouldYieldFrame(maxMsPerSlice, sliceWatch, deferredSessionId, _deferredSubPaneSessionId, out bool cancelledSqlTag))
-                                yield return null;
-                            if (cancelledSqlTag) yield break;
-                        }
-                        VpbLocalDatabase.Row row = tagSqlRowsCo[ri];
-                        GalleryTagCountBackgroundScan.TagScanProcessOneVarRow(tagParForScan, row.InternalPath, row.PackageUid ?? "", targetExts, tagCounts, foundTags, coTagScanTotals);
-                    }
+                    // Map sqlFacets back to our local variables
+                    appearanceSourceCountAll = sqlFacets.AppearanceSourceCountAll;
+                    appearanceSourceCountPresets = sqlFacets.AppearanceSourceCountPresets;
+                    appearanceSourceCountCustom = sqlFacets.AppearanceSourceCountCustom;
+                    clothingSubfilterCountAll = sqlFacets.ClothingSubfilterCountAll;
+                    clothingSubfilterCountReal = sqlFacets.ClothingSubfilterCountReal;
+                    clothingSubfilterCountPresets = sqlFacets.ClothingSubfilterCountPresets;
+                    clothingSubfilterCountCustom = sqlFacets.ClothingSubfilterCountCustom;
+                    clothingSubfilterCountItems = sqlFacets.ClothingSubfilterCountItems;
+                    clothingSubfilterCountMale = sqlFacets.ClothingSubfilterCountMale;
+                    clothingSubfilterCountFemale = sqlFacets.ClothingSubfilterCountFemale;
+                    clothingSubfilterCountDecals = sqlFacets.ClothingSubfilterCountDecals;
+                    appearanceSubfilterCountAll = sqlFacets.AppearanceSubfilterCountAll;
+                    appearanceSubfilterCountPresets = sqlFacets.AppearanceSubfilterCountPresets;
+                    appearanceSubfilterCountCustom = sqlFacets.AppearanceSubfilterCountCustom;
+                    appearanceSubfilterCountMale = sqlFacets.AppearanceSubfilterCountMale;
+                    appearanceSubfilterCountFemale = sqlFacets.AppearanceSubfilterCountFemale;
+                    appearanceSubfilterCountFuta = sqlFacets.AppearanceSubfilterCountFuta;
+                    clothingSubfilterFacetCountReal = sqlFacets.ClothingSubfilterFacetCountReal;
+                    clothingSubfilterFacetCountPresets = sqlFacets.ClothingSubfilterFacetCountPresets;
+                    clothingSubfilterFacetCountCustom = sqlFacets.ClothingSubfilterFacetCountCustom;
+                    clothingSubfilterFacetCountItems = sqlFacets.ClothingSubfilterFacetCountItems;
+                    clothingSubfilterFacetCountMale = sqlFacets.ClothingSubfilterFacetCountMale;
+                    clothingSubfilterFacetCountFemale = sqlFacets.ClothingSubfilterFacetCountFemale;
+                    clothingSubfilterFacetCountDecals = sqlFacets.ClothingSubfilterFacetCountDecals;
+                    appearanceSubfilterFacetCountPresets = sqlFacets.AppearanceSubfilterFacetCountPresets;
+                    appearanceSubfilterFacetCountCustom = sqlFacets.AppearanceSubfilterFacetCountCustom;
+                    appearanceSubfilterFacetCountMale = sqlFacets.AppearanceSubfilterFacetCountMale;
+                    appearanceSubfilterFacetCountFemale = sqlFacets.AppearanceSubfilterFacetCountFemale;
+                    appearanceSubfilterFacetCountFuta = sqlFacets.AppearanceSubfilterFacetCountFuta;
+                    appearanceSubfilterCurrentCountAll = sqlFacets.AppearanceSubfilterCurrentCountAll;
+                    appearanceSubfilterCurrentCountMale = sqlFacets.AppearanceSubfilterCurrentCountMale;
+                    appearanceSubfilterCurrentCountFemale = sqlFacets.AppearanceSubfilterCurrentCountFemale;
+                    appearanceSubfilterCurrentCountFuta = sqlFacets.AppearanceSubfilterCurrentCountFuta;
                 }
             }
 

@@ -1812,8 +1812,7 @@ namespace VPB
             if (!string.IsNullOrEmpty(currentRatingFilter)) return false;
             if (!string.IsNullOrEmpty(currentSizeFilter)) return false;
             if (!string.IsNullOrEmpty(currentSceneSourceFilter)) return false;
-            if (nameFilterTerms != null && nameFilterTerms.Length > 0) return false;
-            if (activeTags != null && activeTags.Count > 0) return false;
+            // nameFilterTerms and activeTags are now handled by SQL
             if (wantsPoseCountsLocal || posePeopleFilter != PosePeopleFilter.All) return false;
             if (FilesSortWantsLoadedOnly()) return false;
             if (FilesSortWantsUnloadedOnly()) return false;
@@ -2230,6 +2229,23 @@ namespace VPB
                             && activeContentSnap == ContentType.Category
                             && canFileListSnapKeyMain)
                         {
+                            List<string> pathExclusions = null;
+                            if (currentPaths != null && currentPaths.Count > 0)
+                            {
+                                for (int i = 0; i < currentPaths.Count; i++)
+                                {
+                                    if (string.Equals(currentPaths[i], "Saves/Person", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        if (pathExclusions == null) pathExclusions = new List<string>();
+                                        pathExclusions.Add("Saves/Person/appearance");
+                                    }
+                                }
+                            }
+                            else if (string.Equals(currentPath, "Saves/Person", StringComparison.OrdinalIgnoreCase))
+                            {
+                                pathExclusions = new List<string> { "Saves/Person/appearance" };
+                            }
+
                             useSqliteIndex = VpbLocalDatabase.TryQueryGalleryCategoryRows(
                                 titleForIndexMain,
                                 extForIndexMain,
@@ -2237,7 +2253,11 @@ namespace VPB
                                 idxRows,
                                 out catQueryStats,
                                 sqliteWorkerClothingSub,
-                                loadedState: wantsLoadedStateForIndexMain);
+                                loadedState: wantsLoadedStateForIndexMain,
+                                nameTerms: nameTerms,
+                                pathExclusions: pathExclusions,
+                                activeTags: activeTags,
+                                sortState: fileListSortSnapForWorker);
                         }
                         else
                         {
@@ -2262,6 +2282,9 @@ namespace VPB
                                 VpbLocalDatabase.Row r = idxRows[ri];
                                 string internalPath = r.InternalPath;
 
+                                // SQL filters (name, tags, path exclusions) are now applied in the query.
+                                // We still keep RefreshWorkerPathMatches for complex path logic that SQL can't easily do,
+                                // but most rows should already be filtered out.
                                 if (!RefreshWorkerPathMatches(internalPath, currentPaths, currentPath)) continue;
 
                                 string varHint = r.VarPath ?? "";
@@ -2299,10 +2322,8 @@ namespace VPB
                                     if (!wantsLoaded && loaded) continue;
                                 }
 
-                                if (hasNameFilter)
-                                {
-                                    if (!MatchesAllTermsInEither(listPath, internalPath, nameTerms)) continue;
-                                }
+                                // Name filter and active tags are now handled by SQL.
+                                // We can skip MatchesAllTermsInEither here for the SQL path.
 
                                 // Clothing: with an active subfilter, avoid ClassifyClothingHairPath per row when the SQLite
                                 // index carries packed attrs (rebuild after schema bump); else fall back to path classification.
@@ -2334,11 +2355,23 @@ namespace VPB
                                 bulk.Add(vfe);
                             }
 
-                            if (bulk.Count >= 2 && fileListSortSnapForWorker != null
-                                && GallerySortManager.TrySortFilesEntryFieldsOnly(bulk, fileListSortSnapForWorker))
+                            if (bulk.Count >= 2 && fileListSortSnapForWorker != null)
                             {
-                                if (sqliteBulkSortedOnWorkerFlag != null)
-                                    sqliteBulkSortedOnWorkerFlag[0] = 1;
+                                bool alreadySorted = false;
+                                switch (fileListSortSnapForWorker.Type)
+                                {
+                                    case SortType.Date:
+                                    case SortType.Size:
+                                    case SortType.DateCreated:
+                                        alreadySorted = true;
+                                        break;
+                                }
+
+                                if (alreadySorted || GallerySortManager.TrySortFilesEntryFieldsOnly(bulk, fileListSortSnapForWorker))
+                                {
+                                    if (sqliteBulkSortedOnWorkerFlag != null)
+                                        sqliteBulkSortedOnWorkerFlag[0] = 1;
+                                }
                             }
 
                             swBulk.Stop();
@@ -2494,40 +2527,40 @@ namespace VPB
                         else if (bc >= 8000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 120L);
                         else if (bc >= 3000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 80L);
 
-                        if (RefreshFilesRoutineCanFastAppendSqliteBulkList(wantsPoseCounts) && bulk.Count > 0)
-                        {
-                            if (localLoadingGroupId != currentLoadingGroupId)
-                            {
-                                HideLoadingOverlay();
-                                refreshCoroutine = null;
-                                CompletePaneLoadTimingIfPending("(refresh superseded)");
-                                yield break;
-                            }
-                            int needCap = files.Count + bulk.Count;
-                            if (files.Capacity < needCap)
-                                files.Capacity = needCap;
-                            files.AddRange(bulk);
-                        }
-                        else
-                        {
-                            for (int bi = 0; bi < bulk.Count; bi++)
-                            {
-                                if (localLoadingGroupId != currentLoadingGroupId)
+                                if (RefreshFilesRoutineCanFastAppendSqliteBulkList(wantsPoseCounts) && bulk.Count > 0)
                                 {
-                                    HideLoadingOverlay();
-                                    refreshCoroutine = null;
-                                    CompletePaneLoadTimingIfPending("(refresh superseded)");
-                                    yield break;
+                                    if (localLoadingGroupId != currentLoadingGroupId)
+                                    {
+                                        HideLoadingOverlay();
+                                        refreshCoroutine = null;
+                                        CompletePaneLoadTimingIfPending("(refresh superseded)");
+                                        yield break;
+                                    }
+                                    int needCap = files.Count + bulk.Count;
+                                    if (files.Capacity < needCap)
+                                        files.Capacity = needCap;
+                                    files.AddRange(bulk);
                                 }
+                                else
+                                {
+                                    for (int bi = 0; bi < bulk.Count; bi++)
+                                    {
+                                        if (localLoadingGroupId != currentLoadingGroupId)
+                                        {
+                                            HideLoadingOverlay();
+                                            refreshCoroutine = null;
+                                            CompletePaneLoadTimingIfPending("(refresh superseded)");
+                                            yield break;
+                                        }
 
-                                if (RefreshFilesRoutineDrainProcessAndShouldYield(bulk[bi], files, ref yieldWatch, bulkBudgetMs, localLoadingGroupId, wantsPoseCounts, sqliteDrainSkipClothingGateOnMain))
-                                {
-                                    yield return null;
-                                    yieldWatch.Reset();
-                                    yieldWatch.Start();
+                                if (RefreshFilesRoutineDrainProcessAndShouldYield(bulk[bi], files, ref yieldWatch, bulkBudgetMs, localLoadingGroupId, wantsPoseCounts, true))
+                                        {
+                                            yield return null;
+                                            yieldWatch.Reset();
+                                            yieldWatch.Start();
+                                        }
+                                    }
                                 }
-                            }
-                        }
 
                         hadWork = true;
                     }
