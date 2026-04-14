@@ -20,9 +20,54 @@ namespace VPB
         public static bool currentProcessingIsThumbnail;
         public static ImageLoaderThreaded.QueuedImage currentProcessingQI;
         
+        private const int AlphaCacheVersion = 2;
+
         private void Awake()
         {
             singleton = this;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ => CleanStaleAlphaCaches());
+        }
+
+        private static void CleanStaleAlphaCaches()
+        {
+            try
+            {
+                string zstdDir = VamHookPlugin.GetCacheDir();
+                if (string.IsNullOrEmpty(zstdDir) || !Directory.Exists(zstdDir)) return;
+
+                string sentinel = Path.Combine(zstdDir, ".vpb_alpha_v" + AlphaCacheVersion);
+                if (File.Exists(sentinel)) return;
+
+                string[] metaFiles;
+                try { metaFiles = Directory.GetFiles(zstdDir, "*__C_A.zvamcachemeta"); }
+                catch { return; }
+
+                int deleted = 0;
+                foreach (var metaFile in metaFiles)
+                {
+                    try
+                    {
+                        var meta = SimpleJSON.JSON.Parse(File.ReadAllText(metaFile));
+                        if (meta == null || meta["vpbVer"].AsInt < AlphaCacheVersion)
+                        {
+                            string dataFile = metaFile.Substring(0, metaFile.Length - 4);
+                            try { if (File.Exists(dataFile)) File.Delete(dataFile); } catch { }
+                            try { File.Delete(metaFile); } catch { }
+                            deleted++;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (deleted > 0)
+                    LogUtil.Log("[VPB] Cleaned " + deleted + " stale alpha cache file(s) from previous version.");
+
+                File.WriteAllText(sentinel, AlphaCacheVersion.ToString());
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] CleanStaleAlphaCaches failed: " + ex.Message);
+            }
         }
 
         Dictionary<string, Texture2D> textureCache = new Dictionary<string, Texture2D>();
@@ -1046,6 +1091,7 @@ namespace VPB
                 zmeta["width"] = src.width.ToString();
                 zmeta["height"] = src.height.ToString();
                 zmeta["format"] = TextureFormat.RGBA32.ToString();
+                zmeta["vpbVer"].AsInt = AlphaCacheVersion;
                 File.WriteAllText(zstdPath + "meta", zmeta.ToString(string.Empty));
             }
             catch (Exception ex)
