@@ -120,6 +120,15 @@ namespace VPB
         private float pendingGalleryGridLabelFontSize;
         private float backupGalleryGridLabelFontSize;
 
+        private bool pendingGalleryOnlyWhenVamMenuVisible;
+        private bool backupGalleryOnlyWhenVamMenuVisible;
+
+        private bool pendingGalleryAnchorToVamMenu;
+        private bool backupGalleryAnchorToVamMenu;
+
+        private Vector3 pendingGalleryAnchorOffset;
+        private Vector3 backupGalleryAnchorOffset;
+
         private GameObject tooltipGO;
         private Text tooltipText;
         private Text settingsTitleText;
@@ -294,6 +303,15 @@ namespace VPB
 
             pendingGalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize;
             backupGalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize;
+
+            pendingGalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible;
+            backupGalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible;
+
+            pendingGalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu;
+            backupGalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu;
+
+            pendingGalleryAnchorOffset = VPBConfig.Instance.GalleryAnchorOffset;
+            backupGalleryAnchorOffset = VPBConfig.Instance.GalleryAnchorOffset;
 
             if (logOpen)
             {
@@ -1030,6 +1048,25 @@ namespace VPB
                     "The label area height adjusts automatically so images stay square."),
                 () => pendingGalleryGridLabelFontSize);
             // ─────────────────────────────────────────────────────────────────
+
+            CreateSettingsSectionSeparator();
+            
+            CreateHeader(VPBTranslation.T("settings.header.vr_integration", "VR & Game Integration"));
+            CreateToggleSetting(VPBTranslation.T("settings.gallery.vam_menu_gate", "Show only when VaM menu is visible"), pendingGalleryOnlyWhenVamMenuVisible, (val) => {
+                pendingGalleryOnlyWhenVamMenuVisible = val;
+                VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = val;
+                VPBConfig.Instance.Save();
+                VPBConfig.Instance.TriggerChange();
+            }, VPBTranslation.T("settings.tip.gallery.vam_menu_gate", "When enabled, gallery panes are automatically hidden if the VaM menu is closed."), () => pendingGalleryOnlyWhenVamMenuVisible);
+
+            CreateToggleSetting(VPBTranslation.T("settings.gallery.vam_menu_anchor", "Anchor to VaM Menu in VR"), pendingGalleryAnchorToVamMenu, (val) => {
+                pendingGalleryAnchorToVamMenu = val;
+                VPBConfig.Instance.GalleryAnchorToVamMenu = val;
+                VPBConfig.Instance.Save();
+                VPBConfig.Instance.TriggerChange();
+                if (parentPanel != null) parentPanel.ResetFollowOffsets();
+            }, VPBTranslation.T("settings.tip.gallery.vam_menu_anchor", "When enabled, the gallery pane automatically positions itself relative to the VaM Menu when in VR."), () => pendingGalleryAnchorToVamMenu);
+
 
             CreateSettingsSectionSeparator();
 

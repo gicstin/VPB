@@ -559,6 +559,21 @@ namespace VPB
         private const float FpsInterval = 0.5f;
 
         // Follow Mode Fields
+        public static GalleryPanel GetAnchoredInstance()
+        {
+            if (Gallery.singleton == null) return null;
+            var pl = Gallery.singleton.Panels;
+            if (pl == null) return null;
+            for (int i = 0; i < pl.Count; i++)
+            {
+                var p = pl[i];
+                if (p != null && p.canvas != null && !p._userHidden)
+                {
+                    return p;
+                }
+            }
+            return null;
+        }
         private bool followUser = true;
         private float lastFollowUpdateTime = 0f;
         private const float FollowUpdateInterval = 0.5f;

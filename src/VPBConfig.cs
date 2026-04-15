@@ -281,6 +281,10 @@ namespace VPB
         public bool GalleryTboxToolbarPinned = false;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
         public bool GalleryOnlyWhenVamMenuVisible = false;
+        /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
+        public bool GalleryAnchorToVamMenu = true;
+        /// <summary>Offset for anchoring gallery pane relative to the VAM menu system.</summary>
+        public Vector3 GalleryAnchorOffset = new Vector3(0f, 0.1f, -0.1f);
 
         // Interaction toggles (persisted)
         public bool SpringScrollButtonEnabled = true;
@@ -572,6 +576,13 @@ namespace VPB
                         if (node["GalleryGridLabelFontSize"] != null) GalleryGridLabelFontSize = Mathf.Clamp(node["GalleryGridLabelFontSize"].AsFloat, 8f, 40f);
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
+                        if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
+                        if (node["GalleryAnchorOffset"] != null)
+                        {
+                            var o = node["GalleryAnchorOffset"];
+                            GalleryAnchorToVamMenu = true;
+                            GalleryAnchorOffset = new Vector3(o["x"].AsFloat, 0.1f, -0.1f);
+                        }
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["InnerPaneScale"] != null) InnerPaneScale = node["InnerPaneScale"].AsFloat;
                         if (node["SpringScrollButtonEnabled"] != null) SpringScrollButtonEnabled = node["SpringScrollButtonEnabled"].AsBool;
@@ -708,6 +719,12 @@ namespace VPB
                 node["GalleryGridLabelFontSize"].AsFloat = GalleryGridLabelFontSize;
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
+                node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
+                JSONClass o = new JSONClass();
+                o["x"].AsFloat = GalleryAnchorOffset.x;
+                o["y"].AsFloat = GalleryAnchorOffset.y;
+                o["z"].AsFloat = GalleryAnchorOffset.z;
+                node["GalleryAnchorOffset"] = o;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["InnerPaneScale"].AsFloat = InnerPaneScale;
                 node["SpringScrollButtonEnabled"].AsBool = SpringScrollButtonEnabled;

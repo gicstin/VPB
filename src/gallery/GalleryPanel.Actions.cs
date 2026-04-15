@@ -492,7 +492,13 @@ namespace VPB
         private void ApplyVamMenuGateVisibility()
         {
             if (VPBConfig.Instance == null || canvas == null) return;
-            bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible;
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            
+            // The anchor-based gate only applies to the specific panel that is anchored.
+            bool isAnchoredInstance = (GetAnchoredInstance() == this);
+            
+            bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible || (VPBConfig.Instance.GalleryAnchorToVamMenu && isVR && isAnchoredInstance);
             bool menuVisible = IsVamMenuVisible();
 
             if (!gate)
@@ -522,6 +528,45 @@ namespace VPB
                 }
             }
         }
+
+        private void ApplyVamMenuAnchoring()
+        {
+            if (VPBConfig.Instance == null || canvas == null) return;
+            
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            
+            if (!isVR) return;
+            if (!VPBConfig.Instance.GalleryAnchorToVamMenu) return;
+
+            // Priority check: only the first visible panel gets anchored.
+            if (GetAnchoredInstance() != this) return;
+
+            // If we are the priority panel, check if menu is visible for snapping.
+            if (!IsVamMenuVisible()) return;
+
+            Transform vamMenuTrans = SuperController.singleton.mainHUD.transform;
+            if (vamMenuTrans == null) return;
+
+            Vector3 localOffset = VPBConfig.Instance.GalleryAnchorOffset;
+            
+            RectTransform canvasRT = canvas.GetComponent<RectTransform>();
+            float galleryHalfHeight = (canvasRT.rect.height * 0.5f) * canvasRT.lossyScale.y;
+
+            // Anchor the gallery such that its bottom matches the localOffset relative to the VAM menu top.
+            // In VaM, mainHUD has its own scale and rotation.
+            Vector3 targetBottomPos = vamMenuTrans.TransformPoint(localOffset);
+            Vector3 targetPos = targetBottomPos + vamMenuTrans.up * galleryHalfHeight;
+
+            canvas.transform.position = targetPos;
+            
+            // Follow the VaM menu rotation with a 180-degree flip to face the user
+            canvas.transform.rotation = vamMenuTrans.rotation * Quaternion.Euler(0, 180, 0);
+
+            // Keep offsets reset so follow mode captures the anchored position when anchoring ends
+            offsetsInitialized = false;
+        }
+
 
         private static string MakeCategoryScrollKey(string title, string path)
             => (title ?? "") + "|" + (path ?? "");

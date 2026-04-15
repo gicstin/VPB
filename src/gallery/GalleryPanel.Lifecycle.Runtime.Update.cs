@@ -47,6 +47,7 @@ namespace VPB
                 try { UpdateSelectionContextMenu(); } catch { }
 
                 try { ApplyVamMenuGateVisibility(); } catch { }
+                try { ApplyVamMenuAnchoring(); } catch { }
 
                 // Determine whether the gallery is "active" (scrolling or thumbnails still loading).
                 // While active we pause all disk saves — background threads must not contend on
@@ -345,7 +346,9 @@ namespace VPB
                     {
                         lastFollowUpdateTime = now;
                         
-                        if (followUser)
+                        bool anchoringActive = (GetAnchoredInstance() == this && VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu && IsVamMenuVisible());
+
+                        if (followUser && !anchoringActive)
                         {
                             if (!offsetsInitialized)
                             {
