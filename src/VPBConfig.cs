@@ -273,6 +273,10 @@ namespace VPB
         public float GalleryListHoverPreviewOffsetX = 0f;
         /// <summary>Y offset (pixels) from the default bottom-left dock point for the List layout hover preview.</summary>
         public float GalleryListHoverPreviewOffsetY = 0f;
+        /// <summary>When true, each grid cell shows a persistent label strip below the thumbnail with Creator.Package.Version. Grid mode only.</summary>
+        public bool GalleryGridLabelsEnabled = true;
+        /// <summary>Font size (pixels) for the always-on grid label strip.</summary>
+        public float GalleryGridLabelFontSize = 18f;
         /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
         public bool GalleryTboxToolbarPinned = false;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
@@ -467,6 +471,8 @@ namespace VPB
             GalleryListNamesLegacyFileName = false;
             GalleryDefaultLeftSidePanel = "None";
             GalleryDefaultRightSidePanel = "None";
+            GalleryGridLabelsEnabled = true;
+            GalleryGridLabelFontSize = 18f;
             GalleryTboxToolbarPinned = false;
             UiLocale = "";
             SpringScrollButtonEnabled = true;
@@ -562,6 +568,8 @@ namespace VPB
                         if (node["GalleryListHoverPreviewSize"] != null) GalleryListHoverPreviewSize = Mathf.Clamp(node["GalleryListHoverPreviewSize"].AsFloat, 200f, 600f);
                         if (node["GalleryListHoverPreviewOffsetX"] != null) GalleryListHoverPreviewOffsetX = Mathf.Clamp(node["GalleryListHoverPreviewOffsetX"].AsFloat, -2000f, 2000f);
                         if (node["GalleryListHoverPreviewOffsetY"] != null) GalleryListHoverPreviewOffsetY = Mathf.Clamp(node["GalleryListHoverPreviewOffsetY"].AsFloat, -2000f, 2000f);
+                        if (node["GalleryGridLabelsEnabled"] != null) GalleryGridLabelsEnabled = node["GalleryGridLabelsEnabled"].AsBool;
+                        if (node["GalleryGridLabelFontSize"] != null) GalleryGridLabelFontSize = Mathf.Clamp(node["GalleryGridLabelFontSize"].AsFloat, 8f, 40f);
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
@@ -696,6 +704,8 @@ namespace VPB
                 node["GalleryListHoverPreviewSize"].AsFloat = GalleryListHoverPreviewSize;
                 node["GalleryListHoverPreviewOffsetX"].AsFloat = GalleryListHoverPreviewOffsetX;
                 node["GalleryListHoverPreviewOffsetY"].AsFloat = GalleryListHoverPreviewOffsetY;
+                node["GalleryGridLabelsEnabled"].AsBool = GalleryGridLabelsEnabled;
+                node["GalleryGridLabelFontSize"].AsFloat = GalleryGridLabelFontSize;
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["SideButtonScale"].AsFloat = SideButtonScale;

@@ -158,12 +158,32 @@ namespace VPB
                         else
                         {
                             int cols = GridColumnCount;
-                            rgv.SetGridConfig(100f, 100f, 10f, 10f, cols);
+                            rgv.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, cols);
                             rgv.SetAdaptiveConfig(true, 200f, cols, false);
                         }
                         rgv.Refresh();
                     }
                 }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Re-applies grid config height and rebinds all visible cells.
+        /// Call after GalleryGridLabelsEnabled or GalleryGridLabelFontSize changes.
+        /// </summary>
+        public void RebuildGridLayout()
+        {
+            try
+            {
+                if (layoutMode != GalleryLayoutMode.Grid) return;
+                if (contentGO == null) return;
+                var rgv = contentGO.GetComponent<RecyclingGridView>();
+                if (rgv == null) return;
+                int cols = GridColumnCount;
+                rgv.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, cols);
+                rgv.SetAdaptiveConfig(true, 200f, cols, false);
+                rgv.Refresh();
             }
             catch { }
         }

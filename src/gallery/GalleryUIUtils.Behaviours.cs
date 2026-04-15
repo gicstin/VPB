@@ -489,7 +489,11 @@ namespace VPB
         
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid) card.SetActive(true);
+            // Card overlay only shows in grid mode when always-on labels are OFF
+            bool labelsActive = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsEnabled
+                                && panel != null && panel.layoutMode == GalleryLayoutMode.Grid;
+            if (!labelsActive && card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
+                card.SetActive(true);
             if (panel != null && file != null) panel.SetHoverPath(file);
         }
 

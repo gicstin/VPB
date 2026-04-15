@@ -1935,7 +1935,7 @@ namespace VPB
                     else
                     {
                         // Grid mode
-                        recyclingGrid.SetGridConfig(100f, 100f, 10f, 10f, GridColumnCount);
+                        recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, GridColumnCount);
                         recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false);
                     }
                     recyclingGrid.SetItemCount(0); // Clear initially
@@ -2832,7 +2832,7 @@ namespace VPB
                 }
                 else
                 {
-                    recyclingGrid.SetGridConfig(100, 100, 10f, 10f, cols);
+                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, cols);
                     recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false);
                 }
                 // Set item count and pre-position scroll so the first UpdateVisibleItems

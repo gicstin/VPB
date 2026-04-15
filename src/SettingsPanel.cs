@@ -114,6 +114,12 @@ namespace VPB
         private float pendingGalleryListHoverPreviewOffsetY;
         private float backupGalleryListHoverPreviewOffsetY;
 
+        private bool pendingGalleryGridLabelsEnabled;
+        private bool backupGalleryGridLabelsEnabled;
+
+        private float pendingGalleryGridLabelFontSize;
+        private float backupGalleryGridLabelFontSize;
+
         private GameObject tooltipGO;
         private Text tooltipText;
         private Text settingsTitleText;
@@ -283,6 +289,12 @@ namespace VPB
             pendingGalleryListHoverPreviewOffsetY = VPBConfig.Instance.GalleryListHoverPreviewOffsetY;
             backupGalleryListHoverPreviewOffsetY = VPBConfig.Instance.GalleryListHoverPreviewOffsetY;
 
+            pendingGalleryGridLabelsEnabled = VPBConfig.Instance.GalleryGridLabelsEnabled;
+            backupGalleryGridLabelsEnabled = VPBConfig.Instance.GalleryGridLabelsEnabled;
+
+            pendingGalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize;
+            backupGalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize;
+
             if (logOpen)
             {
                 SettingsPerfLog($"Open.copyPendingFromConfig {swOpen.ElapsedMilliseconds - mark}ms");
@@ -418,6 +430,8 @@ namespace VPB
             if (!Mathf.Approximately(pendingGalleryListHoverPreviewSize, backupGalleryListHoverPreviewSize)) return false;
             if (!Mathf.Approximately(pendingGalleryListHoverPreviewOffsetX, backupGalleryListHoverPreviewOffsetX)) return false;
             if (!Mathf.Approximately(pendingGalleryListHoverPreviewOffsetY, backupGalleryListHoverPreviewOffsetY)) return false;
+            if (pendingGalleryGridLabelsEnabled != backupGalleryGridLabelsEnabled) return false;
+            if (!Mathf.Approximately(pendingGalleryGridLabelFontSize, backupGalleryGridLabelFontSize)) return false;
             return true;
         }
 
@@ -502,6 +516,14 @@ namespace VPB
 
             VPBConfig.Instance.GalleryListHoverPreviewSize = backupGalleryListHoverPreviewSize;
             pendingGalleryListHoverPreviewSize = backupGalleryListHoverPreviewSize;
+
+            bool gridLabelsCancelChanged = (VPBConfig.Instance.GalleryGridLabelsEnabled != backupGalleryGridLabelsEnabled)
+                                        || !Mathf.Approximately(VPBConfig.Instance.GalleryGridLabelFontSize, backupGalleryGridLabelFontSize);
+            VPBConfig.Instance.GalleryGridLabelsEnabled = backupGalleryGridLabelsEnabled;
+            pendingGalleryGridLabelsEnabled = backupGalleryGridLabelsEnabled;
+            VPBConfig.Instance.GalleryGridLabelFontSize = backupGalleryGridLabelFontSize;
+            pendingGalleryGridLabelFontSize = backupGalleryGridLabelFontSize;
+            if (gridLabelsCancelChanged && parentPanel != null) parentPanel.RebuildGridLayout();
 
             if (logClose)
             {
@@ -628,6 +650,15 @@ namespace VPB
                     backupGalleryListHoverPreviewOffsetX = pendingGalleryListHoverPreviewOffsetX;
                     VPBConfig.Instance.GalleryListHoverPreviewOffsetY = pendingGalleryListHoverPreviewOffsetY;
                     backupGalleryListHoverPreviewOffsetY = pendingGalleryListHoverPreviewOffsetY;
+
+                    bool gridLabelsChanged = (VPBConfig.Instance.GalleryGridLabelsEnabled != pendingGalleryGridLabelsEnabled)
+                                         || !Mathf.Approximately(VPBConfig.Instance.GalleryGridLabelFontSize, pendingGalleryGridLabelFontSize);
+                    VPBConfig.Instance.GalleryGridLabelsEnabled = pendingGalleryGridLabelsEnabled;
+                    backupGalleryGridLabelsEnabled = pendingGalleryGridLabelsEnabled;
+                    VPBConfig.Instance.GalleryGridLabelFontSize = pendingGalleryGridLabelFontSize;
+                    backupGalleryGridLabelFontSize = pendingGalleryGridLabelFontSize;
+                    if (gridLabelsChanged && parentPanel != null) parentPanel.RebuildGridLayout();
+
                     // Avoid ConfigChanged from Save: live preview already ran it for most controls (expensive full gallery layout).
                     VPBConfig.Instance.Save(false);
                     if (SaveNeedsDeferredConfigNotify())
@@ -969,6 +1000,36 @@ namespace VPB
                 if (parentPanel != null) { try { parentPanel.SetHoverPreviewDummyActive(true); parentPanel.RefreshHoverPreviewLayoutImmediate(); } catch { } }
                 SyncSettingsNow();
             }, VPBTranslation.T("settings.tip.hover_preview_position", "Reset the hover preview position offsets back to the docked default."));
+
+            // ── Grid label strip ──────────────────────────────────────────────
+            CreateHeader(VPBTranslation.T("settings.header.grid_labels", "Grid Labels"));
+
+            CreateToggleSetting(
+                VPBTranslation.T("settings.grid_labels_enabled", "Always-on grid labels"),
+                pendingGalleryGridLabelsEnabled,
+                (val) => {
+                    pendingGalleryGridLabelsEnabled = val;
+                    VPBConfig.Instance.GalleryGridLabelsEnabled = val;
+                    if (parentPanel != null) parentPanel.RebuildGridLayout();
+                },
+                VPBTranslation.T("settings.tip.grid_labels_enabled",
+                    "Shows Creator.Package.Version labels below each thumbnail in Grid mode. " +
+                    "Image thumbnails remain square. Hover-card overlay is disabled while labels are active."),
+                () => pendingGalleryGridLabelsEnabled);
+
+            CreateSliderSetting(
+                VPBTranslation.T("settings.grid_label_font_size", "Label font size"),
+                pendingGalleryGridLabelFontSize, 8f, 32f,
+                (val) => {
+                    pendingGalleryGridLabelFontSize = val;
+                    VPBConfig.Instance.GalleryGridLabelFontSize = val;
+                    if (parentPanel != null) parentPanel.RebuildGridLayout();
+                },
+                VPBTranslation.T("settings.tip.grid_label_font_size",
+                    "Font size of the always-on grid label strip (8–32). " +
+                    "The label area height adjusts automatically so images stay square."),
+                () => pendingGalleryGridLabelFontSize);
+            // ─────────────────────────────────────────────────────────────────
 
             CreateSettingsSectionSeparator();
 

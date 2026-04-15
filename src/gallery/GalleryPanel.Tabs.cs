@@ -2158,6 +2158,65 @@ namespace VPB
         }
 
 
+        private static float GetGridLabelUnits()
+            => Mathf.Max(0f, VPBConfig.Instance.GalleryGridLabelFontSize * 0.6f);
+
+        private static float GetGridLabelFraction()
+        {
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridLabelsEnabled) return 0f;
+            float L = GetGridLabelUnits();
+            return L / (100f + L);
+        }
+
+        internal float GetGridCellConfigHeight()
+        {
+            if (layoutMode == GalleryLayoutMode.Grid
+                && VPBConfig.Instance != null
+                && VPBConfig.Instance.GalleryGridLabelsEnabled)
+                return 100f + GetGridLabelUnits();
+            return 100f;
+        }
+
+        private static string GetGridItemLabelText(FileEntry file)
+        {
+            if (file == null) return "";
+            VarPackage pkg = null;
+            if (file is VarFileEntry vfe)         pkg = vfe.Package;
+            else if (file is PackageListEntry ple) pkg = ple.Package;
+            if (pkg != null && !string.IsNullOrEmpty(pkg.Uid)) return pkg.Uid;
+            return System.IO.Path.GetFileNameWithoutExtension(file.Name ?? "");
+        }
+
+        private static string TruncateGridLabelTextByWidth(Text textComponent, string text, float maxWidth)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            if (textComponent == null || textComponent.font == null) return text;
+
+            float availWidth = Mathf.Max(10f, maxWidth - 4f);
+
+            textComponent.text = text;
+            float fullWidth = LayoutUtility.GetPreferredWidth(textComponent.GetComponent<RectTransform>());
+            if (fullWidth <= availWidth) return text;
+
+            string ellipsis = "...";
+            textComponent.text = ellipsis;
+            float ellipsisWidth = LayoutUtility.GetPreferredWidth(textComponent.GetComponent<RectTransform>());
+            float targetWidth = availWidth - ellipsisWidth - 2f;
+
+            if (targetWidth <= 0) return ellipsis;
+
+            string current = text;
+            for (int i = 0; i < text.Length; i++)
+            {
+                current = text.Substring(0, text.Length - i);
+                textComponent.text = current;
+                float width = LayoutUtility.GetPreferredWidth(textComponent.GetComponent<RectTransform>());
+                if (width <= targetWidth) return current + ellipsis;
+            }
+
+            return ellipsis;
+        }
+
         private void CreateFileButton(FileEntry file)
         {
             GameObject btnGO;
@@ -2170,7 +2229,7 @@ namespace VPB
             {
                 btnGO = CreateNewFileButtonGO();
             }
-            
+
             BindFileButton(btnGO, file);
             btnGO.transform.SetAsLastSibling();
             activeButtons.Add(btnGO);
@@ -2203,6 +2262,42 @@ namespace VPB
             thumbRT.sizeDelta = Vector2.zero;
             thumbRT.offsetMin = new Vector2(3, 3);
             thumbRT.offsetMax = new Vector2(-3, -3);
+
+            GameObject gridLabelGO = new GameObject("GridLabel");
+            gridLabelGO.transform.SetParent(btnGO.transform, false);
+            gridLabelGO.SetActive(false);
+
+            RectTransform gridLabelRT = gridLabelGO.AddComponent<RectTransform>();
+            gridLabelRT.anchorMin = new Vector2(0f, 0f);
+            gridLabelRT.anchorMax = new Vector2(1f, 0f);
+            gridLabelRT.offsetMin = Vector2.zero;
+            gridLabelRT.offsetMax = Vector2.zero;
+
+            Image gridLabelBg = gridLabelGO.AddComponent<Image>();
+            gridLabelBg.color = new Color(0f, 0f, 0f, 0.6f);
+            gridLabelBg.raycastTarget = false;
+
+            GameObject gridLabelTextGO = new GameObject("Text");
+            gridLabelTextGO.transform.SetParent(gridLabelGO.transform, false);
+            RectTransform gridLabelTextRT = gridLabelTextGO.AddComponent<RectTransform>();
+            gridLabelTextRT.anchorMin = Vector2.zero;
+            gridLabelTextRT.anchorMax = Vector2.one;
+            gridLabelTextRT.offsetMin = new Vector2(2f, 0f);
+            gridLabelTextRT.offsetMax = new Vector2(-2f, 0f);
+
+            Text gridLabelText = gridLabelTextGO.AddComponent<Text>();
+            gridLabelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            gridLabelText.fontSize = 18;
+            gridLabelText.color = Color.white;
+            gridLabelText.alignment = TextAnchor.MiddleCenter;
+            gridLabelText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            gridLabelText.verticalOverflow = VerticalWrapMode.Overflow;
+            gridLabelText.resizeTextForBestFit = false;
+            gridLabelText.raycastTarget = false;
+
+            Shadow gridLabelShadow = gridLabelTextGO.AddComponent<Shadow>();
+            gridLabelShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            gridLabelShadow.effectDistance = new Vector2(1f, -1f);
 
             // Card Container (Hidden by default, positions below)
             GameObject cardGO = new GameObject("Card");
@@ -2641,6 +2736,13 @@ namespace VPB
                 }
             }
 
+            if (isListMode)
+            {
+                Transform gridLabelTr = btnGO.transform.Find("GridLabel");
+                if (gridLabelTr != null && gridLabelTr.gameObject.activeSelf)
+                    gridLabelTr.gameObject.SetActive(false);
+            }
+
             Transform selectorTr = btnGO.transform.Find("RatingSelector");
             if (selectorTr != null)
             {
@@ -2688,13 +2790,46 @@ namespace VPB
                 }
                 else
                 {
-                    // Full thumb (Grid)
-                    thumbRT.anchorMin = Vector2.zero;
+                    bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsEnabled;
+                    float labelFrac = showGridLabels ? GetGridLabelFraction() : 0f;
+
+                    thumbRT.anchorMin = new Vector2(0f, labelFrac);
                     thumbRT.anchorMax = Vector2.one;
                     thumbRT.pivot = new Vector2(0.5f, 0.5f);
                     thumbRT.anchoredPosition = Vector2.zero;
-                    thumbRT.offsetMin = new Vector2(3, 3);
-                    thumbRT.offsetMax = new Vector2(-3, -3);
+                    thumbRT.offsetMin = new Vector2(3f, 3f);
+                    thumbRT.offsetMax = new Vector2(-3f, -3f);
+                    Transform gridLabelTr = btnGO.transform.Find("GridLabel");
+                    if (gridLabelTr != null)
+                    {
+                        gridLabelTr.gameObject.SetActive(showGridLabels);
+                        if (showGridLabels)
+                        {
+                            RectTransform glRT = gridLabelTr as RectTransform;
+                            if (glRT != null)
+                            {
+                                glRT.anchorMin = new Vector2(0f, 0f);
+                                glRT.anchorMax = new Vector2(1f, labelFrac);
+                                glRT.offsetMin = Vector2.zero;
+                                glRT.offsetMax = Vector2.zero;
+                            }
+                            Transform glTextTr = gridLabelTr.Find("Text");
+                            if (glTextTr != null)
+                            {
+                                Text t = glTextTr.GetComponent<Text>();
+                                RectTransform glTextRT = glTextTr as RectTransform;
+                                if (t != null && glTextRT != null)
+                                {
+                                    int fs = Mathf.RoundToInt(VPBConfig.Instance.GalleryGridLabelFontSize);
+                                    t.fontSize = fs;
+                                    string labelText = GetGridItemLabelText(file);
+                                    RectTransform labelRT = gridLabelTr as RectTransform;
+                                    float availWidth = labelRT != null ? labelRT.rect.width : 94f;
+                                    t.text = TruncateGridLabelTextByWidth(t, labelText, availWidth);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 RawImage thumbImg = thumbTr.GetComponent<RawImage>();
