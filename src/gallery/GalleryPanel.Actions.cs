@@ -309,17 +309,16 @@ namespace VPB
             bool packagesChanged = refreshOnNextShow || (!hasLoadedContent && packageTimestampAdvanced);
 
             titleText.text = title;
-            currentCategoryTitle = title;
             bool paramsChanged = (currentExtension != extension || currentPath != path);
             if (paramsChanged)
             {
+                // Save current category's filters before switching away
+                if (hasLoadedContent)
+                    SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
+
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
-                // currentCreator = ""; // Keep creator filter across categories
-                activeTags.Clear();
-                currentSceneSourceFilter = "";
-                currentAppearanceSourceFilter = "";
             }
             else if (packagesChanged)
             {
@@ -327,6 +326,8 @@ namespace VPB
                 tagsCached = false;
                 categoriesCached = false;
             }
+
+            currentCategoryTitle = title;
 
             bool sameViewReopen = hasLoadedContent && !paramsChanged;
 
@@ -349,7 +350,9 @@ namespace VPB
             }
             if (currentPaths == null) currentPaths = new List<string> { path };
 
-            if (titleSearchInput != null) titleSearchInput.text = nameFilter;
+            // Restore per-category filters (or clear to defaults for first visit)
+            if (paramsChanged)
+                RestoreCategoryFilterState(title, path);
 
             if (Application.isPlaying && canvas.renderMode == RenderMode.WorldSpace)
             {
@@ -636,13 +639,30 @@ namespace VPB
             // Outside filter mode: perform top search in-memory so clearing search can instantly
             // restore the full list without a rebuild (prevents stalls).
             if (topSearchBaseFiles == null)
+            {
+                if (!_topSearchBaseIsClean)
+                {
+                    // currentFilteredFiles may already be filtered (e.g. restored from per-category
+                    // memory after a SQL-filtered RefreshFiles). The unfiltered base is unknown.
+                    if (nameFilterTerms == null || nameFilterTerms.Length == 0)
+                    {
+                        // Clearing search — rebuild from scratch to get the full unfiltered list.
+                        RefreshFiles();
+                        return;
+                    }
+                    // Narrowing search — RefreshFiles will apply nameFilterTerms via SQL.
+                    RefreshFiles();
+                    return;
+                }
                 topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
+            }
 
             if (nameFilterTerms == null || nameFilterTerms.Length == 0)
             {
                 currentFilteredFiles.Clear();
                 currentFilteredFiles.AddRange(topSearchBaseFiles);
                 topSearchBaseFiles = null;
+                _topSearchBaseIsClean = true;
             }
             else
             {
@@ -756,6 +776,12 @@ namespace VPB
                 recyclingGrid.Refresh();
             }
             try { UpdatePaginationText(); } catch { }
+
+            // Refresh creator side tab if open so it shows only creators applicable to search results.
+            bool creatorTabOpen = (leftActiveContent.HasValue && leftActiveContent.Value == ContentType.Creator)
+                               || (rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Creator);
+            if (creatorTabOpen)
+                try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
         }
 
         private void OnFileRightClick(FileEntry file)

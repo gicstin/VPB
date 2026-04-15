@@ -342,6 +342,7 @@
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CategoryFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
@@ -368,6 +369,7 @@
     <Compile Include="src\gallery\GalleryPanel.Toolbox.LoadUnloadCache.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
+    <Compile Include="src\gallery\CategoryFilterState.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.Behaviours.cs" />

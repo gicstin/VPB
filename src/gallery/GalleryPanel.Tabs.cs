@@ -631,6 +631,7 @@ namespace VPB
             // Include cache revision + filter + sort + scale so we rebuild view list only when needed.
             return "v1|" + creatorSideTabDataRevision
                 + "|" + (creatorFilter ?? "")
+                + "|" + (nameFilterLower ?? "")
                 + "|" + (currentExtension ?? "")
                 + "|" + CurrentPathsSignatureFragment()
                 + "|" + (int)(st != null ? st.Type : 0)
@@ -745,6 +746,7 @@ namespace VPB
             if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();
             rightClickDelegate.OnRightClick = () =>
             {
+                SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
                 currentCreator = "";
                 categoriesCached = false;
                 tagsCached = false;
@@ -1089,10 +1091,12 @@ namespace VPB
                         // full UpdateTabs() here blocked the UI for seconds. Side strips refresh when
                         // RefreshFilesRoutine finishes (DeferredGallerySideTabsAfterGridReady).
                     }, trackedButtons, () => {
+                        SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
                         currentPath = "";
                         currentPaths = null;
                         currentExtension = "";
                         if (titleText != null) titleText.text = VPBTranslation.T("gallery.title.all_categories", "All Categories");
+                        ClearFiltersForNewCategory();
                         RefreshFiles();
                         UpdateTabs();
                     });
@@ -1119,24 +1123,34 @@ namespace VPB
                     _creatorVirtViewSig = sig;
                     _creatorVirtView.Clear();
                     string filterNow = creatorFilter ?? "";
-                    if (string.IsNullOrEmpty(filterNow))
+
+                    // Build a set of creators present in the current filtered file list when a name search is active.
+                    HashSet<string> creatorsInResults = null;
+                    bool hasNameFilter = nameFilterTerms != null && nameFilterTerms.Length > 0;
+                    if (hasNameFilter && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
                     {
-                        for (int i = 0; i < cachedCreators.Count; i++)
+                        creatorsInResults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        for (int i = 0; i < currentFilteredFiles.Count; i++)
                         {
-                            var c = cachedCreators[i];
-                            if (string.IsNullOrEmpty(c.Name)) continue;
-                            _creatorVirtView.Add(c);
+                            var fe = currentFilteredFiles[i];
+                            if (fe == null) continue;
+                            string creator = null;
+                            try { creator = fe.Uid; } catch { }
+                            if (string.IsNullOrEmpty(creator)) continue;
+                            int dot1 = creator.IndexOf('.');
+                            if (dot1 > 0) creator = creator.Substring(0, dot1);
+                            if (!string.IsNullOrEmpty(creator))
+                                creatorsInResults.Add(creator);
                         }
                     }
-                    else
+
+                    for (int i = 0; i < cachedCreators.Count; i++)
                     {
-                        for (int i = 0; i < cachedCreators.Count; i++)
-                        {
-                            var c = cachedCreators[i];
-                            if (string.IsNullOrEmpty(c.Name)) continue;
-                            if (c.Name.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
-                            _creatorVirtView.Add(c);
-                        }
+                        var c = cachedCreators[i];
+                        if (string.IsNullOrEmpty(c.Name)) continue;
+                        if (!string.IsNullOrEmpty(filterNow) && c.Name.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        if (creatorsInResults != null && !creatorsInResults.Contains(c.Name)) continue;
+                        _creatorVirtView.Add(c);
                     }
 
                     // New view list: reset scroll to top for stability.

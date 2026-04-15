@@ -827,6 +827,20 @@ namespace VPB
         private bool isHoveringTrigger = false;
         private Camera _cachedCamera;
 
+        // Per-category filter state memory (BA-style: each category remembers its own filters)
+        private readonly Dictionary<string, CategoryFilterState> _categoryFilterStates = new Dictionary<string, CategoryFilterState>(StringComparer.OrdinalIgnoreCase);
+        private string _panelId = null;
+
+        private string PanelId
+        {
+            get
+            {
+                if (_panelId == null)
+                    _panelId = "panel_" + GetHashCode().ToString("x8");
+                return _panelId;
+            }
+        }
+
         // Sorting
         private Dictionary<string, SortState> contentSortStates = new Dictionary<string, SortState>();
 

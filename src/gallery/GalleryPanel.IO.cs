@@ -154,6 +154,7 @@ namespace VPB
         private string filterSearchLower = "";
         private bool filterEnteredFromTopSearch = false;
         private List<FileEntry> topSearchBaseFiles = null; // Base list for top search (non-filter mode)
+        private bool _topSearchBaseIsClean = false; // true only when topSearchBaseFiles was captured from an unfiltered load
         private RecyclingGridView recyclingGrid;
         private string filterRestoreAnchorKey = null;
         private Coroutine filterRestoreCoroutine = null;
@@ -1484,6 +1485,7 @@ namespace VPB
             ClearPackageFilter();
             // Reset in-memory top search base; RefreshFiles rebuilds the list.
             topSearchBaseFiles = null;
+            _topSearchBaseIsClean = false;
 
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
@@ -2788,6 +2790,10 @@ namespace VPB
             // Promote to class member for RecyclingGridView
             currentFilteredFiles.Clear();
             currentFilteredFiles.AddRange(files);
+            // If no name filter was active, the next SetNameFilter call can use currentFilteredFiles
+            // as a trustworthy unfiltered base for in-memory search.
+            if (nameFilterTerms == null || nameFilterTerms.Length == 0)
+                _topSearchBaseIsClean = true;
 
             // Setup Recycling Grid
             if (contentGO != null)

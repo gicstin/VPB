@@ -247,16 +247,80 @@ namespace VPB
                 "CREATE TABLE IF NOT EXISTS cat_mem (category TEXT NOT NULL, pkg_uid TEXT NOT NULL, internal_path TEXT NOT NULL, PRIMARY KEY(category, pkg_uid, internal_path));" +
                 "CREATE TABLE IF NOT EXISTS pkg_dep (src_uid TEXT NOT NULL, dep_uid TEXT NOT NULL, PRIMARY KEY(src_uid, dep_uid));" +
                 "CREATE TABLE IF NOT EXISTS sys_file (cache_key TEXT NOT NULL, path TEXT NOT NULL, wtime INTEGER, size INTEGER, PRIMARY KEY(cache_key, path));" +
+                "CREATE TABLE IF NOT EXISTS cat_filter_state (panel_id TEXT NOT NULL, cat_key TEXT NOT NULL, state_json TEXT NOT NULL, PRIMARY KEY(panel_id, cat_key));" +
                 "CREATE INDEX IF NOT EXISTS idx_cm_cat ON cat_mem(category);" +
                 "CREATE INDEX IF NOT EXISTS idx_cm_pkg ON cat_mem(pkg_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_pd_src ON pkg_dep(src_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_pd_dep ON pkg_dep(dep_uid);" +
-                "CREATE INDEX IF NOT EXISTS idx_sf_key ON sys_file(cache_key);");
+                "CREATE INDEX IF NOT EXISTS idx_sf_key ON sys_file(cache_key);" +
+                "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN var_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN list_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN pctime TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN cloth_attr TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
+        }
+
+        internal static void TrySaveCategoryFilterState(string panelId, string catKey, string stateJson)
+        {
+            if (!VpbSqlite3.IsAvailable) return;
+            if (string.IsNullOrEmpty(panelId) || string.IsNullOrEmpty(catKey) || stateJson == null) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("INSERT OR REPLACE INTO cat_filter_state(panel_id,cat_key,state_json) VALUES(?,?,?)"))
+                    {
+                        st.BindText(1, panelId);
+                        st.BindText(2, catKey);
+                        st.BindText(3, stateJson);
+                        st.Step();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static bool TryLoadCategoryFilterState(string panelId, string catKey, out string stateJson)
+        {
+            stateJson = null;
+            if (!VpbSqlite3.IsAvailable) return false;
+            if (string.IsNullOrEmpty(panelId) || string.IsNullOrEmpty(catKey)) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT state_json FROM cat_filter_state WHERE panel_id=? AND cat_key=?"))
+                    {
+                        st.BindText(1, panelId);
+                        st.BindText(2, catKey);
+                        if (st.Step() != VpbSqlite3.SqliteRow) return false;
+                        stateJson = st.ColumnText(0);
+                        return stateJson != null;
+                    }
+                }
+            }
+            catch { return false; }
+        }
+
+        internal static void TryDeleteAllCategoryFilterStates(string panelId)
+        {
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(panelId)) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("DELETE FROM cat_filter_state WHERE panel_id=?"))
+                    {
+                        st.BindText(1, panelId);
+                        st.Step();
+                    }
+                }
+            }
+            catch { }
         }
 
         internal struct SystemFileRow
