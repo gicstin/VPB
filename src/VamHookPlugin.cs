@@ -118,14 +118,6 @@ namespace VPB
         private bool MiniMode;
         
 
-        // Remove Old/Damaged Window
-        private class RemoveItem
-        {
-            public string Uid;
-            public string Path;
-            public string Type;
-            public bool Checked;
-        }
 
         private const int STD_OUTPUT_HANDLE = -11;
 
@@ -198,15 +190,7 @@ namespace VPB
                 try { Console.Clear(); } catch { }
             }
         }
-        private bool m_ShowRemoveWindow = false;
-        private System.Collections.Generic.List<RemoveItem> m_RemoveList = new System.Collections.Generic.List<RemoveItem>();
-        private string m_RemoveFilter = "";
-        private bool m_ExcludeOld = false;
-        private Vector2 m_RemoveScroll = Vector2.zero;
-        private Rect m_RemoveWindowRect = new Rect(250, 250, 600, 500);
-        
         private bool m_ShowPluginsAlwaysEnabledInfo;
-        private bool m_ShowRemoveOldDamagedInfo;
         private bool m_ShowGcRefreshInfo;
         private bool m_UnloadAllConfirmPending = false;
         private bool m_ShowUnloadAllInfo = false;
@@ -274,7 +258,6 @@ namespace VPB
         private GUIStyle m_StyleWindow;
         private GUIStyle m_StyleContextMenu;
         private GUIStyle m_StyleWindowBorder;
-        private GUIStyle m_StyleInfoIcon;
         private GUIStyle m_StyleInfoCard;
         private GUIStyle m_StyleInfoCardTitle;
         private GUIStyle m_StyleInfoCardText;
@@ -305,7 +288,6 @@ namespace VPB
         private void CloseAllInfoCards()
         {
             m_ShowPluginsAlwaysEnabledInfo = false;
-            m_ShowRemoveOldDamagedInfo = false;
             m_ShowGcRefreshInfo = false;
         }
 
@@ -575,18 +557,6 @@ namespace VPB
             m_StyleToggle.margin = new RectOffset(0, 0, 0, 0);
             m_StyleToggle.contentOffset = new Vector2(0f, 0f);
             m_StyleToggle.fontSize = 14;
-
-            m_StyleInfoIcon = new GUIStyle(GUI.skin.button);
-            m_StyleInfoIcon.normal.background = texTransparent;
-            m_StyleInfoIcon.hover.background = MakeBorderedTex(12, 12, new Color(0.27f, 0.30f, 0.36f, 0.70f), new Color(0.70f, 0.74f, 0.80f, 0.18f), 1);
-            m_StyleInfoIcon.active.background = MakeBorderedTex(12, 12, new Color(0.12f, 0.50f, 0.85f, 0.80f), new Color(0.12f, 0.50f, 0.85f, 0.80f), 1);
-            m_StyleInfoIcon.normal.textColor = new Color(0.65f, 0.85f, 1f, 1f);
-            m_StyleInfoIcon.hover.textColor = Color.white;
-            m_StyleInfoIcon.active.textColor = Color.white;
-            m_StyleInfoIcon.fontStyle = FontStyle.Bold;
-            m_StyleInfoIcon.padding = new RectOffset(0, 0, 0, 0);
-            m_StyleInfoIcon.margin = new RectOffset(0, 0, 0, 0);
-            m_StyleInfoIcon.alignment = TextAnchor.MiddleCenter;
 
             m_StyleInfoCard = new GUIStyle(GUI.skin.box);
             m_StyleInfoCard.normal.background = m_TexInfoCardBg;
@@ -2056,27 +2026,6 @@ namespace VPB
                         GUILayout.Label(VPBTranslation.T("hook.unload_all.info3", "Use this to reset your AddonPackages to a minimal state."), m_StyleInfoCardTextWrapped);
                     });
 
-                    // ========== REMOVE OLD/DAMAGED ==========
-                    GUILayout.BeginHorizontal();
-                    if (GUILayout.Button(VPBTranslation.T("hook.remove_old_damaged", "Remove Old/Damaged"), m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
-                    {
-                        OpenRemoveWindow();
-                    }
-                    if (GUILayout.Button("i", m_StyleButton, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
-                    {
-						ToggleInfoCard(ref m_ShowRemoveOldDamagedInfo);
-                    }
-                    GUILayout.EndHorizontal();
-					DrawInfoCard(ref m_ShowRemoveOldDamagedInfo, VPBTranslation.T("hook.remove_old_damaged", "Remove Old/Damaged"), () =>
-					{
-						GUILayout.Space(4);
-						GUILayout.Label(VPBTranslation.T("hook.remove_old_damaged.info1", "Scan for invalid vars (duplicates, invalid names) and old versions."), m_StyleInfoCardTextWrapped);
-						GUILayout.Space(2);
-						GUILayout.Label(VPBTranslation.T("hook.remove_old_damaged.info2", "Opens a window to review and confirm removal."), m_StyleInfoCardTextWrapped);
-					});
-
-
-
                     // ========== HUB BROWSE ==========
                     DrawPhiSplitButtons(VPBTranslation.T("hook.hub", "Hub"), m_StyleButton, OpenHubBrowse, VPBTranslation.T("hook.create_gallery", "Create Gallery"), m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
 
@@ -2424,11 +2373,6 @@ namespace VPB
                     GUI.backgroundColor = prevBackgroundColor;
                     GUI.enabled = prevEnabled;
 
-                    if (m_ShowRemoveWindow)
-                    {
-                        m_RemoveWindowRect = GUILayout.Window(2, m_RemoveWindowRect, DrawRemoveWindow, "", m_StyleWindow);
-                        GUI.BringWindowToFront(2);
-                    }
                     if (m_ShowQuickMenuPosWindow)
                     {
                         ApplyQuickMenuPositionPreview();
@@ -2500,38 +2444,6 @@ namespace VPB
             //m_MVRPluginManager.configurableFilterablePopupPrefab
 
         }
-
-
-
-        void OpenRemoveWindow()
-        {
-            m_RemoveList.Clear();
-            var items = FileManager.GetCleanupList(true);
-            foreach (var item in items)
-            {
-                m_RemoveList.Add(new RemoveItem
-                {
-                    Path = item.Path,
-                    Uid = item.Uid,
-                    Type = item.Type,
-                    Checked = true
-                });
-            }
-            m_ShowRemoveWindow = true;
-        }
-
-        void PerformRemove()
-        {
-            foreach (var item in m_RemoveList)
-            {
-                if (item.Checked)
-                {
-                    FileManager.RemoveToInvalid(item.Path, item.Type);
-                }
-            }
-            Refresh();
-        }
-
         void DrawSpaceSaverWindow(int windowID)
         {
             var prevPaddingTop = m_StyleWindow.padding.top;
@@ -2987,177 +2899,6 @@ namespace VPB
             return String.Format("{0:0.##} {1}", dblSByte, Suffix[i]);
         }
 
-        void DrawRemoveWindow(int windowID)
-        {
-            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
-            {
-                Input.ResetInputAxes();
-            }
-
-            if (Event.current.type == EventType.KeyDown)
-            {
-                if (GUI.GetNameOfFocusedControl() == "RemoveFilter")
-                {
-                }
-            }
-
-            GUILayout.BeginVertical(m_StylePanel);
-
-            // Header
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Remove Old/Damaged", m_StyleHeader, GUILayout.ExpandWidth(false));
-
-            GUILayout.Space(20);
-            GUILayout.Label("Filter:", GUILayout.Width(50));
-            GUI.SetNextControlName("RemoveFilter");
-            m_RemoveFilter = GUILayout.TextField(m_RemoveFilter, GUILayout.MinWidth(100), GUILayout.MaxWidth(300));
-            if (GUILayout.Button("Clear", m_StyleButtonSmall, GUILayout.Width(50)))
-            {
-                m_RemoveFilter = "";
-                GUI.FocusControl("");
-            }
-
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
-            {
-                m_ShowRemoveWindow = false;
-            }
-            GUILayout.EndHorizontal();
-
-            m_ExcludeOld = GUILayout.Toggle(m_ExcludeOld, "Exclude Old");
-
-            GUILayout.Space(5);
-
-            // List
-            GUILayout.BeginVertical(m_StyleSection);
-
-            // Table Headers
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("", GUILayout.Width(25));
-            GUILayout.Label("Type", m_StyleInfoCardTitle, GUILayout.Width(80));
-            GUILayout.Label("Package Name", m_StyleInfoCardTitle, GUILayout.Width(200));
-            GUILayout.Label("Path/Info", m_StyleInfoCardTitle);
-            GUILayout.EndHorizontal();
-
-            // Manual Scroll Wheel Handling for Remove Window
-            float removeScrollDelta = 0;
-            bool removeScrollConsumed = false;
-            Rect removeRect = new Rect(0, 0, 1000, 1000);
-            if (Event.current.type == EventType.ScrollWheel && removeRect.Contains(Event.current.mousePosition))
-            {
-                removeScrollDelta = Event.current.delta.y;
-                removeScrollConsumed = true;
-            }
-            else if (Input.mouseScrollDelta.y != 0 && removeRect.Contains(Event.current.mousePosition))
-            {
-                removeScrollDelta = -Input.mouseScrollDelta.y;
-            }
-
-            if (removeScrollDelta != 0)
-            {
-                m_RemoveScroll.y += removeScrollDelta * 20;
-                m_RemoveScroll.y = Mathf.Max(0, m_RemoveScroll.y);
-                if (removeScrollConsumed) Event.current.Use();
-            }
-
-            m_RemoveScroll = GUILayout.BeginScrollView(m_RemoveScroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar, GUI.skin.box);
-
-
-            for (int i = 0; i < m_RemoveList.Count; i++)
-            {
-                var item = m_RemoveList[i];
-                if (m_ExcludeOld && item.Type == "OldVersion") continue;
-
-                if (!string.IsNullOrEmpty(m_RemoveFilter) &&
-                    !item.Uid.ToLower().Contains(m_RemoveFilter.ToLower()) &&
-                    !item.Type.ToLower().Contains(m_RemoveFilter.ToLower()))
-                {
-                    continue;
-                }
-
-                GUILayout.BeginHorizontal();
-                item.Checked = GUILayout.Toggle(item.Checked, "", GUILayout.Width(25));
-                GUILayout.Label(item.Type, GUILayout.Width(80));
-                GUILayout.Label(item.Uid, GUILayout.Width(200));
-                GUILayout.Label(Path.GetDirectoryName(item.Path));
-                GUILayout.EndHorizontal();
-            }
-
-            GUILayout.EndScrollView();
-            GUILayout.EndVertical();
-
-            GUILayout.Space(5);
-
-            // Buttons
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Select All", m_StyleButton))
-            {
-                foreach (var item in m_RemoveList)
-                {
-                    if (m_ExcludeOld && item.Type == "OldVersion") continue;
-                    item.Checked = true;
-                }
-            }
-            if (GUILayout.Button("Select None", m_StyleButton))
-            {
-                foreach (var item in m_RemoveList) item.Checked = false;
-            }
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Remove Selected", m_StyleButtonDanger))
-            {
-                PerformRemove();
-                m_ShowRemoveWindow = false;
-            }
-            GUILayout.EndHorizontal();
-
-            // Resize handle
-            var resizeRect = new Rect(m_RemoveWindowRect.width - 30, m_RemoveWindowRect.height - 30, 30, 30);
-            GUI.Box(new Rect(m_RemoveWindowRect.width - 20, m_RemoveWindowRect.height - 20, 20, 20), "◢", m_StyleInfoIcon);
-
-            int resizeControlID = GUIUtility.GetControlID(FocusType.Passive);
-            switch (Event.current.GetTypeForControl(resizeControlID))
-            {
-                case EventType.MouseDown:
-                    if (resizeRect.Contains(Event.current.mousePosition))
-                    {
-                        GUIUtility.hotControl = resizeControlID;
-                        Event.current.Use();
-                    }
-                    break;
-                case EventType.MouseUp:
-                    if (GUIUtility.hotControl == resizeControlID)
-                    {
-                        GUIUtility.hotControl = 0;
-                        Event.current.Use();
-                    }
-                    break;
-                case EventType.MouseDrag:
-                    if (GUIUtility.hotControl == resizeControlID)
-                    {
-                        m_RemoveWindowRect.width += Event.current.delta.x;
-                        m_RemoveWindowRect.height += Event.current.delta.y;
-                        m_RemoveWindowRect.width = Mathf.Max(m_RemoveWindowRect.width, 300);
-                        m_RemoveWindowRect.height = Mathf.Max(m_RemoveWindowRect.height, 200);
-                        Event.current.Use();
-                    }
-                    break;
-            }
-
-            // Consume ScrollWheel event if inside window to prevent game scrolling
-            if (Event.current.type == EventType.ScrollWheel)
-            {
-                Event.current.Use();
-            }
-
-            GUILayout.EndVertical();
-
-            // Drag window (excluding resize handle area to avoid conflict)
-            if (Event.current.type != EventType.MouseDrag || !resizeRect.Contains(Event.current.mousePosition))
-            {
-                GUI.DragWindow();
-            }
-        }
-        
         public class ButtonHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
         {
             public UIDynamicButton targetButton;

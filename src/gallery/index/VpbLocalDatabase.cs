@@ -247,6 +247,7 @@ namespace VPB
                 "CREATE TABLE IF NOT EXISTS cat_mem (category TEXT NOT NULL, pkg_uid TEXT NOT NULL, internal_path TEXT NOT NULL, PRIMARY KEY(category, pkg_uid, internal_path));" +
                 "CREATE TABLE IF NOT EXISTS pkg_dep (src_uid TEXT NOT NULL, dep_uid TEXT NOT NULL, PRIMARY KEY(src_uid, dep_uid));" +
                 "CREATE TABLE IF NOT EXISTS sys_file (cache_key TEXT NOT NULL, path TEXT NOT NULL, wtime INTEGER, size INTEGER, PRIMARY KEY(cache_key, path));" +
+                "CREATE TABLE IF NOT EXISTS cleanup_exclude (uid TEXT PRIMARY KEY, added_utc_binary INTEGER NOT NULL);" +
                 "CREATE TABLE IF NOT EXISTS cat_filter_state (panel_id TEXT NOT NULL, cat_key TEXT NOT NULL, state_json TEXT NOT NULL, PRIMARY KEY(panel_id, cat_key));" +
                 "CREATE INDEX IF NOT EXISTS idx_cm_cat ON cat_mem(category);" +
                 "CREATE INDEX IF NOT EXISTS idx_cm_pkg ON cat_mem(pkg_uid);" +
@@ -317,6 +318,119 @@ namespace VPB
                     {
                         st.BindText(1, panelId);
                         st.Step();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static bool TryIsCleanupExcluded(string uid)
+        {
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(uid)) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT 1 FROM cleanup_exclude WHERE uid=? LIMIT 1"))
+                    {
+                        st.BindText(1, uid);
+                        return st.Step() == VpbSqlite3.SqliteRow;
+                    }
+                }
+            }
+            catch { return false; }
+        }
+
+        internal static void TryReadCleanupExcludedUids(HashSet<string> outUids)
+        {
+            if (outUids == null) return;
+            outUids.Clear();
+            if (!VpbSqlite3.IsAvailable) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT uid FROM cleanup_exclude"))
+                    {
+                        for (;;)
+                        {
+                            int rc = st.Step();
+                            if (rc == VpbSqlite3.SqliteDone) break;
+                            if (rc != VpbSqlite3.SqliteRow) break;
+                            string uid = st.ColumnText(0);
+                            if (!string.IsNullOrEmpty(uid))
+                                outUids.Add(uid);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static void TryAddCleanupExcludes(IList<string> uids)
+        {
+            if (!VpbSqlite3.IsAvailable || uids == null || uids.Count == 0) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    try
+                    {
+                        using (var st = conn.Prepare("INSERT OR REPLACE INTO cleanup_exclude(uid,added_utc_binary) VALUES(?,?)"))
+                        {
+                            long now = DateTime.UtcNow.ToBinary();
+                            for (int i = 0; i < uids.Count; i++)
+                            {
+                                string uid = uids[i];
+                                if (string.IsNullOrEmpty(uid)) continue;
+                                st.Reset();
+                                st.BindText(1, uid);
+                                st.BindInt64(2, now);
+                                st.Step();
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static void TryRemoveCleanupExcludes(IList<string> uids)
+        {
+            if (!VpbSqlite3.IsAvailable || uids == null || uids.Count == 0) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    try
+                    {
+                        using (var st = conn.Prepare("DELETE FROM cleanup_exclude WHERE uid=?"))
+                        {
+                            for (int i = 0; i < uids.Count; i++)
+                            {
+                                string uid = uids[i];
+                                if (string.IsNullOrEmpty(uid)) continue;
+                                st.Reset();
+                                st.BindText(1, uid);
+                                st.Step();
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
                     }
                 }
             }

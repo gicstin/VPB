@@ -1332,6 +1332,44 @@ namespace VPB
                     }, trackedButtons);
                 }
             }
+            else if (contentType == ContentType.CleanupCategories)
+            {
+                int mode = GetCleanupFilterMode();
+                Color cleanupColor = new Color(0.62f, 0.40f, 0.20f, 1f);
+                Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
+
+                string labelAll = VPBTranslation.T("gallery.cleanup.tab.all", "All") + " (" + GetCleanupTabCount(0) + ")";
+                string labelDup = VPBTranslation.T("gallery.cleanup.tab.dup", "Duplicates") + " (" + GetCleanupTabCount(1) + ")";
+                string labelOld = VPBTranslation.T("gallery.cleanup.tab.old", "Old Versions") + " (" + GetCleanupTabCount(2) + ")";
+                string labelDamaged = VPBTranslation.T("gallery.cleanup.tab.damaged", "Damaged") + " (" + GetCleanupTabCount(3) + ")";
+                string labelExcluded = VPBTranslation.T("gallery.cleanup.tab.excluded", "Excluded") + " (" + GetCleanupTabCount(4) + ")";
+
+                CreateTabButton(container.transform, labelAll, mode == 0 ? cleanupColor : inactive, mode == 0, () =>
+                {
+                    SetCleanupFilterMode(0);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, labelDup, mode == 1 ? cleanupColor : inactive, mode == 1, () =>
+                {
+                    SetCleanupFilterMode(1);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, labelOld, mode == 2 ? cleanupColor : inactive, mode == 2, () =>
+                {
+                    SetCleanupFilterMode(2);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, labelDamaged, mode == 3 ? cleanupColor : inactive, mode == 3, () =>
+                {
+                    SetCleanupFilterMode(3);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, labelExcluded, mode == 4 ? cleanupColor : inactive, mode == 4, () =>
+                {
+                    SetCleanupFilterMode(4);
+                    UpdateTabs();
+                }, trackedButtons);
+            }
             else if (contentType == ContentType.SceneSource)
             {
                 var sceneFilters = GetOrderedSceneSourceFilterLabels();
@@ -3044,12 +3082,19 @@ namespace VPB
                         {
                             try
                             {
+                                if (file is CleanupFileEntry cfe && cfe.Candidate != null)
+                                {
+                                    catLabel = cfe.Candidate.GetFlagsLabel();
+                                }
+                                else
+                                {
                                 if (IsFilterActive)
                                 {
                                     if (file is PackageListEntry ple && ple.Package != null)
                                         catLabel = GetBestCategoryLabelForPackage(ple.Package);
                                     else if (file is VarFileEntry vfe3 && vfe3.Package != null)
                                         catLabel = GetBestCategoryLabelForPackage(vfe3.Package);
+                                }
                                 }
                             }
                             catch { catLabel = ""; }

@@ -259,6 +259,13 @@ namespace VPB
             {
                 if (!IsHubMode)
                     ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
+
+                if (cleanupModeActive)
+                {
+                    RebuildCleanupCandidates(true, true);
+                    return;
+                }
+
                 try { MVR.FileManagement.FileManager.Refresh(); } catch { }
                 FileManager.Refresh(true, false, false);
                 creatorsCached = false;

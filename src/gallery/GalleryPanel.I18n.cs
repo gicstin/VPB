@@ -66,6 +66,7 @@ namespace VPB
                 case ContentType.RemoveHair:     return VPBTranslation.T("gallery.search.hair", "Filter Hair...");
                 case ContentType.RemoveAtom:     return VPBTranslation.T("gallery.search.atoms", "Filter Atoms...");
                 case ContentType.Target:         return VPBTranslation.T("gallery.search.target", "Filter Targets...");
+                case ContentType.CleanupCategories: return VPBTranslation.T("gallery.search.cleanup", "Filter Cleanup Categories...");
                 default:                       return VPBTranslation.T("gallery.search.main", "Search...");
             }
         }

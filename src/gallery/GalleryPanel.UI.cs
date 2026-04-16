@@ -2304,13 +2304,23 @@ namespace VPB
 
         private void ToggleRight(ContentType type)
         {
+            bool wasCleanup = cleanupModeActive;
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+                ExitCleanupModeForSidePanelNavigation();
+
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(false);
             bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
                 && (type == ContentType.Category || type == ContentType.Creator);
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("right");
 
-            if (rightActiveContent == type) 
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+            {
+                // After leaving cleanup, explicit Category/Creator click should open the requested list.
+                rightActiveContent = type;
+                if (leftActiveContent == type) leftActiveContent = null;
+            }
+            else if (rightActiveContent == type) 
             {
                 rightActiveContent = null;
             }
@@ -2330,13 +2340,23 @@ namespace VPB
 
         private void ToggleLeft(ContentType type)
         {
+            bool wasCleanup = cleanupModeActive;
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+                ExitCleanupModeForSidePanelNavigation();
+
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(true);
             bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
                 && (type == ContentType.Category || type == ContentType.Creator);
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("left");
 
-            if (leftActiveContent == type)
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+            {
+                // After leaving cleanup, explicit Category/Creator click should open the requested list.
+                leftActiveContent = type;
+                if (rightActiveContent == type) rightActiveContent = null;
+            }
+            else if (leftActiveContent == type)
             {
                 leftActiveContent = null;
             }

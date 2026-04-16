@@ -16,6 +16,19 @@ namespace VPB
         private Text       tboxHintLabel;
         private GameObject tboxCopyPkgNamesBtn;
         private GameObject tboxDeleteBtn;
+        private GameObject tboxCleanupBtn;
+        private GameObject tboxCleanupApplyBtn;
+        private GameObject tboxCleanupFilterAllBtn;
+        private GameObject tboxCleanupFilterDupBtn;
+        private GameObject tboxCleanupFilterOldBtn;
+        private GameObject tboxCleanupFilterDamagedBtn;
+        private GameObject tboxCleanupSelectVisibleBtn;
+        private GameObject tboxCleanupSelectDupBtn;
+        private GameObject tboxCleanupSelectOldBtn;
+        private GameObject tboxCleanupSelectDamagedBtn;
+        private GameObject tboxCleanupClearBtn;
+        private GameObject tboxCleanupAddExcludeBtn;
+        private GameObject tboxCleanupRemoveExcludeBtn;
         private GameObject tboxAutoInstallBtn;
         private GameObject tboxDisableAutoInstallBtn;
         private GameObject tboxHideBtn;
@@ -101,6 +114,19 @@ namespace VPB
             one(tboxHideBtn);
             one(tboxAutoInstallBtn);
             one(tboxDeleteBtn);
+            one(tboxCleanupBtn);
+            one(tboxCleanupApplyBtn);
+            one(tboxCleanupFilterAllBtn);
+            one(tboxCleanupFilterDupBtn);
+            one(tboxCleanupFilterOldBtn);
+            one(tboxCleanupFilterDamagedBtn);
+            one(tboxCleanupSelectVisibleBtn);
+            one(tboxCleanupSelectDupBtn);
+            one(tboxCleanupSelectOldBtn);
+            one(tboxCleanupSelectDamagedBtn);
+            one(tboxCleanupClearBtn);
+            one(tboxCleanupAddExcludeBtn);
+            one(tboxCleanupRemoveExcludeBtn);
             one(tboxLoadBtn);
             one(tboxUnloadBtn);
             one(tboxLoadDepsBtn);
@@ -121,6 +147,19 @@ namespace VPB
             d(tboxHideBtn);
             d(tboxAutoInstallBtn);
             d(tboxDeleteBtn);
+            d(tboxCleanupBtn);
+            d(tboxCleanupApplyBtn);
+            d(tboxCleanupFilterAllBtn);
+            d(tboxCleanupFilterDupBtn);
+            d(tboxCleanupFilterOldBtn);
+            d(tboxCleanupFilterDamagedBtn);
+            d(tboxCleanupSelectVisibleBtn);
+            d(tboxCleanupSelectDupBtn);
+            d(tboxCleanupSelectOldBtn);
+            d(tboxCleanupSelectDamagedBtn);
+            d(tboxCleanupClearBtn);
+            d(tboxCleanupAddExcludeBtn);
+            d(tboxCleanupRemoveExcludeBtn);
             d(tboxLoadBtn);
             d(tboxUnloadBtn);
             d(tboxLoadDepsBtn);
@@ -193,13 +232,26 @@ namespace VPB
                 return s;
             }
 
-            var ltr = new List<GameObject>(14);
+            var ltr = new List<GameObject>(26);
             // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
             if (tboxDisableAutoInstallBtn != null) ltr.Add(tboxDisableAutoInstallBtn);
             if (tboxUnhideBtn != null) ltr.Add(tboxUnhideBtn);
             if (tboxHideBtn != null) ltr.Add(tboxHideBtn);
             if (tboxAutoInstallBtn != null) ltr.Add(tboxAutoInstallBtn);
             if (tboxDeleteBtn != null) ltr.Add(tboxDeleteBtn);
+            if (tboxCleanupBtn != null) ltr.Add(tboxCleanupBtn);
+            if (tboxCleanupApplyBtn != null) ltr.Add(tboxCleanupApplyBtn);
+            if (tboxCleanupFilterAllBtn != null) ltr.Add(tboxCleanupFilterAllBtn);
+            if (tboxCleanupFilterDupBtn != null) ltr.Add(tboxCleanupFilterDupBtn);
+            if (tboxCleanupFilterOldBtn != null) ltr.Add(tboxCleanupFilterOldBtn);
+            if (tboxCleanupFilterDamagedBtn != null) ltr.Add(tboxCleanupFilterDamagedBtn);
+            if (tboxCleanupSelectVisibleBtn != null) ltr.Add(tboxCleanupSelectVisibleBtn);
+            if (tboxCleanupSelectDupBtn != null) ltr.Add(tboxCleanupSelectDupBtn);
+            if (tboxCleanupSelectOldBtn != null) ltr.Add(tboxCleanupSelectOldBtn);
+            if (tboxCleanupSelectDamagedBtn != null) ltr.Add(tboxCleanupSelectDamagedBtn);
+            if (tboxCleanupClearBtn != null) ltr.Add(tboxCleanupClearBtn);
+            if (tboxCleanupAddExcludeBtn != null) ltr.Add(tboxCleanupAddExcludeBtn);
+            if (tboxCleanupRemoveExcludeBtn != null) ltr.Add(tboxCleanupRemoveExcludeBtn);
             if (tboxLoadBtn != null) ltr.Add(tboxLoadBtn);
             if (tboxUnloadBtn != null) ltr.Add(tboxUnloadBtn);
             if (tboxLoadDepsBtn != null) ltr.Add(tboxLoadDepsBtn);
@@ -601,6 +653,151 @@ namespace VPB
             }
             catch { }
 
+            tboxCleanupBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup", "Cleanup"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxOpenCleanupView
+            );
+            tboxCleanupBtn.name = "Tbox_Cleanup";
+            TboxConfigureActionButtonFlex(tboxCleanupBtn, 78f, 92f, innerRowH);
+            AddTooltip(tboxCleanupBtn, "gallery.tooltip.tbox_cleanup", "Scan globally for duplicate, old, and damaged packages/local files.");
+
+            tboxCleanupApplyBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_apply", "Apply"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxApplyCleanupSelected
+            );
+            tboxCleanupApplyBtn.name = "Tbox_CleanupApply";
+            TboxConfigureActionButtonFlex(tboxCleanupApplyBtn, 72f, 84f, innerRowH);
+            AddTooltip(tboxCleanupApplyBtn, "gallery.tooltip.tbox_cleanup_apply", "Move selected cleanup candidates to DeletedPackages/DeletedScenes by type.");
+
+            tboxCleanupFilterAllBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_filter_all", "All"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxToggleCleanupFilterAll
+            );
+            tboxCleanupFilterAllBtn.name = "Tbox_CleanupFilterAll";
+            TboxConfigureActionButtonFlex(tboxCleanupFilterAllBtn, 56f, 68f, innerRowH);
+
+            tboxCleanupFilterDupBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_filter_dup", "Dup"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxToggleCleanupFilterDuplicate
+            );
+            tboxCleanupFilterDupBtn.name = "Tbox_CleanupFilterDup";
+            TboxConfigureActionButtonFlex(tboxCleanupFilterDupBtn, 56f, 68f, innerRowH);
+
+            tboxCleanupFilterOldBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_filter_old", "Old"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxToggleCleanupFilterOld
+            );
+            tboxCleanupFilterOldBtn.name = "Tbox_CleanupFilterOld";
+            TboxConfigureActionButtonFlex(tboxCleanupFilterOldBtn, 56f, 68f, innerRowH);
+
+            tboxCleanupFilterDamagedBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_filter_damaged", "Damaged"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxToggleCleanupFilterDamaged
+            );
+            tboxCleanupFilterDamagedBtn.name = "Tbox_CleanupFilterDamaged";
+            TboxConfigureActionButtonFlex(tboxCleanupFilterDamagedBtn, 78f, 90f, innerRowH);
+
+            tboxCleanupSelectVisibleBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_select_visible", "SelVisible"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxSelectAllVisibleCleanup
+            );
+            tboxCleanupSelectVisibleBtn.name = "Tbox_CleanupSelectVisible";
+            TboxConfigureActionButtonFlex(tboxCleanupSelectVisibleBtn, 88f, 108f, innerRowH);
+
+            tboxCleanupSelectDupBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_select_dup", "SelDup"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                () => TboxSelectCleanupByType(CleanupCandidateType.Duplicate)
+            );
+            tboxCleanupSelectDupBtn.name = "Tbox_CleanupSelectDup";
+            TboxConfigureActionButtonFlex(tboxCleanupSelectDupBtn, 72f, 86f, innerRowH);
+
+            tboxCleanupSelectOldBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_select_old", "SelOld"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                () => TboxSelectCleanupByType(CleanupCandidateType.OldVersion)
+            );
+            tboxCleanupSelectOldBtn.name = "Tbox_CleanupSelectOld";
+            TboxConfigureActionButtonFlex(tboxCleanupSelectOldBtn, 72f, 86f, innerRowH);
+
+            tboxCleanupSelectDamagedBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_select_damaged", "SelDamaged"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                () => TboxSelectCleanupByType(CleanupCandidateType.Damaged)
+            );
+            tboxCleanupSelectDamagedBtn.name = "Tbox_CleanupSelectDamaged";
+            TboxConfigureActionButtonFlex(tboxCleanupSelectDamagedBtn, 88f, 112f, innerRowH);
+
+            tboxCleanupClearBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_clear", "ClearSel"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxClearCleanupSelection
+            );
+            tboxCleanupClearBtn.name = "Tbox_CleanupClear";
+            TboxConfigureActionButtonFlex(tboxCleanupClearBtn, 72f, 90f, innerRowH);
+
+            tboxCleanupAddExcludeBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_add_exclude", "Add Exclude"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxCleanupAddSelectedToExclude
+            );
+            tboxCleanupAddExcludeBtn.name = "Tbox_CleanupAddExclude";
+            TboxConfigureActionButtonFlex(tboxCleanupAddExcludeBtn, 92f, 118f, innerRowH);
+            AddTooltip(tboxCleanupAddExcludeBtn, "gallery.tooltip.tbox_cleanup_add_exclude", "Add selected cleanup packages to the cleanup exclude list.");
+            try
+            {
+                var addExcludeIcon = UI.LoadIconSprite("vpb_icons/list_add.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (addExcludeIcon != null) UI.AddIconToButton(tboxCleanupAddExcludeBtn, addExcludeIcon, padding: 6f);
+            }
+            catch { }
+
+            tboxCleanupRemoveExcludeBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.cleanup_remove_exclude", "Remove Exclude"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxCleanupRemoveSelectedFromExclude
+            );
+            tboxCleanupRemoveExcludeBtn.name = "Tbox_CleanupRemoveExclude";
+            TboxConfigureActionButtonFlex(tboxCleanupRemoveExcludeBtn, 112f, 138f, innerRowH);
+            AddTooltip(tboxCleanupRemoveExcludeBtn, "gallery.tooltip.tbox_cleanup_remove_exclude", "Remove selected cleanup packages from the cleanup exclude list.");
+            try
+            {
+                var removeExcludeIcon = UI.LoadIconSprite("vpb_icons/list_remove.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (removeExcludeIcon != null) UI.AddIconToButton(tboxCleanupRemoveExcludeBtn, removeExcludeIcon, padding: 6f);
+            }
+            catch { }
+            tboxCleanupApplyBtn.SetActive(false);
+            tboxCleanupFilterAllBtn.SetActive(false);
+            tboxCleanupFilterDupBtn.SetActive(false);
+            tboxCleanupFilterOldBtn.SetActive(false);
+            tboxCleanupFilterDamagedBtn.SetActive(false);
+            tboxCleanupSelectVisibleBtn.SetActive(false);
+            tboxCleanupSelectDupBtn.SetActive(false);
+            tboxCleanupSelectOldBtn.SetActive(false);
+            tboxCleanupSelectDamagedBtn.SetActive(false);
+            tboxCleanupClearBtn.SetActive(false);
+            tboxCleanupAddExcludeBtn.SetActive(false);
+            tboxCleanupRemoveExcludeBtn.SetActive(false);
+
             tboxAutoInstallBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -833,7 +1030,7 @@ namespace VPB
             }
 
             // Action buttons only when there is a selection; pin persists until user toggles (saved in VPB.cfg).
-            bool canExpand = sel > 0;
+            bool canExpand = sel > 0 || cleanupModeActive;
             if (!canExpand)
             {
                 tboxExpandT   = 0f;
@@ -845,7 +1042,7 @@ namespace VPB
 
             if (tboxHintLabel != null && tboxHintLabel.gameObject != null)
             {
-                bool showPinnedHint = sel == 0 && tboxPinned;
+                bool showPinnedHint = sel == 0 && tboxPinned && !cleanupModeActive;
                 tboxHintLabel.gameObject.SetActive(showPinnedHint);
                 if (showPinnedHint)
                     tboxHintLabel.text = VPBTranslation.T("gallery.tbox.pinned_select", "Pinned — select items for actions");
@@ -861,7 +1058,7 @@ namespace VPB
             // Animate bar height: grow offsetMax upward to reveal the button band (1 or 2 rows)
             if (tboxRT != null)
             {
-                if (sel > 0 && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
+                if ((sel > 0 || cleanupModeActive) && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
                 {
                     float w = tboxButtonsFlexRootRT.rect.width;
                     if (w > 8f && Mathf.Abs(w - tboxLastFlexAvailW) > 2f)
@@ -900,7 +1097,7 @@ namespace VPB
                 tboxButtonsCG.interactable   = canExpand && tboxExpandT > 0.85f;
             }
 
-            if (sel > 0)
+            if (sel > 0 || cleanupModeActive)
                 RefreshTboxConditionalActionButtons();
 
             // Keep grid / side tab scrollers above the footer while tbox height animates.
@@ -925,6 +1122,83 @@ namespace VPB
             int copyN = 0, deleteN = 0, hideN = 0, unhideN = 0, aiN = 0, noAiN = 0;
             bool anyPkgInstalled = false;     // in AddonPackages
             bool anyPkgNotInstalled = false;  // in AllPackages
+
+            if (cleanupModeActive && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
+            {
+                bool anyCleanupEntry = false;
+                for (int i = 0; i < currentFilteredFiles.Count; i++)
+                {
+                    if (currentFilteredFiles[i] is CleanupFileEntry)
+                    {
+                        anyCleanupEntry = true;
+                        break;
+                    }
+                }
+                if (!anyCleanupEntry) cleanupModeActive = false;
+            }
+            bool isCleanup = cleanupModeActive;
+            void show(GameObject go, bool on)
+            {
+                if (go != null && go.activeSelf != on) go.SetActive(on);
+            }
+
+            show(tboxCleanupBtn, !isCleanup);
+            show(tboxCleanupApplyBtn, false);
+            // Filtering moved to cleanup side-tab list (Category-style), keep toolbox cleaner.
+            show(tboxCleanupFilterAllBtn, false);
+            show(tboxCleanupFilterDupBtn, false);
+            show(tboxCleanupFilterOldBtn, false);
+            show(tboxCleanupFilterDamagedBtn, false);
+            show(tboxCleanupSelectVisibleBtn, false);
+            show(tboxCleanupSelectDupBtn, false);
+            show(tboxCleanupSelectOldBtn, false);
+            show(tboxCleanupSelectDamagedBtn, false);
+            show(tboxCleanupClearBtn, false);
+            bool cleanupHasExcludedSelection = isCleanup && CleanupSelectionHasExcludedEntries();
+            bool cleanupHasNonExcludedSelection = isCleanup && CleanupSelectionHasNonExcludedEntries();
+            show(tboxCleanupAddExcludeBtn, cleanupHasNonExcludedSelection);
+            show(tboxCleanupRemoveExcludeBtn, cleanupHasExcludedSelection);
+
+            show(tboxAutoInstallBtn, !isCleanup);
+            show(tboxDisableAutoInstallBtn, !isCleanup);
+            show(tboxHideBtn, !isCleanup);
+            show(tboxUnhideBtn, !isCleanup);
+            show(tboxLoadBtn, !isCleanup);
+            show(tboxUnloadBtn, !isCleanup);
+            show(tboxLoadDepsBtn, !isCleanup);
+            show(tboxCacheTexturesBtn, !isCleanup);
+
+            if (isCleanup)
+            {
+                int selectedCount = selectedFiles != null ? selectedFiles.Count : 0;
+                SetTboxButtonEnabledVisual(tboxDeleteBtn, selectedCount > 0);
+                SetTboxButtonEnabledVisual(tboxCleanupApplyBtn, false);
+                SetTboxButtonEnabledVisual(tboxCleanupFilterAllBtn, true);
+                SetTboxButtonEnabledVisual(tboxCleanupFilterDupBtn, true);
+                SetTboxButtonEnabledVisual(tboxCleanupFilterOldBtn, true);
+                SetTboxButtonEnabledVisual(tboxCleanupFilterDamagedBtn, true);
+                SetTboxButtonEnabledVisual(tboxCleanupSelectVisibleBtn, false);
+                SetTboxButtonEnabledVisual(tboxCleanupSelectDupBtn, currentFilteredFiles != null && currentFilteredFiles.Count > 0);
+                SetTboxButtonEnabledVisual(tboxCleanupSelectOldBtn, currentFilteredFiles != null && currentFilteredFiles.Count > 0);
+                SetTboxButtonEnabledVisual(tboxCleanupSelectDamagedBtn, currentFilteredFiles != null && currentFilteredFiles.Count > 0);
+                SetTboxButtonEnabledVisual(tboxCleanupClearBtn, false);
+                SetTboxButtonEnabledVisual(tboxCleanupAddExcludeBtn, cleanupHasNonExcludedSelection);
+                SetTboxButtonEnabledVisual(tboxCleanupRemoveExcludeBtn, cleanupHasExcludedSelection);
+
+                SetTboxButtonEnabledVisual(tboxCopyPkgNamesBtn, selectedCount > 0);
+                SetTboxButtonEnabledVisual(tboxHideBtn, false);
+                SetTboxButtonEnabledVisual(tboxUnhideBtn, false);
+                SetTboxButtonEnabledVisual(tboxAutoInstallBtn, false);
+                SetTboxButtonEnabledVisual(tboxDisableAutoInstallBtn, false);
+                SetTboxButtonEnabledVisual(tboxLoadBtn, false);
+                SetTboxButtonEnabledVisual(tboxUnloadBtn, false);
+                SetTboxButtonEnabledVisual(tboxLoadDepsBtn, false);
+                SetTboxButtonEnabledVisual(tboxCacheTexturesBtn, false);
+
+                RefreshTboxFlexButtonLayout();
+                return;
+            }
+
             if (selectedFiles != null && selectedFiles.Count > 0)
             {
                 copyN = CollectUniquePackageUidsFromSelection(selectedFiles).Count
@@ -971,6 +1245,7 @@ namespace VPB
             if (tboxCopyPkgNamesBtn != null)
                 SetTboxCountButtonLabel(tboxCopyPkgNamesBtn, "gallery.tbox.copy_names_count", "Copy Names ({0})", copyN);
             // Delete is an icon button; count is intentionally not shown on the label.
+            SetTboxButtonEnabledVisual(tboxDeleteBtn, deleteN > 0);
 
             bool showHide = hideN > 0;
             bool showUnhide = unhideN > 0;
