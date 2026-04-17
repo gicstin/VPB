@@ -14,6 +14,8 @@ using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using ZstdNet;
+using Leap.Unity;
+using Leap.Unity.Infix;
 namespace VPB
 {
     // Plugin metadata attribute: plugin ID, plugin name, plugin version (must be numeric)
@@ -116,7 +118,7 @@ namespace VPB
         private KeyUtil ToggleFixedGalleryKey;
         private Vector2 UIPosition;
         private bool MiniMode;
-        
+
 
 
         private const int STD_OUTPUT_HANDLE = -11;
@@ -190,6 +192,13 @@ namespace VPB
                 try { Console.Clear(); } catch { }
             }
         }
+        private bool m_ShowRemoveWindow = false;
+        private System.Collections.Generic.List<RemoveItem> m_RemoveList = new System.Collections.Generic.List<RemoveItem>();
+        private string m_RemoveFilter = "";
+        private bool m_ExcludeOld = false;
+        private Vector2 m_RemoveScroll = Vector2.zero;
+        private Rect m_RemoveWindowRect = new Rect(250, 250, 600, 500);
+
         private bool m_ShowPluginsAlwaysEnabledInfo;
         private bool m_ShowGcRefreshInfo;
         private bool m_UnloadAllConfirmPending = false;
@@ -690,7 +699,7 @@ namespace VPB
             catch
             {
             }
-            
+
             // Explicitly initialize ZstdNet native library early
             try { ExternMethods.Initialize(); } catch { }
 
@@ -882,8 +891,6 @@ namespace VPB
             });
 
             AutoLoadALPackages();
-            StartCoroutine(UI.PrewarmIconCacheCoroutine());
-            StartCoroutine(PrewarmGalleryPanelCoroutine());
 
             // Auto-create gallery pane on startup if enabled
             if (VPBConfig.Instance != null && VPBConfig.Instance.EnableAutoFixedGallery)
@@ -897,31 +904,15 @@ namespace VPB
                 }
             }
         }
-        
-        private IEnumerator PrewarmGalleryPanelCoroutine()
-        {
-            // Wait until the UI and file manager are both ready
-            while (!m_UIInited || !IsFileManagerInited)
-                yield return null;
-
-            // Skip if auto-fixed gallery already created a panel, or singleton is missing
-            if (Gallery.singleton == null || Gallery.singleton.PanelCount > 0) yield break;
-
-            if (!m_GalleryCatsInited) InitGalleryCategories();
-
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            Gallery.singleton.CreatePane(showAfterCreate: false);
-            sw.Stop();
-            LogUtil.Log("[VPB] Gallery panel pre-warmed in " + sw.ElapsedMilliseconds + "ms");
-        }
 
         void AutoLoadALPackages()
         {
-            System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+            System.Threading.ThreadPool.QueueUserWorkItem((state) =>
+            {
                 try
                 {
                     if (!Directory.Exists("AllPackages")) return;
-                    
+
                     var alPackages = AutoLoadPackagesManager.Instance.GetAutoLoadPackages();
                     if (alPackages.Count == 0) return;
 
@@ -937,21 +928,21 @@ namespace VPB
                         {
                             string relativePath = file.Replace('\\', '/');
                             string targetPath = "AddonPackages" + relativePath.Substring("AllPackages".Length);
-                            
+
                             string targetDir = Path.GetDirectoryName(targetPath);
                             if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
-                            
+
                             if (!File.Exists(targetPath))
                             {
-                                try 
-                                { 
-                                    File.Move(file, targetPath); 
+                                try
+                                {
+                                    File.Move(file, targetPath);
                                     moved = true;
                                     LogUtil.Log("[VPB] Auto-Loaded package: " + name);
                                 }
-                                catch (Exception ex) 
-                                { 
-                                    LogUtil.LogError("[VPB] Failed to auto-load " + name + ": " + ex.Message); 
+                                catch (Exception ex)
+                                {
+                                    LogUtil.LogError("[VPB] Failed to auto-load " + name + ": " + ex.Message);
                                 }
                             }
                         }
@@ -975,7 +966,7 @@ namespace VPB
             Settings.Instance.MiniMode.Value = MiniMode;
 
             this.Config.Save();
-            
+
             // Cleanup QuickMenu Button
             if (SuperController.singleton.mainHUD != null)
             {
@@ -984,7 +975,7 @@ namespace VPB
             }
             if (m_QuickMenuCanvas != null)
             {
-                 Destroy(m_QuickMenuCanvas.gameObject);
+                Destroy(m_QuickMenuCanvas.gameObject);
             }
         }
         // Called on (hard) restart as well.
@@ -1231,8 +1222,8 @@ namespace VPB
                 {
                     m_BringFrontButtonGO.SetActive(shouldShow);
                 }
-                
-                if (shouldShow && m_ShowHideButton != null && count != m_ShowHideButtonLastCount)
+
+                if (shouldShow && m_ShowHideButton != null)
                 {
                     m_ShowHideButtonLastCount = count;
                     m_ShowHideButton.label = VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide") + " (" + count + ")";
@@ -1339,45 +1330,45 @@ namespace VPB
         HubBrowse m_HubBrowse;
         FileManager m_FileManager;
         FileBrowser m_FileBrowser;
-		Dictionary<GalleryPanel, bool> m_GalleryPanelsVisibleBeforeHub;
+        Dictionary<GalleryPanel, bool> m_GalleryPanelsVisibleBeforeHub;
 
-		void CaptureAndHideGalleryForHub()
-		{
-			if (m_GalleryPanelsVisibleBeforeHub != null) return;
-			if (Gallery.singleton == null) return;
-			if (Gallery.singleton.Panels == null) return;
-			m_GalleryPanelsVisibleBeforeHub = new Dictionary<GalleryPanel, bool>();
-			foreach (var p in Gallery.singleton.Panels)
-			{
-				if (p == null) continue;
-				bool wasVisible = false;
-				try { wasVisible = p.IsVisible; } catch { wasVisible = false; }
-				if (!m_GalleryPanelsVisibleBeforeHub.ContainsKey(p)) m_GalleryPanelsVisibleBeforeHub.Add(p, wasVisible);
-				if (wasVisible)
-				{
-					try { p.Hide(); } catch { }
-				}
-			}
-		}
+        void CaptureAndHideGalleryForHub()
+        {
+            if (m_GalleryPanelsVisibleBeforeHub != null) return;
+            if (Gallery.singleton == null) return;
+            if (Gallery.singleton.Panels == null) return;
+            m_GalleryPanelsVisibleBeforeHub = new Dictionary<GalleryPanel, bool>();
+            foreach (var p in Gallery.singleton.Panels)
+            {
+                if (p == null) continue;
+                bool wasVisible = false;
+                try { wasVisible = p.IsVisible; } catch { wasVisible = false; }
+                if (!m_GalleryPanelsVisibleBeforeHub.ContainsKey(p)) m_GalleryPanelsVisibleBeforeHub.Add(p, wasVisible);
+                if (wasVisible)
+                {
+                    try { p.Hide(); } catch { }
+                }
+            }
+        }
 
-		void RestoreGalleryAfterHub()
-		{
-			var restore = m_GalleryPanelsVisibleBeforeHub;
-			m_GalleryPanelsVisibleBeforeHub = null;
-			if (restore == null) return;
-			foreach (var kv in restore)
-			{
-				var p = kv.Key;
-				if (p == null) continue;
-				if (!kv.Value) continue;
-				try
-				{
-					p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
-				}
-				catch { }
-			}
-		}
-	
+        void RestoreGalleryAfterHub()
+        {
+            var restore = m_GalleryPanelsVisibleBeforeHub;
+            m_GalleryPanelsVisibleBeforeHub = null;
+            if (restore == null) return;
+            foreach (var kv in restore)
+            {
+                var p = kv.Key;
+                if (p == null) continue;
+                if (!kv.Value) continue;
+                try
+                {
+                    p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
+                }
+                catch { }
+            }
+        }
+
         void CreateHubBrowse()
         {
             LogUtil.LogVerboseUi("VPB CreateHubBrowse");
@@ -1440,31 +1431,31 @@ namespace VPB
             m_HubBrowse.InitUI();
             m_HubBrowse.HubEnabled = true;
             m_HubBrowse.WebBrowserEnabled = true;
-            
-			var prevPreShow = m_HubBrowse.preShowCallbacks;
-			m_HubBrowse.preShowCallbacks = () =>
-			{
-				try { prevPreShow?.Invoke(); } catch { }
-				CaptureAndHideGalleryForHub();
-			};
 
-			var prevOnHide = m_HubBrowse.onHideCallbacks;
-			m_HubBrowse.onHideCallbacks = () =>
-			{
-				RestoreGalleryAfterHub();
-				try { prevOnHide?.Invoke(); } catch { }
-				if (Gallery.singleton != null)
-				{
-					foreach (var panel in Gallery.singleton.Panels)
-					{
-						if (panel != null && panel.IsVisible)
-						{
-							try { panel.RefreshFiles(); } catch { }
-						}
-					}
-				}
-			};
-            
+            var prevPreShow = m_HubBrowse.preShowCallbacks;
+            m_HubBrowse.preShowCallbacks = () =>
+            {
+                try { prevPreShow?.Invoke(); } catch { }
+                CaptureAndHideGalleryForHub();
+            };
+
+            var prevOnHide = m_HubBrowse.onHideCallbacks;
+            m_HubBrowse.onHideCallbacks = () =>
+            {
+                RestoreGalleryAfterHub();
+                try { prevOnHide?.Invoke(); } catch { }
+                if (Gallery.singleton != null)
+                {
+                    foreach (var panel in Gallery.singleton.Panels)
+                    {
+                        if (panel != null && panel.IsVisible)
+                        {
+                            try { panel.RefreshFiles(); } catch { }
+                        }
+                    }
+                }
+            };
+
             // Close button
 
             var close = Tools.GetChild(newgo.transform, "CloseButton");
@@ -1509,9 +1500,9 @@ namespace VPB
             try
             {
                 if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;
-                
+
                 var existing = SuperController.singleton.mainHUD.Find("VPB_QuickMenuButton_Canvas");
-                if (existing != null) 
+                if (existing != null)
                 {
                     // Destroy old version if found to ensure update
                     DestroyImmediate(existing.gameObject);
@@ -1524,21 +1515,21 @@ namespace VPB
                 }
 
                 if (m_MVRPluginManager == null) return;
-                
+
                 if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;
                 if (m_MVRPluginManager.configurableButtonPrefab == null) return;
 
                 GameObject canvasObject = new GameObject("VPB_QuickMenuButton_Canvas");
                 m_QuickMenuCanvas = canvasObject.AddComponent<Canvas>();
                 if (m_QuickMenuCanvas == null) return;
-                
+
                 m_QuickMenuCanvas.renderMode = RenderMode.WorldSpace;
                 m_QuickMenuCanvas.pixelPerfect = false;
 
                 if (SuperController.singleton != null && SuperController.singleton.mainHUD != null && SuperController.singleton.mainHUD.gameObject != null)
                     canvasObject.layer = SuperController.singleton.mainHUD.gameObject.layer;
-                
-                if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;    
+
+                if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;
                 m_QuickMenuCanvas.transform.SetParent(SuperController.singleton.mainHUD, false);
                 SuperController.singleton.AddCanvas(m_QuickMenuCanvas);
 
@@ -1576,7 +1567,7 @@ namespace VPB
                     {
                         m_CreateGalleryButtonGO = btnTr.gameObject;
                         btnTr.SetParent(m_QuickMenuCanvas.transform, false);
-                        
+
                         RectTransform rt = btnTr.GetComponent<RectTransform>();
                         if (rt != null)
                         {
@@ -1593,11 +1584,12 @@ namespace VPB
                             if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
                             if (uiBtn.button != null)
                             {
-                                uiBtn.button.onClick.AddListener(() => {
-                                     OpenCreateGallery();
+                                uiBtn.button.onClick.AddListener(() =>
+                                {
+                                    OpenCreateGallery();
                                 });
                             }
-                            
+
                             // Use HoverHandler for dynamic transparency
                             var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
                             hover.targetButton = uiBtn;
@@ -1639,7 +1631,8 @@ namespace VPB
                             if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
                             if (uiBtn.button != null)
                             {
-                                uiBtn.button.onClick.AddListener(() => {
+                                uiBtn.button.onClick.AddListener(() =>
+                                {
                                     if (Gallery.singleton != null)
                                     {
                                         Gallery.singleton.CloseAll();
@@ -1679,7 +1672,8 @@ namespace VPB
                             if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 22;
                             if (uiBtn.button != null)
                             {
-                                uiBtn.button.onClick.AddListener(() => {
+                                uiBtn.button.onClick.AddListener(() =>
+                                {
                                     if (Gallery.singleton != null)
                                     {
                                         Gallery.singleton.BringAllToFront();
@@ -1703,7 +1697,7 @@ namespace VPB
                     {
                         m_ShowHideButtonGO = btnTr2.gameObject;
                         btnTr2.SetParent(m_QuickMenuCanvas.transform, false);
-                        
+
                         RectTransform rt = btnTr2.GetComponent<RectTransform>();
                         if (rt != null)
                         {
@@ -1720,7 +1714,8 @@ namespace VPB
                             if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
                             if (uiBtn.button != null)
                             {
-                                uiBtn.button.onClick.AddListener(() => {
+                                uiBtn.button.onClick.AddListener(() =>
+                                {
                                     if (Gallery.singleton != null)
                                     {
                                         if (Gallery.singleton.IsVisible)
@@ -1730,7 +1725,7 @@ namespace VPB
                                     }
                                 });
                             }
-                            
+
                             // Use HoverHandler for dynamic transparency
                             var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
                             hover.targetButton = uiBtn;
@@ -1739,7 +1734,7 @@ namespace VPB
                         m_ShowHideButtonGO.SetActive(initialShouldShow);
                     }
                 }
-                
+
                 m_QuickMenuButtonInited = true;
                 LogUtil.LogVerboseUi("QuickMenuButton created. VR: " + isVR);
             }
@@ -1752,7 +1747,7 @@ namespace VPB
         void DragWnd(int windowsid)
         {
             EnsureStyles();
-            
+
             // Re-apply alpha for window content
             GUI.color = new Color(GUI.color.r, GUI.color.g, GUI.color.b, m_WindowAlphaState);
             GUI.contentColor = new Color(GUI.contentColor.r, GUI.contentColor.g, GUI.contentColor.b, m_WindowAlphaState);
@@ -1779,13 +1774,13 @@ namespace VPB
 
             // ========== HEADER & CONTROLS ==========
             GUILayout.BeginHorizontal();
-            
+
             // Generate alpha hex for the green color
             int alphaInt = Mathf.RoundToInt(m_WindowAlphaState * 255);
             string alphaHex = alphaInt.ToString("X2");
             // Use a less bright green (LimeGreen #32CD32 approx) instead of pure #00FF00
             GUILayout.Label(string.Format("<color=#32CD32{0}><b>{1}</b></color> {2}", alphaHex, FileManager.s_InstalledCount, m_ProgressText), m_StyleHeader);
-            
+
             GUILayout.FlexibleSpace();
             const float buttonHeight = 22f;
             if (GUILayout.Button(GetImGuiLocaleShortCode(VPBTranslation.CurrentLocale), m_StyleButtonSmall, GUILayout.Width(40), GUILayout.Height(buttonHeight)))
@@ -1794,13 +1789,13 @@ namespace VPB
             }
             if (GUILayout.Button("+", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
-		        m_UIScale = Mathf.Clamp(m_UIScale + 0.2f, MinUiScale, MaxUiScale);
+                m_UIScale = Mathf.Clamp(m_UIScale + 0.2f, MinUiScale, MaxUiScale);
                 Settings.Instance.UIScale.Value = m_UIScale;
                 RestrictUiRect();
             }
             if (GUILayout.Button("-", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
-		        m_UIScale = Mathf.Clamp(m_UIScale - 0.2f, MinUiScale, MaxUiScale);
+                m_UIScale = Mathf.Clamp(m_UIScale - 0.2f, MinUiScale, MaxUiScale);
                 Settings.Instance.UIScale.Value = m_UIScale;
                 RestrictUiRect();
             }
@@ -1848,16 +1843,16 @@ namespace VPB
                     GUI.enabled = false;
 
                 // Removed original Developer Tools section
-                
+
                 {
                     // ========== ZSTD CACHE SETTINGS ==========
 
                     GUILayout.BeginVertical(m_StyleSection);
-                    
+
                     var stats = ImageLoadingMgr.singleton.CurrentZstdStats;
                     var btnLabel = m_PendingVamCacheCount > 0 ? string.Format(VPBTranslation.T("hook.compress_cache_count", "Compress Cache ({0})"), m_PendingVamCacheCount) : VPBTranslation.T("hook.compress_cache", "Compress Cache");
                     var btnRect = GUILayoutUtility.GetRect(new GUIContent(btnLabel), m_StyleButtonPrimary, GUILayout.Height(buttonHeight));
-                    
+
                     if (Event.current.type == EventType.Repaint && btnRect.Contains(Event.current.mousePosition))
                     {
                         if (!m_IsCountingCache && Time.unscaledTime - m_CacheCountUpdateTimer > 2.0f)
@@ -1867,7 +1862,8 @@ namespace VPB
                             string path = MVR.FileManagement.CacheManager.GetTextureCacheDir();
                             int threshold = Settings.Instance.ThumbnailThreshold.Value;
                             LogUtil.Log("Checking VAM cache count...");
-                            System.Threading.ThreadPool.QueueUserWorkItem((s) => {
+                            System.Threading.ThreadPool.QueueUserWorkItem((s) =>
+                            {
                                 m_PendingVamCacheCount = GetVamCacheFileCount(path, threshold);
                                 m_IsCountingCache = false;
                             });
@@ -1895,7 +1891,7 @@ namespace VPB
                         GUILayout.Space(2);
                         float progress = stats.TotalFiles > 0 ? (float)stats.ProcessedFiles / stats.TotalFiles : 0f;
                         var progressRect = GUILayoutUtility.GetRect(0f, 4f, GUILayout.ExpandWidth(true));
-                        
+
                         // Use solid color for progress bar to ensure visibility
                         var prevColorProgressBar = GUI.color;
                         GUI.color = new Color(0.2f, 1f, 0.2f, 0.8f); // Bright green
@@ -1960,24 +1956,24 @@ namespace VPB
                     float infoWidth = infoBtnWidth;
 
                     var infoRect = new Rect(fullRowRect.xMax - infoWidth, fullRowRect.y, infoWidth, fullRowRect.height);
-                        var buttonsRect = new Rect(fullRowRect.x, fullRowRect.y, Mathf.Max(0f, fullRowRect.width - infoWidth - rowGutter), fullRowRect.height);
+                    var buttonsRect = new Rect(fullRowRect.x, fullRowRect.y, Mathf.Max(0f, fullRowRect.width - infoWidth - rowGutter), fullRowRect.height);
 
-                        DrawPhiSplitButtonsInRect(
-                            buttonsRect,
-                            VPBTranslation.T("hook.gc", "GC"),
-                            m_StyleButton,
-                            () => { m_PendingGc = true; },
-                            VPBTranslation.T("hook.refresh", "Refresh"),
-                            m_StyleButton,
-                            Refresh,
-                            1.618f
-                        );
+                    DrawPhiSplitButtonsInRect(
+                        buttonsRect,
+                        "GC",
+                        m_StyleButton,
+                        () => { m_PendingGc = true; },
+                        "Refresh",
+                        m_StyleButton,
+                        Refresh,
+                        1.618f
+                    );
 
-                        if (GUI.Button(infoRect, "i", m_StyleButtonSmall ?? GUI.skin.button))
-                        {
-                            ToggleInfoCard(ref m_ShowGcRefreshInfo);
-                        }
-                    
+                    if (GUI.Button(infoRect, "i", m_StyleButtonSmall ?? GUI.skin.button))
+                    {
+                        ToggleInfoCard(ref m_ShowGcRefreshInfo);
+                    }
+
 
                     DrawInfoCard(ref m_ShowGcRefreshInfo, VPBTranslation.T("hook.gc_refresh.title", "GC & Refresh"), () =>
                     {
@@ -2025,6 +2021,27 @@ namespace VPB
                         GUILayout.Space(2);
                         GUILayout.Label(VPBTranslation.T("hook.unload_all.info3", "Use this to reset your AddonPackages to a minimal state."), m_StyleInfoCardTextWrapped);
                     });
+
+                    // ========== REMOVE OLD/DAMAGED ==========
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button(VPBTranslation.T("hook.remove_old_damaged", "Remove Old/Damaged"), m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
+                    {
+                        OpenRemoveWindow();
+                    }
+                    if (GUILayout.Button("i", m_StyleButton, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
+                    {
+                        ToggleInfoCard(ref m_ShowRemoveOldDamagedInfo);
+                    }
+                    GUILayout.EndHorizontal();
+                    DrawInfoCard(ref m_ShowRemoveOldDamagedInfo, "Remove Old/Damaged", () =>
+                    {
+                        GUILayout.Space(4);
+                        GUILayout.Label("Scan for invalid vars (duplicates, invalid names) and old versions.", m_StyleInfoCardText);
+                        GUILayout.Space(2);
+                        GUILayout.Label("Opens a window to review and confirm removal.", m_StyleInfoCardText);
+                    });
+
+
 
                     // ========== HUB BROWSE ==========
                     DrawPhiSplitButtons(VPBTranslation.T("hook.hub", "Hub"), m_StyleButton, OpenHubBrowse, VPBTranslation.T("hook.create_gallery", "Create Gallery"), m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
@@ -2148,14 +2165,14 @@ namespace VPB
                     RestrictUiRect();
 
                     EnsureStyles();
-                    
+
                     var windowRect = m_Rect;
                     windowRect.height = 0f;
 
                     // Draw the window itself (background + controls)
                     // We let GUILayout handle the layout, but the border is drawn manually below.
                     // IMPORTANT: We use a separate border rect to avoid double-drawing borders if the skin has them.
-                    
+
                     var prevAlphaColor = GUI.color;
                     var prevAlphaContentColor = GUI.contentColor;
                     var prevAlphaBackgroundColor = GUI.backgroundColor;
@@ -2172,7 +2189,7 @@ namespace VPB
                         (checkRect.width * m_UIScale) + (hoverMargin * 2),
                         (checkRect.height * m_UIScale) + (hoverMargin * 2)
                     );
-                    
+
                     Vector2 screenMousePos = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
                     bool isHovering = screenRect.Contains(screenMousePos);
 
@@ -2204,7 +2221,7 @@ namespace VPB
                                 Input.ResetInputAxes();
                             }
                         }
-                        
+
                         m_SpaceSaverWindowRect = GUI.Window(999, m_SpaceSaverWindowRect, DrawSpaceSaverWindow, "", m_StyleWindow);
                     }
 
@@ -2219,7 +2236,7 @@ namespace VPB
                     {
                         m_StyleWindowBorder.normal.background = m_WindowActive ? m_TexWindowBorderActive : m_TexWindowBorder;
                         var prevDepth = GUI.depth;
-                        GUI.depth = 1; 
+                        GUI.depth = 1;
                         // Draw just the frame/border using a style that renders only the border
                         GUI.Box(borderRect, GUIContent.none, m_StyleWindowBorder);
                         GUI.depth = prevDepth;
@@ -2316,10 +2333,10 @@ namespace VPB
 
                             GUI.Box(outerRect, GUIContent.none, m_StyleFpsBadgeOuter);
                             float fpsAlpha = Mathf.Max(m_WindowAlphaState, 0.5f); // Ensure FPS is at least 50% visible
-                            
+
                             // To ensure visibility, we might need to boost the alpha of the contentColor specifically
                             // since GUI.color affects both background and content.
-                            
+
                             var prevC = GUI.color;
                             var prevCC = GUI.contentColor;
                             var prevBC = GUI.backgroundColor;
@@ -2329,13 +2346,13 @@ namespace VPB
                             // If m_WindowAlphaState is 0.1, GUI.color is (1,1,1, 0.1).
                             // If we set GUI.color to (1,1,1, 0.5), the box background will be 0.5.
                             // The text color comes from style.normal.textColor (white) * GUI.contentColor * GUI.color.
-                            
+
                             GUI.color = new Color(1f, 1f, 1f, fpsAlpha);
-                            GUI.contentColor = Color.white; 
+                            GUI.contentColor = Color.white;
                             GUI.backgroundColor = Color.white;
-                            
+
                             GUI.Box(innerRect, fpsText, m_StyleFpsBadge);
-                            
+
                             GUI.color = prevC;
                             GUI.contentColor = prevCC;
                             GUI.backgroundColor = prevBC;
@@ -2496,15 +2513,15 @@ namespace VPB
                 GUILayout.BeginVertical(m_StyleSection);
                 GUILayout.Label("Operation in Progress...", m_StyleHeader);
                 GUILayout.Space(5);
-                
+
                 float progress = stats.TotalFiles > 0 ? (float)stats.ProcessedFiles / stats.TotalFiles : 0f;
-                GUILayout.Label(string.Format("Progress: {0}/{1} files ({2:P1})", stats.ProcessedFiles, stats.TotalFiles, progress), m_StyleInfoCardTextWrapped);
-                
+                GUILayout.Label(string.Format("Progress: {0}/{1} files ({2:P1})", stats.ProcessedFiles, stats.TotalFiles, progress), m_StyleInfoCardText);
+
                 // Progress bar
                 var rect = GUILayoutUtility.GetRect(0f, 20f, GUILayout.ExpandWidth(true));
                 GUI.Box(rect, "", m_StyleButton); // Background
                 var progressRect = new Rect(rect.x, rect.y, rect.width * progress, rect.height);
-                
+
                 // Use solid color for internal progress bar too
                 var barPrevColor = GUI.color;
                 GUI.color = new Color(0.2f, 0.6f, 1f, 0.8f); // Blue
@@ -2512,9 +2529,10 @@ namespace VPB
                 GUI.color = barPrevColor;
 
                 GUILayout.Space(5);
-                GUILayout.Label("Current: " + stats.CurrentFile, m_StyleInfoCardTextWrapped);
-                
-                if (stats.TotalOriginalSize > stats.TotalCompressedSize) {
+                GUILayout.Label("Current: " + stats.CurrentFile, m_StyleInfoCardText);
+
+                if (stats.TotalOriginalSize > stats.TotalCompressedSize)
+                {
                     long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
                     string label = stats.IsDecompression ? "Space Lost: " : "Space Saved: ";
                     GUILayout.Label(label + FormatBytes(diff), m_StyleInfoCardTextWrapped);
@@ -2545,14 +2563,15 @@ namespace VPB
                 {
                     GUILayout.Label("Thumbnails Skipped: " + stats.SkippedCount, m_StyleInfoCardTextWrapped);
                 }
-                GUILayout.Label("Total Uncompressed Size: " + FormatBytes(stats.TotalOriginalSize), m_StyleInfoCardTextWrapped);
-                GUILayout.Label("Total Compressed Size: " + FormatBytes(stats.TotalCompressedSize), m_StyleInfoCardTextWrapped);
-                GUILayout.Label(string.Format("Time Taken: {0:0.##} seconds", stats.Duration), m_StyleInfoCardTextWrapped);
-                
-                if (stats.TotalOriginalSize > stats.TotalCompressedSize) {
+                GUILayout.Label("Total Uncompressed Size: " + FormatBytes(stats.TotalOriginalSize), m_StyleInfoCardText);
+                GUILayout.Label("Total Compressed Size: " + FormatBytes(stats.TotalCompressedSize), m_StyleInfoCardText);
+                GUILayout.Label(string.Format("Time Taken: {0:0.##} seconds", stats.Duration), m_StyleInfoCardText);
+
+                if (stats.TotalOriginalSize > stats.TotalCompressedSize)
+                {
                     long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
                     double percent = stats.TotalOriginalSize > 0 ? (double)diff / stats.TotalOriginalSize : 0;
-                    
+
                     var reportPrevContentColor = GUI.contentColor;
                     if (stats.IsDecompression)
                     {
@@ -2571,7 +2590,7 @@ namespace VPB
                 {
                     GUILayout.Label("Failed Files: " + stats.FailedCount, m_StyleInfoCardTextWrapped);
                 }
-                
+
                 if (GUILayout.Button("Close Report", m_StyleButton, GUILayout.Height(30)))
                 {
                     stats.Completed = false; // Reset to show start screen next time
@@ -2588,10 +2607,10 @@ namespace VPB
                 GUILayout.Label("• Current Cache Size: " + FormatBytes(m_CachedTexturesSize), m_StyleInfoCardTextWrapped);
                 long estimatedSavings = (long)(m_CachedTexturesSize * 0.7f);
                 long estimatedCompressed = m_CachedTexturesSize - estimatedSavings;
-                GUILayout.Label("• Estimated compressed cache = " + FormatBytes(estimatedCompressed) + " (space saved: ~" + FormatBytes(estimatedSavings) + ")", m_StyleInfoCardTextWrapped);
-                GUILayout.Label("• Compression is lossless; no texture quality will be lost.", m_StyleInfoCardTextWrapped);
-                GUILayout.Label("• The operation may take several minutes depending on cache size.", m_StyleInfoCardTextWrapped);
-                
+                GUILayout.Label("• Estimated compressed cache = " + FormatBytes(estimatedCompressed) + " (space saved: ~" + FormatBytes(estimatedSavings) + ")", m_StyleInfoCardText);
+                GUILayout.Label("• Compression is lossless; no texture quality will be lost.", m_StyleInfoCardText);
+                GUILayout.Label("• The operation may take several minutes depending on cache size.", m_StyleInfoCardText);
+
                 GUILayout.Space(20);
 
                 GUILayout.BeginHorizontal();
@@ -2628,10 +2647,10 @@ namespace VPB
                 GUILayout.Label("• Current Compressed Size: " + FormatBytes(m_CachedVpbSize), m_StyleInfoCardTextWrapped);
                 long estimatedDecompressed = (long)(m_CachedVpbSize * 4.6f);
                 long extraSpaceNeeded = estimatedDecompressed - m_CachedVpbSize;
-                GUILayout.Label("• Estimated native cache = " + FormatBytes(estimatedDecompressed) + " (extra space needed: ~" + FormatBytes(extraSpaceNeeded) + ")", m_StyleInfoCardTextWrapped);
-                GUILayout.Label("• This should only be used if you plan to stop using the VPB plugin.", m_StyleInfoCardTextWrapped);
-                GUILayout.Label("• The operation may take several minutes.", m_StyleInfoCardTextWrapped);
-                
+                GUILayout.Label("• Estimated native cache = " + FormatBytes(estimatedDecompressed) + " (extra space needed: ~" + FormatBytes(extraSpaceNeeded) + ")", m_StyleInfoCardText);
+                GUILayout.Label("• This should only be used if you plan to stop using the VPB plugin.", m_StyleInfoCardText);
+                GUILayout.Label("• The operation may take several minutes.", m_StyleInfoCardText);
+
                 GUILayout.Space(20);
 
                 GUILayout.BeginHorizontal();
@@ -2657,17 +2676,18 @@ namespace VPB
             else
             {
                 GUILayout.BeginVertical(m_StyleSection);
-                
+
                 // Buttons layout: Compress, Decompress, Close
                 GUILayout.BeginHorizontal();
-                
+
                 var prevBg = GUI.backgroundColor;
                 GUI.backgroundColor = new Color(0.4f, 0.8f, 0.4f, 1f); // More vibrant green
                 if (GUILayout.Button("Compress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
                 {
                     m_CachedTexturesSize = -1;
-                    System.Threading.ThreadPool.QueueUserWorkItem((state) => {
-                        try { m_CachedTexturesSize = GetTexturesFolderSize(); } catch {}
+                    System.Threading.ThreadPool.QueueUserWorkItem((state) =>
+                    {
+                        try { m_CachedTexturesSize = GetTexturesFolderSize(); } catch { }
                     });
                     m_CompressConfirmRequested = true;
                 }
@@ -2678,14 +2698,15 @@ namespace VPB
                 if (GUILayout.Button("Decompress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
                 {
                     m_CachedVpbSize = -1;
-                    System.Threading.ThreadPool.QueueUserWorkItem((state) => {
-                        try { m_CachedVpbSize = GetVpbCacheFolderSize(); } catch {}
+                    System.Threading.ThreadPool.QueueUserWorkItem((state) =>
+                    {
+                        try { m_CachedVpbSize = GetVpbCacheFolderSize(); } catch { }
                     });
                     m_DecompressConfirmRequested = true;
                 }
-                
+
                 GUILayout.Space(10);
-                
+
                 GUI.backgroundColor = prevBg;
                 if (GUILayout.Button("Close", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
                 {
@@ -2693,7 +2714,7 @@ namespace VPB
                 }
 
                 GUILayout.EndHorizontal();
-                
+
                 GUILayout.EndVertical();
             }
 
@@ -2720,7 +2741,7 @@ namespace VPB
             {
                 string path = GetCacheDir();
                 if (!Directory.Exists(path)) return 0;
-                
+
                 long size = 0;
                 List<string> fileList = new List<string>();
                 FileManager.SafeGetFiles(path, "*.*", fileList);
@@ -2738,44 +2759,8 @@ namespace VPB
             try
             {
                 if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
-                
-                string[] files;
-                try
-                {
-                    string sig = "0";
-                    try { sig = Directory.GetLastWriteTimeUtc(path).ToBinary().ToString(); } catch { sig = "0"; }
-                    string cacheKey = "cache:list|dir=" + (Path.GetFullPath(path).Replace('\\', '/').TrimEnd('/')) + "|pat=*.vamcache";
-                    var cached = new List<VpbLocalDatabase.SystemFileRow>();
-                    if (VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached) && cached.Count > 0)
-                    {
-                        files = new string[cached.Count];
-                        for (int i = 0; i < cached.Count; i++) files[i] = cached[i].Path;
-                    }
-                    else
-                    {
-                        files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
-                        try
-                        {
-                            var rows = new List<VpbLocalDatabase.SystemFileRow>(files.Length);
-                            for (int i = 0; i < files.Length; i++)
-                            {
-                                string p = files[i];
-                                if (string.IsNullOrEmpty(p)) continue;
-                                var r = new VpbLocalDatabase.SystemFileRow();
-                                try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
-                                r.LastWriteBinaryOrInvalid = long.MinValue;
-                                r.SizeOrInvalid = long.MinValue;
-                                rows.Add(r);
-                            }
-                            if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
-                        }
-                        catch { }
-                    }
-                }
-                catch
-                {
-                    files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
-                }
+
+                string[] files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
                 int count = 0;
                 foreach (var file in files)
                 {
@@ -2805,7 +2790,7 @@ namespace VPB
 
         private int GetVamCacheFileCount()
         {
-             return GetVamCacheFileCount(MVR.FileManagement.CacheManager.GetTextureCacheDir(), Settings.Instance.ThumbnailThreshold.Value);
+            return GetVamCacheFileCount(MVR.FileManagement.CacheManager.GetTextureCacheDir(), Settings.Instance.ThumbnailThreshold.Value);
         }
 
 
@@ -2815,7 +2800,7 @@ namespace VPB
             {
                 string path = MVR.FileManagement.CacheManager.GetTextureCacheDir();
                 if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
-                
+
                 long size = 0;
                 string[] files;
                 try
@@ -2897,6 +2882,177 @@ namespace VPB
                 dblSByte = bytes / 1024.0;
             }
             return String.Format("{0:0.##} {1}", dblSByte, Suffix[i]);
+        }
+
+        void DrawRemoveWindow(int windowID)
+        {
+            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+            {
+                Input.ResetInputAxes();
+            }
+
+            if (Event.current.type == EventType.KeyDown)
+            {
+                if (GUI.GetNameOfFocusedControl() == "RemoveFilter")
+                {
+                }
+            }
+
+            GUILayout.BeginVertical(m_StylePanel);
+
+            // Header
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Remove Old/Damaged", m_StyleHeader, GUILayout.ExpandWidth(false));
+
+            GUILayout.Space(20);
+            GUILayout.Label("Filter:", GUILayout.Width(50));
+            GUI.SetNextControlName("RemoveFilter");
+            m_RemoveFilter = GUILayout.TextField(m_RemoveFilter, GUILayout.MinWidth(100), GUILayout.MaxWidth(300));
+            if (GUILayout.Button("Clear", m_StyleButtonSmall, GUILayout.Width(50)))
+            {
+                m_RemoveFilter = "";
+                GUI.FocusControl("");
+            }
+
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
+            {
+                m_ShowRemoveWindow = false;
+            }
+            GUILayout.EndHorizontal();
+
+            m_ExcludeOld = GUILayout.Toggle(m_ExcludeOld, "Exclude Old");
+
+            GUILayout.Space(5);
+
+            // List
+            GUILayout.BeginVertical(m_StyleSection);
+
+            // Table Headers
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("", GUILayout.Width(25));
+            GUILayout.Label("Type", m_StyleInfoCardTitle, GUILayout.Width(80));
+            GUILayout.Label("Package Name", m_StyleInfoCardTitle, GUILayout.Width(200));
+            GUILayout.Label("Path/Info", m_StyleInfoCardTitle);
+            GUILayout.EndHorizontal();
+
+            // Manual Scroll Wheel Handling for Remove Window
+            float removeScrollDelta = 0;
+            bool removeScrollConsumed = false;
+            Rect removeRect = new Rect(0, 0, 1000, 1000);
+            if (Event.current.type == EventType.ScrollWheel && removeRect.Contains(Event.current.mousePosition))
+            {
+                removeScrollDelta = Event.current.delta.y;
+                removeScrollConsumed = true;
+            }
+            else if (Input.mouseScrollDelta.y != 0 && removeRect.Contains(Event.current.mousePosition))
+            {
+                removeScrollDelta = -Input.mouseScrollDelta.y;
+            }
+
+            if (removeScrollDelta != 0)
+            {
+                m_RemoveScroll.y += removeScrollDelta * 20;
+                m_RemoveScroll.y = Mathf.Max(0, m_RemoveScroll.y);
+                if (removeScrollConsumed) Event.current.Use();
+            }
+
+            m_RemoveScroll = GUILayout.BeginScrollView(m_RemoveScroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar, GUI.skin.box);
+
+
+            for (int i = 0; i < m_RemoveList.Count; i++)
+            {
+                var item = m_RemoveList[i];
+                if (m_ExcludeOld && item.Type == "OldVersion") continue;
+
+                if (!string.IsNullOrEmpty(m_RemoveFilter) &&
+                    !item.Uid.ToLower().Contains(m_RemoveFilter.ToLower()) &&
+                    !item.Type.ToLower().Contains(m_RemoveFilter.ToLower()))
+                {
+                    continue;
+                }
+
+                GUILayout.BeginHorizontal();
+                item.Checked = GUILayout.Toggle(item.Checked, "", GUILayout.Width(25));
+                GUILayout.Label(item.Type, GUILayout.Width(80));
+                GUILayout.Label(item.Uid, GUILayout.Width(200));
+                GUILayout.Label(Path.GetDirectoryName(item.Path));
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.EndScrollView();
+            GUILayout.EndVertical();
+
+            GUILayout.Space(5);
+
+            // Buttons
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Select All", m_StyleButton))
+            {
+                foreach (var item in m_RemoveList)
+                {
+                    if (m_ExcludeOld && item.Type == "OldVersion") continue;
+                    item.Checked = true;
+                }
+            }
+            if (GUILayout.Button("Select None", m_StyleButton))
+            {
+                foreach (var item in m_RemoveList) item.Checked = false;
+            }
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Remove Selected", m_StyleButtonDanger))
+            {
+                PerformRemove();
+                m_ShowRemoveWindow = false;
+            }
+            GUILayout.EndHorizontal();
+
+            // Resize handle
+            var resizeRect = new Rect(m_RemoveWindowRect.width - 30, m_RemoveWindowRect.height - 30, 30, 30);
+            GUI.Box(new Rect(m_RemoveWindowRect.width - 20, m_RemoveWindowRect.height - 20, 20, 20), "◢", m_StyleInfoIcon);
+
+            int resizeControlID = GUIUtility.GetControlID(FocusType.Passive);
+            switch (Event.current.GetTypeForControl(resizeControlID))
+            {
+                case EventType.MouseDown:
+                    if (resizeRect.Contains(Event.current.mousePosition))
+                    {
+                        GUIUtility.hotControl = resizeControlID;
+                        Event.current.Use();
+                    }
+                    break;
+                case EventType.MouseUp:
+                    if (GUIUtility.hotControl == resizeControlID)
+                    {
+                        GUIUtility.hotControl = 0;
+                        Event.current.Use();
+                    }
+                    break;
+                case EventType.MouseDrag:
+                    if (GUIUtility.hotControl == resizeControlID)
+                    {
+                        m_RemoveWindowRect.width += Event.current.delta.x;
+                        m_RemoveWindowRect.height += Event.current.delta.y;
+                        m_RemoveWindowRect.width = Mathf.Max(m_RemoveWindowRect.width, 300);
+                        m_RemoveWindowRect.height = Mathf.Max(m_RemoveWindowRect.height, 200);
+                        Event.current.Use();
+                    }
+                    break;
+            }
+
+            // Consume ScrollWheel event if inside window to prevent game scrolling
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                Event.current.Use();
+            }
+
+            GUILayout.EndVertical();
+
+            // Drag window (excluding resize handle area to avoid conflict)
+            if (Event.current.type != EventType.MouseDrag || !resizeRect.Contains(Event.current.mousePosition))
+            {
+                GUI.DragWindow();
+            }
         }
 
         public class ButtonHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler

@@ -12,8 +12,8 @@ namespace VPB
     {
         // Selection toolbox ("tbox")
         private GameObject tbox;
-        private Text       tboxLabel;
-        private Text       tboxHintLabel;
+        private Text tboxLabel;
+        private Text tboxHintLabel;
         private GameObject tboxCopyPkgNamesBtn;
         private GameObject tboxDeleteBtn;
         private GameObject tboxCleanupBtn;
@@ -37,6 +37,7 @@ namespace VPB
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
+        private GameObject tboxSceneImportBtn;
 
         private static void SetTboxButtonEnabledVisual(GameObject go, bool enabled, float disabledAlpha = 0.35f)
         {
@@ -64,20 +65,20 @@ namespace VPB
         private string tboxCopyNamesTooltipLast = null;
 
         // Responsive tbox action buttons: 1–2 rows, flexible widths
-        private GameObject    tboxButtonsFlexRoot;
+        private GameObject tboxButtonsFlexRoot;
         private RectTransform tboxButtonsFlexRootRT;
-        private GameObject    tboxBtnRow0GO;
-        private GameObject    tboxBtnRow1GO;
+        private GameObject tboxBtnRow0GO;
+        private GameObject tboxBtnRow1GO;
         private RectTransform tboxBtnRow0RT;
         private RectTransform tboxBtnRow1RT;
         private LayoutElement tboxBtnRow0LE;
         private LayoutElement tboxBtnRow1LE;
         private HorizontalLayoutGroup tboxBtnRow0HLG;
         private HorizontalLayoutGroup tboxBtnRow1HLG;
-        private GameObject    tboxButtonStash;
-        private int           tboxButtonLayoutRows = 1;
-        private float         tboxLastFlexAvailW = -1f;
-        private const float   tboxBtnRowGap = 4f;
+        private GameObject tboxButtonStash;
+        private int tboxButtonLayoutRows = 1;
+        private float tboxLastFlexAvailW = -1f;
+        private const float tboxBtnRowGap = 4f;
 
         private static void TboxConfigureActionButtonFlex(GameObject go, float minW, float prefW, float innerRowH)
         {
@@ -132,6 +133,7 @@ namespace VPB
             one(tboxLoadDepsBtn);
             one(tboxCacheTexturesBtn);
             one(tboxCopyPkgNamesBtn);
+            one(tboxSceneImportBtn);
         }
 
         private void TboxDetachAllActionButtonsForLayout()
@@ -165,6 +167,7 @@ namespace VPB
             d(tboxLoadDepsBtn);
             d(tboxCacheTexturesBtn);
             d(tboxCopyPkgNamesBtn);
+            d(tboxSceneImportBtn);
         }
 
         private static void TboxPopulateRowLtr(HorizontalLayoutGroup hlg, List<GameObject> listLtr)
@@ -257,6 +260,7 @@ namespace VPB
             if (tboxLoadDepsBtn != null) ltr.Add(tboxLoadDepsBtn);
             if (tboxCacheTexturesBtn != null) ltr.Add(tboxCacheTexturesBtn);
             if (tboxCopyPkgNamesBtn != null) ltr.Add(tboxCopyPkgNamesBtn);
+            if (tboxSceneImportBtn != null) ltr.Add(tboxSceneImportBtn);
 
             var rtl = new List<GameObject>(ltr.Count);
             for (int i = ltr.Count - 1; i >= 0; i--)
@@ -327,15 +331,15 @@ namespace VPB
         }
 
         // Expand/collapse state
-        private bool  tboxIsHovered  = false;
-        private bool  tboxPinned     = false;
-        private float tboxExpandT    = 0f;        // 0 = collapsed, 1 = expanded
+        private bool tboxIsHovered = false;
+        private bool tboxPinned = false;
+        private float tboxExpandT = 0f;        // 0 = collapsed, 1 = expanded
 
         private RectTransform tboxRT;
-        private CanvasGroup   tboxLabelCG;        // fades OUT when expanding
-        private CanvasGroup   tboxButtonsCG;      // fades IN when expanding
-        private GameObject    tboxPinBtn;
-        private Text          tboxPinBtnText;
+        private CanvasGroup tboxLabelCG;        // fades OUT when expanding
+        private CanvasGroup tboxButtonsCG;      // fades IN when expanding
+        private GameObject tboxPinBtn;
+        private Text tboxPinBtnText;
 
         // Row height: matches the collapsed bar height set by the layout system.
         // Updated by layout code (UI.Layout.cs) and innerPaneScaleActions.
@@ -353,7 +357,7 @@ namespace VPB
             // Reuse the unified info bar (hoverPath container) as the tbox
             if (hoverPathRT == null) return;
 
-            tbox   = hoverPathRT.gameObject;
+            tbox = hoverPathRT.gameObject;
             tboxRT = hoverPathRT;
             tbox.name = "InfoBar";
 
@@ -372,11 +376,11 @@ namespace VPB
             // Label layer occupies the BOTTOM row (always visible), leaving 48 px on right for pin
             var labelLayerRT = labelGO.GetComponent<RectTransform>();
             if (labelLayerRT == null) labelLayerRT = labelGO.AddComponent<RectTransform>();
-            labelLayerRT.anchorMin        = new Vector2(0f, 0f);
-            labelLayerRT.anchorMax        = new Vector2(1f, 0f);
-            labelLayerRT.pivot            = new Vector2(0.5f, 0f);
+            labelLayerRT.anchorMin = new Vector2(0f, 0f);
+            labelLayerRT.anchorMax = new Vector2(1f, 0f);
+            labelLayerRT.pivot = new Vector2(0.5f, 0f);
             labelLayerRT.anchoredPosition = Vector2.zero;
-            labelLayerRT.sizeDelta        = new Vector2(-48f, tboxInfoRowHeight);
+            labelLayerRT.sizeDelta = new Vector2(-48f, tboxInfoRowHeight);
             tboxLabelLayerRT = labelLayerRT;
 
             var rowGO = new GameObject("TboxLabelRow");
@@ -388,67 +392,67 @@ namespace VPB
             rowRT.offsetMax = Vector2.zero;
 
             var rowHLG = rowGO.AddComponent<HorizontalLayoutGroup>();
-            rowHLG.childAlignment      = TextAnchor.MiddleCenter;
-            rowHLG.spacing             = 12f;
-            rowHLG.childForceExpandWidth  = false;
+            rowHLG.childAlignment = TextAnchor.MiddleCenter;
+            rowHLG.spacing = 12f;
+            rowHLG.childForceExpandWidth = false;
             rowHLG.childForceExpandHeight = true;
-            rowHLG.childControlWidth   = true;
-            rowHLG.childControlHeight  = true;
-            rowHLG.padding             = new RectOffset(8, 8, 0, 0);
+            rowHLG.childControlWidth = true;
+            rowHLG.childControlHeight = true;
+            rowHLG.padding = new RectOffset(8, 8, 0, 0);
 
             const int tboxCollapsedFont = 18;
 
             var labelTextGO = new GameObject("Text");
             labelTextGO.transform.SetParent(rowGO.transform, false);
             tboxLabel = labelTextGO.AddComponent<Text>();
-            tboxLabel.font      = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            tboxLabel.fontSize  = tboxCollapsedFont;
+            tboxLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            tboxLabel.fontSize = tboxCollapsedFont;
             tboxLabel.fontStyle = FontStyle.Bold;
-            tboxLabel.color     = new Color(0.92f, 0.92f, 0.92f, 1f);
+            tboxLabel.color = new Color(0.92f, 0.92f, 0.92f, 1f);
             tboxLabel.alignment = TextAnchor.MiddleCenter;
             tboxLabel.raycastTarget = false;
             var labelShadow = labelTextGO.AddComponent<Shadow>();
-            labelShadow.effectColor    = new Color(0f, 0f, 0f, 0.5f);
+            labelShadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
             labelShadow.effectDistance = new Vector2(1f, -1f);
             var labelCSF = labelTextGO.AddComponent<ContentSizeFitter>();
             labelCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            labelCSF.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
+            labelCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             var hintTextGO = new GameObject("HoverHint");
             hintTextGO.transform.SetParent(rowGO.transform, false);
             tboxHintLabel = hintTextGO.AddComponent<Text>();
-            tboxHintLabel.font      = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            tboxHintLabel.fontSize  = tboxCollapsedFont;
+            tboxHintLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            tboxHintLabel.fontSize = tboxCollapsedFont;
             tboxHintLabel.fontStyle = FontStyle.Normal;
-            tboxHintLabel.color     = new Color(0.50f, 0.50f, 0.50f, 1f);
+            tboxHintLabel.color = new Color(0.50f, 0.50f, 0.50f, 1f);
             tboxHintLabel.alignment = TextAnchor.MiddleCenter;
             tboxHintLabel.raycastTarget = false;
-            tboxHintLabel.text      = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
+            tboxHintLabel.text = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
             hintTextGO.SetActive(false);
             var hintShadow = hintTextGO.AddComponent<Shadow>();
-            hintShadow.effectColor    = new Color(0f, 0f, 0f, 0.5f);
+            hintShadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
             hintShadow.effectDistance = new Vector2(1f, -1f);
             var hintCSF = hintTextGO.AddComponent<ContentSizeFitter>();
             hintCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            hintCSF.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
+            hintCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // ── Buttons panel (expanded view) ─────────────────────────────────────
             var bpGO = new GameObject("TboxButtonsLayer");
             bpGO.transform.SetParent(tbox.transform, false);
             tboxButtonsCG = bpGO.AddComponent<CanvasGroup>();
-            tboxButtonsCG.alpha          = 0f;
+            tboxButtonsCG.alpha = 0f;
             tboxButtonsCG.blocksRaycasts = false;
-            tboxButtonsCG.interactable   = false;
+            tboxButtonsCG.interactable = false;
 
             // Buttons layer sits in the TOP row — directly above the label row.
             // Revealed by RectMask2D as the bar grows upward.
             var bpRT = bpGO.GetComponent<RectTransform>();
             if (bpRT == null) bpRT = bpGO.AddComponent<RectTransform>();
-            bpRT.anchorMin        = new Vector2(0f, 0f);
-            bpRT.anchorMax        = new Vector2(1f, 0f);
-            bpRT.pivot            = new Vector2(0.5f, 0f);
+            bpRT.anchorMin = new Vector2(0f, 0f);
+            bpRT.anchorMax = new Vector2(1f, 0f);
+            bpRT.pivot = new Vector2(0.5f, 0f);
             bpRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight); // sits one row above bottom
-            bpRT.sizeDelta        = new Vector2(-48f, tboxInfoRowHeight);
+            bpRT.sizeDelta = new Vector2(-48f, tboxInfoRowHeight);
             tboxButtonsLayerRT = bpRT;
 
             // Flex root + two HLG rows (second row toggled when wrapping)
@@ -525,6 +529,17 @@ namespace VPB
             const int tboxActionBtnFont = 16;
 
             // Placeholders — layout is resolved in RefreshTboxFlexButtonLayout (stretch + LayoutElement).
+
+            tboxSceneImportBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.scene_import", "Import"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxSceneImportSelectedPackage
+            );
+            tboxSceneImportBtn.name = "Tbox_SceneImport";
+            TboxConfigureActionButtonFlex(tboxSceneImportBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxSceneImportBtn, "gallery.tooltip.scene_import", "Import presets from a scene");
+
             tboxCopyPkgNamesBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 VPBTranslation.T("gallery.tbox.copy_names", "Copy Names"), tboxActionBtnFont,
@@ -904,15 +919,15 @@ namespace VPB
             tboxPinBtn.name = "Tbox_Pin";
             // Pin button is anchored to the bottom row (tooltip row), not the full bar
             var pinRT = tboxPinBtn.GetComponent<RectTransform>();
-            pinRT.anchorMin        = new Vector2(1f, 0f);
-            pinRT.anchorMax        = new Vector2(1f, 0f);
-            pinRT.pivot            = new Vector2(1f, 0.5f);
+            pinRT.anchorMin = new Vector2(1f, 0f);
+            pinRT.anchorMax = new Vector2(1f, 0f);
+            pinRT.pivot = new Vector2(1f, 0.5f);
             pinRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight * 0.5f);
-            pinRT.sizeDelta        = new Vector2(44f, 44f);
+            pinRT.sizeDelta = new Vector2(44f, 44f);
 
             tboxPinBtnText = tboxPinBtn.GetComponentInChildren<Text>();
 
-            tboxPinOnSprite  = UI.LoadIconSprite("vpb_icons/pin_on.png",  new Color(0.78f, 0.78f, 0.78f, 1f));
+            tboxPinOnSprite = UI.LoadIconSprite("vpb_icons/pin_on.png", new Color(0.78f, 0.78f, 0.78f, 1f));
             tboxPinOffSprite = UI.LoadIconSprite("vpb_icons/pin_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
             { Sprite init = tboxPinOffSprite ?? tboxPinOnSprite; if (init != null) { UI.AddIconToButton(tboxPinBtn, init); tboxPinIconImage = tboxPinBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
@@ -924,11 +939,11 @@ namespace VPB
                 sepImg.color = new Color(1f, 1f, 1f, 0.08f);
                 sepImg.raycastTarget = false;
                 var sepRT = sep.GetComponent<RectTransform>();
-                sepRT.anchorMin        = new Vector2(0f, 0.15f);
-                sepRT.anchorMax        = new Vector2(0f, 0.85f);
-                sepRT.pivot            = new Vector2(0f, 0.5f);
+                sepRT.anchorMin = new Vector2(0f, 0.15f);
+                sepRT.anchorMax = new Vector2(0f, 0.85f);
+                sepRT.pivot = new Vector2(0f, 0.5f);
                 sepRT.anchoredPosition = Vector2.zero;
-                sepRT.sizeDelta        = new Vector2(1f, 0f);
+                sepRT.sizeDelta = new Vector2(1f, 0f);
             }
 
             // Thin separator line at the row boundary (between tooltip row and toolbox row)
@@ -939,15 +954,16 @@ namespace VPB
                 rowSepImg.color = new Color(1f, 1f, 1f, 0.12f);
                 rowSepImg.raycastTarget = false;
                 var rowSepRT = rowSepGO.GetComponent<RectTransform>();
-                rowSepRT.anchorMin        = new Vector2(0f, 0f);
-                rowSepRT.anchorMax        = new Vector2(1f, 0f);
-                rowSepRT.pivot            = new Vector2(0.5f, 0f);
+                rowSepRT.anchorMin = new Vector2(0f, 0f);
+                rowSepRT.anchorMax = new Vector2(1f, 0f);
+                rowSepRT.pivot = new Vector2(0.5f, 0f);
                 rowSepRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight);
-                rowSepRT.sizeDelta        = new Vector2(0f, 1f);
+                rowSepRT.sizeDelta = new Vector2(0f, 1f);
 
                 // Scale action to reposition separator when InnerPaneScale changes
                 var rsRT = rowSepRT;
-                innerPaneScaleActions.Add(s => {
+                innerPaneScaleActions.Add(s =>
+                {
                     if (rsRT != null) rsRT.anchoredPosition = new Vector2(0f, 60f * s);
                 });
             }
@@ -957,7 +973,8 @@ namespace VPB
                 var lRT = tboxLabelLayerRT;
                 var bRT = tboxButtonsLayerRT;
                 var pRT = pinRT;
-                innerPaneScaleActions.Add(s => {
+                innerPaneScaleActions.Add(s =>
+                {
                     float rowH = 60f * s;
                     tboxInfoRowHeight = rowH;
                     if (lRT != null) lRT.sizeDelta = new Vector2(lRT.sizeDelta.x, rowH);
@@ -979,13 +996,13 @@ namespace VPB
             if (tboxPinBtnText == null) return;
             if (tboxPinned)
             {
-                tboxPinBtnText.text  = "●";
+                tboxPinBtnText.text = "●";
                 tboxPinBtnText.color = new Color(0.45f, 0.75f, 0.90f, 1f); // teal accent
                 if (tboxPinIconImage != null && tboxPinOnSprite != null) tboxPinIconImage.sprite = tboxPinOnSprite;
             }
             else
             {
-                tboxPinBtnText.text  = "○";
+                tboxPinBtnText.text = "○";
                 tboxPinBtnText.color = new Color(0.45f, 0.45f, 0.45f, 1f);
                 if (tboxPinIconImage != null && tboxPinOffSprite != null) tboxPinIconImage.sprite = tboxPinOffSprite;
             }
@@ -1009,7 +1026,7 @@ namespace VPB
                 }
             }
 
-            int sel   = (selectedFiles != null) ? selectedFiles.Count : 0;
+            int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
             int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
 
             // Update label: "X Selected  ·  Y Items" when selected, or just "Y Items"
@@ -1033,7 +1050,7 @@ namespace VPB
             bool canExpand = sel > 0 || cleanupModeActive;
             if (!canExpand)
             {
-                tboxExpandT   = 0f;
+                tboxExpandT = 0f;
                 tboxIsHovered = false;
                 tboxButtonLayoutRows = 1;
                 if (tboxButtonsLayerRT != null)
@@ -1092,9 +1109,9 @@ namespace VPB
             if (tboxButtonsCG != null)
             {
                 bool showButtons = canExpand && tboxExpandT > 0.05f;
-                tboxButtonsCG.alpha          = showButtons ? 1f : 0f;
+                tboxButtonsCG.alpha = showButtons ? 1f : 0f;
                 tboxButtonsCG.blocksRaycasts = canExpand && tboxExpandT > 0.5f;
-                tboxButtonsCG.interactable   = canExpand && tboxExpandT > 0.85f;
+                tboxButtonsCG.interactable = canExpand && tboxExpandT > 0.85f;
             }
 
             if (sel > 0 || cleanupModeActive)

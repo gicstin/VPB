@@ -13,7 +13,7 @@
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
-    <VaMPath Condition="'$(VaMPath)' == ''">C:\vam</VaMPath>
+    <VaMPath Condition="'$(VaMPath)' == ''">F:/VamDev</VaMPath>
     <TargetFrameworkProfile>
     </TargetFrameworkProfile>
   </PropertyGroup>
@@ -269,8 +269,13 @@
   <ItemGroup>
     <Compile Include="src\ByteArrayPool.cs" />
     <Compile Include="src\ClothingLoadingUtils.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />
     <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\GlobalInfo.cs" />
+    <Compile Include="src\util\CUAClothing.Data.cs" />
+    <Compile Include="src\util\CUAClothing.cs" />
+    <Compile Include="src\util\CUAConverter.cs" />
+    <Compile Include="src\util\JSONExtensions.cs" />
     <Compile Include="src\VdsLauncher.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />
@@ -433,18 +438,15 @@
     <Compile Include="src\Properties\AssemblyInfo.cs" />
     <Compile Include="src\VamHookPlugin_Interface.cs" />
   </ItemGroup>
-
   <ItemGroup>
     <Compile Include="$(IntermediateOutputPath)PluginVersion.g.cs" />
   </ItemGroup>
-
   <ItemGroup>
     <Compile Remove="_vam_patch\**" />
     <EmbeddedResource Remove="vam_patch\**" />
     <None Remove="vam_patch\**" />
     <Page Remove="vam_patch\**" />
   </ItemGroup>
-
   <!--
     plugin_version.txt: line 1 = base (e.g. 0.28.0 or v0.28.0), line 2 = next build counter (integer).
     Before each compile: if line 1 changed vs last build (see obj/VPB_last_plugin_base.txt), line 2 resets to 1;
@@ -461,7 +463,6 @@
     <MakeDir Directories="$(PluginVersionIntermediateDir)" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_PVProjDir)\scripts\PreparePluginVersion.ps1&quot; -VersionFile &quot;$(_PVProjDir)\plugin_version.txt&quot; -IntermediateDir &quot;$(PluginVersionIntermediateDir)&quot; -ProjectDir &quot;$(_PVProjDir)&quot;" WorkingDirectory="$(_PVProjDir)" />
   </Target>
-
   <!--
     Keeps vam_patch/patch_manifest.json vpb_icons rows in sync with vam_patch/BepInEx/plugins/vpb_icons on disk.
     Set SkipVPBPatchManifestSync=true to skip (e.g. CI). Design-time builds are skipped.
@@ -472,9 +473,7 @@
     </PropertyGroup>
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
   </Target>
-
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-
   <PropertyGroup>
     <!-- DLL + vpb_translations + vpb_fonts + vpb_icons: same PostBuildEvent so copies always run with the DLL (AfterTargets=PostBuildEvent is unreliable across MSBuild/VS). Robocopy: exit 0-7 = success. -->
     <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\scripts\VPB.dll"
