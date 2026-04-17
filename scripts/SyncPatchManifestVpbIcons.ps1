@@ -68,7 +68,14 @@ if (-not $inserted) {
 }
 
 $json = $out | ConvertTo-Json -Depth 5
-$utf8NoBom = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllText($manifestPath, $json + "`r`n", $utf8NoBom)
+$newContent = $json + "`r`n"
 
-Write-Host "Updated $manifestPath ($($iconBlock.Count) vpb_icons rows, $($iconRelPaths.Count) files)."
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+$currentContent = [System.IO.File]::ReadAllText($manifestPath, $utf8NoBom)
+
+if ($currentContent -eq $newContent) {
+    Write-Host "No changes needed for $manifestPath ($($iconBlock.Count) vpb_icons rows, $($iconRelPaths.Count) files)."
+} else {
+    [System.IO.File]::WriteAllText($manifestPath, $newContent, $utf8NoBom)
+    Write-Host "Updated $manifestPath ($($iconBlock.Count) vpb_icons rows, $($iconRelPaths.Count) files)."
+}

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    Local configuration file for developer-specific settings.
+
+    This file is tracked in git but can be customized per developer.
+    To prevent your local changes from being committed, add this file to your local gitignore:
+
+    Option A: git update-index (with skip-worktree flag) VPB.local.props
+
+    Option B: Manually add to .git/info/exclude:
+    echo VPB.local.props >> .git/info/exclude
+  -->
+  <PropertyGroup>
+    <!-- Path to VaM installation directory -->
+    <VaMPath>C:\vam</VaMPath>
+
+    <!-- Add more developer-specific properties below as needed -->
+    <!-- Example: <CustomSetting>Value</CustomSetting> -->
+  </PropertyGroup>
+</Project>
