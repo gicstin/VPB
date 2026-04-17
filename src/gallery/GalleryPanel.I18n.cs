@@ -196,9 +196,7 @@ namespace VPB
 
         private void SetupLanguageSwitcher(GameObject titleBarGO)
         {
-            // Top-left of the title bar — the first thing the eye reaches.
-            // The title text starts at x=60 to leave room for this 50×50 button.
-            // close=[1150,1200], minimize=[1095,1145] are far to the right and unaffected.
+            // Keep language beside the settings icon to avoid overlap with floating-mode top-left resize handle.
 
             languageSwitcherBtnGO = UI.CreateUIButton(
                 titleBarGO, 40, 40,
@@ -233,11 +231,11 @@ namespace VPB
             }
 
             RectTransform langRT = languageSwitcherBtnGO.GetComponent<RectTransform>();
-            // Match the title-bar icon row sizing/centering (like Refresh / Star).
-            langRT.anchorMin = new Vector2(0f, 0.5f);
-            langRT.anchorMax = new Vector2(0f, 0.5f);
-            langRT.pivot     = new Vector2(0f, 0.5f);
-            langRT.anchoredPosition = new Vector2(10f, 0f);
+            // Keep button row consistent: Language sits left of Settings (-230) with a 6px gap.
+            langRT.anchorMin = new Vector2(0.5f, 0.5f);
+            langRT.anchorMax = new Vector2(0.5f, 0.5f);
+            langRT.pivot     = new Vector2(0.5f, 0.5f);
+            langRT.anchoredPosition = new Vector2(-276f, 0f);
             langRT.sizeDelta = new Vector2(40f, 40f);
             // Ensure square sizing (defensive; button factory may override later in some layouts)
             if (Mathf.Abs(langRT.sizeDelta.x - langRT.sizeDelta.y) > 0.01f)
@@ -266,8 +264,7 @@ namespace VPB
             languageMenuPopupGO.SetActive(false);
 
             // ── Dropdown panel ─────────────────────────────────────────────────
-            // Anchored to top-right of the backdrop overlay so it sits right below the button.
-            // panel right edge at (backdrop.right - 112) ≈ button right edge at x=1088.
+            // Position below the language button on the left title-bar icon cluster.
             GameObject panel = new GameObject("LanguageMenuPanel");
             panel.transform.SetParent(languageMenuPopupGO.transform, false);
 
@@ -275,7 +272,7 @@ namespace VPB
             panelRT.anchorMin = new Vector2(0f, 1f);
             panelRT.anchorMax = new Vector2(0f, 1f);
             panelRT.pivot     = new Vector2(0f, 1f);
-            panelRT.anchoredPosition = new Vector2(0f, -72f);
+            panelRT.anchoredPosition = new Vector2(114f, -72f);
             panelRT.sizeDelta = new Vector2(230f, 50f); // height grows via ContentSizeFitter
 
             Image panelImg = panel.AddComponent<Image>();
