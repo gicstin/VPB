@@ -917,5 +917,11 @@ namespace VPB
 
         // Tracks panels hidden when a save flow starts, so they can be restored when it ends
         private List<Canvas> _canvasesHiddenForSave;
+        private List<GalleryPanel> _panelsHiddenForSave;
+        // Scene save can hand off to VaM screenshot capture asynchronously; keep save mode
+        // active until that flow ends so overwrite/screenshot UI is not interrupted.
+        private Coroutine _sceneSaveFinalizeCoroutine;
+        private bool _sceneSaveSawScreenshotCamera;
+        private bool _sceneSaveRehideApplied;
     }
 }
