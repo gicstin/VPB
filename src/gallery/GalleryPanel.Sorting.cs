@@ -99,6 +99,7 @@ namespace VPB
                             recyclingGrid.SetItemCount(currentFilteredFiles.Count);
                             recyclingGrid.Refresh();
                         }
+                        ScrollGalleryToTop();
                         UpdatePaginationText();
                     }
                     catch { }
@@ -120,7 +121,7 @@ namespace VPB
                     // otherwise the user can't "clear" the mode without changing categories.
                     if (prevExclusive || nextExclusive)
                     {
-                        RefreshFiles(keepScroll: true);
+                        RefreshFiles(keepScroll: false);
                     }
                     else
                     {
@@ -134,7 +135,7 @@ namespace VPB
 
         /// <summary>
         /// Re-sorts the loaded file list and refreshes the recycling grid without re-running
-        /// <see cref="GalleryPanel.RefreshFiles"/> (package scan / coroutine). Preserves the centered item when possible.
+        /// <see cref="GalleryPanel.RefreshFiles"/> (package scan / coroutine), then resets to top.
         /// </summary>
         private bool TryReapplyFilesSortWithoutFullRefresh()
         {
@@ -144,11 +145,6 @@ namespace VPB
 
             try
             {
-                string anchorUid = null;
-                int centerIdx = recyclingGrid.GetCenterItemIndex();
-                if (centerIdx >= 0 && centerIdx < currentFilteredFiles.Count)
-                    anchorUid = currentFilteredFiles[centerIdx]?.Uid;
-
                 SortState st = GetSortState("Files");
                 ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
                 GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
@@ -161,20 +157,7 @@ namespace VPB
 
                 recyclingGrid.SetItemCount(currentFilteredFiles.Count);
                 recyclingGrid.Refresh();
-
-                if (anchorUid != null)
-                {
-                    int newIdx = -1;
-                    for (int i = 0; i < currentFilteredFiles.Count; i++)
-                    {
-                        if (string.Equals(currentFilteredFiles[i]?.Uid, anchorUid, StringComparison.OrdinalIgnoreCase))
-                        {
-                            newIdx = i;
-                            break;
-                        }
-                    }
-                    if (newIdx >= 0) recyclingGrid.ScrollToCenterItem(newIdx);
-                }
+                ScrollGalleryToTop();
 
                 UpdatePaginationText();
                 return true;
@@ -540,6 +523,7 @@ namespace VPB
                             recyclingGrid.SetItemCount(currentFilteredFiles.Count);
                             recyclingGrid.Refresh();
                         }
+                        ScrollGalleryToTop();
                         UpdatePaginationText();
                     }
                     catch { }

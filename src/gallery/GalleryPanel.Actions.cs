@@ -341,10 +341,33 @@ namespace VPB
             // Save scroll for the category we're leaving; prime the restore target for the new one.
             if (paramsChanged && hasLoadedContent && scrollRect != null)
             {
-                categoryScrollPositions[_prevCategoryKey] = scrollRect.verticalNormalizedPosition;
+                categoryScrollPositions[_prevCategoryKey] = Mathf.Clamp01(scrollRect.verticalNormalizedPosition);
+                sessionCategoryScrollKeys.Add(_prevCategoryKey);
                 SaveCategoryScrollCache();
             }
-            _pendingScrollRestore = categoryScrollPositions.TryGetValue(MakeCategoryScrollKey(title, path), out float _sp) ? _sp : 1f;
+            string nextCategoryKey = MakeCategoryScrollKey(title, path);
+            if (!hasLoadedContent)
+            {
+                // Cold launch should always start at top.
+                _pendingScrollRestore = 1f;
+            }
+            else if (paramsChanged)
+            {
+                // Category switch: only restore positions that were captured in this runtime session.
+                // Persisted cache values from previous runs are intentionally ignored here to prevent stale/random starts.
+                if (sessionCategoryScrollKeys.Contains(nextCategoryKey) &&
+                    categoryScrollPositions.TryGetValue(nextCategoryKey, out float _sp))
+                    _pendingScrollRestore = Mathf.Clamp01(_sp);
+                else
+                    _pendingScrollRestore = 1f;
+            }
+            else
+            {
+                // Same-view reopen/refresh can restore remembered position.
+                _pendingScrollRestore = categoryScrollPositions.TryGetValue(nextCategoryKey, out float _sp)
+                    ? Mathf.Clamp01(_sp)
+                    : 1f;
+            }
 
             currentExtension = extension;
             currentPath = path;
@@ -417,7 +440,7 @@ namespace VPB
 
             if (shouldRefresh)
             {
-                RefreshFiles(!paramsChanged);
+                RefreshFiles(hasLoadedContent && !paramsChanged);
                 refreshOnNextShow = false;
                 lastAppliedPackageRefreshTime = pkgRefreshTime;
                 LogGalleryCategoryTypeNavPhase("Show_after_RefreshFiles_invoke");

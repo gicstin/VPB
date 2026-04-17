@@ -112,6 +112,8 @@ namespace VPB
         private bool refreshOnNextShow;
         private bool hasLoadedContent = false;
         private Dictionary<string, float> categoryScrollPositions = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        // Tracks category keys that were written during this app session (not just loaded from disk cache).
+        private HashSet<string> sessionCategoryScrollKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private float _pendingScrollRestore = 1f;
         private bool _scrollCacheLoaded = false;
         private DateTime lastAppliedPackageRefreshTime = DateTime.MinValue;
