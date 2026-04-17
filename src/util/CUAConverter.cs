@@ -18,18 +18,22 @@ namespace VPB.src.util
         {
             var json = SuperController.singleton.LoadJSON(sceneJsonPath).AsObject;
 
+            var packageNameRegex = Regex.Match(sceneJsonPath, "([^/]*):");
+            string packageName = packageNameRegex.Success ? packageNameRegex.Groups[1].Value : null;
+
             // Replace any existing references to SELF: with the source package
             // Must be done before clothing items are created since they may reference self
-            var packageName = Regex.Match(sceneJsonPath, "([^/]*:)");
-            if (packageName.Success)
+            if (packageName != null)
             {
-                LogUtil.Log($"Applying package name {packageName.Groups[1].Value}");
-                var externalized = json.ToString().Replace("SELF:", packageName.Groups[1].Value);
+                LogUtil.Log($"Applying package name {packageName}");
+                var externalized = json.ToString().Replace("SELF:", packageName + ":");
                 json = JSONClass.Parse(externalized).AsObject;
             }
 
-            ConvertCUAToCUAClothingMutable(json);
+            ConvertCUAToCUAClothingMutable(json, packageName);
+
             if (onlyPersonAtoms) json.RemoveNonPersonAtomsMutable();
+
             return json;
         }
 
@@ -37,7 +41,7 @@ namespace VPB.src.util
         /// Convert CUAs linked to Person atoms to CUAClothing items
         /// </summary>
         /// <param name="sceneJson"></param>
-        public static void ConvertCUAToCUAClothingMutable(JSONClass sceneJson)
+        public static void ConvertCUAToCUAClothingMutable(JSONClass sceneJson, string sourcePackageId = null)
         {
             var atoms = sceneJson["atoms"].AsArray;
 
@@ -59,6 +63,7 @@ namespace VPB.src.util
                 }
             }
 
+            int i = 0;
             foreach (var cua in cuas)
             {
                 string linkTo = cua.GetStorable("control")?["linkTo"];
@@ -85,80 +90,119 @@ namespace VPB.src.util
 
                 var finalOffset = boneTransform.InverseTransformPoint(cuaTransform);
 
-                var clothingItem = new JSONClass();
-                clothingItem["id"] = "Custom/Clothing/Female/VPB/CUA Clothing/CUA Clothing Dummy.vam";
-                clothingItem["internalId"] = "VPB:CUA Clothing Dummy";
-                clothingItem["enabled"] = "true";
+
+                var gender = linkedPerson.GetStorable("geometry")["character"].Value.Split(' ')[0];
+
+                var clothingItem = CUAClothing.CreateAndSaveCUAClothing(cua, i, sourcePackageId, gender);
 
                 linkedPerson.GetStorable("geometry")["clothing"].AsArray.Add("dummy", clothingItem);
 
-                linkedPerson["storables"].Add(BuildCUAClothingStorable(finalOffset, linkedAtomBone, cua));
-                cua["on"] = "false";
+                linkedPerson["storables"].Add(CUAClothing.BuildCUAClothingStorable(cua, finalOffset, linkedAtomBone, clothingItem["internalId"]));
+
+                i++;
             }
         }
 
-        public static JSONClass BuildCUAClothingStorable(SimpleTransform offset, string parentBone, JSONClass cua)
+        public class BoneMeta
         {
-            var pluginManager = new JSONClass();
-            // TODO: handle multiple items
-            pluginManager["id"] = "VPB:CUA Clothing Dummy:plugin#0_Stopper.ClothingPluginManager";
+            public string ParentName;
+            public bool Symmetric;
 
-            var pluginMap = new JSONClass();
-            pluginMap["plugin#0"] = "Stopper.ClothingPluginManager.7:/Custom/Scripts/Stopper/ClothingPluginManager/ClothingPluginManager.cs";
-            pluginMap["plugin#1"] = "Skynet.CUAClothingAlt.7:/Custom/Scripts/Skynet/CUAClothingAlt.cs";
-            pluginManager["plugins"] = pluginMap;
-
-            var pluginData = new JSONClass();
-
-            pluginData["id"] = "plugin#1_Stopper.CUAClothing";
-            pluginData["xOffset"] = offset.Position.x.ToString("F5");
-            pluginData["yOffset"] = offset.Position.y.ToString("F5");
-            pluginData["zOffset"] = offset.Position.z.ToString("F5");
-            pluginData["xRotation"] = offset.Rotation.eulerAngles.x.ToString("F5");
-            pluginData["yRotation"] = offset.Rotation.eulerAngles.y.ToString("F5");
-            pluginData["zRotation"] = offset.Rotation.eulerAngles.z.ToString("F5");
-
-            var asset = cua.GetStorable("asset");
-
-            pluginData["assetName"] = asset["assetName"];
-            pluginData["Asset"] = asset["assetName"];
-            pluginData["assetUrl"] = asset["assetUrl"];
-            pluginData["Parent Bone"] = parentBone;
-
-            pluginManager["storables"] = new JSONArray() { pluginData };
-
-            return pluginManager;
+            public BoneMeta(string parentName, bool symmetric)
+            {
+                this.ParentName = parentName;
+                this.Symmetric = symmetric;
+            }
         }
 
-
-        static readonly Dictionary<string, string> SKELETON = new Dictionary<string, string>()
+        public static readonly Dictionary<string, BoneMeta> SKELETON = new Dictionary<string, BoneMeta>()
         {
-            { "hip", null },
-            { "abdomen", "hip" },
-            { "abdomen2", "abdomen" },
-            { "chest", "abdomen2" },
-            { "neck", "chest" },
-            { "head", "neck" },
-            { "rightEye", "head" },
-            { "leftEye", "head" },
-
+            { "hip", new BoneMeta(null, false) },
+                { "pelvis", new BoneMeta("hip", false) },
+                    { "Thigh", new BoneMeta("pelvis", true) },
+                        { "Shin", new BoneMeta("Thigh", true) },
+                            { "Foot", new BoneMeta("Shin", true) },
+                                { "Toe", new BoneMeta("Foot", true) },
+                                    { "BigToe", new BoneMeta("Toe", true) },
+                                    { "SmallToe1", new BoneMeta("Toe", true) },
+                                    { "SmallToe2", new BoneMeta("Toe", true) },
+                                    { "SmallToe3", new BoneMeta("Toe", true) },
+                                    { "SmallToe4", new BoneMeta("Toe", true) },
+                { "abdomen", new BoneMeta("hip", false) },
+                    { "abdomen2", new BoneMeta("abdomen", false) },
+                        { "chest", new BoneMeta("abdomen2", false) },
+                            { "neck", new BoneMeta("chest", false) },
+                                { "head", new BoneMeta("neck", false) },
+                                    { "Eye", new BoneMeta("head", true) },
+                            { "Collar", new BoneMeta("chest", true) },
+                                { "Shldr", new BoneMeta("Collar", true) },
+                                    { "ForeArm", new BoneMeta("Shldr", true) },
+                                        { "Hand", new BoneMeta("ForeArm", true) },
+                                            { "Thumb1", new BoneMeta("Hand", true) },
+                                                { "Thumb2", new BoneMeta("Thumb1", true) },
+                                                    { "Thumb3", new BoneMeta("Thumb2", true) },
+                                            { "Carpal1", new BoneMeta("Hand", true) },
+                                                { "Index1", new BoneMeta("Carpal1", true) },
+                                                    { "Index2", new BoneMeta("Index1", true) },
+                                                        { "Index3", new BoneMeta("Index2", true) },
+                                                { "Mid1", new BoneMeta("Carpal1", true) },
+                                                    { "Mid2", new BoneMeta("Mid1", true) },
+                                                        { "Mid3", new BoneMeta("Mid2", true) },
+                                            { "Carpal2", new BoneMeta("Hand", true) },
+                                                { "Ring1", new BoneMeta("Carpal1", true) },
+                                                    { "Ring2", new BoneMeta("Ring1", true) },
+                                                        { "Ring3", new BoneMeta("Ring2", true) },
+                                                { "Pinky1", new BoneMeta("Carpal1", true) },
+                                                    { "Pinky2", new BoneMeta("Pinky1", true) },
+                                                        { "Pinky3", new BoneMeta("Pinky2", true) },
+                            { "Pectoral", new BoneMeta("chest", true) },
         };
+
+        private static BoneMeta GetStartBoneMeta(string bone, out string side, out string name)
+        {
+            var regex = Regex.Match(bone, "^((?<side>[lr])(?<name>[A-Z].*))|(?<name>.*)");
+            if (regex.Success)
+            {
+                side = regex.Groups["side"].Value;
+                if (side == string.Empty) side = null;
+                name = regex.Groups["name"].Value;
+                return SKELETON[name];
+            } else
+            {
+                side = null;
+                name = null;
+                return null;
+            }
+        }
 
 
         /// <summary>
         /// Returns a list of bone names starting at the given bone and ending at the root bone
         /// </summary>
-        /// <param name="bone">The starting bone</param>
+        /// <param name="startBoneName">The starting bone</param>
         /// <returns></returns>
-        private static List<string> BonePathToRoot(string bone)
+        public static List<string> BonePathToRoot(string startBoneName)
         {
-            string currentBone = bone;
-            List<string> path = new List<string>() { bone };
-            var i = 0;
-            while (SKELETON.TryGetValue(currentBone, out currentBone) && currentBone != null && i < 50)
+            BoneMeta currentMeta = GetStartBoneMeta(startBoneName, out string side, out string currentName);
+            if (currentMeta == null) {
+                return null;
+            };
+            List<string> path = new List<string>();
+            for (var i = 0; currentMeta != null && i < 50; i++)
             {
-                path.Add(currentBone);
-                i++;
+                path.Add((currentMeta.Symmetric ? side : "") + currentName);
+                if (currentMeta.ParentName == null) break;
+                currentName = currentMeta.ParentName;
+                SKELETON.TryGetValue(currentMeta.ParentName, out currentMeta);
+            }
+            if (path.Count == 0)
+            {
+                LogUtil.LogError("Failed to trace skeleton from " + startBoneName + "! (invalid bone name)");
+                return null;
+            }
+            if (path.Last() != "hip")
+            {
+                LogUtil.LogError("Failed to trace skeleton from " + startBoneName + "! (no path to root bone)");
             }
             return path;
         }

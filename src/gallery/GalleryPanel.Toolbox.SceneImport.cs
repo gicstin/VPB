@@ -1,3 +1,4 @@
+using MeshVR;
 using MVR.FileManagement;
 using SimpleJSON;
 using System;
@@ -29,32 +30,62 @@ namespace VPB
 
                 var presetFile = selectedFiles[0];
 
-                LogUtil.Log($"Attempting to import from {presetFile}");
+                LogUtil.Log($"Attempting to import from {presetFile.Path}");
 
-                if (!TryGetTboxResolvablePackageState(presetFile, out string uid, out FileEntry f, out _, out _, out _))
-                    return;
-
-                if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out string absLocalJson, out _, false))
+                string normalizedPath = presetFile.Path;
+                string packageName;
+                string fileName;
+                var parts = presetFile.Path.Split(':');
+                if (parts.Length > 1)
                 {
-                    LogUtil.Log($"Importing {uid} from local scene {absLocalJson}");
-                    return;
+                    packageName = parts[0].Split('/').Last().Replace(".var", string.Empty).Replace(".zip", string.Empty);
+                    fileName = parts[1];
+                    normalizedPath = packageName + ":" + fileName;
                 }
+                else
+                {
 
-                string path = ResolveVarPathForUid(uid);
-                if (string.IsNullOrEmpty(path)) return;
-                LogUtil.Log($"Normalizing {presetFile.Path}");
-                var normalizedPath = Regex.Replace(
-                    Regex.Match(presetFile.Path, "([^/]*:/?.*)").Groups[0].Value, "\\.var|\\.zip", string.Empty
-                );
-                LogUtil.Log($"Reading file {normalizedPath}");
+                    packageName = null;
+                    fileName = parts[0].TrimStart('/');
+                    normalizedPath = fileName;
 
-                var json = CUAConverter.GetConvertedScene(normalizedPath);
-                var personPreset = json["atoms"][0].AsObject;
+                }
+                var convertedPath = "Saves/scene/VPB/" + packageName  + "/" + fileName.Split('/').Last();
+
+                JSONClass personPreset;
+                if (File.Exists(convertedPath))
+                {
+                    LogUtil.Log($"Reading pre-converted file {convertedPath}");
+                    var json = SuperController.singleton.LoadJSON(convertedPath).AsObject.RemoveNonPersonAtomsMutable();
+                    personPreset = json["atoms"][0].AsObject;
+                }
+                else
+                {
+                    LogUtil.Log($"Reading original file {normalizedPath}");
+
+                    var json = CUAConverter.GetConvertedScene(normalizedPath);
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(convertedPath));
+                    SuperController.singleton.SaveJSON(json, convertedPath);
+
+                    // TODO: this is not always necessary
+                    var itemControl = SelectedTargetAtom.GetComponentInChildren<DAZClothingItemControl>();
+                    if (itemControl)
+                    {
+                        LogUtil.Log($"Refreshing clothing items!");
+                        itemControl.RefreshClothingItems();
+                    }
+                    else
+                    {
+                        LogUtil.LogError($"No DAZClothingItemControl!");
+                    }
+
+                    personPreset = json["atoms"][0].AsObject;
+                }
 
 
                 SelectedTargetAtom.PreRestore(restorePhysical: false, restoreAppearance: true);
                 SelectedTargetAtom.Restore(personPreset, restorePhysical: false, restoreAppearance: true, restoreCore: false);
-                SelectedTargetAtom.LateRestore(personPreset, restorePhysical: false, restoreAppearance: true, restoreCore: false);
                 SelectedTargetAtom.PostRestore(restorePhysical: false, restoreAppearance: true);
                 if (SuperController.singleton != null && personPreset["id"] != null)
                 {
@@ -62,35 +93,12 @@ namespace VPB
                 }
 
 
-
-                //string convertedPath = "Saves/scene/VPB/" + Regex.Match(normalizedPath, "([^:/]*\\.json)").Groups[1].Value;
-                //Directory.CreateDirectory(Path.GetDirectoryName(convertedPath));
-                //if (File.Exists(convertedPath))
-                //{
-                //    File.Delete(convertedPath);
-                //}
-                //LogUtil.Log($"Saving to file {convertedPath}");
-                //SuperController.singleton.SaveJSON(json, convertedPath);
-
-                //var builder = SuperController.singleton.packageBuilder;
-                //var oldCreatorName = UserPreferences.singleton.creatorName;
-                //UserPreferences.singleton.creatorName = "VPB";
-                //builder.LoadMetaFromPackageUid(normalizedPath.Split(':')[0]);
-                //builder.ClearContentItems();
-                //builder.AddContentItem("Custom/Clothing/Female/VPB/CUA Clothing/CUA Clothing Dummy.vam");
-                //builder.AddContentItem(convertedPath);
-                //builder.PrepPackage();
-                //LogUtil.Log("Finalizing...");
-                //builder.FinalizePackage();
-                //File.Delete(convertedPath);
-                //UserPreferences.singleton.creatorName = oldCreatorName;
-
                 ShowTemporaryStatus($"Done", 2.5f);
             }
             catch (Exception ex)
             {
-                LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages error: " + ex);
-                ShowTemporaryStatus("Autoinstall failed. See log.", 2f);
+                LogUtil.LogError("[VPB] TboxSceneImportSelectedPackage error: " + ex);
+                ShowTemporaryStatus("Import failed. See log.", 2f);
             }
         }
 

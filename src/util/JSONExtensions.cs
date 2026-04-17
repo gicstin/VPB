@@ -16,6 +16,21 @@ namespace VPB.src.util
             }
         }
 
+        public static List<string> GetAtomIds(this JSONClass cls, bool onlyPersonAtoms)
+        {
+            var ids = new List<string>();
+            if (!cls.HasKey("atoms")) return ids;
+            var atoms = cls["atoms"].AsArray;
+            if (atoms.Count == 0) return ids;
+
+            foreach(JSONClass atom in atoms)
+            {
+                if (!onlyPersonAtoms || atom["type"].Value == "Person") atoms.Add(atom.GetId());
+            }
+
+            return ids;
+        }
+
         /// <summary>
         /// Remove any non-Person atoms from the "atoms" array, if there is one
         /// </summary>
