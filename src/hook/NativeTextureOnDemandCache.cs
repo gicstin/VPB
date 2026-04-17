@@ -2858,7 +2858,6 @@ namespace VPB
 
     internal static class OnDemandTextureCacheHook
     {
-        private static bool s_HotkeyDown;
         private static bool s_HotkeyNativeOnlyDown;
         private static bool s_MultiRunning;
 
@@ -2866,14 +2865,11 @@ namespace VPB
         {
             try { NativeTextureCacheBuildOverlay.EnsureCreated(); } catch { }
 
-            if (Input.GetKeyDown(KeyCode.F3)) s_HotkeyDown = true;
             if (Input.GetKeyDown(KeyCode.F7)) s_HotkeyNativeOnlyDown = true;
 
-            if (!s_HotkeyDown && !s_HotkeyNativeOnlyDown) return;
+            if (!s_HotkeyNativeOnlyDown) return;
 
             bool requestNativeOnly = s_HotkeyNativeOnlyDown;
-            bool requestNativeAndZstd = s_HotkeyDown;
-            s_HotkeyDown = false;
             s_HotkeyNativeOnlyDown = false;
 
             // If the previous job summary is still visible, close it before starting a new job.
@@ -2891,11 +2887,6 @@ namespace VPB
             if (requestNativeOnly)
             {
                 NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.NativeOnly);
-            }
-            else if (requestNativeAndZstd)
-            {
-                // F3 is the default launcher: build VPB Zstd cache (optionally with 8k->4k downscale).
-                NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.ZstdOnly);
             }
 
             var selectedScenePaths = new List<string>();
