@@ -130,6 +130,12 @@ namespace VPB
         {
             try
             {
+                if (cleanupModeActive)
+                {
+                    TboxApplyCleanupSelected();
+                    return;
+                }
+
                 if (selectedFiles == null || selectedFiles.Count == 0)
                 {
                     ShowTemporaryStatus("No selection.");

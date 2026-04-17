@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <Import Project="VPB.local.props" Condition="Exists('VPB.local.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -316,6 +317,7 @@
     <Compile Include="src\hook\uFileBrowser\FileIcon.cs" />
     <Compile Include="src\hook\uFileBrowser\ShortCutButton.cs" />
     <Compile Include="src\hook\VarNameParser.cs" />
+    <Compile Include="src\hook\PluginSignatureBridge.cs" />
     <Compile Include="src\KeyUtil.cs" />
     <Compile Include="src\LogUtil.cs" />
     <Compile Include="src\MessageDef.cs" />
@@ -347,6 +349,7 @@
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CategoryFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
@@ -367,12 +370,14 @@
     <Compile Include="src\gallery\GalleryPanel.UI.Overlays.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Layout.cs" />
     <Compile Include="src\gallery\GalleryPanel.SelectionContextMenu.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.Cleanup.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeletePackages.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalScenes.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.AutoInstallHide.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.LoadUnloadCache.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
+    <Compile Include="src\gallery\CategoryFilterState.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.Behaviours.cs" />

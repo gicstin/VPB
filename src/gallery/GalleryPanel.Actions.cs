@@ -259,6 +259,13 @@ namespace VPB
             {
                 if (!IsHubMode)
                     ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
+
+                if (cleanupModeActive)
+                {
+                    RebuildCleanupCandidates(true, true);
+                    return;
+                }
+
                 try { MVR.FileManagement.FileManager.Refresh(); } catch { }
                 FileManager.Refresh(true, false, false);
                 creatorsCached = false;
@@ -309,17 +316,16 @@ namespace VPB
             bool packagesChanged = refreshOnNextShow || (!hasLoadedContent && packageTimestampAdvanced);
 
             titleText.text = title;
-            currentCategoryTitle = title;
             bool paramsChanged = (currentExtension != extension || currentPath != path);
             if (paramsChanged)
             {
+                // Save current category's filters before switching away
+                if (hasLoadedContent)
+                    SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
+
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
-                // currentCreator = ""; // Keep creator filter across categories
-                activeTags.Clear();
-                currentSceneSourceFilter = "";
-                currentAppearanceSourceFilter = "";
             }
             else if (packagesChanged)
             {
@@ -328,15 +334,40 @@ namespace VPB
                 categoriesCached = false;
             }
 
+            currentCategoryTitle = title;
+
             bool sameViewReopen = hasLoadedContent && !paramsChanged;
 
             // Save scroll for the category we're leaving; prime the restore target for the new one.
             if (paramsChanged && hasLoadedContent && scrollRect != null)
             {
-                categoryScrollPositions[_prevCategoryKey] = scrollRect.verticalNormalizedPosition;
+                categoryScrollPositions[_prevCategoryKey] = Mathf.Clamp01(scrollRect.verticalNormalizedPosition);
+                sessionCategoryScrollKeys.Add(_prevCategoryKey);
                 SaveCategoryScrollCache();
             }
-            _pendingScrollRestore = categoryScrollPositions.TryGetValue(MakeCategoryScrollKey(title, path), out float _sp) ? _sp : 1f;
+            string nextCategoryKey = MakeCategoryScrollKey(title, path);
+            if (!hasLoadedContent)
+            {
+                // Cold launch should always start at top.
+                _pendingScrollRestore = 1f;
+            }
+            else if (paramsChanged)
+            {
+                // Category switch: only restore positions that were captured in this runtime session.
+                // Persisted cache values from previous runs are intentionally ignored here to prevent stale/random starts.
+                if (sessionCategoryScrollKeys.Contains(nextCategoryKey) &&
+                    categoryScrollPositions.TryGetValue(nextCategoryKey, out float _sp))
+                    _pendingScrollRestore = Mathf.Clamp01(_sp);
+                else
+                    _pendingScrollRestore = 1f;
+            }
+            else
+            {
+                // Same-view reopen/refresh can restore remembered position.
+                _pendingScrollRestore = categoryScrollPositions.TryGetValue(nextCategoryKey, out float _sp)
+                    ? Mathf.Clamp01(_sp)
+                    : 1f;
+            }
 
             currentExtension = extension;
             currentPath = path;
@@ -349,7 +380,9 @@ namespace VPB
             }
             if (currentPaths == null) currentPaths = new List<string> { path };
 
-            if (titleSearchInput != null) titleSearchInput.text = nameFilter;
+            // Restore per-category filters (or clear to defaults for first visit)
+            if (paramsChanged)
+                RestoreCategoryFilterState(title, path);
 
             if (Application.isPlaying && canvas.renderMode == RenderMode.WorldSpace)
             {
@@ -407,7 +440,7 @@ namespace VPB
 
             if (shouldRefresh)
             {
-                RefreshFiles(!paramsChanged);
+                RefreshFiles(hasLoadedContent && !paramsChanged);
                 refreshOnNextShow = false;
                 lastAppliedPackageRefreshTime = pkgRefreshTime;
                 LogGalleryCategoryTypeNavPhase("Show_after_RefreshFiles_invoke");
@@ -489,7 +522,13 @@ namespace VPB
         private void ApplyVamMenuGateVisibility()
         {
             if (VPBConfig.Instance == null || canvas == null) return;
-            bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible;
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            
+            // The anchor-based gate only applies to the specific panel that is anchored.
+            bool isAnchoredInstance = (GetAnchoredInstance() == this);
+            
+            bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible || (VPBConfig.Instance.GalleryAnchorToVamMenu && isVR && isAnchoredInstance);
             bool menuVisible = IsVamMenuVisible();
 
             if (!gate)
@@ -519,6 +558,45 @@ namespace VPB
                 }
             }
         }
+
+        private void ApplyVamMenuAnchoring()
+        {
+            if (VPBConfig.Instance == null || canvas == null) return;
+            
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            
+            if (!isVR) return;
+            if (!VPBConfig.Instance.GalleryAnchorToVamMenu) return;
+
+            // Priority check: only the first visible panel gets anchored.
+            if (GetAnchoredInstance() != this) return;
+
+            // If we are the priority panel, check if menu is visible for snapping.
+            if (!IsVamMenuVisible()) return;
+
+            Transform vamMenuTrans = SuperController.singleton.mainHUD.transform;
+            if (vamMenuTrans == null) return;
+
+            Vector3 localOffset = VPBConfig.Instance.GalleryAnchorOffset;
+            
+            RectTransform canvasRT = canvas.GetComponent<RectTransform>();
+            float galleryHalfHeight = (canvasRT.rect.height * 0.5f) * canvasRT.lossyScale.y;
+
+            // Anchor the gallery such that its bottom matches the localOffset relative to the VAM menu top.
+            // In VaM, mainHUD has its own scale and rotation.
+            Vector3 targetBottomPos = vamMenuTrans.TransformPoint(localOffset);
+            Vector3 targetPos = targetBottomPos + vamMenuTrans.up * galleryHalfHeight;
+
+            canvas.transform.position = targetPos;
+            
+            // Follow the VaM menu rotation with a 180-degree flip to face the user
+            canvas.transform.rotation = vamMenuTrans.rotation * Quaternion.Euler(0, 180, 0);
+
+            // Keep offsets reset so follow mode captures the anchored position when anchoring ends
+            offsetsInitialized = false;
+        }
+
 
         private static string MakeCategoryScrollKey(string title, string path)
             => (title ?? "") + "|" + (path ?? "");
@@ -569,6 +647,16 @@ namespace VPB
             {
                 SetHoverPath("");
                 return;
+            }
+
+            if (cleanupModeActive && file is CleanupFileEntry cfe && cfe.Candidate != null)
+            {
+                string details = BuildCleanupHoverDetails(cfe.Candidate);
+                if (!string.IsNullOrEmpty(details))
+                {
+                    SetHoverPath((file.Path ?? "") + "\n" + details);
+                    return;
+                }
             }
             SetHoverPath(file.Path);
         }
@@ -636,13 +724,30 @@ namespace VPB
             // Outside filter mode: perform top search in-memory so clearing search can instantly
             // restore the full list without a rebuild (prevents stalls).
             if (topSearchBaseFiles == null)
+            {
+                if (!_topSearchBaseIsClean)
+                {
+                    // currentFilteredFiles may already be filtered (e.g. restored from per-category
+                    // memory after a SQL-filtered RefreshFiles). The unfiltered base is unknown.
+                    if (nameFilterTerms == null || nameFilterTerms.Length == 0)
+                    {
+                        // Clearing search — rebuild from scratch to get the full unfiltered list.
+                        RefreshFiles();
+                        return;
+                    }
+                    // Narrowing search — RefreshFiles will apply nameFilterTerms via SQL.
+                    RefreshFiles();
+                    return;
+                }
                 topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
+            }
 
             if (nameFilterTerms == null || nameFilterTerms.Length == 0)
             {
                 currentFilteredFiles.Clear();
                 currentFilteredFiles.AddRange(topSearchBaseFiles);
                 topSearchBaseFiles = null;
+                _topSearchBaseIsClean = true;
             }
             else
             {
@@ -756,6 +861,12 @@ namespace VPB
                 recyclingGrid.Refresh();
             }
             try { UpdatePaginationText(); } catch { }
+
+            // Refresh creator side tab if open so it shows only creators applicable to search results.
+            bool creatorTabOpen = (leftActiveContent.HasValue && leftActiveContent.Value == ContentType.Creator)
+                               || (rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Creator);
+            if (creatorTabOpen)
+                try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
         }
 
         private void OnFileRightClick(FileEntry file)

@@ -239,12 +239,14 @@ namespace VPB
         {
             if (_canvasesHiddenForSave != null) return; // already in save mode
             _canvasesHiddenForSave = new List<Canvas>();
+            _panelsHiddenForSave = new List<GalleryPanel>();
             if (Gallery.singleton != null)
             {
                 foreach (var p in Gallery.singleton.Panels)
                 {
                     if (p != null && p.IsVisible)
                     {
+                        _panelsHiddenForSave.Add(p);
                         p.Hide();
                         _canvasesHiddenForSave.Add(p.canvas);
                     }
@@ -254,6 +256,36 @@ namespace VPB
 
         private void EndSaveMode()
         {
+            if (_panelsHiddenForSave != null && _panelsHiddenForSave.Count > 0)
+            {
+                for (int i = 0; i < _panelsHiddenForSave.Count; i++)
+                {
+                    var p = _panelsHiddenForSave[i];
+                    if (p == null) continue;
+                    try
+                    {
+                        string t = p.GetTitle();
+                        string ext = p.GetCurrentExtension();
+                        string curPath = p.GetCurrentPath();
+                        if (!string.IsNullOrEmpty(t) && !string.IsNullOrEmpty(ext) && !string.IsNullOrEmpty(curPath))
+                        {
+                            p.Show(t, ext, curPath);
+                        }
+                        else if (Gallery.singleton != null)
+                        {
+                            // Fallback for partially initialized panels.
+                            var cats = p.categories;
+                            if (cats != null && cats.Count > 0)
+                            {
+                                var c0 = cats[0];
+                                p.Show(c0.name, c0.extension, c0.path);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            _panelsHiddenForSave = null;
             _canvasesHiddenForSave = null;
         }
 
@@ -276,20 +308,28 @@ namespace VPB
                 }
                 string path = selectedPath;
                 if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) path += ".json";
-                try
+                path = NormalizeSceneSavePath(path);
+                bool exists = false;
+                try { exists = MVR.FileManagementSecure.FileManagerSecure.FileExists(path); } catch { exists = false; }
+
+                if (exists)
                 {
-                    SuperController.singleton.Save(path);
-                    ShowTemporaryStatus("Scene saved: " + path, 2f);
+                    try
+                    {
+                        SuperController.singleton.Alert("Resource " + path + " already exists. Overwrite?", () =>
+                        {
+                            SaveSceneFinal(path, true);
+                        }, () => { EndSaveMode(); });
+                    }
+                    catch
+                    {
+                        ShowTemporaryStatus("Scene already exists.", 2f);
+                        EndSaveMode();
+                    }
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("[VPB] Save Scene failed: " + ex);
-                    ShowTemporaryStatus("Save failed. See log.");
-                }
-                finally
-                {
-                    EndSaveMode();
-                }
+
+                SaveSceneFinal(path, false);
             }, "json", defaultFolder, false, true, false, null, true);
 
             try
@@ -305,6 +345,256 @@ namespace VPB
                 }
             }
             catch { }
+        }
+
+        private void SaveSceneFinal(string path, bool overwriteConfirmed)
+        {
+            path = NormalizeSceneSavePath(path);
+            bool saveInvoked = false;
+            try
+            {
+                saveInvoked = TryInvokeSceneSave(path, overwriteConfirmed);
+                if (saveInvoked)
+                {
+                    ShowTemporaryStatus("Scene saved: " + path, 2f);
+                }
+                else
+                {
+                    ShowTemporaryStatus("Save cancelled or failed.");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Save Scene failed: " + ex);
+                ShowTemporaryStatus("Save failed. See log.");
+            }
+
+            if (!saveInvoked)
+            {
+                EndSaveMode();
+                return;
+            }
+
+            if (_sceneSaveFinalizeCoroutine != null)
+            {
+                StopCoroutine(_sceneSaveFinalizeCoroutine);
+                _sceneSaveFinalizeCoroutine = null;
+            }
+            _sceneSaveSawScreenshotCamera = false;
+            _sceneSaveRehideApplied = false;
+            _sceneSaveFinalizeCoroutine = StartCoroutine(FinalizeSceneSaveModeCoroutine(path));
+        }
+
+        private IEnumerator FinalizeSceneSaveModeCoroutine(string path)
+        {
+            float waitStart = Time.unscaledTime;
+            const float waitForScreenshotStartMax = 12f;
+            const float waitForScreenshotFinishMax = 45f;
+
+            // Let Save() kick off any async UI/camera flow first.
+            yield return null;
+
+            while (true)
+            {
+                bool screenshotActive = IsScreenshotCaptureActive();
+                if (screenshotActive)
+                {
+                    _sceneSaveSawScreenshotCamera = true;
+                    if (!_sceneSaveRehideApplied)
+                    {
+                        HidePanelsForSaveTracking();
+                        _sceneSaveRehideApplied = true;
+                    }
+                }
+
+                if (_sceneSaveSawScreenshotCamera)
+                {
+                    if (!screenshotActive) break; // screenshot flow completed
+                    if (Time.unscaledTime - waitStart > waitForScreenshotFinishMax) break; // safety timeout
+                }
+                else
+                {
+                    // No screenshot started shortly after save: complete immediately.
+                    if (Time.unscaledTime - waitStart > waitForScreenshotStartMax) break;
+                }
+
+                yield return null;
+            }
+
+            _sceneSaveFinalizeCoroutine = null;
+            EndSaveMode();
+        }
+
+        private void HidePanelsForSaveTracking()
+        {
+            if (_panelsHiddenForSave == null || _panelsHiddenForSave.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < _panelsHiddenForSave.Count; i++)
+            {
+                var p = _panelsHiddenForSave[i];
+                if (p == null) continue;
+                try
+                {
+                    if (p.IsVisible)
+                    {
+                        p.Hide();
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private static bool IsScreenshotCaptureActive()
+        {
+            SuperController sc = SuperController.singleton;
+            if (sc == null) return false;
+            try
+            {
+                bool normal = sc.screenshotCamera != null && sc.screenshotCamera.enabled;
+                bool hiRes = sc.hiResScreenshotCamera != null && sc.hiResScreenshotCamera.enabled;
+                return normal || hiRes;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string NormalizeSceneSavePath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return path;
+            }
+            return path.Replace('\\', '/');
+        }
+
+        private bool TryInvokeSceneSave(string path, bool overwriteConfirmed)
+        {
+            Exception signedSaveError;
+            if (PluginSignatureSaveBridge.TrySaveScene(path, out signedSaveError))
+            {
+                return true;
+            }
+            if (signedSaveError != null)
+            {
+                LogUtil.LogWarning("[VPB] Signed scene save bridge failed, using fallback save invocation: " + signedSaveError.Message);
+            }
+
+            object result;
+
+            // Mirror BA behavior first: direct Save(path) tends to preserve native scene screenshot flow.
+            if (TryInvokeSaveMethod(SuperController.singleton, "Save", new object[] { path }, out result))
+                return InterpretSaveResult(result);
+            if (TryInvokeSaveMethod(SuperController.singleton, "SaveScene", new object[] { path }, out result))
+                return InterpretSaveResult(result);
+
+            // Then try richer signatures in case this VaM build exposes them.
+            if (TryInvokeSaveMethod(SuperController.singleton, "SaveSceneWithScreenshot", new object[] { path, overwriteConfirmed }, out result))
+                return InterpretSaveResult(result);
+            if (TryInvokeSaveMethod(SuperController.singleton, "SaveWithScreenshot", new object[] { path, overwriteConfirmed }, out result))
+                return InterpretSaveResult(result);
+            if (TryInvokeSaveMethod(SuperController.singleton, "SaveSceneWithScreenshot", new object[] { path }, out result))
+                return InterpretSaveResult(result);
+            if (TryInvokeSaveMethod(SuperController.singleton, "SaveWithScreenshot", new object[] { path }, out result))
+                return InterpretSaveResult(result);
+            if (TryInvokeSaveMethod(SuperController.singleton, "Save", new object[] { path, overwriteConfirmed, true }, out result))
+                return InterpretSaveResult(result);
+            if (TryInvokeSaveMethod(SuperController.singleton, "SaveScene", new object[] { path, overwriteConfirmed, true }, out result))
+                return InterpretSaveResult(result);
+            if (TryInvokeSaveMethod(SuperController.singleton, "Save", new object[] { path, overwriteConfirmed }, out result))
+                return InterpretSaveResult(result);
+            if (TryInvokeSaveMethod(SuperController.singleton, "SaveScene", new object[] { path, overwriteConfirmed }, out result))
+                return InterpretSaveResult(result);
+
+            return false;
+        }
+
+        private static bool TryInvokeSaveMethod(object target, string methodName, object[] args, out object result)
+        {
+            result = null;
+            if (target == null) return false;
+
+            Type t = target.GetType();
+            MethodInfo[] methods = t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            for (int i = 0; i < methods.Length; i++)
+            {
+                MethodInfo candidate = methods[i];
+                if (!string.Equals(candidate.Name, methodName, StringComparison.Ordinal)) continue;
+                ParameterInfo[] ps = candidate.GetParameters();
+                if (args.Length > ps.Length) continue;
+
+                object[] invokeArgs = new object[ps.Length];
+                bool signatureMatch = true;
+                for (int p = 0; p < ps.Length; p++)
+                {
+                    bool hasProvidedArg = p < args.Length;
+                    object arg = hasProvidedArg ? args[p] : Type.Missing;
+                    Type pt = ps[p].ParameterType;
+
+                    if (!hasProvidedArg)
+                    {
+                        if (!ps[p].IsOptional)
+                        {
+                            signatureMatch = false;
+                            break;
+                        }
+                        invokeArgs[p] = Type.Missing;
+                        continue;
+                    }
+
+                    if (arg == null)
+                    {
+                        if (pt.IsValueType && Nullable.GetUnderlyingType(pt) == null)
+                        {
+                            signatureMatch = false;
+                            break;
+                        }
+                        invokeArgs[p] = null;
+                        continue;
+                    }
+
+                    if (pt.IsInstanceOfType(arg))
+                    {
+                        invokeArgs[p] = arg;
+                        continue;
+                    }
+
+                    try
+                    {
+                        Type targetType = Nullable.GetUnderlyingType(pt) ?? pt;
+                        object converted = Convert.ChangeType(arg, targetType, System.Globalization.CultureInfo.InvariantCulture);
+                        invokeArgs[p] = converted;
+                    }
+                    catch
+                    {
+                        signatureMatch = false;
+                        break;
+                    }
+                }
+
+                if (!signatureMatch) continue;
+                try
+                {
+                    result = candidate.Invoke(target, invokeArgs);
+                    return true;
+                }
+                catch
+                {
+                    // Try next overload
+                }
+            }
+            return false;
+        }
+
+        private static bool InterpretSaveResult(object invokeResult)
+        {
+            if (invokeResult == null) return true; // void-returning save APIs
+            if (invokeResult is bool b) return b;
+            return true;
         }
 
         private void SavePresetFromStorable(Atom target, string storableId)
@@ -2304,13 +2594,23 @@ namespace VPB
 
         private void ToggleRight(ContentType type)
         {
+            bool wasCleanup = cleanupModeActive;
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+                ExitCleanupModeForSidePanelNavigation();
+
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(false);
             bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
                 && (type == ContentType.Category || type == ContentType.Creator);
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("right");
 
-            if (rightActiveContent == type) 
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+            {
+                // After leaving cleanup, explicit Category/Creator click should open the requested list.
+                rightActiveContent = type;
+                if (leftActiveContent == type) leftActiveContent = null;
+            }
+            else if (rightActiveContent == type) 
             {
                 rightActiveContent = null;
             }
@@ -2330,13 +2630,23 @@ namespace VPB
 
         private void ToggleLeft(ContentType type)
         {
+            bool wasCleanup = cleanupModeActive;
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+                ExitCleanupModeForSidePanelNavigation();
+
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(true);
             bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
                 && (type == ContentType.Category || type == ContentType.Creator);
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("left");
 
-            if (leftActiveContent == type)
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+            {
+                // After leaving cleanup, explicit Category/Creator click should open the requested list.
+                leftActiveContent = type;
+                if (rightActiveContent == type) rightActiveContent = null;
+            }
+            else if (leftActiveContent == type)
             {
                 leftActiveContent = null;
             }

@@ -1949,7 +1949,7 @@ namespace VPB
             
             // Set initial adaptive config
             float minSize = 200f;
-            recyclingGrid.SetGridConfig(100, 100, 10f, 10f, gridColumnCount);
+            recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, gridColumnCount);
             recyclingGrid.SetAdaptiveConfig(true, minSize, gridColumnCount, false);
 
             // Pagination Controls (Bottom Left)

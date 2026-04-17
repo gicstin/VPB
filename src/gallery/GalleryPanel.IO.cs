@@ -56,10 +56,11 @@ namespace VPB
             }
         }
 
-        private static string BuildSharedSideMetaCacheKey(string creator, string ext, string path, List<string> paths, List<Gallery.Category> cats)
+        private static string BuildSharedSideMetaCacheKey(string creator, string ext, string path, List<string> paths, List<Gallery.Category> cats, string categoryTitle = null)
         {
             var sb = new StringBuilder(512);
             sb.Append(creator ?? ""); sb.Append('\u001E');
+            sb.Append(categoryTitle ?? ""); sb.Append('\u001E');
             sb.Append(ext ?? ""); sb.Append('\u001E');
             sb.Append(path ?? ""); sb.Append('\u001E');
             if (paths != null)
@@ -153,6 +154,7 @@ namespace VPB
         private string filterSearchLower = "";
         private bool filterEnteredFromTopSearch = false;
         private List<FileEntry> topSearchBaseFiles = null; // Base list for top search (non-filter mode)
+        private bool _topSearchBaseIsClean = false; // true only when topSearchBaseFiles was captured from an unfiltered load
         private RecyclingGridView recyclingGrid;
         private string filterRestoreAnchorKey = null;
         private Coroutine filterRestoreCoroutine = null;
@@ -495,6 +497,7 @@ namespace VPB
             try { UpdateTabs(); } catch { }
             try { UpdatePaginationText(); } catch { }
             RefreshRecycleGridAfterFilterChange();
+            ScrollGalleryToTop();
         }
 
         public void ApplySearchWithinFilter(string query)
@@ -1483,6 +1486,7 @@ namespace VPB
             ClearPackageFilter();
             // Reset in-memory top search base; RefreshFiles rebuilds the list.
             topSearchBaseFiles = null;
+            _topSearchBaseIsClean = false;
 
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
@@ -1910,11 +1914,9 @@ namespace VPB
             int savedCenterItemIndex = (useCenterItemRestore && recyclingGrid != null)
                 ? recyclingGrid.GetCenterItemIndex()
                 : -1;
-            // Use keepScroll (not useCenterItemRestore) so that if keepScroll=true but hasLoadedContent
-            // is still false (e.g. package scan completed while the initial load coroutine was mid-run
-            // and got cancelled before reaching hasLoadedContent=true), we still capture the current
-            // scroll position rather than falling back to _pendingScrollRestore (which defaults to 1f/top).
-            float savedScrollNormalizedPos = keepScroll
+            // Preserve normalized scroll only when we have already loaded content.
+            // Early refresh paths should use the pending restore target (top by default).
+            float savedScrollNormalizedPos = useCenterItemRestore
                 ? (scrollRect != null ? scrollRect.verticalNormalizedPosition : 1f)
                 : _pendingScrollRestore;
 
@@ -1932,7 +1934,7 @@ namespace VPB
                     else
                     {
                         // Grid mode
-                        recyclingGrid.SetGridConfig(100f, 100f, 10f, 10f, GridColumnCount);
+                        recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, GridColumnCount);
                         recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false);
                     }
                     recyclingGrid.SetItemCount(0); // Clear initially
@@ -2063,7 +2065,7 @@ namespace VPB
             {
                 InvalidateSharedSideMetaIfPackageScanAdvanced();
                 sideMetaCacheKey = BuildSharedSideMetaCacheKey(
-                    currentCreator, currentExtension, currentPath, currentPaths, categories);
+                    currentCreator, currentExtension, currentPath, currentPaths, categories, currentCategoryTitle);
                 List<CreatorCacheEntry> sharedCreators;
                 Dictionary<string, int> sharedCounts;
                 if (TryGetSharedSideMeta(sideMetaCacheKey, out sharedCreators, out sharedCounts))
@@ -2081,6 +2083,7 @@ namespace VPB
                 string _bExtension = currentExtension;
                 List<string> _bPaths = currentPaths != null ? new List<string>(currentPaths) : null;
                 string _bPath = currentPath;
+                string _bCategoryTitle = currentCategoryTitle;
                 var _bCategories = categories != null ? new List<Gallery.Category>(categories) : null;
                 bool _buildCreators = earlyBuildCreators;
                 bool _buildCats = earlyBuildCats;
@@ -2092,7 +2095,7 @@ namespace VPB
                         if (_buildCreators)
                         {
                             var counts = new Dictionary<string, int>();
-                            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath))
+                            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath, null, _bCategoryTitle))
                             {
                                 string[] exts2 = string.IsNullOrEmpty(_bExtension) ? new string[0] : _bExtension.Split('|');
                                 var tExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2132,7 +2135,7 @@ namespace VPB
                             foreach (var c in _bCategories)
                                 catCounts2[c.name] = 0;
 
-                            if (!VpbLocalDatabase.TryReadCategoryMemberCounts(catCounts2))
+                            if (!VpbLocalDatabase.TryReadCategoryMemberCounts(catCounts2, _bCreator))
                             {
                                 var extToCats2 = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
                                 foreach (var c in _bCategories)
@@ -2786,6 +2789,10 @@ namespace VPB
             // Promote to class member for RecyclingGridView
             currentFilteredFiles.Clear();
             currentFilteredFiles.AddRange(files);
+            // If no name filter was active, the next SetNameFilter call can use currentFilteredFiles
+            // as a trustworthy unfiltered base for in-memory search.
+            if (nameFilterTerms == null || nameFilterTerms.Length == 0)
+                _topSearchBaseIsClean = true;
 
             // Setup Recycling Grid
             if (contentGO != null)
@@ -2824,7 +2831,7 @@ namespace VPB
                 }
                 else
                 {
-                    recyclingGrid.SetGridConfig(100, 100, 10f, 10f, cols);
+                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, cols);
                     recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false);
                 }
                 // Set item count and pre-position scroll so the first UpdateVisibleItems
@@ -2865,6 +2872,7 @@ namespace VPB
                     {
                         cachedCreators = earlyNewCreators ?? new List<CreatorCacheEntry>();
                         creatorsCached = true;
+                        unchecked { creatorSideTabDataRevision++; }
                     }
                     if (earlyBuildCats)
                     {
@@ -2874,6 +2882,7 @@ namespace VPB
                             foreach (var kv in earlyNewCatCounts) categoryCounts[kv.Key] = kv.Value;
                         }
                         categoriesCached = true;
+                        unchecked { categorySideTabDataRevision++; }
                     }
                     if (!skipEarlyMetaThread && sideMetaCacheKey != null && earlyBuildCreators && earlyBuildCats
                         && earlyNewCreators != null && earlyNewCatCounts != null)
@@ -2915,7 +2924,7 @@ namespace VPB
             // Always run follow-up: hide strip (unless sort needs hidden rows), then Hidden-only / AutoInstall-only narrowing, then re-sort.
             try
             {
-                StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId));
+                StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId, keepScroll, scrollToBottom, savedScrollNormalizedPos));
             }
             catch { }
 
@@ -3157,7 +3166,7 @@ namespace VPB
             }
         }
 
-        private IEnumerator PostFilesListHideAndSortFollowupRoutine(string groupId)
+        private IEnumerator PostFilesListHideAndSortFollowupRoutine(string groupId, bool keepScroll, bool scrollToBottom, float targetScrollNormalizedPos)
         {
             yield return null;
             yield return null;
@@ -3210,6 +3219,19 @@ namespace VPB
                         recyclingGrid.SetItemCount(currentFilteredFiles.Count);
                         recyclingGrid.Refresh();
                     }
+                    if (!scrollToBottom)
+                    {
+                        // Follow-up pass must honor the same resolved scroll target as the main refresh pass.
+                        if (targetScrollNormalizedPos >= 0.999f)
+                        {
+                            ScrollGalleryToTop();
+                        }
+                        else if (scrollRect != null)
+                        {
+                            scrollRect.verticalNormalizedPosition = Mathf.Clamp01(targetScrollNormalizedPos);
+                            if (recyclingGrid != null) recyclingGrid.Refresh();
+                        }
+                    }
                     UpdatePaginationText();
                 }
                 catch { }
@@ -3243,7 +3265,6 @@ namespace VPB
                 currentPackageFilterMasterUid = pkg.Uid;
                 currentPackageFilterMode = PackageFilterMode.Dependencies;
                 ApplyFilteredList(filtered, $"Dependencies of {label}");
-                ScheduleFilterScrollRestore(GetEntryAnchorKey(file));
             }
             // Handle scene files
             else if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
@@ -3325,7 +3346,6 @@ namespace VPB
                     currentPackageFilterMasterUid = file.Path;
                     currentPackageFilterMode = PackageFilterMode.Dependencies;
                     ApplyFilteredList(filtered, $"Dependencies ({deps.Count})");
-                    ScheduleFilterScrollRestore(GetEntryAnchorKey(file));
                 }
             }
         }
@@ -3357,7 +3377,6 @@ namespace VPB
             currentPackageFilterMasterUid = pkg.Uid;
             currentPackageFilterMode = PackageFilterMode.Dependents;
             ApplyFilteredList(filtered, $"Dependents of {label}");
-            ScheduleFilterScrollRestore(GetEntryAnchorKey(file));
         }
 
         /// <summary>Filter to show only the missing dependencies of the selected package.</summary>
@@ -3414,7 +3433,6 @@ namespace VPB
                     currentPackageFilterMasterUid = pkg.Uid;
                     currentPackageFilterMode = PackageFilterMode.Dependencies;
                     ApplyFilteredList(filtered, $"Missing Dependencies ({missingUids.Count})");
-                    ScheduleFilterScrollRestore(GetEntryAnchorKey(file));
                 }
                 // Handle scene files
                 else if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
@@ -3463,7 +3481,6 @@ namespace VPB
                     currentPackageFilterMasterUid = file.Path;
                     currentPackageFilterMode = PackageFilterMode.Dependencies;
                     ApplyFilteredList(filtered, $"Missing ({missingDeps.Count})");
-                    ScheduleFilterScrollRestore(GetEntryAnchorKey(file));
                 }
             }
             catch (Exception ex)
@@ -3494,15 +3511,8 @@ namespace VPB
                 try { UpdateTabs(); } catch { }
                 try { UpdatePaginationText(); } catch { }
 
-                // Restore scroll after the grid has rebound.
-                filterRestoreAnchorKey = filterBaseAnchorKey;
                 filterBaseAnchorKey = null;
-                if (filterRestoreCoroutine != null)
-                {
-                    try { StopCoroutine(filterRestoreCoroutine); } catch { }
-                    filterRestoreCoroutine = null;
-                }
-                try { filterRestoreCoroutine = StartCoroutine(RestoreFilterScrollAnchorNextFrame()); } catch { }
+                ScrollGalleryToTop();
 
                 // If the user entered filter mode while a top search was active, clearing the filter should
                 // return to the full category list (not the search-limited snapshot).
@@ -3525,6 +3535,7 @@ namespace VPB
                             currentFilteredFiles.AddRange(topSearchBaseFiles);
                             topSearchBaseFiles = null;
                             RefreshRecycleGridAfterFilterChange();
+                            ScrollGalleryToTop();
                             try { UpdatePaginationText(); } catch { }
                         }
                     }

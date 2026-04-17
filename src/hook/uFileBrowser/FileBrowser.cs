@@ -1874,7 +1874,7 @@ namespace VPB
 			{
 				if (fileEntryField.text != string.Empty)
 				{
-					string path = currentPath + slash + fileEntryField.text;
+					string path = NormalizeBrowserPath(currentPath + slash + fileEntryField.text);
 					if (!_keepOpen)
 					{
 						Hide();
@@ -1891,7 +1891,7 @@ namespace VPB
 			}
 			else if (selected != null && ((selected.isDir && selectDirectory) || (!selected.isDir && !selectDirectory)))
 			{
-				string fullPath = selected.fullPath;
+				string fullPath = NormalizeBrowserPath(selected.fullPath);
 				if (!_keepOpen)
 				{
 					Hide();
@@ -1905,6 +1905,15 @@ namespace VPB
 					fullCallback(fullPath, !_keepOpen);
 				}
 			}
+		}
+
+		private static string NormalizeBrowserPath(string path)
+		{
+			if (string.IsNullOrEmpty(path))
+			{
+				return path;
+			}
+			return path.Replace('\\', '/');
 		}
 
 		public void CancelButtonClicked()

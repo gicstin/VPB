@@ -112,6 +112,8 @@ namespace VPB
         private bool refreshOnNextShow;
         private bool hasLoadedContent = false;
         private Dictionary<string, float> categoryScrollPositions = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        // Tracks category keys that were written during this app session (not just loaded from disk cache).
+        private HashSet<string> sessionCategoryScrollKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private float _pendingScrollRestore = 1f;
         private bool _scrollCacheLoaded = false;
         private DateTime lastAppliedPackageRefreshTime = DateTime.MinValue;
@@ -559,6 +561,21 @@ namespace VPB
         private const float FpsInterval = 0.5f;
 
         // Follow Mode Fields
+        public static GalleryPanel GetAnchoredInstance()
+        {
+            if (Gallery.singleton == null) return null;
+            var pl = Gallery.singleton.Panels;
+            if (pl == null) return null;
+            for (int i = 0; i < pl.Count; i++)
+            {
+                var p = pl[i];
+                if (p != null && p.canvas != null && !p._userHidden)
+                {
+                    return p;
+                }
+            }
+            return null;
+        }
         private bool followUser = true;
         private float lastFollowUpdateTime = 0f;
         private const float FollowUpdateInterval = 0.5f;
@@ -827,6 +844,20 @@ namespace VPB
         private bool isHoveringTrigger = false;
         private Camera _cachedCamera;
 
+        // Per-category filter state memory (BA-style: each category remembers its own filters)
+        private readonly Dictionary<string, CategoryFilterState> _categoryFilterStates = new Dictionary<string, CategoryFilterState>(StringComparer.OrdinalIgnoreCase);
+        private string _panelId = null;
+
+        private string PanelId
+        {
+            get
+            {
+                if (_panelId == null)
+                    _panelId = "panel_" + GetHashCode().ToString("x8");
+                return _panelId;
+            }
+        }
+
         // Sorting
         private Dictionary<string, SortState> contentSortStates = new Dictionary<string, SortState>();
 
@@ -886,5 +917,11 @@ namespace VPB
 
         // Tracks panels hidden when a save flow starts, so they can be restored when it ends
         private List<Canvas> _canvasesHiddenForSave;
+        private List<GalleryPanel> _panelsHiddenForSave;
+        // Scene save can hand off to VaM screenshot capture asynchronously; keep save mode
+        // active until that flow ends so overwrite/screenshot UI is not interrupted.
+        private Coroutine _sceneSaveFinalizeCoroutine;
+        private bool _sceneSaveSawScreenshotCamera;
+        private bool _sceneSaveRehideApplied;
     }
 }

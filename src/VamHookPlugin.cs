@@ -120,14 +120,6 @@ namespace VPB
         private bool MiniMode;
 
 
-        // Remove Old/Damaged Window
-        private class RemoveItem
-        {
-            public string Uid;
-            public string Path;
-            public string Type;
-            public bool Checked;
-        }
 
         private const int STD_OUTPUT_HANDLE = -11;
 
@@ -208,7 +200,6 @@ namespace VPB
         private Rect m_RemoveWindowRect = new Rect(250, 250, 600, 500);
 
         private bool m_ShowPluginsAlwaysEnabledInfo;
-        private bool m_ShowRemoveOldDamagedInfo;
         private bool m_ShowGcRefreshInfo;
         private bool m_UnloadAllConfirmPending = false;
         private bool m_ShowUnloadAllInfo = false;
@@ -276,7 +267,6 @@ namespace VPB
         private GUIStyle m_StyleWindow;
         private GUIStyle m_StyleContextMenu;
         private GUIStyle m_StyleWindowBorder;
-        private GUIStyle m_StyleInfoIcon;
         private GUIStyle m_StyleInfoCard;
         private GUIStyle m_StyleInfoCardTitle;
         private GUIStyle m_StyleInfoCardText;
@@ -307,7 +297,6 @@ namespace VPB
         private void CloseAllInfoCards()
         {
             m_ShowPluginsAlwaysEnabledInfo = false;
-            m_ShowRemoveOldDamagedInfo = false;
             m_ShowGcRefreshInfo = false;
         }
 
@@ -578,18 +567,6 @@ namespace VPB
             m_StyleToggle.contentOffset = new Vector2(0f, 0f);
             m_StyleToggle.fontSize = 14;
 
-            m_StyleInfoIcon = new GUIStyle(GUI.skin.button);
-            m_StyleInfoIcon.normal.background = texTransparent;
-            m_StyleInfoIcon.hover.background = MakeBorderedTex(12, 12, new Color(0.27f, 0.30f, 0.36f, 0.70f), new Color(0.70f, 0.74f, 0.80f, 0.18f), 1);
-            m_StyleInfoIcon.active.background = MakeBorderedTex(12, 12, new Color(0.12f, 0.50f, 0.85f, 0.80f), new Color(0.12f, 0.50f, 0.85f, 0.80f), 1);
-            m_StyleInfoIcon.normal.textColor = new Color(0.65f, 0.85f, 1f, 1f);
-            m_StyleInfoIcon.hover.textColor = Color.white;
-            m_StyleInfoIcon.active.textColor = Color.white;
-            m_StyleInfoIcon.fontStyle = FontStyle.Bold;
-            m_StyleInfoIcon.padding = new RectOffset(0, 0, 0, 0);
-            m_StyleInfoIcon.margin = new RectOffset(0, 0, 0, 0);
-            m_StyleInfoIcon.alignment = TextAnchor.MiddleCenter;
-
             m_StyleInfoCard = new GUIStyle(GUI.skin.box);
             m_StyleInfoCard.normal.background = m_TexInfoCardBg;
             m_StyleInfoCard.normal.textColor = Color.white;
@@ -677,22 +654,18 @@ namespace VPB
             m_StylesInited = true;
         }
 
-        static string cacheDir;
         public static string GetCacheDir()
         {
-            if (string.IsNullOrEmpty(cacheDir))
+            // Move Zstd texture cache to a subfolder of native Textures cache
+            string baseCache = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+            if (string.IsNullOrEmpty(baseCache))
             {
-                // Move Zstd texture cache to a subfolder of native Textures cache
-                string baseCache = MVR.FileManagement.CacheManager.GetTextureCacheDir();
-                if (string.IsNullOrEmpty(baseCache))
-                {
-                    baseCache = Path.GetFullPath(Path.Combine(Application.dataPath, "../Cache/Textures"));
-                }
-                cacheDir = Path.Combine(baseCache, "Zstd");
-                if (!Directory.Exists(cacheDir))
-                {
-                    Directory.CreateDirectory(cacheDir);
-                }
+                baseCache = Path.GetFullPath(Path.Combine(Application.dataPath, "../Cache/Textures"));
+            }
+            string cacheDir = Path.Combine(baseCache, "Zstd");
+            if (!Directory.Exists(cacheDir))
+            {
+                Directory.CreateDirectory(cacheDir);
             }
             return cacheDir;
         }
@@ -2417,11 +2390,6 @@ namespace VPB
                     GUI.backgroundColor = prevBackgroundColor;
                     GUI.enabled = prevEnabled;
 
-                    if (m_ShowRemoveWindow)
-                    {
-                        m_RemoveWindowRect = GUILayout.Window(2, m_RemoveWindowRect, DrawRemoveWindow, "", m_StyleWindow);
-                        GUI.BringWindowToFront(2);
-                    }
                     if (m_ShowQuickMenuPosWindow)
                     {
                         ApplyQuickMenuPositionPreview();
@@ -2493,38 +2461,6 @@ namespace VPB
             //m_MVRPluginManager.configurableFilterablePopupPrefab
 
         }
-
-
-
-        void OpenRemoveWindow()
-        {
-            m_RemoveList.Clear();
-            var items = FileManager.GetCleanupList(true);
-            foreach (var item in items)
-            {
-                m_RemoveList.Add(new RemoveItem
-                {
-                    Path = item.Path,
-                    Uid = item.Uid,
-                    Type = item.Type,
-                    Checked = true
-                });
-            }
-            m_ShowRemoveWindow = true;
-        }
-
-        void PerformRemove()
-        {
-            foreach (var item in m_RemoveList)
-            {
-                if (item.Checked)
-                {
-                    FileManager.RemoveToInvalid(item.Path, item.Type);
-                }
-            }
-            Refresh();
-        }
-
         void DrawSpaceSaverWindow(int windowID)
         {
             var prevPaddingTop = m_StyleWindow.padding.top;

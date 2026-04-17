@@ -631,6 +631,7 @@ namespace VPB
             // Include cache revision + filter + sort + scale so we rebuild view list only when needed.
             return "v1|" + creatorSideTabDataRevision
                 + "|" + (creatorFilter ?? "")
+                + "|" + (nameFilterLower ?? "")
                 + "|" + (currentExtension ?? "")
                 + "|" + CurrentPathsSignatureFragment()
                 + "|" + (int)(st != null ? st.Type : 0)
@@ -745,6 +746,7 @@ namespace VPB
             if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();
             rightClickDelegate.OnRightClick = () =>
             {
+                SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
                 currentCreator = "";
                 categoriesCached = false;
                 tagsCached = false;
@@ -1089,10 +1091,12 @@ namespace VPB
                         // full UpdateTabs() here blocked the UI for seconds. Side strips refresh when
                         // RefreshFilesRoutine finishes (DeferredGallerySideTabsAfterGridReady).
                     }, trackedButtons, () => {
+                        SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
                         currentPath = "";
                         currentPaths = null;
                         currentExtension = "";
                         if (titleText != null) titleText.text = VPBTranslation.T("gallery.title.all_categories", "All Categories");
+                        ClearFiltersForNewCategory();
                         RefreshFiles();
                         UpdateTabs();
                     });
@@ -1119,24 +1123,34 @@ namespace VPB
                     _creatorVirtViewSig = sig;
                     _creatorVirtView.Clear();
                     string filterNow = creatorFilter ?? "";
-                    if (string.IsNullOrEmpty(filterNow))
+
+                    // Build a set of creators present in the current filtered file list when a name search is active.
+                    HashSet<string> creatorsInResults = null;
+                    bool hasNameFilter = nameFilterTerms != null && nameFilterTerms.Length > 0;
+                    if (hasNameFilter && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
                     {
-                        for (int i = 0; i < cachedCreators.Count; i++)
+                        creatorsInResults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        for (int i = 0; i < currentFilteredFiles.Count; i++)
                         {
-                            var c = cachedCreators[i];
-                            if (string.IsNullOrEmpty(c.Name)) continue;
-                            _creatorVirtView.Add(c);
+                            var fe = currentFilteredFiles[i];
+                            if (fe == null) continue;
+                            string creator = null;
+                            try { creator = fe.Uid; } catch { }
+                            if (string.IsNullOrEmpty(creator)) continue;
+                            int dot1 = creator.IndexOf('.');
+                            if (dot1 > 0) creator = creator.Substring(0, dot1);
+                            if (!string.IsNullOrEmpty(creator))
+                                creatorsInResults.Add(creator);
                         }
                     }
-                    else
+
+                    for (int i = 0; i < cachedCreators.Count; i++)
                     {
-                        for (int i = 0; i < cachedCreators.Count; i++)
-                        {
-                            var c = cachedCreators[i];
-                            if (string.IsNullOrEmpty(c.Name)) continue;
-                            if (c.Name.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
-                            _creatorVirtView.Add(c);
-                        }
+                        var c = cachedCreators[i];
+                        if (string.IsNullOrEmpty(c.Name)) continue;
+                        if (!string.IsNullOrEmpty(filterNow) && c.Name.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        if (creatorsInResults != null && !creatorsInResults.Contains(c.Name)) continue;
+                        _creatorVirtView.Add(c);
                     }
 
                     // New view list: reset scroll to top for stability.
@@ -1317,6 +1331,44 @@ namespace VPB
                         UpdateTabs();
                     }, trackedButtons);
                 }
+            }
+            else if (contentType == ContentType.CleanupCategories)
+            {
+                int mode = GetCleanupFilterMode();
+                Color cleanupColor = new Color(0.62f, 0.40f, 0.20f, 1f);
+                Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
+
+                string labelAll = VPBTranslation.T("gallery.cleanup.tab.all", "All") + " (" + GetCleanupTabCount(0) + ")";
+                string labelDup = VPBTranslation.T("gallery.cleanup.tab.dup", "Duplicates") + " (" + GetCleanupTabCount(1) + ")";
+                string labelOld = VPBTranslation.T("gallery.cleanup.tab.old", "Old Versions") + " (" + GetCleanupTabCount(2) + ")";
+                string labelDamaged = VPBTranslation.T("gallery.cleanup.tab.damaged", "Damaged") + " (" + GetCleanupTabCount(3) + ")";
+                string labelExcluded = VPBTranslation.T("gallery.cleanup.tab.excluded", "Excluded") + " (" + GetCleanupTabCount(4) + ")";
+
+                CreateTabButton(container.transform, labelAll, mode == 0 ? cleanupColor : inactive, mode == 0, () =>
+                {
+                    SetCleanupFilterMode(0);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, labelDup, mode == 1 ? cleanupColor : inactive, mode == 1, () =>
+                {
+                    SetCleanupFilterMode(1);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, labelOld, mode == 2 ? cleanupColor : inactive, mode == 2, () =>
+                {
+                    SetCleanupFilterMode(2);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, labelDamaged, mode == 3 ? cleanupColor : inactive, mode == 3, () =>
+                {
+                    SetCleanupFilterMode(3);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, labelExcluded, mode == 4 ? cleanupColor : inactive, mode == 4, () =>
+                {
+                    SetCleanupFilterMode(4);
+                    UpdateTabs();
+                }, trackedButtons);
             }
             else if (contentType == ContentType.SceneSource)
             {
@@ -2144,6 +2196,65 @@ namespace VPB
         }
 
 
+        private static float GetGridLabelUnits()
+            => Mathf.Max(0f, VPBConfig.Instance.GalleryGridLabelFontSize * 0.6f);
+
+        private static float GetGridLabelFraction()
+        {
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridLabelsEnabled) return 0f;
+            float L = GetGridLabelUnits();
+            return L / (100f + L);
+        }
+
+        internal float GetGridCellConfigHeight()
+        {
+            if (layoutMode == GalleryLayoutMode.Grid
+                && VPBConfig.Instance != null
+                && VPBConfig.Instance.GalleryGridLabelsEnabled)
+                return 100f + GetGridLabelUnits();
+            return 100f;
+        }
+
+        private static string GetGridItemLabelText(FileEntry file)
+        {
+            if (file == null) return "";
+            VarPackage pkg = null;
+            if (file is VarFileEntry vfe)         pkg = vfe.Package;
+            else if (file is PackageListEntry ple) pkg = ple.Package;
+            if (pkg != null && !string.IsNullOrEmpty(pkg.Uid)) return pkg.Uid;
+            return System.IO.Path.GetFileNameWithoutExtension(file.Name ?? "");
+        }
+
+        private static string TruncateGridLabelTextByWidth(Text textComponent, string text, float maxWidth)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            if (textComponent == null || textComponent.font == null) return text;
+
+            float availWidth = Mathf.Max(10f, maxWidth - 4f);
+
+            textComponent.text = text;
+            float fullWidth = LayoutUtility.GetPreferredWidth(textComponent.GetComponent<RectTransform>());
+            if (fullWidth <= availWidth) return text;
+
+            string ellipsis = "...";
+            textComponent.text = ellipsis;
+            float ellipsisWidth = LayoutUtility.GetPreferredWidth(textComponent.GetComponent<RectTransform>());
+            float targetWidth = availWidth - ellipsisWidth - 2f;
+
+            if (targetWidth <= 0) return ellipsis;
+
+            string current = text;
+            for (int i = 0; i < text.Length; i++)
+            {
+                current = text.Substring(0, text.Length - i);
+                textComponent.text = current;
+                float width = LayoutUtility.GetPreferredWidth(textComponent.GetComponent<RectTransform>());
+                if (width <= targetWidth) return current + ellipsis;
+            }
+
+            return ellipsis;
+        }
+
         private void CreateFileButton(FileEntry file)
         {
             GameObject btnGO;
@@ -2156,7 +2267,7 @@ namespace VPB
             {
                 btnGO = CreateNewFileButtonGO();
             }
-            
+
             BindFileButton(btnGO, file);
             btnGO.transform.SetAsLastSibling();
             activeButtons.Add(btnGO);
@@ -2189,6 +2300,42 @@ namespace VPB
             thumbRT.sizeDelta = Vector2.zero;
             thumbRT.offsetMin = new Vector2(3, 3);
             thumbRT.offsetMax = new Vector2(-3, -3);
+
+            GameObject gridLabelGO = new GameObject("GridLabel");
+            gridLabelGO.transform.SetParent(btnGO.transform, false);
+            gridLabelGO.SetActive(false);
+
+            RectTransform gridLabelRT = gridLabelGO.AddComponent<RectTransform>();
+            gridLabelRT.anchorMin = new Vector2(0f, 0f);
+            gridLabelRT.anchorMax = new Vector2(1f, 0f);
+            gridLabelRT.offsetMin = Vector2.zero;
+            gridLabelRT.offsetMax = Vector2.zero;
+
+            Image gridLabelBg = gridLabelGO.AddComponent<Image>();
+            gridLabelBg.color = new Color(0f, 0f, 0f, 0.6f);
+            gridLabelBg.raycastTarget = false;
+
+            GameObject gridLabelTextGO = new GameObject("Text");
+            gridLabelTextGO.transform.SetParent(gridLabelGO.transform, false);
+            RectTransform gridLabelTextRT = gridLabelTextGO.AddComponent<RectTransform>();
+            gridLabelTextRT.anchorMin = Vector2.zero;
+            gridLabelTextRT.anchorMax = Vector2.one;
+            gridLabelTextRT.offsetMin = new Vector2(2f, 0f);
+            gridLabelTextRT.offsetMax = new Vector2(-2f, 0f);
+
+            Text gridLabelText = gridLabelTextGO.AddComponent<Text>();
+            gridLabelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            gridLabelText.fontSize = 18;
+            gridLabelText.color = Color.white;
+            gridLabelText.alignment = TextAnchor.MiddleCenter;
+            gridLabelText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            gridLabelText.verticalOverflow = VerticalWrapMode.Overflow;
+            gridLabelText.resizeTextForBestFit = false;
+            gridLabelText.raycastTarget = false;
+
+            Shadow gridLabelShadow = gridLabelTextGO.AddComponent<Shadow>();
+            gridLabelShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            gridLabelShadow.effectDistance = new Vector2(1f, -1f);
 
             // Card Container (Hidden by default, positions below)
             GameObject cardGO = new GameObject("Card");
@@ -2627,6 +2774,13 @@ namespace VPB
                 }
             }
 
+            if (isListMode)
+            {
+                Transform gridLabelTr = btnGO.transform.Find("GridLabel");
+                if (gridLabelTr != null && gridLabelTr.gameObject.activeSelf)
+                    gridLabelTr.gameObject.SetActive(false);
+            }
+
             Transform selectorTr = btnGO.transform.Find("RatingSelector");
             if (selectorTr != null)
             {
@@ -2674,13 +2828,46 @@ namespace VPB
                 }
                 else
                 {
-                    // Full thumb (Grid)
-                    thumbRT.anchorMin = Vector2.zero;
+                    bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsEnabled;
+                    float labelFrac = showGridLabels ? GetGridLabelFraction() : 0f;
+
+                    thumbRT.anchorMin = new Vector2(0f, labelFrac);
                     thumbRT.anchorMax = Vector2.one;
                     thumbRT.pivot = new Vector2(0.5f, 0.5f);
                     thumbRT.anchoredPosition = Vector2.zero;
-                    thumbRT.offsetMin = new Vector2(3, 3);
-                    thumbRT.offsetMax = new Vector2(-3, -3);
+                    thumbRT.offsetMin = new Vector2(3f, 3f);
+                    thumbRT.offsetMax = new Vector2(-3f, -3f);
+                    Transform gridLabelTr = btnGO.transform.Find("GridLabel");
+                    if (gridLabelTr != null)
+                    {
+                        gridLabelTr.gameObject.SetActive(showGridLabels);
+                        if (showGridLabels)
+                        {
+                            RectTransform glRT = gridLabelTr as RectTransform;
+                            if (glRT != null)
+                            {
+                                glRT.anchorMin = new Vector2(0f, 0f);
+                                glRT.anchorMax = new Vector2(1f, labelFrac);
+                                glRT.offsetMin = Vector2.zero;
+                                glRT.offsetMax = Vector2.zero;
+                            }
+                            Transform glTextTr = gridLabelTr.Find("Text");
+                            if (glTextTr != null)
+                            {
+                                Text t = glTextTr.GetComponent<Text>();
+                                RectTransform glTextRT = glTextTr as RectTransform;
+                                if (t != null && glTextRT != null)
+                                {
+                                    int fs = Mathf.RoundToInt(VPBConfig.Instance.GalleryGridLabelFontSize);
+                                    t.fontSize = fs;
+                                    string labelText = GetGridItemLabelText(file);
+                                    RectTransform labelRT = gridLabelTr as RectTransform;
+                                    float availWidth = labelRT != null ? labelRT.rect.width : 94f;
+                                    t.text = TruncateGridLabelTextByWidth(t, labelText, availWidth);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 RawImage thumbImg = thumbTr.GetComponent<RawImage>();
@@ -2895,12 +3082,19 @@ namespace VPB
                         {
                             try
                             {
+                                if (file is CleanupFileEntry cfe && cfe.Candidate != null)
+                                {
+                                    catLabel = cfe.Candidate.GetFlagsLabel();
+                                }
+                                else
+                                {
                                 if (IsFilterActive)
                                 {
                                     if (file is PackageListEntry ple && ple.Package != null)
                                         catLabel = GetBestCategoryLabelForPackage(ple.Package);
                                     else if (file is VarFileEntry vfe3 && vfe3.Package != null)
                                         catLabel = GetBestCategoryLabelForPackage(vfe3.Package);
+                                }
                                 }
                             }
                             catch { catLabel = ""; }

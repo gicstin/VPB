@@ -221,6 +221,46 @@ namespace VPB
             {
                 imgPath = file.Path;
             }
+            else if (file is CleanupFileEntry cfe && cfe.Candidate != null)
+            {
+                var cand = cfe.Candidate;
+                if (cand.SourceKind == CleanupCandidateSourceKind.VarPackage)
+                {
+                    VarPackage pkg = null;
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(cand.PackageUid))
+                            pkg = FileManager.GetPackageForDependency(cand.PackageUid, false);
+                    }
+                    catch { pkg = null; }
+
+                    if (pkg != null)
+                    {
+                        string chosen = GetOrChoosePackagePreviewInternalPath(pkg);
+                        if (!string.IsNullOrEmpty(chosen))
+                            imgPath = pkg.Path + ":/" + chosen.Replace('\\', '/');
+                    }
+                }
+                else
+                {
+                    // Local cleanup rows: prefer sidecar image next to source (.json -> .jpg/.png).
+                    try
+                    {
+                        string testJpg = Path.ChangeExtension(file.Path, ".jpg");
+                        if (File.Exists(testJpg) || FileManager.FileExists(testJpg))
+                        {
+                            imgPath = testJpg;
+                        }
+                        else
+                        {
+                            string testPng = Path.ChangeExtension(file.Path, ".png");
+                            if (File.Exists(testPng) || FileManager.FileExists(testPng))
+                                imgPath = testPng;
+                        }
+                    }
+                    catch { }
+                }
+            }
             else if (file is PackageListEntry ple && ple.Package != null)
             {
                 // For package list rows, pick an internal image (jpg/png) inside the .var.

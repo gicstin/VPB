@@ -19,6 +19,8 @@ namespace VPB
 
         public void SetLeftActiveContent(ContentType? type)
         {
+            if (type.HasValue && (type.Value == ContentType.Category || type.Value == ContentType.Creator))
+                ExitCleanupModeForSidePanelNavigation();
             leftActiveContent = type;
             UpdateLayout();
             UpdateTabs();
@@ -26,6 +28,8 @@ namespace VPB
 
         public void SetRightActiveContent(ContentType? type)
         {
+            if (type.HasValue && (type.Value == ContentType.Category || type.Value == ContentType.Creator))
+                ExitCleanupModeForSidePanelNavigation();
             rightActiveContent = type;
             UpdateLayout();
             UpdateTabs();
