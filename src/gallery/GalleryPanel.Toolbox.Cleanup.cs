@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using UnityEngine;
 
 namespace VPB
@@ -106,6 +107,15 @@ namespace VPB
         private readonly List<CleanupCandidate> cleanupCandidatesAll = new List<CleanupCandidate>();
         private readonly Dictionary<string, CleanupCandidate> cleanupCandidateByPath =
             new Dictionary<string, CleanupCandidate>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, CleanupHashCacheEntry> cleanupHashCacheByPath =
+            new Dictionary<string, CleanupHashCacheEntry>(StringComparer.OrdinalIgnoreCase);
+
+        private sealed class CleanupHashCacheEntry
+        {
+            public long Size;
+            public long LastWriteUtcTicks;
+            public string Sha256Hex;
+        }
 
         private static string NormalizePathSafe(string p)
         {
@@ -222,6 +232,96 @@ namespace VPB
             return best;
         }
 
+        private bool TryGetFileSha256Cached(string path, out long size, out string sha256Hex)
+        {
+            size = 0;
+            sha256Hex = null;
+            if (string.IsNullOrEmpty(path)) return false;
+
+            try
+            {
+                string norm = NormalizePathSafe(path);
+                if (string.IsNullOrEmpty(norm)) return false;
+
+                var fi = new FileInfo(path);
+                if (!fi.Exists) return false;
+                size = fi.Length;
+                long lastWriteUtcTicks = fi.LastWriteTimeUtc.Ticks;
+
+                if (cleanupHashCacheByPath.TryGetValue(norm, out CleanupHashCacheEntry cached))
+                {
+                    if (cached != null
+                        && cached.Size == size
+                        && cached.LastWriteUtcTicks == lastWriteUtcTicks
+                        && !string.IsNullOrEmpty(cached.Sha256Hex))
+                    {
+                        sha256Hex = cached.Sha256Hex;
+                        return true;
+                    }
+                }
+
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 64 * 1024, FileOptions.SequentialScan))
+                using (var sha = SHA256.Create())
+                {
+                    byte[] hashBytes = sha.ComputeHash(stream);
+                    sha256Hex = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+                }
+
+                cleanupHashCacheByPath[norm] = new CleanupHashCacheEntry
+                {
+                    Size = size,
+                    LastWriteUtcTicks = lastWriteUtcTicks,
+                    Sha256Hex = sha256Hex
+                };
+                return !string.IsNullOrEmpty(sha256Hex);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private Dictionary<string, List<CleanupCandidate>> BuildDuplicateHashGroups(List<CleanupCandidate> candidates)
+        {
+            var result = new Dictionary<string, List<CleanupCandidate>>(StringComparer.OrdinalIgnoreCase);
+            if (candidates == null || candidates.Count <= 1) return result;
+
+            var bySize = new Dictionary<long, List<CleanupCandidate>>();
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                var c = candidates[i];
+                if (c == null || string.IsNullOrEmpty(c.SourcePath)) continue;
+                if (!TryGetFileSha256Cached(c.SourcePath, out long size, out string _)) continue;
+
+                if (!bySize.TryGetValue(size, out var sameSize))
+                {
+                    sameSize = new List<CleanupCandidate>();
+                    bySize[size] = sameSize;
+                }
+                sameSize.Add(c);
+            }
+
+            foreach (var sizeGroup in bySize.Values)
+            {
+                if (sizeGroup == null || sizeGroup.Count <= 1) continue;
+                for (int i = 0; i < sizeGroup.Count; i++)
+                {
+                    var c = sizeGroup[i];
+                    if (c == null || string.IsNullOrEmpty(c.SourcePath)) continue;
+                    if (!TryGetFileSha256Cached(c.SourcePath, out long _, out string hash) || string.IsNullOrEmpty(hash)) continue;
+
+                    if (!result.TryGetValue(hash, out var arr))
+                    {
+                        arr = new List<CleanupCandidate>();
+                        result[hash] = arr;
+                    }
+                    arr.Add(c);
+                }
+            }
+
+            return result;
+        }
+
         private CleanupCandidate GetOrCreateCleanupCandidate(
             Dictionary<string, CleanupCandidate> byPath,
             string sourcePath,
@@ -252,9 +352,6 @@ namespace VPB
             var varSw = Stopwatch.StartNew();
             BuildVarCleanupCandidates(byPath);
             varSw.Stop();
-            var localSw = Stopwatch.StartNew();
-            BuildLocalCleanupCandidates(byPath);
-            localSw.Stop();
             RefreshCleanupExcludedKeyCache();
 
             var list = byPath.Values.ToList();
@@ -269,7 +366,7 @@ namespace VPB
                 return string.Compare(a.NormalizedPath, b.NormalizedPath, StringComparison.OrdinalIgnoreCase);
             });
             totalSw.Stop();
-            LogUtil.LogWarning("[VPB] Cleanup(list) scan done | var=" + varSw.ElapsedMilliseconds + " ms | local=" + localSw.ElapsedMilliseconds + " ms | total=" + totalSw.ElapsedMilliseconds + " ms | candidates=" + list.Count);
+            LogUtil.LogWarning("[VPB] Cleanup(list) scan done | var=" + varSw.ElapsedMilliseconds + " ms | local=disabled | total=" + totalSw.ElapsedMilliseconds + " ms | candidates=" + list.Count);
             return list;
         }
 
@@ -352,8 +449,13 @@ namespace VPB
                 }
                 else
                 {
-                    c.Flags.Add(CleanupCandidateType.Damaged);
-                    c.Reasons.Add("Invalid VAR filename format");
+                    bool isVarByExt = false;
+                    try { isVarByExt = string.Equals(Path.GetExtension(norm), ".var", StringComparison.OrdinalIgnoreCase); } catch { isVarByExt = false; }
+                    if (isVarByExt)
+                    {
+                        c.Flags.Add(CleanupCandidateType.Damaged);
+                        c.Reasons.Add("Invalid VAR filename format");
+                    }
                 }
             }
 
@@ -361,14 +463,33 @@ namespace VPB
             {
                 var arr = kvp.Value;
                 if (arr == null || arr.Count <= 1) continue;
-                var keep = PickDuplicateKeepCandidate(arr);
-                for (int i = 0; i < arr.Count; i++)
+                var byHash = BuildDuplicateHashGroups(arr);
+                var hashMatched = new HashSet<CleanupCandidate>();
+                foreach (var hashKvp in byHash)
                 {
-                    var c = arr[i];
-                    if (c == null) continue;
-                    if (ReferenceEquals(c, keep)) continue;
-                    c.Flags.Add(CleanupCandidateType.Duplicate);
-                    c.Reasons.Add("Duplicate UID+version: " + kvp.Key);
+                    var sameHash = hashKvp.Value;
+                    if (sameHash == null || sameHash.Count <= 1) continue;
+                    var keep = PickDuplicateKeepCandidate(sameHash);
+                    for (int i = 0; i < sameHash.Count; i++)
+                    {
+                        var c = sameHash[i];
+                        if (c == null) continue;
+                        hashMatched.Add(c);
+                        if (ReferenceEquals(c, keep)) continue;
+                        c.Flags.Add(CleanupCandidateType.Duplicate);
+                        c.Reasons.Add("Duplicate UID+version (hash match): " + kvp.Key);
+                    }
+                }
+
+                if (arr.Count > 1 && hashMatched.Count < arr.Count)
+                {
+                    for (int i = 0; i < arr.Count; i++)
+                    {
+                        var c = arr[i];
+                        if (c == null || hashMatched.Contains(c)) continue;
+                        c.Flags.Add(CleanupCandidateType.Damaged);
+                        c.Reasons.Add("UID+version collision with different file hash: " + kvp.Key);
+                    }
                 }
             }
 
@@ -418,6 +539,9 @@ namespace VPB
 
                 foreach (string p in invalidByPath)
                 {
+                    bool isVarByExt = false;
+                    try { isVarByExt = string.Equals(Path.GetExtension(p), ".var", StringComparison.OrdinalIgnoreCase); } catch { isVarByExt = false; }
+                    if (!isVarByExt) continue;
                     var c = GetOrCreateCleanupCandidate(byPath, p, CleanupCandidateSourceKind.VarPackage);
                     if (c == null) continue;
                     c.Flags.Add(CleanupCandidateType.Damaged);
@@ -438,7 +562,6 @@ namespace VPB
 
             var byFileName = new Dictionary<string, List<CleanupCandidate>>(StringComparer.OrdinalIgnoreCase);
             var byFamily = new Dictionary<string, List<CleanupCandidate>>(StringComparer.OrdinalIgnoreCase);
-            var scenePreviewCandidates = new List<CleanupCandidate>();
 
             foreach (string p in EnumerateFilesCompat(savesRoot))
             {
@@ -535,40 +658,23 @@ namespace VPB
                     }
                 }
 
-                if (ext == ".jpg" || ext == ".png")
-                {
-                    scenePreviewCandidates.Add(c);
-                }
-            }
-
-            // Missing paired-assets criterion: preview image without matching scene JSON.
-            for (int i = 0; i < scenePreviewCandidates.Count; i++)
-            {
-                var c = scenePreviewCandidates[i];
-                if (c == null || string.IsNullOrEmpty(c.NormalizedPath)) continue;
-                string low = c.NormalizedPath.ToLowerInvariant();
-                if (low.IndexOf("/saves/scene/", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                try
-                {
-                    string stem = Path.Combine(Path.GetDirectoryName(c.NormalizedPath) ?? "", Path.GetFileNameWithoutExtension(c.NormalizedPath) ?? "");
-                    string sceneJson = stem + ".json";
-                    if (!File.Exists(sceneJson))
-                    {
-                        c.Flags.Add(CleanupCandidateType.Damaged);
-                        c.Reasons.Add("Preview image without matching scene JSON");
-                    }
-                }
-                catch { }
             }
 
             foreach (var kvp in byFileName)
             {
                 var arr = kvp.Value;
                 if (arr == null || arr.Count <= 1) continue;
-                for (int i = 0; i < arr.Count; i++)
+
+                var byHash = BuildDuplicateHashGroups(arr);
+                foreach (var hashKvp in byHash)
                 {
-                    arr[i].Flags.Add(CleanupCandidateType.Duplicate);
-                    arr[i].Reasons.Add("Duplicate local filename: " + kvp.Key);
+                    var sameHash = hashKvp.Value;
+                    if (sameHash == null || sameHash.Count <= 1) continue;
+                    for (int i = 0; i < sameHash.Count; i++)
+                    {
+                        sameHash[i].Flags.Add(CleanupCandidateType.Duplicate);
+                        sameHash[i].Reasons.Add("Duplicate local filename (hash match): " + kvp.Key);
+                    }
                 }
             }
 
@@ -638,6 +744,66 @@ namespace VPB
                         || c.HasFlag(CleanupCandidateType.Damaged)
                         || c.IsExcluded;
             }
+        }
+
+        private static bool CleanupReasonMatchesType(string reason, CleanupCandidateType type)
+        {
+            if (string.IsNullOrEmpty(reason)) return false;
+            switch (type)
+            {
+                case CleanupCandidateType.Duplicate:
+                    return reason.StartsWith("Duplicate UID+version", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("Duplicate local filename", StringComparison.OrdinalIgnoreCase);
+                case CleanupCandidateType.OldVersion:
+                    return reason.StartsWith("Old version", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("Older numeric-suffix version", StringComparison.OrdinalIgnoreCase);
+                default:
+                    return reason.StartsWith("Invalid VAR filename format", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("UID+version collision with different file hash", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("Marked invalid by scan/DB", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("Missing local file", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("Zero-byte local file", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("Unreadable local file", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("Empty scene JSON", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("Unreadable or oversized scene JSON", StringComparison.OrdinalIgnoreCase)
+                        || reason.StartsWith("Scene JSON parse failed", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        private static string BuildCleanupReasonLine(string label, HashSet<string> allReasons, CleanupCandidateType type)
+        {
+            if (allReasons == null || allReasons.Count == 0) return "";
+            var matched = new List<string>();
+            foreach (string reason in allReasons)
+            {
+                if (!CleanupReasonMatchesType(reason, type)) continue;
+                if (!matched.Contains(reason)) matched.Add(reason);
+            }
+            if (matched.Count == 0) return "";
+            return label + ": " + string.Join("; ", matched.ToArray());
+        }
+
+        private string BuildCleanupHoverDetails(CleanupCandidate candidate)
+        {
+            if (candidate == null) return "";
+            var lines = new List<string>();
+            if (candidate.HasFlag(CleanupCandidateType.Damaged))
+            {
+                string line = BuildCleanupReasonLine("Damaged", candidate.Reasons, CleanupCandidateType.Damaged);
+                if (!string.IsNullOrEmpty(line)) lines.Add(line);
+            }
+            if (candidate.HasFlag(CleanupCandidateType.Duplicate))
+            {
+                string line = BuildCleanupReasonLine("Duplicate", candidate.Reasons, CleanupCandidateType.Duplicate);
+                if (!string.IsNullOrEmpty(line)) lines.Add(line);
+            }
+            if (candidate.HasFlag(CleanupCandidateType.OldVersion))
+            {
+                string line = BuildCleanupReasonLine("Old", candidate.Reasons, CleanupCandidateType.OldVersion);
+                if (!string.IsNullOrEmpty(line)) lines.Add(line);
+            }
+            if (candidate.IsExcluded) lines.Add("Excluded: manually excluded from cleanup");
+            return string.Join("\n", lines.ToArray());
         }
 
         private int GetCleanupFilterMode()

@@ -648,6 +648,16 @@ namespace VPB
                 SetHoverPath("");
                 return;
             }
+
+            if (cleanupModeActive && file is CleanupFileEntry cfe && cfe.Candidate != null)
+            {
+                string details = BuildCleanupHoverDetails(cfe.Candidate);
+                if (!string.IsNullOrEmpty(details))
+                {
+                    SetHoverPath((file.Path ?? "") + "\n" + details);
+                    return;
+                }
+            }
             SetHoverPath(file.Path);
         }
 
