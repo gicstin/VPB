@@ -311,7 +311,7 @@
     <Compile Include="src\hook\uFileBrowser\FileIcon.cs" />
     <Compile Include="src\hook\uFileBrowser\ShortCutButton.cs" />
     <Compile Include="src\hook\VarNameParser.cs" />
-    <Compile Include="src\hook\PluginSignatureSaveBridge.cs" />
+    <Compile Include="src\hook\PluginSignatureBridge.cs" />
     <Compile Include="src\KeyUtil.cs" />
     <Compile Include="src\LogUtil.cs" />
     <Compile Include="src\MessageDef.cs" />
