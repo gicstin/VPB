@@ -2876,7 +2876,7 @@ namespace VPB
              if (cam == null) cam = Camera.main;
              if (ghostObject == null || cam == null) return;
              
-             bool isValidTarget = (atom != null && atom.type == "Person");
+             bool isValidTarget = (atom != null && SceneUtils.IsPersonLikeAtom(atom));
 
              if (HubItem != null)
              {

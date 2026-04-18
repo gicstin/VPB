@@ -231,7 +231,7 @@ namespace VPB
         {
             bool shouldShow = hoverCount > 0 && (canvas != null && canvas.gameObject.activeInHierarchy);
             Atom target = SelectedTargetAtom;
-            if (!shouldShow || target == null || target.type != "Person")
+            if (!shouldShow || target == null || !SceneUtils.IsPersonLikeAtom(target))
             {
                 if (targetMarkerGO != null) targetMarkerGO.SetActive(false);
                 return;

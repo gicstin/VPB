@@ -646,6 +646,47 @@ namespace VPB
             return buttonGO;
         }
 
+        /// <summary>
+        /// Square trailing control for optional actions on gallery side-tab rows (rename today; other categories later).
+        /// Uses a fixed <paramref name="edgeLengthPx"/> for both axes so layout groups cannot collapse one dimension.
+        /// Pair <paramref name="edgeLengthPx"/> with the same value used for the row’s tab height (e.g. 35 × InnerPaneScale).
+        /// </summary>
+        public static GameObject CreateSideTabSquareIconButton(GameObject rowParent, float edgeLengthPx, Sprite icon, UnityAction onClick, Color backdrop, float iconPadding)
+        {
+            GameObject go = new GameObject("SideTabSquareIcon");
+            go.transform.SetParent(rowParent.transform, false);
+            Image img = go.AddComponent<Image>();
+            img.color = backdrop;
+            img.raycastTarget = true;
+            Button btn = go.AddComponent<Button>();
+            ColorBlock cb = btn.colors;
+            cb.normalColor = Color.white;
+            cb.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f);
+            cb.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+            cb.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            btn.colors = cb;
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            if (onClick != null) btn.onClick.AddListener(onClick);
+            go.AddComponent<UIHoverBorder>();
+
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(edgeLengthPx, edgeLengthPx);
+
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            le.minWidth = le.preferredWidth = edgeLengthPx;
+            le.minHeight = le.preferredHeight = edgeLengthPx;
+            le.flexibleWidth = 0f;
+            le.flexibleHeight = 0f;
+
+            if (icon != null)
+                AddIconToButton(go, icon, iconPadding, backdrop);
+
+            return go;
+        }
+
         private static readonly Dictionary<string, Sprite> _iconSpriteCache = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>

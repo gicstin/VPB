@@ -218,7 +218,7 @@ namespace VPB
                 foreach(Atom a in allAtoms)
                 {
                     if (a == targetAtom) continue;
-                    if (a.type != "Person") continue;
+                    if (!SceneUtils.IsPersonLikeAtom(a)) continue;
                     
                     bool aIsMale = IsAtomMale(a);
                     if (aIsMale == requiredPartnerMale)
@@ -237,7 +237,7 @@ namespace VPB
                     foreach(Atom a in allAtoms)
                     {
                         if (a == targetAtom) continue;
-                        if (a.type != "Person") continue;
+                        if (!SceneUtils.IsPersonLikeAtom(a)) continue;
                         float d = Vector3.Distance(targetAtom.transform.position, a.transform.position);
                         if (d < closestDist)
                         {
@@ -351,7 +351,7 @@ namespace VPB
                  options.Add(new ContextMenuPanel.Option("Load Scene", () => LoadSceneFile(entry.Uid)));
                  options.Add(new ContextMenuPanel.Option("Merge Scene", () => MergeSceneFile(entry.Uid, false)));
 
-                 if (atom != null && atom.type == "Person")
+                 if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
                  {
                      options.Add(new ContextMenuPanel.Option("Import From Scene", () => {
                          ShowImportCategories(entry, atom);

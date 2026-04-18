@@ -52,7 +52,7 @@ namespace VPB
             try
             {
                 Atom selected = SuperController.singleton.GetSelectedAtom();
-                if (selected != null && selected.type == "Person") return selected;
+                if (selected != null && SceneUtils.IsPersonLikeAtom(selected)) return selected;
             }
             catch { }
 
@@ -65,7 +65,7 @@ namespace VPB
                     foreach (Atom a in allAtoms)
                     {
                         if (a == null) continue;
-                        try { if (a.type == "Person") return a; } catch { }
+                        try { if (SceneUtils.IsPersonLikeAtom(a)) return a; } catch { }
                     }
                 }
             }

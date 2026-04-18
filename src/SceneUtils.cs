@@ -185,7 +185,7 @@ namespace VPB
                 if (string.IsNullOrEmpty(scenePath)) return false;
                 if (SuperController.singleton == null) return false;
 
-                string tempPath = CreateFilteredSceneJSON(scenePath, entry, (atom) => atom != null && atom["type"].Value != "Person", true);
+                string tempPath = CreateFilteredSceneJSON(scenePath, entry, (atom) => atom != null && !SceneUtils.IsPersonLikeAtomType(atom["type"].Value), true);
                 if (string.IsNullOrEmpty(tempPath)) return false;
 
                 string loadPath = UI.NormalizePath(tempPath);
@@ -223,7 +223,7 @@ namespace VPB
             List<string> personUids = new List<string>();
             foreach (Atom a in sc.GetAtoms())
             {
-                if (a.type == "Person") personUids.Add(a.uid);
+                if (SceneUtils.IsPersonLikeAtom(a)) personUids.Add(a.uid);
             }
 
             if (personUids.Count == 0)
@@ -244,7 +244,7 @@ namespace VPB
                 sc.Save(currentSceneTemp);
             }
 
-            string personsOnlyTemp = CreateFilteredSceneJSON(currentSceneTemp, null, (atom) => atom != null && atom["type"].Value == "Person", false);
+            string personsOnlyTemp = CreateFilteredSceneJSON(currentSceneTemp, null, (atom) => atom != null && SceneUtils.IsPersonLikeAtomType(atom["type"].Value), false);
             try { if (File.Exists(currentSceneTemp)) File.Delete(currentSceneTemp); } catch { }
 
             if (string.IsNullOrEmpty(personsOnlyTemp))
@@ -260,7 +260,7 @@ namespace VPB
                 {
                     if (atom == null) return false;
                     string t = atom["type"].Value;
-                    if (t == "Person") return false;
+                    if (SceneUtils.IsPersonLikeAtomType(t)) return false;
                     return true;
                 },
                 false);
@@ -557,7 +557,7 @@ namespace VPB
         {
             if (atom == null) return;
             if (SuperController.singleton == null) return;
-            if (atom.type != "Person") return;
+            if (!SceneUtils.IsPersonLikeAtom(atom)) return;
 
             try
             {
@@ -574,7 +574,7 @@ namespace VPB
             yield return new WaitForEndOfFrame();
 
             if (atom == null) yield break;
-            if (atom.type != "Person") yield break;
+            if (!SceneUtils.IsPersonLikeAtom(atom)) yield break;
 
             if (lateRestoreTargets != null)
             {
@@ -605,6 +605,30 @@ namespace VPB
             yield return new WaitForEndOfFrame();
 
             if (serial != sceneLoadSerial) yield break;
+        }
+
+        /// <summary>
+        /// After LoadInternal returns, atoms may still be spawning for a few frames — defer so the target list matches the new scene.
+        /// </summary>
+        public static void ScheduleGalleryTargetListRefresh()
+        {
+            try
+            {
+                SuperController sc = SuperController.singleton;
+                if (sc == null) return;
+                sc.StartCoroutine(GalleryTargetListRefreshAfterSceneCoroutine());
+            }
+            catch { }
+        }
+
+        static IEnumerator GalleryTargetListRefreshAfterSceneCoroutine()
+        {
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            GalleryPanel.NotifyAllPanelsSceneTargetsChanged();
         }
 
 

@@ -1423,7 +1423,7 @@ namespace VPB
                 try
                 {
                     List<Atom> targets = SuperController.singleton != null
-                        ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
+                        ? SuperController.singleton.GetAtoms().Where(a => a != null && SceneUtils.IsPersonLikeAtom(a)).ToList()
                         : new List<Atom>();
 
                     foreach (Atom tgt in targets)
@@ -1465,7 +1465,7 @@ namespace VPB
                 try
                 {
                     List<Atom> targets = SuperController.singleton != null
-                        ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
+                        ? SuperController.singleton.GetAtoms().Where(a => a != null && SceneUtils.IsPersonLikeAtom(a)).ToList()
                         : new List<Atom>();
 
                     foreach (Atom tgt in targets)

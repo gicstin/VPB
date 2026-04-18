@@ -119,7 +119,7 @@ namespace VPB
             if (IsHubMode) return options;
 
             Atom target = GetBestTargetAtom();
-            bool hasTarget = target != null && (target.type == "Person" || target.type == "InvisiblePerson");
+            bool hasTarget = target != null && SceneUtils.IsPersonLikeAtom(target);
             string targetUid = target != null ? target.uid : "None";
 
             void AddPresetOption(string label, string storableId)

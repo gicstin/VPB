@@ -1687,7 +1687,7 @@ namespace VPB
                     if (SuperController.singleton != null)
                     {
                         var atoms = SuperController.singleton.GetAtoms();
-                        if (atoms != null) a = atoms.FirstOrDefault(x => x != null && x.type == "Person");
+                        if (atoms != null) a = atoms.FirstOrDefault(x => x != null && SceneUtils.IsPersonLikeAtom(x));
                     }
                 }
                 catch { a = null; }
@@ -1828,7 +1828,7 @@ namespace VPB
         private Action CaptureUndoRedoSnapshotAction()
         {
             Atom a = GetBestUndoRedoTargetAtom();
-            if (a != null && string.Equals(a.type, "Person", StringComparison.OrdinalIgnoreCase))
+            if (a != null && SceneUtils.IsPersonLikeAtom(a))
             {
                 Action atomSnap = CaptureAtomSnapshotAction(a);
                 if (atomSnap != null) return atomSnap;
@@ -1879,7 +1879,7 @@ namespace VPB
                                 if (SuperController.singleton != null)
                                 {
                                     var atoms = SuperController.singleton.GetAtoms();
-                                    if (atoms != null) bestAtom = atoms.FirstOrDefault(a => a != null && a.type == "Person");
+                                    if (atoms != null) bestAtom = atoms.FirstOrDefault(a => a != null && SceneUtils.IsPersonLikeAtom(a));
                                 }
                             }
                             catch { bestAtom = null; }
@@ -2023,7 +2023,7 @@ namespace VPB
                         if (a == null) continue;
                         try
                         {
-                            if (a.type == "Person")
+                            if (SceneUtils.IsPersonLikeAtom(a))
                             {
                                 string uid = a.uid;
                                 if (uid != null)
@@ -2062,6 +2062,35 @@ namespace VPB
             }
 
             UpdateTargetDropdownUI();
+        }
+
+        /// <summary>Called after scene load/merge (deferred) and when the Target side tab may need rebuilt buttons.</summary>
+        public static void NotifyAllPanelsSceneTargetsChanged()
+        {
+            try
+            {
+                if (Gallery.singleton == null) return;
+                var panels = Gallery.singleton.Panels;
+                if (panels == null) return;
+                for (int i = 0; i < panels.Count; i++)
+                {
+                    GalleryPanel p = panels[i];
+                    if (p == null) continue;
+                    try { p.SyncTargetListWithScene(); } catch { }
+                }
+            }
+            catch { }
+        }
+
+        public void SyncTargetListWithScene()
+        {
+            RefreshTargetDropdown();
+            try
+            {
+                if (leftActiveContent == ContentType.Target || rightActiveContent == ContentType.Target)
+                    UpdateTabs();
+            }
+            catch { }
         }
 
         public void CycleTarget(bool forward)

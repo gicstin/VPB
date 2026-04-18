@@ -571,6 +571,17 @@ namespace VPB
             string saveName, bool loadMerge, bool editMode)
         {
             LogUtil.EndSceneLoadInternal("LoadInternal");
+            try { SceneLoadingUtils.ScheduleGalleryTargetListRefresh(); } catch { }
+        }
+
+        /// <summary>
+        /// Keep gallery target picker in sync when an atom is removed (no polling).
+        /// </summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SuperController), "RemoveAtom", new Type[] { typeof(Atom) })]
+        public static void PostRemoveAtom(SuperController __instance, Atom atom)
+        {
+            try { GalleryPanel.NotifyAllPanelsSceneTargetsChanged(); } catch { }
         }
 
         /// <summary>

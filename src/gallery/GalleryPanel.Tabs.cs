@@ -1046,6 +1046,8 @@ namespace VPB
             }
             trackedButtons.Clear();
 
+            CleanupSideTabLabeledRows(container.transform);
+
             if (contentType == ContentType.Category)
             {
                 if (categories == null || categories.Count == 0) return;
@@ -1259,7 +1261,9 @@ namespace VPB
             {
                 Color targetColor = new Color(0.4f, 0.4f, 0.5f, 1f);
                 Color cancelColor = new Color(0.6f, 0.3f, 0.3f, 1f);
-                if (personAtoms == null || personAtoms.Count == 0) RefreshTargetDropdown();
+                // Always refresh: when the scene had zero persons we store a placeholder (Count==1, atom null).
+                // The old guard only ran when Count==0, so the list never re-scanned after persons appeared.
+                RefreshTargetDropdown();
 
                 UnityAction cancelAction = () => {
                     if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
@@ -1270,6 +1274,9 @@ namespace VPB
 
                 bool hasRealPersons = personAtoms.Count > 0 && personAtoms[0] != null;
                 int startIndex = trackedButtons.Count;
+                float sScale = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                float tabRowHeight = 35f * sScale;
+                Sprite renameSpr = UI.LoadIconSprite("vpb_icons/rename.png", new Color(0.78f, 0.78f, 0.78f, 1f));
 
                 for (int i = 0; i < personAtoms.Count; i++)
                 {
@@ -1286,7 +1293,23 @@ namespace VPB
                     string tooltip = atom != null ? atom.uid : "No target";
 
                     int capturedIndex = i;
-                    CreateTabButton(container.transform, label, btnColor, isActive, () => {
+
+                    GameObject rowGO = new GameObject("SideTabLabeledRow");
+                    rowGO.transform.SetParent(container.transform, false);
+                    HorizontalLayoutGroup rowHlg = rowGO.AddComponent<HorizontalLayoutGroup>();
+                    rowHlg.spacing = Mathf.Max(2, Mathf.RoundToInt(4f * sScale));
+                    rowHlg.childAlignment = TextAnchor.MiddleLeft;
+                    rowHlg.childControlWidth = true;
+                    rowHlg.childForceExpandWidth = true;
+                    rowHlg.childControlHeight = true;
+                    // Do not stretch children vertically to different heights — keeps trailing icon buttons square.
+                    rowHlg.childForceExpandHeight = false;
+                    LayoutElement rowLe = rowGO.AddComponent<LayoutElement>();
+                    rowLe.minHeight = tabRowHeight;
+                    rowLe.preferredHeight = tabRowHeight;
+                    rowLe.flexibleWidth = 1f;
+
+                    CreateTabButton(rowGO.transform, label, btnColor, isActive, () => {
                         targetDropdownValue = capturedIndex;
                         UpdateTargetDropdownUI();
                         for (int j = startIndex; j < trackedButtons.Count; j++)
@@ -1305,6 +1328,13 @@ namespace VPB
                             if (bottomCancelImg != null) bottomCancelImg.color = cancelColor;
                         }
                     }, trackedButtons, null, tooltip);
+
+                    if (atom != null && renameSpr != null)
+                    {
+                        Color renameBackdrop = new Color(0.35f, 0.35f, 0.42f, 1f);
+                        GameObject renameBtnGO = UI.CreateSideTabSquareIconButton(rowGO.gameObject, tabRowHeight, renameSpr, () => ShowPersonAtomRenameOverlay(atom), renameBackdrop, Mathf.Max(3f, 4f * sScale));
+                        AddTooltipPlain(renameBtnGO, VPBTranslation.T("gallery.rename.tooltip", "Rename this person"));
+                    }
                 }
 
                 if (hasRealPersons)
@@ -1599,7 +1629,7 @@ namespace VPB
             else if (contentType == ContentType.RemoveClothing)
             {
                 List<Atom> personAtoms = SuperController.singleton != null
-                    ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
+                    ? SuperController.singleton.GetAtoms().Where(a => a != null && SceneUtils.IsPersonLikeAtom(a)).ToList()
                     : new List<Atom>();
 
                 if (personAtoms.Count > 0)
@@ -1721,7 +1751,7 @@ namespace VPB
             else if (contentType == ContentType.RemoveHair)
             {
                 List<Atom> personAtoms = SuperController.singleton != null
-                    ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
+                    ? SuperController.singleton.GetAtoms().Where(a => a != null && SceneUtils.IsPersonLikeAtom(a)).ToList()
                     : new List<Atom>();
 
                 if (personAtoms.Count > 0)
@@ -1923,6 +1953,21 @@ namespace VPB
             rt.sizeDelta = sizeDelta;
             rt.anchoredPosition = Vector2.zero;
             go.AddComponent<Image>().color = color;
+        }
+
+        /// <summary>Removes side-tab rows that pair a primary tab button with optional trailing controls (see <see cref="UI.CreateSideTabSquareIconButton"/>).</summary>
+        private static void CleanupSideTabLabeledRows(Transform container)
+        {
+            if (container == null) return;
+            for (int i = container.childCount - 1; i >= 0; i--)
+            {
+                Transform ch = container.GetChild(i);
+                if (ch == null) continue;
+                string n = ch.gameObject.name;
+                if (string.Equals(n, "SideTabLabeledRow", StringComparison.Ordinal)
+                    || string.Equals(n, "TargetPersonRow", StringComparison.Ordinal))
+                    UnityEngine.Object.Destroy(ch.gameObject);
+            }
         }
 
         private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null)
