@@ -458,14 +458,9 @@ namespace VPB
         private InputField leftSearchInput;
         private InputField rightSearchInput;
         private InputField titleSearchInput;
-        private Text leftTargetBtnText;
-        private Image leftTargetBtnImage;
-        private Image leftTargetBtnIconImage;
-        private Text rightTargetBtnText;
-        private Image rightTargetBtnImage;
-        private Image rightTargetBtnIconImage;
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
+        private List<GameObject> tboxPersonAtomBtns = new List<GameObject>();
 
         private enum AppearanceGender
         {
@@ -785,16 +780,14 @@ namespace VPB
         private Sprite gallerySaveSprite;
         private Sprite galleryCategorySprite;
         private Sprite galleryCreatorSprite;
-        private Sprite galleryTargetSprite;
+        private Sprite targetOnSprite;
+        private Sprite targetOffSprite;
         private Sprite galleryApplySprite;
         private Sprite galleryApplyOneClickSprite;
         private Sprite galleryApplyTwoClickSprite;
         private Sprite galleryAddSprite;
         private Sprite galleryReplaceSprite;
         private Sprite galleryRemoveSprite;
-
-        /// <summary>Current target line for status tooltip when target side button uses an icon.</summary>
-        private string sideTargetTooltipLive = "";
 
         private Image rightFollowBtnIconImage;
         private Image leftFollowBtnIconImage;

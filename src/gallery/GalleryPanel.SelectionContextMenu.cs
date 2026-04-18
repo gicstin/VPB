@@ -168,6 +168,7 @@ namespace VPB
             d(tboxCacheTexturesBtn);
             d(tboxCopyPkgNamesBtn);
             d(tboxSceneImportBtn);
+            foreach (var go in tboxPersonAtomBtns) { if (go != null) go.transform.SetParent(p, false); }
         }
 
         private static void TboxPopulateRowLtr(HorizontalLayoutGroup hlg, List<GameObject> listLtr)
@@ -235,7 +236,9 @@ namespace VPB
                 return s;
             }
 
-            var ltr = new List<GameObject>(26);
+            var ltr = new List<GameObject>(26 + tboxPersonAtomBtns.Count);
+            // Person atom target buttons appear leftmost in the toolbar
+            foreach (var go in tboxPersonAtomBtns) { if (go != null) ltr.Add(go); }
             // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
             if (tboxDisableAutoInstallBtn != null) ltr.Add(tboxDisableAutoInstallBtn);
             if (tboxUnhideBtn != null) ltr.Add(tboxUnhideBtn);
@@ -989,6 +992,9 @@ namespace VPB
                 tboxPinned = VPBConfig.Instance.GalleryTboxToolbarPinned;
             RefreshTboxPinVisual();
             AddTooltip(tboxPinBtn, "gallery.tooltip.tbox_pin", "Pin — keep toolbar expanded");
+
+            // Populate person atom buttons with whatever data is already loaded
+            try { RefreshTboxPersonAtomButtons(); } catch { }
         }
 
         private void RefreshTboxPinVisual()
@@ -1006,6 +1012,150 @@ namespace VPB
                 tboxPinBtnText.color = new Color(0.45f, 0.45f, 0.45f, 1f);
                 if (tboxPinIconImage != null && tboxPinOffSprite != null) tboxPinIconImage.sprite = tboxPinOffSprite;
             }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+
+        /// <summary>Public wrapper called after scene loads to ensure toolbox person atom buttons are refreshed with the new atoms.</summary>
+        public void RefreshTboxPersonAtomButtonsAfterSceneLoad()
+        {
+            try
+            {
+                EnsureTboxUI();
+                RefreshTboxPersonAtomButtons();
+                // Force layout rebuild to ensure buttons appear immediately
+                try { Canvas.ForceUpdateCanvases(); } catch { }
+            }
+            catch { }
+        }
+
+        private string GetPersonAtomDisplayLabel(Atom atom, string uid)
+        {
+            try
+            {
+                JSONStorable storable = atom?.GetStorableByID("AppearancePresets");
+                if (storable != null)
+                {
+                    JSONStorableString presetParam = null;
+                    try { presetParam = storable.GetStringJSONParam("presetName"); } catch { }
+                    if (presetParam != null && !string.IsNullOrEmpty(presetParam.val))
+                    {
+                        string presetName = MVR.FileManagementSecure.FileManagerSecure.GetFileName(presetParam.val);
+                        if (!string.IsNullOrEmpty(presetName))
+                            return $"{presetName} ({uid})";
+                    }
+                }
+            }
+            catch { }
+            return uid;
+        }
+
+        private void RefreshTboxPersonAtomButtons()
+        {
+            EnsureTboxUI();
+            if (tboxButtonStash == null) return;
+
+            // Move old rows out of flex rows before destroying so the HLG stops seeing them this frame
+            if (tboxButtonStash != null)
+            {
+                Transform s = tboxButtonStash.transform;
+                foreach (var go in tboxPersonAtomBtns) { if (go != null) go.transform.SetParent(s, false); }
+            }
+            foreach (var go in tboxPersonAtomBtns) { if (go != null) Destroy(go); }
+            tboxPersonAtomBtns.Clear();
+
+            bool hasReal = personAtoms.Count > 0 && personAtoms[0] != null;
+            if (!hasReal)
+            {
+                try { RefreshTboxFlexButtonLayout(); } catch { }
+                return;
+            }
+
+            float innerRowH   = Mathf.Max(34f, tboxInfoRowHeight - 8f);
+            float sScale      = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            Sprite renameSpr  = UI.LoadIconSprite("vpb_icons/rename.png",       new Color(0.78f, 0.78f, 0.78f, 1f));
+            Sprite saveSpr    = gallerySaveSprite;
+            Color renameBackdrop = new Color(0.35f, 0.35f, 0.42f, 1f);
+            Color saveBackdrop   = new Color(0.20f, 0.35f, 0.22f, 1f);
+            Color activeColor    = new Color(0.25f, 0.35f, 0.50f, 1f);
+            Color inactiveColor  = new Color(0.18f, 0.18f, 0.20f, 1f);
+            Transform stash      = tboxButtonStash.transform;
+            float iconBtnSz      = innerRowH;
+            float iconBtnCount   = (renameSpr != null ? 1 : 0) + (saveSpr != null ? 1 : 0);
+            float iconBtnsW      = iconBtnCount * iconBtnSz + (iconBtnCount > 1 ? (iconBtnCount - 1) * 2f : 0f);
+
+            for (int i = 0; i < personAtoms.Count; i++)
+            {
+                Atom atom = personAtoms[i];
+                if (atom == null) continue;
+
+                string uid      = targetDropdownOptions.Count > i ? targetDropdownOptions[i] : "Unknown";
+                string label    = GetPersonAtomDisplayLabel(atom, uid);
+                bool   isActive = (targetDropdownValue == i);
+                int    captured = i;
+
+                // Row GO — stashed initially, placed into flex rows by RefreshTboxFlexButtonLayout
+                var rowGO = new GameObject("TboxPersonAtomRow_" + i);
+                rowGO.transform.SetParent(stash, false);
+                var rowRT = rowGO.AddComponent<RectTransform>();
+                rowRT.anchorMin = Vector2.zero; rowRT.anchorMax = Vector2.one;
+                rowRT.pivot = new Vector2(0.5f, 0.5f);
+                rowRT.offsetMin = rowRT.offsetMax = Vector2.zero;
+                var rowHLG = rowGO.AddComponent<HorizontalLayoutGroup>();
+                rowHLG.spacing = 2f; rowHLG.childAlignment = TextAnchor.MiddleLeft;
+                rowHLG.childControlWidth = true; rowHLG.childForceExpandWidth = false;
+                rowHLG.childControlHeight = true; rowHLG.childForceExpandHeight = true;
+                var rowLE = rowGO.AddComponent<LayoutElement>();
+                rowLE.minWidth = 90f + (iconBtnsW > 0 ? 2f + iconBtnsW : 0f);
+                rowLE.preferredWidth = 160f + (iconBtnsW > 0 ? 2f + iconBtnsW : 0f);
+                rowLE.flexibleWidth = 1f;
+                rowLE.minHeight = innerRowH; rowLE.preferredHeight = innerRowH; rowLE.flexibleHeight = 1f;
+                tboxPersonAtomBtns.Add(rowGO);
+
+                // Main button (sets this atom as target on click)
+                var mainBtn = UI.CreateUIButton(rowGO, 0, 0, label, 14, 0, 0, AnchorPresets.stretchAll,
+                    () => { targetDropdownValue = captured; UpdateTargetDropdownUI(); });
+                mainBtn.name = "PersonAtomBtn_" + label;
+                var mainImg = mainBtn.GetComponent<Image>();
+                if (mainImg != null) mainImg.color = isActive ? activeColor : inactiveColor;
+                var mainLE = mainBtn.GetComponent<LayoutElement>() ?? mainBtn.AddComponent<LayoutElement>();
+                mainLE.flexibleWidth = 1f; mainLE.minHeight = innerRowH;
+                mainLE.preferredHeight = innerRowH; mainLE.flexibleHeight = 1f;
+                var txt = mainBtn.GetComponentInChildren<Text>(true);
+                if (txt != null) txt.gameObject.SetActive(true);
+                string tooltipText = $"Person atom: {atom.uid}\nClick to select as target";
+                AddTooltipPlain(mainBtn, tooltipText);
+
+                // Save appearance preset button
+                if (saveSpr != null)
+                {
+                    Atom capturedAtom = atom;
+                    var saveBtn = UI.CreateSideTabSquareIconButton(
+                        rowGO, iconBtnSz, saveSpr,
+                        () => SavePresetFromStorable(capturedAtom, "AppearancePresets"),
+                        saveBackdrop, Mathf.Max(3f, 4f * sScale));
+                    AddTooltipPlain(saveBtn, VPBTranslation.T("gallery.tbox.save_appearance", "Save appearance preset for this person"));
+                }
+
+                // Rename button
+                if (renameSpr != null)
+                {
+                    Atom capturedAtom = atom;
+                    var renameBtn = UI.CreateSideTabSquareIconButton(
+                        rowGO, iconBtnSz, renameSpr,
+                        () => ShowPersonAtomRenameOverlay(capturedAtom),
+                        renameBackdrop, Mathf.Max(3f, 4f * sScale));
+                    AddTooltipPlain(renameBtn, VPBTranslation.T("gallery.rename.tooltip", "Rename this person"));
+                }
+            }
+
+            try
+            {
+                Canvas.ForceUpdateCanvases();
+                RefreshTboxFlexButtonLayout();
+                Canvas.ForceUpdateCanvases();
+            }
+            catch { }
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -1046,8 +1196,9 @@ namespace VPB
                 }
             }
 
-            // Action buttons only when there is a selection; pin persists until user toggles (saved in VPB.cfg).
-            bool canExpand = sel > 0 || cleanupModeActive;
+            // Action buttons when there is a selection, cleanup mode active, or person atoms present; pin persists until user toggles (saved in VPB.cfg).
+            bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
+            bool canExpand = sel > 0 || cleanupModeActive || hasPersonAtoms;
             if (!canExpand)
             {
                 tboxExpandT = 0f;
@@ -1065,7 +1216,8 @@ namespace VPB
                     tboxHintLabel.text = VPBTranslation.T("gallery.tbox.pinned_select", "Pinned — select items for actions");
             }
 
-            bool wantExpanded = canExpand && (tboxIsHovered || tboxPinned);
+            // Auto-expand toolbox if person atoms present, otherwise require hover or pin
+            bool wantExpanded = canExpand && (tboxIsHovered || tboxPinned || hasPersonAtoms);
 
             // Smooth animate expand T — fast snap
             float targetT = wantExpanded ? 1f : 0f;
@@ -1075,7 +1227,7 @@ namespace VPB
             // Animate bar height: grow offsetMax upward to reveal the button band (1 or 2 rows)
             if (tboxRT != null)
             {
-                if ((sel > 0 || cleanupModeActive) && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
+                if ((sel > 0 || cleanupModeActive || hasPersonAtoms) && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
                 {
                     float w = tboxButtonsFlexRootRT.rect.width;
                     if (w > 8f && Mathf.Abs(w - tboxLastFlexAvailW) > 2f)

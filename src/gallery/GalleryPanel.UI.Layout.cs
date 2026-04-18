@@ -915,7 +915,7 @@ namespace VPB
 
                     idxCategory = FindIndexByTextRef(rightCategoryBtnText != null ? rightCategoryBtnText : leftCategoryBtnText);
                     idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
-                    idxTarget = FindIndexByTextRef(rightTargetBtnText != null ? rightTargetBtnText : leftTargetBtnText);
+                    // idxTarget: target button moved to toolbox, no longer a side button
                     idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);
                     idxKeepOutfit = FindIndexByTextRef(rightKeepClothingBtnText != null ? rightKeepClothingBtnText : leftKeepClothingBtnText);
                     idxReplace = FindIndexByTextRef(rightReplaceBtnText != null ? rightReplaceBtnText : leftReplaceBtnText);
@@ -1029,34 +1029,7 @@ namespace VPB
 
         private void ToggleTargetSubmenuFromSideButtons(bool? forceLeftSide = null)
         {
-            bool useLeftSide = forceLeftSide ?? isFixedLocally;
-            CloseOtherSideIfSubmenu(useLeftSide);
-            if (useLeftSide)
-            {
-                if (leftActiveContent == ContentType.Target)
-                {
-                    leftActiveContent = leftPrevActiveContent;
-                }
-                else
-                {
-                    leftPrevActiveContent = leftActiveContent;
-                    leftActiveContent = ContentType.Target;
-                }
-            }
-            else
-            {
-                if (rightActiveContent == ContentType.Target)
-                {
-                    rightActiveContent = rightPrevActiveContent;
-                }
-                else
-                {
-                    rightPrevActiveContent = rightActiveContent;
-                    rightActiveContent = ContentType.Target;
-                }
-            }
-            UpdateLayout();
-            UpdateTabs();
+            // Removed: target selection is now in the toolbox.
         }
 
         private void PushUndoSnapshotForAtomRemoval(Atom atom)
@@ -1574,8 +1547,6 @@ namespace VPB
                     return true;
                 if (galleryCreatorSprite != null && rightCreatorBtnIconImage != null && rightCreatorBtnImage != null && go == rightCreatorBtnImage.gameObject)
                     return true;
-                if (galleryTargetSprite != null && rightTargetBtnIconImage != null && rightTargetBtnImage != null && go == rightTargetBtnImage.gameObject)
-                    return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && rightApplyModeBtnIconImage != null && rightApplyModeBtnImage != null && go == rightApplyModeBtnImage.gameObject)
                     return true;
                 if ((galleryAddSprite != null || galleryReplaceSprite != null) && rightReplaceBtnIconImage != null && rightReplaceBtnImage != null && go == rightReplaceBtnImage.gameObject)
@@ -1593,8 +1564,6 @@ namespace VPB
                 if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
                     return true;
                 if (galleryCreatorSprite != null && leftCreatorBtnIconImage != null && leftCreatorBtnImage != null && go == leftCreatorBtnImage.gameObject)
-                    return true;
-                if (galleryTargetSprite != null && leftTargetBtnIconImage != null && leftTargetBtnImage != null && go == leftTargetBtnImage.gameObject)
                     return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && leftApplyModeBtnIconImage != null && leftApplyModeBtnImage != null && go == leftApplyModeBtnImage.gameObject)
                     return true;

@@ -269,13 +269,8 @@
   <ItemGroup>
     <Compile Include="src\ByteArrayPool.cs" />
     <Compile Include="src\ClothingLoadingUtils.cs" />
-    <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />
     <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\GlobalInfo.cs" />
-    <Compile Include="src\util\CUAClothing.Data.cs" />
-    <Compile Include="src\util\CUAClothing.cs" />
-    <Compile Include="src\util\CUAConverter.cs" />
-    <Compile Include="src\util\JSONExtensions.cs" />
     <Compile Include="src\VdsLauncher.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />

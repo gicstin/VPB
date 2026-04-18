@@ -1966,37 +1966,6 @@ namespace VPB
             };
         }
 
-        /// <summary>Shows <see cref="sideTargetTooltipLive"/> on hover when target uses an icon.</summary>
-        private void WireSideTargetTooltipHover(GameObject targetBtnGO)
-        {
-            if (targetBtnGO == null) return;
-            var del = targetBtnGO.GetComponent<UIHoverDelegate>();
-            if (del == null) del = targetBtnGO.AddComponent<UIHoverDelegate>();
-            del.OnHoverChange += OnSideTargetTooltipHover;
-        }
-
-        private void OnSideTargetTooltipHover(bool enter)
-        {
-            if (enter)
-            {
-                string s = sideTargetTooltipLive;
-                if (string.IsNullOrEmpty(s)) return;
-                if (temporaryStatusCoroutine != null)
-                {
-                    StopCoroutine(temporaryStatusCoroutine);
-                    temporaryStatusCoroutine = null;
-                }
-                temporaryStatusMsg = s;
-            }
-            else
-            {
-                string s = sideTargetTooltipLive;
-                if (!string.IsNullOrEmpty(s) && temporaryStatusMsg == s)
-                    temporaryStatusMsg = null;
-            }
-        }
-
-
         private void UpdateDesktopModeButton()
         {
             if (VPBConfig.Instance == null) return;

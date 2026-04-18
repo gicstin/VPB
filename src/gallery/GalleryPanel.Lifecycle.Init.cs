@@ -931,7 +931,8 @@ namespace VPB
                     galleryCategorySprite = UI.LoadIconSprite("vpb_icons/gallery_category.png", sideTint);
                     galleryCreatorSprite = UI.LoadIconSprite("vpb_icons/gallery_creator.png", sideTint);
                     galleryCreatorOffSprite = UI.LoadIconSprite("vpb_icons/gallery_creator_off.png", sideTint);
-                    galleryTargetSprite = UI.LoadIconSprite("vpb_icons/gallery_target.png", sideTint);
+                    targetOnSprite  = UI.LoadIconSprite("vpb_icons/target_on.png",  new Color(1f, 1f, 1f, 1f));
+                    targetOffSprite = UI.LoadIconSprite("vpb_icons/target_off.png", new Color(0.65f, 0.65f, 0.65f, 1f));
                     galleryApplySprite = UI.LoadIconSprite("vpb_icons/gallery_apply.png", sideTint);
                     galleryApplyOneClickSprite = UI.LoadIconSprite("vpb_icons/gallery_apply_1click.png", sideTint);
                     galleryApplyTwoClickSprite = UI.LoadIconSprite("vpb_icons/gallery_apply_2click.png", sideTint);
@@ -1130,35 +1131,6 @@ namespace VPB
                     rightSideButtons.Add(rightCreatorBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
                     AddTooltip(rightCreatorBtn, "gallery.tooltip.creator_list", "Open creator list.");
-                }
-
-                // Target (Dropdown-like)
-                {
-                    float tW = galleryTargetSprite != null ? sideIconBtn : btnWidth;
-                    float tH = galleryTargetSprite != null ? sideIconBtn : btnHeight;
-                    GameObject rightTargetBtn = UI.CreateUIButton(rightSideContainer, tW, tH, " ", 8, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => ToggleTargetSubmenuFromSideButtons(false));
-                    Color targetCol = new Color(0.15f, 0.15f, 0.15f, 1f);
-                    rightTargetBtnImage = rightTargetBtn.GetComponent<Image>();
-                    rightTargetBtnText = rightTargetBtn.GetComponentInChildren<Text>(true);
-                    if (galleryTargetSprite != null)
-                    {
-                        UI.AddIconToButton(rightTargetBtn, galleryTargetSprite, sideIconPad, targetCol);
-                        rightTargetBtnIconImage = rightTargetBtn.transform.Find("Icon") != null
-                            ? rightTargetBtn.transform.Find("Icon").GetComponent<Image>() : null;
-                    }
-                    else
-                    {
-                        rightTargetBtnImage.color = targetCol;
-                        if (rightTargetBtnText != null)
-                        {
-                            rightTargetBtnText.text = VPBTranslation.T("gallery.side.target_none", "Target: None");
-                            rightTargetBtnText.fontSize = 14;
-                            rightTargetBtnText.gameObject.SetActive(true);
-                        }
-                        rightTargetBtnIconImage = null;
-                    }
-                    rightSideButtons.Add(rightTargetBtn.GetComponent<RectTransform>());
-                    WireSideTargetTooltipHover(rightTargetBtn);
                 }
 
                 // Apply Mode (Right) — icon swaps 1-click vs 2-click when both assets exist
@@ -1583,35 +1555,6 @@ namespace VPB
                     leftSideButtons.Add(leftCreatorBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
                     AddTooltip(leftCreatorBtn, "gallery.tooltip.creator_list", "Open creator list.");
-                }
-
-                // Target (Dropdown-like)
-                {
-                    float tW = galleryTargetSprite != null ? sideIconBtn : btnWidth;
-                    float tH = galleryTargetSprite != null ? sideIconBtn : btnHeight;
-                    GameObject leftTargetBtn = UI.CreateUIButton(leftSideContainer, tW, tH, " ", 8, 0, startY - spacing * 8 - groupGap * 4, AnchorPresets.centre, () => ToggleTargetSubmenuFromSideButtons(true));
-                    Color targetCol = new Color(0.15f, 0.15f, 0.15f, 1f);
-                    leftTargetBtnImage = leftTargetBtn.GetComponent<Image>();
-                    leftTargetBtnText = leftTargetBtn.GetComponentInChildren<Text>(true);
-                    if (galleryTargetSprite != null)
-                    {
-                        UI.AddIconToButton(leftTargetBtn, galleryTargetSprite, sideIconPad, targetCol);
-                        leftTargetBtnIconImage = leftTargetBtn.transform.Find("Icon") != null
-                            ? leftTargetBtn.transform.Find("Icon").GetComponent<Image>() : null;
-                    }
-                    else
-                    {
-                        leftTargetBtnImage.color = targetCol;
-                        if (leftTargetBtnText != null)
-                        {
-                            leftTargetBtnText.text = VPBTranslation.T("gallery.side.target_none", "Target: None");
-                            leftTargetBtnText.fontSize = 14;
-                            leftTargetBtnText.gameObject.SetActive(true);
-                        }
-                        leftTargetBtnIconImage = null;
-                    }
-                    leftSideButtons.Add(leftTargetBtn.GetComponent<RectTransform>());
-                    WireSideTargetTooltipHover(leftTargetBtn);
                 }
 
                 // Apply Mode (Left)

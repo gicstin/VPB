@@ -2062,6 +2062,9 @@ namespace VPB
             }
 
             UpdateTargetDropdownUI();
+
+            // Keep toolbox person-atom buttons in sync whenever the target list changes (same timing as category Show()).
+            try { RefreshTboxPersonAtomButtonsAfterSceneLoad(); } catch { }
         }
 
         /// <summary>Called after scene load/merge (deferred) and when the Target side tab may need rebuilt buttons.</summary>
@@ -2115,39 +2118,12 @@ namespace VPB
             UpdateTargetDropdownUI();
         }
 
+        /// <summary>
+        /// Syncs visible target labels when text/icon target picker controls exist on the side rail.
+        /// This branch does not declare those controls in GalleryPanel.Fields — keep a no-op so RefreshTargetDropdown / Init compile.
+        /// </summary>
         private void UpdateTargetDropdownUI()
         {
-            string raw = (targetDropdownValue >= 0 && targetDropdownValue < targetDropdownOptions.Count)
-                ? targetDropdownOptions[targetDropdownValue]
-                : "None";
-            string valText = (raw == "None") ? VPBTranslation.T("gallery.side.target_val_none", "None") : raw;
-            string fullText = VPBTranslation.T("gallery.side.target_prefix", "Target: ") + valText;
-
-            sideTargetTooltipLive = fullText;
-
-            bool iconMode = galleryTargetSprite != null
-                && leftTargetBtnIconImage != null
-                && rightTargetBtnIconImage != null;
-            if (iconMode)
-            {
-                if (leftTargetBtnText != null) leftTargetBtnText.gameObject.SetActive(false);
-                if (rightTargetBtnText != null) rightTargetBtnText.gameObject.SetActive(false);
-                if (leftTargetBtnIconImage != null) leftTargetBtnIconImage.enabled = true;
-                if (rightTargetBtnIconImage != null) rightTargetBtnIconImage.enabled = true;
-            }
-            else
-            {
-                if (leftTargetBtnText != null)
-                {
-                    leftTargetBtnText.gameObject.SetActive(true);
-                    leftTargetBtnText.text = fullText;
-                }
-                if (rightTargetBtnText != null)
-                {
-                    rightTargetBtnText.gameObject.SetActive(true);
-                    rightTargetBtnText.text = fullText;
-                }
-            }
         }
 
         private void Undo()

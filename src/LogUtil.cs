@@ -920,6 +920,9 @@ namespace VPB
                 VPBConfig.Instance.EndSceneLoad();
             }
 
+            // Scene content (including Person atoms in GetAtoms()) is reliably settled once total load completes.
+            try { GalleryPanel.NotifyAllPanelsSceneTargetsChanged(); } catch { }
+
             if (ImageLoadingMgr.singleton != null)
             {
                 ImageLoadingMgr.singleton.ProcessCandidates();

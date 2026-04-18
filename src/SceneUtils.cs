@@ -628,7 +628,25 @@ namespace VPB
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
             yield return new WaitForEndOfFrame();
+
+            // LoadInternal has returned, but VPB may still set IsLoadingScene until WorldUI / idle completion.
+            // GetAtoms() often does not yet list Person targets during that window — refreshing then leaves "None"
+            // until some later UI pass (e.g. category change). Wait for the load flag to clear first.
+            float loadWaitStart = Time.realtimeSinceStartup;
+            while (VPBConfig.Instance != null && VPBConfig.Instance.IsLoadingScene
+                   && (Time.realtimeSinceStartup - loadWaitStart) < 45f)
+                yield return null;
+
             GalleryPanel.NotifyAllPanelsSceneTargetsChanged();
+
+            // Person atoms can still register a few frames after loading ends; re-sync briefly.
+            for (int i = 0; i < 3; i++)
+            {
+                yield return new WaitForEndOfFrame();
+                yield return new WaitForEndOfFrame();
+                yield return new WaitForEndOfFrame();
+                GalleryPanel.NotifyAllPanelsSceneTargetsChanged();
+            }
         }
 
 
