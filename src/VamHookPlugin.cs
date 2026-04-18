@@ -201,6 +201,7 @@ namespace VPB
 
         private bool m_ShowPluginsAlwaysEnabledInfo;
         private bool m_ShowGcRefreshInfo;
+        private bool m_ShowRemoveOldDamagedInfo;
         private bool m_UnloadAllConfirmPending = false;
         private bool m_ShowUnloadAllInfo = false;
         private bool m_PendingGc;
@@ -2225,6 +2226,20 @@ namespace VPB
                         m_SpaceSaverWindowRect = GUI.Window(999, m_SpaceSaverWindowRect, DrawSpaceSaverWindow, "", m_StyleWindow);
                     }
 
+                    if (m_ShowRemoveWindow)
+                    {
+                        var removeScreenRect = new Rect(m_RemoveWindowRect.x * m_UIScale, m_RemoveWindowRect.y * m_UIScale, m_RemoveWindowRect.width * m_UIScale, m_RemoveWindowRect.height * m_UIScale);
+                        if (removeScreenRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)))
+                        {
+                            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+                            {
+                                Input.ResetInputAxes();
+                            }
+                        }
+
+                        m_RemoveWindowRect = GUI.Window(1000, m_RemoveWindowRect, DrawRemoveWindow, "", m_StyleWindow);
+                    }
+
 
                     // Draw our custom border ON TOP or AROUND the window rect
                     var borderRect = new Rect(m_Rect.x, m_Rect.y, m_Rect.width, m_Rect.height);
@@ -2884,6 +2899,163 @@ namespace VPB
             return String.Format("{0:0.##} {1}", dblSByte, Suffix[i]);
         }
 
+        private sealed class RemoveItem
+        {
+            public bool Checked = true;
+            public string Type;
+            public string Uid;
+            public string Path;
+        }
+
+        private void OpenRemoveWindow()
+        {
+            m_RemoveList.Clear();
+            m_RemoveScroll = Vector2.zero;
+            m_RemoveFilter = "";
+
+            try
+            {
+                HashSet<string> referenced = FileManager.GetReferencedPackage();
+                foreach (VarPackageGroup group in FileManager.GetPackageGroups())
+                {
+                    if (group == null) continue;
+                    foreach (VarPackage pkg in group.Packages)
+                    {
+                        if (pkg == null) continue;
+                        if (pkg.Version == group.NewestVersion) continue;
+                        if (referenced.Contains(pkg.Uid)) continue;
+
+                        m_RemoveList.Add(new RemoveItem
+                        {
+                            Checked = true,
+                            Type = "OldVersion",
+                            Uid = pkg.Uid,
+                            Path = pkg.Path
+                        });
+                    }
+                }
+
+                const string invalidRoot = "InvalidPackages";
+                if (Directory.Exists(invalidRoot))
+                {
+                    foreach (string subDir in Directory.GetDirectories(invalidRoot))
+                    {
+                        string folderName = Path.GetFileName(subDir);
+                        string typeLabel = folderName;
+                        if (string.Equals(folderName, "Duplicated", StringComparison.OrdinalIgnoreCase))
+                            typeLabel = "Duplicated";
+                        else if (string.Equals(folderName, "InvalidName", StringComparison.OrdinalIgnoreCase))
+                            typeLabel = "InvalidName";
+                        else if (string.Equals(folderName, "OldVersion", StringComparison.OrdinalIgnoreCase))
+                            typeLabel = "OldVersion";
+
+                        try
+                        {
+                            foreach (string varPath in Directory.GetFiles(subDir, "*.var", SearchOption.AllDirectories))
+                            {
+                                string norm = varPath.Replace('\\', '/');
+                                string uidGuess = Path.GetFileNameWithoutExtension(varPath);
+                                m_RemoveList.Add(new RemoveItem
+                                {
+                                    Checked = true,
+                                    Type = typeLabel,
+                                    Uid = uidGuess,
+                                    Path = norm
+                                });
+                            }
+                        }
+                        catch (Exception scanEx)
+                        {
+                            LogUtil.LogWarning("[VPB] OpenRemoveWindow InvalidPackages scan: " + scanEx.Message);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] OpenRemoveWindow: " + ex);
+            }
+
+            m_ShowRemoveWindow = true;
+        }
+
+        private void PerformRemove()
+        {
+            int ok = 0;
+            int failed = 0;
+
+            foreach (RemoveItem item in m_RemoveList)
+            {
+                if (!item.Checked) continue;
+                try
+                {
+                    if (string.IsNullOrEmpty(item.Path))
+                    {
+                        failed++;
+                        continue;
+                    }
+
+                    string norm = item.Path.Replace('\\', '/');
+
+                    if (norm.IndexOf("InvalidPackages/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        norm.StartsWith("InvalidPackages", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (File.Exists(item.Path))
+                        {
+                            File.Delete(item.Path);
+                            ok++;
+                        }
+                        continue;
+                    }
+
+                    if (norm.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
+                        norm.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!File.Exists(item.Path))
+                        {
+                            failed++;
+                            continue;
+                        }
+
+                        string sub = "OldVersion";
+                        if (string.Equals(item.Type, "Duplicated", StringComparison.OrdinalIgnoreCase)) sub = "Duplicated";
+                        else if (string.Equals(item.Type, "InvalidName", StringComparison.OrdinalIgnoreCase)) sub = "InvalidName";
+                        else if (string.Equals(item.Type, "OldVersion", StringComparison.OrdinalIgnoreCase)) sub = "OldVersion";
+
+                        FileManager.RemoveToInvalid(item.Path, sub);
+                        ok++;
+                        continue;
+                    }
+
+                    if (File.Exists(item.Path))
+                    {
+                        File.Delete(item.Path);
+                        ok++;
+                    }
+                    else
+                    {
+                        failed++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("[VPB] PerformRemove failed for " + item.Path + ": " + ex.Message);
+                    failed++;
+                }
+            }
+
+            try
+            {
+                FileManager.Refresh(init: false, clean: false, removeOldVersion: false);
+            }
+            catch (Exception refreshEx)
+            {
+                LogUtil.LogWarning("[VPB] PerformRemove refresh: " + refreshEx.Message);
+            }
+
+            LogUtil.Log("[VPB] Remove finished: OK=" + ok + ", failed=" + failed);
+        }
+
         void DrawRemoveWindow(int windowID)
         {
             if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
@@ -3009,7 +3181,7 @@ namespace VPB
 
             // Resize handle
             var resizeRect = new Rect(m_RemoveWindowRect.width - 30, m_RemoveWindowRect.height - 30, 30, 30);
-            GUI.Box(new Rect(m_RemoveWindowRect.width - 20, m_RemoveWindowRect.height - 20, 20, 20), "◢", m_StyleInfoIcon);
+            GUI.Box(new Rect(m_RemoveWindowRect.width - 20, m_RemoveWindowRect.height - 20, 20, 20), "◢", m_StyleButtonSmall ?? GUI.skin.box);
 
             int resizeControlID = GUIUtility.GetControlID(FocusType.Passive);
             switch (Event.current.GetTypeForControl(resizeControlID))

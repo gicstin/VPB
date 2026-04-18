@@ -5,14 +5,61 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using UnityEngine;
-using VPB.src.util;
+using global::VPB.src.util;
 
 namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
+        /// <summary>
+        /// Path passed to <see cref="SuperController.LoadJSON"/> for a file inside a .var.
+        /// Must use the registered package UID from the VAR meta (same as <see cref="VarPackage.Uid"/>),
+        /// not the .var filename from disk — filenames can differ in casing/spelling from the UID.
+        /// </summary>
+        private static string BuildVarScopedJsonLoadPath(FileEntry entry)
+        {
+            if (entry == null) return null;
+
+            string path = (entry.Path ?? "").Replace('\\', '/');
+            int sep = path.IndexOf(":/", StringComparison.Ordinal);
+
+            string uid = null;
+            if (entry is VarFileEntry vfe)
+                uid = vfe.GetRowPackageUid();
+
+            if (string.IsNullOrEmpty(uid))
+                uid = TryGetPackageUidForEntry(entry);
+
+            // Prefer manifest/index UID + path-after-colon from gallery Path (fixes UID vs .var filename mismatch).
+            // VaM virtual refs require ":/" after the UID (same as VarFileEntry), not "uid:Saves/..." alone.
+            if (sep >= 0 && !string.IsNullOrEmpty(uid))
+                return uid + ":/" + path.Substring(sep + 2).TrimStart('/');
+
+            // Path has no ":/" — may already be a plain saves path or virtual Uid-only row.
+            if (!string.IsNullOrEmpty(entry.Uid))
+            {
+                string u = entry.Uid.Replace('\\', '/');
+                int us = u.IndexOf(":/", StringComparison.Ordinal);
+                if (us > 0)
+                {
+                    string pref = u.Substring(0, us);
+                    // Valid virtual ref: "creator.pkg.1:/Saves/..." — reject "AllPackages/x.var:/..." masquerading as Uid.
+                    if (pref.IndexOf('/') < 0)
+                        return u;
+                }
+            }
+
+            if (sep >= 0)
+            {
+                string prefix = sep > 0 ? path.Substring(0, sep) : "";
+                uid = prefix.Split('/').Last().Replace(".var", string.Empty).Replace(".zip", string.Empty);
+                return uid + ":/" + path.Substring(sep + 2).TrimStart('/');
+            }
+
+            return path;
+        }
+
         private void TboxSceneImportSelectedPackage()
         {
             try
@@ -32,41 +79,46 @@ namespace VPB
 
                 LogUtil.Log($"Attempting to import from {presetFile.Path}");
 
-                string normalizedPath = presetFile.Path;
-                string packageName;
-                string fileName;
-                var parts = presetFile.Path.Split(':');
-                if (parts.Length > 1)
+                string normalizedPath = BuildVarScopedJsonLoadPath(presetFile);
+                if (string.IsNullOrEmpty(normalizedPath))
                 {
-                    packageName = parts[0].Split('/').Last().Replace(".var", string.Empty).Replace(".zip", string.Empty);
-                    fileName = parts[1];
-                    normalizedPath = packageName + ":" + fileName;
+                    ShowTemporaryStatus("Could not resolve package path.");
+                    return;
                 }
-                else
-                {
 
-                    packageName = null;
-                    fileName = parts[0].TrimStart('/');
-                    normalizedPath = fileName;
+                string packageKey = normalizedPath;
+                int colon = normalizedPath.IndexOf(":/", StringComparison.Ordinal);
+                if (colon > 0)
+                    packageKey = normalizedPath.Substring(0, colon);
 
-                }
-                var convertedPath = "Saves/scene/VPB/" + packageName  + "/" + fileName.Split('/').Last();
+                string fileLeaf = colon >= 0 && colon + 2 < normalizedPath.Length
+                    ? Path.GetFileName(normalizedPath.Substring(colon + 2).TrimEnd('/'))
+                    : Path.GetFileName(normalizedPath);
 
-                JSONClass personPreset;
+                if (string.IsNullOrEmpty(fileLeaf))
+                    fileLeaf = "scene.json";
+
+                var convertedPath = "Saves/scene/VPB/" + packageKey + "/" + fileLeaf;
+
+                JSONClass sceneJson;
                 if (File.Exists(convertedPath))
                 {
                     LogUtil.Log($"Reading pre-converted file {convertedPath}");
-                    var json = SuperController.singleton.LoadJSON(convertedPath).AsObject.RemoveNonPersonAtomsMutable();
-                    personPreset = json["atoms"][0].AsObject;
+                    sceneJson = SuperController.singleton.LoadJSON(convertedPath)?.AsObject;
+                    if (sceneJson == null)
+                    {
+                        ShowTemporaryStatus("Could not read cached scene; delete Saves/scene/VPB cache and retry.");
+                        return;
+                    }
                 }
                 else
                 {
                     LogUtil.Log($"Reading original file {normalizedPath}");
 
-                    var json = CUAConverter.GetConvertedScene(normalizedPath);
+                    sceneJson = CUAConverter.GetConvertedScene(normalizedPath, onlyPersonAtoms: false, presetFile);
 
                     Directory.CreateDirectory(Path.GetDirectoryName(convertedPath));
-                    SuperController.singleton.SaveJSON(json, convertedPath);
+                    SuperController.singleton.SaveJSON(sceneJson, convertedPath);
 
                     // TODO: this is not always necessary
                     var itemControl = SelectedTargetAtom.GetComponentInChildren<DAZClothingItemControl>();
@@ -79,10 +131,30 @@ namespace VPB
                     {
                         LogUtil.LogError($"No DAZClothingItemControl!");
                     }
-
-                    personPreset = json["atoms"][0].AsObject;
                 }
 
+                // Same as LoadPose / preset import: move referenced VARs from AllPackages → AddonPackages so Restore can resolve paths.
+                try
+                {
+                    if (FileButton.EnsureInstalledByText(sceneJson.ToString()))
+                    {
+                        MVR.FileManagement.FileManager.Refresh();
+                        FileManager.Refresh();
+                    }
+                }
+                catch (Exception ensureEx)
+                {
+                    LogUtil.LogWarning("[VPB] Scene import EnsureInstalled: " + ensureEx.Message);
+                }
+
+                sceneJson = sceneJson.RemoveNonPersonAtomsMutable();
+                if (sceneJson["atoms"] == null || sceneJson["atoms"].AsArray.Count == 0)
+                {
+                    ShowTemporaryStatus("No Person atom in scene.");
+                    return;
+                }
+
+                JSONClass personPreset = sceneJson["atoms"][0].AsObject;
 
                 SelectedTargetAtom.PreRestore(restorePhysical: false, restoreAppearance: true);
                 SelectedTargetAtom.Restore(personPreset, restorePhysical: false, restoreAppearance: true, restoreCore: false);

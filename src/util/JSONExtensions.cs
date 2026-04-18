@@ -23,9 +23,9 @@ namespace VPB.src.util
             var atoms = cls["atoms"].AsArray;
             if (atoms.Count == 0) return ids;
 
-            foreach(JSONClass atom in atoms)
+            foreach (JSONClass atom in atoms)
             {
-                if (!onlyPersonAtoms || atom["type"].Value == "Person") atoms.Add(atom.GetId());
+                if (!onlyPersonAtoms || atom["type"].Value == "Person") ids.Add(atom.GetId());
             }
 
             return ids;

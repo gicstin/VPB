@@ -14,11 +14,35 @@ namespace VPB.src.util
 {
     public class CUAConverter
     {
-        public static JSONClass GetConvertedScene(string sceneJsonPath, bool onlyPersonAtoms = true)
+        /// <param name="fileEntry">When set, <see cref="VPB.UI.LoadJSONWithFallback"/> can read the JSON from the .var via VPB when native LoadJSON fails.</param>
+        public static JSONClass GetConvertedScene(string sceneJsonPath, bool onlyPersonAtoms = true, global::VPB.FileEntry fileEntry = null)
         {
-            var json = SuperController.singleton.LoadJSON(sceneJsonPath).AsObject;
+            if (SuperController.singleton == null)
+                throw new InvalidOperationException("GetConvertedScene: SuperController.singleton is null.");
 
-            var packageNameRegex = Regex.Match(sceneJsonPath, "([^/]*):");
+            string loadPath = string.IsNullOrEmpty(sceneJsonPath) ? sceneJsonPath : sceneJsonPath.Replace('\\', '/');
+            try
+            {
+                if (!string.IsNullOrEmpty(loadPath))
+                    loadPath = FileManager.NormalizePath(loadPath);
+            }
+            catch { }
+
+            JSONNode loaded = VPB.UI.LoadJSONWithFallback(loadPath ?? sceneJsonPath, fileEntry);
+            if (loaded == null)
+            {
+                LogUtil.LogError($"[VPB] GetConvertedScene: could not load JSON for '{sceneJsonPath}'. Use virtual path form packageUid:/pathInsideVar (note colon+slash); see VPB.UI.LoadJSONWithFallback.");
+                throw new InvalidOperationException("Scene JSON could not be loaded: " + sceneJsonPath);
+            }
+
+            var json = loaded.AsObject;
+            if (json == null)
+            {
+                LogUtil.LogError($"[VPB] GetConvertedScene: JSON is not an object for '{sceneJsonPath}'.");
+                throw new InvalidOperationException("Scene JSON root is not an object: " + sceneJsonPath);
+            }
+
+            var packageNameRegex = Regex.Match(sceneJsonPath, "^([^:]+)");
             string packageName = packageNameRegex.Success ? packageNameRegex.Groups[1].Value : null;
 
             // Replace any existing references to SELF: with the source package

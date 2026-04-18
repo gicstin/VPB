@@ -370,6 +370,11 @@
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalScenes.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.AutoInstallHide.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.LoadUnloadCache.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />
+    <Compile Include="src\util\JSONExtensions.cs" />
+    <Compile Include="src\util\CUAConverter.cs" />
+    <Compile Include="src\util\CUAClothing.cs" />
+    <Compile Include="src\util\CUAClothing.Data.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\CategoryFilterState.cs" />
