@@ -20,13 +20,9 @@ namespace VPB.src.util
             if (SuperController.singleton == null)
                 throw new InvalidOperationException("GetConvertedScene: SuperController.singleton is null.");
 
+            // Do not run FileManager.NormalizePath here: for virtual refs it can substitute paths in ways that break
+            // lookups for entries with '!', parentheses, or spaces; slashes are enough for LoadJSONWithFallback.
             string loadPath = string.IsNullOrEmpty(sceneJsonPath) ? sceneJsonPath : sceneJsonPath.Replace('\\', '/');
-            try
-            {
-                if (!string.IsNullOrEmpty(loadPath))
-                    loadPath = FileManager.NormalizePath(loadPath);
-            }
-            catch { }
 
             JSONNode loaded = VPB.UI.LoadJSONWithFallback(loadPath ?? sceneJsonPath, fileEntry);
             if (loaded == null)
@@ -50,8 +46,8 @@ namespace VPB.src.util
             if (packageName != null)
             {
                 LogUtil.Log($"Applying package name {packageName}");
-                var externalized = json.ToString().Replace("SELF:", packageName + ":");
-                json = JSONClass.Parse(externalized).AsObject;
+                // In-place tree walk — never json.ToString()+Parse on multi‑MB mocap/timeline scenes (Mono heap blow‑ups).
+                JSONExtensions.ReplaceSelfPrefixWithPackageUidMutable(json, packageName);
             }
 
             ConvertCUAToCUAClothingMutable(json, packageName);
@@ -67,7 +63,15 @@ namespace VPB.src.util
         /// <param name="sceneJson"></param>
         public static void ConvertCUAToCUAClothingMutable(JSONClass sceneJson, string sourcePackageId = null)
         {
-            var atoms = sceneJson["atoms"].AsArray;
+            if (sceneJson == null) return;
+
+            JSONNode atomsRoot = sceneJson["atoms"];
+            JSONArray atoms = atomsRoot != null ? atomsRoot.AsArray : null;
+            if (atoms == null)
+            {
+                LogUtil.LogWarning("[VPB] ConvertCUAToCUAClothingMutable: scene has no atoms array — skipping CUA conversion.");
+                return;
+            }
 
             var persons = new List<JSONClass>();
             var cuas = new List<JSONClass>();
@@ -107,21 +111,48 @@ namespace VPB.src.util
                 var linkedPerson = persons.FirstOrDefault(p => p.GetId() == linkedAtomId);
                 if (linkedPerson == null) continue;
 
-                var boneTransform = GetBoneTransform(linkedPerson, linkedAtomBone);
+                if (!TryGetBoneTransform(linkedPerson, linkedAtomBone, out SimpleTransform boneTransform))
+                {
+                    LogUtil.LogWarning($"[VPB] CUA {cua.GetId()}: could not resolve link bone '{linkedAtomBone}' — skipping clothing conversion for this CUA.");
+                    continue;
+                }
 
                 var personTransform = linkedPerson.GetTransform();
                 var cuaTransform = cua.GetTransform();
 
                 var finalOffset = boneTransform.InverseTransformPoint(cuaTransform);
 
+                JSONClass geom = linkedPerson.GetStorable("geometry");
+                if (geom == null)
+                {
+                    LogUtil.LogWarning($"[VPB] CUA {cua.GetId()}: Person has no geometry storable.");
+                    continue;
+                }
 
-                var gender = linkedPerson.GetStorable("geometry")["character"].Value.Split(' ')[0];
+                JSONNode charNode = geom["character"];
+                if (charNode == null || string.IsNullOrEmpty(charNode.Value))
+                {
+                    LogUtil.LogWarning($"[VPB] CUA {cua.GetId()}: geometry.character missing.");
+                    continue;
+                }
+
+                string gender = charNode.Value.Split(' ')[0];
 
                 var clothingItem = CUAClothing.CreateAndSaveCUAClothing(cua, i, sourcePackageId, gender);
 
-                linkedPerson.GetStorable("geometry")["clothing"].AsArray.Add("dummy", clothingItem);
+                if (geom["clothing"] == null)
+                    geom["clothing"] = new JSONArray();
+                JSONArray clothingArr = geom["clothing"].AsArray;
+                if (clothingArr == null)
+                {
+                    LogUtil.LogWarning($"[VPB] CUA {cua.GetId()}: geometry.clothing is not an array.");
+                    continue;
+                }
+                clothingArr.Add("dummy", clothingItem);
 
-                linkedPerson["storables"].Add(CUAClothing.BuildCUAClothingStorable(cua, finalOffset, linkedAtomBone, clothingItem["internalId"]));
+                if (linkedPerson["storables"] == null)
+                    linkedPerson["storables"] = new JSONArray();
+                linkedPerson["storables"].AsArray.Add(CUAClothing.BuildCUAClothingStorable(cua, finalOffset, linkedAtomBone, clothingItem["internalId"]));
 
                 i++;
             }
@@ -182,21 +213,31 @@ namespace VPB.src.util
                             { "Pectoral", new BoneMeta("chest", true) },
         };
 
+        /// <summary>Resolves <see cref="BoneMeta"/> for a person bone name; returns null if unknown (e.g. extra mocap/rig bones not in <see cref="SKELETON"/>).</summary>
         private static BoneMeta GetStartBoneMeta(string bone, out string side, out string name)
         {
             var regex = Regex.Match(bone, "^((?<side>[lr])(?<name>[A-Z].*))|(?<name>.*)");
-            if (regex.Success)
-            {
-                side = regex.Groups["side"].Value;
-                if (side == string.Empty) side = null;
-                name = regex.Groups["name"].Value;
-                return SKELETON[name];
-            } else
+            if (!regex.Success)
             {
                 side = null;
                 name = null;
                 return null;
             }
+
+            side = regex.Groups["side"].Value;
+            if (side == string.Empty) side = null;
+            name = regex.Groups["name"].Value;
+
+            if (SKELETON.TryGetValue(name, out BoneMeta meta))
+                return meta;
+
+            foreach (var kvp in SKELETON)
+            {
+                if (string.Equals(kvp.Key, name, StringComparison.OrdinalIgnoreCase))
+                    return kvp.Value;
+            }
+
+            return null;
         }
 
 
@@ -232,24 +273,25 @@ namespace VPB.src.util
         }
 
 
-        private static SimpleTransform GetBoneTransform(JSONClass person, string offsetBone)
+        private static bool TryGetBoneTransform(JSONClass person, string offsetBone, out SimpleTransform boneOffset)
         {
-            var boneOffset = new SimpleTransform();
-            foreach (var bone in BonePathToRoot(offsetBone).Reverse<string>())
+            boneOffset = new SimpleTransform();
+            var path = BonePathToRoot(offsetBone);
+            if (path == null)
+                return false;
+
+            foreach (var bone in Enumerable.Reverse(path))
             {
                 var storable = person.GetStorable(bone);
                 if (storable == null)
                 {
                     LogUtil.LogError($"Bone {bone} not found in person {person["id"]}");
                     continue;
-                    // to continue... or to return? close-ish or just give up?
-                    //return boneOffset;
                 }
                 var localTransform = storable.GetTransform();
-
                 boneOffset = boneOffset.TransformPoint(localTransform);
             }
-            return boneOffset;
+            return true;
         }
     }
 

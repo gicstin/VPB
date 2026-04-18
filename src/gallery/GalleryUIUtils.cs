@@ -360,30 +360,58 @@ namespace VPB
 
             try
             {
-                if (entry != null && FileEntryMatchesPathForJsonLoad(entry, path))
-                    readEntry = entry;
-                else
+                // Selected VarFileEntry row: read this file from the .var directly. Do not require the
+                // virtual path string to match entry.Path/Uid (spacing/slashes often differ from rebuilt paths).
+                if (entry is VarFileEntry directVfe)
                 {
-                    VarFileEntry vfe = FileManager.GetVarFileEntry(path);
-                    if (vfe == null)
+                    try
                     {
-                        try
+                        using (var reader = directVfe.OpenStreamReader())
                         {
-                            string norm = FileManager.NormalizePath(path);
-                            if (!string.IsNullOrEmpty(norm))
-                                vfe = FileManager.GetVarFileEntry(norm);
+                            if (reader != null)
+                            {
+                                string directContent = reader.ReadToEnd();
+                                if (!string.IsNullOrEmpty(directContent))
+                                {
+                                    content = directContent;
+                                    readEntry = directVfe;
+                                }
+                            }
                         }
-                        catch { }
                     }
-                    readEntry = vfe;
+                    catch (Exception exDirect)
+                    {
+                        LogUtil.LogVerboseUi($"[VPB] LoadJSONWithFallback: direct VarFileEntry read skipped: {exDirect.Message}");
+                    }
                 }
 
-                if (readEntry != null)
+                if (string.IsNullOrEmpty(content))
                 {
-                    using (var reader = readEntry.OpenStreamReader())
+                    if (entry != null && FileEntryMatchesPathForJsonLoad(entry, path))
+                        readEntry = entry;
+                    else
                     {
-                        if (reader != null)
-                            content = reader.ReadToEnd();
+                        VarFileEntry vfe = FileManager.GetVarFileEntry(path);
+                        if (vfe == null)
+                        {
+                            try
+                            {
+                                string norm = FileManager.NormalizePath(path);
+                                if (!string.IsNullOrEmpty(norm))
+                                    vfe = FileManager.GetVarFileEntry(norm);
+                            }
+                            catch { }
+                        }
+                        readEntry = vfe;
+                    }
+
+                    if (readEntry != null && string.IsNullOrEmpty(content))
+                    {
+                        using (var reader = readEntry.OpenStreamReader())
+                        {
+                            if (reader != null)
+                                content = reader.ReadToEnd();
+                        }
                     }
                 }
             }

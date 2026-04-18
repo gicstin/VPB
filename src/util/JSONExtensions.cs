@@ -53,6 +53,51 @@ namespace VPB.src.util
         }
 
         /// <summary>
+        /// Replaces literal <c>SELF:</c> VaM path prefixes with <paramref name="packageUid"/> without
+        /// serializing/reparsing the entire JSON. Mocap/timeline saves are huge; <see cref="JSONClass.ToString"/>
+        /// + <see cref="JSON.Parse"/> duplicates multi‑MB buffers and fragments Mono (“too many heap sections”).
+        /// </summary>
+        public static void ReplaceSelfPrefixWithPackageUidMutable(JSONNode root, string packageUid)
+        {
+            if (root == null || string.IsNullOrEmpty(packageUid)) return;
+
+            ReplaceSelfPrefixWalk(root, packageUid + ":");
+        }
+
+        static void ReplaceSelfPrefixWalk(JSONNode node, string replacementPrefix)
+        {
+            if (node == null) return;
+
+            // JSONArray MUST be handled before JSONClass: some SimpleJSON forks derive JSONArray from JSONClass;
+            // treating arrays as objects corrupts traversal (wrong keys / hung walks on mocap-timeline JSON).
+            JSONArray ja = node as JSONArray;
+            if (ja != null)
+            {
+                for (int i = 0; i < ja.Count; i++)
+                    ReplaceSelfPrefixWalk(ja[i], replacementPrefix);
+                return;
+            }
+
+            JSONClass jc = node as JSONClass;
+            if (jc != null)
+            {
+                foreach (string key in jc.Keys)
+                    ReplaceSelfPrefixWalk(jc[key], replacementPrefix);
+                return;
+            }
+
+            try
+            {
+                string v = node.Value;
+                if (!string.IsNullOrEmpty(v) && v.IndexOf("SELF:", StringComparison.Ordinal) >= 0)
+                    node.Value = v.Replace("SELF:", replacementPrefix);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
         /// Return the storable with the given id from the "storables" array, or null if not found
         /// </summary>
         /// <param name="id">The ID of the storable</param>
