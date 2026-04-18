@@ -1,0 +1,294 @@
+﻿using HarmonyLib;
+using Leap.Unity;
+using Leap.Unity.Infix;
+using MVR.FileManagement;
+using SimpleJSON;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using UnityEngine;
+
+namespace VPB.src.util
+{
+    public class CUAConverter
+    {
+        public static JSONClass GetConvertedScene(string sceneJsonPath, bool onlyPersonAtoms = true)
+        {
+            var json = SuperController.singleton.LoadJSON(sceneJsonPath).AsObject;
+
+            var packageNameRegex = Regex.Match(sceneJsonPath, "([^/]*):");
+            string packageName = packageNameRegex.Success ? packageNameRegex.Groups[1].Value : null;
+
+            // Replace any existing references to SELF: with the source package
+            // Must be done before clothing items are created since they may reference self
+            if (packageName != null)
+            {
+                LogUtil.Log($"Applying package name {packageName}");
+                var externalized = json.ToString().Replace("SELF:", packageName + ":");
+                json = JSONClass.Parse(externalized).AsObject;
+            }
+
+            ConvertCUAToCUAClothingMutable(json, packageName);
+
+            if (onlyPersonAtoms) json.RemoveNonPersonAtomsMutable();
+
+            return json;
+        }
+
+        /// <summary>
+        /// Convert CUAs linked to Person atoms to CUAClothing items
+        /// </summary>
+        /// <param name="sceneJson"></param>
+        public static void ConvertCUAToCUAClothingMutable(JSONClass sceneJson, string sourcePackageId = null)
+        {
+            var atoms = sceneJson["atoms"].AsArray;
+
+            var persons = new List<JSONClass>();
+            var cuas = new List<JSONClass>();
+
+            foreach (JSONClass atom in atoms)
+            {
+                string id = atom["id"];
+                string type = atom["type"];
+
+                if (type == "Person")
+                {
+                    persons.Add(atom);
+                }
+                else if (type == "CustomUnityAsset")
+                {
+                    cuas.Add(atom);
+                }
+            }
+
+            int i = 0;
+            foreach (var cua in cuas)
+            {
+                string linkTo = cua.GetStorable("control")?["linkTo"];
+                if (linkTo == null) continue;
+
+                var parts = linkTo.Split(':');
+
+                if (parts.Length < 2)
+                {
+                    LogUtil.LogWarning($"Invalid linkTo format for {cua["id"]}: {linkTo}");
+                    continue;
+                }
+
+                string linkedAtomId = parts[0];
+                string linkedAtomBone = parts[1];
+
+                var linkedPerson = persons.FirstOrDefault(p => p.GetId() == linkedAtomId);
+                if (linkedPerson == null) continue;
+
+                var boneTransform = GetBoneTransform(linkedPerson, linkedAtomBone);
+
+                var personTransform = linkedPerson.GetTransform();
+                var cuaTransform = cua.GetTransform();
+
+                var finalOffset = boneTransform.InverseTransformPoint(cuaTransform);
+
+
+                var gender = linkedPerson.GetStorable("geometry")["character"].Value.Split(' ')[0];
+
+                var clothingItem = CUAClothing.CreateAndSaveCUAClothing(cua, i, sourcePackageId, gender);
+
+                linkedPerson.GetStorable("geometry")["clothing"].AsArray.Add("dummy", clothingItem);
+
+                linkedPerson["storables"].Add(CUAClothing.BuildCUAClothingStorable(cua, finalOffset, linkedAtomBone, clothingItem["internalId"]));
+
+                i++;
+            }
+        }
+
+        public class BoneMeta
+        {
+            public string ParentName;
+            public bool Symmetric;
+
+            public BoneMeta(string parentName, bool symmetric)
+            {
+                this.ParentName = parentName;
+                this.Symmetric = symmetric;
+            }
+        }
+
+        public static readonly Dictionary<string, BoneMeta> SKELETON = new Dictionary<string, BoneMeta>()
+        {
+            { "hip", new BoneMeta(null, false) },
+                { "pelvis", new BoneMeta("hip", false) },
+                    { "Thigh", new BoneMeta("pelvis", true) },
+                        { "Shin", new BoneMeta("Thigh", true) },
+                            { "Foot", new BoneMeta("Shin", true) },
+                                { "Toe", new BoneMeta("Foot", true) },
+                                    { "BigToe", new BoneMeta("Toe", true) },
+                                    { "SmallToe1", new BoneMeta("Toe", true) },
+                                    { "SmallToe2", new BoneMeta("Toe", true) },
+                                    { "SmallToe3", new BoneMeta("Toe", true) },
+                                    { "SmallToe4", new BoneMeta("Toe", true) },
+                { "abdomen", new BoneMeta("hip", false) },
+                    { "abdomen2", new BoneMeta("abdomen", false) },
+                        { "chest", new BoneMeta("abdomen2", false) },
+                            { "neck", new BoneMeta("chest", false) },
+                                { "head", new BoneMeta("neck", false) },
+                                    { "Eye", new BoneMeta("head", true) },
+                            { "Collar", new BoneMeta("chest", true) },
+                                { "Shldr", new BoneMeta("Collar", true) },
+                                    { "ForeArm", new BoneMeta("Shldr", true) },
+                                        { "Hand", new BoneMeta("ForeArm", true) },
+                                            { "Thumb1", new BoneMeta("Hand", true) },
+                                                { "Thumb2", new BoneMeta("Thumb1", true) },
+                                                    { "Thumb3", new BoneMeta("Thumb2", true) },
+                                            { "Carpal1", new BoneMeta("Hand", true) },
+                                                { "Index1", new BoneMeta("Carpal1", true) },
+                                                    { "Index2", new BoneMeta("Index1", true) },
+                                                        { "Index3", new BoneMeta("Index2", true) },
+                                                { "Mid1", new BoneMeta("Carpal1", true) },
+                                                    { "Mid2", new BoneMeta("Mid1", true) },
+                                                        { "Mid3", new BoneMeta("Mid2", true) },
+                                            { "Carpal2", new BoneMeta("Hand", true) },
+                                                { "Ring1", new BoneMeta("Carpal1", true) },
+                                                    { "Ring2", new BoneMeta("Ring1", true) },
+                                                        { "Ring3", new BoneMeta("Ring2", true) },
+                                                { "Pinky1", new BoneMeta("Carpal1", true) },
+                                                    { "Pinky2", new BoneMeta("Pinky1", true) },
+                                                        { "Pinky3", new BoneMeta("Pinky2", true) },
+                            { "Pectoral", new BoneMeta("chest", true) },
+        };
+
+        private static BoneMeta GetStartBoneMeta(string bone, out string side, out string name)
+        {
+            var regex = Regex.Match(bone, "^((?<side>[lr])(?<name>[A-Z].*))|(?<name>.*)");
+            if (regex.Success)
+            {
+                side = regex.Groups["side"].Value;
+                if (side == string.Empty) side = null;
+                name = regex.Groups["name"].Value;
+                return SKELETON[name];
+            } else
+            {
+                side = null;
+                name = null;
+                return null;
+            }
+        }
+
+
+        /// <summary>
+        /// Returns a list of bone names starting at the given bone and ending at the root bone
+        /// </summary>
+        /// <param name="startBoneName">The starting bone</param>
+        /// <returns></returns>
+        public static List<string> BonePathToRoot(string startBoneName)
+        {
+            BoneMeta currentMeta = GetStartBoneMeta(startBoneName, out string side, out string currentName);
+            if (currentMeta == null) {
+                return null;
+            };
+            List<string> path = new List<string>();
+            for (var i = 0; currentMeta != null && i < 50; i++)
+            {
+                path.Add((currentMeta.Symmetric ? side : "") + currentName);
+                if (currentMeta.ParentName == null) break;
+                currentName = currentMeta.ParentName;
+                SKELETON.TryGetValue(currentMeta.ParentName, out currentMeta);
+            }
+            if (path.Count == 0)
+            {
+                LogUtil.LogError("Failed to trace skeleton from " + startBoneName + "! (invalid bone name)");
+                return null;
+            }
+            if (path.Last() != "hip")
+            {
+                LogUtil.LogError("Failed to trace skeleton from " + startBoneName + "! (no path to root bone)");
+            }
+            return path;
+        }
+
+
+        private static SimpleTransform GetBoneTransform(JSONClass person, string offsetBone)
+        {
+            var boneOffset = new SimpleTransform();
+            foreach (var bone in BonePathToRoot(offsetBone).Reverse<string>())
+            {
+                var storable = person.GetStorable(bone);
+                if (storable == null)
+                {
+                    LogUtil.LogError($"Bone {bone} not found in person {person["id"]}");
+                    continue;
+                    // to continue... or to return? close-ish or just give up?
+                    //return boneOffset;
+                }
+                var localTransform = storable.GetTransform();
+
+                boneOffset = boneOffset.TransformPoint(localTransform);
+            }
+            return boneOffset;
+        }
+    }
+
+    public class SimpleTransform
+    {
+        public Vector3 Position;
+        public Quaternion Rotation;
+
+        public SimpleTransform()
+        {
+            Position = new Vector3();
+            Rotation = Quaternion.identity;
+        }
+
+        public SimpleTransform(Vector3 position, Quaternion rotation)
+        {
+            this.Position = position;
+            this.Rotation = rotation;
+        }
+
+        /// <summary>
+        /// Convert a transform from local space to world space
+        /// </summary>
+        /// <param name="transform"></param>
+        public SimpleTransform TransformPoint(SimpleTransform transform)
+        {
+            return new SimpleTransform(Position + transform.Position.RotatedBy(Rotation), Rotation * transform.Rotation);
+        }
+
+        public SimpleTransform InverseTransformPoint(SimpleTransform worldTransform)
+        {
+            Quaternion invRot = Quaternion.Inverse(Rotation);
+            Vector3 localPos = invRot * (worldTransform.Position - Position);
+            Quaternion localRot = invRot * worldTransform.Rotation;
+
+            return new SimpleTransform(localPos, localRot);
+        }
+
+        public override string ToString()
+        {
+            return $"{Position.ToString("F5")}{Rotation.eulerAngles.ToString("F5").Replace("(", "[").Replace(")", "]")}";
+        }
+
+        /// <summary>
+        /// Create a Transform from the "position" and "rotation" fields of a JSONClass
+        /// </summary>
+        /// <param name="json">The JSON holding the transform data</param>
+        public static SimpleTransform FromJson(JSONClass json, string positionKey = "position", string rotationKey = "rotation")
+        {
+            if (!json.HasKey(positionKey) || !json.HasKey(rotationKey))
+            {
+                LogUtil.LogError($"Invalid transform JSON: {json}");
+                return new SimpleTransform();
+            }
+
+            JSONClass positionJson = json[positionKey].AsObject;
+            JSONClass rotationJson = json[rotationKey].AsObject;
+
+            // Will return 0.0f if the keys are missing
+            Vector3 position = new Vector3(positionJson["x"].AsFloat, positionJson["y"].AsFloat, positionJson["z"].AsFloat);
+            Quaternion rotation = Quaternion.Euler(rotationJson["x"].AsFloat, rotationJson["y"].AsFloat, rotationJson["z"].AsFloat);
+
+            return new SimpleTransform(position, rotation);
+        }
+    }
+}
