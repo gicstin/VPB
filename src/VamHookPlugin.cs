@@ -1028,6 +1028,7 @@ namespace VPB
         static bool m_Show = true; // Made static so it can be toggled via external message calls.
         void Update()
         {
+            CacheCleanupManager.CheckAutoFlush();
             if (m_PendingGc)
             {
                 // Avoid forcing unload/GC during scene load; it can interfere with VaM's load lifecycle

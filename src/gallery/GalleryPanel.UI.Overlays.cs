@@ -465,7 +465,7 @@ namespace VPB
             GameObject panelGO = new GameObject("Panel");
             panelGO.transform.SetParent(overlayGO.transform, false);
             RectTransform panelRT = panelGO.AddComponent<RectTransform>();
-            panelRT.sizeDelta = new Vector2(450, 250);
+            panelRT.sizeDelta = new Vector2(500, 420);
             
             Image panelImg = panelGO.AddComponent<Image>();
             panelImg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
@@ -502,8 +502,8 @@ namespace VPB
             msgRT.offsetMax = new Vector2(-20, -60);
 
             // Buttons
-            GameObject cancelBtn = UI.CreateUIButton(panelGO, 160, 45, "Cancel", 18, -100, -80, AnchorPresets.middleCenter, () => Destroy(overlayGO));
-            GameObject confirmBtn = UI.CreateUIButton(panelGO, 160, 45, "Confirm", 18, 100, -80, AnchorPresets.middleCenter, () => {
+            GameObject cancelBtn = UI.CreateUIButton(panelGO, 160, 45, "Cancel", 18, -100, 40, AnchorPresets.bottomMiddle, () => Destroy(overlayGO));
+            GameObject confirmBtn = UI.CreateUIButton(panelGO, 160, 45, "Confirm", 18, 100, 40, AnchorPresets.bottomMiddle, () => {
                 onConfirm?.Invoke();
                 Destroy(overlayGO);
             });

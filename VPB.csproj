@@ -339,6 +339,7 @@
     <Compile Include="src\gallery\GalleryFileListSnapshotCache.cs" />
     <Compile Include="src\gallery\GalleryTagCountSnapshotCache.cs" />
     <Compile Include="src\gallery\GalleryTagCountBackgroundScan.cs" />
+    <Compile Include="src\gallery\CacheCleanupManager.cs" />
     <Compile Include="src\gallery\index\VpbSqlite3.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />

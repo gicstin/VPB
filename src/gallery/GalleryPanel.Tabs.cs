@@ -1289,7 +1289,8 @@ namespace VPB
                 string labelDup = VPBTranslation.T("gallery.cleanup.tab.dup", "Duplicates") + " (" + GetCleanupTabCount(1) + ")";
                 string labelOld = VPBTranslation.T("gallery.cleanup.tab.old", "Old Versions") + " (" + GetCleanupTabCount(2) + ")";
                 string labelDamaged = VPBTranslation.T("gallery.cleanup.tab.damaged", "Damaged") + " (" + GetCleanupTabCount(3) + ")";
-                string labelExcluded = VPBTranslation.T("gallery.cleanup.tab.excluded", "Excluded") + " (" + GetCleanupTabCount(4) + ")";
+                string labelStale = VPBTranslation.T("gallery.cleanup.tab.stale", "Stale Cache") + " (" + GetCleanupTabCount(4) + ")";
+                string labelExcluded = VPBTranslation.T("gallery.cleanup.tab.excluded", "Excluded") + " (" + GetCleanupTabCount(5) + ")";
 
                 CreateTabButton(container.transform, labelAll, mode == 0 ? cleanupColor : inactive, mode == 0, () =>
                 {
@@ -1311,9 +1312,14 @@ namespace VPB
                     SetCleanupFilterMode(3);
                     UpdateTabs();
                 }, trackedButtons);
-                CreateTabButton(container.transform, labelExcluded, mode == 4 ? cleanupColor : inactive, mode == 4, () =>
+                CreateTabButton(container.transform, labelStale, mode == 4 ? cleanupColor : inactive, mode == 4, () =>
                 {
                     SetCleanupFilterMode(4);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, labelExcluded, mode == 5 ? cleanupColor : inactive, mode == 5, () =>
+                {
+                    SetCleanupFilterMode(5);
                     UpdateTabs();
                 }, trackedButtons);
             }
@@ -3284,6 +3290,13 @@ namespace VPB
             // Special / meta
             if (sl == "unknown") return new Color(0.65f, 0.65f, 0.65f, 1f);
             if (sl == "mixed") return new Color(0.85f, 0.65f, 0.15f, 1f);
+
+            // Cleanup types
+            if (sl.Contains("stale cache")) return new Color(0.62f, 0.40f, 0.20f, 1f); // brown (matches tab)
+            if (sl.Contains("duplicate")) return new Color(0.80f, 0.35f, 0.15f, 1f);   // reddish-orange
+            if (sl.Contains("damaged")) return new Color(0.85f, 0.20f, 0.20f, 1f);     // red
+            if (sl.Contains("old version")) return new Color(0.55f, 0.55f, 0.55f, 1f); // gray
+            if (sl.Contains("excluded")) return new Color(0.40f, 0.40f, 0.40f, 1f);    // dark gray
 
             // Common VPB/VaM gallery types (heuristic)
             if (sl.Contains("scene")) return new Color(0.95f, 0.55f, 0.10f, 1f);     // orange

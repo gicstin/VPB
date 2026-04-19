@@ -15,14 +15,16 @@ namespace VPB
         {
             Duplicate,
             OldVersion,
-            Damaged
+            Damaged,
+            StaleCache
         }
 
         private enum CleanupCandidateSourceKind
         {
             VarPackage,
             LocalScene,
-            LocalFile
+            LocalFile,
+            StaleCache
         }
 
         private sealed class CleanupCandidate
@@ -43,6 +45,7 @@ namespace VPB
             {
                 get
                 {
+                    if (Flags.Contains(CleanupCandidateType.StaleCache)) return CleanupCandidateType.StaleCache;
                     if (Flags.Contains(CleanupCandidateType.Damaged)) return CleanupCandidateType.Damaged;
                     if (Flags.Contains(CleanupCandidateType.Duplicate)) return CleanupCandidateType.Duplicate;
                     return CleanupCandidateType.OldVersion;
@@ -51,17 +54,13 @@ namespace VPB
 
             public string GetFlagsLabel()
             {
-                bool d = Flags.Contains(CleanupCandidateType.Duplicate);
-                bool o = Flags.Contains(CleanupCandidateType.OldVersion);
-                bool z = Flags.Contains(CleanupCandidateType.Damaged);
-                string baseLabel;
-                if (d && o && z) baseLabel = "Duplicate | Old Version | Damaged";
-                else if (d && z) baseLabel = "Duplicate | Damaged";
-                else if (o && z) baseLabel = "Old Version | Damaged";
-                else if (d && o) baseLabel = "Duplicate | Old Version";
-                else if (z) baseLabel = "Damaged";
-                else if (d) baseLabel = "Duplicate";
-                else baseLabel = "Old Version";
+                var labels = new List<string>();
+                if (Flags.Contains(CleanupCandidateType.StaleCache)) labels.Add("Stale Cache");
+                if (Flags.Contains(CleanupCandidateType.Damaged)) labels.Add("Damaged");
+                if (Flags.Contains(CleanupCandidateType.Duplicate)) labels.Add("Duplicate");
+                if (Flags.Contains(CleanupCandidateType.OldVersion)) labels.Add("Old Version");
+
+                string baseLabel = labels.Count > 0 ? string.Join(" | ", labels.ToArray()) : "Other";
                 return IsExcluded ? (baseLabel + " | Excluded") : baseLabel;
             }
         }
@@ -129,6 +128,7 @@ namespace VPB
             {
                 case CleanupCandidateType.Duplicate: return "Duplicates";
                 case CleanupCandidateType.OldVersion: return "OldVersions";
+                case CleanupCandidateType.StaleCache: return "StaleCache";
                 default: return "Damaged";
             }
         }
@@ -344,12 +344,13 @@ namespace VPB
             return c;
         }
 
-        private List<CleanupCandidate> BuildCleanupCandidatesGlobal()
+        private List<CleanupCandidate> BuildCleanupCandidatesGlobal(bool testMode = false)
         {
             var totalSw = Stopwatch.StartNew();
             var byPath = new Dictionary<string, CleanupCandidate>(StringComparer.OrdinalIgnoreCase);
 
             var varSw = Stopwatch.StartNew();
+            BuildStaleCacheCleanupCandidates(byPath, testMode);
             BuildVarCleanupCandidates(byPath);
             varSw.Stop();
             RefreshCleanupExcludedKeyCache();
@@ -389,6 +390,7 @@ namespace VPB
         private bool IsCleanupCandidateExcluded(CleanupCandidate c)
         {
             if (c == null) return false;
+            if (c.SourceKind == CleanupCandidateSourceKind.StaleCache) return false;
             try
             {
                 foreach (string key in EnumerateCleanupExcludeKeys(c))
@@ -399,6 +401,36 @@ namespace VPB
             }
             catch { }
             return false;
+        }
+
+        private void BuildStaleCacheCleanupCandidates(Dictionary<string, CleanupCandidate> byPath, bool testMode = false)
+        {
+            try
+            {
+                // Logic: > 30 days old, <= 2 hits (unless testMode)
+                int days = testMode ? 0 : 30;
+                int hits = testMode ? 999 : 2;
+
+                long olderThanBinary = DateTime.UtcNow.AddDays(-days).ToBinary();
+                var staleRows = new List<VpbLocalDatabase.CacheUsageRow>();
+                VpbLocalDatabase.TryGetStaleCacheItems(olderThanBinary, hits, staleRows);
+
+                foreach (var row in staleRows)
+                {
+                    if (string.IsNullOrEmpty(row.CachePath) || !File.Exists(row.CachePath)) continue;
+
+                    var c = GetOrCreateCleanupCandidate(byPath, row.CachePath, CleanupCandidateSourceKind.StaleCache);
+                    if (c == null) continue;
+
+                    c.Flags.Add(CleanupCandidateType.StaleCache);
+                    DateTime lastAccess = DateTime.FromBinary(row.LastAccessedBinary);
+                    c.Reasons.Add($"Stale Texture Cache (Hits: {row.HitCount}, Last: {lastAccess:yyyy-MM-dd})");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Failed to build stale cache cleanup candidates: " + ex.Message);
+            }
         }
 
         private void BuildVarCleanupCandidates(Dictionary<string, CleanupCandidate> byPath)
@@ -737,11 +769,13 @@ namespace VPB
                 case 1: return c.HasFlag(CleanupCandidateType.Duplicate);
                 case 2: return c.HasFlag(CleanupCandidateType.OldVersion);
                 case 3: return c.HasFlag(CleanupCandidateType.Damaged);
-                case 4: return c.IsExcluded;
+                case 4: return c.HasFlag(CleanupCandidateType.StaleCache);
+                case 5: return c.IsExcluded;
                 default:
                     return c.HasFlag(CleanupCandidateType.Duplicate)
                         || c.HasFlag(CleanupCandidateType.OldVersion)
                         || c.HasFlag(CleanupCandidateType.Damaged)
+                        || c.HasFlag(CleanupCandidateType.StaleCache)
                         || c.IsExcluded;
             }
         }
@@ -757,6 +791,8 @@ namespace VPB
                 case CleanupCandidateType.OldVersion:
                     return reason.StartsWith("Old version", StringComparison.OrdinalIgnoreCase)
                         || reason.StartsWith("Older numeric-suffix version", StringComparison.OrdinalIgnoreCase);
+                case CleanupCandidateType.StaleCache:
+                    return reason.StartsWith("Stale Texture Cache", StringComparison.OrdinalIgnoreCase);
                 default:
                     return reason.StartsWith("Invalid VAR filename format", StringComparison.OrdinalIgnoreCase)
                         || reason.StartsWith("UID+version collision with different file hash", StringComparison.OrdinalIgnoreCase)
@@ -802,6 +838,11 @@ namespace VPB
                 string line = BuildCleanupReasonLine("Old", candidate.Reasons, CleanupCandidateType.OldVersion);
                 if (!string.IsNullOrEmpty(line)) lines.Add(line);
             }
+            if (candidate.HasFlag(CleanupCandidateType.StaleCache))
+            {
+                string line = BuildCleanupReasonLine("Stale Cache", candidate.Reasons, CleanupCandidateType.StaleCache);
+                if (!string.IsNullOrEmpty(line)) lines.Add(line);
+            }
             if (candidate.IsExcluded) lines.Add("Excluded: manually excluded from cleanup");
             return string.Join("\n", lines.ToArray());
         }
@@ -819,19 +860,21 @@ namespace VPB
                 case 1: return cleanupCandidatesAll.Count(c => c.HasFlag(CleanupCandidateType.Duplicate));
                 case 2: return cleanupCandidatesAll.Count(c => c.HasFlag(CleanupCandidateType.OldVersion));
                 case 3: return cleanupCandidatesAll.Count(c => c.HasFlag(CleanupCandidateType.Damaged));
-                case 4: return cleanupCandidatesAll.Count(c => c.IsExcluded);
+                case 4: return cleanupCandidatesAll.Count(c => c.HasFlag(CleanupCandidateType.StaleCache));
+                case 5: return cleanupCandidatesAll.Count(c => c.IsExcluded);
                 default:
                     return cleanupCandidatesAll.Count(c =>
                         c.HasFlag(CleanupCandidateType.Duplicate) ||
                         c.HasFlag(CleanupCandidateType.OldVersion) ||
                         c.HasFlag(CleanupCandidateType.Damaged) ||
+                        c.HasFlag(CleanupCandidateType.StaleCache) ||
                         c.IsExcluded);
             }
         }
 
         private void SetCleanupFilterMode(int mode, bool clearSelection = true)
         {
-            cleanupFilterMode = (mode >= 0 && mode <= 4) ? mode : 0;
+            cleanupFilterMode = (mode >= 0 && mode <= 5) ? mode : 0;
             ApplyCleanupFilterToList(clearSelection);
         }
 
@@ -851,12 +894,12 @@ namespace VPB
             try { UpdateTabs(); } catch { }
         }
 
-        private void RebuildCleanupCandidates(bool clearSelection, bool showSummaryStatus)
+        private void RebuildCleanupCandidates(bool clearSelection, bool showSummaryStatus, bool testMode = false)
         {
             if (!cleanupModeActive) return;
             var sw = Stopwatch.StartNew();
             cleanupCandidatesAll.Clear();
-            cleanupCandidatesAll.AddRange(BuildCleanupCandidatesGlobal());
+            cleanupCandidatesAll.AddRange(BuildCleanupCandidatesGlobal(testMode));
             ApplyCleanupFilterToList(clearSelection);
             if (showSummaryStatus)
                 ShowTemporaryStatus(BuildCleanupSummaryText(), 3f);
@@ -910,9 +953,10 @@ namespace VPB
             int dup = cleanupCandidatesAll.Count(c => c.HasFlag(CleanupCandidateType.Duplicate));
             int old = cleanupCandidatesAll.Count(c => c.HasFlag(CleanupCandidateType.OldVersion));
             int dmg = cleanupCandidatesAll.Count(c => c.HasFlag(CleanupCandidateType.Damaged));
+            int stale = cleanupCandidatesAll.Count(c => c.HasFlag(CleanupCandidateType.StaleCache));
             return string.Format(
-                VPBTranslation.T("gallery.cleanup.summary", "Cleanup candidates: {0} total ({1} duplicates, {2} old, {3} damaged)"),
-                total, dup, old, dmg);
+                VPBTranslation.T("gallery.cleanup.summary", "Cleanup candidates: {0} total ({1} duplicates, {2} old, {3} damaged, {4} stale cache)"),
+                total, dup, old, dmg, stale);
         }
 
         private void TboxOpenCleanupView()
@@ -930,7 +974,11 @@ namespace VPB
 
                 currentCategoryTitle = VPBTranslation.T("gallery.tbox.cleanup", "Cleanup");
                 ActivateCleanupSideTabs();
-                RebuildCleanupCandidates(true, true);
+                
+                bool testMode = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                if (testMode) LogUtil.LogWarning("[VPB] Cleanup: Test Mode Enabled (0-day threshold)");
+
+                RebuildCleanupCandidates(true, true, testMode);
                 openSw.Stop();
                 LogUtil.LogWarning("[VPB] Cleanup(list) open: scan ready in " + openSw.ElapsedMilliseconds + " ms.");
             }
@@ -1068,6 +1116,34 @@ namespace VPB
                 failReason = "missing source";
                 return false;
             }
+
+            if (c.SourceKind == CleanupCandidateSourceKind.StaleCache)
+            {
+                try
+                {
+                    if (File.Exists(c.SourcePath))
+                    {
+                        File.Delete(c.SourcePath);
+                        string meta = c.SourcePath + "meta";
+                        if (File.Exists(meta)) File.Delete(meta);
+                        VpbLocalDatabase.TryDeleteCacheUsage(c.SourcePath);
+                        moved = true;
+                        return true;
+                    }
+                    else
+                    {
+                        VpbLocalDatabase.TryDeleteCacheUsage(c.SourcePath);
+                        moved = true; // Already gone
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failReason = "delete failed: " + ex.Message;
+                    return false;
+                }
+            }
+
             if (!File.Exists(c.SourcePath))
             {
                 failReason = "missing source file";
@@ -1153,10 +1229,11 @@ namespace VPB
             int dup = selected.Count(c => c.HasFlag(CleanupCandidateType.Duplicate));
             int old = selected.Count(c => c.HasFlag(CleanupCandidateType.OldVersion));
             int dmg = selected.Count(c => c.HasFlag(CleanupCandidateType.Damaged));
+            int stale = selected.Count(c => c.HasFlag(CleanupCandidateType.StaleCache));
 
             string msg = string.Format(
-                VPBTranslation.T("gallery.cleanup.confirm", "Move {0} selected cleanup items?\n\nDuplicates: {1}\nOld: {2}\nDamaged: {3}\n\n.var -> DeletedPackages/<Type>\nLocal files -> DeletedScenes/<Type>"),
-                selected.Count, dup, old, dmg);
+                VPBTranslation.T("gallery.cleanup.confirm_v3", "Perform cleanup for {0} selected items?\n\nDuplicates: {1}\nOld Versions: {2}\nDamaged: {3}\nStale Cache: {4}\n\n- .var packages: Move to 'DeletedPackages'\n- Local scenes/files: Move to 'DeletedScenes'\n- Stale texture cache: Permanent Delete"),
+                selected.Count, dup, old, dmg, stale);
 
             DisplayConfirm(VPBTranslation.T("gallery.cleanup.confirm_title", "Cleanup"), msg, () =>
             {

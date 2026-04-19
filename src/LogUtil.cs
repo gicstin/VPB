@@ -927,6 +927,8 @@ namespace VPB
             {
                 ImageLoadingMgr.singleton.ProcessCandidates();
             }
+
+            CacheCleanupManager.FlushHitsBatch();
         }
 
         static void LogTextureOffenderSummary()

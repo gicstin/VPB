@@ -49,7 +49,7 @@ namespace VPB
         /// <summary>High bit: row has <see cref="ClothingAttrPacked"/> from index rebuild (fast clothing subfilter path).</summary>
         internal const int ClothingAttrPresentFlag = unchecked((int)0x80000000);
 
-        private const int SchemaVersion = 7;
+        private const int SchemaVersion = 8;
 
         private static readonly object s_Sync = new object();
         private static volatile bool s_RebuildScheduled;
@@ -254,6 +254,8 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_pd_src ON pkg_dep(src_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_pd_dep ON pkg_dep(dep_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_sf_key ON sys_file(cache_key);" +
+                "CREATE TABLE IF NOT EXISTS cache_usage (cache_path TEXT PRIMARY KEY, hit_count INTEGER NOT NULL DEFAULT 0, last_accessed INTEGER NOT NULL);" +
+                "CREATE INDEX IF NOT EXISTS idx_cu_last ON cache_usage(last_accessed);" +
                 "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN var_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN list_path TEXT;");
@@ -431,6 +433,114 @@ namespace VPB
                     catch
                     {
                         try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static void TryRecordCacheHit(string cachePath)
+        {
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(cachePath)) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("INSERT INTO cache_usage(cache_path, hit_count, last_accessed) VALUES(?, 1, ?) ON CONFLICT(cache_path) DO UPDATE SET hit_count = hit_count + 1, last_accessed = excluded.last_accessed"))
+                    {
+                        st.BindText(1, cachePath);
+                        st.BindInt64(2, DateTime.UtcNow.ToBinary());
+                        st.Step();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static void TryRecordCacheHitsBatch(IEnumerable<string> cachePaths)
+        {
+            if (!VpbSqlite3.IsAvailable || cachePaths == null) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    try
+                    {
+                        using (var st = conn.Prepare("INSERT INTO cache_usage(cache_path, hit_count, last_accessed) VALUES(?, 1, ?) ON CONFLICT(cache_path) DO UPDATE SET hit_count = hit_count + 1, last_accessed = excluded.last_accessed"))
+                        {
+                            long now = DateTime.UtcNow.ToBinary();
+                            foreach (var path in cachePaths)
+                            {
+                                if (string.IsNullOrEmpty(path)) continue;
+                                st.Reset();
+                                st.BindText(1, path);
+                                st.BindInt64(2, now);
+                                st.Step();
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal struct CacheUsageRow
+        {
+            public string CachePath;
+            public int HitCount;
+            public long LastAccessedBinary;
+        }
+
+        internal static void TryGetStaleCacheItems(long olderThanBinary, int maxHits, List<CacheUsageRow> outRows)
+        {
+            if (outRows == null) return;
+            outRows.Clear();
+            if (!VpbSqlite3.IsAvailable) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT cache_path, hit_count, last_accessed FROM cache_usage WHERE last_accessed < ? AND hit_count <= ?"))
+                    {
+                        st.BindInt64(1, olderThanBinary);
+                        st.BindInt64(2, (long)maxHits);
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            outRows.Add(new CacheUsageRow
+                            {
+                                CachePath = st.ColumnText(0),
+                                HitCount = (int)st.ColumnInt64(1),
+                                LastAccessedBinary = st.ColumnInt64(2)
+                            });
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static void TryDeleteCacheUsage(string cachePath)
+        {
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(cachePath)) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("DELETE FROM cache_usage WHERE cache_path = ?"))
+                    {
+                        st.BindText(1, cachePath);
+                        st.Step();
                     }
                 }
             }
