@@ -39,6 +39,15 @@ namespace VPB
         private GameObject tboxCacheTexturesBtn;
         private GameObject tboxSceneImportBtn;
 
+        // Dependency filter controls in toolbox
+        private GameObject tboxFilterModeRowGO;
+        private RectTransform tboxFilterModeRowRT;
+        private LayoutElement tboxFilterModeRowLE;
+        private HorizontalLayoutGroup tboxFilterModeRowHLG;
+        private GameObject tboxFilterBackBtn;
+        private GameObject tboxFilterClearBtn;
+        private Text tboxFilterModeText;
+
         private static void SetTboxButtonEnabledVisual(GameObject go, bool enabled, float disabledAlpha = 0.35f)
         {
             if (go == null) return;
@@ -326,6 +335,9 @@ namespace VPB
             }
 
             float band = tboxInfoRowHeight * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap : 0f);
+            // Add filter row height when active
+            if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
+                band += tboxInfoRowHeight + tboxBtnRowGap;
             if (tboxButtonsLayerRT != null)
                 tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, band);
 
@@ -528,6 +540,59 @@ namespace VPB
             tboxBtnRow1HLG.childControlHeight = true;
             tboxBtnRow1HLG.childForceExpandHeight = true;
             tboxBtnRow1GO.SetActive(false);
+
+            // ── Dependency Filter Mode Row ─────────────────────────────────────
+            tboxFilterModeRowGO = new GameObject("TboxFilterModeRow");
+            tboxFilterModeRowGO.transform.SetParent(flexGO.transform, false);
+            tboxFilterModeRowGO.transform.SetAsFirstSibling();
+            tboxFilterModeRowRT = tboxFilterModeRowGO.AddComponent<RectTransform>();
+            tboxFilterModeRowRT.anchorMin = Vector2.zero;
+            tboxFilterModeRowRT.anchorMax = Vector2.one;
+            tboxFilterModeRowRT.sizeDelta = Vector2.zero;
+            tboxFilterModeRowLE = tboxFilterModeRowGO.AddComponent<LayoutElement>();
+            tboxFilterModeRowLE.minHeight = innerRowH;
+            tboxFilterModeRowLE.preferredHeight = innerRowH;
+            tboxFilterModeRowLE.flexibleWidth = 1f;
+            tboxFilterModeRowHLG = tboxFilterModeRowGO.AddComponent<HorizontalLayoutGroup>();
+            tboxFilterModeRowHLG.spacing = 12f;
+            tboxFilterModeRowHLG.padding = new RectOffset(8, 8, 0, 0);
+            tboxFilterModeRowHLG.childAlignment = TextAnchor.MiddleCenter;
+            tboxFilterModeRowHLG.childControlWidth = false;
+            tboxFilterModeRowHLG.childForceExpandWidth = false;
+            tboxFilterModeRowHLG.childControlHeight = true;
+            tboxFilterModeRowHLG.childForceExpandHeight = true;
+            tboxFilterModeRowGO.SetActive(false);
+
+            // Filter Mode Label
+            {
+                var filterLabelGO = new GameObject("FilterModeLabel");
+                filterLabelGO.transform.SetParent(tboxFilterModeRowGO.transform, false);
+                tboxFilterModeText = filterLabelGO.AddComponent<Text>();
+                tboxFilterModeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                tboxFilterModeText.fontSize = 20;
+                tboxFilterModeText.fontStyle = FontStyle.Bold;
+                tboxFilterModeText.color = new Color(1f, 0.85f, 0f, 1f);
+                tboxFilterModeText.alignment = TextAnchor.MiddleCenter;
+                tboxFilterModeText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                tboxFilterModeText.verticalOverflow = VerticalWrapMode.Truncate;
+                tboxFilterModeText.raycastTarget = false;
+                var labelRT = filterLabelGO.GetComponent<RectTransform>();
+                labelRT.sizeDelta = new Vector2(200, innerRowH);
+            }
+
+            // Back Button
+            tboxFilterBackBtn = UI.CreateUIButton(tboxFilterModeRowGO, 80, 40, VPBTranslation.T("gallery.tbox.filter_back", "Back"), 16, 0, 0, AnchorPresets.stretchAll, NavigateBack);
+            tboxFilterBackBtn.name = "TboxFilterBackBtn";
+            tboxFilterBackBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.6f, 0.9f);
+            { var s = UI.LoadIconSprite("vpb_icons/arrow_left.png", new Color(0.92f, 0.92f, 0.92f, 1f)); if (s != null) UI.AddIconToButton(tboxFilterBackBtn, s, padding: 6f); }
+            AddTooltip(tboxFilterBackBtn, "gallery.tooltip.filter_back", VPBTranslation.T("gallery.tooltip.filter_back", "Back"));
+
+            // Clear Filter Button
+            tboxFilterClearBtn = UI.CreateUIButton(tboxFilterModeRowGO, 80, 40, VPBTranslation.T("gallery.tbox.filter_clear", "Clear"), 16, 0, 0, AnchorPresets.stretchAll, ClearPackageFilter);
+            tboxFilterClearBtn.name = "TboxFilterClearBtn";
+            tboxFilterClearBtn.GetComponent<Image>().color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
+            { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", new Color(0.92f, 0.92f, 0.92f, 1f)); if (s != null) UI.AddIconToButton(tboxFilterClearBtn, s, padding: 6f); }
+            AddTooltip(tboxFilterClearBtn, "gallery.tooltip.filter_clear", VPBTranslation.T("gallery.tooltip.filter_clear", "Clear Filter"));
 
             const int tboxActionBtnFont = 16;
 
@@ -976,6 +1041,8 @@ namespace VPB
                 var lRT = tboxLabelLayerRT;
                 var bRT = tboxButtonsLayerRT;
                 var pRT = pinRT;
+                var fRT = tboxFilterModeRowRT;
+                var fLE = tboxFilterModeRowLE;
                 innerPaneScaleActions.Add(s =>
                 {
                     float rowH = 60f * s;
@@ -983,6 +1050,7 @@ namespace VPB
                     if (lRT != null) lRT.sizeDelta = new Vector2(lRT.sizeDelta.x, rowH);
                     if (bRT != null) bRT.anchoredPosition = new Vector2(0f, rowH);
                     if (pRT != null) pRT.sizeDelta = new Vector2(44f * s, 44f * s);
+                    if (fLE != null) { fLE.minHeight = rowH; fLE.preferredHeight = rowH; }
                     try { TboxSetAllFlexActionButtonHeights(Mathf.Max(34f, rowH - 8f)); } catch { }
                     try { RefreshTboxFlexButtonLayout(); } catch { }
                 });
@@ -1199,13 +1267,18 @@ namespace VPB
             // Action buttons when there is a selection, cleanup mode active, or person atoms present; pin persists until user toggles (saved in VPB.cfg).
             bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
             bool canExpand = sel > 0 || cleanupModeActive || hasPersonAtoms;
-            if (!canExpand)
+            // Only force collapse if not pinned and not currently expanded (preserve expansion state during category switches)
+            if (!canExpand && !tboxPinned && tboxExpandT < 0.01f)
             {
                 tboxExpandT = 0f;
                 tboxIsHovered = false;
                 tboxButtonLayoutRows = 1;
+                float collapsedHeight = tboxInfoRowHeight;
+                // Account for filter row when active even when collapsed
+                if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
+                    collapsedHeight += tboxInfoRowHeight + tboxBtnRowGap;
                 if (tboxButtonsLayerRT != null)
-                    tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, tboxInfoRowHeight);
+                    tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, collapsedHeight);
             }
 
             if (tboxHintLabel != null && tboxHintLabel.gameObject != null)
@@ -1238,8 +1311,17 @@ namespace VPB
 
                 float btnBand = tboxInfoRowHeight * Mathf.Max(1, tboxButtonLayoutRows)
                     + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap : 0f);
+                // Add filter row height when active
+                if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
+                    btnBand += tboxInfoRowHeight + tboxBtnRowGap;
                 float targetTop = tboxTopOffsetBase + btnBand * tboxExpandT;
-                float newTop = Mathf.Lerp(tboxRT.offsetMax.y, targetTop, Time.deltaTime * 22f);
+                // Use a slower lerp during category switches to prevent flashing
+                float lerpSpeed = Time.deltaTime * 22f;
+                float currentTop = tboxRT.offsetMax.y;
+                // If the difference is very large (indicating a reset), snap to target immediately to prevent flash
+                if (Mathf.Abs(currentTop - targetTop) > 50f)
+                    currentTop = targetTop;
+                float newTop = Mathf.Lerp(currentTop, targetTop, lerpSpeed);
                 if (Mathf.Abs(newTop - targetTop) < 0.5f) newTop = targetTop;
                 tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, newTop);
             }

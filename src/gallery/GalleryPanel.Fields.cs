@@ -654,8 +654,8 @@ namespace VPB
         private RectTransform paginationRT;
         private HorizontalLayoutGroup footerHLG;
         private int _footerHLGLastRightPadding = -1;
+        private GameObject footerBackBtn;
         private GameObject footerClearFilterBtn;
-        private Text footerClearFilterBtnText;
         private Text footerFilterModeText;
         private GameObject footerFilterModeSpacerGO;
         private Text hoverPathText;

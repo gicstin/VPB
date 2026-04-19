@@ -140,6 +140,10 @@
         "IsDirectory":  true
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/arrow_left.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/auto.png",
         "IsDirectory":  false
     },
@@ -193,6 +197,10 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/filter.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/filter_off.png",
         "IsDirectory":  false
     },
     {

@@ -177,7 +177,11 @@ namespace VPB
                 {
                     // Info bar: stretch to full width, sits above the buttons bar
                     hoverPathRT.offsetMin = new Vector2(0, 60 * paneScale);
-                    hoverPathRT.offsetMax = new Vector2(0, 120 * paneScale);
+                    // Only set offsetMax if toolbox is not yet initialized (tbox == null)
+                    // Once initialized, the animation system handles the height via tboxRT.offsetMax.y
+                    // Setting it here after initialization causes flashing during category switches
+                    if (tbox == null)
+                        hoverPathRT.offsetMax = new Vector2(0, 120 * paneScale);
                     // Update tbox expansion references so animation uses the correct scale
                     tboxTopOffsetBase  = 120f * paneScale;
                     tboxInfoRowHeight  = 60f  * paneScale;

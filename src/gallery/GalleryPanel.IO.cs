@@ -143,8 +143,21 @@ namespace VPB
             Dependents = 2,
         }
 
+        private struct FilterFrame
+        {
+            public List<FileEntry> files;
+            public string desc;
+            public PackageFilterMode mode;
+            public string masterUid;
+            public int count;
+            public List<FileEntry> searchBase;
+            public string searchLower;
+            public string savedNameFilter;
+            public bool enteredFromTopSearch;
+        }
+        private Stack<FilterFrame> _filterStack = new Stack<FilterFrame>();
+
         private List<FileEntry> currentFilteredFiles = new List<FileEntry>();
-        private List<FileEntry> filterBaseFiles = null; // Original list when filtering first activated
         private string filterBaseAnchorKey = null; // Scroll anchor captured when first entering filter mode
         private string currentFilterDesc = null; // Description of active filter (e.g., "Dependents of X.var")
         private PackageFilterMode currentPackageFilterMode = PackageFilterMode.None;
@@ -152,7 +165,6 @@ namespace VPB
         private int currentPackageFilterCount = 0;
         private List<FileEntry> filterSearchBaseFiles = null; // Base list for search within filter mode
         private string filterSearchLower = "";
-        private bool filterEnteredFromTopSearch = false;
         private List<FileEntry> topSearchBaseFiles = null; // Base list for top search (non-filter mode)
         private bool _topSearchBaseIsClean = false; // true only when topSearchBaseFiles was captured from an unfiltered load
         private RecyclingGridView recyclingGrid;
@@ -184,8 +196,12 @@ namespace VPB
             RefreshVarRelatedPathsInList(currentFilteredFiles, packageUids);
             RefreshVarRelatedPathsInList(selectedFiles, packageUids);
             RefreshVarRelatedPathsInList(topSearchBaseFiles, packageUids);
-            RefreshVarRelatedPathsInList(filterBaseFiles, packageUids);
             RefreshVarRelatedPathsInList(filterSearchBaseFiles, packageUids);
+            foreach (var frame in _filterStack)
+            {
+                RefreshVarRelatedPathsInList(frame.files, packageUids);
+                RefreshVarRelatedPathsInList(frame.searchBase, packageUids);
+            }
             try
             {
                 if (lastFilteredFiles != null && lastFilteredFiles.Count > 0)
@@ -451,24 +467,39 @@ namespace VPB
             }
         }
 
-        private void EnsureFilterBaseCaptured()
+        private void PushFilterFrame()
         {
-            if (filterBaseFiles != null) return;
-            filterBaseFiles = new List<FileEntry>(currentFilteredFiles);
+            bool fromTopSearch = false;
+            try { fromTopSearch = nameFilterTerms != null && nameFilterTerms.Length > 0; } catch { }
 
-            // Capture "return point" once for Clear Filter
-            filterBaseAnchorKey = null;
-            SaveFilterScrollAnchor();
-            filterBaseAnchorKey = filterRestoreAnchorKey;
+            _filterStack.Push(new FilterFrame
+            {
+                files = new List<FileEntry>(currentFilteredFiles),
+                desc = currentFilterDesc,
+                mode = currentPackageFilterMode,
+                masterUid = currentPackageFilterMasterUid,
+                count = currentPackageFilterCount,
+                searchBase = filterSearchBaseFiles != null ? new List<FileEntry>(filterSearchBaseFiles) : null,
+                searchLower = filterSearchLower,
+                savedNameFilter = nameFilter ?? "",
+                enteredFromTopSearch = fromTopSearch,
+            });
 
-            // Initialize filter-mode search base
+            // Save scroll anchor only on the first (outermost) entry
+            if (_filterStack.Count == 1)
+            {
+                filterBaseAnchorKey = null;
+                SaveFilterScrollAnchor();
+                filterBaseAnchorKey = filterRestoreAnchorKey;
+            }
+
+            // Initialise filter-mode search base from the current list
             filterSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
             filterSearchLower = "";
-
-            // If filter mode is entered while the top search is narrowing the list, "Clear Filter"
-            // should return to the full category list (not the search snapshot).
-            try { filterEnteredFromTopSearch = nameFilterTerms != null && nameFilterTerms.Length > 0; } catch { filterEnteredFromTopSearch = false; }
         }
+
+        // Legacy alias – callers will be migrated to PushFilterFrame directly.
+        private void EnsureFilterBaseCaptured() => PushFilterFrame();
 
         private void ApplyFilteredList(List<FileEntry> filtered, string desc)
         {
@@ -478,8 +509,20 @@ namespace VPB
             if (IsFilterActive)
             {
                 filterSearchBaseFiles = new List<FileEntry>(filtered);
-                filterSearchLower = nameFilter ?? "";
+                // Don't carry the active top search into filter mode — show all deps immediately.
+                // The search box is repurposed for searching within the dep list.
+                filterSearchLower = "";
                 filtered = BuildFilterModeView(filterSearchBaseFiles, filterSearchLower);
+
+                // Clear the top search box so it's ready for in-filter searching
+                try
+                {
+                    nameFilter = "";
+                    nameFilterLower = "";
+                    nameFilterTerms = new string[0];
+                    if (titleSearchInput != null) titleSearchInput.text = "";
+                }
+                catch { }
             }
 
             currentFilteredFiles.Clear();
@@ -3489,63 +3532,105 @@ namespace VPB
             }
         }
 
-        /// <summary>Clear any active filter and restore the full list.</summary>
+        /// <summary>Pop one filter level and return to the previous view.</summary>
+        public void NavigateBack()
+        {
+            if (_filterStack.Count == 0) return;
+
+            FilterFrame frame = _filterStack.Pop();
+
+            currentFilteredFiles.Clear();
+            currentFilteredFiles.AddRange(frame.files);
+            currentFilterDesc = frame.desc;
+            currentPackageFilterMode = frame.mode;
+            currentPackageFilterMasterUid = frame.masterUid;
+            currentPackageFilterCount = frame.count;
+            filterSearchBaseFiles = frame.searchBase;
+            filterSearchLower = frame.searchLower;
+
+            try
+            {
+                nameFilter = frame.savedNameFilter;
+                nameFilterLower = string.IsNullOrEmpty(frame.savedNameFilter) ? "" : frame.savedNameFilter.ToLowerInvariant();
+                nameFilterTerms = SplitSearchTerms(frame.savedNameFilter);
+                if (titleSearchInput != null) titleSearchInput.text = frame.savedNameFilter;
+            }
+            catch { }
+
+            filterBaseAnchorKey = null;
+            RefreshRecycleGridAfterFilterChange();
+            try { UpdateTabs(); } catch { }
+            try { UpdatePaginationText(); } catch { }
+            ScrollGalleryToTop();
+        }
+
+        /// <summary>Clear all filter levels and restore the original unfiltered list.</summary>
         public void ClearPackageFilter()
         {
-            if (filterBaseFiles != null)
+            if (_filterStack.Count == 0) return;
+
+            // Drain the stack; keep the bottom (outermost) frame for restoration
+            FilterFrame bottom = _filterStack.Pop();
+            while (_filterStack.Count > 0)
+                bottom = _filterStack.Pop();
+
+            currentFilteredFiles.Clear();
+            currentFilteredFiles.AddRange(bottom.files);
+            currentFilterDesc = null;
+            currentPackageFilterMode = PackageFilterMode.None;
+            currentPackageFilterMasterUid = null;
+            currentPackageFilterCount = 0;
+            filterSearchBaseFiles = null;
+            filterSearchLower = "";
+
+            RefreshRecycleGridAfterFilterChange();
+            try { UpdateTabs(); } catch { }
+            try { UpdatePaginationText(); } catch { }
+
+            filterBaseAnchorKey = null;
+            ScrollGalleryToTop();
+
+            // If the user entered filter mode while a top search was active, clearing the filter
+            // should return to the full category list (not the search-limited snapshot).
+            if (bottom.enteredFromTopSearch)
             {
-                currentFilteredFiles.Clear();
-                currentFilteredFiles.AddRange(filterBaseFiles);
-                filterBaseFiles = null;
-                currentFilterDesc = null;
-                currentPackageFilterMode = PackageFilterMode.None;
-                currentPackageFilterMasterUid = null;
-                currentPackageFilterCount = 0;
-                filterSearchBaseFiles = null;
-                filterSearchLower = "";
-                bool enteredFromSearch = filterEnteredFromTopSearch;
-                filterEnteredFromTopSearch = false;
-
-                RefreshRecycleGridAfterFilterChange();
-
-                try { UpdateTabs(); } catch { }
-                try { UpdatePaginationText(); } catch { }
-
-                filterBaseAnchorKey = null;
-                ScrollGalleryToTop();
-
-                // If the user entered filter mode while a top search was active, clearing the filter should
-                // return to the full category list (not the search-limited snapshot).
-                if (enteredFromSearch)
+                try
                 {
-                    try
-                    {
-                        nameFilter = "";
-                        nameFilterLower = "";
-                            nameFilterTerms = new string[0];
-                        if (titleSearchInput != null) titleSearchInput.text = "";
-                    }
-                    catch { }
-                    try
-                    {
-                        // Restore full list instantly via in-memory top search base.
-                        if (topSearchBaseFiles != null)
-                        {
-                            currentFilteredFiles.Clear();
-                            currentFilteredFiles.AddRange(topSearchBaseFiles);
-                            topSearchBaseFiles = null;
-                            RefreshRecycleGridAfterFilterChange();
-                            ScrollGalleryToTop();
-                            try { UpdatePaginationText(); } catch { }
-                        }
-                    }
-                    catch { }
+                    nameFilter = "";
+                    nameFilterLower = "";
+                    nameFilterTerms = new string[0];
+                    if (titleSearchInput != null) titleSearchInput.text = "";
                 }
+                catch { }
+                try
+                {
+                    if (topSearchBaseFiles != null)
+                    {
+                        currentFilteredFiles.Clear();
+                        currentFilteredFiles.AddRange(topSearchBaseFiles);
+                        topSearchBaseFiles = null;
+                        RefreshRecycleGridAfterFilterChange();
+                        ScrollGalleryToTop();
+                        try { UpdatePaginationText(); } catch { }
+                    }
+                }
+                catch { }
+            }
+            else
+            {
+                try
+                {
+                    nameFilter = bottom.savedNameFilter;
+                    nameFilterLower = string.IsNullOrEmpty(bottom.savedNameFilter) ? "" : bottom.savedNameFilter.ToLowerInvariant();
+                    nameFilterTerms = SplitSearchTerms(bottom.savedNameFilter);
+                    if (titleSearchInput != null) titleSearchInput.text = bottom.savedNameFilter;
+                }
+                catch { }
             }
         }
 
         /// <summary>Returns whether a filter is currently active.</summary>
-        public bool IsFilterActive => filterBaseFiles != null;
+        public bool IsFilterActive => _filterStack.Count > 0;
 
         /// <summary>Returns the description of the active filter, or null if none.</summary>
         public string GetFilterDescription => currentFilterDesc;

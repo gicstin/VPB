@@ -321,5 +321,9 @@
   "gallery.tbox.no_autoinstall_count": "自動導入オフ ({0})",
   "gallery.tbox.no_autoinstall": "自動導入オフ",
   "gallery.tooltip.tbox_unhide": "選択したパッケージの .hide マーカーを削除",
-  "gallery.tooltip.tbox_no_autoinstall": "選択したパッケージの自動導入と VPB 自動読み込みを解除"
+  "gallery.tooltip.tbox_no_autoinstall": "選択したパッケージの自動導入と VPB 自動読み込みを解除",
+  "gallery.tbox.filter_back": "戻る",
+  "gallery.tbox.filter_clear": "クリア",
+  "gallery.tooltip.filter_back": "戻る",
+  "gallery.tooltip.filter_clear": "フィルターを解除"
 }

@@ -969,21 +969,18 @@ namespace VPB
                 footerFilterModeSpacerGO.SetActive(false);
             }
 
-            // Clear Filter Button (shown in place of the count text while filtering)
-            footerClearFilterBtn = UI.CreateUIButton(centerSection, 200, 40, "Clear Filter", 18, 0, 0, AnchorPresets.middleCenter, ClearPackageFilter);
+            // Back Button — icon-only, shown whenever filter mode is active
+            footerBackBtn = UI.CreateUIButton(centerSection, 40, 40, "", 18, 0, 0, AnchorPresets.middleCenter, NavigateBack);
+            footerBackBtn.name = "BackButton";
+            footerBackBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.6f, 0.9f);
+            { var s = UI.LoadIconSprite("vpb_icons/arrow_left.png", new Color(0.92f, 0.92f, 0.92f, 1f)); if (s != null) UI.AddIconToButton(footerBackBtn, s); }
+            footerBackBtn.SetActive(false);
+
+            // Clear Filter Button — icon-only, clears all filter levels
+            footerClearFilterBtn = UI.CreateUIButton(centerSection, 40, 40, "", 18, 0, 0, AnchorPresets.middleCenter, ClearPackageFilter);
             footerClearFilterBtn.name = "ClearFilterButton";
-            var clearImg = footerClearFilterBtn.GetComponent<Image>();
-            if (clearImg != null) clearImg.color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
-            footerClearFilterBtnText = footerClearFilterBtn.GetComponentInChildren<Text>();
-            if (footerClearFilterBtnText != null)
-            {
-                footerClearFilterBtnText.text = "Clear Filter";
-                footerClearFilterBtnText.color = Color.white;
-                footerClearFilterBtnText.alignment = TextAnchor.MiddleCenter;
-                footerClearFilterBtnText.horizontalOverflow = HorizontalWrapMode.Overflow;
-                footerClearFilterBtnText.verticalOverflow = VerticalWrapMode.Truncate;
-                footerClearFilterBtnText.fontSize = 22;
-            }
+            footerClearFilterBtn.GetComponent<Image>().color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
+            { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", new Color(0.92f, 0.92f, 0.92f, 1f)); if (s != null) UI.AddIconToButton(footerClearFilterBtn, s); }
             footerClearFilterBtn.SetActive(false);
 
             paginationNextBtn = UI.CreateUIButton(centerSection, 40, 40, ">", 20, 0, 0, AnchorPresets.middleCenter, NextPage);
@@ -1125,8 +1122,10 @@ namespace VPB
             AddTooltip(footerScrollBottomBtn, "gallery.tooltip.scroll_bottom", "Jump to bottom of list");
             AddHoverDelegate(footerSpringScrollToggleBtn);
             AddHoverDelegate(footerHoldToLaunchToggleBtn);
+            AddHoverDelegate(footerBackBtn);
+            AddTooltip(footerBackBtn, "gallery.tooltip.filter_back", "Go back one filter level");
             AddHoverDelegate(footerClearFilterBtn);
-            AddTooltip(footerClearFilterBtn, "gallery.tooltip.clear_filter", "Clear Filter");
+            AddTooltip(footerClearFilterBtn, "gallery.tooltip.clear_filter", "Clear all filters");
             AddHoverDelegate(footerUndoBtnGO);
             AddTooltip(footerUndoBtnGO, "gallery.tooltip.undo", "Undo last change");
             AddHoverDelegate(footerRedoBtnGO);
@@ -1205,11 +1204,15 @@ namespace VPB
             UpdateSpringScrollButtonToggleUI();
             UpdateHoldToLaunchToggleUI();
 
-            // Scale the clear filter button to match the slot
+            // Scale the back button
+            {
+                var rt = footerBackBtn != null ? footerBackBtn.GetComponent<RectTransform>() : null;
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(40f*s, 40f*s); });
+            }
+            // Scale the clear filter button
             {
                 var rt = footerClearFilterBtn != null ? footerClearFilterBtn.GetComponent<RectTransform>() : null;
-                var t = footerClearFilterBtnText;
-                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(200f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(22*s); });
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(40f*s, 40f*s); });
             }
 
             // Scale the filter mode label
@@ -1227,11 +1230,10 @@ namespace VPB
             }
 
             // Unified info bar — always visible; hosts hover path, status messages, and tbox label/buttons.
-            // RectMask2D clips the buttons row when the bar is in collapsed state.
             GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0.15f, 0.15f, 0.15f, 1f), AnchorPresets.hStretchBottom, 0, 40, new Vector2(0, 40));
             pathGO.name = "HoverPathContainer";
             pathGO.GetComponent<Image>().raycastTarget = true; // tbox hover delegate needs raycasts
-            pathGO.AddComponent<RectMask2D>();                 // clips buttons row until bar grows
+            // Removed RectMask2D - it was causing visual glitches/flashing during height animation during category switches
             hoverPathRT = pathGO.GetComponent<RectTransform>();
 
             CreateHoverPreviewOverlay(backgroundBoxGO);
@@ -1613,6 +1615,7 @@ namespace VPB
 
             if (IsHubMode)
             {
+                if (footerBackBtn != null) footerBackBtn.SetActive(false);
                 if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(false);
                 if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(false);
                 if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(false);
@@ -1666,29 +1669,39 @@ namespace VPB
             else
             {
                 bool showClearFilter = IsFilterActive;
-                if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(showClearFilter);
-                if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(showClearFilter);
-                if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(showClearFilter);
+                bool showBackBtn = IsFilterActive;
+                // Hide footer filter controls when in dependency filter mode (moved to toolbox)
+                if (footerBackBtn != null) footerBackBtn.SetActive(false);
+                if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(false);
+                if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(false);
+                if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(false);
                 // Item count moved to tbox bar — hide it from the bottom bar in gallery mode
                 if (paginationText != null) paginationText.gameObject.SetActive(false);
 
-                if (showClearFilter && footerClearFilterBtn != null)
+                // Show toolbox filter controls when in dependency filter mode
+                if (tboxFilterModeRowGO != null) tboxFilterModeRowGO.SetActive(showClearFilter);
+                if (tboxFilterBackBtn != null) tboxFilterBackBtn.SetActive(showBackBtn);
+                if (tboxFilterClearBtn != null) tboxFilterClearBtn.SetActive(showClearFilter);
+
+                // Refresh toolbox layout to account for filter row height change
+                try { RefreshTboxFlexButtonLayout(); } catch { }
+
+                if (showClearFilter && tboxFilterClearBtn != null)
                 {
-                    var btn = footerClearFilterBtn.GetComponent<Button>();
+                    var btn = tboxFilterClearBtn.GetComponent<Button>();
                     if (btn != null)
                     {
                         btn.onClick.RemoveAllListeners();
                         btn.onClick.AddListener(ClearPackageFilter);
                     }
-                    if (footerClearFilterBtnText != null) footerClearFilterBtnText.text = "Clear Filter";
-                    if (footerFilterModeText != null)
+                    if (tboxFilterModeText != null)
                     {
-                        footerFilterModeText.text = string.IsNullOrEmpty(GetFilterModeLabel) ? "" : $"{GetFilterModeLabel} ({GetFilterModeCount})";
+                        tboxFilterModeText.text = string.IsNullOrEmpty(GetFilterModeLabel) ? "" : $"{GetFilterModeLabel} ({GetFilterModeCount})";
                         // Set color to red for Missing filter, yellow for other filters
                         if (GetFilterModeLabel == "Missing")
-                            footerFilterModeText.color = new Color(1f, 0.2f, 0.2f, 1f);  // Red
+                            tboxFilterModeText.color = new Color(1f, 0.2f, 0.2f, 1f);  // Red
                         else
-                            footerFilterModeText.color = new Color(1f, 0.85f, 0f, 1f);   // Yellow
+                            tboxFilterModeText.color = new Color(1f, 0.85f, 0f, 1f);   // Yellow
                     }
                 }
 

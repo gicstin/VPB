@@ -273,7 +273,9 @@ namespace VPB
                     StopCoroutine(hoverFadeCoroutine);
                     hoverFadeCoroutine = null;
                 }
-                hoverPathCanvasGroup.alpha = 0f; // hide path text while status is visible
+                // Only hide the path text, not the entire container (toolbox reuses hoverPathRT)
+                if (hoverPathText != null)
+                    hoverPathText.gameObject.SetActive(false);
             }
 
             if (statusBarText != null)
