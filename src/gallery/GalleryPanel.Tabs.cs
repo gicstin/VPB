@@ -94,7 +94,6 @@ namespace VPB
                 if (showTitle)
                     titleText.text = currentCategoryTitle;
             }
-            UpdateFooterContextActions();
             UpdateSideContextActions();
             UpdateSideButtonsVisibility();
         }
@@ -158,7 +157,6 @@ namespace VPB
                 }
             }
 
-            UpdateFooterContextActions();
             UpdateSideContextActions();
 
             if (IsHubMode)

@@ -599,9 +599,6 @@ namespace VPB
         private Image footerFollowDistanceImage;
         private GameObject footerFollowHeightBtn;
         private Image footerFollowHeightImage;
-        private GameObject footerRemoveAllHairBtn;
-        private Image footerRemoveAllHairBtnImage;
-        private Text footerRemoveAllHairBtnText;
         // Icon swap fields for multi-state footer buttons
         private Image footerLayoutIconImage;
         private Sprite footerLayoutGridSprite;
@@ -674,12 +671,12 @@ namespace VPB
         private GameObject paginationNext10Btn;
         private GameObject paginationFirstBtn;
         private GameObject paginationLastBtn;
-        private GameObject selectAllBtn;
-        private GameObject clearSelectionBtn;
         private GameObject gridSizeMinusBtn;
         private GameObject gridSizePlusBtn;
         private GameObject footerScrollTopBtn;
         private GameObject footerScrollBottomBtn;
+        private GameObject footerGridScrollExpandBtn;
+        private bool footerGridScrollExpanded = false;
         private GameObject footerSpringScrollToggleBtn;
         private Image footerSpringScrollToggleBtnImage;
         private Image footerSpringScrollToggleIconImage;

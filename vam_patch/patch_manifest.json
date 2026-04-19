@@ -184,6 +184,14 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/expand_left.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/expand_up.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/eye_angle.png",
         "IsDirectory":  false
     },

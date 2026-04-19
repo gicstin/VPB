@@ -1009,10 +1009,6 @@ namespace VPB
             { Sprite init = footerMenuGateOffSprite ?? footerMenuGateOnSprite; if (init != null) { UI.AddIconToButton(footerMenuGateBtn, init); footerMenuGateIconImage = footerMenuGateBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerMenuGateBtn, "gallery.tooltip.vam_menu_gate", "Show only when VaM menu is visible");
 
-            selectAllBtn = UI.CreateUIButton(rightSection, 40, 40, "A", 20, 0, 0, AnchorPresets.middleCenter, SelectAll);
-            { var s = UI.LoadIconSprite("vpb_icons/select_all.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(selectAllBtn, s); }
-            clearSelectionBtn = UI.CreateUIButton(rightSection, 40, 40, "C", 20, 0, 0, AnchorPresets.middleCenter, ClearSelection);
-            { var s = UI.LoadIconSprite("vpb_icons/clear_selection.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(clearSelectionBtn, s); }
             gridSizeMinusBtn = UI.CreateUIButton(rightSection, 40, 40, "-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
             { var s = UI.LoadIconSprite("vpb_icons/zoom_out.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(gridSizeMinusBtn, s); }
             gridSizePlusBtn = UI.CreateUIButton(rightSection, 40, 40, "+", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(-1));
@@ -1027,6 +1023,11 @@ namespace VPB
             footerSpringScrollToggleBtnImage = footerSpringScrollToggleBtn.GetComponent<Image>();
             { var s = UI.LoadIconSprite("vpb_icons/scroll.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) { UI.AddIconToButton(footerSpringScrollToggleBtn, s); footerSpringScrollToggleIconImage = footerSpringScrollToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerSpringScrollToggleBtn, "gallery.tooltip.spring_scroll_toggle", "Toggle spring scroll drag button (floating)");
+
+            // Expand button to show grid and scroll controls
+            footerGridScrollExpandBtn = UI.CreateUIButton(rightSection, 40, 40, "▼", 18, 0, 0, AnchorPresets.middleCenter, ToggleFooterGridScrollExpanded);
+            { var s = UI.LoadIconSprite("vpb_icons/expand_left.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerGridScrollExpandBtn, s); }
+            AddTooltip(footerGridScrollExpandBtn, "gallery.tooltip.footer_expand", "Show grid and scroll controls");
 
             // Toggle hold-to-launch/apply (hover-hold over an item for 2s)
             footerHoldToLaunchToggleBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleHoldToLaunch);
@@ -1050,14 +1051,14 @@ namespace VPB
             footerLayoutBtnText = footerLayoutBtn.GetComponentInChildren<Text>();
             footerLayoutGridSprite = UI.LoadIconSprite("vpb_icons/layout_grid.png", new Color(0.78f, 0.78f, 0.78f, 1f));
             footerLayoutListSprite = UI.LoadIconSprite("vpb_icons/layout_list.png", new Color(0.78f, 0.78f, 0.78f, 1f));
-            { Sprite init = footerLayoutGridSprite ?? footerLayoutListSprite; if (init != null) { UI.AddIconToButton(footerLayoutBtn, init); footerLayoutIconImage = footerLayoutBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+            { Sprite init = footerLayoutListSprite ?? footerLayoutGridSprite; if (init != null) { UI.AddIconToButton(footerLayoutBtn, init); footerLayoutIconImage = footerLayoutBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
             footerHeightBtn = UI.CreateUIButton(rightSection, 40, 40, "↕", 20, 0, 0, AnchorPresets.middleCenter, ToggleFixedHeightMode);
             footerHeightBtnImage = footerHeightBtn.GetComponent<Image>();
             footerHeightBtnText = footerHeightBtn.GetComponentInChildren<Text>();
             footerHeightFreeSprite  = UI.LoadIconSprite("vpb_icons/height_free.png",  new Color(0.78f, 0.78f, 0.78f, 1f));
             footerHeightFixedSprite = UI.LoadIconSprite("vpb_icons/height_fixed.png", new Color(0.78f, 0.78f, 0.78f, 1f));
-            { Sprite init = footerHeightFreeSprite ?? footerHeightFixedSprite; if (init != null) { UI.AddIconToButton(footerHeightBtn, init); footerHeightIconImage = footerHeightBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+            { Sprite init = footerHeightFixedSprite ?? footerHeightFreeSprite; if (init != null) { UI.AddIconToButton(footerHeightBtn, init); footerHeightIconImage = footerHeightBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
             footerShowHiddenPackagesBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleGalleryShowHiddenPackages);
             footerShowHiddenPackagesBtnImage = footerShowHiddenPackagesBtn.GetComponent<Image>();
@@ -1070,29 +1071,11 @@ namespace VPB
             footerAutoHideBtn = UI.CreateUIButton(rightSection, 40, 40, "A", 20, 0, 0, AnchorPresets.middleCenter, ToggleAutoHideMode);
             footerAutoHideBtnImage = footerAutoHideBtn.GetComponent<Image>();
             footerAutoHideBtnText = footerAutoHideBtn.GetComponentInChildren<Text>();
-            // Icon mapping reversed per UX preference (matches tbox swaps)
-            footerAutoHideOffSprite = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  new Color(0.78f, 0.78f, 0.78f, 1f));
-            footerAutoHideOnSprite  = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            footerAutoHideOffSprite = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            footerAutoHideOnSprite  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  new Color(0.78f, 0.78f, 0.78f, 1f));
             { Sprite init = footerAutoHideOffSprite ?? footerAutoHideOnSprite; if (init != null) { UI.AddIconToButton(footerAutoHideBtn, init); footerAutoHideIconImage = footerAutoHideBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
             // --- Context Actions (Category-aware) ---
-            footerRemoveAllHairBtn = UI.CreateUIButton(rightSection, 40, 40, "Hr", 16, 0, 0, AnchorPresets.middleCenter, () => {
-                Atom target = GetBestTargetAtom();
-                if (target == null)
-                {
-                    LogUtil.LogWarning("[VPB] Please select a Person atom.");
-                    return;
-                }
-
-                UIDraggableItem dragger = footerRemoveAllHairBtn.GetComponent<UIDraggableItem>();
-                if (dragger == null) dragger = footerRemoveAllHairBtn.AddComponent<UIDraggableItem>();
-                dragger.Panel = this;
-                dragger.RemoveAllHair(target);
-            });
-            footerRemoveAllHairBtnImage = footerRemoveAllHairBtn.GetComponent<Image>();
-            footerRemoveAllHairBtnText = footerRemoveAllHairBtn.GetComponentInChildren<Text>();
-            AddTooltip(footerRemoveAllHairBtn, "gallery.tooltip.remove_all_hair", "Remove All Hair from Target");
-            { var s = UI.LoadIconSprite("vpb_icons/remove_hair.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerRemoveAllHairBtn, s); }
 
             // Hover support for pagination (Hub mode)
             AddHoverDelegate(paginationFirstBtn);
@@ -1108,10 +1091,6 @@ namespace VPB
             AddHoverDelegate(paginationLastBtn);
             AddTooltip(paginationLastBtn, "gallery.tooltip.page_last", "Last Page");
 
-            AddHoverDelegate(selectAllBtn);
-            AddTooltip(selectAllBtn, "gallery.tooltip.select_all", "Select All");
-            AddHoverDelegate(clearSelectionBtn);
-            AddTooltip(clearSelectionBtn, "gallery.tooltip.clear_selection", "Clear Selection");
             AddHoverDelegate(gridSizeMinusBtn);
             AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease Columns");
             AddHoverDelegate(gridSizePlusBtn);
@@ -1138,14 +1117,9 @@ namespace VPB
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
             AddHoverDelegate(footerLayoutBtn);
-            AddTooltip(footerLayoutBtn, "gallery.tooltip.toggle_layout", "Toggle Layout Mode");
             AddHoverDelegate(footerHeightBtn);
-            AddTooltip(footerHeightBtn, "gallery.tooltip.toggle_fixed_height", "Toggle Fixed Height Mode");
             AddHoverDelegate(footerShowHiddenPackagesBtn);
-            AddTooltip(footerShowHiddenPackagesBtn, "gallery.tooltip.show_hidden_packages", "Show packages marked hidden (.hide) in the gallery");
             AddHoverDelegate(footerAutoHideBtn);
-            AddTooltip(footerAutoHideBtn, "gallery.tooltip.auto_hide_fixed", "Auto-Hide (Fixed)");
-            AddHoverDelegate(footerRemoveAllHairBtn);
 
             // Register inner pane button scale actions (footer/pagination)
             { var prt = paginationRT; innerPaneScaleActions.Add(s => { if (prt) prt.sizeDelta = new Vector2(0, 40f*s); }); }
@@ -1173,25 +1147,23 @@ namespace VPB
                 footerFollowAngleBtn, footerFollowDistanceBtn, footerFollowHeightBtn,
                 paginationFirstBtn, paginationPrev10Btn, paginationPrevBtn,
                 paginationNextBtn, paginationNext10Btn, paginationLastBtn,
-                selectAllBtn, clearSelectionBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
                 footerScrollTopBtn, footerScrollBottomBtn,
                 footerSpringScrollToggleBtn,
+                footerGridScrollExpandBtn,
                 footerHoldToLaunchToggleBtn,
                 footerLayoutBtn, footerHeightBtn, footerShowHiddenPackagesBtn, footerAutoHideBtn,
-                footerRemoveAllHairBtn,
             };
             var footerBtnFonts = new int[] {
                 20, 20, 20,
                 18, 18, 20,
                 20, 18, 18,
-                20, 20,
                 24, 24,
                 22, 22,
                 20,
+                18,
                 20,
                 20, 20, 20, 20,
-                16,
             };
             for (int i = 0; i < footerBtnGOs.Length; i++)
             {
@@ -1203,6 +1175,7 @@ namespace VPB
 
             UpdateSpringScrollButtonToggleUI();
             UpdateHoldToLaunchToggleUI();
+            UpdateFooterGridScrollVisibility();
 
             // Scale the back button
             {
@@ -1282,7 +1255,6 @@ namespace VPB
             UpdateFooterShowHiddenPackagesState();
             UpdateFooterAutoHideState();
             UpdateFooterVamMenuGateState();
-            UpdateFooterContextActions();
             UpdatePaginationText();
             try { UpdateUndoRedoButtonLabels(); } catch { }
         }
@@ -1311,6 +1283,21 @@ namespace VPB
                 springScrollButtonGO.SetActive(springScrollButtonEnabled);
             }
             UpdateSpringScrollButtonToggleUI();
+        }
+
+        private void ToggleFooterGridScrollExpanded()
+        {
+            footerGridScrollExpanded = !footerGridScrollExpanded;
+            UpdateFooterGridScrollVisibility();
+        }
+
+        private void UpdateFooterGridScrollVisibility()
+        {
+            if (gridSizeMinusBtn != null) gridSizeMinusBtn.SetActive(footerGridScrollExpanded);
+            if (gridSizePlusBtn != null) gridSizePlusBtn.SetActive(footerGridScrollExpanded);
+            if (footerScrollTopBtn != null) footerScrollTopBtn.SetActive(footerGridScrollExpanded);
+            if (footerScrollBottomBtn != null) footerScrollBottomBtn.SetActive(footerGridScrollExpanded);
+            if (footerSpringScrollToggleBtn != null) footerSpringScrollToggleBtn.SetActive(footerGridScrollExpanded);
         }
 
         private void EnsureSpringScrollButtonExists()
@@ -1660,9 +1647,9 @@ namespace VPB
                     paginationLastBtn.GetComponent<Button>().interactable = canGoNext;
                 }
 
-                if (selectAllBtn != null)
+                if (tboxSelectAllBtn != null)
                 {
-                    Button sab = selectAllBtn.GetComponent<Button>();
+                    Button sab = tboxSelectAllBtn.GetComponent<Button>();
                     if (sab != null) sab.interactable = false;
                 }
             }
@@ -1721,9 +1708,9 @@ namespace VPB
                     paginationText.text = VPBTranslation.T("gallery.items.zero", "0 Items");
                 }
 
-                if (selectAllBtn != null)
+                if (tboxSelectAllBtn != null)
                 {
-                    Button sab = selectAllBtn.GetComponent<Button>();
+                    Button sab = tboxSelectAllBtn.GetComponent<Button>();
                     if (sab != null)
                     {
                         int totalForSelectAll = currentFilteredFiles != null ? currentFilteredFiles.Count : 0;
@@ -1740,20 +1727,6 @@ namespace VPB
             }
         }
 
-        private void UpdateFooterContextActions()
-        {
-            // Default to hidden
-            if (footerRemoveAllHairBtn != null) footerRemoveAllHairBtn.SetActive(false);
-
-            string title = currentCategoryTitle ?? "";
-            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-
-            if (footerRemoveAllHairBtn != null) footerRemoveAllHairBtn.SetActive(isHair);
-
-            // Slight visual cue (optional but consistent with other footer buttons)
-            if (footerRemoveAllHairBtnImage != null) footerRemoveAllHairBtnImage.color = new Color(0.6f, 0.2f, 0.2f, 1f);
-            if (footerRemoveAllHairBtnText != null) footerRemoveAllHairBtnText.color = Color.white;
-        }
 
         private void ToggleLayoutMode()
         {
@@ -1778,8 +1751,16 @@ namespace VPB
 
             if (footerLayoutIconImage != null)
             {
-                Sprite target = (layoutMode == GalleryLayoutMode.List) ? footerLayoutListSprite : footerLayoutGridSprite;
+                Sprite target = (layoutMode == GalleryLayoutMode.List) ? footerLayoutGridSprite : footerLayoutListSprite;
                 if (target != null) footerLayoutIconImage.sprite = target;
+            }
+
+            if (footerLayoutBtn != null)
+            {
+                var del = footerLayoutBtn.GetComponent<UIHoverDelegate>();
+                if (del != null) del.OnHoverChange = null;
+                string modeText = (layoutMode == GalleryLayoutMode.List) ? "Toggle Grid Layout Mode" : "Toggle List Layout Mode";
+                AddTooltipPlain(footerLayoutBtn, modeText);
             }
         }
 
@@ -1795,13 +1776,13 @@ namespace VPB
         private void UpdateFooterHeightState()
         {
             if (VPBConfig.Instance == null) return;
-            
+
             Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
             Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            
+
             if (footerHeightBtnImage != null)
                 footerHeightBtnImage.color = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? activeColor : inactiveColor;
-                
+
             if (footerHeightBtnText != null)
             {
                 switch(VPBConfig.Instance.DesktopFixedHeightMode)
@@ -1813,8 +1794,16 @@ namespace VPB
 
             if (footerHeightIconImage != null)
             {
-                Sprite target = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? footerHeightFixedSprite : footerHeightFreeSprite;
+                Sprite target = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? footerHeightFreeSprite : footerHeightFixedSprite;
                 if (target != null) footerHeightIconImage.sprite = target;
+            }
+
+            if (footerHeightBtn != null)
+            {
+                var del = footerHeightBtn.GetComponent<UIHoverDelegate>();
+                if (del != null) del.OnHoverChange = null;
+                string modeText = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? "Toggle Adjustable Height Mode" : "Toggle Full Height Mode";
+                AddTooltipPlain(footerHeightBtn, modeText);
             }
         }
 
@@ -1844,6 +1833,14 @@ namespace VPB
             {
                 Sprite target = VPBConfig.Instance.GalleryShowHiddenPackages ? footerShowHiddenOnSprite : footerShowHiddenOffSprite;
                 if (target != null) footerShowHiddenIconImage.sprite = target;
+            }
+
+            if (footerShowHiddenPackagesBtn != null)
+            {
+                var del = footerShowHiddenPackagesBtn.GetComponent<UIHoverDelegate>();
+                if (del != null) del.OnHoverChange = null;
+                string modeText = VPBConfig.Instance.GalleryShowHiddenPackages ? "Hide Hidden" : "Show Hidden";
+                AddTooltipPlain(footerShowHiddenPackagesBtn, modeText);
             }
         }
 
@@ -1900,6 +1897,14 @@ namespace VPB
             {
                 Sprite target = VPBConfig.Instance.DesktopFixedAutoCollapse ? footerAutoHideOnSprite : footerAutoHideOffSprite;
                 if (target != null) footerAutoHideIconImage.sprite = target;
+            }
+
+            if (footerAutoHideBtn != null)
+            {
+                var del = footerAutoHideBtn.GetComponent<UIHoverDelegate>();
+                if (del != null) del.OnHoverChange = null;
+                string modeText = VPBConfig.Instance.DesktopFixedAutoCollapse ? " (Enabled)" : " (Disabled)";
+                AddTooltipPlain(footerAutoHideBtn, "Auto-Hide" + modeText);
             }
         }
 

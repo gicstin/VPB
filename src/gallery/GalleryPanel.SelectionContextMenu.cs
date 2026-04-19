@@ -38,6 +38,8 @@ namespace VPB
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
         private GameObject tboxSceneImportBtn;
+        private GameObject tboxSelectAllBtn;
+        private GameObject tboxClearSelectionBtn;
 
         // Dependency filter controls in toolbox
         private GameObject tboxFilterModeRowGO;
@@ -143,6 +145,8 @@ namespace VPB
             one(tboxCacheTexturesBtn);
             one(tboxCopyPkgNamesBtn);
             one(tboxSceneImportBtn);
+            one(tboxSelectAllBtn);
+            one(tboxClearSelectionBtn);
         }
 
         private void TboxDetachAllActionButtonsForLayout()
@@ -177,6 +181,8 @@ namespace VPB
             d(tboxCacheTexturesBtn);
             d(tboxCopyPkgNamesBtn);
             d(tboxSceneImportBtn);
+            d(tboxSelectAllBtn);
+            d(tboxClearSelectionBtn);
             foreach (var go in tboxPersonAtomBtns) { if (go != null) go.transform.SetParent(p, false); }
         }
 
@@ -245,7 +251,7 @@ namespace VPB
                 return s;
             }
 
-            var ltr = new List<GameObject>(26 + tboxPersonAtomBtns.Count);
+            var ltr = new List<GameObject>(28 + tboxPersonAtomBtns.Count);
             // Person atom target buttons appear leftmost in the toolbar
             foreach (var go in tboxPersonAtomBtns) { if (go != null) ltr.Add(go); }
             // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
@@ -273,6 +279,8 @@ namespace VPB
             if (tboxCacheTexturesBtn != null) ltr.Add(tboxCacheTexturesBtn);
             if (tboxCopyPkgNamesBtn != null) ltr.Add(tboxCopyPkgNamesBtn);
             if (tboxSceneImportBtn != null) ltr.Add(tboxSceneImportBtn);
+            if (tboxSelectAllBtn != null) ltr.Add(tboxSelectAllBtn);
+            if (tboxClearSelectionBtn != null) ltr.Add(tboxClearSelectionBtn);
 
             var rtl = new List<GameObject>(ltr.Count);
             for (int i = ltr.Count - 1; i >= 0; i--)
@@ -732,6 +740,48 @@ namespace VPB
                     // Fallback: keep text label if icon missing
                     Text t = tboxDeleteBtn.GetComponentInChildren<Text>(true);
                     if (t != null) t.text = VPBTranslation.T("gallery.tbox.delete", "Delete");
+                }
+            }
+            catch { }
+
+            tboxSelectAllBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                SelectAll
+            );
+            tboxSelectAllBtn.name = "Tbox_SelectAll";
+            TboxConfigureActionButtonFlex(tboxSelectAllBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxSelectAllBtn, "gallery.tooltip.select_all", "Select All");
+            try
+            {
+                var selectAllIcon = UI.LoadIconSprite("vpb_icons/select_all.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                if (selectAllIcon != null) UI.AddIconToButton(tboxSelectAllBtn, selectAllIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxSelectAllBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.select_all", "Select All");
+                }
+            }
+            catch { }
+
+            tboxClearSelectionBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                ClearSelection
+            );
+            tboxClearSelectionBtn.name = "Tbox_ClearSelection";
+            TboxConfigureActionButtonFlex(tboxClearSelectionBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxClearSelectionBtn, "gallery.tooltip.clear_selection", "Clear Selection");
+            try
+            {
+                var clearSelectionIcon = UI.LoadIconSprite("vpb_icons/clear_selection.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                if (clearSelectionIcon != null) UI.AddIconToButton(tboxClearSelectionBtn, clearSelectionIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxClearSelectionBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.clear_selection", "Clear");
                 }
             }
             catch { }

@@ -144,8 +144,6 @@ namespace VPB
             if (leftRemoveAtomBtnIconImage == null) RefreshGoText(leftRemoveAtomBtn, "gallery.side.remove", "Remove");
             if (rightRemoveAllClothingBtnIconImage == null) RefreshGoText(rightRemoveAllClothingBtn, "gallery.side.remove_clothing", "Remove\nClothing");
             if (leftRemoveAllClothingBtnIconImage == null) RefreshGoText(leftRemoveAllClothingBtn, "gallery.side.remove_clothing", "Remove\nClothing");
-            if (rightRemoveAllHairBtnIconImage == null) RefreshGoText(rightRemoveAllHairBtn, "gallery.side.remove_hair", "Remove\nHair");
-            if (leftRemoveAllHairBtnIconImage == null) RefreshGoText(leftRemoveAllHairBtn, "gallery.side.remove_hair", "Remove\nHair");
 
             // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
             try { RefreshTboxConditionalActionButtons(); } catch { }

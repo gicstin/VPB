@@ -36,6 +36,12 @@ namespace VPB
             raycaster.enabled = true;
         }
 
+        private IEnumerator RefreshRaycasterAfterDelay(float delaySecs)
+        {
+            yield return new WaitForSecondsRealtime(delaySecs);
+            yield return StartCoroutine(RefreshRaycasterNextFrame());
+        }
+
         private Atom GetBestTargetAtom()
         {
             if (SuperController.singleton == null) return null;
@@ -432,10 +438,18 @@ namespace VPB
 
             SetCanvasVisible(true);
 
-            // If we had to register late (startup ordering), refresh raycast state deterministically.
-            if (!registeredBefore && _registeredWithSuperController)
+            // Refresh raycast on first show (cold-launch VR fix) and on late registration.
+            // On cold launch, VaM's VR pointer system may not have connected to the canvas yet
+            // even when registration succeeded in Init().
+            bool isFirstShow = !hasLoadedContent;
+            if (isFirstShow || (!registeredBefore && _registeredWithSuperController))
             {
                 try { StartCoroutine(RefreshRaycasterNextFrame()); } catch { }
+            }
+            // Second delayed refresh: VaM's VR pointer system may take ~1 second to fully connect.
+            if (isFirstShow)
+            {
+                try { StartCoroutine(RefreshRaycasterAfterDelay(1f)); } catch { }
             }
 
             if (shouldRefresh)
