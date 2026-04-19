@@ -273,6 +273,11 @@ namespace VPB
         private List<string> previewRemoveClothingAllItemUids = new List<string>();
         private List<bool> previewRemoveClothingAllPrevVals = new List<bool>();
 
+        // Tracks active clothing UIDs per atom to detect changes for auto-refresh.
+        private Dictionary<string, HashSet<string>> _lastActiveClothingUids = new Dictionary<string, HashSet<string>>();
+        // Tracks clothing UIDs that were present when the atom was first encountered in this session.
+        private Dictionary<string, HashSet<string>> _sessionInitialClothingUids = new Dictionary<string, HashSet<string>>();
+
         private bool isPreviewRemoveHairAll = false;
         private List<string> previewRemoveHairAllItemUids = new List<string>();
         private List<bool> previewRemoveHairAllPrevVals = new List<bool>();

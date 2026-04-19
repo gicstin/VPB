@@ -1394,7 +1394,10 @@ namespace VPB
             if (leftSaveBtnGO != null) leftSaveBtnGO.SetActive(showSave);
 
             // Update arrow indicators immediately (not only after submenu hover).
-            if (isClothing)
+            bool anyClothingChanged = false;
+            bool isRemoveClothingOpen = (leftActiveContent == ContentType.RemoveClothing || rightActiveContent == ContentType.RemoveClothing);
+
+            if (isClothing || isRemoveClothingOpen)
             {
                 int count = 0;
                 try
@@ -1405,6 +1408,7 @@ namespace VPB
 
                     foreach (Atom tgt in targets)
                     {
+                        HashSet<string> currentUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                         JSONStorable geometry = tgt.GetStorableByID("geometry");
                         if (geometry != null)
                         {
@@ -1422,14 +1426,43 @@ namespace VPB
                                     && previewRemoveClothingPrevGeometryVal.Value);
 
                                 JSONStorableBool jsb = geometry.GetBoolJSONParam(name);
-                                if (jsb != null && (jsb.val || isPreviewItem)) count++;
+                                bool isActive = jsb != null && (jsb.val || isPreviewItem);
+                                if (isActive)
+                                {
+                                    count++;
+                                    currentUids.Add(clothingUid);
+                                }
                             }
+                        }
+
+                        // Initialize session-initial UIDs for this atom if not already tracked.
+                        if (!_sessionInitialClothingUids.ContainsKey(tgt.uid))
+                        {
+                            _sessionInitialClothingUids[tgt.uid] = new HashSet<string>(currentUids, StringComparer.OrdinalIgnoreCase);
+                        }
+
+                        // Detect changes for auto-refresh.
+                        if (!_lastActiveClothingUids.TryGetValue(tgt.uid, out var lastUids))
+                        {
+                            lastUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        }
+
+                        if (!currentUids.SetEquals(lastUids))
+                        {
+                            anyClothingChanged = true;
+                            _lastActiveClothingUids[tgt.uid] = currentUids;
                         }
                     }
                 }
                 catch { }
 
-                UpdateRemoveClothingButtonLabels(count);
+                if (isClothing) UpdateRemoveClothingButtonLabels(count);
+
+                // Auto-refresh the side tab if the list changed and the tab is open.
+                if (anyClothingChanged && isRemoveClothingOpen)
+                {
+                    UpdateTabs();
+                }
             }
             else
             {

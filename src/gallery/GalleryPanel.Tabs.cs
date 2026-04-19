@@ -1552,6 +1552,7 @@ namespace VPB
                 if (personAtoms.Count > 0)
                 {
                     Color removeColor = new Color(0.6f, 0.2f, 0.2f, 1f);
+                    Color newItemColor = new Color(0.2f, 0.5f, 0.4f, 1f);
                     Color cancelColor = new Color(0.35f, 0.35f, 0.35f, 1f);
                     Color allColor = new Color(0.8f, 0.2f, 0.2f, 1f);
                     Color groupColor = new Color(0.2f, 0.2f, 0.2f, 1f);
@@ -1640,7 +1641,14 @@ namespace VPB
                                 string uid = opt.Key;
                                 string label = opt.Value;
                                 string tooltip = "Remove: " + label + " from " + target.uid;
-                                CreateTabButton(container.transform, label, removeColor, false, () => {
+
+                                Color btnColor = removeColor;
+                                if (_sessionInitialClothingUids.TryGetValue(target.uid, out var initialUids) && !initialUids.Contains(uid))
+                                {
+                                    btnColor = newItemColor;
+                                }
+
+                                CreateTabButton(container.transform, label, btnColor, false, () => {
                                     ClearClothingPreview();
                                     UIDraggableItem dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.GetComponent<UIDraggableItem>();
                                     if (dragger == null) dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.AddComponent<UIDraggableItem>();
