@@ -2853,7 +2853,9 @@ namespace VPB
                 recyclingGrid.onBindItem = (go, index) => {
                     if (index >= 0 && index < currentFilteredFiles.Count)
                     {
-                        int centerIdx = recyclingGrid != null ? recyclingGrid.GetCenterItemIndex() : 0;
+                        // Use CachedCenterItemIndex (computed once per UpdateVisibleItems call)
+                        // instead of calling GetCenterItemIndex() per item — avoids N viewport.rect accesses.
+                        int centerIdx = recyclingGrid != null ? recyclingGrid.CachedCenterItemIndex : 0;
                         int dist = Mathf.Abs(index - centerIdx);
                         _nextThumbPriority = Mathf.Min(90, dist * 3); // center=0 (first), edges=higher (later)
                         BindFileButton(go, currentFilteredFiles[index]);

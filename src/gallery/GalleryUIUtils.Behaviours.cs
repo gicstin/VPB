@@ -632,8 +632,16 @@ namespace VPB
         
         public Action<GameObject, int> onBindItem;
         public Func<GameObject> onCreateItem;
+        public Action<GameObject> onRecycleItem;
+
+        /// <summary>
+        /// The item index whose row was closest to viewport center during the last UpdateVisibleItems call.
+        /// Cached so callers (e.g. thumbnail priority computation) don't recompute it per-item.
+        /// </summary>
+        public int CachedCenterItemIndex { get; private set; }
 
         private List<RecyclingGridItem> activeItems = new List<RecyclingGridItem>();
+        private HashSet<int> _activeIndexSet = new HashSet<int>();
         private Stack<RectTransform> pool = new Stack<RectTransform>();
         
         // Grid State
@@ -658,6 +666,19 @@ namespace VPB
 
         private bool _needsVisibleUpdate = false;
         private bool _needsLayoutUpdate = true; // Start with true to ensure initial layout
+
+        /// <summary>
+        /// Last visible index range passed to recycle/bind — avoids redoing O(n) recycle scans
+        /// every frame while the scroll offset moves inside the same rows (common during drag).
+        /// </summary>
+        private int _lastVisibleStartIndex = -1;
+        private int _lastVisibleEndIndex = -1;
+
+        private void InvalidateVisibleRangeCache()
+        {
+            _lastVisibleStartIndex = -1;
+            _lastVisibleEndIndex = -1;
+        }
 
         private void Awake()
         {
@@ -895,7 +916,7 @@ namespace VPB
 
         private void UpdateVisibleItems()
         {
-            if (itemsCount == 0 || viewport == null || content == null) 
+            if (itemsCount == 0 || viewport == null || content == null)
             {
                 if (activeItems.Count > 0) RecycleAll();
                 return;
@@ -906,60 +927,70 @@ namespace VPB
             if (effectiveItemHeight <= 0.1f) effectiveItemHeight = 200f;
 
             float viewHeight = viewport.rect.height;
-            if (viewHeight <= 0) viewHeight = 800f; 
+            if (viewHeight <= 0) viewHeight = 800f;
 
             float startY = content.anchoredPosition.y;
             float endY = startY + viewHeight;
-            
-            // Revert to simpler buffer logic that worked
-            startY -= effectiveItemHeight; 
-            endY += effectiveItemHeight;
+
+            // 2-row buffer above and below so thumbnails begin loading before items enter view.
+            startY -= effectiveItemHeight * 2f;
+            endY += effectiveItemHeight * 2f;
 
             int startRow = Mathf.FloorToInt(Mathf.Max(0, startY) / effectiveItemHeight);
             int endRow = Mathf.CeilToInt(endY / effectiveItemHeight);
-            
+
             startRow = Mathf.Max(0, startRow);
             endRow = Mathf.Min(rowCount - 1, endRow);
 
             int startIndex = startRow * colCount;
-            int endIndex = Mathf.Min(itemsCount - 1, (endRow * colCount) + colCount - 1); 
-            // Recycle items out of range
+            int endIndex = Mathf.Min(itemsCount - 1, (endRow * colCount) + colCount - 1);
+
+            // Same window as last frame: no recycle/bind work (dominant cost during smooth scroll).
+            // Still refresh center index so future binds use an up-to-date priority hint when rows change.
+            if (_lastVisibleStartIndex == startIndex && _lastVisibleEndIndex == endIndex && activeItems.Count > 0)
+            {
+                CachedCenterItemIndex = GetCenterItemIndex();
+                return;
+            }
+
+            // Cache center index once for the entire bind pass so onBindItem callbacks
+            // don't recompute it (and access viewport.rect) for every single item.
+            CachedCenterItemIndex = GetCenterItemIndex();
+
+            // Recycle items out of range, updating the index set in sync.
             for (int i = activeItems.Count - 1; i >= 0; i--)
             {
                 RecyclingGridItem item = activeItems[i];
                 if (item == null || item.index < startIndex || item.index > endIndex)
                 {
-                    if (item != null) Recycle(item.GetComponent<RectTransform>());
+                    if (item != null)
+                    {
+                        _activeIndexSet.Remove(item.index);
+                        Recycle(item.GetComponent<RectTransform>());
+                    }
                     activeItems.RemoveAt(i);
                 }
             }
 
-            // Create missing items
+            // Create missing items — O(1) lookup via HashSet instead of O(N) inner scan.
             for (int i = startIndex; i <= endIndex; i++)
             {
-                bool alreadyActive = false;
-                for (int j = 0; j < activeItems.Count; j++)
-                {
-                    if (activeItems[j] != null && activeItems[j].index == i)
-                    {
-                        alreadyActive = true;
-                        break;
-                    }
-                }
+                if (_activeIndexSet.Contains(i)) continue;
 
-                if (!alreadyActive)
+                RectTransform itemRT = GetItem();
+                if (itemRT != null)
                 {
-                    RectTransform itemRT = GetItem();
-                    if (itemRT != null)
-                    {
-                        RecyclingGridItem item = itemRT.GetComponent<RecyclingGridItem>();
-                        item.index = i;
-                        PositionItem(itemRT, i);
-                        if (onBindItem != null) onBindItem(itemRT.gameObject, i);
-                        activeItems.Add(item);
-                    }
+                    RecyclingGridItem item = itemRT.GetComponent<RecyclingGridItem>();
+                    item.index = i;
+                    _activeIndexSet.Add(i);
+                    PositionItem(itemRT, i);
+                    if (onBindItem != null) onBindItem(itemRT.gameObject, i);
+                    activeItems.Add(item);
                 }
             }
+
+            _lastVisibleStartIndex = startIndex;
+            _lastVisibleEndIndex = endIndex;
         }
 
         private void PositionItem(RectTransform item, int index)
@@ -1006,6 +1037,7 @@ namespace VPB
         private void Recycle(RectTransform item)
         {
             if (item == null) return;
+            if (onRecycleItem != null) onRecycleItem(item.gameObject);
             item.gameObject.SetActive(false);
             pool.Push(item);
         }
@@ -1017,6 +1049,8 @@ namespace VPB
                 Recycle(activeItems[i].GetComponent<RectTransform>());
             }
             activeItems.Clear();
+            _activeIndexSet.Clear();
+            InvalidateVisibleRangeCache();
         }
     }
 
@@ -1127,8 +1161,7 @@ namespace VPB
 
             // Force interactable to prevent other scripts from disabling it
             if (!scrollbar.interactable) scrollbar.interactable = true;
-            
-            UpdateScrollbarSize();
+            // Scrollbar size + collider sync run in LateUpdate only — avoids duplicate rect reads every frame.
         }
 
         private void LateUpdate()
