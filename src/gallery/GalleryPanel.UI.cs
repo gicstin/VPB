@@ -1100,6 +1100,7 @@ namespace VPB
             AddHoverDelegate(footerScrollBottomBtn);
             AddTooltip(footerScrollBottomBtn, "gallery.tooltip.scroll_bottom", "Jump to bottom of list");
             AddHoverDelegate(footerSpringScrollToggleBtn);
+            AddHoverDelegate(footerMenuGateBtn);
             AddHoverDelegate(footerHoldToLaunchToggleBtn);
             AddHoverDelegate(footerBackBtn);
             AddTooltip(footerBackBtn, "gallery.tooltip.filter_back", "Go back one filter level");
@@ -1150,6 +1151,7 @@ namespace VPB
                 gridSizeMinusBtn, gridSizePlusBtn,
                 footerScrollTopBtn, footerScrollBottomBtn,
                 footerSpringScrollToggleBtn,
+                footerMenuGateBtn,
                 footerGridScrollExpandBtn,
                 footerHoldToLaunchToggleBtn,
                 footerLayoutBtn, footerHeightBtn, footerShowHiddenPackagesBtn, footerAutoHideBtn,
@@ -1160,6 +1162,7 @@ namespace VPB
                 20, 18, 18,
                 24, 24,
                 22, 22,
+                20,
                 20,
                 18,
                 20,
