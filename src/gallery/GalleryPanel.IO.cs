@@ -1471,8 +1471,11 @@ namespace VPB
                 else if (currentSceneSourceFilter == "Custom Scenes")
                 {
                     if (entry is VarFileEntry) return false;
-                    // Custom scenes are from Saves folder
-                    if (!entry.Path.StartsWith("Saves", StringComparison.OrdinalIgnoreCase)) return false;
+                    // Custom scenes are from Saves folder or Custom/SubScene folder
+                    string ep = entry.Path.Replace('\\', '/');
+                    bool isCustomSave = ep.StartsWith("Saves", StringComparison.OrdinalIgnoreCase);
+                    bool isLocalSubScene = ep.IndexOf("Custom/SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (!isCustomSave && !isLocalSubScene) return false;
                 }
             }
 
