@@ -279,6 +279,10 @@ namespace VPB
             VerticalLayoutGroup vlg = panel.AddComponent<VerticalLayoutGroup>();
             vlg.padding           = new RectOffset(6, 6, 6, 6);
             vlg.spacing           = 4;
+            {
+                var v = vlg;
+                innerPaneScaleActions.Add(s => { if (v) { v.spacing = 4f * s; v.padding = new RectOffset(Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s)); } });
+            }
             vlg.childControlHeight    = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth     = true;

@@ -563,6 +563,10 @@ namespace VPB
             VerticalLayoutGroup v = go.AddComponent<VerticalLayoutGroup>();
             v.spacing = 2f;
             v.padding = new RectOffset(5, 5, 0, 0);
+            {
+                var vlg = v;
+                innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
+            }
             v.childAlignment = TextAnchor.UpperCenter;
             v.childControlWidth = true;
             v.childControlHeight = true;
@@ -667,9 +671,9 @@ namespace VPB
 
         private float CreatorVirtRowHeight()
         {
-            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
-            // Match CreateTabButton size (35*s) plus the old VerticalLayoutGroup spacing (2).
-            return (35f * s) + 2f;
+            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            // Match CreateTabButton size (35*s) plus the scaled VerticalLayoutGroup spacing (2*s).
+            return (35f * s) + (2f * s);
         }
 
         private void EnsureCreatorVirtPool(bool isLeft, Transform parent, int desired)

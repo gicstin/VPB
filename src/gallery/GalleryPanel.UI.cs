@@ -836,6 +836,10 @@ namespace VPB
             
             footerHLG = pageContainer.AddComponent<HorizontalLayoutGroup>();
             footerHLG.padding = new RectOffset(60, 10, 0, 0); // left reserved space (existing behavior)
+            {
+                var hlg = footerHLG;
+                innerPaneScaleActions.Add(s => { if (hlg) { hlg.padding = new RectOffset(Mathf.RoundToInt(60 * s), Mathf.RoundToInt(10 * s), 0, 0); } });
+            }
             footerHLG.childControlWidth = true;
             footerHLG.childControlHeight = true;
             footerHLG.childForceExpandWidth = true;
@@ -854,6 +858,10 @@ namespace VPB
             leftHLG.childForceExpandHeight = false;
             leftHLG.childAlignment = TextAnchor.MiddleLeft;
             leftHLG.spacing = 10;
+            {
+                var hlg = leftHLG;
+                innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
+            }
 
             // Undo / Redo / Random (footer left; compact labels U/R/Rdm)
             footerUndoBtnGO = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.footer.undo_abbrev", "U") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Undo);
@@ -922,6 +930,10 @@ namespace VPB
             centerHLG.childForceExpandHeight = false;
             centerHLG.childAlignment = TextAnchor.MiddleCenter;
             centerHLG.spacing = 10;
+            {
+                var hlg = centerHLG;
+                innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
+            }
 
             paginationFirstBtn = UI.CreateUIButton(centerSection, 40, 40, "|<", 18, 0, 0, AnchorPresets.middleCenter, FirstPage);
             paginationPrev10Btn = UI.CreateUIButton(centerSection, 40, 40, "<<", 18, 0, 0, AnchorPresets.middleCenter, Prev10Page);
@@ -939,6 +951,10 @@ namespace VPB
             paginationText.verticalOverflow = VerticalWrapMode.Overflow;
             RectTransform textRT = textGO.GetComponent<RectTransform>();
             textRT.sizeDelta = new Vector2(200, 40);
+            {
+                var rt = textRT;
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(200f * s, 40f * s); if (paginationText) paginationText.fontSize = Mathf.RoundToInt(18 * s); });
+            }
 
             // Filter Mode Label (shown in filter mode, left of clear button)
             {
@@ -1000,6 +1016,10 @@ namespace VPB
             rightHLG.childForceExpandHeight = false;
             rightHLG.childAlignment = TextAnchor.MiddleRight;
             rightHLG.spacing = 10;
+            {
+                var hlg = rightHLG;
+                innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
+            }
 
             // VaM Menu Gate (show gallery only when VaM menu is visible) — placed left of Select All
             footerMenuGateBtn = UI.CreateUIButton(rightSection, 40, 40, "M", 20, 0, 0, AnchorPresets.middleCenter, ToggleVamMenuGateMode);

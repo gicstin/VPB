@@ -240,7 +240,7 @@ namespace VPB
             fpsRT.anchorMin = new Vector2(1, 0.5f);
             fpsRT.anchorMax = new Vector2(1, 0.5f);
             fpsRT.pivot = new Vector2(1, 0.5f);
-            fpsRT.anchoredPosition = new Vector2(-112, 0);
+            fpsRT.anchoredPosition = new Vector2(-110, 0);
             fpsRT.sizeDelta = new Vector2(100, 40);
 
             SetupLanguageSwitcher(titleBarGO);
@@ -432,16 +432,16 @@ namespace VPB
 
             // Register inner pane button scale actions (title bar)
             { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, 70f*s); }); }
-            { var t = titleText; innerPaneScaleActions.Add(s => { if (t) { t.fontSize = Mathf.RoundToInt(28*s); t.GetComponent<RectTransform>().sizeDelta = new Vector2(300f*s, 40f*s); } }); }
-            { var t = fpsText; innerPaneScaleActions.Add(s => { if (t) { t.fontSize = Mathf.RoundToInt(20*s); t.GetComponent<RectTransform>().sizeDelta = new Vector2(100f*s, 40f*s); } }); }
-            { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) go.GetComponent<RectTransform>().sizeDelta = new Vector2(40f*s, 40f*s); if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(16*s); t.resizeTextMinSize = Mathf.RoundToInt(10*s); } }); }
-            { var rt = titleSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 40f*s); }); }
-            { var rt = fileSortTypeRT; var t = fileSortTypeText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
-            { var rt = fileSortDirRT; var t = fileSortDirText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
-            { var rt = ratingSortToggleRT; var t = ratingSortToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(18*s); }); }
-            { var rt = refreshRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); }); }
-            { var rt = titleBarSettingsRT; var t = titleBarSettingsBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
-            { var rt = qfToggleRT; var t = quickFiltersToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(16*s); }); }
+            { var rt = titleRT; innerPaneScaleActions.Add(s => { if (rt) rt.anchoredPosition = new Vector2(60f * s, 10f * s); rt.sizeDelta = new Vector2(300f * s, 40f * s); }); }
+            { var rt = fpsRT; innerPaneScaleActions.Add(s => { if (rt) rt.anchoredPosition = new Vector2(-112f * s, 0f); rt.sizeDelta = new Vector2(100f * s, 40f * s); }); }
+            { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) { var rt = go.GetComponent<RectTransform>(); rt.anchoredPosition = new Vector2(-276f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); } if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(16 * s); t.resizeTextMinSize = Mathf.RoundToInt(10 * s); } }); }
+            { var rt = titleSearchRT; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-40f * s, 0f); rt.sizeDelta = new Vector2(rt.sizeDelta.x, 40f * s); }); }
+            { var rt = fileSortTypeRT; var t = fileSortTypeText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(108f * s, 0f); rt.sizeDelta = new Vector2(35f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
+            { var rt = fileSortDirRT; var t = fileSortDirText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(151f * s, 0f); rt.sizeDelta = new Vector2(35f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
+            { var rt = ratingSortToggleRT; var t = ratingSortToggleBtnText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(197f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(18 * s); }); }
+            { var rt = refreshRT; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(245f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
+            { var rt = titleBarSettingsRT; var t = titleBarSettingsBtnText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-230f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
+            { var rt = qfToggleRT; var t = quickFiltersToggleBtnText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-184f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
 
             // Tab Area - Create for all panels so undocked can clone/filter
             if (true)
@@ -468,8 +468,12 @@ namespace VPB
                 rightTabRT.offsetMax = new Vector2(-10, -95);
 
                 rightTabContainerGO = rightTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
-                rightTabContainerGO.GetComponent<VerticalLayoutGroup>().spacing = 2;
-                rightTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
+                {
+                    var vlg = rightTabContainerGO.GetComponent<VerticalLayoutGroup>();
+                    vlg.spacing = 2;
+                    vlg.padding = new RectOffset(5, 5, 0, 0);
+                    innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
+                }
 
                 // 1b. Right Sub Tab Area (For Tags split view)
                 rightSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero, 15f, 0f, false);
@@ -480,8 +484,12 @@ namespace VPB
                 rightSubTabRT.offsetMax = new Vector2(-10, -45);
                 
                 rightSubTabContainerGO = rightSubTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
-                rightSubTabContainerGO.GetComponent<VerticalLayoutGroup>().spacing = 2;
-                rightSubTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
+                {
+                    var vlg = rightSubTabContainerGO.GetComponent<VerticalLayoutGroup>();
+                    vlg.spacing = 2;
+                    vlg.padding = new RectOffset(5, 5, 0, 0);
+                    innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
+                }
                 rightSubTabScrollGO.SetActive(false); // Hidden by default
 
                 // Right Sub Sort Button (tags split: same 35² icon cycle as upper row)
@@ -692,8 +700,12 @@ namespace VPB
                 leftTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -95);
 
                 leftTabContainerGO = leftTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
-                leftTabContainerGO.GetComponent<VerticalLayoutGroup>().spacing = 2;
-                leftTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
+                {
+                    var vlg = leftTabContainerGO.GetComponent<VerticalLayoutGroup>();
+                    vlg.spacing = 2;
+                    vlg.padding = new RectOffset(5, 5, 0, 0);
+                    innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
+                }
                 leftTabScrollGO.SetActive(false); // Hidden by default
 
                 // 2b. Left Sub Tab Area (For Tags split view)
@@ -705,8 +717,12 @@ namespace VPB
                 leftSubTabRT.offsetMax = new Vector2(tabAreaWidth + 10, -45);
                 
                 leftSubTabContainerGO = leftSubTabScrollGO.GetComponent<ScrollRect>().content.gameObject;
-                leftSubTabContainerGO.GetComponent<VerticalLayoutGroup>().spacing = 2;
-                leftSubTabContainerGO.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(5, 5, 0, 0);
+                {
+                    var vlg = leftSubTabContainerGO.GetComponent<VerticalLayoutGroup>();
+                    vlg.spacing = 2;
+                    vlg.padding = new RectOffset(5, 5, 0, 0);
+                    innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
+                }
                 leftSubTabScrollGO.SetActive(false); // Hidden by default
 
                 // Left Sub Sort Button (tags split: same 35² icon cycle as upper row)
@@ -1944,7 +1960,7 @@ namespace VPB
             minRT.anchorMin = new Vector2(1f, 0.5f);
             minRT.anchorMax = new Vector2(1f, 0.5f);
             minRT.pivot     = new Vector2(1f, 0.5f);
-            minRT.anchoredPosition = new Vector2(-54f, 0f);
+            minRT.anchoredPosition = new Vector2(-60f, 0f);
             minimizeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(minimizeBtn);
             { var s = UI.LoadIconSprite("vpb_icons/minimize.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(minimizeBtn, s); }
@@ -1963,8 +1979,9 @@ namespace VPB
             { var s = UI.LoadIconSprite("vpb_icons/close.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(closeBtn, s); }
 
             // Register inner pane button scale actions (close/minimize)
-            { var rt = minRT; var t = minimizeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(30*s); }); }
-            { var rt = closeRT; var t = closeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(30*s); }); }
+            { var rt = minRT; var t = minimizeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-60f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(30 * s); }); }
+            { var rt = closeRT; var t = closeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-10f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(30 * s); }); }
+            { var rt = fpsRT; innerPaneScaleActions.Add(s => { if (rt) { rt.anchoredPosition = new Vector2(-110f * s, 0f); rt.sizeDelta = new Vector2(100f * s, 40f * s); } }); }
 
             ApplyInnerPaneScale();
             ApplySideButtonScale();

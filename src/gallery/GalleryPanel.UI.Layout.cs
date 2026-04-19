@@ -24,6 +24,7 @@ namespace VPB
         /// <see cref="GalleryPanel.RefreshFilesRoutine"/> builds the same data on a worker thread during a pending full refresh.</param>
         public void UpdateLayout(bool allowSynchronousCatalogCaches)
         {
+            float paneScale = VPBConfig.Instance.CurrentInnerPaneScale;
             if (backgroundBoxGO != null)
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(backgroundBoxGO.GetComponent<RectTransform>());
@@ -49,12 +50,12 @@ namespace VPB
 
                         // Keep some safety space for the left title area and the right-side FPS display,
                         // plus buttons to the right of search.
-                        float reservedLeft = 320f;
-                        float reservedRight = 240f;
-                        float reservedButtonsRightOfSearch = 190f;
+                        float reservedLeft = 320f * paneScale;
+                        float reservedRight = 240f * paneScale;
+                        float reservedButtonsRightOfSearch = 190f * paneScale;
 
                         float available = w - reservedLeft - reservedRight - reservedButtonsRightOfSearch;
-                        float target = Mathf.Clamp(available, 100f, 240f);
+                        float target = Mathf.Clamp(available, 100f * paneScale, 240f * paneScale);
 
                         if (Mathf.Abs(searchRT.sizeDelta.x - target) > 0.5f)
                         {
@@ -162,7 +163,6 @@ namespace VPB
                 if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
             }
             
-            float paneScale = VPBConfig.Instance.InnerPaneScale;
             float topOffset = -65f * paneScale;
             float tabTopOffset = TabScrollTopOffset(); // clears fixed sort/search row (pos -55, height 35*s)
 
@@ -220,7 +220,7 @@ namespace VPB
         /// <summary>Distance from panel bottom to the top edge of the bottom chrome (pagination + info/tbox bar).</summary>
         private float GalleryMainAreaBottomInset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
             if (hoverPathRT != null) return hoverPathRT.offsetMax.y;
             return 120f * s;
         }
@@ -234,7 +234,7 @@ namespace VPB
         /// <summary>Small gap at the horizontal split only (upper pane — not footer clearance).</summary>
         private float SideTabSplitSeamInset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
             return 5f * s;
         }
 
@@ -290,7 +290,7 @@ namespace VPB
         /// <summary>Top inset for sub-tab scroll rects (anchors end at mid-split / hub line). Do not use TabScrollTopOffset (title-bar row — far too large here).</summary>
         private float SubTabScrollPaneTopOffset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
             return -(15f + 35f * s + 5f * s);
         }
 
