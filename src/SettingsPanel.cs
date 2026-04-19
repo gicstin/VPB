@@ -59,9 +59,17 @@ namespace VPB
 
         private float pendingSideButtonScale;
         private float backupSideButtonScale;
+        private float pendingSideButtonScaleVR;
+        private float backupSideButtonScaleVR;
+        private float pendingSideButtonScaleDesktop;
+        private float backupSideButtonScaleDesktop;
 
         private float pendingInnerPaneScale;
         private float backupInnerPaneScale;
+        private float pendingInnerPaneScaleVR;
+        private float backupInnerPaneScaleVR;
+        private float pendingInnerPaneScaleDesktop;
+        private float backupInnerPaneScaleDesktop;
 
         private bool pendingDragDropReplaceMode;
         private bool backupDragDropReplaceMode;
@@ -244,9 +252,17 @@ namespace VPB
 
             pendingSideButtonScale = VPBConfig.Instance.SideButtonScale;
             backupSideButtonScale = VPBConfig.Instance.SideButtonScale;
+            pendingSideButtonScaleVR = VPBConfig.Instance.SideButtonScaleVR;
+            backupSideButtonScaleVR = VPBConfig.Instance.SideButtonScaleVR;
+            pendingSideButtonScaleDesktop = VPBConfig.Instance.SideButtonScaleDesktop;
+            backupSideButtonScaleDesktop = VPBConfig.Instance.SideButtonScaleDesktop;
 
             pendingInnerPaneScale = VPBConfig.Instance.InnerPaneScale;
             backupInnerPaneScale = VPBConfig.Instance.InnerPaneScale;
+            pendingInnerPaneScaleVR = VPBConfig.Instance.InnerPaneScaleVR;
+            backupInnerPaneScaleVR = VPBConfig.Instance.InnerPaneScaleVR;
+            pendingInnerPaneScaleDesktop = VPBConfig.Instance.InnerPaneScaleDesktop;
+            backupInnerPaneScaleDesktop = VPBConfig.Instance.InnerPaneScaleDesktop;
 
             pendingDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
             backupDragDropReplaceMode = VPBConfig.Instance.DragDropReplaceMode;
@@ -430,7 +446,11 @@ namespace VPB
             if (pendingGalleryManualRefreshOnly != backupGalleryManualRefreshOnly) return false;
             if (!Mathf.Approximately(pendingGalleryOpacity, backupGalleryOpacity)) return false;
             if (!Mathf.Approximately(pendingSideButtonScale, backupSideButtonScale)) return false;
+            if (!Mathf.Approximately(pendingSideButtonScaleVR, backupSideButtonScaleVR)) return false;
+            if (!Mathf.Approximately(pendingSideButtonScaleDesktop, backupSideButtonScaleDesktop)) return false;
             if (!Mathf.Approximately(pendingInnerPaneScale, backupInnerPaneScale)) return false;
+            if (!Mathf.Approximately(pendingInnerPaneScaleVR, backupInnerPaneScaleVR)) return false;
+            if (!Mathf.Approximately(pendingInnerPaneScaleDesktop, backupInnerPaneScaleDesktop)) return false;
             if (pendingDragDropReplaceMode != backupDragDropReplaceMode) return false;
             if (!string.Equals(NormalizeSettingsAppearanceClothingMode(pendingAppearanceClothingApplyMode), NormalizeSettingsAppearanceClothingMode(backupAppearanceClothingApplyMode), StringComparison.OrdinalIgnoreCase)) return false;
             if (pendingEnableDragDrop != backupEnableDragDrop) return false;
@@ -504,7 +524,11 @@ namespace VPB
             VPBConfig.Instance.GalleryManualRefreshOnly = backupGalleryManualRefreshOnly;
             VPBConfig.Instance.GalleryOpacity = backupGalleryOpacity;
             VPBConfig.Instance.SideButtonScale = backupSideButtonScale;
+            VPBConfig.Instance.SideButtonScaleVR = backupSideButtonScaleVR;
+            VPBConfig.Instance.SideButtonScaleDesktop = backupSideButtonScaleDesktop;
             VPBConfig.Instance.InnerPaneScale = backupInnerPaneScale;
+            VPBConfig.Instance.InnerPaneScaleVR = backupInnerPaneScaleVR;
+            VPBConfig.Instance.InnerPaneScaleDesktop = backupInnerPaneScaleDesktop;
             // ApplySideButtonScale / ApplyInnerPaneScale run from ConfigChanged after TriggerChange below.
             VPBConfig.Instance.DragDropReplaceMode = backupDragDropReplaceMode;
             VPBConfig.Instance.AppearanceClothingApplyMode = backupAppearanceClothingApplyMode;
@@ -643,7 +667,11 @@ namespace VPB
                     VPBConfig.Instance.GalleryManualRefreshOnly = pendingGalleryManualRefreshOnly;
                     VPBConfig.Instance.GalleryOpacity = pendingGalleryOpacity;
                     VPBConfig.Instance.SideButtonScale = pendingSideButtonScale;
+                    VPBConfig.Instance.SideButtonScaleVR = pendingSideButtonScaleVR;
+                    VPBConfig.Instance.SideButtonScaleDesktop = pendingSideButtonScaleDesktop;
                     VPBConfig.Instance.InnerPaneScale = pendingInnerPaneScale;
+                    VPBConfig.Instance.InnerPaneScaleVR = pendingInnerPaneScaleVR;
+                    VPBConfig.Instance.InnerPaneScaleDesktop = pendingInnerPaneScaleDesktop;
                     VPBConfig.Instance.DragDropReplaceMode = pendingDragDropReplaceMode;
                     VPBConfig.Instance.AppearanceClothingApplyMode = pendingAppearanceClothingApplyMode;
                     VPBConfig.Instance.EnableDragDrop = pendingEnableDragDrop;
@@ -782,17 +810,29 @@ namespace VPB
                 VPBConfig.Instance.TriggerChange();
             }, VPBTranslation.T("settings.tip.gallery_opacity", "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque."), () => pendingGalleryOpacity);
 
-            CreateSliderSetting(VPBTranslation.T("settings.side_button_scale", "Side Button Scale"), pendingSideButtonScale, 0.5f, 2.0f, (val) => {
-                pendingSideButtonScale = val;
-                VPBConfig.Instance.SideButtonScale = val;
+            CreateSliderSetting(VPBTranslation.T("settings.side_button_scale_vr", "Side Button Scale (VR)"), pendingSideButtonScaleVR, 0.5f, 2.0f, (val) => {
+                pendingSideButtonScaleVR = val;
+                VPBConfig.Instance.SideButtonScaleVR = val;
                 if (parentPanel != null) parentPanel.ApplySideButtonScale();
-            }, VPBTranslation.T("settings.tip.side_button_scale", "Scales the size of the side buttons. 1.0 = default size."), () => pendingSideButtonScale);
+            }, VPBTranslation.T("settings.tip.side_button_scale_vr", "Scales the size of the side buttons in VR mode. 1.0 = default size."), () => pendingSideButtonScaleVR);
 
-            CreateSliderSetting(VPBTranslation.T("settings.inner_pane_scale", "Inner Pane Scale"), pendingInnerPaneScale, 0.5f, 2.0f, (val) => {
-                pendingInnerPaneScale = val;
-                VPBConfig.Instance.InnerPaneScale = val;
+            CreateSliderSetting(VPBTranslation.T("settings.side_button_scale_desktop", "Side Button Scale (Desktop)"), pendingSideButtonScaleDesktop, 0.5f, 2.0f, (val) => {
+                pendingSideButtonScaleDesktop = val;
+                VPBConfig.Instance.SideButtonScaleDesktop = val;
+                if (parentPanel != null) parentPanel.ApplySideButtonScale();
+            }, VPBTranslation.T("settings.tip.side_button_scale_desktop", "Scales the size of the side buttons in Desktop mode. 1.0 = default size."), () => pendingSideButtonScaleDesktop);
+
+            CreateSliderSetting(VPBTranslation.T("settings.inner_pane_scale_vr", "Inner Pane Scale (VR)"), pendingInnerPaneScaleVR, 0.5f, 2.0f, (val) => {
+                pendingInnerPaneScaleVR = val;
+                VPBConfig.Instance.InnerPaneScaleVR = val;
                 VPBConfig.Instance.TriggerChange();
-            }, VPBTranslation.T("settings.tip.inner_pane_scale", "Scales all UI elements inside the gallery pane. 1.0 = default size."), () => pendingInnerPaneScale);
+            }, VPBTranslation.T("settings.tip.inner_pane_scale_vr", "Scales all UI elements inside the gallery pane in VR mode. 1.0 = default size."), () => pendingInnerPaneScaleVR);
+
+            CreateSliderSetting(VPBTranslation.T("settings.inner_pane_scale_desktop", "Inner Pane Scale (Desktop)"), pendingInnerPaneScaleDesktop, 0.5f, 2.0f, (val) => {
+                pendingInnerPaneScaleDesktop = val;
+                VPBConfig.Instance.InnerPaneScaleDesktop = val;
+                VPBConfig.Instance.TriggerChange();
+            }, VPBTranslation.T("settings.tip.inner_pane_scale_desktop", "Scales all UI elements inside the gallery pane in Desktop mode. 1.0 = default size."), () => pendingInnerPaneScaleDesktop);
 
             // Side Button Gaps
             CreateToggleSetting(VPBTranslation.T("settings.side_button_gaps", "Side Button Gaps"), pendingEnableButtonGaps, (val) => {

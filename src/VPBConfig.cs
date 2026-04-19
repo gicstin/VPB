@@ -359,7 +359,32 @@ namespace VPB
         /// <summary>When true, gallery lists include packages that have an AddonPackagesFilePrefs .hide sidecar.</summary>
         public bool GalleryShowHiddenPackages = false;
         public float SideButtonScale = 1.0f;
-        public float InnerPaneScale = 1.0f;
+        public float SideButtonScaleVR = 1.0f;
+        public float SideButtonScaleDesktop = 0.8f;
+        public float InnerPaneScaleVR = 1.0f;
+        public float InnerPaneScaleDesktop = 0.8f;
+        public float CurrentSideButtonScale => IsVR ? SideButtonScaleVR : SideButtonScaleDesktop;
+        public float CurrentInnerPaneScale => IsVR ? InnerPaneScaleVR : InnerPaneScaleDesktop;
+        public float InnerPaneScale
+        {
+            get => CurrentInnerPaneScale;
+            set
+            {
+                if (IsVR)
+                    InnerPaneScaleVR = value;
+                else
+                    InnerPaneScaleDesktop = value;
+            }
+        }
+
+        public bool IsVR
+        {
+            get
+            {
+                try { return UnityEngine.XR.XRSettings.enabled; } catch { return false; }
+            }
+        }
+
         /// <summary>UI language id: en, zh_cn, etc. Matches vpb_translations/&lt;id&gt;.json. Empty string means auto-detect on first run.</summary>
         public string UiLocale = "";
         /// <summary>Category names hidden from the Categories tab list.</summary>
@@ -584,7 +609,16 @@ namespace VPB
                             GalleryAnchorOffset = new Vector3(o["x"].AsFloat, 0.1f, -0.1f);
                         }
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
+                        if (node["SideButtonScaleVR"] != null) SideButtonScaleVR = node["SideButtonScaleVR"].AsFloat;
+                        else SideButtonScaleVR = SideButtonScale;
+                        if (node["SideButtonScaleDesktop"] != null) SideButtonScaleDesktop = node["SideButtonScaleDesktop"].AsFloat;
+                        else SideButtonScaleDesktop = SideButtonScale;
+
                         if (node["InnerPaneScale"] != null) InnerPaneScale = node["InnerPaneScale"].AsFloat;
+                        if (node["InnerPaneScaleVR"] != null) InnerPaneScaleVR = node["InnerPaneScaleVR"].AsFloat;
+                        else InnerPaneScaleVR = InnerPaneScale;
+                        if (node["InnerPaneScaleDesktop"] != null) InnerPaneScaleDesktop = node["InnerPaneScaleDesktop"].AsFloat;
+                        else InnerPaneScaleDesktop = InnerPaneScale;
                         if (node["SpringScrollButtonEnabled"] != null) SpringScrollButtonEnabled = node["SpringScrollButtonEnabled"].AsBool;
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["HoldToLaunchPrevEnableDragDrop"] != null) HoldToLaunchPrevEnableDragDrop = node["HoldToLaunchPrevEnableDragDrop"].AsBool;
@@ -726,7 +760,11 @@ namespace VPB
                 o["z"].AsFloat = GalleryAnchorOffset.z;
                 node["GalleryAnchorOffset"] = o;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
+                node["SideButtonScaleVR"].AsFloat = SideButtonScaleVR;
+                node["SideButtonScaleDesktop"].AsFloat = SideButtonScaleDesktop;
                 node["InnerPaneScale"].AsFloat = InnerPaneScale;
+                node["InnerPaneScaleVR"].AsFloat = InnerPaneScaleVR;
+                node["InnerPaneScaleDesktop"].AsFloat = InnerPaneScaleDesktop;
                 node["SpringScrollButtonEnabled"].AsBool = SpringScrollButtonEnabled;
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["HoldToLaunchPrevEnableDragDrop"].AsBool = HoldToLaunchPrevEnableDragDrop;
@@ -829,8 +867,7 @@ namespace VPB
             if (setting == "Off") return false;
             if (setting == "Both") return true;
 
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = IsVR;
 
             if (setting == "VR") return isVR;
             if (setting == "Desktop") return !isVR;

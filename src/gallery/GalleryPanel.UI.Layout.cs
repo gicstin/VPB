@@ -431,7 +431,7 @@ namespace VPB
 
         public void ApplyInnerPaneScale()
         {
-            float s = VPBConfig.Instance.InnerPaneScale;
+            float s = VPBConfig.Instance.CurrentInnerPaneScale;
             foreach (var action in innerPaneScaleActions)
             {
                 try { action(s); } catch { }
@@ -442,7 +442,7 @@ namespace VPB
 
         public void ApplySideButtonScale()
         {
-            float scale = VPBConfig.Instance.SideButtonScale;
+            float scale = VPBConfig.Instance.CurrentSideButtonScale;
             float w = 120f * scale;
             float h = 50f * scale;
             int fontSize = Mathf.RoundToInt(20f * scale);
@@ -516,7 +516,7 @@ namespace VPB
         public void UpdateSideButtonPositions()
         {
             if (backgroundBoxGO == null) return;
-            float scale = VPBConfig.Instance.SideButtonScale;
+            float scale = VPBConfig.Instance.CurrentSideButtonScale;
             float spacing = 60f * scale;
             float groupGap = VPBConfig.Instance.EnableButtonGaps ? 10f * scale : 0f;
             float stackHeight = GetSideButtonsStackHeight(spacing, groupGap);
