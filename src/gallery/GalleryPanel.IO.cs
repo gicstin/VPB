@@ -2138,6 +2138,7 @@ namespace VPB
                 string _bExtension = currentExtension;
                 List<string> _bPaths = currentPaths != null ? new List<string>(currentPaths) : null;
                 string _bPath = currentPath;
+                string _bPackagePathFilter = currentPackagePathFilter;
                 string _bCategoryTitle = currentCategoryTitle;
                 var _bCategories = categories != null ? new List<Gallery.Category>(categories) : null;
                 bool _buildCreators = earlyBuildCreators;
@@ -2150,7 +2151,7 @@ namespace VPB
                         if (_buildCreators)
                         {
                             var counts = new Dictionary<string, int>();
-                            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath, null, _bCategoryTitle))
+                            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath, null, _bCategoryTitle, _bPackagePathFilter))
                             {
                                 string[] exts2 = string.IsNullOrEmpty(_bExtension) ? new string[0] : _bExtension.Split('|');
                                 var tExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2162,6 +2163,9 @@ namespace VPB
                                     {
                                         if (string.IsNullOrEmpty(pkg.Creator)) continue;
                                         if (pkg.FileEntries == null) continue;
+                                        if (!string.IsNullOrEmpty(_bPackagePathFilter) &&
+                                            !GalleryPathFilterMatchesRawPath(pkg.Path, _bPackagePathFilter))
+                                            continue;
                                         int cnt = pkg.FileEntries.Count;
                                         for (int i = 0; i < cnt; i++)
                                         {
@@ -2190,7 +2194,7 @@ namespace VPB
                             foreach (var c in _bCategories)
                                 catCounts2[c.name] = 0;
 
-                            if (!VpbLocalDatabase.TryReadCategoryMemberCounts(catCounts2, _bCreator))
+                            if (!VpbLocalDatabase.TryReadCategoryMemberCounts(catCounts2, _bCreator, null, _bPackagePathFilter))
                             {
                                 var extToCats2 = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
                                 foreach (var c in _bCategories)
@@ -2209,6 +2213,9 @@ namespace VPB
                                     foreach (var pkg in FileManager.PackagesByUid.Values)
                                     {
                                         if (!string.IsNullOrEmpty(_bCreator) && (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != _bCreator)) continue;
+                                        if (!string.IsNullOrEmpty(_bPackagePathFilter) &&
+                                            !GalleryPathFilterMatchesRawPath(pkg.Path, _bPackagePathFilter))
+                                            continue;
                                         if (pkg.FileEntries == null) continue;
                                         int cnt = pkg.FileEntries.Count;
                                         for (int i = 0; i < cnt; i++)
@@ -2234,7 +2241,7 @@ namespace VPB
                                     }
                                 }
                             }
-                            AddLocalCustomScriptsCountToCategory(catCounts2);
+                            AddLocalCustomScriptsCountToCategory(catCounts2, _bPackagePathFilter);
                             earlyNewCatCounts = catCounts2;
                         }
                     }

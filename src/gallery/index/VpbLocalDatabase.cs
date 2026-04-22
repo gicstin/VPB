@@ -1752,7 +1752,11 @@ namespace VPB
         /// Fills side-tab category totals from <c>cat_mem</c> when the index matches the current package scan (avoids scanning every VAR on disk).
         /// Only keys already present in <paramref name="countsByCategoryName"/> are updated.
         /// </summary>
-        internal static bool TryReadCategoryMemberCounts(Dictionary<string, int> countsByCategoryName, string creatorFilter = "", HashSet<string> activeTags = null)
+        internal static bool TryReadCategoryMemberCounts(
+            Dictionary<string, int> countsByCategoryName,
+            string creatorFilter = "",
+            HashSet<string> activeTags = null,
+            string packagePathFilter = "")
         {
             if (!VpbSqlite3.IsAvailable || countsByCategoryName == null || countsByCategoryName.Count == 0) return false;
 
@@ -1776,14 +1780,23 @@ namespace VPB
                     if (conn == null) return false;
                     
                     bool hasCreator = !string.IsNullOrEmpty(creatorFilter);
+                    string normalizedPackagePathFilter = "";
+                    bool hasPackagePathFilter = false;
+                    if (!string.IsNullOrEmpty(packagePathFilter))
+                    {
+                        normalizedPackagePathFilter = packagePathFilter.Replace('\\', '/').Trim().Trim('/');
+                        hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
+                    }
                     bool hasTags = activeTags != null && activeTags.Count > 0;
                     
                     var sb = new StringBuilder();
                     sb.Append("SELECT m.category, COUNT(*) FROM cat_mem m");
-                    if (hasCreator) sb.Append(" INNER JOIN pkg p ON p.uid = m.pkg_uid");
+                    if (hasCreator || hasPackagePathFilter) sb.Append(" INNER JOIN pkg p ON p.uid = m.pkg_uid");
                     
                     sb.Append(" WHERE 1=1");
                     if (hasCreator) sb.Append(" AND p.creator = ?");
+                    if (hasPackagePathFilter)
+                        sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     
                     List<string> tagsList = null;
                     if (hasTags)
@@ -1801,6 +1814,8 @@ namespace VPB
                     {
                         int bind = 1;
                         if (hasCreator) stmt.BindText(bind++, creatorFilter);
+                        if (hasPackagePathFilter)
+                            stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
                         if (hasTags)
                         {
                             foreach (var tag in tagsList)
@@ -1838,7 +1853,8 @@ namespace VPB
             List<string> pathPrefixes,
             string singlePathPrefix,
             HashSet<string> activeTags = null,
-            string categoryTitle = null)
+            string categoryTitle = null,
+            string packagePathFilter = null)
         {
             if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
             countsOut.Clear();
@@ -1873,12 +1889,21 @@ namespace VPB
                 {
                     bool hasTags = activeTags != null && activeTags.Count > 0;
                     bool hasCat = !string.IsNullOrEmpty(categoryTitle);
+                    string normalizedPackagePathFilter = "";
+                    bool hasPackagePathFilter = false;
+                    if (!string.IsNullOrEmpty(packagePathFilter))
+                    {
+                        normalizedPackagePathFilter = packagePathFilter.Replace('\\', '/').Trim().Trim('/');
+                        hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
+                    }
                     var sb = new StringBuilder();
                     string countExpr = hasCat ? "COUNT(*)" : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
                     sb.Append("SELECT p.creator, ").Append(countExpr).Append(" ");
                     sb.Append("FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid ");
                     sb.Append("WHERE length(trim(coalesce(p.creator,''))) > 0");
                     if (hasCat) sb.Append(" AND m.category = ?");
+                    if (hasPackagePathFilter)
+                        sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     
                     List<string> tagsList = null;
                     if (hasTags)
@@ -1896,6 +1921,8 @@ namespace VPB
                     {
                         int bind = 1;
                         if (hasCat) stmt.BindText(bind++, categoryTitle);
+                        if (hasPackagePathFilter)
+                            stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
                         if (hasTags)
                         {
                             foreach (var tag in tagsList)

@@ -206,7 +206,7 @@ namespace VPB
             categoryCounts.Clear();
             foreach (var c in categories) categoryCounts[c.name] = 0;
 
-            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, activeTags))
+            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, activeTags, currentPackagePathFilter))
             {
                 // SQL path succeeded.
             }
@@ -241,6 +241,9 @@ namespace VPB
                         {
                             if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
                         }
+                        if (!string.IsNullOrEmpty(currentPackagePathFilter) &&
+                            !GalleryPathFilterMatchesRawPath(pkg.Path, currentPackagePathFilter))
+                            continue;
 
                         if (pkg.FileEntries == null) continue;
                         
@@ -301,8 +304,8 @@ namespace VPB
             }
 
             // Tab counts are VAR-only above; Custom/Scripts plugins live on local disk (same tree RefreshFiles scans).
-            AddLocalCustomScriptsCountToCategory(categoryCounts);
-            AddLocalCustomAppearanceCountToCategory(categoryCounts);
+            AddLocalCustomScriptsCountToCategory(categoryCounts, currentPackagePathFilter);
+            AddLocalCustomAppearanceCountToCategory(categoryCounts, currentPackagePathFilter);
 
             categoriesCached = true;
             unchecked { categorySideTabDataRevision++; }
@@ -312,10 +315,11 @@ namespace VPB
         /// Count .cs / .cslist / .dll under Custom/Scripts on disk so the Plugins category is not stuck at 0.
         /// (Package-only counting misses almost all session plugins.)
         /// </summary>
-        private static void AddLocalCustomScriptsCountToCategory(Dictionary<string, int> counts)
+        private static void AddLocalCustomScriptsCountToCategory(Dictionary<string, int> counts, string selectedPathFilter = "")
         {
             if (counts == null || !counts.ContainsKey("Plugins")) return;
             const string root = "Custom/Scripts";
+            if (!GalleryPathFilterMatchesFolder(root, selectedPathFilter)) return;
             try
             {
                 if (!Directory.Exists(root)) return;
@@ -368,13 +372,14 @@ namespace VPB
             counts["Plugins"] += n;
         }
 
-        private static void AddLocalCustomAppearanceCountToCategory(Dictionary<string, int> counts)
+        private static void AddLocalCustomAppearanceCountToCategory(Dictionary<string, int> counts, string selectedPathFilter = "")
         {
             if (counts == null || !counts.ContainsKey("Appearance")) return;
             string[] roots = new[] { "Saves/Person/appearance", "Custom/Atom/Person/Appearance" };
             int total = 0;
             foreach (var root in roots)
             {
+                if (!GalleryPathFilterMatchesFolder(root, selectedPathFilter)) continue;
                 try
                 {
                     if (!Directory.Exists(root)) continue;
@@ -428,7 +433,7 @@ namespace VPB
             if (FileManager.PackagesByUid == null) return;
 
             Dictionary<string, int> counts = new Dictionary<string, int>();
-            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle))
+            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle, currentPackagePathFilter))
             {
                 string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
                 HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -438,6 +443,9 @@ namespace VPB
                 {
                     if (string.IsNullOrEmpty(pkg.Creator)) continue;
                     if (pkg.FileEntries == null) continue;
+                    if (!string.IsNullOrEmpty(currentPackagePathFilter) &&
+                        !GalleryPathFilterMatchesRawPath(pkg.Path, currentPackagePathFilter))
+                        continue;
 
                     int count = pkg.FileEntries.Count;
                     for (int i = 0; i < count; i++)
