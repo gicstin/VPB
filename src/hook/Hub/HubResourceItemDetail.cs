@@ -327,6 +327,7 @@ namespace VPB
                                                 if (asObject2 != null)
                                                 {
                                                     HubResourcePackage dhrp = new HubResourcePackage(asObject2, browser, true);
+                                                    dhrp.SetMainThumbnail(thumbnailImage);
                                                     downloadPackages.Add(dhrp);
                                                     RectTransform rectTransform2 = browser.CreateDownloadPrefabInstance();
                                                     if (rectTransform2 != null)

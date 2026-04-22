@@ -5,6 +5,7 @@ using MVR.FileManagement;
 using SimpleJSON;
 using UnityEngine.UI;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace VPB
 {
@@ -47,6 +48,14 @@ namespace VPB
         protected string downloadUrl;
 
         protected string latestUrl;
+
+        protected string thumbnailUrl;
+        public Texture2D thumbnailTexture;
+        protected HubImageLoaderThreaded.QueuedImage thumbnailQueuedImage;
+        protected RawImage thumbnailImageUI;
+        public RawImage mainThumbnailImage;
+        public Texture originalMainThumbnailTexture;
+        protected DependencyThumbnailHover hoverHandler;
 
         protected JSONStorableFloat downloadProgressJSON;
 
@@ -114,11 +123,24 @@ namespace VPB
             }
         }
 
+        public void SetMainThumbnail(RawImage mainThumbnail)
+        {
+            mainThumbnailImage = mainThumbnail;
+            if (mainThumbnailImage != null && mainThumbnailImage.texture != null)
+            {
+                originalMainThumbnailTexture = mainThumbnailImage.texture;
+            }
+        }
+
         public HubResourcePackage(JSONClass package, HubBrowse hubBrowse, bool isDependency)
         {
             browser = hubBrowse;
             package_id = package["package_id"];
             resource_id = package["resource_id"];
+            // Derive CDN thumbnail URL from resource_id when available
+            int ridInt;
+            if (!string.IsNullOrEmpty(resource_id) && resource_id != "null" && int.TryParse(resource_id, out ridInt) && ridInt > 0)
+                thumbnailUrl = $"https://1424104733.rsc.cdn77.org/data/resource_icons/{ridInt / 1000}/{ridInt}.jpg";
             string input = package["filename"];
             input = Regex.Replace(input, ".var$", string.Empty);
             GroupName = Regex.Replace(input, "(.*)\\..*", "$1");
@@ -269,6 +291,47 @@ namespace VPB
             isDownloadingJSON.val = false;
             LogUtil.Log("Error while downloading " + Name + ": " + err);
         }
+ 
+        protected void SyncThumbnailTexture(HubImageLoaderThreaded.QueuedImage qi)
+        {
+            thumbnailTexture = qi.tex;
+            if (thumbnailTexture != null)
+            {
+                if (thumbnailImageUI != null)
+                {
+                    thumbnailImageUI.texture = thumbnailTexture;
+                    thumbnailImageUI.color = Color.white;
+                }
+                
+                // If we are currently hovered, update the main thumbnail too
+                var hover = hoverHandler;
+                if (hover != null && hover.IsHovered && hover.package == this)
+                {
+                    hover.UpdateMainThumbnail(thumbnailTexture);
+                }
+            }
+        }
+ 
+        protected void LoadThumbnail()
+        {
+            if (string.IsNullOrEmpty(thumbnailUrl) || HubImageLoaderThreaded.singleton == null) return;
+            
+            // Check if already loaded
+            if (thumbnailTexture != null)
+            {
+                SyncThumbnailTexture(new HubImageLoaderThreaded.QueuedImage { tex = thumbnailTexture, imgPath = thumbnailUrl });
+                return;
+            }
+
+            HubImageLoaderThreaded.QueuedImage qi = HubImageLoaderThreaded.singleton.GetQI();
+            qi.imgPath = thumbnailUrl;
+            qi.isThumbnail = true;
+            qi.groupId = "missingPkg";
+            qi.callback = SyncThumbnailTexture;
+            thumbnailQueuedImage = qi;
+            HubImageLoaderThreaded.singleton.QueueThumbnailImmediate(qi);
+        }
+ 
         HubBrowse.DownloadRequest request;
         public void Download()
         {
@@ -382,6 +445,7 @@ namespace VPB
                 isDependencyJSON.indicator = ui.isDependencyIndicator;
                 nameJSON.text = ui.nameText;
                 licenseTypeJSON.text = ui.licenseTypeText;
+
                 fileSizeJSON.text = ui.fileSizeText;
                 // Make the display area a bit larger
                 ui.fileSizeText.GetComponent<RectTransform>().sizeDelta = new Vector2(-20,0);
@@ -411,6 +475,37 @@ namespace VPB
                 var btn = newObj.GetComponent<Button>();
                 btn.onClick.RemoveAllListeners();
                 btn.onClick.AddListener(StopDownloading);
+ 
+                // Add Hub thumbnail preview if we have a CDN URL (resource_id was resolved)
+                if (!string.IsNullOrEmpty(thumbnailUrl))
+                {
+                    GameObject thumbGO;
+                    if (ui.thumbnailImage != null)
+                    {
+                        thumbGO = ui.thumbnailImage.gameObject;
+                        thumbnailImageUI = ui.thumbnailImage;
+                    }
+                    else
+                    {
+                        thumbGO = new GameObject("HubThumbnail");
+                        thumbGO.transform.SetParent(ui.transform, false);
+                        var rt = thumbGO.AddComponent<RectTransform>();
+                        rt.anchorMin = new Vector2(0f, 1f);
+                        rt.anchorMax = new Vector2(0f, 1f);
+                        rt.pivot = new Vector2(0f, 1f);
+                        rt.sizeDelta = new Vector2(64f, 64f);
+                        rt.anchoredPosition = new Vector2(10f, 0f);
+                        thumbnailImageUI = thumbGO.AddComponent<RawImage>();
+                    }
+                    
+                    thumbnailImageUI.color = new Color(0.25f, 0.25f, 0.25f, 0.8f); // dark placeholder
+                    
+                    // Add hover handler for preview in main thumbnail area
+                    hoverHandler = thumbGO.AddComponent<DependencyThumbnailHover>();
+                    hoverHandler.package = this;
+                    
+                    LoadThumbnail();
+                }
             }
         }
         void StopDownloading()
@@ -418,6 +513,46 @@ namespace VPB
             if (request != null)
             {
                 request.stop = true;
+            }
+        }
+    }
+
+    public class DependencyThumbnailHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public HubResourcePackage package;
+        private Texture storedOriginalTexture;
+        private bool isHovered;
+        public bool IsHovered { get { return isHovered; } }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            isHovered = true;
+            if (package != null && package.mainThumbnailImage != null)
+            {
+                storedOriginalTexture = package.mainThumbnailImage.texture;
+                if (package.thumbnailTexture != null)
+                {
+                    package.mainThumbnailImage.texture = package.thumbnailTexture;
+                    package.mainThumbnailImage.color = Color.white;
+                }
+            }
+        }
+
+        public void UpdateMainThumbnail(Texture tex)
+        {
+            if (isHovered && package != null && package.mainThumbnailImage != null)
+            {
+                package.mainThumbnailImage.texture = tex;
+                package.mainThumbnailImage.color = Color.white;
+            }
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            isHovered = false;
+            if (package != null && package.mainThumbnailImage != null && storedOriginalTexture != null)
+            {
+                package.mainThumbnailImage.texture = storedOriginalTexture;
             }
         }
     }

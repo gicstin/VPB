@@ -880,7 +880,8 @@ namespace VPB
                     if (value.webRequest == null)
                     {
                         value.webRequest = UnityWebRequest.Get(value.imgPath);
-                        value.webRequest.timeout = 30;
+                        value.webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
+                        value.webRequest.timeout = 60;
                         value.webRequest.SendWebRequest();
                     }
                     if (value.webRequest.isDone)
@@ -904,7 +905,8 @@ namespace VPB
 
                                     value.webRequest.Dispose();
                                     value.webRequest = UnityWebRequest.Get(location);
-                                    value.webRequest.timeout = 30;
+                                    value.webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
+                                    value.webRequest.timeout = 60;
                                     value.webRequest.SendWebRequest();
                                     return;
                                 }

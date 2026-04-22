@@ -1174,8 +1174,7 @@ namespace VPB
 					{
 						foreach (var key in vp.RecursivePackageDependencies)
 						{
-							VarPackage pkg = FileManager.GetPackageForDependency(key);
-							if (pkg == null)
+							if (!FileManager.IsPackage(key))
 							{
 								hashSet.Add(key);
 							}

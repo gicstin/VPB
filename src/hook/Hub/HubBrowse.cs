@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -155,7 +156,7 @@ namespace VPB
 
         protected JSONStorableStringChooser hostedOptionChooser;
 
-        protected string _payTypeFilter = "Free";
+        protected string _payTypeFilter = "All";
 
         protected JSONStorableStringChooser payTypeFilterChooser;
 
@@ -193,6 +194,7 @@ namespace VPB
 
         protected bool hubSettingsApplied;
         protected bool suppressHubSettingsSave;
+        protected bool suppressRefresh;
 
         protected Dictionary<string, HubResourceItemDetailUI> savedResourceDetailsPanels;
 
@@ -414,8 +416,10 @@ namespace VPB
             {
                 // UnityWebRequest can occasionally hang indefinitely on some systems/networks.
                 // Add a hard timeout so the Hub UI doesn't get stuck on "Fetching Hub Info".
-                const int timeoutSeconds = 30;
+                const int timeoutSeconds = 60;
                 try { webRequest.timeout = timeoutSeconds; } catch { }
+
+                // webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
 
                 long createMs = sw.ElapsedMilliseconds;
                 if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
@@ -445,12 +449,12 @@ namespace VPB
                 }
                 long waitMs = sw.ElapsedMilliseconds;
 
-                if (webRequest.isNetworkError)
+                if (webRequest.isNetworkError || webRequest.isHttpError)
                 {
                     LogUtil.LogError($"HubBrowse.GetRequest DONE_ERROR uri={uri} waitMs={waitMs} totalMs={totalSw.ElapsedMilliseconds} code={webRequest.responseCode} err={webRequest.error}");
                     if (errorCallback != null)
                     {
-                        errorCallback(webRequest.error);
+                        errorCallback(webRequest.error + " (Code: " + webRequest.responseCode + ")");
                     }
                 }
                 else
@@ -462,20 +466,38 @@ namespace VPB
 
                     sw.Reset();
                     sw.Start();
-                    SimpleJSON.JSONNode jsonNode = JSON.Parse(text);
+                    SimpleJSON.JSONNode jsonNode = null;
+                    try
+                    {
+                        jsonNode = JSON.Parse(text);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError($"HubBrowse.GetRequest JSON_PARSE_EXCEPTION uri={uri} textLen={textLen} err={ex.Message}");
+                    }
                     long parseMs = sw.ElapsedMilliseconds;
                     if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
                         LogUtil.Log($"HubBrowse.GetRequest PARSED uri={uri} parseMs={parseMs} totalMs={totalSw.ElapsedMilliseconds}");
 
-                    sw.Reset();
-                    sw.Start();
-                    if (callback != null)
+                    if (jsonNode == null)
                     {
-                        callback(jsonNode);
+                        string truncatedResponse = TruncateForLog(text, 200);
+                        string errText = "Error - Invalid JSON response (len=" + textLen + "): " + truncatedResponse;
+                        LogUtil.LogError($"HubBrowse.GetRequest JSON_PARSE_ERROR uri={uri} {errText}");
+                        if (errorCallback != null) errorCallback(errText);
                     }
-                    long callbackMs = sw.ElapsedMilliseconds;
-                    if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
-                        LogUtil.Log($"HubBrowse.GetRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
+                    else
+                    {
+                        sw.Reset();
+                        sw.Start();
+                        if (callback != null)
+                        {
+                            callback(jsonNode);
+                        }
+                        long callbackMs = sw.ElapsedMilliseconds;
+                        if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                            LogUtil.Log($"HubBrowse.GetRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
+                    }
                 }
             }
         }
@@ -511,12 +533,13 @@ namespace VPB
                     }
                     yield return null;
                 }
-                if (request.stop || webRequest.isNetworkError)
+                if (request.stop || webRequest.isNetworkError || webRequest.isHttpError)
                 {
-                    LogUtil.LogError(uri + ": Error: " + webRequest.error);
+                    string err = request.stop ? "Cancelled" : (webRequest.error + " (Code: " + webRequest.responseCode + ")");
+                    LogUtil.LogError(uri + ": Error: " + err);
                     if (errorCallback != null)
                     {
-                        errorCallback(webRequest.error);
+                        errorCallback(err);
                     }
                 }
                 else
@@ -542,12 +565,13 @@ namespace VPB
             {
                 // UnityWebRequest can occasionally hang indefinitely on some systems/networks.
                 // Add a hard timeout so the Hub UI doesn't get stuck on "Fetching Hub Info".
-                const int timeoutSeconds = 30;
+                const int timeoutSeconds = 60;
                 try { webRequest.timeout = timeoutSeconds; } catch { }
 
                 webRequest.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(postData));
                 webRequest.SetRequestHeader("Content-Type", "application/json");
                 webRequest.SetRequestHeader("Accept", "application/json");
+                // webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
                 long createMs = sw.ElapsedMilliseconds;
                 if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
                     LogUtil.Log($"HubBrowse.PostRequest CREATED uri={uri} ms={createMs}");
@@ -578,12 +602,12 @@ namespace VPB
 
                 string[] pages = uri.Split('/');
                 int page = pages.Length - 1;
-                if (webRequest.isNetworkError)
+                if (webRequest.isNetworkError || webRequest.isHttpError)
                 {
                     LogUtil.LogError($"HubBrowse.PostRequest DONE_ERROR uri={uri} page={pages[page]} waitMs={waitMs} totalMs={totalSw.ElapsedMilliseconds} code={webRequest.responseCode} err={webRequest.error}");
                     if (errorCallback != null)
                     {
-                        errorCallback(webRequest.error);
+                        errorCallback(webRequest.error + " (Code: " + webRequest.responseCode + ")");
                     }
                     yield break;
                 }
@@ -595,14 +619,23 @@ namespace VPB
 
                 sw.Reset();
                 sw.Start();
-                SimpleJSON.JSONNode jSONNode = JSON.Parse(text);
+                SimpleJSON.JSONNode jSONNode = null;
+                try
+                {
+                    jSONNode = JSON.Parse(text);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError($"HubBrowse.PostRequest JSON_PARSE_EXCEPTION uri={uri} textLen={textLen} err={ex.Message}");
+                }
                 long parseMs = sw.ElapsedMilliseconds;
                 if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
                     LogUtil.Log($"HubBrowse.PostRequest PARSED uri={uri} parseMs={parseMs} totalMs={totalSw.ElapsedMilliseconds}");
                 if (jSONNode == null)
                 {
-                    string errText = "Error - Invalid JSON response: " + text;
-                    //Debug.LogError(pages[page] + ": " + text);
+                    string truncatedResponse = TruncateForLog(text, 200);
+                    string errText = "Error - Invalid JSON response (len=" + textLen + "): " + truncatedResponse;
+                    LogUtil.LogError($"HubBrowse.PostRequest JSON_PARSE_ERROR uri={uri} {errText}");
                     if (errorCallback != null)
                     {
                         errorCallback(errText);
@@ -618,6 +651,12 @@ namespace VPB
                         LogUtil.Log($"HubBrowse.PostRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
                 }
             }
+        }
+
+        private string TruncateForLog(string s, int maxLen = 100)
+        {
+            if (string.IsNullOrEmpty(s) || s.Length <= maxLen) return s;
+            return s.Substring(0, maxLen) + "...";
         }
 
         protected void SyncHubEnabled(bool b)
@@ -666,6 +705,8 @@ namespace VPB
 
         public void Show()
         {
+            bool alreadyShowing = _isShowing;
+            LogUtil.Log($"HubBrowse.Show: alreadyShowing={alreadyShowing}, hubEnabled={_hubEnabled}");
             if (preShowCallbacks != null)
             {
                 preShowCallbacks();
@@ -694,6 +735,8 @@ namespace VPB
                 {
                     return;
                 }
+                // If sorting by Submission Date, we always want to check for new stuff when opening the hub.
+                if (_sortPrimary != SortSubmissionDate && _sortSecondary != SortSubmissionDate)
                 {
                     foreach (HubResourceItemUI item in items)
                     {
@@ -705,6 +748,38 @@ namespace VPB
                     return;
                 }
             }
+
+            // If we are opening the hub from a hidden state and sorting by Submission Date, 
+            // reset to page 1 and clear the hosted filter to ensure the user sees the latest submissions.
+            if (!alreadyShowing && (_sortPrimary == SortSubmissionDate || _sortSecondary == SortSubmissionDate))
+            {
+                _currentPageString = "1";
+                _currentPageInt = 1;
+                currentPageJSON.valNoCallback = _currentPageString;
+                
+                // Clear the hosted option as it's the most likely filter to be "stuck" and hiding results.
+                _hostedOption = "All";
+                if (hostedOptionChooser != null) hostedOptionChooser.valNoCallback = "All";
+
+                // Clear the pay type and downloadable filters to ensure all items are visible.
+                _payTypeFilter = "All";
+                if (payTypeFilterChooser != null) payTypeFilterChooser.valNoCallback = "All";
+                if (onlyDownloadable != null) onlyDownloadable.valNoCallback = false;
+
+                // CRITICAL: Clear search filter as it was observed to persist (e.g. "qingfeng")
+                _searchFilter = string.Empty;
+                if (searchFilterJSON != null) searchFilterJSON.valNoCallback = string.Empty;
+
+                if (!suppressHubSettingsSave && Settings.Instance != null)
+                {
+                    if (Settings.Instance.HubCurrentPage != null) Settings.Instance.HubCurrentPage.Value = 1;
+                    if (Settings.Instance.HubHostedOption != null) Settings.Instance.HubHostedOption.Value = "All";
+                    if (Settings.Instance.HubPayTypeFilter != null) Settings.Instance.HubPayTypeFilter.Value = "All";
+                    if (Settings.Instance.HubOnlyDownloadable != null) Settings.Instance.HubOnlyDownloadable.Value = false;
+                    if (Settings.Instance.HubSearchText != null) Settings.Instance.HubSearchText.Value = string.Empty;
+                }
+            }
+
             RefreshResources();
         }
 
@@ -743,6 +818,7 @@ namespace VPB
 
         protected void RefreshCallback(SimpleJSON.JSONNode jsonNode, string page)
         {
+            Stopwatch sw = Stopwatch.StartNew();
             if (refreshIndicator != null)
             {
                 refreshIndicator.SetActive(false);
@@ -791,6 +867,7 @@ namespace VPB
                 {
                     return;
                 }
+                int count = 0;
                 IEnumerator enumerator2 = asArray.GetEnumerator();
                 try
                 {
@@ -819,9 +896,11 @@ namespace VPB
                             {
                                 hubResourceItem.RegisterUI(component);
                                 items.Add(component);
+                                count++;
                             }
                         }
                     }
+                    LogUtil.Log($"HubBrowse.RefreshCallback DONE page={page} items={count} ms={sw.ElapsedMilliseconds}");
                     return;
                 }
                 finally
@@ -839,6 +918,7 @@ namespace VPB
 
         public void RefreshResources()
         {
+            LogUtil.Log($"HubBrowse.RefreshResources: Page={_currentPageString}, Sort={_sortPrimary},{_sortSecondary}, Filter=[Hosted:{_hostedOption}, Pay:{_payTypeFilter}, Cat:{_categoryFilter}, Creator:{_creatorFilter}, Tags:{_tagsFilter}, Search:{_searchFilter}]");
             _hasBeenRefreshed = true;
             if (_hubEnabled)
             {
@@ -939,6 +1019,7 @@ namespace VPB
 
         protected void ResetRefresh()
         {
+            if (suppressRefresh) return;
             CancelOldPageImages();
             _currentPageString = "1";
             _currentPageInt = 1;
@@ -991,6 +1072,9 @@ namespace VPB
 
         protected void ResetFilters()
         {
+            LogUtil.Log("HubBrowse.ResetFilters called");
+            _hostedOption = "All";
+            if (hostedOptionChooser != null) hostedOptionChooser.valNoCallback = "All";
             _payTypeFilter = "All";
             payTypeFilterChooser.valNoCallback = "All";
             _searchFilter = string.Empty;
@@ -1001,10 +1085,24 @@ namespace VPB
             creatorFilterChooser.valNoCallback = "All";
             _tagsFilter = "All";
             tagsFilterChooser.valNoCallback = "All";
+            if (onlyDownloadable != null) onlyDownloadable.valNoCallback = false;
+
+            // Persist the cleared state to settings
+            if (Settings.Instance != null)
+            {
+                if (Settings.Instance.HubHostedOption != null) Settings.Instance.HubHostedOption.Value = "All";
+                if (Settings.Instance.HubPayTypeFilter != null) Settings.Instance.HubPayTypeFilter.Value = "All";
+                if (Settings.Instance.HubSearchText != null) Settings.Instance.HubSearchText.Value = string.Empty;
+                if (Settings.Instance.HubCategoryFilter != null) Settings.Instance.HubCategoryFilter.Value = "All";
+                if (Settings.Instance.HubCreatorFilter != null) Settings.Instance.HubCreatorFilter.Value = "All";
+                if (Settings.Instance.HubTagsFilter != null) Settings.Instance.HubTagsFilter.Value = "All";
+                if (Settings.Instance.HubOnlyDownloadable != null) Settings.Instance.HubOnlyDownloadable.Value = false;
+            }
         }
 
         protected void ResetFiltersAndRefresh()
         {
+            LogUtil.Log("HubBrowse.ResetFiltersAndRefresh (Reset Filters button) pressed");
             ResetFilters();
             ResetRefresh();
         }
@@ -1036,17 +1134,6 @@ namespace VPB
             }
         }
 
-        protected IEnumerator TriggerResetRefesh()
-        {
-            while (triggerCountdown > 0f)
-            {
-                triggerCountdown -= Time.unscaledDeltaTime;
-                yield return null;
-            }
-            triggerResetRefreshRoutine = null;
-            ResetRefresh();
-        }
-
         protected void SyncSearchFilter(string s)
         {
             _searchFilter = s;
@@ -1073,9 +1160,16 @@ namespace VPB
                 triggerCountdown = 0.5f;
                 if (triggerResetRefreshRoutine == null)
                 {
-                    triggerResetRefreshRoutine = StartCoroutine(TriggerResetRefesh());
+                    triggerResetRefreshRoutine = StartCoroutine(TriggerResetRefresh());
                 }
             }
+        }
+
+        protected IEnumerator TriggerResetRefresh()
+        {
+            yield return new WaitForSeconds(triggerCountdown);
+            ResetRefresh();
+            triggerResetRefreshRoutine = null;
         }
 
         protected void SyncCategoryFilter(string s)
@@ -1856,156 +1950,166 @@ namespace VPB
             {
                 return;
             }
-            if (asObject["location"] != null)
-            {
-                JSONArray asArray = asObject["location"].AsArray;
-                if (asArray != null)
-                {
-                    List<string> list = new List<string>();
-                    list.Add("All");
-                    IEnumerator enumerator = asArray.GetEnumerator();
-                    try
-                    {
-                        while (enumerator.MoveNext())
-                        {
-                            SimpleJSON.JSONNode jSONNode = (SimpleJSON.JSONNode)enumerator.Current;
-                            list.Add(jSONNode);
-                        }
-                    }
-                    finally
-                    {
-                        IDisposable disposable;
-                        if ((disposable = enumerator as IDisposable) != null)
-                        {
-                            disposable.Dispose();
-                        }
-                    }
-                    hostedOptionChooser.choices = list;
-                }
-            }
-            if (asObject["category"] != null)
-            {
-                JSONArray asArray2 = asObject["category"].AsArray;
-                if (asArray2 != null)
-                {
-                    List<string> list2 = new List<string>();
-                    list2.Add("All");
-                    IEnumerator enumerator2 = asArray2.GetEnumerator();
-                    try
-                    {
-                        while (enumerator2.MoveNext())
-                        {
-                            SimpleJSON.JSONNode jSONNode2 = (SimpleJSON.JSONNode)enumerator2.Current;
-                            list2.Add(jSONNode2);
-                        }
-                    }
-                    finally
-                    {
-                        IDisposable disposable2;
-                        if ((disposable2 = enumerator2 as IDisposable) != null)
-                        {
-                            disposable2.Dispose();
-                        }
-                    }
-                    payTypeFilterChooser.choices = list2;
-                }
-            }
-            if (asObject["type"] != null)
-            {
-                JSONArray asArray3 = asObject["type"].AsArray;
-                if (asArray3 != null)
-                {
-                    List<string> list3 = new List<string>();
-                    list3.Add("All");
-                    IEnumerator enumerator3 = asArray3.GetEnumerator();
-                    try
-                    {
-                        while (enumerator3.MoveNext())
-                        {
-                            SimpleJSON.JSONNode jSONNode3 = (SimpleJSON.JSONNode)enumerator3.Current;
-                            list3.Add(jSONNode3);
-                        }
-                    }
-                    finally
-                    {
-                        IDisposable disposable3;
-                        if ((disposable3 = enumerator3 as IDisposable) != null)
-                        {
-                            disposable3.Dispose();
-                        }
-                    }
-                    categoryFilterChooser.choices = list3;
-                }
-            }
-            if (asObject["users"] != null)
-            {
-                JSONClass asObject2 = asObject["users"].AsObject;
-                if (asObject2 != null)
-                {
-                    List<string> list4 = new List<string>();
-                    list4.Add("All");
-                    foreach (string key in asObject2.Keys)
-                    {
-                        list4.Add(key);
-                    }
-                    creatorFilterChooser.choices = list4;
-                }
-            }
-            if (asObject["tags"] != null)
-            {
-                JSONClass asObject3 = asObject["tags"].AsObject;
-                if (asObject3 != null)
-                {
-                    List<string> list5 = new List<string>();
-                    list5.Add("All");
-                    foreach (string key2 in asObject3.Keys)
-                    {
-                        list5.Add(key2);
-                    }
-                    tagsFilterChooser.choices = list5;
-                }
-            }
-            if (asObject["sort"] != null)
-            {
-                JSONArray asArray4 = asObject["sort"].AsArray;
-                if (asArray4 != null)
-                {
-                    List<string> list6 = new List<string>();
-                    List<string> list7 = new List<string>();
-                    list7.Add("None");
-                    IEnumerator enumerator6 = asArray4.GetEnumerator();
-                    try
-                    {
-                        while (enumerator6.MoveNext())
-                        {
-                            SimpleJSON.JSONNode jSONNode4 = (SimpleJSON.JSONNode)enumerator6.Current;
-                            list6.Add(jSONNode4);
-                            list7.Add(jSONNode4);
-                        }
-                    }
-                    finally
-                    {
-                        IDisposable disposable4;
-                        if ((disposable4 = enumerator6 as IDisposable) != null)
-                        {
-                            disposable4.Dispose();
-                        }
-                    }
 
-                    // VaM Hub supports "Submission Date" sorting on the website; ensure it's available in the in-game UI.
-                    // We only add it if the API didn't include it in the getInfo sort array.
-                    // If present, keep it first to match the VPB UI convention.
-                    list6.Remove(SortSubmissionDate);
-                    list6.Insert(0, SortSubmissionDate);
-
-                    list7.Remove(SortSubmissionDate);
-                    list7.Insert(0, SortSubmissionDate);
-                    sortPrimaryChooser.choices = list6;
-                    sortSecondaryChooser.choices = list7;
+            suppressRefresh = true;
+            try
+            {
+                if (asObject["location"] != null)
+                {
+                    JSONArray asArray = asObject["location"].AsArray;
+                    if (asArray != null)
+                    {
+                        List<string> list = new List<string>();
+                        list.Add("All");
+                        IEnumerator enumerator = asArray.GetEnumerator();
+                        try
+                        {
+                            while (enumerator.MoveNext())
+                            {
+                                SimpleJSON.JSONNode jSONNode = (SimpleJSON.JSONNode)enumerator.Current;
+                                list.Add(jSONNode);
+                            }
+                        }
+                        finally
+                        {
+                            IDisposable disposable;
+                            if ((disposable = enumerator as IDisposable) != null)
+                            {
+                                disposable.Dispose();
+                            }
+                        }
+                        if (hostedOptionChooser != null) hostedOptionChooser.choices = list;
+                    }
                 }
-            }
+                if (asObject["category"] != null)
+                {
+                    JSONArray asArray2 = asObject["category"].AsArray;
+                    if (asArray2 != null)
+                    {
+                        List<string> list2 = new List<string>();
+                        list2.Add("All");
+                        IEnumerator enumerator2 = asArray2.GetEnumerator();
+                        try
+                        {
+                            while (enumerator2.MoveNext())
+                            {
+                                SimpleJSON.JSONNode jSONNode2 = (SimpleJSON.JSONNode)enumerator2.Current;
+                                list2.Add(jSONNode2);
+                            }
+                        }
+                        finally
+                        {
+                            IDisposable disposable2;
+                            if ((disposable2 = enumerator2 as IDisposable) != null)
+                            {
+                                disposable2.Dispose();
+                            }
+                        }
+                        if (payTypeFilterChooser != null) payTypeFilterChooser.choices = list2;
+                    }
+                }
+                if (asObject["type"] != null)
+                {
+                    JSONArray asArray3 = asObject["type"].AsArray;
+                    if (asArray3 != null)
+                    {
+                        List<string> list3 = new List<string>();
+                        list3.Add("All");
+                        IEnumerator enumerator3 = asArray3.GetEnumerator();
+                        try
+                        {
+                            while (enumerator3.MoveNext())
+                            {
+                                SimpleJSON.JSONNode jSONNode3 = (SimpleJSON.JSONNode)enumerator3.Current;
+                                list3.Add(jSONNode3);
+                            }
+                        }
+                        finally
+                        {
+                            IDisposable disposable3;
+                            if ((disposable3 = enumerator3 as IDisposable) != null)
+                            {
+                                disposable3.Dispose();
+                            }
+                        }
+                        if (categoryFilterChooser != null) categoryFilterChooser.choices = list3;
+                    }
+                }
+                if (asObject["users"] != null)
+                {
+                    JSONClass asObject2 = asObject["users"].AsObject;
+                    if (asObject2 != null)
+                    {
+                        List<string> list4 = new List<string>();
+                        list4.Add("All");
+                        foreach (string key in asObject2.Keys)
+                        {
+                            list4.Add(key);
+                        }
+                        if (creatorFilterChooser != null) creatorFilterChooser.choices = list4;
+                    }
+                }
+                if (asObject["tags"] != null)
+                {
+                    JSONClass asObject3 = asObject["tags"].AsObject;
+                    if (asObject3 != null)
+                    {
+                        List<string> list5 = new List<string>();
+                        list5.Add("All");
+                        foreach (string key2 in asObject3.Keys)
+                        {
+                            list5.Add(key2);
+                        }
+                        if (tagsFilterChooser != null) tagsFilterChooser.choices = list5;
+                    }
+                }
+                if (asObject["sort"] != null)
+                {
+                    JSONArray asArray4 = asObject["sort"].AsArray;
+                    if (asArray4 != null)
+                    {
+                        List<string> list6 = new List<string>();
+                        List<string> list7 = new List<string>();
+                        list7.Add("None");
+                        IEnumerator enumerator6 = asArray4.GetEnumerator();
+                        try
+                        {
+                            while (enumerator6.MoveNext())
+                            {
+                                SimpleJSON.JSONNode jSONNode4 = (SimpleJSON.JSONNode)enumerator6.Current;
+                                list6.Add(jSONNode4);
+                                list7.Add(jSONNode4);
+                            }
+                        }
+                        finally
+                        {
+                            IDisposable disposable4;
+                            if ((disposable4 = enumerator6 as IDisposable) != null)
+                            {
+                                disposable4.Dispose();
+                            }
+                        }
 
-            ApplyPersistedHubSettingsIfNeeded();
+                        // VaM Hub supports "Submission Date" sorting on the website; ensure it's available in the in-game UI.
+                        // We only add it if the API didn't include it in the getInfo sort array.
+                        // If present, keep it first to match the VPB UI convention.
+                        list6.Remove(SortSubmissionDate);
+                        list6.Insert(0, SortSubmissionDate);
+
+                        list7.Remove(SortSubmissionDate);
+                        list7.Insert(0, SortSubmissionDate);
+
+                        if (sortPrimaryChooser != null) sortPrimaryChooser.choices = list6;
+                        if (sortSecondaryChooser != null) sortSecondaryChooser.choices = list7;
+                    }
+                }
+
+                ApplyPersistedHubSettingsIfNeeded();
+            }
+            finally
+            {
+                suppressRefresh = false;
+            }
 
             string text = asObject["last_update"];
             if (packagesJSONUrl != null && packagesJSONUrl != string.Empty && text != null)
@@ -2013,6 +2117,12 @@ namespace VPB
                 string uri = packagesJSONUrl + "?" + text;
                 LogUtil.Log($"HubBrowse requesting packages.json uri={uri}");
                 StartCoroutine(GetRequest(uri, GetPackagesJSONCallback, GetPackagesJSONErrorCallback));
+            }
+
+            // Only refresh if items haven't been loaded yet (e.g. by Show())
+            if (items == null || items.Count == 0)
+            {
+                RefreshResources();
             }
         }
 
@@ -2054,7 +2164,7 @@ namespace VPB
             suppressHubSettingsSave = true;
             try
             {
-                bool onlyDl = (Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : true;
+                bool onlyDl = (Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : false;
                 if (onlyDownloadable != null)
                 {
                     onlyDownloadable.valNoCallback = onlyDl;
@@ -2450,7 +2560,7 @@ namespace VPB
             var relPos = openMissingPackagesPanelButton.transform.localPosition;
             Transform parent = openMissingPackagesPanelButton.transform.parent;
 
-            bool initialOnlyDownloadable = (Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : true;
+            bool initialOnlyDownloadable = (Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : false;
             onlyDownloadable = new JSONStorableBool("Only Downloadable", initialOnlyDownloadable, SyncOnlyDownloadable);
             var manager = SuperController.singleton.transform.Find("ScenePluginManager").GetComponent<MVRPluginManager>();
             if (manager != null && manager.configurableTogglePrefab != null)
