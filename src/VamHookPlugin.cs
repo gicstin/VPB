@@ -906,8 +906,6 @@ namespace VPB
                     Gallery.singleton.CreatePane();
                 }
             }
-
-            StartCoroutine(JSONExtensions.LoadCharacterGenderMap());
         }
 
         void AutoLoadALPackages()

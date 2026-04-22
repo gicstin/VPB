@@ -3,6 +3,7 @@ using HarmonyLib;
 using MeshVR;
 using SimpleJSON;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -160,10 +161,12 @@ namespace VPB.src.util
             return new SimpleTransform();
         }
 
+        private static bool _hasInitCharacterGenderMap = false;
         public static Dictionary<string, string> CharacterGenderMap = new Dictionary<string, string>();
 
-        public static IEnumerator<string[]> LoadCharacterGenderMap()
+        public static IEnumerator LoadCharacterGenderMap()
         {
+            if (_hasInitCharacterGenderMap) yield break;
             var timer = new Stopwatch();
             timer.Start();
             var load = AssetBundleManager.LoadAssetAsync("a_per", "assets/vamassets/prefabs/people/person.prefab", typeof(GameObject));
@@ -194,6 +197,7 @@ namespace VPB.src.util
                     if (character.isMale) loadedMale++;
                     else loadedFemale++;
                 }
+                _hasInitCharacterGenderMap = true;
                 LogUtil.Log("Loaded " + loadedFemale.ToString() + " female characters, " + loadedMale.ToString() + " male characters");
             }
             else

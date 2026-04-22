@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using Prime31.MessageKit;
 using UnityEngine;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -74,6 +75,7 @@ namespace VPB
         void Awake()
         {
             singleton = this;
+            StartCoroutine(JSONExtensions.LoadCharacterGenderMap());
             try
             {
                 string gameRoot = Path.GetDirectoryName(Application.dataPath);
