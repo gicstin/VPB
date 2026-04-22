@@ -20,6 +20,7 @@ namespace VPB
             s.Tags = new List<string>(activeTags);
             s.SceneSourceFilter = currentSceneSourceFilter ?? "";
             s.AppearanceSourceFilter = currentAppearanceSourceFilter ?? "";
+            s.PackagePathFilter = currentPackagePathFilter ?? "";
             s.ClothingSubfilter = (int)clothingSubfilter;
             s.AppearanceSubfilter = (int)appearanceSubfilter;
             s.PosePeopleFilter = (int)posePeopleFilter;
@@ -91,6 +92,7 @@ namespace VPB
 
             currentSceneSourceFilter = state.SceneSourceFilter ?? "";
             currentAppearanceSourceFilter = state.AppearanceSourceFilter ?? "";
+            currentPackagePathFilter = state.PackagePathFilter ?? "";
             clothingSubfilter = (ClothingSubfilter)state.ClothingSubfilter;
             appearanceSubfilter = (AppearanceSubfilter)state.AppearanceSubfilter;
             posePeopleFilter = (PosePeopleFilter)state.PosePeopleFilter;
@@ -113,6 +115,7 @@ namespace VPB
             activeTags.Clear();
             currentSceneSourceFilter = "";
             currentAppearanceSourceFilter = "";
+            currentPackagePathFilter = "";
             clothingSubfilter = 0;
             appearanceSubfilter = 0;
             posePeopleFilter = PosePeopleFilter.All;

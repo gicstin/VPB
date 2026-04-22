@@ -277,6 +277,7 @@ namespace VPB
                 creatorsCached = false;
                 categoriesCached = false;
                 tagsCached = false;
+                pathsCached = false;
                 refreshOnNextShow = true;
                 RefreshFiles(true);
                 refreshOnNextShow = false;
@@ -332,12 +333,14 @@ namespace VPB
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
+                pathsCached = false;
             }
             else if (packagesChanged)
             {
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
+                pathsCached = false;
             }
 
             currentCategoryTitle = title;
@@ -1189,6 +1192,7 @@ namespace VPB
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
+                pathsCached = false;
 			    try { if (IsVisible) UpdateTabs(); } catch { }
             }
             return true;

@@ -739,6 +739,7 @@ namespace VPB
                     if (currentCreator == cName) currentCreator = "";
                     else currentCreator = cName;
                     categoriesCached = false;
+                    pathsCached = false;
                     tagsCached = false;
                     RefreshFiles();
                     UpdateTabs();
@@ -751,6 +752,7 @@ namespace VPB
                 SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
                 currentCreator = "";
                 categoriesCached = false;
+                pathsCached = false;
                 tagsCached = false;
                 RefreshFiles();
                 UpdateTabs();
@@ -1170,6 +1172,92 @@ namespace VPB
                 // We do NOT add them to trackedButtons because that would return them to the shared pool
                 // every time UpdateTabs is called, causing massive churn.
                 UpdateCreatorVirtualVisible(isLeft);
+            }
+            else if (contentType == ContentType.Path)
+            {
+                if (!pathsCached) CachePaths();
+                if (cachedPaths == null || cachedPaths.Count == 0) return;
+
+                var displayPaths = new List<PathCacheEntry>(cachedPaths);
+                var sortState = GetSortState("Path");
+                if (sortState.Type == SortType.Count)
+                {
+                    if (sortState.Direction == SortDirection.Ascending)
+                        displayPaths.Sort((a, b) => a.Count.CompareTo(b.Count));
+                    else
+                        displayPaths.Sort((a, b) => b.Count.CompareTo(a.Count));
+                }
+                else
+                {
+                    if (sortState.Direction == SortDirection.Ascending)
+                        displayPaths.Sort((a, b) => string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase));
+                    else
+                        displayPaths.Sort((a, b) => string.Compare(b.Path, a.Path, StringComparison.OrdinalIgnoreCase));
+                }
+
+                string filterNow = pathFilter ?? "";
+                for (int i = 0; i < displayPaths.Count; i++)
+                {
+                    PathCacheEntry pe = displayPaths[i];
+                    if (string.IsNullOrEmpty(pe.Path)) continue;
+                    if (!string.IsNullOrEmpty(filterNow) && pe.Path.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    bool isActive = string.Equals(currentPackagePathFilter, pe.Path, StringComparison.OrdinalIgnoreCase);
+                    if (pe.Count <= 0 && !isActive) continue;
+
+                    string label = pe.Path;
+                    Color btnColor = isActive ? ColorPath : new Color(0.25f, 0.25f, 0.25f, 1f);
+                    string pathValue = pe.Path;
+                    CreateTabButton(container.transform, label, btnColor, isActive, () =>
+                    {
+                        if (string.Equals(currentPackagePathFilter, pathValue, StringComparison.OrdinalIgnoreCase))
+                            currentPackagePathFilter = "";
+                        else
+                            currentPackagePathFilter = pathValue;
+
+                        categoriesCached = false;
+                        creatorsCached = false;
+                        tagsCached = false;
+                        RefreshFiles();
+                        UpdateTabs();
+                    }, trackedButtons, () =>
+                    {
+                        currentPackagePathFilter = "";
+                        categoriesCached = false;
+                        creatorsCached = false;
+                        tagsCached = false;
+                        RefreshFiles();
+                        UpdateTabs();
+                    }, pathValue);
+
+                    GameObject pathBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
+                    if (pathBtnGO != null)
+                    {
+                        float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                        float rowSingle = 35f * s;
+                        LayoutElement le = pathBtnGO.GetComponent<LayoutElement>();
+                        if (le == null) le = pathBtnGO.AddComponent<LayoutElement>();
+                        le.minHeight = rowSingle;
+                        le.preferredHeight = rowSingle;
+
+                        Text txt = pathBtnGO.GetComponentInChildren<Text>(true);
+                        if (txt != null)
+                        {
+                            txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+                            txt.verticalOverflow = VerticalWrapMode.Truncate;
+                            txt.alignment = TextAnchor.MiddleLeft;
+                            txt.resizeTextForBestFit = false;
+
+                            RectTransform txtRT = txt.GetComponent<RectTransform>();
+                            if (txtRT != null)
+                            {
+                                float padX = 10f * s;
+                                txtRT.offsetMin = new Vector2(padX, txtRT.offsetMin.y);
+                                txtRT.offsetMax = new Vector2(-padX, txtRT.offsetMax.y);
+                            }
+                        }
+                    }
+                }
             }
             else if (contentType == ContentType.Ratings)
             {

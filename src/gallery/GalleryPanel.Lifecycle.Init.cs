@@ -654,6 +654,7 @@ namespace VPB
                 rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
                     else if (rightActiveContent == ContentType.Creator) creatorFilter = val;
+                    else if (rightActiveContent == ContentType.Path) pathFilter = val;
                     else if (rightActiveContent == ContentType.RemoveClothing) removeClothingFilter = val;
                     else if (rightActiveContent == ContentType.RemoveHair) removeHairFilter = val;
                     else if (rightActiveContent == ContentType.RemoveAtom) removeAtomFilter = val;
@@ -663,8 +664,17 @@ namespace VPB
                     if (rightActiveContent == ContentType.Creator) {
                         currentCreator = "";
                         categoriesCached = false;
+                        pathsCached = false;
                         tagsCached = false;
                             RefreshFiles();
+                        UpdateTabs();
+                    }
+                    else if (rightActiveContent == ContentType.Path) {
+                        currentPackagePathFilter = "";
+                        categoriesCached = false;
+                        creatorsCached = false;
+                        tagsCached = false;
+                        RefreshFiles();
                         UpdateTabs();
                     }
                     else if (rightActiveContent == ContentType.RemoveClothing) {
@@ -872,6 +882,7 @@ namespace VPB
                 leftSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
                     if (leftActiveContent == ContentType.Category) categoryFilter = val;
                     else if (leftActiveContent == ContentType.Creator) creatorFilter = val;
+                    else if (leftActiveContent == ContentType.Path) pathFilter = val;
                     else if (leftActiveContent == ContentType.RemoveClothing) removeClothingFilter = val;
                     else if (leftActiveContent == ContentType.RemoveHair) removeHairFilter = val;
                     else if (leftActiveContent == ContentType.RemoveAtom) removeAtomFilter = val;
@@ -881,8 +892,17 @@ namespace VPB
                     if (leftActiveContent == ContentType.Creator) {
                         currentCreator = "";
                         categoriesCached = false;
+                        pathsCached = false;
                         tagsCached = false;
                             RefreshFiles();
+                        UpdateTabs();
+                    }
+                    else if (leftActiveContent == ContentType.Path) {
+                        currentPackagePathFilter = "";
+                        categoriesCached = false;
+                        creatorsCached = false;
+                        tagsCached = false;
+                        RefreshFiles();
                         UpdateTabs();
                     }
                     else if (leftActiveContent == ContentType.RemoveClothing) {
@@ -946,6 +966,7 @@ namespace VPB
                     gallerySaveSprite = UI.LoadIconSprite("vpb_icons/gallery_save.png", sideTint);
                     galleryCategorySprite = UI.LoadIconSprite("vpb_icons/gallery_category.png", sideTint);
                     galleryCreatorSprite = UI.LoadIconSprite("vpb_icons/gallery_creator.png", sideTint);
+                    galleryPathSprite = UI.LoadIconSprite("vpb_icons/folder.png", sideTint);
                     galleryCreatorOffSprite = UI.LoadIconSprite("vpb_icons/gallery_creator_off.png", sideTint);
                     targetOnSprite  = UI.LoadIconSprite("vpb_icons/target_on.png",  new Color(1f, 1f, 1f, 1f));
                     targetOffSprite = UI.LoadIconSprite("vpb_icons/target_off.png", new Color(0.65f, 0.65f, 0.65f, 1f));
@@ -1102,6 +1123,7 @@ namespace VPB
                     rightClearCreatorBtn = UI.CreateUIButton(rightSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => {
                         currentCreator = "";
                         categoriesCached = false;
+                        pathsCached = false;
                         tagsCached = false;
                         RefreshFiles();
                         UpdateTabs();
@@ -1147,6 +1169,37 @@ namespace VPB
                     rightSideButtons.Add(rightCreatorBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
                     AddTooltip(rightCreatorBtn, "gallery.tooltip.creator_list", "Open creator list.");
+                }
+
+                // Path (Blue)
+                {
+                    float pW = galleryPathSprite != null ? sideIconBtn : btnWidth;
+                    float pH = galleryPathSprite != null ? sideIconBtn : btnHeight;
+                    GameObject rightPathBtn = UI.CreateUIButton(rightSideContainer, pW, pH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => {
+                        if (isFixedLocally) ToggleLeft(ContentType.Path); else ToggleRight(ContentType.Path);
+                    });
+                    rightPathBtnImage = rightPathBtn.GetComponent<Image>();
+                    rightPathBtnText = rightPathBtn.GetComponentInChildren<Text>(true);
+                    if (galleryPathSprite != null)
+                    {
+                        UI.AddIconToButton(rightPathBtn, galleryPathSprite, sideIconPad, ColorPath);
+                        rightPathBtnIconImage = rightPathBtn.transform.Find("Icon") != null
+                            ? rightPathBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        rightPathBtnImage.color = ColorPath;
+                        if (rightPathBtnText != null)
+                        {
+                            rightPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
+                            rightPathBtnText.fontSize = btnFontSize;
+                            rightPathBtnText.gameObject.SetActive(true);
+                        }
+                        rightPathBtnIconImage = null;
+                    }
+                    rightSideButtons.Add(rightPathBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightPathBtn, () => ToggleRight(ContentType.Path));
+                    AddTooltip(rightPathBtn, "gallery.tooltip.path_list", "Open package and file path list.");
                 }
 
                 // Apply Mode (Right) — icon swaps 1-click vs 2-click when both assets exist
@@ -1528,6 +1581,7 @@ namespace VPB
                     leftClearCreatorBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => {
                         currentCreator = "";
                         categoriesCached = false;
+                        pathsCached = false;
                         tagsCached = false;
                         RefreshFiles();
                         UpdateTabs();
@@ -1571,6 +1625,35 @@ namespace VPB
                     leftSideButtons.Add(leftCreatorBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
                     AddTooltip(leftCreatorBtn, "gallery.tooltip.creator_list", "Open creator list.");
+                }
+
+                // Path (Blue)
+                {
+                    float pW = galleryPathSprite != null ? sideIconBtn : btnWidth;
+                    float pH = galleryPathSprite != null ? sideIconBtn : btnHeight;
+                    GameObject leftPathBtn = UI.CreateUIButton(leftSideContainer, pW, pH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Path));
+                    leftPathBtnImage = leftPathBtn.GetComponent<Image>();
+                    leftPathBtnText = leftPathBtn.GetComponentInChildren<Text>(true);
+                    if (galleryPathSprite != null)
+                    {
+                        UI.AddIconToButton(leftPathBtn, galleryPathSprite, sideIconPad, ColorPath);
+                        leftPathBtnIconImage = leftPathBtn.transform.Find("Icon") != null
+                            ? leftPathBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else
+                    {
+                        leftPathBtnImage.color = ColorPath;
+                        if (leftPathBtnText != null)
+                        {
+                            leftPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
+                            leftPathBtnText.fontSize = btnFontSize;
+                            leftPathBtnText.gameObject.SetActive(true);
+                        }
+                        leftPathBtnIconImage = null;
+                    }
+                    leftSideButtons.Add(leftPathBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftPathBtn, () => ToggleRight(ContentType.Path));
+                    AddTooltip(leftPathBtn, "gallery.tooltip.path_list", "Open package and file path list.");
                 }
 
                 // Apply Mode (Left)

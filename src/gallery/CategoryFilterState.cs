@@ -11,6 +11,7 @@ namespace VPB
         public List<string> Tags = new List<string>();
         public string SceneSourceFilter = "";
         public string AppearanceSourceFilter = "";
+        public string PackagePathFilter = "";
         public int ClothingSubfilter = 0;
         public int AppearanceSubfilter = 0;
         public int PosePeopleFilter = 0;
@@ -23,6 +24,7 @@ namespace VPB
             node["c"] = Creator ?? "";
             node["ss"] = SceneSourceFilter ?? "";
             node["as"] = AppearanceSourceFilter ?? "";
+            node["pp"] = PackagePathFilter ?? "";
             node["csf"].AsInt = ClothingSubfilter;
             node["asf"].AsInt = AppearanceSubfilter;
             node["ppf"].AsInt = PosePeopleFilter;
@@ -56,6 +58,7 @@ namespace VPB
                 s.Creator = node["c"] ?? "";
                 s.SceneSourceFilter = node["ss"] ?? "";
                 s.AppearanceSourceFilter = node["as"] ?? "";
+                s.PackagePathFilter = node["pp"] ?? "";
                 s.ClothingSubfilter = node["csf"].AsInt;
                 s.AppearanceSubfilter = node["asf"].AsInt;
                 s.PosePeopleFilter = node["ppf"].AsInt;

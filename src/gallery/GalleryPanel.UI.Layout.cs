@@ -91,6 +91,7 @@ namespace VPB
 
                     if (type == ContentType.Category) target = categoryFilter;
                     else if (type == ContentType.Creator) target = creatorFilter;
+                    else if (type == ContentType.Path) target = pathFilter;
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
@@ -135,6 +136,7 @@ namespace VPB
 
                     if (type == ContentType.Category) target = categoryFilter;
                     else if (type == ContentType.Creator) target = creatorFilter;
+                    else if (type == ContentType.Path) target = pathFilter;
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
@@ -895,6 +897,7 @@ namespace VPB
             int idxFollow = -1;
             int idxCategory = -1;
             int idxCreator = -1;
+            int idxPath = -1;
             int idxCreatorClear = -1;
             int idxTarget = -1;
             int idxApplyMode = -1;
@@ -919,6 +922,7 @@ namespace VPB
 
                     idxCategory = FindIndexByTextRef(rightCategoryBtnText != null ? rightCategoryBtnText : leftCategoryBtnText);
                     idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
+                    idxPath = FindIndexByTextRef(rightPathBtnText != null ? rightPathBtnText : leftPathBtnText);
                     // idxTarget: target button moved to toolbox, no longer a side button
                     idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);
                     idxKeepOutfit = FindIndexByTextRef(rightKeepClothingBtnText != null ? rightKeepClothingBtnText : leftKeepClothingBtnText);
@@ -973,6 +977,7 @@ namespace VPB
                 new SideButtonLayoutEntry(idxCategory, 0, 2), // Category
                 new SideButtonLayoutEntry(idxCreatorClear, 0, 0), // Clear Creator
                 new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
+                new SideButtonLayoutEntry(idxPath, 0, 0), // Path
 
                 new SideButtonLayoutEntry(idxSave, 0, 2), // Save
 
@@ -1584,6 +1589,8 @@ namespace VPB
                     return true;
                 if (galleryCreatorSprite != null && rightCreatorBtnIconImage != null && rightCreatorBtnImage != null && go == rightCreatorBtnImage.gameObject)
                     return true;
+                if (galleryPathSprite != null && rightPathBtnIconImage != null && rightPathBtnImage != null && go == rightPathBtnImage.gameObject)
+                    return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && rightApplyModeBtnIconImage != null && rightApplyModeBtnImage != null && go == rightApplyModeBtnImage.gameObject)
                     return true;
                 if ((galleryAddSprite != null || galleryReplaceSprite != null) && rightReplaceBtnIconImage != null && rightReplaceBtnImage != null && go == rightReplaceBtnImage.gameObject)
@@ -1601,6 +1608,8 @@ namespace VPB
                 if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
                     return true;
                 if (galleryCreatorSprite != null && leftCreatorBtnIconImage != null && leftCreatorBtnImage != null && go == leftCreatorBtnImage.gameObject)
+                    return true;
+                if (galleryPathSprite != null && leftPathBtnIconImage != null && leftPathBtnImage != null && go == leftPathBtnImage.gameObject)
                     return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && leftApplyModeBtnIconImage != null && leftApplyModeBtnImage != null && go == leftApplyModeBtnImage.gameObject)
                     return true;

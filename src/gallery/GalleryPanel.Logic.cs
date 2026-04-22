@@ -483,6 +483,138 @@ namespace VPB
             unchecked { creatorSideTabDataRevision++; }
         }
 
+        private static readonly string[] GalleryPathFilterRoots = new[] { "AddonPackages/", "AllPackages/", "Custom/", "Saves/" };
+
+        internal static bool TryNormalizeGalleryPathUnderKnownRoots(string rawPath, out string normalizedPath)
+        {
+            normalizedPath = "";
+            if (string.IsNullOrEmpty(rawPath)) return false;
+
+            string p = rawPath.Replace('\\', '/');
+            int varSep = p.IndexOf(":/", StringComparison.Ordinal);
+            if (varSep > 0) p = p.Substring(0, varSep);
+            p = p.Trim();
+            if (p.Length == 0) return false;
+
+            for (int i = 0; i < GalleryPathFilterRoots.Length; i++)
+            {
+                string root = GalleryPathFilterRoots[i];
+                int idx = p.IndexOf(root, StringComparison.OrdinalIgnoreCase);
+                if (idx < 0) continue;
+                string rel = p.Substring(idx).TrimStart('/');
+                if (rel.Length == 0) return false;
+                normalizedPath = rel.TrimEnd('/');
+                return normalizedPath.Length > 0;
+            }
+
+            return false;
+        }
+
+        internal static string TryGetPathFilterFolderForEntry(FileEntry entry)
+        {
+            if (entry == null) return null;
+            string normalized;
+            if (!TryNormalizeGalleryPathUnderKnownRoots(entry.Path, out normalized)) return null;
+            try
+            {
+                string dir = Path.GetDirectoryName(normalized);
+                if (string.IsNullOrEmpty(dir)) return null;
+                dir = dir.Replace('\\', '/').TrimEnd('/');
+                return dir.Length == 0 ? null : dir;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        internal static bool GalleryPathFilterMatchesFolder(string folderPath, string selectedFilter)
+        {
+            if (string.IsNullOrEmpty(selectedFilter)) return true;
+            if (string.IsNullOrEmpty(folderPath)) return false;
+            return folderPath.Equals(selectedFilter, StringComparison.OrdinalIgnoreCase)
+                || folderPath.StartsWith(selectedFilter + "/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool GalleryPathFilterMatchesRawPath(string rawPath, string selectedFilter)
+        {
+            if (string.IsNullOrEmpty(selectedFilter)) return true;
+            string normalized;
+            if (!TryNormalizeGalleryPathUnderKnownRoots(rawPath, out normalized)) return false;
+            string folder = "";
+            try { folder = Path.GetDirectoryName(normalized); } catch { folder = ""; }
+            if (string.IsNullOrEmpty(folder)) return false;
+            folder = folder.Replace('\\', '/').TrimEnd('/');
+            if (folder.Length == 0) return false;
+            return GalleryPathFilterMatchesFolder(folder, selectedFilter);
+        }
+
+        private static void AddPathHierarchyCount(Dictionary<string, int> counts, string folderPath)
+        {
+            if (counts == null || string.IsNullOrEmpty(folderPath)) return;
+            string p = folderPath.Replace('\\', '/').Trim('/');
+            if (p.Length == 0) return;
+
+            for (int i = 0; i < GalleryPathFilterRoots.Length; i++)
+            {
+                string root = GalleryPathFilterRoots[i].TrimEnd('/');
+                if (!p.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+                string[] seg = p.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                if (seg.Length == 0) return;
+                string running = seg[0];
+                for (int si = 1; si <= seg.Length; si++)
+                {
+                    int cur;
+                    counts.TryGetValue(running, out cur);
+                    counts[running] = cur + 1;
+                    if (si < seg.Length) running += "/" + seg[si];
+                }
+                return;
+            }
+        }
+
+        private static void AddPathCountsFromEntries(Dictionary<string, int> counts, IList<FileEntry> files, bool includeVarRows, bool includeLooseRows)
+        {
+            if (counts == null || files == null) return;
+            for (int i = 0; i < files.Count; i++)
+            {
+                FileEntry fe = files[i];
+                if (fe == null) continue;
+                bool isVar = fe is VarFileEntry;
+                if (isVar && !includeVarRows) continue;
+                if (!isVar && !includeLooseRows) continue;
+                string folder = TryGetPathFilterFolderForEntry(fe);
+                if (string.IsNullOrEmpty(folder)) continue;
+                AddPathHierarchyCount(counts, folder);
+            }
+        }
+
+        private void CachePaths()
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            bool sqlOk = VpbLocalDatabase.TryReadPackageFolderCounts(
+                counts,
+                currentExtension,
+                currentPaths,
+                currentPath,
+                activeTags,
+                currentCategoryTitle,
+                currentCreator);
+
+            // SQL path is VAR-backed; include loose files from current loaded list so Custom/Saves are represented.
+            // If SQL is unavailable/stale, include VAR rows too from current loaded list.
+            IList<FileEntry> source = currentFilteredFiles != null && currentFilteredFiles.Count > 0
+                ? (IList<FileEntry>)currentFilteredFiles
+                : (IList<FileEntry>)lastFilteredFiles;
+            AddPathCountsFromEntries(counts, source, includeVarRows: !sqlOk, includeLooseRows: true);
+
+            cachedPaths = counts.Select(kv => new PathCacheEntry { Path = kv.Key, Count = kv.Value })
+                               .OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase)
+                               .ToList();
+            pathsCached = true;
+        }
+
         public void InvalidateTags()
         {
             tagsCached = false;

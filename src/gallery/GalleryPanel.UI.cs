@@ -2605,16 +2605,16 @@ namespace VPB
         private void ToggleRight(ContentType type)
         {
             bool wasCleanup = cleanupModeActive;
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path))
                 ExitCleanupModeForSidePanelNavigation();
 
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(false);
             bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
-                && (type == ContentType.Category || type == ContentType.Creator);
+                && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path);
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("right");
 
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path))
             {
                 // After leaving cleanup, explicit Category/Creator click should open the requested list.
                 rightActiveContent = type;
@@ -2641,16 +2641,16 @@ namespace VPB
         private void ToggleLeft(ContentType type)
         {
             bool wasCleanup = cleanupModeActive;
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path))
                 ExitCleanupModeForSidePanelNavigation();
 
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(true);
             bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
-                && (type == ContentType.Category || type == ContentType.Creator);
+                && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path);
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("left");
 
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator))
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path))
             {
                 // After leaving cleanup, explicit Category/Creator click should open the requested list.
                 leftActiveContent = type;

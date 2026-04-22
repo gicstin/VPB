@@ -1317,6 +1317,13 @@ namespace VPB
         {
             if (entry == null) return false;
 
+            if (!string.IsNullOrEmpty(currentPackagePathFilter))
+            {
+                string folder = TryGetPathFilterFolderForEntry(entry);
+                if (!GalleryPathFilterMatchesFolder(folder, currentPackagePathFilter))
+                    return false;
+            }
+
             // Hide filtering and sort-only narrowing run in PostFilesListHideAndSortFollowupRoutine after the grid is shown.
             // to avoid per-entry FileManager.FileExists calls blocking the scan drain loop.
 
@@ -1789,6 +1796,7 @@ namespace VPB
             creatorsCached = false;
             tagsCached = false;
             categoriesCached = false;
+            pathsCached = false;
         }
 
         /// <summary>Key for <see cref="GalleryFileListSnapshotCache"/> when the full enumeration result is reproducible from panel state.</summary>
@@ -1816,6 +1824,7 @@ namespace VPB
                 }
                 sb.Append('\u001E');
                 sb.Append(currentCreator ?? "").Append('\u001E');
+                sb.Append(currentPackagePathFilter ?? "").Append('\u001E');
                 sb.Append(nameFilterLower ?? "").Append('\u001E');
                 sb.Append(title).Append('\u001E');
                 sb.Append((int)posePeopleFilter).Append('\u001E');
@@ -2250,6 +2259,7 @@ namespace VPB
                 string titleForIndexMain = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                 string extForIndexMain = currentExtension ?? "";
                 string creatorForIndexMain = currentCreator ?? "";
+                string packagePathFilterForIndexMain = currentPackagePathFilter ?? "";
                 int wantsLoadedStateForIndexMain = -1;
                 try
                 {
@@ -2350,6 +2360,13 @@ namespace VPB
                                 if (string.IsNullOrEmpty(listPath))
                                     continue;
 
+                                if (!string.IsNullOrEmpty(packagePathFilterForIndexMain))
+                                {
+                                    string rawPath = !string.IsNullOrEmpty(varHint) ? varHint : listPath;
+                                    if (!GalleryPathFilterMatchesRawPath(rawPath, packagePathFilterForIndexMain))
+                                        continue;
+                                }
+
                                 // Exclusive filter (Loaded-only) is pushed into SQLite query when possible,
                                 // but keep a defensive check here for any non-indexed paths.
                                 if (wantsLoadedStateForIndexMain != -1)
@@ -2440,6 +2457,11 @@ namespace VPB
                                 if (!string.IsNullOrEmpty(filterCreator))
                                 {
                                     if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
+                                }
+                                if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
+                                    !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
+                                {
+                                    continue;
                                 }
 
                                 List<string> names;
