@@ -33,6 +33,8 @@ namespace VPB
         private GameObject tboxDisableAutoInstallBtn;
         private GameObject tboxHideBtn;
         private GameObject tboxUnhideBtn;
+        private GameObject tboxScanWhitelistAddFolderBtn;
+        private GameObject tboxScanWhitelistRemoveFolderBtn;
         private GameObject tboxLoadBtn;
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
@@ -124,6 +126,8 @@ namespace VPB
             one(tboxDisableAutoInstallBtn);
             one(tboxUnhideBtn);
             one(tboxHideBtn);
+            one(tboxScanWhitelistAddFolderBtn);
+            one(tboxScanWhitelistRemoveFolderBtn);
             one(tboxAutoInstallBtn);
             one(tboxDeleteBtn);
             one(tboxCleanupBtn);
@@ -160,6 +164,8 @@ namespace VPB
             d(tboxDisableAutoInstallBtn);
             d(tboxUnhideBtn);
             d(tboxHideBtn);
+            d(tboxScanWhitelistAddFolderBtn);
+            d(tboxScanWhitelistRemoveFolderBtn);
             d(tboxAutoInstallBtn);
             d(tboxDeleteBtn);
             d(tboxCleanupBtn);
@@ -258,6 +264,8 @@ namespace VPB
             if (tboxDisableAutoInstallBtn != null) ltr.Add(tboxDisableAutoInstallBtn);
             if (tboxUnhideBtn != null) ltr.Add(tboxUnhideBtn);
             if (tboxHideBtn != null) ltr.Add(tboxHideBtn);
+            if (tboxScanWhitelistAddFolderBtn != null) ltr.Add(tboxScanWhitelistAddFolderBtn);
+            if (tboxScanWhitelistRemoveFolderBtn != null) ltr.Add(tboxScanWhitelistRemoveFolderBtn);
             if (tboxAutoInstallBtn != null) ltr.Add(tboxAutoInstallBtn);
             if (tboxDeleteBtn != null) ltr.Add(tboxDeleteBtn);
             if (tboxCleanupBtn != null) ltr.Add(tboxCleanupBtn);
@@ -998,6 +1006,28 @@ namespace VPB
             }
             catch { }
 
+            tboxScanWhitelistAddFolderBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.scan_wl_add", "+W"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxScanWhitelistAddFolderForSelection
+            );
+            tboxScanWhitelistAddFolderBtn.name = "Tbox_ScanWlAddFolder";
+            TboxConfigureActionButtonFlex(tboxScanWhitelistAddFolderBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxScanWhitelistAddFolderBtn, "gallery.tooltip.tbox_scan_wl_add_folder",
+                "Add the selected packages' folders to the VaM scan whitelist. Packages in whitelisted folders are scanned by VaM on startup.");
+
+            tboxScanWhitelistRemoveFolderBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.scan_wl_remove", "-W"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxScanWhitelistRemoveFolderForSelection
+            );
+            tboxScanWhitelistRemoveFolderBtn.name = "Tbox_ScanWlRemoveFolder";
+            TboxConfigureActionButtonFlex(tboxScanWhitelistRemoveFolderBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxScanWhitelistRemoveFolderBtn, "gallery.tooltip.tbox_scan_wl_remove_folder",
+                "Remove the selected packages' folders from the VaM scan whitelist. VaM will no longer scan these folders on startup.");
+
             tboxDisableAutoInstallBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -1421,6 +1451,7 @@ namespace VPB
         private void RefreshTboxConditionalActionButtons()
         {
             int copyN = 0, deleteN = 0, hideN = 0, unhideN = 0, aiN = 0, noAiN = 0;
+            int scanWlAddN = 0, scanWlRemoveN = 0;
             bool anyPkgInstalled = false;     // in AddonPackages
             bool anyPkgNotInstalled = false;  // in AllPackages
 
@@ -1464,6 +1495,8 @@ namespace VPB
             show(tboxDisableAutoInstallBtn, !isCleanup);
             show(tboxHideBtn, !isCleanup);
             show(tboxUnhideBtn, !isCleanup);
+            show(tboxScanWhitelistAddFolderBtn, !isCleanup && ScanWhitelistManager.Instance.IsEnabled);
+            show(tboxScanWhitelistRemoveFolderBtn, !isCleanup && ScanWhitelistManager.Instance.IsEnabled);
             show(tboxLoadBtn, !isCleanup);
             show(tboxUnloadBtn, !isCleanup);
             show(tboxLoadDepsBtn, !isCleanup);
@@ -1489,6 +1522,8 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxCopyPkgNamesBtn, selectedCount > 0);
                 SetTboxButtonEnabledVisual(tboxHideBtn, false);
                 SetTboxButtonEnabledVisual(tboxUnhideBtn, false);
+                SetTboxButtonEnabledVisual(tboxScanWhitelistAddFolderBtn, false);
+                SetTboxButtonEnabledVisual(tboxScanWhitelistRemoveFolderBtn, false);
                 SetTboxButtonEnabledVisual(tboxAutoInstallBtn, false);
                 SetTboxButtonEnabledVisual(tboxDisableAutoInstallBtn, false);
                 SetTboxButtonEnabledVisual(tboxLoadBtn, false);
@@ -1518,6 +1553,29 @@ namespace VPB
                     else hideN++;
                     if (fiAi || uidAl) noAiN++;
                     if (!fiAi || !uidAl) aiN++;
+                    // Scan whitelist add/remove counts (only when feature is enabled)
+                    if (ScanWhitelistManager.Instance.IsEnabled)
+                    {
+                        try
+                        {
+                            var pkg = FileManager.GetPackage(uid, ensureInstalled: false);
+                            if (pkg != null)
+                            {
+                                string normPath = (pkg.Path ?? "").Replace('\\', '/');
+                                if (normPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    string folder = ScanWhitelistManager.FolderFromVarPath(normPath);
+                                    if (!string.IsNullOrEmpty(folder))
+                                    {
+                                        bool folderWhitelisted = ScanWhitelistManager.Instance.IsPathWhitelisted(normPath);
+                                        if (folderWhitelisted) scanWlRemoveN++;
+                                        else scanWlAddN++;
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
 
                     // Fast install-state summary for Load/Unload buttons.
                     // Use the resolved disk FileEntry (already computed by TryGetTboxResolvablePackageState) and
@@ -1563,6 +1621,10 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxUnhideBtn, showUnhide);
                 // Unhide is an icon button; count is intentionally not shown on the label.
             }
+            if (tboxScanWhitelistAddFolderBtn != null)
+                SetTboxButtonEnabledVisual(tboxScanWhitelistAddFolderBtn, scanWlAddN > 0);
+            if (tboxScanWhitelistRemoveFolderBtn != null)
+                SetTboxButtonEnabledVisual(tboxScanWhitelistRemoveFolderBtn, scanWlRemoveN > 0);
             if (tboxAutoInstallBtn != null)
             {
                 SetTboxButtonEnabledVisual(tboxAutoInstallBtn, showAi);

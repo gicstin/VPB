@@ -206,6 +206,11 @@ namespace VPB
         private bool m_ShowUnloadAllInfo = false;
         private bool m_PendingGc;
         private bool m_ShowSpaceSaverWindow;
+        private bool m_ShowScanWhitelistWindow;
+        private Rect m_ScanWhitelistWindowRect = new Rect(120, 120, 520, 440);
+        private Vector2 m_ScanWhitelistScroll;
+        private string m_ScanWhitelistNewFolderText = "";
+        private string m_ScanWhitelistNewUidText = "";
         private string m_AutoOptimizeReport;
         private float m_AutoOptimizeReportTimer;
         private bool m_PendingAutoLoadRefresh;
@@ -891,6 +896,10 @@ namespace VPB
                 } catch {}
             });
 
+            VamOnDemandLoader.SetMainThread();
+            VamScanFilter.DiscoverVamInternals();
+            var _ = ScanWhitelistManager.Instance; // eager init
+
             AutoLoadALPackages();
 
             // Auto-create gallery pane on startup if enabled
@@ -1028,6 +1037,7 @@ namespace VPB
         static bool m_Show = true; // Made static so it can be toggled via external message calls.
         void Update()
         {
+            VamOnDemandLoader.DrainMainThreadQueue();
             CacheCleanupManager.CheckAutoFlush();
             if (m_PendingGc)
             {
@@ -2241,6 +2251,19 @@ namespace VPB
                         m_RemoveWindowRect = GUI.Window(1000, m_RemoveWindowRect, DrawRemoveWindow, "", m_StyleWindow);
                     }
 
+                    if (m_ShowScanWhitelistWindow)
+                    {
+                        var swScreenRect = new Rect(m_ScanWhitelistWindowRect.x * m_UIScale, m_ScanWhitelistWindowRect.y * m_UIScale, m_ScanWhitelistWindowRect.width * m_UIScale, m_ScanWhitelistWindowRect.height * m_UIScale);
+                        if (swScreenRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)))
+                        {
+                            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+                            {
+                                Input.ResetInputAxes();
+                            }
+                        }
+
+                        m_ScanWhitelistWindowRect = GUI.Window(1001, m_ScanWhitelistWindowRect, DrawScanWhitelistWindow, "", m_StyleWindow);
+                    }
 
                     // Draw our custom border ON TOP or AROUND the window rect
                     var borderRect = new Rect(m_Rect.x, m_Rect.y, m_Rect.width, m_Rect.height);
@@ -3226,6 +3249,158 @@ namespace VPB
             {
                 GUI.DragWindow();
             }
+        }
+
+        void DrawScanWhitelistWindow(int windowID)
+        {
+            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+            {
+                Input.ResetInputAxes();
+            }
+
+            GUILayout.BeginVertical(m_StylePanel);
+
+            // Header
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("VaM Scan Whitelist", m_StyleHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
+            {
+                m_ShowScanWhitelistWindow = false;
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(6);
+
+            // Enable toggle
+            bool swEnabled = ScanWhitelistManager.Instance.IsEnabled;
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(swEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                ScanWhitelistManager.Instance.SetEnabled(!swEnabled);
+                ScanWhitelistManager.Instance.Save();
+            }
+            GUILayout.Label("Enable scan whitelist");
+            GUILayout.EndHorizontal();
+
+            if (ScanWhitelistManager.Instance.IsEnabledButEmpty())
+            {
+                GUILayout.Label("⚠ Whitelist enabled but empty — all packages excluded from VaM's scan!", m_StyleInfoCardTextWrapped);
+            }
+
+            GUILayout.Space(8);
+
+            // Scroll view for folders + uid overrides
+            m_ScanWhitelistScroll = GUILayout.BeginScrollView(m_ScanWhitelistScroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar, GUI.skin.box, GUILayout.Height(240));
+
+            // Whitelisted Folders
+            GUILayout.Label("Whitelisted Folders", m_StyleInfoCardTitle);
+            var folders = ScanWhitelistManager.Instance.GetWhitelistedFolders();
+            if (folders.Count == 0)
+            {
+                GUILayout.Label("  (none)", m_StyleInfoCardText);
+            }
+            else
+            {
+                for (int i = 0; i < folders.Count; i++)
+                {
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label(folders[i], m_StyleInfoCardText);
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("Remove", m_StyleButtonSmall, GUILayout.Width(65)))
+                    {
+                        ScanWhitelistManager.Instance.RemoveFolder(folders[i]);
+                        ScanWhitelistManager.Instance.Save();
+                    }
+                    GUILayout.EndHorizontal();
+                }
+            }
+
+            GUILayout.Space(8);
+
+            // Per-UID Overrides
+            GUILayout.Label("Per-Package UID Overrides", m_StyleInfoCardTitle);
+            var uids = ScanWhitelistManager.Instance.GetIncludedPackageUids();
+            if (uids.Count == 0)
+            {
+                GUILayout.Label("  (none)", m_StyleInfoCardText);
+            }
+            else
+            {
+                foreach (var uid in uids)
+                {
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label(uid, m_StyleInfoCardText);
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("Remove", m_StyleButtonSmall, GUILayout.Width(65)))
+                    {
+                        ScanWhitelistManager.Instance.RemoveUidOverride(uid);
+                        ScanWhitelistManager.Instance.Save();
+                    }
+                    GUILayout.EndHorizontal();
+                }
+            }
+
+            GUILayout.EndScrollView();
+
+            GUILayout.Space(6);
+
+            // Add folder
+            GUILayout.Label("Add Folder (e.g. AddonPackages/CreatorName):", m_StyleInfoCardText);
+            GUILayout.BeginHorizontal();
+            GUI.SetNextControlName("SWNewFolder");
+            m_ScanWhitelistNewFolderText = GUILayout.TextField(m_ScanWhitelistNewFolderText, GUILayout.ExpandWidth(true));
+            if (GUILayout.Button("Add", m_StyleButtonSmall, GUILayout.Width(50)))
+            {
+                string folder = m_ScanWhitelistNewFolderText.Trim();
+                if (!string.IsNullOrEmpty(folder))
+                {
+                    if (ScanWhitelistManager.Instance.AddFolder(folder))
+                    {
+                        ScanWhitelistManager.Instance.Save();
+                        m_ScanWhitelistNewFolderText = "";
+                    }
+                }
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(4);
+
+            // Add UID override
+            GUILayout.Label("Add Package UID Override:", m_StyleInfoCardText);
+            GUILayout.BeginHorizontal();
+            GUI.SetNextControlName("SWNewUid");
+            m_ScanWhitelistNewUidText = GUILayout.TextField(m_ScanWhitelistNewUidText, GUILayout.ExpandWidth(true));
+            if (GUILayout.Button("Add", m_StyleButtonSmall, GUILayout.Width(50)))
+            {
+                string uid = m_ScanWhitelistNewUidText.Trim();
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    if (ScanWhitelistManager.Instance.AddUidOverride(uid))
+                    {
+                        ScanWhitelistManager.Instance.Save();
+                        m_ScanWhitelistNewUidText = "";
+                    }
+                }
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(8);
+
+            if (GUILayout.Button("Close", m_StyleButton))
+            {
+                m_ShowScanWhitelistWindow = false;
+            }
+
+            GUILayout.EndVertical();
+
+            // Consume scroll events inside window
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                Event.current.Use();
+            }
+
+            GUI.DragWindow();
         }
 
         public class ButtonHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler

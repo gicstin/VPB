@@ -427,6 +427,9 @@
     <Compile Include="src\hook\FileManagement\VarFileEntryStreamReader.cs" />
     <Compile Include="src\hook\FileManagement\VarPackage.cs" />
     <Compile Include="src\hook\FileManagement\VarPackageGroup.cs" />
+    <Compile Include="src\hook\FileManagement\VamScanFilter.cs" />
+    <Compile Include="src\hook\FileManagement\VamOnDemandLoader.cs" />
+    <Compile Include="src\ScanWhitelistManager.cs" />
     <Compile Include="src\hook\Hub\HubBrowse.cs" />
     <Compile Include="src\hook\Hub\HubResourceCreatorSupportUI.cs" />
     <Compile Include="src\hook\Hub\HubResourceItem.cs" />

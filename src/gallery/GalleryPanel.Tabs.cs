@@ -2669,6 +2669,36 @@ namespace VPB
             hideBadgeTextRT.anchoredPosition = Vector2.zero;
             hideBadgeGO.SetActive(false);
 
+            // Scan-whitelist excluded badge (top-left, to the right of Hide "H")
+            // Shows "W" when the package is in AddonPackages/ but excluded from VaM's scan whitelist.
+            GameObject scanExBadgeGO = new GameObject("ScanExcludedBadge");
+            scanExBadgeGO.transform.SetParent(btnGO.transform, false);
+            RectTransform scanExBadgeRT = scanExBadgeGO.AddComponent<RectTransform>();
+            scanExBadgeRT.anchorMin = new Vector2(0, 1);
+            scanExBadgeRT.anchorMax = new Vector2(0, 1);
+            scanExBadgeRT.pivot = new Vector2(0, 1);
+            scanExBadgeRT.sizeDelta = new Vector2(32, 32);
+            scanExBadgeRT.anchoredPosition = new Vector2(80, -6);
+            Image scanExBadgeBg = scanExBadgeGO.AddComponent<Image>();
+            scanExBadgeBg.color = new Color(0.25f, 0.4f, 0.55f, 0.9f);
+            scanExBadgeBg.raycastTarget = false;
+            GameObject scanExBadgeTextGO = new GameObject("Text");
+            scanExBadgeTextGO.transform.SetParent(scanExBadgeGO.transform, false);
+            Text scanExBadgeText = scanExBadgeTextGO.AddComponent<Text>();
+            scanExBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            scanExBadgeText.fontSize = 22;
+            scanExBadgeText.fontStyle = FontStyle.Bold;
+            scanExBadgeText.color = Color.white;
+            scanExBadgeText.alignment = TextAnchor.MiddleCenter;
+            scanExBadgeText.text = "W";
+            scanExBadgeText.raycastTarget = false;
+            RectTransform scanExBadgeTextRT = scanExBadgeTextGO.GetComponent<RectTransform>();
+            scanExBadgeTextRT.anchorMin = Vector2.zero;
+            scanExBadgeTextRT.anchorMax = Vector2.one;
+            scanExBadgeTextRT.sizeDelta = Vector2.zero;
+            scanExBadgeTextRT.anchoredPosition = Vector2.zero;
+            scanExBadgeGO.SetActive(false);
+
             // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
             GameObject listHoverBarGO = new GameObject("ListHoverBar");
             listHoverBarGO.transform.SetParent(btnGO.transform, false);
@@ -3010,6 +3040,13 @@ namespace VPB
             if (hideBadgeTr != null)
             {
                 hideBadgeTr.gameObject.SetActive(PackageHidePrefs.IsGalleryHideBadgeVisible(file));
+            }
+
+            // Scan-Excluded Badge: show "W" when package is in AddonPackages/ but excluded from VaM's whitelist scan
+            Transform scanExBadgeTr = btnGO.transform.Find("ScanExcludedBadge");
+            if (scanExBadgeTr != null)
+            {
+                scanExBadgeTr.gameObject.SetActive(ScanWhitelistManager.IsScanExcludedBadgeVisible(file));
             }
 
             // List Row Bind

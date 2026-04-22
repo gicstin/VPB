@@ -16,6 +16,65 @@ namespace VPB
     public static class UI
     {
         private static float _lastLoadSceneStartTime = -9999f;
+        
+        private static List<string> BuildSceneLoadUidAllowList(FileEntry entry, List<string> movedUids)
+        {
+            var needed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                foreach (var uid in SceneLoadingUtils.CollectReferencedPackageUids(entry))
+                {
+                    if (!string.IsNullOrEmpty(uid)) needed.Add(uid);
+                }
+            }
+            catch { }
+
+            if (movedUids != null)
+            {
+                for (int i = 0; i < movedUids.Count; i++)
+                {
+                    string uid = movedUids[i];
+                    if (!string.IsNullOrEmpty(uid)) needed.Add(uid);
+                }
+            }
+
+            return needed.ToList();
+        }
+
+        private static List<string> ApplyTemporarySceneLoadWhitelist(FileEntry entry, List<string> movedUids)
+        {
+            try
+            {
+                if (!ScanWhitelistManager.Instance.IsEnabled) return null;
+
+                List<string> needed = BuildSceneLoadUidAllowList(entry, movedUids);
+                if (needed == null || needed.Count == 0) return null;
+
+                List<string> added = ScanWhitelistManager.Instance.AddTemporaryUidOverrides(needed);
+                if (added != null && added.Count > 0)
+                    LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list: +" + string.Join(", ", added.ToArray()));
+                return added;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB ScanWhitelist] Temporary allow-list apply failed: " + ex.Message);
+                return null;
+            }
+        }
+
+        private static void RemoveTemporarySceneLoadWhitelist(List<string> temporaryUids)
+        {
+            if (temporaryUids == null || temporaryUids.Count == 0) return;
+            try
+            {
+                ScanWhitelistManager.Instance.RemoveTemporaryUidOverrides(temporaryUids);
+                LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list removed: -" + string.Join(", ", temporaryUids.ToArray()));
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB ScanWhitelist] Temporary allow-list removal failed: " + ex.Message);
+            }
+        }
 
         private static void TryRefreshEntryDisplayPathAfterVarMoves(FileEntry entry)
         {
@@ -39,7 +98,7 @@ namespace VPB
             catch { }
         }
 
-        private static IEnumerator DisableSuppressionAfterSceneLoad()
+        private static IEnumerator DisableSuppressionAfterSceneLoad(List<string> temporaryUidOverrides)
         {
             LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Waiting for scene to finish loading...");
             
@@ -59,6 +118,7 @@ namespace VPB
             yield return new WaitForSeconds(1.0f);
             
             LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Scene load complete, disabling suppression");
+            RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
             Gallery.SuppressAutoRefresh(false);
         }
 
@@ -108,6 +168,7 @@ namespace VPB
             }
             _lastLoadSceneStartTime = now;
 
+            List<string> temporaryUidOverrides = null;
             try
             {
                 string path = entry.Uid;
@@ -132,14 +193,19 @@ namespace VPB
                         LogUtil.Log("[VPB] UI.EnsureInstalled: depsChanged=false means no packages were moved; missing deps (if any) are logged above by EnsureInstalled.");
                     }
 
-                    if (installed)
+                    temporaryUidOverrides = ApplyTemporarySceneLoadWhitelist(entry, movedUids);
+                    bool hasTemporaryAllowList = temporaryUidOverrides != null && temporaryUidOverrides.Count > 0;
+
+                    if (installed || hasTemporaryAllowList)
                     {
-                        LogUtil.Log("[VPB] Refreshing FileManagers...");
+                        if (installed) LogUtil.Log("[VPB] Refreshing FileManagers...");
+                        else LogUtil.Log("[VPB] Refreshing VaM FileManager for temporary scene-load allow-list...");
                         
                         if (MVR.FileManagement.FileManager.singleton != null)
                             MVR.FileManagement.FileManager.Refresh();
-                        
-                        FileManager.Refresh();
+
+                        if (installed)
+                            FileManager.Refresh();
 
                         try
                         {
@@ -184,6 +250,7 @@ namespace VPB
                 catch (Exception installEx)
                 {
                     LogUtil.LogError($"[VPB] EnsureInstalled or FileManager refresh error: {installEx.Message}");
+                    RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
                     // On error, disable suppression immediately since we won't be loading
                     Gallery.SuppressAutoRefresh(false);
                     return;
@@ -208,6 +275,7 @@ namespace VPB
                 if (Messager.singleton == null)
                 {
                     LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start load coroutines");
+                    RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
                     Gallery.SuppressAutoRefresh(false);
                 }
                 else if (installed)
@@ -216,20 +284,21 @@ namespace VPB
                     // Yield one frame so MVR FileManager.Refresh can finish processing
                     // before LoadInternal runs, preventing atom-list race exceptions.
                     LogUtil.Log("[VPB] Packages installed; deferring sc.Load by one frame");
-                    Messager.singleton.StartCoroutine(LoadSceneAfterRefresh(normalizedPath));
+                    Messager.singleton.StartCoroutine(LoadSceneAfterRefresh(normalizedPath, temporaryUidOverrides));
                 }
                 else
                 {
                     SuperController sc = SuperController.singleton;
                     if (sc != null)
                     {
-                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad());
+                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(temporaryUidOverrides));
                         LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
                         sc.Load(normalizedPath);
                     }
                     else
                     {
                         LogUtil.LogError("[VPB] SuperController.singleton is null!");
+                        RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
                         Gallery.SuppressAutoRefresh(false);
                     }
                 }
@@ -237,21 +306,24 @@ namespace VPB
             catch (Exception ex)
             {
                 LogUtil.LogError($"[VPB] UI.LoadSceneFile crash: {ex.Message}\n{ex.StackTrace}");
+                RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
+                Gallery.SuppressAutoRefresh(false);
             }
         }
 
-        private static IEnumerator LoadSceneAfterRefresh(string normalizedPath)
+        private static IEnumerator LoadSceneAfterRefresh(string normalizedPath, List<string> temporaryUidOverrides)
         {
             yield return null; // one frame for MVR refresh operations to settle
             SuperController sc = SuperController.singleton;
             if (sc == null)
             {
                 LogUtil.LogError("[VPB] SuperController.singleton is null in LoadSceneAfterRefresh!");
+                RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
                 Gallery.SuppressAutoRefresh(false);
                 yield break;
             }
             if (Messager.singleton != null)
-                Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad());
+                Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(temporaryUidOverrides));
             LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath}) (after install+refresh)");
             sc.Load(normalizedPath);
         }

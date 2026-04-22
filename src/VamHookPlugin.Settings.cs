@@ -264,6 +264,32 @@ namespace VPB
 
             GUILayout.Space(10);
 
+            GUILayout.Label(VPBTranslation.T("hook.settings.header.scan_whitelist", "VaM Scan Whitelist"), m_StyleHeader);
+            GUILayout.Space(4);
+
+            GUILayout.BeginHorizontal();
+            bool swEnabled = ScanWhitelistManager.Instance.IsEnabled;
+            if (GUILayout.Button(swEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                ScanWhitelistManager.Instance.SetEnabled(!swEnabled);
+                ScanWhitelistManager.Instance.Save();
+            }
+            GUILayout.Label(VPBTranslation.T("hook.settings.scan_whitelist.enable", "Enable VaM scan whitelist (restrict VaM startup scan to whitelisted folders)"));
+            GUILayout.EndHorizontal();
+
+            if (ScanWhitelistManager.Instance.IsEnabledButEmpty())
+            {
+                GUILayout.Label(VPBTranslation.T("hook.settings.scan_whitelist.empty_warning", "⚠ Warning: whitelist is enabled but empty — all packages will be excluded from VaM's scan!"), m_StyleInfoCardTextWrapped);
+            }
+
+            GUILayout.Space(4);
+            if (GUILayout.Button(VPBTranslation.T("hook.settings.scan_whitelist.manage", "Manage Scan Whitelist..."), m_StyleButton, GUILayout.Height(buttonHeight)))
+            {
+                m_ShowScanWhitelistWindow = true;
+            }
+
+            GUILayout.Space(10);
+
             GUILayout.Label(VPBTranslation.T("hook.settings.header.gallery", "Gallery Pane Settings"), m_StyleHeader);
             GUILayout.Space(4);
 

@@ -619,6 +619,15 @@ namespace VPB
                 }
                 doneEvent.Close();
 
+                // VPB package indexing intentionally bypasses scan-whitelist filtering.
+                // The whitelist applies only to VaM's native startup registration path.
+                if (ScanWhitelistManager.Instance.IsEnabled)
+                {
+                    LogUtil.Log(string.Format(
+                        "[VPB ScanWhitelist] VPB index bypass active: indexing all local .var files ({0}) while VaM scan remains whitelist-restricted",
+                        allVarFiles.Count));
+                }
+
                 try
                 {
                     string[] varPaths = allVarFiles.ToArray();
@@ -749,6 +758,7 @@ namespace VPB
                         s_InstalledCount++;
                     }
                 }
+                VamOnDemandLoader.ClearCache();
                 m_RefreshCo = null;
                 if (m_RefreshPending)
                 {
@@ -1827,6 +1837,20 @@ namespace VPB
 		private static void EnsurePackageInstalled(VarPackage package)
 		{
 			if (package == null) return;
+
+			// Scan-whitelist check: if the package is physically in AddonPackages/ but was
+			// excluded from VaM's scan, register it in VaM's FileManager on-demand instead
+			// of moving it. This avoids unnecessary file I/O.
+			if (ScanWhitelistManager.Instance.IsEnabled)
+			{
+				string normPath = (package.Path ?? "").Replace('\\', '/');
+				if (normPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)
+					&& ScanWhitelistManager.Instance.IsPackageScanExcluded(package.Uid, normPath))
+				{
+					VamOnDemandLoader.TryRegisterPackageOnDemand(package.Uid);
+					return;
+				}
+			}
 
 			// Recursively install this package and its dependencies if needed.
 			// InstallRecursive will return true if ANYTHING was moved (self or dependency).

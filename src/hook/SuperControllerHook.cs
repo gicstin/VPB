@@ -1023,6 +1023,105 @@ namespace VPB
         {
             return true;
         }
+
+        // --- Scan Whitelist Patches ---
+
+        /// <summary>
+        /// Blocks VaM from registering non-whitelisted packages during its startup scan.
+        /// PREFIX patch so VaM never opens the .var zip or reads the manifest for excluded
+        /// packages — the expensive I/O is skipped entirely, not just cleaned up afterward.
+        /// On-demand registration (via VamOnDemandLoader) bypasses this via s_AllowRegistration.
+        /// </summary>
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "RegisterPackage")]
+        public static bool PreRegisterPackageScanFilter(string __0)
+        {
+            try
+            {
+                if (!ScanWhitelistManager.Instance.IsEnabled) return true;
+                if (VamOnDemandLoader.s_AllowRegistration) return true;
+                if (string.IsNullOrEmpty(__0)) return true;
+
+                string norm = __0.Replace('\\', '/');
+                if (!norm.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) return true;
+
+                string uid = System.IO.Path.GetFileNameWithoutExtension(norm);
+                if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid))
+                {
+                    VamScanFilter.RecordScanAllowed();
+                    return true;
+                }
+
+                bool allowed = ScanWhitelistManager.Instance.IsPathWhitelisted(norm);
+                if (allowed) VamScanFilter.RecordScanAllowed();
+                else VamScanFilter.RecordScanBlocked();
+                return allowed;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB ScanFilter] PreRegisterPackageScanFilter error: " + ex.Message);
+                return true; // fail open
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
+        public static void PreRefreshResetScanCounters()
+        {
+            VamScanFilter.ResetScanCounters();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
+        public static void PostRefreshLogScanResult()
+        {
+            VamScanFilter.LogScanResult();
+        }
+
+        /// <summary>
+        /// After VaM's GetVarFileEntry returns null for a scan-excluded package,
+        /// register the package on-demand in VaM's FileManager and retry.
+        /// This ensures MVRScript plugins can still load dependencies from
+        /// non-whitelisted packages without requiring a full scan.
+        /// </summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetVarFileEntry", new Type[] { typeof(string) })]
+        public static void PostGetVarFileEntryOnDemand(string path, ref MVR.FileManagement.VarFileEntry __result)
+        {
+            try
+            {
+                if (__result != null) return;
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
+                if (VamOnDemandLoader.s_InOnDemand) return;
+
+                string uid = VamOnDemandLoader.UidFromEntryPath(path);
+                if (string.IsNullOrEmpty(uid)) return;
+
+                VamOnDemandLoader.TryRegisterPackageOnDemand(uid);
+                VamOnDemandLoader.s_InOnDemand = true;
+                try
+                {
+                    __result = MVR.FileManagement.FileManager.GetVarFileEntry(path);
+                    if (__result != null) return;
+
+                    // Some VaM call sites pass *.latest:/... and do not resolve aliases
+                    // after registration. Retry with a concrete UID path when possible.
+                    string rewritten = VamOnDemandLoader.TryRewriteLatestEntryPath(path, attemptRegister: true);
+                    if (!string.IsNullOrEmpty(rewritten) && !string.Equals(rewritten, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        __result = MVR.FileManagement.FileManager.GetVarFileEntry(rewritten);
+                    }
+                }
+                finally
+                {
+                    VamOnDemandLoader.s_InOnDemand = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] PostGetVarFileEntryOnDemand error: " + ex.Message);
+            }
+        }
     }
 
 }

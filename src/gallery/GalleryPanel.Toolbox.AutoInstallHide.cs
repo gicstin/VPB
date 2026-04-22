@@ -434,5 +434,79 @@ namespace VPB
                 ShowTemporaryStatus("Clear autoinstall failed. See log.", 2f);
             }
         }
+
+        // ─── Scan Whitelist toolbox actions ───────────────────────────────────────
+
+        private void TboxScanWhitelistAddFolderForSelection()
+        {
+            TboxScanWhitelistModifyForSelection(addFolder: true);
+        }
+
+        private void TboxScanWhitelistRemoveFolderForSelection()
+        {
+            TboxScanWhitelistModifyForSelection(addFolder: false);
+        }
+
+        private void TboxScanWhitelistModifyForSelection(bool addFolder)
+        {
+            try
+            {
+                if (!ScanWhitelistManager.Instance.IsEnabled)
+                {
+                    ShowTemporaryStatus("Scan whitelist is disabled. Enable it in VPB settings first.", 2.5f);
+                    return;
+                }
+                if (selectedFiles == null || selectedFiles.Count == 0)
+                {
+                    ShowTemporaryStatus("No selection.", 1.5f);
+                    return;
+                }
+
+                var seenFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                int changed = 0;
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    var f = selectedFiles[i];
+                    if (f == null) continue;
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out _, out _)) continue;
+
+                    try
+                    {
+                        var pkg = FileManager.GetPackage(uid, ensureInstalled: false);
+                        if (pkg == null) continue;
+                        string normPath = (pkg.Path ?? "").Replace('\\', '/');
+                        if (!normPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) continue;
+                        string folder = ScanWhitelistManager.FolderFromVarPath(normPath);
+                        if (string.IsNullOrEmpty(folder)) continue;
+                        if (!seenFolders.Add(folder)) continue;
+
+                        if (addFolder) { if (ScanWhitelistManager.Instance.AddFolder(folder)) changed++; }
+                        else           { if (ScanWhitelistManager.Instance.RemoveFolder(folder)) changed++; }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogWarning("[VPB] ScanWhitelist toolbox error for " + uid + ": " + ex.Message);
+                    }
+                }
+
+                if (changed > 0)
+                {
+                    ScanWhitelistManager.Instance.Save();
+                    try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                    try { RefreshTboxConditionalActionButtons(); } catch { }
+                    string verb = addFolder ? "Added" : "Removed";
+                    ShowTemporaryStatus($"{verb} {changed} folder(s) {(addFolder ? "to" : "from")} scan whitelist.", 2.5f);
+                }
+                else
+                {
+                    ShowTemporaryStatus("No folders changed.", 1.5f);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] TboxScanWhitelistModifyForSelection error: " + ex);
+                ShowTemporaryStatus("Scan whitelist update failed. See log.", 2f);
+            }
+        }
     }
 }

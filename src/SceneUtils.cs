@@ -484,6 +484,58 @@ namespace VPB
         }
 
         /// <summary>
+        /// Collects package UIDs needed by this entry's load path:
+        /// host package UID (when entry is from a var) plus dependency references in JSON-like content
+        /// that can be resolved to an installed package UID.
+        /// </summary>
+        public static HashSet<string> CollectReferencedPackageUids(FileEntry entry)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (entry == null) return result;
+
+            try
+            {
+                if (entry is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
+                    result.Add(vfe.Package.Uid);
+                else if (entry is SystemFileEntry sfe && sfe.package != null && !string.IsNullOrEmpty(sfe.package.Uid))
+                    result.Add(sfe.package.Uid);
+                else if (entry is PackageListEntry ple && ple.Package != null && !string.IsNullOrEmpty(ple.Package.Uid))
+                    result.Add(ple.Package.Uid);
+            }
+            catch { }
+
+            try
+            {
+                string path = entry.Path ?? "";
+                string ext = Path.GetExtension(path).ToLowerInvariant();
+                if (ext != ".json" && ext != ".vap" && ext != ".cslist")
+                    return result;
+
+                using (var reader = entry.OpenStreamReader())
+                {
+                    string content = reader.ReadToEnd();
+                    if (string.IsNullOrEmpty(content)) return result;
+
+                    HashSet<string> deps = null;
+                    try { deps = VarNameParser.Parse(content); } catch { deps = null; }
+                    if (deps == null || deps.Count == 0) return result;
+
+                    foreach (string dep in deps)
+                    {
+                        if (string.IsNullOrEmpty(dep)) continue;
+                        VarPackage pkg = null;
+                        try { pkg = FileManager.GetPackageForDependency(dep, false); } catch { pkg = null; }
+                        if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
+                            result.Add(pkg.Uid);
+                    }
+                }
+            }
+            catch { }
+
+            return result;
+        }
+
+        /// <summary>
         /// Copies the preset file's host .var from AllPackages to AddonPackages (if applicable) without scanning file contents for dependency VARs.
         /// Used for appearance "clothes only", where dependency install runs on garment-filtered JSON only (not the full .vap text).
         /// </summary>
