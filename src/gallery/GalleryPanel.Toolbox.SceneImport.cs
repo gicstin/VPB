@@ -107,8 +107,6 @@ namespace VPB
                     return;
                 }
 
-                LogUtil.Log("[VPB] Scene import normalized path: " + normalizedPath);
-
                 string packageKey = normalizedPath;
                 int colon = normalizedPath.IndexOf(":/", StringComparison.Ordinal);
                 if (colon > 0)

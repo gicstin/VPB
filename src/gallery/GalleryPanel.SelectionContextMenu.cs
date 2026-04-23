@@ -947,7 +947,7 @@ namespace VPB
             );
             tboxAutoInstallBtn.name = "Tbox_AutoInstall";
             TboxConfigureActionButtonFlex(tboxAutoInstallBtn, innerRowH, innerRowH, innerRowH); // square icon button
-            AddTooltip(tboxAutoInstallBtn, "gallery.tooltip.tbox_autoinstall", "Flag selected packages for auto-install and auto-load. Packages in AllPackages are copied to AddonPackages on the next VaM start (not immediately).");
+            AddTooltip(tboxAutoInstallBtn, "gallery.tooltip.tbox_autoinstall", "Flag selected packages for auto-install and auto-load. When scan whitelist is enabled, this also adds a persistent per-package startup-scan whitelist override. Packages in AllPackages are copied to AddonPackages on the next VaM start (not immediately).");
             try
             {
                 var autoLoadIcon = UI.LoadIconSprite("vpb_icons/auto.png", new Color(0.92f, 0.92f, 0.92f, 1f));
@@ -1036,7 +1036,7 @@ namespace VPB
             );
             tboxDisableAutoInstallBtn.name = "Tbox_NoAutoInstall";
             TboxConfigureActionButtonFlex(tboxDisableAutoInstallBtn, innerRowH, innerRowH, innerRowH); // square icon button
-            AddTooltip(tboxDisableAutoInstallBtn, "gallery.tooltip.tbox_no_autoinstall", "Clear auto-install and VPB auto-load for selected packages");
+            AddTooltip(tboxDisableAutoInstallBtn, "gallery.tooltip.tbox_no_autoinstall", "Clear auto-install and VPB auto-load for selected packages. When scan whitelist is enabled, this also removes the persistent per-package startup-scan whitelist override.");
             try
             {
                 var autoLoadOffIcon = UI.LoadIconSprite("vpb_icons/auto_off.png", new Color(0.92f, 0.92f, 0.92f, 1f));
@@ -1546,13 +1546,16 @@ namespace VPB
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    if (!TryGetTboxResolvablePackageState(f, out string uid, out FileEntry diskFe, out bool hidden, out bool fiAi, out bool uidAl))
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out FileEntry diskFe, out bool hidden, out bool fiAi, out bool uidAl, out bool uidWl))
                         continue;
                     if (!seen.Add(uid)) continue;
                     if (hidden) unhideN++;
                     else hideN++;
-                    if (fiAi || uidAl) noAiN++;
-                    if (!fiAi || !uidAl) aiN++;
+                    bool scanWlEnabled = ScanWhitelistManager.Instance.IsEnabled;
+                    bool hasAnyAiFlag = fiAi || uidAl || (scanWlEnabled && uidWl);
+                    bool missingAnyAiFlag = !fiAi || !uidAl || (scanWlEnabled && !uidWl);
+                    if (hasAnyAiFlag) noAiN++;
+                    if (missingAnyAiFlag) aiN++;
                     // Scan whitelist add/remove counts (only when feature is enabled)
                     if (ScanWhitelistManager.Instance.IsEnabled)
                     {
@@ -1671,11 +1674,18 @@ namespace VPB
         /// <summary>Resolve a gallery row to an on-disk .var for tbox hide/autoinstall actions (one row may share a UID).</summary>
         private bool TryGetTboxResolvablePackageState(FileEntry f, out string uid, out FileEntry diskFe, out bool isHidden, out bool fileAutoInstall, out bool uidAutoLoad)
         {
+            return TryGetTboxResolvablePackageState(f, out uid, out diskFe, out isHidden, out fileAutoInstall, out uidAutoLoad, out _);
+        }
+
+        /// <summary>Like <see cref="TryGetTboxResolvablePackageState(FileEntry, out string, out FileEntry, out bool, out bool, out bool)"/>, plus persistent scan-whitelist UID override state.</summary>
+        private bool TryGetTboxResolvablePackageState(FileEntry f, out string uid, out FileEntry diskFe, out bool isHidden, out bool fileAutoInstall, out bool uidAutoLoad, out bool uidScanWhitelistPersisted)
+        {
             uid = null;
             diskFe = null;
             isHidden = false;
             fileAutoInstall = false;
             uidAutoLoad = false;
+            uidScanWhitelistPersisted = false;
 
             if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out string relGallery, false))
             {
@@ -1685,6 +1695,7 @@ namespace VPB
                 try { fileAutoInstall = LocalSceneGallerySupport.IsLocalSceneAutoInstallMarked(f); }
                 catch { fileAutoInstall = false; }
                 uidAutoLoad = false;
+                uidScanWhitelistPersisted = false;
                 return true;
             }
 
@@ -1707,6 +1718,11 @@ namespace VPB
                     uidAutoLoad = AutoLoadPackagesManager.Instance != null && AutoLoadPackagesManager.Instance.IsAutoLoad(uid);
                 }
                 catch { uidAutoLoad = false; }
+                try
+                {
+                    uidScanWhitelistPersisted = ScanWhitelistManager.Instance.IsUidOverridePersisted(uid);
+                }
+                catch { uidScanWhitelistPersisted = false; }
                 return true;
             }
             catch

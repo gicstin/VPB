@@ -102,28 +102,65 @@ namespace VPB
             catch { }
         }
 
-        private static IEnumerator DisableSuppressionAfterSceneLoad(List<string> temporaryUidOverrides)
+        private sealed class SceneLoadCleanupState
+        {
+            public List<string> TemporaryUidOverrides;
+            public float SuppressionStartRealtime;
+            public int SceneLoadTotalSerialAtStart;
+            private bool _done;
+
+            public bool TryMarkDone()
+            {
+                if (_done) return false;
+                _done = true;
+                return true;
+            }
+        }
+
+        private static void FinalizeSceneLoadCleanup(SceneLoadCleanupState state, string reason, bool asWarning = false)
+        {
+            if (state == null || !state.TryMarkDone()) return;
+
+            float waited = Time.realtimeSinceStartup - state.SuppressionStartRealtime;
+            string msg = $"[VPB] DisableSuppressionAfterSceneLoad: {reason} after {waited:0.00}s, disabling suppression";
+            if (asWarning) LogUtil.LogWarning(msg);
+            else LogUtil.Log(msg);
+
+            RemoveTemporarySceneLoadWhitelist(state.TemporaryUidOverrides);
+            Gallery.SuppressAutoRefresh(false);
+        }
+
+        private static IEnumerator DisableSuppressionAfterSceneLoad(SceneLoadCleanupState cleanupState)
         {
             LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Waiting for scene to finish loading...");
-            
-            // Wait for scene to start loading
-            yield return new WaitForSeconds(0.5f);
-            
-            // Wait until scene loading is complete
+            int startSerial = cleanupState != null ? cleanupState.SceneLoadTotalSerialAtStart : LogUtil.GetSceneLoadTotalSerial();
             float timeout = 60f; // Max 60 seconds
             float elapsed = 0f;
-            while (LogUtil.IsSceneLoading() && elapsed < timeout)
+            bool completedBySceneTotal = false;
+
+            while (elapsed < timeout)
             {
-                yield return new WaitForSeconds(0.5f);
-                elapsed += 0.5f;
+                if (LogUtil.GetSceneLoadTotalSerial() != startSerial)
+                {
+                    completedBySceneTotal = true;
+                    break;
+                }
+                yield return new WaitForSeconds(0.1f);
+                elapsed += 0.1f;
             }
-            
-            // Wait a bit more to ensure all post-load refreshes complete
-            yield return new WaitForSeconds(1.0f);
-            
-            LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Scene load complete, disabling suppression");
-            RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
-            Gallery.SuppressAutoRefresh(false);
+
+            if (completedBySceneTotal)
+            {
+                yield return null; // allow one frame for end-of-load side effects
+                FinalizeSceneLoadCleanup(cleanupState, "scene total ended");
+                yield break;
+            }
+
+            // Fallback for edge cases where scene-total auto-end is not reached in time.
+            if (LogUtil.IsSceneLoading())
+                FinalizeSceneLoadCleanup(cleanupState, "scene-load-total signal timeout reached (cleanup fallback)", true);
+            else
+                FinalizeSceneLoadCleanup(cleanupState, "scene loading flag cleared (fallback)");
         }
 
         public static IEnumerator DisableSuppressionAfterDelay(float delay)
@@ -173,42 +210,52 @@ namespace VPB
             _lastLoadSceneStartTime = now;
 
             List<string> temporaryUidOverrides = null;
+            SceneLoadCleanupState cleanupState = null;
             try
             {
                 string path = entry.Uid;
                 LogUtil.Log($"[VPB] UI.LoadSceneFile started for: {path}");
                 
-                bool installed = false;
+                bool depsChanged = false;
+                SceneLoadingUtils.EnsureInstalledResult ensureResult = default(SceneLoadingUtils.EnsureInstalledResult);
                 List<string> movedUids = null;
                 
                 // Suppress gallery auto-refresh to preserve scroll position and state
                 // Must activate BEFORE EnsureInstalled since it may trigger FileManager.Refresh internally
-                // NOTE: Suppression is NOT disabled in a finally block because sc.Load() is async
-                // Instead, a coroutine will disable it after scene loading completes
+                // Suppression is disabled by explicit cleanup paths and a scene-load completion coroutine.
                 try
                 {
                     Gallery.SuppressAutoRefresh(true);
+                    cleanupState = new SceneLoadCleanupState
+                    {
+                        SuppressionStartRealtime = Time.realtimeSinceStartup,
+                        SceneLoadTotalSerialAtStart = LogUtil.GetSceneLoadTotalSerial()
+                    };
                     
                     movedUids = new List<string>(32);
-                    installed = EnsureInstalled(entry, movedUids);
-                    LogUtil.Log($"[VPB] UI.EnsureInstalled (with dependency scan) depsChanged: {installed}");
-                    if (!installed)
-                    {
-                        LogUtil.Log("[VPB] UI.EnsureInstalled: depsChanged=false means no packages were moved; missing deps (if any) are logged above by EnsureInstalled.");
-                    }
+                    ensureResult = SceneLoadingUtils.EnsureInstalledDetailed(entry, movedUids);
+                    depsChanged = ensureResult.DepsChanged;
 
                     temporaryUidOverrides = ApplyTemporarySceneLoadWhitelist(entry, movedUids);
+                    if (cleanupState != null) cleanupState.TemporaryUidOverrides = temporaryUidOverrides;
                     bool hasTemporaryAllowList = temporaryUidOverrides != null && temporaryUidOverrides.Count > 0;
+                    bool packageStateChanged = depsChanged || hasTemporaryAllowList;
 
-                    if (installed || hasTemporaryAllowList)
+                    LogUtil.Log($"[VPB] UI.EnsureInstalled (with dependency scan) depsChanged:{depsChanged} missing:{ensureResult.MissingCount}/{ensureResult.ReferencedCount} whitelistChanged:{hasTemporaryAllowList} packageStateChanged:{packageStateChanged}");
+                    if (ensureResult.IsDegraded)
+                        LogUtil.LogWarning($"[VPB] Scene load will continue in DEGRADED mode: missing {ensureResult.MissingCount}/{ensureResult.ReferencedCount} referenced package(s)");
+                    else if (!depsChanged)
+                        LogUtil.Log("[VPB] UI.EnsureInstalled: no package moves detected.");
+
+                    if (packageStateChanged)
                     {
-                        if (installed) LogUtil.Log("[VPB] Refreshing FileManagers...");
+                        if (depsChanged) LogUtil.Log("[VPB] Refreshing FileManagers...");
                         else LogUtil.Log("[VPB] Refreshing VaM FileManager for temporary scene-load allow-list...");
                         
                         if (MVR.FileManagement.FileManager.singleton != null)
                             MVR.FileManagement.FileManager.Refresh();
 
-                        if (installed)
+                        if (depsChanged)
                             FileManager.Refresh();
 
                         try
@@ -254,9 +301,7 @@ namespace VPB
                 catch (Exception installEx)
                 {
                     LogUtil.LogError($"[VPB] EnsureInstalled or FileManager refresh error: {installEx.Message}");
-                    RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
-                    // On error, disable suppression immediately since we won't be loading
-                    Gallery.SuppressAutoRefresh(false);
+                    FinalizeSceneLoadCleanup(cleanupState, "install/refresh error");
                     return;
                 }
 
@@ -279,55 +324,51 @@ namespace VPB
                 if (Messager.singleton == null)
                 {
                     LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start load coroutines");
-                    RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
-                    Gallery.SuppressAutoRefresh(false);
+                    FinalizeSceneLoadCleanup(cleanupState, "messager unavailable");
                 }
-                else if (installed)
+                else if (depsChanged)
                 {
                     // Packages were just moved from AllPackages to AddonPackages.
                     // Yield one frame so MVR FileManager.Refresh can finish processing
                     // before LoadInternal runs, preventing atom-list race exceptions.
                     LogUtil.Log("[VPB] Packages installed; deferring sc.Load by one frame");
-                    Messager.singleton.StartCoroutine(LoadSceneAfterRefresh(normalizedPath, temporaryUidOverrides));
+                    Messager.singleton.StartCoroutine(LoadSceneAfterRefresh(normalizedPath, cleanupState));
                 }
                 else
                 {
                     SuperController sc = SuperController.singleton;
                     if (sc != null)
                     {
-                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(temporaryUidOverrides));
+                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(cleanupState));
                         LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
                         sc.Load(normalizedPath);
                     }
                     else
                     {
                         LogUtil.LogError("[VPB] SuperController.singleton is null!");
-                        RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
-                        Gallery.SuppressAutoRefresh(false);
+                        FinalizeSceneLoadCleanup(cleanupState, "supercontroller unavailable");
                     }
                 }
             }
             catch (Exception ex)
             {
                 LogUtil.LogError($"[VPB] UI.LoadSceneFile crash: {ex.Message}\n{ex.StackTrace}");
-                RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
-                Gallery.SuppressAutoRefresh(false);
+                FinalizeSceneLoadCleanup(cleanupState, "load crash");
             }
         }
 
-        private static IEnumerator LoadSceneAfterRefresh(string normalizedPath, List<string> temporaryUidOverrides)
+        private static IEnumerator LoadSceneAfterRefresh(string normalizedPath, SceneLoadCleanupState cleanupState)
         {
             yield return null; // one frame for MVR refresh operations to settle
             SuperController sc = SuperController.singleton;
             if (sc == null)
             {
                 LogUtil.LogError("[VPB] SuperController.singleton is null in LoadSceneAfterRefresh!");
-                RemoveTemporarySceneLoadWhitelist(temporaryUidOverrides);
-                Gallery.SuppressAutoRefresh(false);
+                FinalizeSceneLoadCleanup(cleanupState, "supercontroller unavailable after refresh");
                 yield break;
             }
             if (Messager.singleton != null)
-                Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(temporaryUidOverrides));
+                Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(cleanupState));
             LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath}) (after install+refresh)");
             sc.Load(normalizedPath);
         }

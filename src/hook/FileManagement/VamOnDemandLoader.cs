@@ -198,6 +198,14 @@ namespace VPB
             string group = m.Groups[1].Value;
             if (string.IsNullOrEmpty(group)) return null;
 
+            // Prefer the local package index when available.
+            try
+            {
+                if (VpbLocalDatabase.TryResolveLatestUidFromIndex(group, out string latestFromSql) && !string.IsNullOrEmpty(latestFromSql))
+                    return latestFromSql;
+            }
+            catch { }
+
             int bestVersion = -1;
             string bestUid = null;
 
@@ -232,6 +240,14 @@ namespace VPB
         private static string TryFindVarPathForUid(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return null;
+
+            // Prefer indexed UID->path lookup when available.
+            try
+            {
+                if (VpbLocalDatabase.TryResolveIndexedVarPathForUid(uid, out string sqlPath) && !string.IsNullOrEmpty(sqlPath))
+                    return NormalizePath(sqlPath);
+            }
+            catch { }
 
             string filename = uid + ".var";
             string addon = NormalizePath(Path.Combine("AddonPackages", filename));

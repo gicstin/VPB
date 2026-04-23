@@ -211,16 +211,14 @@ namespace VPB
                 try { isDown = metaJson["downscaled"].AsBool; } catch { }
 
                 bool isRead = false;
-                try 
-                { 
+                try
+                {
                     if (metaJson["isReadable"] != null)
                     {
-                        isRead = metaJson["isReadable"].AsBool; 
+                        isRead = metaJson["isReadable"].AsBool;
                     }
-                } 
+                }
                 catch { }
-
-                LogUtil.Log($"[VPB SIM] FastLoadMetadata: path='{cachePath}', width={w}, height={h}, format={fmt}, isReadable={isRead}");
 
                 var entry = new MetadataEntry
                 {

@@ -15,6 +15,18 @@ namespace VPB
         static int sceneLoadSerial;
         static int lastScheduledSceneLoadSerial;
 
+        public struct EnsureInstalledResult
+        {
+            public bool DepsChanged;
+            public int ReferencedCount;
+            public int MissingCount;
+
+            public bool IsDegraded
+            {
+                get { return MissingCount > 0; }
+            }
+        }
+
         private static MethodInfo s_LoadMergeMethod;
         private static MethodInfo s_LoadInternalMethod;
 
@@ -402,7 +414,14 @@ namespace VPB
         /// <param name="outMovedPackageUids">When non-null, receives UIDs for packages whose .var was moved during this call.</param>
         public static bool EnsureInstalled(FileEntry entry, List<string> outMovedPackageUids)
         {
-            if (entry == null) return false;
+            EnsureInstalledResult result = EnsureInstalledDetailed(entry, outMovedPackageUids);
+            return result.DepsChanged;
+        }
+
+        public static EnsureInstalledResult EnsureInstalledDetailed(FileEntry entry, List<string> outMovedPackageUids)
+        {
+            EnsureInstalledResult result = default(EnsureInstalledResult);
+            if (entry == null) return result;
 
             try
             {
@@ -446,6 +465,7 @@ namespace VPB
                                     try
                                     {
                                         int depCount = deps.Count;
+                                        result.ReferencedCount = depCount;
                                         if (depCount > 0)
                                         {
                                             string sample = string.Join(", ", deps.Take(5).ToArray());
@@ -463,6 +483,7 @@ namespace VPB
                                         {
                                             LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}");
                                         }
+                                        result.MissingCount = missing;
                                     }
                                     catch { }
 
@@ -474,12 +495,13 @@ namespace VPB
                     }
                 }
 
-                return flag;
+                result.DepsChanged = flag;
+                return result;
             }
             catch (Exception ex)
             {
                 LogUtil.LogError($"[VPB] EnsureInstalled error: {ex.Message}\n{ex.StackTrace}");
-                return false;
+                return result;
             }
         }
 

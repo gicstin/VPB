@@ -17,6 +17,7 @@ namespace VPB
     {
         // Registry of confirmed simulation texture paths extracted from preset files
         private static HashSet<string> simTextureRegistry = new HashSet<string>();
+        private static HashSet<string> simTexturePatchedThisLoad = new HashSet<string>();
         private static readonly object registryLock = new object();
 
         /// <summary>
@@ -40,6 +41,7 @@ namespace VPB
             lock (registryLock)
             {
                 simTextureRegistry.Clear();
+                simTexturePatchedThisLoad.Clear();
             }
         }
 
@@ -156,6 +158,22 @@ namespace VPB
             return null;
         }
 
+        private static bool IsTextureReadableCompat(Texture2D tex)
+        {
+            if (tex == null) return false;
+            try
+            {
+                // Unity versions used by VaM may not expose Texture2D.isReadable.
+                // Probe via GetPixel, which throws when the texture is non-readable.
+                tex.GetPixel(0, 0);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static bool IsPluginsAlwaysEnabledSettingOn()
         {
             try
@@ -267,20 +285,12 @@ namespace VPB
             int lastSlash = lower.LastIndexOfAny(new char[] { '/', '\\' });
             string filename = lastSlash >= 0 ? lower.Substring(lastSlash + 1) : lower;
             int lastDot = filename.LastIndexOf('.');
-            string ext = lastDot > 0 ? filename.Substring(lastDot) : "";
             if (lastDot > 0) filename = filename.Substring(0, lastDot);
-            
-            if (filename.Contains("sim")) return true;
-            
-            // Clothing sim textures often have short names like rbn1.png, psim1.png, bsim1.png
-            // Detect: in clothing path + short filename (<=8 chars) + ends with digit
-            if (lower.Contains("/clothing/") && filename.Length <= 8)
-            {
-                if (filename.Length > 0 && char.IsDigit(filename[filename.Length - 1]))
-                {
-                    return true;
-                }
-            }
+
+            // Conservative fallback only: match "sim" as a token to avoid false positives like "simone".
+            // Accepted examples: sim_foo, foo_sim, foo-sim1, sim1, phys_foo, physics-2
+            if (Regex.IsMatch(filename, @"(^|[_\-])sim([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
+            if (Regex.IsMatch(filename, @"(^|[_\-])phys(ics)?([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
 
             return false;
         }
@@ -489,6 +499,7 @@ namespace VPB
         public static void PostActivateWorldUI(SuperController __instance)
         {
             LogUtil.LogStartupReadyOnce("World UI activated");
+            LogUtil.MarkScenePhaseWorldUiActivated();
             LogUtil.EndSceneLoadTotal("WorldUI.Activate");
         }
 
@@ -514,6 +525,8 @@ namespace VPB
             string saveName, bool loadMerge, bool editMode)
         {
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
+            LogUtil.BeginSceneLoad(saveName);
+            LogUtil.MarkScenePhasePreLoadInternal();
             try
             {
                 // Clear sim texture registry for new scene
@@ -551,7 +564,6 @@ namespace VPB
                 }
             }
             catch { }
-            LogUtil.BeginSceneLoad(saveName);
 
             if (saveName == "Saves\\scene\\MeshedVR\\default.json")
             {
@@ -570,6 +582,7 @@ namespace VPB
         public static void PostLoadInternal(SuperController __instance,
             string saveName, bool loadMerge, bool editMode)
         {
+            LogUtil.MarkScenePhasePostLoadInternal();
             LogUtil.EndSceneLoadInternal("LoadInternal");
             try { SceneLoadingUtils.ScheduleGalleryTargetListRefresh(); } catch { }
         }
@@ -880,36 +893,38 @@ namespace VPB
                 {
                     try
                     {
-                        // Force re-apply with isReadable=true by recreating the texture
-                        // We need to get the raw data and recreate with proper settings
-                        var tex = __instance.tex;
-                        if (tex != null && tex.format != TextureFormat.RGBA32 && tex.format != TextureFormat.RGB24)
+                        bool alreadyPatched;
+                        lock (registryLock)
                         {
-                            // Texture is compressed (DXT), we need to decompress to make it readable
-                            // This is expensive but necessary for sim textures
-                            LogUtil.Log($"[VPB SIM] PostFinish: Fixing up non-readable sim texture: {__instance.imgPath}");
-                            
-                            // Create a temporary readable copy by rendering to a RenderTexture
-                            RenderTexture rt = RenderTexture.GetTemporary(tex.width, tex.height, 0, RenderTextureFormat.ARGB32);
-                            Graphics.Blit(tex, rt);
-                            
-                            RenderTexture.active = rt;
-                            Texture2D readableTex = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false, __instance.linear);
-                            readableTex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
-                            readableTex.Apply(false, false); // Keep it readable!
-                            RenderTexture.active = null;
-                            RenderTexture.ReleaseTemporary(rt);
-                            
-                            UnityEngine.Object.Destroy(tex);
-                            __instance.tex = readableTex;
-                            
-                            LogUtil.Log($"[VPB SIM] PostFinish: Fixed sim texture to be readable: {__instance.imgPath}");
+                            alreadyPatched = simTexturePatchedThisLoad.Contains(__instance.imgPath);
+                            if (!alreadyPatched) simTexturePatchedThisLoad.Add(__instance.imgPath);
                         }
-                        else if (tex != null)
+
+                        // Avoid repeatedly running expensive conversion for the same asset path in one scene load.
+                        if (!alreadyPatched)
                         {
-                            // Already uncompressed, just re-apply with readable flag
-                            tex.Apply(false, false);
-                            LogUtil.Log($"[VPB SIM] PostFinish: Applied readable flag to sim texture: {__instance.imgPath}");
+                            var tex = __instance.tex as Texture2D;
+                            if (tex != null && !IsTextureReadableCompat(tex))
+                            {
+                                LogUtil.Log($"[VPB SIM] PostFinish: Fixing up non-readable sim texture: {__instance.imgPath}");
+
+                                // Recreate as readable using GPU copy -> ReadPixels.
+                                RenderTexture rt = RenderTexture.GetTemporary(tex.width, tex.height, 0, RenderTextureFormat.ARGB32);
+                                Graphics.Blit(tex, rt);
+
+                                RenderTexture prev = RenderTexture.active;
+                                RenderTexture.active = rt;
+                                Texture2D readableTex = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false, __instance.linear);
+                                readableTex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
+                                readableTex.Apply(false, false); // keep readable
+                                RenderTexture.active = prev;
+                                RenderTexture.ReleaseTemporary(rt);
+
+                                UnityEngine.Object.Destroy(tex);
+                                __instance.tex = readableTex;
+
+                                LogUtil.Log($"[VPB SIM] PostFinish: Fixed sim texture to be readable: {__instance.imgPath}");
+                            }
                         }
                     }
                     catch (Exception ex)

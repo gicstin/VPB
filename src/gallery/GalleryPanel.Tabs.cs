@@ -125,14 +125,6 @@ namespace VPB
             if (!IsHubMode && (leftTabContainerGO != null || rightTabContainerGO != null)
                 && VPBConfig.Instance != null && VPBConfig.Instance.TryConsumeLightweightGalleryTabRefreshSlot())
             {
-                if (VPBConfig.IsLogConfigPerfEnabled())
-                {
-                    try
-                    {
-                        LogUtil.Log("[VPBConfig.Perf] UpdateTabs: lightweight path (side tab buttons not rebuilt)");
-                    }
-                    catch { }
-                }
                 UpdateTabsLightChromeOnlyStandardGallery();
                 return;
             }

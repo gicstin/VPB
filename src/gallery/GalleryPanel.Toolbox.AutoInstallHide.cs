@@ -20,18 +20,23 @@ namespace VPB
                 int resolvedUids = 0;
                 int installOk = 0;
                 int loadOk = 0;
+                int scanWlOk = 0;
+                bool scanWlDirty = false;
+                bool scanWlEnabled = ScanWhitelistManager.Instance.IsEnabled;
 
                 for (int i = 0; i < selectedFiles.Count; i++)
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl))
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl, out bool uidWl))
                         continue;
                     if (!seen.Add(uid)) continue;
                     resolvedUids++;
-                    if (fiAi && uidAl) continue;
+                    bool localScene = LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out string absLocalJson, out _, false);
+                    bool pendingScanWlChange = scanWlEnabled && !localScene && !uidWl;
+                    if (fiAi && uidAl && !pendingScanWlChange) continue;
 
-                    if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out string absLocalJson, out _, false))
+                    if (localScene)
                     {
                         if (!fiAi)
                         {
@@ -58,6 +63,22 @@ namespace VPB
                             }
                         }
                         continue;
+                    }
+
+                    if (scanWlEnabled && !uidWl)
+                    {
+                        try
+                        {
+                            if (ScanWhitelistManager.Instance.AddUidOverride(uid))
+                            {
+                                scanWlOk++;
+                                scanWlDirty = true;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("[VPB] TboxAutoInstallSelectedPackages SetScanWhitelist " + uid + ": " + ex.Message);
+                        }
                     }
 
                     string path = ResolveVarPathForUid(uid);
@@ -101,7 +122,12 @@ namespace VPB
                     ShowTemporaryStatus("No packages or local scenes in selection.");
                     return;
                 }
-                if (installOk == 0 && loadOk == 0)
+                if (scanWlDirty)
+                {
+                    try { ScanWhitelistManager.Instance.Save(); } catch { }
+                }
+
+                if (installOk == 0 && loadOk == 0 && scanWlOk == 0)
                 {
                     ShowTemporaryStatus("Nothing to enable for current selection.", 2f);
                     return;
@@ -110,7 +136,7 @@ namespace VPB
                 // SetAutoInstall no longer moves .var files here; refresh grid so AI badges match the updated lookup.
                 try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
-                ShowTemporaryStatus($"Autoinstall: {installOk}, auto-load: {loadOk} (install at next launch).", 2.5f);
+                ShowTemporaryStatus($"Autoinstall: {installOk}, auto-load: {loadOk}, scan-whitelist: {scanWlOk} (install at next launch).", 2.5f);
             }
             catch (Exception ex)
             {
@@ -344,18 +370,23 @@ namespace VPB
                 int resolvableUids = 0;
                 int installOk = 0;
                 int loadOk = 0;
+                int scanWlOk = 0;
+                bool scanWlDirty = false;
+                bool scanWlEnabled = ScanWhitelistManager.Instance.IsEnabled;
 
                 for (int i = 0; i < selectedFiles.Count; i++)
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl))
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out bool fiAi, out bool uidAl, out bool uidWl))
                         continue;
                     if (!seenUid.Add(uid)) continue;
                     resolvableUids++;
-                    if (!fiAi && !uidAl) continue;
+                    bool localScene = LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false);
+                    bool pendingScanWlChange = scanWlEnabled && !localScene && uidWl;
+                    if (!fiAi && !uidAl && !pendingScanWlChange) continue;
 
-                    if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
+                    if (localScene)
                     {
                         if (fiAi)
                         {
@@ -370,6 +401,22 @@ namespace VPB
                             }
                         }
                         continue;
+                    }
+
+                    if (scanWlEnabled && uidWl)
+                    {
+                        try
+                        {
+                            if (ScanWhitelistManager.Instance.RemoveUidOverride(uid))
+                            {
+                                scanWlOk++;
+                                scanWlDirty = true;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("[VPB] TboxDisableAutoInstallSelectedPackages ClearScanWhitelist " + uid + ": " + ex.Message);
+                        }
                     }
 
                     string path = ResolveVarPathForUid(uid);
@@ -420,13 +467,18 @@ namespace VPB
                     return;
                 }
 
+                if (scanWlDirty)
+                {
+                    try { ScanWhitelistManager.Instance.Save(); } catch { }
+                }
+
                 try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
 
-                if (installOk == 0 && loadOk == 0)
+                if (installOk == 0 && loadOk == 0 && scanWlOk == 0)
                     ShowTemporaryStatus("No auto-install or auto-load flags to clear for selection.", 2f);
                 else
-                    ShowTemporaryStatus($"Cleared autoinstall: {installOk}, auto-load: {loadOk}.", 2.5f);
+                    ShowTemporaryStatus($"Cleared autoinstall: {installOk}, auto-load: {loadOk}, scan-whitelist: {scanWlOk}.", 2.5f);
             }
             catch (Exception ex)
             {

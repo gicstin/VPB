@@ -1730,8 +1730,6 @@ namespace VPB
                 {
                     LogUtil.LogWarning($"[VPB] Scene rewrite skipped due to error: {ex.Message}");
                 }
-                LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
-                
                 SuperController sc = SuperController.singleton;
                 if (sc != null)
                 {

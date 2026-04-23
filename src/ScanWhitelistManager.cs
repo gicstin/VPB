@@ -36,6 +36,9 @@ namespace VPB
         private bool _enabled = false;
         // Normalized folder paths (forward slashes, no trailing slash), e.g. "AddonPackages/FavoriteCreator"
         private readonly List<string> _whitelistedFolders = new List<string>();
+        // Bucket whitelist folders by top segment (or AddonPackages creator segment) to reduce prefix checks.
+        private readonly Dictionary<string, List<string>> _whitelistedFoldersByBucket =
+            new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         // Per-package UID overrides: packages included even if their folder is not whitelisted
         private readonly HashSet<string> _includedPackageUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Runtime-only UID overrides for temporary scene-load allow-listing (not persisted).
@@ -82,6 +85,7 @@ namespace VPB
             lock (lockObj)
             {
                 _whitelistedFolders.Clear();
+                _whitelistedFoldersByBucket.Clear();
                 _includedPackageUids.Clear();
                 _temporaryIncludedPackageUids.Clear();
                 _enabled = false;
@@ -151,6 +155,7 @@ namespace VPB
                             _whitelistedFolders.Add(normalized);
                     }
                 }
+                RebuildWhitelistBucketsLocked();
 
                 if (data.IncludedPackageUids != null)
                 {
@@ -240,8 +245,10 @@ namespace VPB
                 string norm = varFilePath.Replace('\\', '/');
                 // AllPackages is always passed through (separate system)
                 if (norm.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) return true;
-                foreach (var folder in _whitelistedFolders)
+                List<string> candidates = GetWhitelistBucketCandidatesLocked(norm);
+                for (int i = 0; i < candidates.Count; i++)
                 {
+                    string folder = candidates[i];
                     // folder = "AddonPackages/Creator", norm must start with "AddonPackages/Creator/"
                     // or exactly equal "AddonPackages/Creator/pkg.var" (file directly in folder)
                     if (norm.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase)
@@ -266,6 +273,19 @@ namespace VPB
         }
 
         /// <summary>
+        /// Returns true only for persistent UID overrides stored in scan_whitelist.json.
+        /// Runtime temporary overrides are excluded from this check.
+        /// </summary>
+        public bool IsUidOverridePersisted(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            lock (lockObj)
+            {
+                return _includedPackageUids.Contains(uid);
+            }
+        }
+
+        /// <summary>
         /// Returns true if the package is effectively excluded from VaM's scan
         /// (feature enabled, path not whitelisted, no UID override).
         /// </summary>
@@ -285,8 +305,10 @@ namespace VPB
             if (string.IsNullOrEmpty(varFilePath)) return true;
             string norm = varFilePath.Replace('\\', '/');
             if (norm.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) return true;
-            foreach (var folder in _whitelistedFolders)
+            List<string> candidates = GetWhitelistBucketCandidatesLocked(norm);
+            for (int i = 0; i < candidates.Count; i++)
             {
+                string folder = candidates[i];
                 if (norm.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase)
                     || norm.StartsWith(folder + "\\", StringComparison.OrdinalIgnoreCase))
                     return true;
@@ -316,6 +338,7 @@ namespace VPB
             {
                 if (_whitelistedFolders.Contains(normalized)) return false;
                 _whitelistedFolders.Add(normalized);
+                AddFolderToBucketsLocked(normalized);
                 return true;
             }
         }
@@ -326,7 +349,9 @@ namespace VPB
             if (string.IsNullOrEmpty(normalized)) return false;
             lock (lockObj)
             {
-                return _whitelistedFolders.Remove(normalized);
+                bool removed = _whitelistedFolders.Remove(normalized);
+                if (removed) RemoveFolderFromBucketsLocked(normalized);
+                return removed;
             }
         }
 
@@ -430,6 +455,66 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(folder)) return null;
             return folder.Replace('\\', '/').TrimEnd('/').Trim();
+        }
+
+        private static string GetWhitelistBucketKey(string normalizedPath)
+        {
+            if (string.IsNullOrEmpty(normalizedPath)) return "";
+            string p = normalizedPath.Replace('\\', '/').Trim('/');
+            if (p.Length == 0) return "";
+
+            const string addonPrefix = "AddonPackages/";
+            if (p.StartsWith(addonPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string rest = p.Substring(addonPrefix.Length);
+                if (rest.Length == 0) return "AddonPackages";
+                int slash = rest.IndexOf('/');
+                if (slash <= 0) return addonPrefix + rest;
+                return addonPrefix + rest.Substring(0, slash);
+            }
+
+            int firstSlash = p.IndexOf('/');
+            if (firstSlash <= 0) return p;
+            return p.Substring(0, firstSlash);
+        }
+
+        private void RebuildWhitelistBucketsLocked()
+        {
+            _whitelistedFoldersByBucket.Clear();
+            for (int i = 0; i < _whitelistedFolders.Count; i++)
+                AddFolderToBucketsLocked(_whitelistedFolders[i]);
+        }
+
+        private void AddFolderToBucketsLocked(string normalizedFolder)
+        {
+            if (string.IsNullOrEmpty(normalizedFolder)) return;
+            string key = GetWhitelistBucketKey(normalizedFolder);
+            if (!_whitelistedFoldersByBucket.TryGetValue(key, out var list))
+            {
+                list = new List<string>();
+                _whitelistedFoldersByBucket[key] = list;
+            }
+            if (!list.Contains(normalizedFolder))
+                list.Add(normalizedFolder);
+        }
+
+        private void RemoveFolderFromBucketsLocked(string normalizedFolder)
+        {
+            if (string.IsNullOrEmpty(normalizedFolder)) return;
+            string key = GetWhitelistBucketKey(normalizedFolder);
+            if (!_whitelistedFoldersByBucket.TryGetValue(key, out var list)) return;
+            list.Remove(normalizedFolder);
+            if (list.Count == 0)
+                _whitelistedFoldersByBucket.Remove(key);
+        }
+
+        private List<string> GetWhitelistBucketCandidatesLocked(string normalizedPath)
+        {
+            if (_whitelistedFolders.Count <= 1) return _whitelistedFolders;
+            string key = GetWhitelistBucketKey(normalizedPath);
+            if (_whitelistedFoldersByBucket.TryGetValue(key, out var list) && list != null && list.Count > 0)
+                return list;
+            return _whitelistedFolders;
         }
 
         /// <summary>

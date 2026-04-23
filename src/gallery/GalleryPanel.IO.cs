@@ -441,12 +441,23 @@ namespace VPB
 
         private static void AddVarFileEntriesWithPackageInDepList(List<FileEntry> filtered, FileEntry master, IList<FileEntry> source, List<string> depUids)
         {
-            if (filtered == null || depUids == null || source == null) return;
+            if (depUids == null)
+            {
+                if (filtered == null || source == null) return;
+                return;
+            }
+            var depSet = new HashSet<string>(depUids, StringComparer.OrdinalIgnoreCase);
+            AddVarFileEntriesWithPackageInUidSet(filtered, master, source, depSet);
+        }
+
+        private static void AddVarFileEntriesWithPackageInUidSet(List<FileEntry> filtered, FileEntry master, IList<FileEntry> source, HashSet<string> uids)
+        {
+            if (filtered == null || source == null || uids == null || uids.Count == 0) return;
             for (int i = 0; i < source.Count; i++)
             {
                 FileEntry other = source[i];
                 if (other == master) continue;
-                if (other is VarFileEntry vfe && vfe.Package != null && depUids.Contains(vfe.Package.Uid))
+                if (other is VarFileEntry vfe && vfe.Package != null && uids.Contains(vfe.Package.Uid))
                 {
                     if (PackageHidePrefs.IsExcludedByGalleryHideFilter(other)) continue;
                     filtered.Add(other);
@@ -2089,19 +2100,11 @@ namespace VPB
                     snapList = new List<FileEntry>(o.currentFilteredFiles);
                     fileListFromCache = true;
                     fileListFromSibling = true;
-                    if (VPBConfig.IsLogConfigPerfEnabled())
-                    {
-                        try { LogUtil.Log("[VPB] Gallery file-list snapshot SIBLING reuse (count=" + snapList.Count + ")"); } catch { }
-                    }
                     break;
                 }
             }
             if (!fileListFromCache && canFileListCache)
                 fileListFromCache = GalleryFileListSnapshotCache.TryGet(fileListSnapKey, out snapList);
-            if (fileListFromCache && !fileListFromSibling && VPBConfig.IsLogConfigPerfEnabled())
-            {
-                try { LogUtil.Log("[VPB] Gallery file-list snapshot cache HIT"); } catch { }
-            }
             List<FileEntry> files = (fileListFromCache && snapList != null) ? snapList : new List<FileEntry>();
             if (fileListFromSibling && canFileListCache && fileListSnapKey != null && files.Count > 0)
                 GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
@@ -2543,26 +2546,6 @@ namespace VPB
                     finally
                     {
                         swWorker.Stop();
-                        if (VPBConfig.IsLogConfigPerfEnabled())
-                        {
-                            try
-                            {
-                                string rej = catQueryStats.RejectReason ?? "";
-                                if (rej.Length > 220)
-                                    rej = rej.Substring(0, 217) + "...";
-                                LogUtil.Log("[VPB.Gallery.SqlIndex] worker path=" + workerPathLabel
-                                    + " worker_total_ms=" + swWorker.ElapsedMilliseconds
-                                    + " sql_ms=" + catQueryStats.SqlElapsedMs
-                                    + " sql_rows_read=" + catQueryStats.RowsRead
-                                    + " bulk_build_ms=" + workerBulkBuildMs
-                                    + " bulk_after_worker_filter=" + workerBulkOutCount
-                                    + " sql_executed=" + catQueryStats.ExecutedQuery
-                                    + " snap_key_ok=" + (canFileListSnapKeyMain ? "1" : "0")
-                                    + (string.IsNullOrEmpty(rej) ? "" : (" reject=" + rej))
-                                    + " cat='" + titleForIndexMain + "'");
-                            }
-                            catch { }
-                        }
                         Interlocked.Exchange(ref workerDoneFlag, 1);
                     }
                 });
@@ -2850,21 +2833,6 @@ namespace VPB
                 if (!skipMainThreadSort)
                     GallerySortManager.Instance.SortFiles(files, sortState);
                 swSortMain.Stop();
-                if (VPBConfig.IsLogConfigPerfEnabled())
-                {
-                    try
-                    {
-                        int sysN = sysLooseFilesAddedCount != null ? sysLooseFilesAddedCount[0] : 0;
-                        LogUtil.Log("[VPB.Gallery.SqlIndex] main path=after_refresh drain_wall_ms=" + refreshDrainWallMs
-                            + " sort_ms=" + swSortMain.ElapsedMilliseconds
-                            + " sort_skipped=" + skipMainThreadSort
-                            + " worker_presorted_flag=" + (sqliteBulkSortedOnWorkerFlag != null ? sqliteBulkSortedOnWorkerFlag[0].ToString() : "n/a")
-                            + " files_out=" + files.Count
-                            + " sys_loose_added=" + sysN
-                            + " cat='" + (currentCategoryTitle ?? "") + "'");
-                    }
-                    catch { }
-                }
                 if (canFileListCache && fileListSnapKey != null)
                     GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
             }
@@ -3336,7 +3304,6 @@ namespace VPB
             if (TryGetPackageFromEntry(file, out VarPackage pkg, out string label) && pkg != null)
             {
                 List<FileEntry> filtered;
-                var deps = pkg.RecursivePackageDependencies;
 
                 if (PackageFilterUsesPackageListRows())
                 {
@@ -3346,8 +3313,10 @@ namespace VPB
                 }
                 else
                 {
+                    HashSet<string> depUids = BuildUidSetForDependenciesFilter(pkg);
+                    if (!string.IsNullOrEmpty(pkg.Uid)) depUids.Remove(pkg.Uid);
                     filtered = new List<FileEntry> { file };
-                    AddVarFileEntriesWithPackageInDepList(filtered, file, currentFilteredFiles, deps);
+                    AddVarFileEntriesWithPackageInUidSet(filtered, file, currentFilteredFiles, depUids);
                     currentPackageFilterCount = Math.Max(0, filtered.Count - 1);
                 }
 
@@ -3458,8 +3427,10 @@ namespace VPB
             }
             else
             {
+                HashSet<string> uids = CollectUidsForDependentsPackageListFilter(targetUid, targetShort);
+                if (!string.IsNullOrEmpty(targetUid)) uids.Remove(targetUid);
                 filtered = new List<FileEntry> { file };
-                AddVarFileEntriesThatDependOnPackageUid(filtered, file, currentFilteredFiles, targetUid, targetShort);
+                AddVarFileEntriesWithPackageInUidSet(filtered, file, currentFilteredFiles, uids);
                 currentPackageFilterCount = Math.Max(0, filtered.Count - 1);
             }
 

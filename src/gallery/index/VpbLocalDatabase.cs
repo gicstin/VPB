@@ -2964,5 +2964,169 @@ namespace VPB
                 return false;
             }
         }
+
+        internal static bool TryReadIndexedPackageGroups(List<string> outGroups)
+        {
+            if (outGroups == null) return false;
+            outGroups.Clear();
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            long scanBin = 0;
+            try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+
+            long readyScan = long.MinValue;
+            string catSig = null;
+            lock (s_Sync)
+            {
+                readyScan = s_ReadyScanBinary;
+                catSig = s_ReadyCategoriesSig;
+            }
+            if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+                return false;
+
+            try
+            {
+                var groups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                using (var st = conn.Prepare("SELECT uid FROM pkg"))
+                {
+                    for (;;)
+                    {
+                        int rc = st.Step();
+                        if (rc == VpbSqlite3.SqliteDone) break;
+                        if (rc != VpbSqlite3.SqliteRow) break;
+                        string uid = st.ColumnText(0) ?? "";
+                        if (TryGetPackageGroupFromUid(uid, out string group))
+                            groups.Add(group);
+                    }
+                }
+                outGroups.AddRange(groups);
+                outGroups.Sort(StringComparer.OrdinalIgnoreCase);
+                return true;
+            }
+            catch
+            {
+                outGroups.Clear();
+                return false;
+            }
+        }
+
+        internal static bool TryResolveIndexedVarPathForUid(string uid, out string varPath)
+        {
+            varPath = null;
+            if (string.IsNullOrEmpty(uid)) return false;
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            long scanBin = 0;
+            try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+
+            long readyScan = long.MinValue;
+            string catSig = null;
+            lock (s_Sync)
+            {
+                readyScan = s_ReadyScanBinary;
+                catSig = s_ReadyCategoriesSig;
+            }
+            if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+                return false;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                using (var st = conn.Prepare("SELECT ifnull(var_path,'') FROM pkg WHERE uid = ? LIMIT 1"))
+                {
+                    st.BindText(1, uid);
+                    if (st.Step() != VpbSqlite3.SqliteRow) return false;
+                    string p = st.ColumnText(0) ?? "";
+                    if (string.IsNullOrEmpty(p)) return false;
+                    varPath = p;
+                    return true;
+                }
+            }
+            catch
+            {
+                varPath = null;
+                return false;
+            }
+        }
+
+        internal static bool TryResolveLatestUidFromIndex(string packageGroup, out string resolvedUid)
+        {
+            resolvedUid = null;
+            if (string.IsNullOrEmpty(packageGroup)) return false;
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            long scanBin = 0;
+            try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+
+            long readyScan = long.MinValue;
+            string catSig = null;
+            lock (s_Sync)
+            {
+                readyScan = s_ReadyScanBinary;
+                catSig = s_ReadyCategoriesSig;
+            }
+            if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+                return false;
+
+            try
+            {
+                int bestVersion = -1;
+                string bestUid = null;
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                using (var st = conn.Prepare("SELECT uid FROM pkg WHERE uid LIKE ?"))
+                {
+                    st.BindText(1, packageGroup + ".%");
+                    for (;;)
+                    {
+                        int rc = st.Step();
+                        if (rc == VpbSqlite3.SqliteDone) break;
+                        if (rc != VpbSqlite3.SqliteRow) break;
+                        string uid = st.ColumnText(0) ?? "";
+                        if (!TryParseUidVersion(uid, packageGroup, out int version)) continue;
+                        if (version > bestVersion)
+                        {
+                            bestVersion = version;
+                            bestUid = uid;
+                        }
+                    }
+                }
+
+                if (string.IsNullOrEmpty(bestUid)) return false;
+                resolvedUid = bestUid;
+                return true;
+            }
+            catch
+            {
+                resolvedUid = null;
+                return false;
+            }
+        }
+
+        private static bool TryGetPackageGroupFromUid(string uid, out string packageGroup)
+        {
+            packageGroup = null;
+            if (string.IsNullOrEmpty(uid)) return false;
+            int lastDot = uid.LastIndexOf('.');
+            if (lastDot <= 0) return false;
+            string maybeGroup = uid.Substring(0, lastDot);
+            if (string.IsNullOrEmpty(maybeGroup)) return false;
+            int firstDot = maybeGroup.IndexOf('.');
+            if (firstDot <= 0) return false;
+            if (maybeGroup.IndexOf('.', firstDot + 1) != -1) return false;
+            packageGroup = maybeGroup;
+            return true;
+        }
+
+        private static bool TryParseUidVersion(string uid, string packageGroup, out int version)
+        {
+            version = -1;
+            if (string.IsNullOrEmpty(uid) || string.IsNullOrEmpty(packageGroup)) return false;
+            string prefix = packageGroup + ".";
+            if (!uid.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+            string suffix = uid.Substring(prefix.Length);
+            if (string.IsNullOrEmpty(suffix)) return false;
+            return int.TryParse(suffix, out version);
+        }
     }
 }

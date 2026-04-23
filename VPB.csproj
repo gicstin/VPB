@@ -480,7 +480,7 @@
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <!-- DLL + vpb_translations + vpb_fonts + vpb_icons: same PostBuildEvent so copies always run with the DLL (AfterTargets=PostBuildEvent is unreliable across MSBuild/VS). Robocopy: exit 0-7 = success. -->
-    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\scripts\VPB.dll"
+    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\plugins\VPB.dll"
 copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB.dll"
 if exist "$(VaMPath)\BepInEx\scripts\sqlite3.dll" del /F /Q "$(VaMPath)\BepInEx\scripts\sqlite3.dll"
 if exist "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" (
