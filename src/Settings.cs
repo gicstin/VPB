@@ -122,7 +122,7 @@ namespace VPB
             LogHubRequests = config.Bind<bool>("Logging", "LogHubRequests", false, "Log detailed Hub request timing and payload information (very verbose). Enable when troubleshooting Hub issues.");
 
             HubHostedOption = config.Bind<string>("HubBrowser", "HostedOption", "Hub And Dependencies", "Hub Browser: Hosted option filter.");
-            HubPayTypeFilter = config.Bind<string>("HubBrowser", "PayTypeFilter", "Free", "Hub Browser: Pay type filter.");
+            HubPayTypeFilter = config.Bind<string>("HubBrowser", "PayTypeFilter", "All", "Hub Browser: Pay type filter.");
             HubCategoryFilter = config.Bind<string>("HubBrowser", "CategoryFilter", "All", "Hub Browser: Category filter.");
             HubCreatorFilter = config.Bind<string>("HubBrowser", "CreatorFilter", "All", "Hub Browser: Creator filter.");
             HubTagsFilter = config.Bind<string>("HubBrowser", "TagsFilter", "All", "Hub Browser: Tags filter.");
@@ -131,7 +131,7 @@ namespace VPB
             HubSortSecondary = config.Bind<string>("HubBrowser", "SortSecondary", "None", "Hub Browser: Secondary sort.");
             HubItemsPerPage = config.Bind<int>("HubBrowser", "ItemsPerPage", 48, "Hub Browser: Items per page.");
             HubCurrentPage = config.Bind<int>("HubBrowser", "CurrentPage", 1, "Hub Browser: Current page.");
-            HubOnlyDownloadable = config.Bind<bool>("HubBrowser", "OnlyDownloadable", true, "Hub Browser: Only show downloadable resources.");
+            HubOnlyDownloadable = config.Bind<bool>("HubBrowser", "OnlyDownloadable", false, "Hub Browser: Only show downloadable resources.");
 
 
             AutoOptimizeCache = config.Bind<bool>("Optimze", "AutoOptimizeCache", false, "When checked, clicking Compress Cache button will start compression without opening the confirmation window.");

@@ -4,7 +4,7 @@ using MeshVR;
 
 namespace VPB
 {
-    public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource, RemoveClothing, RemoveHair, RemoveAtom, SavePresets, Target, CleanupCategories }
+    public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource, RemoveClothing, RemoveHair, RemoveAtom, SavePresets, Target, CleanupCategories, Path }
     public enum ApplyMode { SingleClick, DoubleClick }
     public enum TabSide { Hidden, Left, Right }
     public enum GalleryLayoutMode { Grid, List }
@@ -13,6 +13,12 @@ namespace VPB
     { 
         public string Name; 
         public int Count; 
+    }
+
+    public struct PathCacheEntry
+    {
+        public string Path;
+        public int Count;
     }
 
     public class PresetLockStore

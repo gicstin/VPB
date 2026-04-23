@@ -180,6 +180,9 @@ namespace VPB
         private Text rightCreatorBtnText;
         private Image rightCreatorBtnImage;
         private Image rightCreatorBtnIconImage;
+        private Text rightPathBtnText;
+        private Image rightPathBtnImage;
+        private Image rightPathBtnIconImage;
         
         private Text footerHubBtnText;
         private Image footerHubBtnImage;
@@ -191,6 +194,9 @@ namespace VPB
         private Text leftCreatorBtnText;
         private Image leftCreatorBtnImage;
         private Image leftCreatorBtnIconImage;
+        private Text leftPathBtnText;
+        private Image leftPathBtnImage;
+        private Image leftPathBtnIconImage;
 
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
@@ -337,6 +343,7 @@ namespace VPB
         private string currentSizeFilter = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
+        private string pathFilter = "";
         private string removeClothingFilter = "";
         private string removeHairFilter = "";
         private string removeAtomFilter = "";
@@ -357,6 +364,7 @@ namespace VPB
         private string tagFilter = ""; // NEW
         private string currentSceneSourceFilter = ""; // NEW
         private string currentAppearanceSourceFilter = "";
+        private string currentPackagePathFilter = "";
         private PosePeopleFilter posePeopleFilter = PosePeopleFilter.All;
         private readonly Dictionary<string, int> posePeopleCountCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private readonly object posePeopleCountCacheLock = new object();
@@ -367,6 +375,8 @@ namespace VPB
         private string posePeopleIndexGroupId = "";
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
+        // Hub CDN thumbnail URLs for missing dep packages (dep uid → thumbnail URL), populated async after missing-deps filter is applied.
+        private readonly Dictionary<string, string> _hubThumbnailUrlCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private bool _cacheRetryPending = false;
 
         /// <summary>When set, logs elapsed time when the first file-list load finishes after create/clone pane.</summary>
@@ -638,6 +648,8 @@ namespace VPB
         
         private List<CreatorCacheEntry> cachedCreators = new List<CreatorCacheEntry>();
         private bool creatorsCached = false;
+        private List<PathCacheEntry> cachedPaths = new List<PathCacheEntry>();
+        private bool pathsCached = false;
         
         private Dictionary<string, int> categoryCounts = new Dictionary<string, int>();
         private bool categoriesCached = false;
@@ -782,6 +794,7 @@ namespace VPB
         private Sprite gallerySaveSprite;
         private Sprite galleryCategorySprite;
         private Sprite galleryCreatorSprite;
+        private Sprite galleryPathSprite;
         private Sprite targetOnSprite;
         private Sprite targetOffSprite;
         private Sprite galleryApplySprite;
@@ -824,6 +837,7 @@ namespace VPB
         // Define colors for different content types
         public static readonly Color ColorCategory = new Color(0.5f, 0.15f, 0.15f, 1f); // Darker Red
         public static readonly Color ColorCreator = new Color(0.15f, 0.45f, 0.15f, 1f); // Darker Green
+        public static readonly Color ColorPath = new Color(0.15f, 0.35f, 0.6f, 1f); // Darker Blue
         public static readonly Color ColorHub = new Color(0.8f, 0.4f, 0f, 1f); // Darker Orange
         public static readonly Color ColorLicense = new Color(0.6f, 0f, 0.6f, 1f); // Darker Magenta
 
