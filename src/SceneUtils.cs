@@ -536,6 +536,105 @@ namespace VPB
         }
 
         /// <summary>
+        /// Pre-register host/dependency packages in VaM's FileManager before a preset load pass.
+        /// This avoids one-shot missing item failures where VaM does not retry lookups after an initial miss.
+        /// Returns the number of unique UID candidates attempted.
+        /// </summary>
+        public static int PrewarmOnDemandPackagesForEntry(FileEntry entry, string pathHint = null)
+        {
+            if (!ScanWhitelistManager.Instance.IsEnabled) return 0;
+            if (entry == null && string.IsNullOrEmpty(pathHint)) return 0;
+
+            var uidCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void addUid(string uid)
+            {
+                if (string.IsNullOrEmpty(uid)) return;
+                uid = uid.Trim();
+                if (string.IsNullOrEmpty(uid)) return;
+                uidCandidates.Add(uid);
+            }
+
+            try
+            {
+                if (entry != null)
+                {
+                    foreach (var uid in CollectReferencedPackageUids(entry))
+                        addUid(uid);
+                }
+            }
+            catch { }
+
+            string candidatePath = pathHint;
+            if (string.IsNullOrEmpty(candidatePath) && entry != null)
+                candidatePath = entry.Path;
+            if (!string.IsNullOrEmpty(candidatePath))
+            {
+                string normalized = UI.NormalizePath(candidatePath);
+                if (UI.IsLikelyVarPackageReference(normalized))
+                {
+                    int colon = normalized.IndexOf(':');
+                    if (colon > 0)
+                    {
+                        addUid(normalized.Substring(0, colon));
+                    }
+                }
+            }
+
+            if (entry != null && !string.IsNullOrEmpty(entry.Path))
+            {
+                string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
+                if (ext == ".json" || ext == ".vap" || ext == ".cslist")
+                {
+                    try
+                    {
+                        using (var reader = entry.OpenStreamReader())
+                        {
+                            string content = reader.ReadToEnd();
+                            if (!string.IsNullOrEmpty(content))
+                            {
+                                HashSet<string> deps = VarNameParser.Parse(content);
+                                if (deps != null)
+                                {
+                                    foreach (string dep in deps)
+                                    {
+                                        addUid(dep);
+                                        try
+                                        {
+                                            VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
+                                            if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
+                                                addUid(pkg.Uid);
+                                        }
+                                        catch { }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogWarning($"[VPB OnDemand] Prewarm dependency parse failed for {entry.Name}: {ex.Message}");
+                    }
+                }
+            }
+
+            if (uidCandidates.Count == 0) return 0;
+
+            foreach (string uid in uidCandidates)
+            {
+                try { VamOnDemandLoader.TryRegisterPackageOnDemand(uid); } catch { }
+            }
+
+            try
+            {
+                string sample = string.Join(", ", uidCandidates.Take(5).ToArray());
+                LogUtil.Log($"[VPB OnDemand] Prewarm attempted {uidCandidates.Count} package(s) for {(entry != null ? entry.Name : candidatePath)}. Sample: {sample}");
+            }
+            catch { }
+
+            return uidCandidates.Count;
+        }
+
+        /// <summary>
         /// Copies the preset file's host .var from AllPackages to AddonPackages (if applicable) without scanning file contents for dependency VARs.
         /// Used for appearance "clothes only", where dependency install runs on garment-filtered JSON only (not the full .vap text).
         /// </summary>

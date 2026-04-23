@@ -1645,6 +1645,25 @@ namespace VPB
                     FileManager.NotifyInstalled(movedUids);
             }
 
+            bool shouldPrewarmOnDemand =
+                itemType == ItemType.Clothing ||
+                itemType == ItemType.Hair ||
+                itemType == ItemType.ClothingItem ||
+                itemType == ItemType.HairItem ||
+                itemType == ItemType.ClothingPreset ||
+                itemType == ItemType.HairPreset;
+            if (shouldPrewarmOnDemand)
+            {
+                try
+                {
+                    SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(FileEntry, normalizedPath);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB OnDemand] Clothing/Hair prewarm failed: " + ex.Message);
+                }
+            }
+
             LogUtil.Log($"[DragDropDebug] Attempting to apply. FullPath: {normalizedPath}, LegacyPath: {legacyPath}, Installed: {installed}");
 
             JSONStorable geometry = atom.GetStorableByID("geometry");
