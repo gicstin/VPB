@@ -463,6 +463,27 @@ namespace VPB
             }
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "FileExists", new Type[] { typeof(string), typeof(bool), typeof(bool) })]
+        public static void PostFileExists3(ref bool __result)
+        {
+            LogUtil.RecordFileExistsResult(__result);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "FileExists", new Type[] { typeof(string), typeof(bool) })]
+        public static void PostFileExists2(ref bool __result)
+        {
+            LogUtil.RecordFileExistsResult(__result);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "FileExists", new Type[] { typeof(string) })]
+        public static void PostFileExists1(ref bool __result)
+        {
+            LogUtil.RecordFileExistsResult(__result);
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStream", new Type[] { typeof(string), typeof(bool) })]
         public static void PreOpenStream(ref string path)
@@ -474,6 +495,13 @@ namespace VPB
             }
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStream", new Type[] { typeof(string), typeof(bool) })]
+        public static void PostOpenStream(object __result)
+        {
+            LogUtil.RecordOpenStreamResult(__result != null);
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStreamReader", new Type[] { typeof(string), typeof(bool) })]
         public static void PreOpenStreamReader(ref string path)
@@ -483,6 +511,13 @@ namespace VPB
             {
                 path = rewritten;
             }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStreamReader", new Type[] { typeof(string), typeof(bool) })]
+        public static void PostOpenStreamReader(object __result)
+        {
+            LogUtil.RecordOpenStreamResult(__result != null);
         }
 
         // Click "Return To Scene View"
@@ -1111,7 +1146,9 @@ namespace VPB
 
                 string uid = VamOnDemandLoader.UidFromEntryPath(path);
                 if (string.IsNullOrEmpty(uid)) return;
+                LogUtil.RecordVarEntryMiss();
 
+                LogUtil.RecordOnDemandRetry();
                 VamOnDemandLoader.TryRegisterPackageOnDemand(uid);
                 VamOnDemandLoader.s_InOnDemand = true;
                 try
@@ -1124,6 +1161,7 @@ namespace VPB
                     string rewritten = VamOnDemandLoader.TryRewriteLatestEntryPath(path, attemptRegister: true);
                     if (!string.IsNullOrEmpty(rewritten) && !string.Equals(rewritten, path, StringComparison.OrdinalIgnoreCase))
                     {
+                        LogUtil.RecordOnDemandRetry();
                         __result = MVR.FileManagement.FileManager.GetVarFileEntry(rewritten);
                     }
                 }

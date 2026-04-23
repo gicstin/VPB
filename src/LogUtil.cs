@@ -62,6 +62,25 @@ namespace VPB
         static float sceneLoadPostLoadInternalRealtime;
         static float sceneLoadWorldUiActivatedRealtime;
         static float sceneLoadFirstImageActivityRealtime;
+        static float sceneSettleNextSampleRealtime;
+        static int sceneSettleSampleCount;
+        static int sceneSettleBusySampleCount;
+        static int sceneSettleQueueMax;
+        static int sceneSettleQueueLast;
+        static int sceneSettleAtomsMin;
+        static int sceneSettleAtomsMax;
+        static int sceneSettleAtomsLast;
+        static int sceneSettlePersonsMin;
+        static int sceneSettlePersonsMax;
+        static int sceneSettlePersonsLast;
+        static int sceneSettlePrevAtoms;
+        static int sceneSettlePrevPersons;
+        static int sceneSettleStableSampleStreak;
+        static float sceneSettleSoftReadyRealtime;
+        static int sceneSettleFileExistsMissCount;
+        static int sceneSettleOpenStreamMissCount;
+        static int sceneSettleVarEntryMissCount;
+        static int sceneSettleOnDemandRetryCount;
         static int sceneLoadTailUpdateCount;
         static int sceneLoadTailBusyCount;
         static int sceneLoadTailIdleWindowBlockCount;
@@ -567,6 +586,25 @@ namespace VPB
             sceneLoadPostLoadInternalRealtime = -1f;
             sceneLoadWorldUiActivatedRealtime = -1f;
             sceneLoadFirstImageActivityRealtime = -1f;
+            sceneSettleNextSampleRealtime = 0f;
+            sceneSettleSampleCount = 0;
+            sceneSettleBusySampleCount = 0;
+            sceneSettleQueueMax = -1;
+            sceneSettleQueueLast = -1;
+            sceneSettleAtomsMin = -1;
+            sceneSettleAtomsMax = -1;
+            sceneSettleAtomsLast = -1;
+            sceneSettlePersonsMin = -1;
+            sceneSettlePersonsMax = -1;
+            sceneSettlePersonsLast = -1;
+            sceneSettlePrevAtoms = -1;
+            sceneSettlePrevPersons = -1;
+            sceneSettleStableSampleStreak = 0;
+            sceneSettleSoftReadyRealtime = -1f;
+            sceneSettleFileExistsMissCount = 0;
+            sceneSettleOpenStreamMissCount = 0;
+            sceneSettleVarEntryMissCount = 0;
+            sceneSettleOnDemandRetryCount = 0;
             sceneLoadTailUpdateCount = 0;
             sceneLoadTailBusyCount = 0;
             sceneLoadTailIdleWindowBlockCount = 0;
@@ -649,6 +687,32 @@ namespace VPB
                 sceneLoadWorldUiActivatedRealtime = Time.realtimeSinceStartup;
         }
 
+        public static void RecordFileExistsResult(bool exists)
+        {
+            if (!sceneLoadActive) return;
+            if (exists) return;
+            sceneSettleFileExistsMissCount++;
+        }
+
+        public static void RecordOpenStreamResult(bool success)
+        {
+            if (!sceneLoadActive) return;
+            if (success) return;
+            sceneSettleOpenStreamMissCount++;
+        }
+
+        public static void RecordVarEntryMiss()
+        {
+            if (!sceneLoadActive) return;
+            sceneSettleVarEntryMissCount++;
+        }
+
+        public static void RecordOnDemandRetry()
+        {
+            if (!sceneLoadActive) return;
+            sceneSettleOnDemandRetryCount++;
+        }
+
         public static void SceneLoadFrameTick(float unscaledDeltaTime)
         {
             if (!sceneLoadActive)
@@ -676,6 +740,8 @@ namespace VPB
             {
                 return;
             }
+
+            SampleSceneSettleWindow();
 
             // Hard safety timeout so we never get stuck.
             if ((Time.realtimeSinceStartup - sceneLoadBeginRealtime) > 600f)
@@ -779,6 +845,138 @@ namespace VPB
             {
                 sceneLoadEndArmed = false;
             }
+        }
+
+        static void SampleSceneSettleWindow()
+        {
+            // Focus on the expensive settle window after LoadInternal returns and before not-loading.
+            if (sceneLoadPostLoadInternalRealtime < 0f) return;
+            if (sceneLoadFirstNotLoadingRealtime >= 0f) return;
+
+            float now = Time.realtimeSinceStartup;
+            if (now < sceneSettleNextSampleRealtime) return;
+            sceneSettleNextSampleRealtime = now + 0.5f;
+
+            sceneSettleSampleCount++;
+
+            bool busy = IsImageLoadingBusy();
+            if (busy) sceneSettleBusySampleCount++;
+
+            int queueDepth = TryGetCombinedImageQueueDepth();
+            sceneSettleQueueLast = queueDepth;
+            if (queueDepth >= 0)
+            {
+                if (sceneSettleQueueMax < 0 || queueDepth > sceneSettleQueueMax)
+                    sceneSettleQueueMax = queueDepth;
+            }
+
+            SuperController sc = SuperController.singleton;
+            if (sc == null) return;
+
+            try
+            {
+                var atoms = sc.GetAtoms();
+                int atomCount = atoms != null ? atoms.Count : 0;
+                int personCount = 0;
+                if (atoms != null)
+                {
+                    for (int i = 0; i < atoms.Count; i++)
+                    {
+                        Atom a = atoms[i];
+                        if (a != null && SceneUtils.IsPersonLikeAtom(a)) personCount++;
+                    }
+                }
+
+                sceneSettleAtomsLast = atomCount;
+                if (sceneSettleAtomsMin < 0 || atomCount < sceneSettleAtomsMin) sceneSettleAtomsMin = atomCount;
+                if (sceneSettleAtomsMax < 0 || atomCount > sceneSettleAtomsMax) sceneSettleAtomsMax = atomCount;
+
+                sceneSettlePersonsLast = personCount;
+                if (sceneSettlePersonsMin < 0 || personCount < sceneSettlePersonsMin) sceneSettlePersonsMin = personCount;
+                if (sceneSettlePersonsMax < 0 || personCount > sceneSettlePersonsMax) sceneSettlePersonsMax = personCount;
+
+                // "Soft-ready": settle window shows stable atom/person counts and no active image busy for >=1s.
+                bool stableCounts = sceneSettlePrevAtoms == atomCount && sceneSettlePrevPersons == personCount;
+                sceneSettlePrevAtoms = atomCount;
+                sceneSettlePrevPersons = personCount;
+                if (stableCounts && !busy && queueDepth >= 0 && queueDepth <= 2)
+                {
+                    sceneSettleStableSampleStreak++;
+                    if (sceneSettleStableSampleStreak >= 2 && sceneSettleSoftReadyRealtime < 0f)
+                    {
+                        sceneSettleSoftReadyRealtime = now;
+                    }
+                }
+                else
+                {
+                    sceneSettleStableSampleStreak = 0;
+                }
+            }
+            catch { }
+        }
+
+        static int TryGetCombinedImageQueueDepth()
+        {
+            int total = 0;
+            bool any = false;
+
+            try
+            {
+                if (ImageLoaderThreaded.singleton != null)
+                {
+                    int c = TryGetImageQueueDepthFromLoader(Traverse.Create(ImageLoaderThreaded.singleton));
+                    if (c >= 0)
+                    {
+                        total += c;
+                        any = true;
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (CustomImageLoaderThreaded.singleton != null)
+                {
+                    int c = TryGetImageQueueDepthFromLoader(Traverse.Create(CustomImageLoaderThreaded.singleton));
+                    if (c >= 0)
+                    {
+                        total += c;
+                        any = true;
+                    }
+                }
+            }
+            catch { }
+
+            return any ? total : -1;
+        }
+
+        static int TryGetImageQueueDepthFromLoader(Traverse tr)
+        {
+            if (tr == null) return -1;
+            try
+            {
+                object n = tr.Field("numRealQueuedImages").GetValue();
+                if (n is int ni && ni >= 0) return ni;
+            }
+            catch { }
+
+            try
+            {
+                object q = tr.Field("queuedImages").GetValue();
+                if (q != null)
+                {
+                    var countProp = q.GetType().GetProperty("Count");
+                    if (countProp != null)
+                    {
+                        object cObj = countProp.GetValue(q, null);
+                        if (cObj is int ci && ci >= 0) return ci;
+                    }
+                }
+            }
+            catch { }
+
+            return -1;
         }
 
         static bool IsImageLoadingBusy()
@@ -999,6 +1197,7 @@ namespace VPB
             {
                 LogSceneLoadLifecycleBreakdown(context, name, ms / 1000.0);
                 LogSceneLoadPhaseBreakdown(context, name, ms / 1000.0);
+                LogSceneLoadSettleBreakdown(context, name, ms / 1000.0);
                 LogSceneLoadStats(name, ms / 1000.0);
                 LogPerfSummary();
                 LogTextureOffenderSummary();
@@ -1145,6 +1344,74 @@ namespace VPB
                 sb.Append(" busyFlaps:");
                 sb.Append(sceneLoadBusyFlapTransitions);
 
+                LogString(LevelWarn, sb.ToString());
+            }
+            finally
+            {
+                StringBuilderPool.Return(sb);
+            }
+        }
+
+        static void LogSceneLoadSettleBreakdown(string context, string sceneName, double durSeconds)
+        {
+            float settleWindowSec = -1f;
+            if (sceneLoadPostLoadInternalRealtime >= 0f && sceneLoadFirstNotLoadingRealtime >= 0f)
+            {
+                settleWindowSec = Mathf.Max(0f, sceneLoadFirstNotLoadingRealtime - sceneLoadPostLoadInternalRealtime);
+            }
+
+            string atomsRange = (sceneSettleAtomsMin >= 0 && sceneSettleAtomsMax >= 0)
+                ? (sceneSettleAtomsMin + "->" + sceneSettleAtomsMax + " (last:" + sceneSettleAtomsLast + ")")
+                : "n/a";
+            string personsRange = (sceneSettlePersonsMin >= 0 && sceneSettlePersonsMax >= 0)
+                ? (sceneSettlePersonsMin + "->" + sceneSettlePersonsMax + " (last:" + sceneSettlePersonsLast + ")")
+                : "n/a";
+            string queueStats = sceneSettleQueueMax >= 0
+                ? ("max:" + sceneSettleQueueMax + " last:" + sceneSettleQueueLast)
+                : "n/a";
+            string busyRatio = sceneSettleSampleCount > 0
+                ? ((sceneSettleBusySampleCount * 100.0f / sceneSettleSampleCount).ToString("0.0") + "%")
+                : "n/a";
+            float softReadyDelaySec = (sceneSettleSoftReadyRealtime >= 0f && sceneLoadPostLoadInternalRealtime >= 0f)
+                ? Mathf.Max(0f, sceneSettleSoftReadyRealtime - sceneLoadPostLoadInternalRealtime)
+                : -1f;
+
+            var sb = StringBuilderPool.Get();
+            try
+            {
+                sb.Append(GetTimeString());
+                sb.Append(" (vb_warn) ");
+                sb.Append("SCENE_LOAD_SETTLE ");
+                sb.Append(context);
+                sb.Append(" | ");
+                sb.Append(sceneName);
+                sb.Append(" | dur:");
+                sb.Append(durSeconds.ToString("0.00"));
+                sb.Append("s window:");
+                sb.Append(settleWindowSec >= 0f ? settleWindowSec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" samples:");
+                sb.Append(sceneSettleSampleCount);
+                sb.Append(" busy:");
+                sb.Append(sceneSettleBusySampleCount);
+                sb.Append(" (");
+                sb.Append(busyRatio);
+                sb.Append(")");
+                sb.Append(" queue:");
+                sb.Append(queueStats);
+                sb.Append(" softReady:");
+                sb.Append(softReadyDelaySec >= 0f ? softReadyDelaySec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" atoms:");
+                sb.Append(atomsRange);
+                sb.Append(" persons:");
+                sb.Append(personsRange);
+                sb.Append(" misses[file/open/var]:");
+                sb.Append(sceneSettleFileExistsMissCount);
+                sb.Append("/");
+                sb.Append(sceneSettleOpenStreamMissCount);
+                sb.Append("/");
+                sb.Append(sceneSettleVarEntryMissCount);
+                sb.Append(" onDemandRetries:");
+                sb.Append(sceneSettleOnDemandRetryCount);
                 LogString(LevelWarn, sb.ToString());
             }
             finally
