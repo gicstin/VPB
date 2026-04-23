@@ -190,6 +190,21 @@ namespace VPB
                     }
                 }
 
+                // In scan-whitelist mode, EnsureInstalled can make packages physically available
+                // without VaM having them registered yet. Prewarm on-demand registration before
+                // Restore() so clothing/hair/morph lookups don't fail on first access.
+                if (ScanWhitelistManager.Instance.IsEnabled)
+                {
+                    try
+                    {
+                        SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(presetFile, normalizedPath);
+                    }
+                    catch (Exception prewarmEx)
+                    {
+                        LogUtil.LogWarning("[VPB OnDemand] Scene import prewarm failed: " + prewarmEx.Message);
+                    }
+                }
+
                 sceneJson = sceneJson.RemoveNonPersonAtomsMutable();
                 if (sceneJson["atoms"] == null || sceneJson["atoms"].AsArray.Count == 0)
                 {
