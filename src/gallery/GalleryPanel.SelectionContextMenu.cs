@@ -1495,10 +1495,10 @@ namespace VPB
             show(tboxDisableAutoInstallBtn, !isCleanup);
             show(tboxHideBtn, !isCleanup);
             show(tboxUnhideBtn, !isCleanup);
-            show(tboxScanWhitelistAddFolderBtn, !isCleanup && ScanWhitelistManager.Instance.IsEnabled);
-            show(tboxScanWhitelistRemoveFolderBtn, !isCleanup && ScanWhitelistManager.Instance.IsEnabled);
-            show(tboxLoadBtn, !isCleanup);
-            show(tboxUnloadBtn, !isCleanup);
+            show(tboxScanWhitelistAddFolderBtn, false);
+            show(tboxScanWhitelistRemoveFolderBtn, false);
+            show(tboxLoadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
+            show(tboxUnloadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxLoadDepsBtn, !isCleanup);
             show(tboxCacheTexturesBtn, !isCleanup);
 

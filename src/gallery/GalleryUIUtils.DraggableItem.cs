@@ -708,6 +708,12 @@ namespace VPB
             string normalizedPath = UI.NormalizePath(FileEntry.Path);
             LogUtil.Log($"[VPB] LoadPose: Applying {FileEntry.Name} to {target.uid} (SuppressRoot: {suppressRoot})");
 
+            if (ScanWhitelistManager.Instance.IsEnabled)
+            {
+                try { SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(FileEntry, normalizedPath); }
+                catch { }
+            }
+
             // Use LoadJSONWithFallback instead of SuperController.LoadJSON directly:
             // some .var packages have spaces in their name (e.g. "infiniteya.Pose Pack.1")
             // which VAM's native LoadJSON cannot resolve from a UID path, but VPB can read

@@ -52,7 +52,10 @@ namespace VPB
 
                 List<string> added = ScanWhitelistManager.Instance.AddTemporaryUidOverrides(needed);
                 if (added != null && added.Count > 0)
+                {
                     LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list: +" + string.Join(", ", added.ToArray()));
+                    try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
+                }
                 return added;
             }
             catch (Exception ex)
@@ -69,6 +72,7 @@ namespace VPB
             {
                 ScanWhitelistManager.Instance.RemoveTemporaryUidOverrides(temporaryUids);
                 LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list removed: -" + string.Join(", ", temporaryUids.ToArray()));
+                try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
             }
             catch (Exception ex)
             {

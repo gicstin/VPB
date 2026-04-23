@@ -348,6 +348,18 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Rebind currently visible rows without rebuilding filters/sort/list contents.
+        /// Used when badge-only state changes (e.g. temporary scan-whitelist UID overrides).
+        /// </summary>
+        internal void RefreshVisibleGridVisualsOnly()
+        {
+            if (!HasLoadedContent || !IsVisible || IsHubMode) return;
+            if (recyclingGrid == null) return;
+            try { recyclingGrid.Refresh(); } catch { }
+            try { RefreshSelectionVisuals(); } catch { }
+        }
+
         /// <summary>Scene category or already showing package-level rows — use package list for deps/dependents filter.</summary>
         private bool PackageFilterUsesPackageListRows()
         {

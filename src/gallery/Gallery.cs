@@ -611,5 +611,22 @@ namespace VPB
                 try { p.RefreshDisplayedVarPathsAfterPackageMoves(set); } catch { }
             }
         }
+
+        /// <summary>
+        /// Refreshes row bindings for visible non-hub panels only (no full list rebuild).
+        /// Useful for badge-only state changes while auto-refresh is suppressed.
+        /// </summary>
+        public static void RefreshVisiblePanelRowVisuals()
+        {
+            if (singleton == null) return;
+            List<GalleryPanel> pl = singleton.Panels;
+            if (pl == null) return;
+            for (int i = 0; i < pl.Count; i++)
+            {
+                GalleryPanel p = pl[i];
+                if (p == null) continue;
+                try { p.RefreshVisibleGridVisualsOnly(); } catch { }
+            }
+        }
     }
 }

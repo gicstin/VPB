@@ -137,11 +137,39 @@ namespace VPB
 			catch { return false; }
 		}
 
-		/// <summary>True when the gallery should show the "H" badge (package prefs .hide or adjacent local scene.json.hide).</summary>
+		private static bool TryGetPackageForEntry(FileEntry entry, out VarPackage pkg)
+		{
+			pkg = null;
+			if (entry == null) return false;
+			try
+			{
+				if (entry is VarFileEntry vfe && vfe.Package != null) pkg = vfe.Package;
+				else if (entry is SystemFileEntry sfe && sfe.isVar && sfe.package != null) pkg = sfe.package;
+				else if (entry is PackageListEntry ple && ple.Package != null) pkg = ple.Package;
+			}
+			catch { pkg = null; }
+			return pkg != null;
+		}
+
+		/// <summary>
+		/// True when the gallery should show the "H" badge.
+		/// Local scenes still use adjacent <c>scene.json.hide</c>, while package rows only show "H"
+		/// when the package is hidden and not excluded from VaM's scan whitelist.
+		/// </summary>
 		public static bool IsGalleryHideBadgeVisible(FileEntry entry)
 		{
 			if (entry == null) return false;
-			return IsPackageVarHidden(entry) || IsLocalSceneJsonHidden(entry);
+			if (IsLocalSceneJsonHidden(entry)) return true;
+			if (!IsPackageVarHidden(entry)) return false;
+			if (!TryGetPackageForEntry(entry, out VarPackage pkg)) return false;
+			try
+			{
+				if (ScanWhitelistManager.Instance.IsEnabled
+					&& ScanWhitelistManager.Instance.IsPackageScanExcluded(pkg.Uid, pkg.Path ?? ""))
+					return false;
+			}
+			catch { }
+			return true;
 		}
 
 		/// <summary>True when the gallery should omit this entry (hidden marker present and user is not showing hidden packages).</summary>

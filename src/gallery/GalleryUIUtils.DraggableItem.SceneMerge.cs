@@ -1651,7 +1651,11 @@ namespace VPB
                 itemType == ItemType.ClothingItem ||
                 itemType == ItemType.HairItem ||
                 itemType == ItemType.ClothingPreset ||
-                itemType == ItemType.HairPreset;
+                itemType == ItemType.HairPreset ||
+                itemType == ItemType.Appearance ||
+                itemType == ItemType.Skin ||
+                itemType == ItemType.Pose ||
+                itemType == ItemType.Morphs;
             if (shouldPrewarmOnDemand)
             {
                 try
@@ -1660,7 +1664,7 @@ namespace VPB
                 }
                 catch (Exception ex)
                 {
-                    LogUtil.LogWarning("[VPB OnDemand] Clothing/Hair prewarm failed: " + ex.Message);
+                    LogUtil.LogWarning("[VPB OnDemand] Asset prewarm failed: " + ex.Message);
                 }
             }
 

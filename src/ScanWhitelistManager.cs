@@ -402,9 +402,9 @@ namespace VPB
         // --- Gallery helpers ---
 
         /// <summary>
-        /// Returns true if this file entry should show the scan-excluded "W" badge in the gallery.
-        /// The badge appears when the feature is enabled and the package's folder is not whitelisted
-        /// (and it has no per-UID override).
+        /// Returns true if this file entry should show the gallery "W" badge.
+        /// Current gallery behavior shows this only for packages effectively included by VaM's scan whitelist
+        /// (whitelisted folder or UID override), and hides it for VPB-only scan-excluded packages.
         /// </summary>
         public static bool IsScanExcludedBadgeVisible(FileEntry entry)
         {
@@ -419,7 +419,7 @@ namespace VPB
                 else if (entry is PackageListEntry ple && ple.Package != null) pkg = ple.Package;
 
                 if (pkg == null) return false;
-                return Instance.IsPackageScanExcluded(pkg.Uid, pkg.Path ?? "");
+                return !Instance.IsPackageScanExcluded(pkg.Uid, pkg.Path ?? "");
             }
             catch { return false; }
         }

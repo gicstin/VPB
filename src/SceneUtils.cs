@@ -580,6 +580,27 @@ namespace VPB
                 }
             }
 
+            // SQLite transitive dependency lookup — resolves full dep tree for the host package(s)
+            // without requiring deps to already be registered in VaM's FileManager.
+            if (uidCandidates.Count > 0)
+            {
+                var sqlDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var hostUids = new List<string>(uidCandidates);
+                foreach (string hostUid in hostUids)
+                {
+                    try
+                    {
+                        sqlDeps.Clear();
+                        if (VpbLocalDatabase.TryReadRecursiveDependencyUids(hostUid, sqlDeps))
+                        {
+                            foreach (string dep in sqlDeps)
+                                addUid(dep);
+                        }
+                    }
+                    catch { }
+                }
+            }
+
             if (entry != null && !string.IsNullOrEmpty(entry.Path))
             {
                 string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
@@ -619,17 +640,39 @@ namespace VPB
 
             if (uidCandidates.Count == 0) return 0;
 
+            int newlyRegistered = 0;
             foreach (string uid in uidCandidates)
             {
-                try { VamOnDemandLoader.TryRegisterPackageOnDemand(uid); } catch { }
+                try
+                {
+                    string result = VamOnDemandLoader.TryRegisterPackageOnDemand(uid);
+                    if (result != null) newlyRegistered++;
+                }
+                catch { }
             }
 
             try
             {
                 string sample = string.Join(", ", uidCandidates.Take(5).ToArray());
-                LogUtil.Log($"[VPB OnDemand] Prewarm attempted {uidCandidates.Count} package(s) for {(entry != null ? entry.Name : candidatePath)}. Sample: {sample}");
+                LogUtil.Log($"[VPB OnDemand] Prewarm attempted {uidCandidates.Count} package(s) ({newlyRegistered} new) for {(entry != null ? entry.Name : candidatePath)}. Sample: {sample}");
             }
             catch { }
+
+            // In whitelist mode, VaM's clothing catalog (geometry 'clothing:*' bool params) is only
+            // populated during a full FileManager.Refresh(). Without this, on-demand registered packages
+            // have their files accessible but their clothing items are invisible to VaM's clothing system,
+            // causing 'Param not found' / 'Clothing item missing' errors.
+            // This mirrors what EnsureInstalled + Refresh() does in non-whitelist mode.
+            if (newlyRegistered > 0)
+            {
+                try
+                {
+                    LogUtil.Log($"[VPB OnDemand] Triggering FileManager.Refresh for clothing catalog update ({newlyRegistered} new package(s))");
+                    MVR.FileManagement.FileManager.Refresh();
+                }
+                catch { }
+                try { FileManager.Refresh(); } catch { }
+            }
 
             return uidCandidates.Count;
         }
