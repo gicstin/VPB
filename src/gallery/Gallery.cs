@@ -75,7 +75,6 @@ namespace VPB
         void Awake()
         {
             singleton = this;
-            StartCoroutine(JSONExtensions.LoadCharacterGenderMap());
             try
             {
                 string gameRoot = Path.GetDirectoryName(Application.dataPath);
@@ -96,6 +95,7 @@ namespace VPB
         void OnEnable()
         {
             MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+            StartCoroutine(JSONExtensions.LoadCharacterGenderMap());
         }
 
         void OnDisable()
