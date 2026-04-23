@@ -109,8 +109,15 @@ namespace VPB
                     return;
                 }
 
+                // Fail closed by default: if config is missing/corrupt at startup, enable
+                // the whitelist with an empty list so AddonPackages are excluded from VaM's
+                // proactive scan. VPB on-demand registration still allows needed packages.
+                _enabled = true;
                 hasLoadedSuccessfully = true; // fresh start
-                LogUtil.Log("[VPB ScanWhitelist] No config found — disabled, passthrough mode");
+                if (!mainExists && !backupExists)
+                    LogUtil.LogWarning("[VPB ScanWhitelist] No config found — defaulting to enabled empty whitelist (fail-closed)");
+                else
+                    LogUtil.LogWarning("[VPB ScanWhitelist] Config unreadable — defaulting to enabled empty whitelist (fail-closed)");
             }
         }
 
