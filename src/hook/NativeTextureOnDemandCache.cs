@@ -62,6 +62,7 @@ namespace VPB
         private static long s_NativeCacheBytesExisting;
 
         private static int s_ZstdWrites;
+        private static int s_ZstdRewrites;
         private static int s_ZstdSkips;
         private static int s_ZstdFails;
         private static long s_ZstdOriginalBytes;
@@ -80,6 +81,8 @@ namespace VPB
 
         private static CacheWriteMode? s_NextJobWriteModeOverride;
         private static CacheWriteMode s_JobWriteMode;
+        private static bool s_NextJobRewriteExistingZstd;
+        private static bool s_JobRewriteExistingZstd;
 
         private static StringBuilder s_DebugTrace;
 
@@ -147,6 +150,11 @@ namespace VPB
             s_NextJobWriteModeOverride = mode;
         }
 
+        internal static void SetNextJobRewriteExistingZstd(bool rewriteExistingZstd)
+        {
+            s_NextJobRewriteExistingZstd = rewriteExistingZstd;
+        }
+
         internal static void BeginBatchJob(string title, int totalItems)
         {
             BeginUiJob(title);
@@ -198,6 +206,7 @@ namespace VPB
             s_NativeCacheBytesWritten = 0;
             s_NativeCacheBytesExisting = 0;
             s_ZstdWrites = 0;
+            s_ZstdRewrites = 0;
             s_ZstdSkips = 0;
             s_ZstdFails = 0;
             s_ZstdOriginalBytes = 0;
@@ -226,6 +235,8 @@ namespace VPB
             catch { }
             s_NextJobWriteModeOverride = null;
             s_JobWriteMode = mode;
+            s_JobRewriteExistingZstd = s_NextJobRewriteExistingZstd;
+            s_NextJobRewriteExistingZstd = false;
 
             s_CompletionSoundPlayed = false;
             s_UiSummary = null;
@@ -242,6 +253,7 @@ namespace VPB
                 s_DebugTrace.AppendLine("StartedUtc: " + DateTime.UtcNow.ToString("o"));
                 s_DebugTrace.AppendLine("Title: " + (title ?? string.Empty));
                 s_DebugTrace.AppendLine("WriteMode: " + s_JobWriteMode);
+                s_DebugTrace.AppendLine("RewriteExistingZstd: " + s_JobRewriteExistingZstd);
                 s_DebugTrace.AppendLine();
             }
             catch { }
@@ -329,6 +341,11 @@ namespace VPB
                 + "Saved Space: " + totalSaved + " (" + totalPct + "%)\n\n"
                 + "<b>Zstd Cache</b>\n"
                 + "Wrote: " + s_ZstdWrites + "    Skipped: " + s_ZstdSkips + "    Failed: " + s_ZstdFails;
+
+            if (s_ZstdRewrites > 0)
+            {
+                s_UiSummary += "\nRewrote existing: " + s_ZstdRewrites;
+            }
 
             if (s_ZstdDownscaleWrites > 0)
             {
@@ -1854,9 +1871,10 @@ namespace VPB
                         }
                     }
 
-                    bool zstdExists = (!string.IsNullOrEmpty(zstdPath) && File.Exists(zstdPath));
+                    bool zstdExists = (!string.IsNullOrEmpty(zstdPath) && File.Exists(zstdPath) && File.Exists(zstdPath + "meta"));
                     bool needNative = wantNative && !nativeExists;
-                    bool needZstd = wantZstd && !zstdExists;
+                    bool rewriteZstd = wantZstd && zstdExists && s_JobRewriteExistingZstd;
+                    bool needZstd = wantZstd && (!zstdExists || rewriteZstd);
 
                     if (!needNative && !needZstd)
                     {
@@ -1983,6 +2001,7 @@ namespace VPB
                     bool didZstdDownscale = false;
                     int zstdSourceW = 0;
                     int zstdSourceH = 0;
+                    bool allowNativePayloadRead = !rewriteZstd;
 
                     bool allowZstdDownscale = false;
                     try
@@ -1994,7 +2013,7 @@ namespace VPB
 
                     if (needNative && needZstd && allowZstdDownscale)
                     {
-                        bool okNative = TryBuildCachePayloadUnity(imgUidPath, internalPath, flags, targetWidth, targetHeight, false, out payload, out w, out h, out tf, out hasAlpha, out err, out _, out _, out _);
+                        bool okNative = TryBuildCachePayloadUnity(imgUidPath, internalPath, flags, targetWidth, targetHeight, false, allowNativePayloadRead, out payload, out w, out h, out tf, out hasAlpha, out err, out _, out _, out _);
                         if (!okNative || payload == null)
                         {
                             s_CacheFails++;
@@ -2002,7 +2021,7 @@ namespace VPB
                             continue;
                         }
 
-                        bool okZ = TryBuildCachePayloadUnity(imgUidPath, internalPath, flags, targetWidth, targetHeight, true, out payloadZstd, out wz, out hz, out tfz, out hasAlphaz, out errz, out didZstdDownscale, out zstdSourceW, out zstdSourceH);
+                        bool okZ = TryBuildCachePayloadUnity(imgUidPath, internalPath, flags, targetWidth, targetHeight, true, allowNativePayloadRead, out payloadZstd, out wz, out hz, out tfz, out hasAlphaz, out errz, out didZstdDownscale, out zstdSourceW, out zstdSourceH);
                         if (!okZ || payloadZstd == null)
                         {
                             payloadZstd = null;
@@ -2017,6 +2036,7 @@ namespace VPB
                             targetWidth,
                             targetHeight,
                             (needZstd && !needNative && allowZstdDownscale),
+                            allowNativePayloadRead,
                             out payload,
                             out w,
                             out h,
@@ -2146,6 +2166,7 @@ namespace VPB
                             AtomicWriteAllText(zstdPath + "meta", zmeta.ToString(string.Empty));
 
                             s_ZstdWrites++;
+                            if (rewriteZstd) s_ZstdRewrites++;
                             s_ZstdOriginalBytes += payloadZstd.Length;
                             if (compressed != null) s_ZstdCompressedBytes += compressed.Length;
                             try
@@ -2166,7 +2187,7 @@ namespace VPB
                                 }
                             }
                             catch { }
-                            Trace("ZstdWrite: path='" + zstdPath + "' orig=" + payloadZstd.Length + " comp=" + (compressed != null ? compressed.Length : 0));
+                            Trace((rewriteZstd ? "ZstdRewrite: path='" : "ZstdWrite: path='") + zstdPath + "' orig=" + payloadZstd.Length + " comp=" + (compressed != null ? compressed.Length : 0));
 
                             if (didZstdDownscale) s_ZstdDownscaleWrites++;
                             if (didZstdDownscale)
@@ -2533,7 +2554,7 @@ namespace VPB
             }
         }
 
-        private static bool TryBuildCachePayloadUnity(string imgUidPath, string internalPath, TextureFlags flags, int targetWidth, int targetHeight, bool allowZstdDownscale, out byte[] payload, out int width, out int height, out TextureFormat format, out bool hasAlpha, out string error, out bool didDownscale, out int sourceWidth, out int sourceHeight)
+        private static bool TryBuildCachePayloadUnity(string imgUidPath, string internalPath, TextureFlags flags, int targetWidth, int targetHeight, bool allowZstdDownscale, bool allowNativeCacheRead, out byte[] payload, out int width, out int height, out TextureFormat format, out bool hasAlpha, out string error, out bool didDownscale, out int sourceWidth, out int sourceHeight)
         {
             payload = null;
             width = 0;
@@ -2549,7 +2570,7 @@ namespace VPB
             {
                 string nativePath = GetNativeCachePathDynamic(imgUidPath, flags, 0, default(DateTime), targetWidth, targetHeight);
                 string nativeMetaPath = nativePath != null ? nativePath + "meta" : null;
-                if (!string.IsNullOrEmpty(nativePath) && File.Exists(nativePath) && File.Exists(nativeMetaPath))
+                if (allowNativeCacheRead && !string.IsNullOrEmpty(nativePath) && File.Exists(nativePath) && File.Exists(nativeMetaPath))
                 {
                     try
                     {
@@ -2859,18 +2880,25 @@ namespace VPB
     internal static class OnDemandTextureCacheHook
     {
         private static bool s_HotkeyNativeOnlyDown;
+        private static bool s_HotkeyRewriteExistingZstdDown;
         private static bool s_MultiRunning;
 
         public static void Update()
         {
             try { NativeTextureCacheBuildOverlay.EnsureCreated(); } catch { }
 
-            if (Input.GetKeyDown(KeyCode.F7)) s_HotkeyNativeOnlyDown = true;
+            if (Input.GetKeyDown(KeyCode.F7))
+            {
+                s_HotkeyRewriteExistingZstdDown = IsCtrlHeld();
+                s_HotkeyNativeOnlyDown = true;
+            }
 
             if (!s_HotkeyNativeOnlyDown) return;
 
-            bool requestNativeOnly = s_HotkeyNativeOnlyDown;
+            bool requestRewriteExistingZstd = s_HotkeyRewriteExistingZstdDown;
+            bool requestNativeOnly = s_HotkeyNativeOnlyDown && !requestRewriteExistingZstd;
             s_HotkeyNativeOnlyDown = false;
+            s_HotkeyRewriteExistingZstdDown = false;
 
             // If the previous job summary is still visible, close it before starting a new job.
             // Otherwise the UI can remain in summary-mode and block the new run.
@@ -2887,6 +2915,11 @@ namespace VPB
             if (requestNativeOnly)
             {
                 NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.NativeOnly);
+            }
+            else if (requestRewriteExistingZstd)
+            {
+                NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.ZstdOnly);
+                NativeTextureOnDemandCache.SetNextJobRewriteExistingZstd(true);
             }
 
             var selectedScenePaths = new List<string>();
@@ -2918,6 +2951,18 @@ namespace VPB
 
             // Fallback: no selection, try current scene
             NativeTextureOnDemandCache.TryBuildSceneCacheOnDemand(sc);
+        }
+
+        private static bool IsCtrlHeld()
+        {
+            try
+            {
+                return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static IEnumerator RunMultiSelection(MonoBehaviour host, List<string> scenePaths, List<string> packagePaths)

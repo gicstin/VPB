@@ -191,7 +191,13 @@ namespace VPB
                     return;
                 }
 
+                bool rewriteExistingZstd = IsCtrlHeldForTextureCacheRewrite();
                 NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.ZstdOnly);
+                NativeTextureOnDemandCache.SetNextJobRewriteExistingZstd(rewriteExistingZstd);
+                if (rewriteExistingZstd)
+                {
+                    ShowTemporaryStatus("Rewriting existing zstd texture cache...", 2f);
+                }
 
                 if (paths.Count == 1)
                 {
@@ -205,6 +211,18 @@ namespace VPB
             {
                 LogUtil.LogError("[VPB] TboxCacheTexturesSelected error: " + ex);
                 ShowTemporaryStatus("Cache textures failed. See log.", 2f);
+            }
+        }
+
+        private static bool IsCtrlHeldForTextureCacheRewrite()
+        {
+            try
+            {
+                return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            }
+            catch
+            {
+                return false;
             }
         }
 
