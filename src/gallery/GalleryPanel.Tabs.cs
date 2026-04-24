@@ -2727,6 +2727,47 @@ namespace VPB
             return btnGO;
         }
 
+        private const float GalleryBadgeSlotStartX = 6f;
+        private const float GalleryBadgeSlotStartY = -6f;
+        private const float GalleryBadgeSlotStepX = 36f;
+
+        private void ApplyTopLeftBadgeSlot(RectTransform badgeRT, int slotIndex)
+        {
+            if (badgeRT == null) return;
+            badgeRT.anchorMin = new Vector2(0f, 1f);
+            badgeRT.anchorMax = new Vector2(0f, 1f);
+            badgeRT.pivot = new Vector2(0f, 1f);
+            badgeRT.anchoredPosition = new Vector2(
+                GalleryBadgeSlotStartX + (GalleryBadgeSlotStepX * Mathf.Max(0, slotIndex)),
+                GalleryBadgeSlotStartY
+            );
+        }
+
+        private void ApplyDynamicTopLeftBadgeLayout(GameObject btnGO, bool showAutoInstall, bool showHide, bool showWhitelistExcluded)
+        {
+            if (btnGO == null) return;
+
+            int slotIndex = 0;
+
+            if (showAutoInstall)
+            {
+                Transform tr = btnGO.transform.Find("AutoInstallBadge");
+                if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, slotIndex++);
+            }
+
+            if (showHide)
+            {
+                Transform tr = btnGO.transform.Find("HidePackageBadge");
+                if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, slotIndex++);
+            }
+
+            if (showWhitelistExcluded)
+            {
+                Transform tr = btnGO.transform.Find("ScanExcludedBadge");
+                if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, slotIndex++);
+            }
+        }
+
         public void UpdateFileButtonVisuals(GameObject btnGO, FileEntry file)
         {
             if (btnGO == null)
@@ -3022,24 +3063,28 @@ namespace VPB
             }
 
             // AutoInstall Badge — show blue "A" for packages flagged as AutoInstall
+            bool showAutoInstallBadge = file.IsAutoInstall();
             Transform aiBadgeTr = btnGO.transform.Find("AutoInstallBadge");
             if (aiBadgeTr != null)
             {
-                aiBadgeTr.gameObject.SetActive(file.IsAutoInstall());
+                aiBadgeTr.gameObject.SetActive(showAutoInstallBadge);
             }
 
+            bool showHideBadge = PackageHidePrefs.IsGalleryHideBadgeVisible(file);
             Transform hideBadgeTr = btnGO.transform.Find("HidePackageBadge");
             if (hideBadgeTr != null)
             {
-                hideBadgeTr.gameObject.SetActive(PackageHidePrefs.IsGalleryHideBadgeVisible(file));
+                hideBadgeTr.gameObject.SetActive(showHideBadge);
             }
 
             // Scan-Excluded Badge: show "W" when package is in AddonPackages/ but excluded from VaM's whitelist scan
+            bool showScanExcludedBadge = ScanWhitelistManager.IsScanExcludedBadgeVisible(file);
             Transform scanExBadgeTr = btnGO.transform.Find("ScanExcludedBadge");
             if (scanExBadgeTr != null)
             {
-                scanExBadgeTr.gameObject.SetActive(ScanWhitelistManager.IsScanExcludedBadgeVisible(file));
+                scanExBadgeTr.gameObject.SetActive(showScanExcludedBadge);
             }
+            ApplyDynamicTopLeftBadgeLayout(btnGO, showAutoInstallBadge, showHideBadge, showScanExcludedBadge);
 
             // List Row Bind
             if (isListMode)
