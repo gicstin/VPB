@@ -16,6 +16,8 @@ using UnityEngine.UI;
 using ZstdNet;
 using Leap.Unity;
 using Leap.Unity.Infix;
+using System.Text;
+using VPB.src.util;
 namespace VPB
 {
     // Plugin metadata attribute: plugin ID, plugin name, plugin version (must be numeric)

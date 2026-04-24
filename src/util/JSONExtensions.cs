@@ -1,6 +1,11 @@
-﻿using SimpleJSON;
+﻿using AssetBundles;
+using HarmonyLib;
+using MeshVR;
+using SimpleJSON;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using UnityEngine;
 
@@ -154,6 +159,64 @@ namespace VPB.src.util
             }
 
             return new SimpleTransform();
+        }
+
+        private static bool _hasInitCharacterGenderMap = false;
+        public static Dictionary<string, string> CharacterGenderMap = new Dictionary<string, string>();
+
+        public static IEnumerator LoadCharacterGenderMap()
+        {
+            if (_hasInitCharacterGenderMap) yield break;
+            var timer = new Stopwatch();
+            timer.Start();
+            var load = AssetBundleManager.LoadAssetAsync("a_per", "assets/vamassets/prefabs/people/person.prefab", typeof(GameObject));
+
+            while (!load.IsDone()) { yield return null; }
+
+            var prefab = load.GetAsset<GameObject>();
+
+            var selector = prefab.GetComponentInChildren<DAZCharacterSelector>();
+
+            if (selector != null)
+            {
+                var allCharacters = new List<DAZCharacter>();
+                if (selector.femaleCharactersPrefab != null)
+                    allCharacters.AddRange(selector.femaleCharactersPrefab.GetComponentsInChildren<DAZCharacter>(true));
+                if (selector.maleCharactersPrefab != null)
+                    allCharacters.AddRange(selector.maleCharactersPrefab.GetComponentsInChildren<DAZCharacter>(true));
+                var loadedMale = 0;
+                var loadedFemale = 0;
+                foreach (var character in allCharacters)
+                {
+                    if (CharacterGenderMap.ContainsKey(character.displayName))
+                    {
+                        LogUtil.LogWarning("Skipping registration of duplicate character " + character.displayName + " (" + character.displayNameAlt + ")");
+                        continue;
+                    }
+                    CharacterGenderMap[character.displayName] = character.isMale ? "Male" : "Female";
+                    if (character.isMale) loadedMale++;
+                    else loadedFemale++;
+                }
+                _hasInitCharacterGenderMap = true;
+                LogUtil.Log("Loaded " + loadedFemale.ToString() + " female characters, " + loadedMale.ToString() + " male characters");
+            }
+            else
+            {
+                LogUtil.LogError("Failed to initialize character gender mapping (could not locate DAZCharacterSelector)");
+            }
+            timer.Stop();
+            LogUtil.Log("Initialized character gender map in " + timer.ElapsedMilliseconds + "ms");
+        }
+
+        public static string GetGenderForCharacter(string characterName)
+        {
+            if (!CharacterGenderMap.TryGetValue(characterName, out string gender) || gender == null)
+            {
+                LogUtil.LogWarning("Failed to determine gender for " + characterName);
+                return "Neutral";
+            }
+            
+            return gender;
         }
     }
 
