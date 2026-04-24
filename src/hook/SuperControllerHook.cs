@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Collections.Generic;
+using System.Diagnostics;
 using BepInEx;
 using UnityEngine;
 using HarmonyLib;
@@ -15,6 +16,10 @@ namespace VPB
 {
     public class SuperControllerHook
     {
+        private static readonly object pluginCreateLock = new object();
+        private static readonly Dictionary<int, Stopwatch> pluginCreateSwByThread = new Dictionary<int, Stopwatch>();
+        private static readonly Dictionary<int, string> pluginCreateNameByThread = new Dictionary<int, string>();
+
         // Registry of confirmed simulation texture paths extracted from preset files
         private static HashSet<string> simTextureRegistry = new HashSet<string>();
         private static HashSet<string> simTexturePatchedThisLoad = new HashSet<string>();
@@ -234,6 +239,14 @@ namespace VPB
             // Fall back to heuristic detection
             if (lower.Contains("phys")) return true;
             if (lower.Contains("simulation")) return true;
+
+            string[] pathSegments = lower.Split(new char[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < pathSegments.Length - 1; i++)
+            {
+                string segment = pathSegments[i];
+                if (segment == "sim" || segment == "simulation" || segment == "phys" || segment == "physics")
+                    return true;
+            }
 
             int lastSlash = lower.LastIndexOfAny(new char[] { '/', '\\' });
             string filename = lastSlash >= 0 ? lower.Substring(lastSlash + 1) : lower;
@@ -489,6 +502,116 @@ namespace VPB
             LogUtil.LogStartupReadyOnce("World UI activated");
             LogUtil.MarkScenePhaseWorldUiActivated();
             LogUtil.EndSceneLoadTotal("WorldUI.Activate");
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVRPluginManager), "CreateScriptController")]
+        public static void PreCreateScriptController(object mvrp, object type)
+        {
+            try
+            {
+                string pluginName = "unknown";
+                try
+                {
+                    if (mvrp != null)
+                    {
+                        string uid = null;
+                        string path = null;
+                        var t = mvrp.GetType();
+                        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                        try
+                        {
+                            var p = t.GetProperty("storeId", flags);
+                            if (p != null && p.PropertyType == typeof(string))
+                                uid = p.GetValue(mvrp, null) as string;
+                        }
+                        catch { }
+                        try
+                        {
+                            if (string.IsNullOrEmpty(uid))
+                            {
+                                var f = t.GetField("storeId", flags);
+                                if (f != null && f.FieldType == typeof(string))
+                                    uid = f.GetValue(mvrp) as string;
+                            }
+                        }
+                        catch { }
+                        try
+                        {
+                            var p = t.GetProperty("pluginPath", flags);
+                            if (p != null && p.PropertyType == typeof(string))
+                                path = p.GetValue(mvrp, null) as string;
+                        }
+                        catch { }
+                        try
+                        {
+                            if (string.IsNullOrEmpty(path))
+                            {
+                                var f = t.GetField("pluginPath", flags);
+                                if (f != null && f.FieldType == typeof(string))
+                                    path = f.GetValue(mvrp) as string;
+                            }
+                        }
+                        catch { }
+                        pluginName = !string.IsNullOrEmpty(uid) ? uid : (!string.IsNullOrEmpty(path) ? path : mvrp.GetType().Name);
+                    }
+                }
+                catch { }
+
+                string scriptType = type != null ? type.ToString() : "unknown";
+                int tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
+                var sw = Stopwatch.StartNew();
+                lock (pluginCreateLock)
+                {
+                    pluginCreateSwByThread[tid] = sw;
+                    pluginCreateNameByThread[tid] = pluginName + "|" + scriptType;
+                }
+                LogUtil.Log("[VPB.Startup] plugin_create START tid=" + tid + " plugin=" + pluginName + " type=" + scriptType);
+            }
+            catch { }
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch(typeof(MVRPluginManager), "CreateScriptController")]
+        public static Exception FinalizeCreateScriptController(Exception __exception)
+        {
+            try
+            {
+                int tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
+                Stopwatch sw = null;
+                string name = "unknown";
+                lock (pluginCreateLock)
+                {
+                    if (pluginCreateSwByThread.TryGetValue(tid, out sw))
+                        pluginCreateSwByThread.Remove(tid);
+                    if (pluginCreateNameByThread.TryGetValue(tid, out name))
+                        pluginCreateNameByThread.Remove(tid);
+                }
+                long ms = 0;
+                try { if (sw != null) { sw.Stop(); ms = sw.ElapsedMilliseconds; } } catch { }
+                if (__exception == null)
+                {
+                    LogUtil.Log("[VPB.Startup] plugin_create DONE tid=" + tid + " target=" + name + " ms=" + ms);
+                }
+                else
+                {
+                    LogUtil.LogWarning("[VPB.Startup] plugin_create FAIL tid=" + tid + " target=" + name + " ms=" + ms + " ex=" + __exception.GetType().Name + ": " + __exception.Message);
+                }
+            }
+            catch { }
+            return __exception;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SuperController), "Load", new Type[] { typeof(string) })]
+        public static void PreLoad(SuperController __instance, string saveName)
+        {
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SuperController), "LoadMerge", new Type[] { typeof(string) })]
+        public static void PreLoadMerge(SuperController __instance, string saveName)
+        {
         }
 
         [HarmonyPrefix]
@@ -1086,6 +1209,9 @@ namespace VPB
                 string uid = VamOnDemandLoader.UidFromEntryPath(path);
                 if (string.IsNullOrEmpty(uid)) return;
                 LogUtil.RecordVarEntryMiss();
+
+                if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
+                    return;
 
                 LogUtil.RecordOnDemandRetry();
                 VamOnDemandLoader.TryRegisterPackageOnDemand(uid);

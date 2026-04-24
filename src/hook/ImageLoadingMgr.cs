@@ -130,14 +130,32 @@ namespace VPB
                 }
             }
 
-                    string vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength, SuperControllerHook.IsSimulationTexturePath(qi.imgPath));
+            bool isSimPath = SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
+            string vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength, isSimPath);
 
             if (vpbCachePath != null && !File.Exists(vpbCachePath) && qi.setSize)
             {
-                string vpbCachePathDefault = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength, SuperControllerHook.IsSimulationTexturePath(qi.imgPath));
+                string vpbCachePathDefault = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength, isSimPath);
                 if (File.Exists(vpbCachePathDefault))
                 {
                     vpbCachePath = vpbCachePathDefault;
+                }
+            }
+
+            if (isSimPath && vpbCachePath != null && !File.Exists(vpbCachePath))
+            {
+                string legacyCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength, false);
+                if (File.Exists(legacyCachePath))
+                {
+                    vpbCachePath = legacyCachePath;
+                }
+                else if (qi.setSize)
+                {
+                    legacyCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength, false);
+                    if (File.Exists(legacyCachePath))
+                    {
+                        vpbCachePath = legacyCachePath;
+                    }
                 }
             }
 
@@ -395,7 +413,7 @@ namespace VPB
                 int expectedSize = TextureUtil.GetExpectedRawDataSize(meta.Width, meta.Height, meta.Format);
                 if (expectedSize > 0 && data.Length < expectedSize) return false;
 
-                bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
+                bool isSimTexture = meta.IsReadable || SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
                 Texture2D tex = qi.tex;
                 bool reusingExisting = tex != null;
                 if (tex == null)
