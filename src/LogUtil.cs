@@ -1200,7 +1200,7 @@ namespace VPB
                 sb.Append(worldUiSec >= 0f ? worldUiSec.ToString("0.00") + "s" : "n/a");
                 sb.Append(" worldUiToEnd:");
                 sb.Append(worldUiToEndSec >= 0f ? worldUiToEndSec.ToString("0.00") + "s" : "n/a");
-                LogString(LevelWarn, sb.ToString());
+                logSource.LogWarning(sb.ToString());
             }
             finally
             {
@@ -1271,7 +1271,7 @@ namespace VPB
                 sb.Append(" busyFlaps:");
                 sb.Append(sceneLoadBusyFlapTransitions);
 
-                LogString(LevelWarn, sb.ToString());
+                logSource.LogWarning(sb.ToString());
             }
             finally
             {
@@ -1339,7 +1339,7 @@ namespace VPB
                 sb.Append(sceneSettleVarEntryMissCount);
                 sb.Append(" onDemandRetries:");
                 sb.Append(sceneSettleOnDemandRetryCount);
-                LogString(LevelWarn, sb.ToString());
+                logSource.LogWarning(sb.ToString());
             }
             finally
             {

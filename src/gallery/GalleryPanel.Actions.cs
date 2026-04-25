@@ -274,6 +274,8 @@ namespace VPB
 
                 try { MVR.FileManagement.FileManager.Refresh(); } catch { }
                 FileManager.Refresh(true, false, false);
+                GalleryFileListSnapshotCache.Clear();
+                GalleryTagCountSnapshotCache.Clear();
                 creatorsCached = false;
                 categoriesCached = false;
                 tagsCached = false;

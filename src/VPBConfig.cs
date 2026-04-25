@@ -20,53 +20,27 @@ namespace VPB
         /// </summary>
         private int _lightweightGalleryTabRefreshSlotsRemaining;
 
-        public static bool IsLogConfigPerfEnabled()
-        {
-            try
-            {
-                return Settings.Instance != null && Settings.Instance.LogConfigPerf != null && Settings.Instance.LogConfigPerf.Value;
-            }
-            catch
-            {
-                return false;
-            }
-        }
 
-        private static bool LogConfigPerfVerbose()
+        /// <summary>Runs <see cref="ConfigChanged"/> subscribers one-by-one (same order as +=).</summary>
+        private void InvokeConfigChanged()
         {
-            return IsLogConfigPerfEnabled();
-        }
-
-        private static void LogPerfSave(string pathForLog, bool notifyListeners, bool lightTabsHint, long buildMs, long toStringMs, long diskMs, long notifyMs, long totalMs)
-        {
-            bool verbose = LogConfigPerfVerbose();
-            bool slow = totalMs >= 75 || notifyMs >= 50 || diskMs >= 25;
-            if (!verbose && !slow)
-                return;
-            string msg = "Config Save total=" + totalMs + "ms build=" + buildMs + "ms toString=" + toStringMs + "ms disk=" + diskMs + "ms ConfigChanged=" + notifyMs + "ms notifyListeners=" + notifyListeners + " lightTabsHint=" + lightTabsHint + " path=" + pathForLog;
-            if (slow && !verbose)
-                VPBLogger.Perf.LogWarning(msg);
-            else
-                VPBLogger.Perf.LogInfo(msg);
+            if (ConfigChanged != null)
+                ConfigChanged();
         }
 
         private static void LogPerfTriggerChange(long notifyMs)
         {
-            bool verbose = LogConfigPerfVerbose();
-            if (!verbose && notifyMs < 50)
+            if (notifyMs < 50)
                 return;
-            string msg = "Config TriggerChange ConfigChanged=" + notifyMs + "ms (no disk write)";
-            if (!verbose && notifyMs >= 50)
-                VPBLogger.Perf.LogWarning(msg);
-            else
-                VPBLogger.Perf.LogInfo(msg);
+            string msg = "[VPBConfig.Perf] TriggerChange ConfigChanged=" + notifyMs + "ms (no disk write)";
+            LogUtil.LogWarning(msg);
         }
 
         private static void LogPerfLoad(string pathForLog, long totalMs, bool fileExisted)
         {
-            if (!LogConfigPerfVerbose() || !fileExisted)
+            if (!fileExisted)
                 return;
-            VPBLogger.Perf.LogInfo("Config Load total=" + totalMs + "ms path=" + pathForLog);
+            LogUtil.Log("[VPBConfig.Perf] Load total=" + totalMs + "ms path=" + pathForLog);
         }
 
         private static string DescribeConfigChangedHandler(Delegate d)
@@ -95,47 +69,18 @@ namespace VPB
             ConfigChangedInvocationDepth++;
             try
             {
-                bool verbose = LogConfigPerfVerbose();
-                Stopwatch swTotal = Stopwatch.StartNew();
-                int n = list.Length;
-                long[] msEach = new long[n];
-                string[] names = new string[n];
-
-                for (int i = 0; i < n; i++)
+                foreach (Delegate d in list)
                 {
-                    names[i] = DescribeConfigChangedHandler(list[i]);
-                    Stopwatch sw = Stopwatch.StartNew();
                     try
                     {
-                        ((OnConfigChanged)list[i]).Invoke();
+                        ((OnConfigChanged)d).Invoke();
                     }
                     catch (Exception ex)
                     {
-                        VPBLogger.Config.LogError("ConfigChanged handler threw | " + names[i] + " | " + ex.Message);
+                        UnityEngine.Debug.LogError("[VPB] ConfigChanged handler threw | " + ex.Message);
                     }
-                    msEach[i] = sw.ElapsedMilliseconds;
                 }
-
-                long totalMs = swTotal.ElapsedMilliseconds;
-                bool logAll = verbose || totalMs >= 50;
-
-                try
-                {
-                    int detailLines = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        if (logAll || msEach[i] >= 25)
-                        {
-                            VPBLogger.Perf.LogInfo("ConfigChanged+" + context + " [" + (i + 1) + "/" + n + "] " + names[i] + " " + msEach[i] + "ms");
-                            detailLines++;
-                        }
-                    }
-                    if (detailLines > 0 && n > 1)
-                        VPBLogger.Perf.LogInfo("ConfigChanged+" + context + " wall=" + totalMs + "ms for " + n + " handlers");
-                }
-                catch { }
-
-                return totalMs;
+                return 0;
             }
             finally
             {
@@ -665,14 +610,6 @@ namespace VPB
             {
                 VPBLogger.Config.LogError("Error loading config: " + ex.Message);
             }
-            finally
-            {
-                try
-                {
-                    LogPerfLoad(cfgPath, loadSw.ElapsedMilliseconds, cfgExistedAtStart);
-                }
-                catch { }
-            }
         }
 
         public void Save()
@@ -776,26 +713,17 @@ namespace VPB
                 long msAfterToString = sw.ElapsedMilliseconds;
                 File.WriteAllText(path, jsonOutput);
                 long msAfterDisk = sw.ElapsedMilliseconds;
-                long notifyMs = 0;
                 if (notifyListeners)
                 {
                     try
                     {
-                        notifyMs = InvokeConfigChangedWithPerfLogging("Save");
+                        InvokeConfigChanged();
                     }
                     finally
                     {
                         _lightweightGalleryTabRefreshSlotsRemaining = 0;
                     }
                 }
-                long msTotal = sw.ElapsedMilliseconds;
-                long toStringMs = msAfterToString - msBuild;
-                long diskMs = msAfterDisk - msAfterToString;
-                try
-                {
-                    LogPerfSave(path, notifyListeners, lightTabsHint, msBuild, toStringMs, diskMs, notifyMs, msTotal);
-                }
-                catch { }
 
                 try
                 {
@@ -823,20 +751,14 @@ namespace VPB
         public void TriggerChange()
         {
             _lightweightGalleryTabRefreshSlotsRemaining = 0;
-            long notifyMs = 0;
             try
             {
-                notifyMs = InvokeConfigChangedWithPerfLogging("TriggerChange");
+                InvokeConfigChanged();
             }
             finally
             {
                 _lightweightGalleryTabRefreshSlotsRemaining = 0;
             }
-            try
-            {
-                LogPerfTriggerChange(notifyMs);
-            }
-            catch { }
         }
 
         private void ArmLightweightGalleryTabRefreshInternal()

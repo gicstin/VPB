@@ -2299,9 +2299,6 @@ namespace VPB
                 ThreadPool.QueueUserWorkItem((state) =>
                 {
                     var swWorker = System.Diagnostics.Stopwatch.StartNew();
-                    string workerPathLabel = "legacy";
-                    long workerBulkBuildMs = 0;
-                    int workerBulkOutCount = 0;
                     try
                     {
                         List<VpbLocalDatabase.Row> idxRows = new List<VpbLocalDatabase.Row>();
@@ -2353,7 +2350,6 @@ namespace VPB
 
                         if (useSqliteIndex)
                         {
-                            workerPathLabel = "sqlite";
                             var swBulk = System.Diagnostics.Stopwatch.StartNew();
                             var bulk = new List<FileEntry>(idxRows.Count > 0 ? idxRows.Count : 16);
                             for (int ri = 0; ri < idxRows.Count; ri++)
@@ -2463,8 +2459,6 @@ namespace VPB
                             }
 
                             swBulk.Stop();
-                            workerBulkBuildMs = swBulk.ElapsedMilliseconds;
-                            workerBulkOutCount = bulk.Count;
 
                             sqliteBulkList = bulk;
                             Thread.MemoryBarrier();
@@ -2703,12 +2697,20 @@ namespace VPB
                     }
                     catch { sysCacheHit = false; sysCachedRows = null; }
 
-                    if (sysCacheHit && sysCachedRows != null && sysCachedRows.Count > 0)
+                    if (sysCacheHit && sysCachedRows != null)
                     {
+                        bool prunedMissingCachedRows = false;
+                        List<VpbLocalDatabase.SystemFileRow> sysRowsToKeep = new List<VpbLocalDatabase.SystemFileRow>(sysCachedRows.Count);
                         for (int i = 0; i < sysCachedRows.Count; i++)
                         {
                             var r = sysCachedRows[i];
                             if (string.IsNullOrEmpty(r.Path)) continue;
+                            if (!File.Exists(r.Path))
+                            {
+                                prunedMissingCachedRows = true;
+                                continue;
+                            }
+                            sysRowsToKeep.Add(r);
                             DateTime wt = DateTime.MinValue;
                             if (r.LastWriteBinaryOrInvalid != long.MinValue)
                             {
@@ -2719,6 +2721,15 @@ namespace VPB
                             if (!PassesFilters(sysEntryFast, true)) continue;
                             files.Add(sysEntryFast);
                             if (sysLooseFilesAddedCount != null) sysLooseFilesAddedCount[0]++;
+                        }
+                        if (prunedMissingCachedRows)
+                        {
+                            try
+                            {
+                                if (!string.IsNullOrEmpty(sysCacheKey) && sysCacheSig != null)
+                                    VpbLocalDatabase.TryWriteSystemFilesForCacheKey(sysCacheKey, sysCacheSig, sysRowsToKeep);
+                            }
+                            catch { }
                         }
                     }
                     else
@@ -2810,7 +2821,7 @@ namespace VPB
                     }
                         try
                         {
-                            if (!string.IsNullOrEmpty(sysCacheKey) && sysCacheSig != null && sysRowsForWrite.Count > 0)
+                            if (!string.IsNullOrEmpty(sysCacheKey) && sysCacheSig != null)
                                 VpbLocalDatabase.TryWriteSystemFilesForCacheKey(sysCacheKey, sysCacheSig, sysRowsForWrite);
                         }
                         catch { }
