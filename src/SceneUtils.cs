@@ -133,8 +133,10 @@ namespace VPB
                 string name = (string.IsNullOrEmpty(filePrefix) ? "vpb_scene" : filePrefix) + "_" + Guid.NewGuid().ToString() + ".json";
                 string tempPath = Path.Combine(dir, name);
                 File.WriteAllText(tempPath, root.ToString());
+                LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(tempPath);
 
                 ScheduleTempFileDelete(tempPath, 20);
+                ScheduleTempFileDelete(tempPath + ".hide", 20);
                 return tempPath.Replace('\\', '/');
             }
             catch

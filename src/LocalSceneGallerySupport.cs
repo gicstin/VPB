@@ -11,6 +11,8 @@ namespace VPB
     {
         /// <summary>Prefix for keys in <see cref="FileEntry.AutoInstallLookup"/> / AutoInstall.txt so local scenes never collide with package UIDs.</summary>
         public const string AutoInstallLookupKeyPrefix = "VPB_LS:";
+        private const string SceneImportCachePrefix = "Saves/scene/VPB/";
+        private const string TempScenesPrefix = "Saves/scene/VPB_TempScenes/";
 
         public static string GetSavesSceneDirectoryFullPath()
         {
@@ -53,12 +55,57 @@ namespace VPB
 
             string lower = p.ToLowerInvariant();
             if (lower.Contains("/subscene/") || lower.Contains("/subscenedata/")) return false;
-            if (lower.Contains("/saves/scene/vpb_tmpscenes/") || lower.Contains("vpb_tmpscenes")) return false;
+            if (IsVpbGeneratedLocalScenePath(p)) return false;
             if (lower.Contains("/deletedscenes/")) return false;
 
             if (lower.IndexOf("/saves/scene/", StringComparison.Ordinal) >= 0) return true;
             if (lower.StartsWith("saves/scene/", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
+        }
+
+        public static bool IsVpbGeneratedLocalScenePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string p = path.Replace('\\', '/').TrimStart('/');
+            return p.StartsWith(SceneImportCachePrefix, StringComparison.OrdinalIgnoreCase)
+                || p.StartsWith(TempScenesPrefix, StringComparison.OrdinalIgnoreCase)
+                || p.IndexOf("/" + SceneImportCachePrefix, StringComparison.OrdinalIgnoreCase) >= 0
+                || p.IndexOf("/" + TempScenesPrefix, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        public static bool TryEnsureVpbGeneratedSceneHideMarker(string jsonPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(jsonPath)) return false;
+                if (!jsonPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+                if (!IsVpbGeneratedLocalScenePath(jsonPath)) return false;
+
+                string full;
+                try
+                {
+                    full = Path.IsPathRooted(jsonPath)
+                        ? Path.GetFullPath(jsonPath)
+                        : FileManager.GetFullPath(jsonPath.Replace('/', Path.DirectorySeparatorChar));
+                }
+                catch
+                {
+                    full = jsonPath;
+                }
+
+                string hidePath = full + ".hide";
+                if (File.Exists(hidePath)) return true;
+
+                string dir = Path.GetDirectoryName(hidePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+                File.WriteAllText(hidePath, string.Empty);
+                return File.Exists(hidePath);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>

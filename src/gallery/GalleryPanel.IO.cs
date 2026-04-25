@@ -2701,10 +2701,18 @@ namespace VPB
                     {
                         bool prunedMissingCachedRows = false;
                         List<VpbLocalDatabase.SystemFileRow> sysRowsToKeep = new List<VpbLocalDatabase.SystemFileRow>(sysCachedRows.Count);
+                        string titleForGeneratedSceneSkip = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+                        bool skipVpbGeneratedLocalScenes = titleForGeneratedSceneSkip.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
                         for (int i = 0; i < sysCachedRows.Count; i++)
                         {
                             var r = sysCachedRows[i];
                             if (string.IsNullOrEmpty(r.Path)) continue;
+                            if (skipVpbGeneratedLocalScenes && LocalSceneGallerySupport.IsVpbGeneratedLocalScenePath(r.Path))
+                            {
+                                LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(r.Path);
+                                prunedMissingCachedRows = true;
+                                continue;
+                            }
                             if (!File.Exists(r.Path))
                             {
                                 prunedMissingCachedRows = true;
@@ -2735,6 +2743,8 @@ namespace VPB
                     else
                     {
                         var sysRowsForWrite = new List<VpbLocalDatabase.SystemFileRow>(256);
+                        string titleForGeneratedSceneSkip = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+                        bool skipVpbGeneratedLocalScenes = titleForGeneratedSceneSkip.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
                     foreach (var searchPath in pathsToSearch)
                     {
                         if (!Directory.Exists(searchPath)) continue;
@@ -2752,6 +2762,12 @@ namespace VPB
 
                             foreach (var sysPath in sysFiles)
                             {
+                                if (skipVpbGeneratedLocalScenes && LocalSceneGallerySupport.IsVpbGeneratedLocalScenePath(sysPath))
+                                {
+                                    LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(sysPath);
+                                    continue;
+                                }
+
                                 if (yieldWatch.ElapsedMilliseconds > maxMsPerFrame)
                                 {
                                     yield return null;

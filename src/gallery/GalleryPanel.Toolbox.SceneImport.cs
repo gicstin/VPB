@@ -140,6 +140,7 @@ namespace VPB
 
                     Directory.CreateDirectory(Path.GetDirectoryName(convertedPath));
                     SuperController.singleton.SaveJSON(sceneJson, convertedPath);
+                    LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(convertedPath);
 
                     // TODO: this is not always necessary
                     var itemControl = SelectedTargetAtom.GetComponentInChildren<DAZClothingItemControl>();
