@@ -253,35 +253,7 @@ namespace VPB
             titleSearchRT.anchorMax = new Vector2(0.5f, 0.5f);
             titleSearchRT.pivot = new Vector2(0.5f, 0.5f);
             titleSearchRT.anchoredPosition = new Vector2(-40, 0);
-            titleSearchRT.sizeDelta = new Vector2(40, 40); // Collapsed (icon-only) by default
-
-            // Expand search to full width on focus; collapse back when cleared
-            {
-                const float collapsedW = 40f, expandedW = 240f;
-                Transform clearBtnT = titleSearchInput.transform.Find("Button_X");
-                GameObject clearBtnGO = clearBtnT != null ? clearBtnT.gameObject : null;
-                if (clearBtnGO != null) clearBtnGO.SetActive(false);
-
-                EventTrigger searchTrigger = titleSearchInput.gameObject.GetComponent<EventTrigger>()
-                                             ?? titleSearchInput.gameObject.AddComponent<EventTrigger>();
-
-                var onSelect = new EventTrigger.Entry { eventID = EventTriggerType.Select };
-                onSelect.callback.AddListener(_ => {
-                    titleSearchRT.sizeDelta = new Vector2(expandedW, 40f);
-                    if (clearBtnGO != null) clearBtnGO.SetActive(true);
-                });
-                searchTrigger.triggers.Add(onSelect);
-
-                var onDeselect = new EventTrigger.Entry { eventID = EventTriggerType.Deselect };
-                onDeselect.callback.AddListener(_ => {
-                    if (string.IsNullOrEmpty(titleSearchInput.text))
-                    {
-                        titleSearchRT.sizeDelta = new Vector2(collapsedW, 40f);
-                        if (clearBtnGO != null) clearBtnGO.SetActive(false);
-                    }
-                });
-                searchTrigger.triggers.Add(onDeselect);
-            }
+            titleSearchRT.sizeDelta = new Vector2(240, 40);
 
             // File Sort Type Button
             GameObject fileSortTypeBtn = UI.CreateUIButton(titleBarGO, 35, 40, VPBTranslation.T("gallery.sort.az", "Az"), 16, 0, 0, AnchorPresets.middleCenter, null);
