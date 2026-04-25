@@ -1,21 +1,20 @@
-﻿using System;
+﻿using HarmonyLib;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
-using System.IO;
-using BepInEx.Logging;
-using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Profiling;
+using VPB.src.util;
 
 namespace VPB
 {
     class LogUtil
     {
         public static readonly object JsonLock = new object();
-        static ManualLogSource logSource;
+        private static VPBLogSource logSource = VPBLogger.GetInstance(VPBModule.Main);
 
         static readonly DateTime processStartTime;
         static DateTime pluginSessionStartTime;
@@ -91,8 +90,6 @@ namespace VPB
         static bool startupReadyLogged;
         static bool startupAutoReadyLogged;
 
-
-
         static LogUtil()
         {
             try
@@ -107,7 +104,7 @@ namespace VPB
             ResetPluginSession();
         }
 
-        static void ResetPluginSession()
+        public static void ResetPluginSession()
         {
             pluginSessionStartTime = DateTime.Now;
             pluginSessionEngineStartSeconds = Time.realtimeSinceStartup;
@@ -118,17 +115,6 @@ namespace VPB
             sincePluginAwake.Reset();
             pluginAwakeMarked = false;
         }
-
-
-        public static void SetLogSource(ManualLogSource source)
-        {
-            logSource = source;
-            // Treat a new log source as a new plugin session. This ensures timing output
-            // is meaningful across BepInEx hot reloads (game/process not restarted).
-            ResetPluginSession();
-        }
-
-
 
         static string lastTimeString;
         static long lastTimeTicks;
@@ -155,128 +141,79 @@ namespace VPB
             sincePluginAwake.Start();
         }
 
-        const int LevelInfo = 0;
-        const int LevelWarn = 1;
-        const int LevelErr = 2;
-
-        static void LogString(int level, string msg)
-        {
-            if (logSource != null)
-            {
-                if (level == LevelInfo) logSource.LogInfo(msg);
-                else if (level == LevelWarn) logSource.LogWarning(msg);
-                else if (level == LevelErr) logSource.LogError(msg);
-                return;
-            }
-            if (level == LevelInfo) UnityEngine.Debug.Log(msg);
-            else if (level == LevelWarn) UnityEngine.Debug.LogWarning(msg);
-            else if (level == LevelErr) UnityEngine.Debug.LogError(msg);
-        }
-
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string log)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(log);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+            logSource.LogInfo(log);
         }
 
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, string p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+            logSource.LogInfo($"{p1} {p2}");
         }
 
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, string p2, string p3)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            sb.Append(p3);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+
+            logSource.LogInfo($"{p1} {p2} {p3}");
         }
 
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, int p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+
+            logSource.LogInfo($"{p1} {p2}");
         }
 
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, float p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+            logSource.LogInfo($"{p1} {p2}");
         }
 
+        /// <see cref="VPBLogSource.LogError(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogError")]
         public static void LogError(string log)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_err) ");
-            sb.Append(log);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelErr, msg);
+            logSource.LogError(log);
         }
 
+        /// <see cref="VPBLogSource.LogError(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogError")]
         public static void LogError(string p1, string p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_err) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelErr, msg);
+            logSource.LogError($"{p1} {p2}");
         }
 
+        /// <see cref="VPBLogSource.LogWarning(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogWarning")]
         public static void LogWarning(string log)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_warn) ");
-            sb.Append(log);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelWarn, msg);
+            logSource.LogWarning(log);
         }
 
+
+        /// <see cref="VPBLogSource.LogWarning(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogWarning")]
         public static void LogWarning(string p1, string p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_warn) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelWarn, msg);
+            logSource.LogWarning($"{p1} {p2}");
         }
 
         static int GetTextureLogLevel()
@@ -341,20 +278,10 @@ namespace VPB
             }
 
             var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_warn) ");
-            sb.Append("TEX_SLOW_DISK ");
-            sb.Append(op);
-            sb.Append(" ");
-            sb.Append(ms.ToString("0.00"));
-            sb.Append("ms (");
             FormatBytes(sb, bytes);
-            sb.Append(") | ");
-            sb.Append(path);
-
             string msg = sb.ToString();
             StringBuilderPool.Return(sb);
-            LogString(LevelWarn, msg);
+            LogWarning($"TEX_SLOW_DISK {op} {ms.ToString("0.00")}ms ({msg}) | {path}");
         }
 
         public static void LogVerboseUi(string message)
@@ -1047,7 +974,7 @@ namespace VPB
             FormatBytes(sb, memManagedEnd - memManagedStart);
             sb.Append(")");
 
-            LogString(LevelWarn, sb.ToString());
+            LogWarning(sb.ToString());
             }
             finally
             {
@@ -1153,7 +1080,7 @@ namespace VPB
                     sb.Append(")");
                 }
 
-                LogString(LevelWarn, sb.ToString());
+                LogWarning(sb.ToString());
             }
             finally
             {

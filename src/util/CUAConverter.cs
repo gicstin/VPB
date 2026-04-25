@@ -136,9 +136,9 @@ namespace VPB.src.util
                     continue;
                 }
 
-                string gender = charNode.Value.Split(' ')[0];
+                string gender = JSONExtensions.GetGenderForCharacter(charNode.Value);
 
-                var clothingItem = CUAClothing.CreateAndSaveCUAClothing(cua, i, sourcePackageId, gender);
+                var needRefresh = CUAClothing.CreateAndSaveCUAClothing(out JSONClass clothingItem, cua, i, sourcePackageId, gender);
 
                 if (geom["clothing"] == null)
                     geom["clothing"] = new JSONArray();

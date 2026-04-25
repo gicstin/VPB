@@ -544,7 +544,7 @@ namespace VPB
                 return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
             }
-            else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
+            else if (context == "Category" || context == "Creator" || context == "Path" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
             {
                 return type == SortType.Name || type == SortType.Count;
             }
@@ -553,7 +553,7 @@ namespace VPB
 
         private static bool SupportsSidePaneFourModeSort(string context)
         {
-            return context == "Category" || context == "Creator" || context == "Status" || context == "Tags" || context == "Hub";
+            return context == "Category" || context == "Creator" || context == "Path" || context == "Status" || context == "Tags" || context == "Hub";
         }
 
         /// <summary>Upper side pane: name A→Z, name Z→A, count low→high, count high→low (same icons as scene file sort).</summary>

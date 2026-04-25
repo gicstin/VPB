@@ -170,10 +170,19 @@ namespace VPB
 
         private void LoadThumbnail(FileEntry file, RawImage target, bool gridThumbnailContext = true)
         {
-            // Skip thumbnails for missing/virtual entries
-            if (file is VirtualFileEntry || file is MissingPackageListEntry)
+            if (file is MissingPackageListEntry)
             {
                 ClearThumbnailTarget(target);
+                return;
+            }
+
+            if (file is VirtualFileEntry vfeOuter)
+            {
+                string thumbUrl;
+                if (_hubThumbnailUrlCache.TryGetValue(vfeOuter.Uid, out thumbUrl) && !string.IsNullOrEmpty(thumbUrl))
+                    LoadHubThumbnailToTarget(thumbUrl, vfeOuter.Uid, target);
+                else
+                    ClearThumbnailTarget(target);
                 return;
             }
 
@@ -199,7 +208,7 @@ namespace VPB
 
         private void LoadThumbnailInternal(FileEntry file, RawImage target, bool gridThumbnailContext)
         {
-            // Skip thumbnails for missing/virtual entries - clear any existing texture
+            // Virtual/missing entries are handled before reaching here
             if (file is VirtualFileEntry || file is MissingPackageListEntry)
             {
                 ClearThumbnailTarget(target);
@@ -462,6 +471,52 @@ namespace VPB
             {
                 arf.aspectRatio = (float)tex.width / tex.height;
             }
+        }
+
+        /// <summary>
+        /// Downloads and applies a Hub CDN thumbnail URL to a gallery RawImage target.
+        /// Uses HubImageLoaderThreaded so it benefits from its in-memory cache and download queue.
+        /// Uses ThumbnailBindingTag to avoid applying stale textures to recycled list rows.
+        /// </summary>
+        private void LoadHubThumbnailToTarget(string thumbUrl, string uid, RawImage target)
+        {
+            if (string.IsNullOrEmpty(thumbUrl) || target == null) return;
+            if (HubImageLoaderThreaded.singleton == null) { ClearThumbnailTarget(target); return; }
+
+            string expectedTag = "hub|" + uid;
+
+            ThumbnailBindingTag bind = target.GetComponent<ThumbnailBindingTag>();
+            if (bind == null) bind = target.gameObject.AddComponent<ThumbnailBindingTag>();
+
+            // Already showing this Hub thumbnail — keep it
+            if (bind.ExpectedTag == expectedTag && target.texture != null)
+            {
+                target.color = Color.white;
+                return;
+            }
+
+            // Release any previously bound local texture before switching to a Hub one
+            if (bind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
+            {
+                CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(bind.CurrentTexture);
+                bind.CurrentTexture = null;
+            }
+            bind.ExpectedTag = expectedTag;
+
+            HubImageLoaderThreaded.QueuedImage qi = HubImageLoaderThreaded.singleton.GetQI();
+            qi.imgPath = thumbUrl;
+            qi.isThumbnail = true;
+            qi.groupId = currentLoadingGroupId;
+            qi.callback = (res) => {
+                if (res?.tex == null) return;
+                if (target == null) return;
+                ThumbnailBindingTag cbBind = target.GetComponent<ThumbnailBindingTag>();
+                if (cbBind == null || cbBind.ExpectedTag != expectedTag) return;
+                target.texture = res.tex;
+                target.color = Color.white;
+                UpdateAspectRatio(target, res.tex);
+            };
+            HubImageLoaderThreaded.singleton.QueueThumbnailImmediate(qi);
         }
     }
 }

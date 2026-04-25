@@ -9,20 +9,30 @@ namespace VPB.src.util
 {
     public partial class CUAClothing
     {
-        public static JSONClass CreateAndSaveCUAClothing(JSONClass cua, int index, string packageName = "Local", string gender = "Neutral", bool replaceExisting = false)
+        /// <summary>
+        /// Create and save clothing items to `Custom/Clothing`
+        /// </summary>
+        /// <param name="clothingItem">Storable of `id` (path name) and `internalId` (unique ID)</param>
+        /// <param name="cua">The CUA this clothing is based on</param>
+        /// <param name="index"></param>
+        /// <param name="packageName"></param>
+        /// <param name="gender"></param>
+        /// <param name="replaceExisting"></param>
+        /// <returns>True if a clothing item was created, False if one already exists</returns>
+        public static bool CreateAndSaveCUAClothing(out JSONClass clothingItem, JSONClass cua, int index, string packageName = "Local", string gender = "Neutral", bool replaceExisting = false)
         {
             var cuaId = cua.GetId();
             var assetName = cua.GetStorable("asset")["assetUrl"].Value.Split('/').Last().Split('.')[0];
             var path = $"Custom/Clothing/{gender}/VPB/{packageName}/{assetName}/{cuaId}";
             var uid = $"VPB:{packageName} - {cuaId}";
 
-            var clothingItem = new JSONClass();
+            clothingItem = new JSONClass();
             clothingItem["id"] = path + ".vam";
             clothingItem["internalId"] = uid;
             clothingItem["enabled"] = "true";
 
             var metaExists = File.Exists(path + ".vam");
-            if (metaExists && !replaceExisting) return clothingItem;
+            if (metaExists && !replaceExisting) return false;
 
             var clothingMeta = JSONClass.Parse(GetClothingMetadataJSON(gender, uid, cuaId)).AsObject;
             var clothingPreset = JSONClass.Parse(GetClothingPresetJSON(uid)).AsObject;
@@ -37,19 +47,19 @@ namespace VPB.src.util
             // should SuperController be used?
             SuperController.singleton.SaveJSON(clothingPreset, path + ".vaj");
 
-            // Copy the dummy binary if it does not exist
+            // Create the dummy binary if it does not exist
             if (!File.Exists(path + ".vab"))
             {
                 using (var output = FileManager.OpenStreamForCreate(path + ".vab")) {
                     using (var writer = new BinaryWriter(output))
                     {
-                        writer.Write(GetClothingBinaryData());
+                        writer.Write(clothingBinary);
                     }
                 }
 
             }
 
-            return clothingItem;
+            return true;
         }
 
 

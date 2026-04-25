@@ -29,6 +29,9 @@ namespace VPB
         }
         public HubResourcePackage connectedItem;
 
+        /// <summary>Optional: Hub CDN thumbnail image. If present (set by VPB), HubResourcePackage will load the package preview into it.</summary>
+        public RawImage thumbnailImage;
+
         public Button resourceButton;
         public Text nameText;
         public Text licenseTypeText;

@@ -1317,6 +1317,13 @@ namespace VPB
         {
             if (entry == null) return false;
 
+            if (!string.IsNullOrEmpty(currentPackagePathFilter))
+            {
+                string folder = TryGetPathFilterFolderForEntry(entry);
+                if (!GalleryPathFilterMatchesFolder(folder, currentPackagePathFilter))
+                    return false;
+            }
+
             // Hide filtering and sort-only narrowing run in PostFilesListHideAndSortFollowupRoutine after the grid is shown.
             // to avoid per-entry FileManager.FileExists calls blocking the scan drain loop.
 
@@ -1789,6 +1796,7 @@ namespace VPB
             creatorsCached = false;
             tagsCached = false;
             categoriesCached = false;
+            pathsCached = false;
         }
 
         /// <summary>Key for <see cref="GalleryFileListSnapshotCache"/> when the full enumeration result is reproducible from panel state.</summary>
@@ -1816,6 +1824,7 @@ namespace VPB
                 }
                 sb.Append('\u001E');
                 sb.Append(currentCreator ?? "").Append('\u001E');
+                sb.Append(currentPackagePathFilter ?? "").Append('\u001E');
                 sb.Append(nameFilterLower ?? "").Append('\u001E');
                 sb.Append(title).Append('\u001E');
                 sb.Append((int)posePeopleFilter).Append('\u001E');
@@ -2129,6 +2138,7 @@ namespace VPB
                 string _bExtension = currentExtension;
                 List<string> _bPaths = currentPaths != null ? new List<string>(currentPaths) : null;
                 string _bPath = currentPath;
+                string _bPackagePathFilter = currentPackagePathFilter;
                 string _bCategoryTitle = currentCategoryTitle;
                 var _bCategories = categories != null ? new List<Gallery.Category>(categories) : null;
                 bool _buildCreators = earlyBuildCreators;
@@ -2141,7 +2151,7 @@ namespace VPB
                         if (_buildCreators)
                         {
                             var counts = new Dictionary<string, int>();
-                            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath, null, _bCategoryTitle))
+                            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath, null, _bCategoryTitle, _bPackagePathFilter))
                             {
                                 string[] exts2 = string.IsNullOrEmpty(_bExtension) ? new string[0] : _bExtension.Split('|');
                                 var tExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2153,6 +2163,9 @@ namespace VPB
                                     {
                                         if (string.IsNullOrEmpty(pkg.Creator)) continue;
                                         if (pkg.FileEntries == null) continue;
+                                        if (!string.IsNullOrEmpty(_bPackagePathFilter) &&
+                                            !GalleryPathFilterMatchesRawPath(pkg.Path, _bPackagePathFilter))
+                                            continue;
                                         int cnt = pkg.FileEntries.Count;
                                         for (int i = 0; i < cnt; i++)
                                         {
@@ -2181,7 +2194,7 @@ namespace VPB
                             foreach (var c in _bCategories)
                                 catCounts2[c.name] = 0;
 
-                            if (!VpbLocalDatabase.TryReadCategoryMemberCounts(catCounts2, _bCreator))
+                            if (!VpbLocalDatabase.TryReadCategoryMemberCounts(catCounts2, _bCreator, null, _bPackagePathFilter))
                             {
                                 var extToCats2 = new Dictionary<string, List<Gallery.Category>>(StringComparer.OrdinalIgnoreCase);
                                 foreach (var c in _bCategories)
@@ -2200,6 +2213,9 @@ namespace VPB
                                     foreach (var pkg in FileManager.PackagesByUid.Values)
                                     {
                                         if (!string.IsNullOrEmpty(_bCreator) && (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != _bCreator)) continue;
+                                        if (!string.IsNullOrEmpty(_bPackagePathFilter) &&
+                                            !GalleryPathFilterMatchesRawPath(pkg.Path, _bPackagePathFilter))
+                                            continue;
                                         if (pkg.FileEntries == null) continue;
                                         int cnt = pkg.FileEntries.Count;
                                         for (int i = 0; i < cnt; i++)
@@ -2225,7 +2241,7 @@ namespace VPB
                                     }
                                 }
                             }
-                            AddLocalCustomScriptsCountToCategory(catCounts2);
+                            AddLocalCustomScriptsCountToCategory(catCounts2, _bPackagePathFilter);
                             earlyNewCatCounts = catCounts2;
                         }
                     }
@@ -2250,6 +2266,7 @@ namespace VPB
                 string titleForIndexMain = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                 string extForIndexMain = currentExtension ?? "";
                 string creatorForIndexMain = currentCreator ?? "";
+                string packagePathFilterForIndexMain = currentPackagePathFilter ?? "";
                 int wantsLoadedStateForIndexMain = -1;
                 try
                 {
@@ -2350,6 +2367,13 @@ namespace VPB
                                 if (string.IsNullOrEmpty(listPath))
                                     continue;
 
+                                if (!string.IsNullOrEmpty(packagePathFilterForIndexMain))
+                                {
+                                    string rawPath = !string.IsNullOrEmpty(varHint) ? varHint : listPath;
+                                    if (!GalleryPathFilterMatchesRawPath(rawPath, packagePathFilterForIndexMain))
+                                        continue;
+                                }
+
                                 // Exclusive filter (Loaded-only) is pushed into SQLite query when possible,
                                 // but keep a defensive check here for any non-indexed paths.
                                 if (wantsLoadedStateForIndexMain != -1)
@@ -2440,6 +2464,11 @@ namespace VPB
                                 if (!string.IsNullOrEmpty(filterCreator))
                                 {
                                     if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
+                                }
+                                if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
+                                    !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
+                                {
+                                    continue;
                                 }
 
                                 List<string> names;

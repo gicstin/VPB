@@ -1752,7 +1752,11 @@ namespace VPB
         /// Fills side-tab category totals from <c>cat_mem</c> when the index matches the current package scan (avoids scanning every VAR on disk).
         /// Only keys already present in <paramref name="countsByCategoryName"/> are updated.
         /// </summary>
-        internal static bool TryReadCategoryMemberCounts(Dictionary<string, int> countsByCategoryName, string creatorFilter = "", HashSet<string> activeTags = null)
+        internal static bool TryReadCategoryMemberCounts(
+            Dictionary<string, int> countsByCategoryName,
+            string creatorFilter = "",
+            HashSet<string> activeTags = null,
+            string packagePathFilter = "")
         {
             if (!VpbSqlite3.IsAvailable || countsByCategoryName == null || countsByCategoryName.Count == 0) return false;
 
@@ -1776,14 +1780,23 @@ namespace VPB
                     if (conn == null) return false;
                     
                     bool hasCreator = !string.IsNullOrEmpty(creatorFilter);
+                    string normalizedPackagePathFilter = "";
+                    bool hasPackagePathFilter = false;
+                    if (!string.IsNullOrEmpty(packagePathFilter))
+                    {
+                        normalizedPackagePathFilter = packagePathFilter.Replace('\\', '/').Trim().Trim('/');
+                        hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
+                    }
                     bool hasTags = activeTags != null && activeTags.Count > 0;
                     
                     var sb = new StringBuilder();
                     sb.Append("SELECT m.category, COUNT(*) FROM cat_mem m");
-                    if (hasCreator) sb.Append(" INNER JOIN pkg p ON p.uid = m.pkg_uid");
+                    if (hasCreator || hasPackagePathFilter) sb.Append(" INNER JOIN pkg p ON p.uid = m.pkg_uid");
                     
                     sb.Append(" WHERE 1=1");
                     if (hasCreator) sb.Append(" AND p.creator = ?");
+                    if (hasPackagePathFilter)
+                        sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     
                     List<string> tagsList = null;
                     if (hasTags)
@@ -1801,6 +1814,8 @@ namespace VPB
                     {
                         int bind = 1;
                         if (hasCreator) stmt.BindText(bind++, creatorFilter);
+                        if (hasPackagePathFilter)
+                            stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
                         if (hasTags)
                         {
                             foreach (var tag in tagsList)
@@ -1838,7 +1853,8 @@ namespace VPB
             List<string> pathPrefixes,
             string singlePathPrefix,
             HashSet<string> activeTags = null,
-            string categoryTitle = null)
+            string categoryTitle = null,
+            string packagePathFilter = null)
         {
             if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
             countsOut.Clear();
@@ -1873,12 +1889,21 @@ namespace VPB
                 {
                     bool hasTags = activeTags != null && activeTags.Count > 0;
                     bool hasCat = !string.IsNullOrEmpty(categoryTitle);
+                    string normalizedPackagePathFilter = "";
+                    bool hasPackagePathFilter = false;
+                    if (!string.IsNullOrEmpty(packagePathFilter))
+                    {
+                        normalizedPackagePathFilter = packagePathFilter.Replace('\\', '/').Trim().Trim('/');
+                        hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
+                    }
                     var sb = new StringBuilder();
                     string countExpr = hasCat ? "COUNT(*)" : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
                     sb.Append("SELECT p.creator, ").Append(countExpr).Append(" ");
                     sb.Append("FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid ");
                     sb.Append("WHERE length(trim(coalesce(p.creator,''))) > 0");
                     if (hasCat) sb.Append(" AND m.category = ?");
+                    if (hasPackagePathFilter)
+                        sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     
                     List<string> tagsList = null;
                     if (hasTags)
@@ -1896,6 +1921,8 @@ namespace VPB
                     {
                         int bind = 1;
                         if (hasCat) stmt.BindText(bind++, categoryTitle);
+                        if (hasPackagePathFilter)
+                            stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
                         if (hasTags)
                         {
                             foreach (var tag in tagsList)
@@ -1912,6 +1939,187 @@ namespace VPB
                             if (!int.TryParse(stmt.ColumnText(1), out n)) n = 0;
                             if (!string.IsNullOrEmpty(creator))
                                 countsOut[creator] = n;
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                countsOut.Clear();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Side-tab package-folder file counts (VAR rows only) grouped by package directory path under
+        /// AddonPackages/ and AllPackages/, including parent folders.
+        /// </summary>
+        internal static bool TryReadPackageFolderCounts(
+            Dictionary<string, int> countsOut,
+            string extensionPipeSeparated,
+            List<string> pathPrefixes,
+            string singlePathPrefix,
+            HashSet<string> activeTags,
+            string categoryTitle,
+            string creatorFilter)
+        {
+            if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
+            countsOut.Clear();
+
+            if (string.IsNullOrEmpty(categoryTitle)) return false;
+
+            long scanBin = DateTime.MinValue.Ticks;
+            try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+
+            string catSig = null;
+            long readyScan = long.MinValue;
+            lock (s_Sync)
+            {
+                readyScan = s_ReadyScanBinary;
+                catSig = s_ReadyCategoriesSig;
+            }
+            if (readyScan != scanBin || string.IsNullOrEmpty(catSig)) return false;
+            if (s_RebuildRunning) return false;
+
+            var extSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(extensionPipeSeparated))
+            {
+                string[] exts = extensionPipeSeparated.Split('|');
+                for (int i = 0; i < exts.Length; i++)
+                {
+                    string e = exts[i] != null ? exts[i].Trim() : "";
+                    if (e.Length > 0) extSet.Add(e.ToLowerInvariant());
+                }
+            }
+
+            void AddHierarchyCount(string folderPath, int count)
+            {
+                if (string.IsNullOrEmpty(folderPath) || count <= 0) return;
+                string p = folderPath.Replace('\\', '/').Trim('/');
+                if (p.Length == 0) return;
+
+                string[] seg = p.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                if (seg.Length == 0) return;
+                string running = seg[0];
+                for (int si = 1; si <= seg.Length; si++)
+                {
+                    int cur;
+                    countsOut.TryGetValue(running, out cur);
+                    countsOut[running] = cur + count;
+                    if (si < seg.Length) running += "/" + seg[si];
+                }
+            }
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    bool hasTags = activeTags != null && activeTags.Count > 0;
+                    bool hasCreator = !string.IsNullOrEmpty(creatorFilter);
+                    bool hasPathPrefix = (pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix);
+
+                    var sb = new StringBuilder();
+                    sb.Append("SELECT ifnull(p.var_path,''), COUNT(*) ");
+                    sb.Append("FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid ");
+                    sb.Append("WHERE m.category = ?");
+                    if (hasCreator) sb.Append(" AND p.creator = ?");
+
+                    if (extSet.Count > 0)
+                    {
+                        sb.Append(" AND (");
+                        int ei = 0;
+                        foreach (var ext in extSet)
+                        {
+                            if (ei++ > 0) sb.Append(" OR ");
+                            sb.Append("lower(m.internal_path) LIKE ? ESCAPE '\\'");
+                        }
+                        sb.Append(")");
+                    }
+
+                    if (hasPathPrefix)
+                    {
+                        sb.Append(" AND (");
+                        bool first = true;
+                        if (pathPrefixes != null && pathPrefixes.Count > 0)
+                        {
+                            for (int i = 0; i < pathPrefixes.Count; i++)
+                            {
+                                if (string.IsNullOrEmpty(pathPrefixes[i])) continue;
+                                if (!first) sb.Append(" OR ");
+                                sb.Append("m.internal_path LIKE ? ESCAPE '\\'");
+                                first = false;
+                            }
+                        }
+                        if (!string.IsNullOrEmpty(singlePathPrefix))
+                        {
+                            if (!first) sb.Append(" OR ");
+                            sb.Append("m.internal_path LIKE ? ESCAPE '\\'");
+                            first = false;
+                        }
+                        if (first) sb.Append("1");
+                        sb.Append(")");
+                    }
+
+                    if (hasTags)
+                    {
+                        foreach (var _ in activeTags)
+                            sb.Append(" AND m.list_path LIKE ? ESCAPE '\\'");
+                    }
+
+                    sb.Append(" GROUP BY p.var_path");
+
+                    using (var stmt = conn.Prepare(sb.ToString()))
+                    {
+                        int bind = 1;
+                        stmt.BindText(bind++, categoryTitle);
+                        if (hasCreator) stmt.BindText(bind++, creatorFilter);
+
+                        if (extSet.Count > 0)
+                        {
+                            foreach (var ext in extSet)
+                                stmt.BindText(bind++, "%." + EscapeLike(ext));
+                        }
+
+                        if (hasPathPrefix)
+                        {
+                            if (pathPrefixes != null && pathPrefixes.Count > 0)
+                            {
+                                for (int i = 0; i < pathPrefixes.Count; i++)
+                                {
+                                    string pref = pathPrefixes[i];
+                                    if (string.IsNullOrEmpty(pref)) continue;
+                                    stmt.BindText(bind++, EscapeLike(pref.Replace('\\', '/')) + "%");
+                                }
+                            }
+                            if (!string.IsNullOrEmpty(singlePathPrefix))
+                            {
+                                stmt.BindText(bind++, EscapeLike(singlePathPrefix.Replace('\\', '/')) + "%");
+                            }
+                        }
+
+                        if (hasTags)
+                        {
+                            foreach (var tag in activeTags)
+                                stmt.BindText(bind++, "%[" + EscapeLike(tag) + "]%");
+                        }
+
+                        int step;
+                        while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
+                        {
+                            string varPath = stmt.ColumnText(0) ?? "";
+                            int n;
+                            if (!int.TryParse(stmt.ColumnText(1), out n)) n = 0;
+                            if (n <= 0 || string.IsNullOrEmpty(varPath)) continue;
+
+                            string normalized;
+                            if (!GalleryPanel.TryNormalizeGalleryPathUnderKnownRoots(varPath, out normalized)) continue;
+                            string folder = "";
+                            try { folder = Path.GetDirectoryName(normalized); } catch { folder = ""; }
+                            if (string.IsNullOrEmpty(folder)) continue;
+                            folder = folder.Replace('\\', '/').Trim('/');
+                            if (folder.Length == 0) continue;
+                            AddHierarchyCount(folder, n);
                         }
                     }
                 }

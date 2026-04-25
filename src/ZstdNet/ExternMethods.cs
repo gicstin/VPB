@@ -5,11 +5,13 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using size_t = System.UIntPtr;
 using BepInEx;
+using VPB.src.util;
 
 namespace ZstdNet
 {
 	internal static class ExternMethods
 	{
+        private static VPBLogSource logger = VPBLogger.GetInstance(VPBModule.Zstd);
 		private static bool _initialized = false;
 
 		static ExternMethods()
@@ -114,7 +116,7 @@ namespace ZstdNet
                             loadedVia = "LoadLibrary";
                             if (VPB.Settings.Instance != null && VPB.Settings.Instance.LogStartupDetails != null && VPB.Settings.Instance.LogStartupDetails.Value)
                             {
-                                SafeLog(string.Format("[ZstdNet] libzstd.dll loaded OK | via: {0} | path: {1} | Assembly: {2}, Plugins: {3}, Scripts: {4}",
+                                VPBLogger.Zstd.LogInfo (string.Format("libzstd.dll loaded OK | via: {0} | path: {1} | Assembly: {2}, Plugins: {3}, Scripts: {4}",
                                     loadedVia,
                                     foundPath ?? "null",
                                     assemblyDir ?? "null",
@@ -126,51 +128,26 @@ namespace ZstdNet
                         else
                         {
                             long err = Marshal.GetLastWin32Error();
-                            failDetails.Append("[ZstdNet] LoadLibrary failed for ").Append(fullPath).Append(". Error: ").Append(err).AppendLine();
+                            failDetails.Append("LoadLibrary failed for ").Append(fullPath).Append(". Error: ").Append(err).AppendLine();
                         }
                     }
                 }
 
-                failDetails.Append("[ZstdNet] libzstd.dll not found in search paths. Falling back to default search.").AppendLine();
-                failDetails.Append("[ZstdNet] Paths - Assembly: ").Append(assemblyDir ?? "null").Append(", Plugins: ").Append(pluginDir ?? "null").Append(", Scripts: ").Append(scriptDir ?? "null").AppendLine();
-                failDetails.Append("[ZstdNet] SearchDirs:").AppendLine();
+                failDetails.Append("libzstd.dll not found in search paths. Falling back to default search.").AppendLine();
+                failDetails.Append("Paths - Assembly: ").Append(assemblyDir ?? "null").Append(", Plugins: ").Append(pluginDir ?? "null").Append(", Scripts: ").Append(scriptDir ?? "null").AppendLine();
+                failDetails.Append("SearchDirs:").AppendLine();
                 foreach (string dir in searchDirs)
                 {
-                    failDetails.Append("[ZstdNet]  ").Append(dir ?? "null").AppendLine();
+                    failDetails.Append(dir ?? "null").AppendLine();
                 }
 
-                SafeLog(failDetails.ToString().TrimEnd('\r', '\n'));
+                VPBLogger.Zstd.LogWarning(failDetails.ToString().TrimEnd('\r', '\n'));
             }
             catch (Exception ex)
             {
-                SafeLog(string.Format("[ZstdNet] Exception in SetWinDllDirectory: {0}", ex.Message));
+                VPBLogger.Zstd.LogWarning(string.Format("Exception in SetWinDllDirectory: {0}", ex.Message));
             }
 		}
-
-        private static void SafeLog(string message)
-        {
-            try
-            {
-                bool logged = false;
-                try
-                {
-                    VPB.LogUtil.Log(message);
-                    logged = true;
-                }
-                catch
-                {
-                }
-
-                if (!logged)
-                {
-                    UnityEngine.Debug.Log(message);
-                }
-            }
-            catch
-            {
-                // Ignore logging errors
-            }
-        }
 
 		[DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
 		private static extern bool SetDllDirectory(string path);

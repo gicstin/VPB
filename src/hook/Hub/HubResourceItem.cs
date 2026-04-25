@@ -12,6 +12,7 @@ namespace VPB
     public class HubResourceItem
     {
         protected HubBrowse browser;
+        private static readonly string[] SizeSuffixes = new string[9] { "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
 
         protected string resource_id;
 
@@ -200,6 +201,50 @@ namespace VPB
             titleJSON = new JSONStorableString("title", startingValue);
             tagLineJSON = new JSONStorableString("tagLine", startingValue2);
             versionNumberJSON = new JSONStorableString("versionNumber", startingValue3);
+            
+            // Calculate total size and append dependency info to version string
+            long totalSize = 0;
+            if (varFilesJSONArray != null)
+            {
+                foreach (JSONNode file in varFilesJSONArray)
+                {
+                    totalSize += (long)file["file_size"].AsDouble;
+                }
+            }
+            
+            JSONClass deps = resource["dependencies"].AsObject;
+            if (deps != null)
+            {
+                foreach (string key in deps.Keys)
+                {
+                    JSONArray depFiles = deps[key].AsArray;
+                    if (depFiles != null)
+                    {
+                        foreach (JSONNode depFile in depFiles)
+                        {
+                            totalSize += (long)depFile["file_size"].AsDouble;
+                        }
+                    }
+                }
+            }
+
+            string extraInfo = "";
+            if (asInt > 0)
+            {
+                extraInfo += $" ({asInt} deps";
+                if (totalSize > 0)
+                {
+                    extraInfo += $", {SizeSuffix(totalSize)}";
+                }
+                extraInfo += ")";
+            }
+            else if (totalSize > 0)
+            {
+                extraInfo += $" ({SizeSuffix(totalSize)})";
+            }
+            
+            versionNumberJSON.val = startingValue3 + extraInfo;
+
             payTypeJSON = new JSONStorableString("payType", startingValue4);
             categoryJSON = new JSONStorableString("category", startingValue5);
             payTypeAndCategorySelectAction = new JSONStorableAction("PayTypeAndCategorySelect", PayTypeAndCategorySelect);
@@ -309,6 +354,26 @@ namespace VPB
         protected DateTime UnixTimeStampToDateTime(int unixTimeStamp)
         {
             return new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddSeconds(unixTimeStamp).ToLocalTime();
+        }
+
+        private static string SizeSuffix(long value, int decimalPlaces = 1)
+        {
+            if (value < 0)
+            {
+                return "-" + SizeSuffix(-value);
+            }
+            if (value == 0)
+            {
+                return string.Format("{0:n" + decimalPlaces + "} bytes", 0);
+            }
+            int num = (int)Math.Log(value, 1024.0);
+            decimal num2 = (decimal)value / (decimal)(1L << num * 10);
+            if (Math.Round(num2, decimalPlaces) >= 1000m)
+            {
+                num++;
+                num2 /= 1024m;
+            }
+            return string.Format("{0:n" + decimalPlaces + "} {1}", num2, SizeSuffixes[num]);
         }
 
         public virtual void Refresh()
@@ -449,8 +514,67 @@ namespace VPB
                 titleJSON.text = ui.titleText;
                 tagLineJSON.text = ui.tagLineText;
                 versionNumberJSON.text = ui.versionText;
-                payTypeJSON.text = ui.payTypeText;
+                // Format as "PayType: Category"
+                if (ui.payTypeText != null)
+                {
+                    string payType = payTypeJSON.val;
+                    string category = categoryJSON.val;
+                    
+                    // Avoid duplication if category is already in payType (e.g. "Free Looks" and "Looks")
+                    if (!string.IsNullOrEmpty(category) && payType.EndsWith(category, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Strip the duplicate part from payType
+                        payType = payType.Substring(0, payType.Length - category.Length).Trim();
+                    }
+
+                    string formattedText = payType;
+                    if (!string.IsNullOrEmpty(category))
+                    {
+                        formattedText += ": " + category;
+                    }
+                    ui.payTypeText.text = formattedText;
+                }
+                
+                // Style the main pay type badge if it's not empty
+                if (ui.payTypeText != null && !string.IsNullOrEmpty(payTypeJSON.val))
+                {
+                    var payRT = ui.payTypeText.GetComponent<RectTransform>();
+                    
+                    // Check if we need to add a background image if it doesn't have one
+                    Image payImg = ui.payTypeText.GetComponent<Image>();
+                    if (payImg == null && payRT.parent != null)
+                    {
+                        // Check parent for background (standard VaM badge pattern)
+                        payImg = payRT.parent.GetComponent<Image>();
+                    }
+                    
+                    // If no background, add one to make it look like a badge
+                    if (payImg == null)
+                    {
+                        payImg = ui.payTypeText.gameObject.AddComponent<Image>();
+                        // Give it some padding
+                        payRT.sizeDelta = new Vector2(payRT.sizeDelta.x + 20, payRT.sizeDelta.y + 10);
+                    }
+
+                    if (payImg != null)
+                    {
+                        payImg.enabled = true;
+                        if (payTypeJSON.val.ToLower().Contains("free"))
+                            payImg.color = new Color(0.2f, 0.6f, 0.2f, 1f); // Darker green for free
+                        else
+                            payImg.color = new Color(0.5f, 0f, 0.5f, 1f); // Dark magenta/purple for paid
+                    }
+                    
+                    ui.payTypeText.alignment = TextAnchor.MiddleCenter;
+                    ui.payTypeText.color = Color.white;
+                    ui.payTypeText.fontStyle = FontStyle.Bold;
+                }
                 categoryJSON.text = ui.categoryText;
+                // Hide the original category text to avoid "Free: Looks Looks"
+                if (ui.categoryText != null)
+                {
+                    ui.categoryText.gameObject.SetActive(false);
+                }
                 payTypeAndCategorySelectAction.button = ui.payTypeAndCategorySelectButton;
                 creatorSelectAction.button = ui.creatorSelectButton;
                 creatorJSON.text = ui.creatorText;
