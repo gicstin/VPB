@@ -358,7 +358,13 @@ namespace VPB
             {
                 var m = AccessTools.Method(fm, "FileExists", sig);
                 if (m == null) continue;
-                harmony.Patch(m, prefix: new HarmonyMethod(prefix));
+                string postfixName = sig.Length == 3
+                    ? nameof(PostFileExists3)
+                    : (sig.Length == 2 ? nameof(PostFileExists2) : nameof(PostFileExists1));
+                var postfix = AccessTools.Method(typeof(SuperControllerHook), postfixName);
+                harmony.Patch(m,
+                    prefix: new HarmonyMethod(prefix),
+                    postfix: postfix != null ? new HarmonyMethod(postfix) : null);
                 return;
             }
         }
@@ -429,25 +435,70 @@ namespace VPB
             }
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "FileExists", new Type[] { typeof(string), typeof(bool), typeof(bool) })]
-        public static void PostFileExists3(ref bool __result)
+        public static void PostFileExists3(string __0, bool __1, ref bool __result)
         {
+            PostFileExistsOnDemand(__0, __1, ref __result);
             LogUtil.RecordFileExistsResult(__result);
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "FileExists", new Type[] { typeof(string), typeof(bool) })]
-        public static void PostFileExists2(ref bool __result)
+        public static void PostFileExists2(string __0, bool __1, ref bool __result)
         {
+            PostFileExistsOnDemand(__0, __1, ref __result);
             LogUtil.RecordFileExistsResult(__result);
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "FileExists", new Type[] { typeof(string) })]
-        public static void PostFileExists1(ref bool __result)
+        public static void PostFileExists1(string __0, ref bool __result)
         {
+            PostFileExistsOnDemand(__0, false, ref __result);
             LogUtil.RecordFileExistsResult(__result);
+        }
+
+        private static void PostFileExistsOnDemand(string path, bool onlySystemFiles, ref bool result)
+        {
+            try
+            {
+                if (result) return;
+                if (onlySystemFiles) return;
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
+                if (VamOnDemandLoader.s_InOnDemand) return;
+
+                string uid = VamOnDemandLoader.UidFromEntryPath(path);
+                if (string.IsNullOrEmpty(uid)) return;
+                LogUtil.RecordVarEntryMiss();
+
+                if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
+                    return;
+
+                LogUtil.RecordOnDemandRetry();
+                VamOnDemandLoader.TryRegisterPackageOnDemand(uid);
+                VamOnDemandLoader.s_InOnDemand = true;
+                try
+                {
+                    if (MVR.FileManagement.FileManager.GetVarFileEntry(path) != null)
+                    {
+                        result = true;
+                        return;
+                    }
+
+                    // VaM may check FileExists against a *.latest:/... plugin path even
+                    // after the package registered under its concrete UID.
+                    string rewritten = VamOnDemandLoader.TryRewriteLatestEntryPath(path, attemptRegister: true);
+                    if (!string.IsNullOrEmpty(rewritten) && !string.Equals(rewritten, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogUtil.RecordOnDemandRetry();
+                        if (MVR.FileManagement.FileManager.GetVarFileEntry(rewritten) != null)
+                            result = true;
+                    }
+                }
+                finally
+                {
+                    VamOnDemandLoader.s_InOnDemand = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] PostFileExistsOnDemand error: " + ex.Message);
+            }
         }
 
         [HarmonyPrefix]

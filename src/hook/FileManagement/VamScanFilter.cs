@@ -76,7 +76,10 @@ namespace VPB
             }
             catch (Exception ex)
             {
-                LogUtil.LogWarning("[VPB ScanFilter] TryRegisterVarInVam failed for " + varPath + ": " + ex.Message);
+                Exception root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+                LogUtil.LogWarning("[VPB ScanFilter] TryRegisterVarInVam failed for " + varPath + ": "
+                    + root.GetType().Name + ": " + root.Message);
                 return false;
             }
             finally

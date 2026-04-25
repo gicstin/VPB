@@ -46,11 +46,11 @@ namespace VPB
         private static long s_StartupAllowedScriptCount;
         private static readonly HashSet<string> s_StartupDeferredAnyUidsLogged =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        // Targeted startup script deferral list for known heavy plugin controllers.
+        // Script/plugin paths must be registered synchronously when VaM asks for them.
+        // VaM treats a false existence check as a failed plugin load and does not retry later.
         private static readonly HashSet<string> s_StartupDeferredScriptUids =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "JayJayWon.BrowserAssist.90"
             };
 
         // Startup diagnostics: quantify how much time on-demand registration consumes.
@@ -190,6 +190,12 @@ namespace VPB
             if (!TryResolveVarPathForUid(uid, out string resolvedUid, out string varPath))
                 return null;
             if (string.IsNullOrEmpty(varPath)) return null;
+
+            lock (s_RegisteredLock)
+            {
+                if (!string.IsNullOrEmpty(resolvedUid) && s_RegisteredOnDemand.Contains(resolvedUid)) return null;
+            }
+            if (!string.IsNullOrEmpty(resolvedUid) && WasRecentFailure(resolvedUid)) return null;
 
             // Check file exists
             if (!File.Exists(varPath)) return null;
@@ -580,9 +586,14 @@ namespace VPB
         public static string UidFromEntryPath(string entryPath)
         {
             if (string.IsNullOrEmpty(entryPath)) return null;
-            int colonIdx = entryPath.IndexOf(':');
+            string p = entryPath.Replace('\\', '/');
+            int colonIdx = p.IndexOf(":/");
             if (colonIdx > 0)
-                return entryPath.Substring(0, colonIdx);
+            {
+                // Do not treat absolute Windows paths (E:/...) as package UIDs.
+                if (colonIdx == 1 && char.IsLetter(p[0])) return null;
+                return p.Substring(0, colonIdx);
+            }
             return null;
         }
     }

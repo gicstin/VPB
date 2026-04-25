@@ -39,6 +39,7 @@ namespace VPB
                 foreach (string key in jclass.Keys)
                 {
                     JSONNode child = jclass[key];
+                    ExtractVariableReferences(key, result.VariableReferences);
                     
                     if (key == "id" && child.Value != null && child.Value.EndsWith(TIMELINE_PLUGIN_SUFFIX))
                     {
@@ -152,6 +153,7 @@ namespace VPB
             {
                 foreach (string key in jclass.Keys)
                 {
+                    ExtractVariableReferences(key, results);
                     ExtractAllVariableReferences(jclass[key], results);
                 }
             }

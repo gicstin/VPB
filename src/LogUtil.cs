@@ -343,6 +343,16 @@ namespace VPB
             LogWarning("STARTUP_MILESTONE " + context + " | since process start: " + GetSecondsSinceProcessStart().ToString("0.000") + "s");
         }
 
+        public static bool IsStartupReadyLogged()
+        {
+            return startupReadyLogged || readyLogged;
+        }
+
+        public static bool IsStartupPresetBootstrapActive()
+        {
+            return false;
+        }
+
         public static void BeginSceneClick(string saveName)
         {
             if (string.IsNullOrEmpty(saveName))
