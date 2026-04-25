@@ -685,6 +685,17 @@ namespace VPB
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
 
+        public void LoadPlugins(Atom target)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadPlugins: No target atom provided.");
+                return;
+            }
+            LogUtil.Log($"[VPB] LoadPlugins: Applying {FileEntry.Name} to {target.uid}");
+            ApplyClothingToAtom(target, FileEntry.Uid);
+        }
+
         public void LoadAppearance(Atom target, string mode = null)
         {
             if (target == null)

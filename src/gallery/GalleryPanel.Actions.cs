@@ -99,6 +99,7 @@ namespace VPB
 
                     string pathLower = (file.Path ?? "").ToLowerInvariant();
                     string category = CurrentCategoryTitle ?? "";
+                    string categoryLower = category.ToLowerInvariant();
 
                     // Match the primary tab's first action behavior (auto action = first button).
                     if (pathLower.EndsWith(".var"))
@@ -161,6 +162,18 @@ namespace VPB
                         Atom target = GetBestTargetAtom();
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
                         dragger.LoadAppearance(target);
+                        return true;
+                    }
+
+                    bool isPluginPreset =
+                        pathLower.Contains("/custom/atom/person/plugins/") ||
+                        pathLower.Contains("\\custom\\atom\\person\\plugins\\") ||
+                        (pathLower.EndsWith(".vap") && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset")));
+                    if (isPluginPreset)
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadPlugins(target);
                         return true;
                     }
 
