@@ -2549,7 +2549,7 @@ namespace VPB
             {
                 try
                 {
-                    UnityEngine.Debug.Log("[VPB] List zoom: layoutMode=" + layoutMode + " fixedColumns=" + (rgvState != null ? rgvState.fixedColumns.ToString() : "null") + " fixedHeight=" + (rgvState != null ? rgvState.useFixedHeight.ToString() : "null") + " delta=" + delta);
+                    logger.LogInfo("List zoom: layoutMode=" + layoutMode + " fixedColumns=" + (rgvState != null ? rgvState.fixedColumns.ToString() : "null") + " fixedHeight=" + (rgvState != null ? rgvState.useFixedHeight.ToString() : "null") + " delta=" + delta);
                 }
                 catch { }
 

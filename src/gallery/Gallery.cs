@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using Prime31.MessageKit;
 using UnityEngine;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -94,6 +95,7 @@ namespace VPB
         void OnEnable()
         {
             MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+            StartCoroutine(JSONExtensions.LoadCharacterGenderMap());
         }
 
         void OnDisable()

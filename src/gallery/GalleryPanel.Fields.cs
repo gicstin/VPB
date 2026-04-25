@@ -5,11 +5,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using VPB.src.util;
 
 namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
+        private static VPBLogSource logger = VPBLogger.Gallery;
         public Canvas canvas;
         public Text statusBarText;
         private bool _registeredWithSuperController;
