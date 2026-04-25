@@ -1496,6 +1496,14 @@ namespace VPB
 
             string k = key;
 
+            if (SuperControllerHook.IsSimulationTextureKey(k))
+            {
+                flags.compress = false;
+                flags.linear = true;
+                flags.isReadable = true;
+                return true;
+            }
+
             // Common VaM "textures" atom keys are consistent enough to map directly.
             // This helps avoid filename-based false positives (e.g. *gen*.jpg).
             if (k.EndsWith("DiffuseUrl", StringComparison.OrdinalIgnoreCase))
@@ -2007,7 +2015,9 @@ namespace VPB
                     try
                     {
                         allowZstdDownscale = (Settings.Instance != null
-                            && Settings.Instance.Downscale8kTo4kBeforeZstdCache.Value);
+                            && Settings.Instance.Downscale8kTo4kBeforeZstdCache.Value
+                            && !flags.isReadable
+                            && !SuperControllerHook.IsSimulationTexturePath(internalPath));
                     }
                     catch { allowZstdDownscale = false; }
 
@@ -2156,6 +2166,7 @@ namespace VPB
                             zmeta["width"] = wz.ToString();
                             zmeta["height"] = hz.ToString();
                             zmeta["format"] = tfz.ToString();
+                            if (flags.isReadable) zmeta["isReadable"] = "true";
                             if (didZstdDownscale)
                             {
                                 zmeta["downscaled"].AsBool = true;

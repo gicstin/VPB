@@ -25,6 +25,7 @@ namespace VPB
         public static void PreLoadAppearancePreset(Atom __instance, string saveName = "savefile")
         {
             LogUtil.Log("[VPB hook]PreLoadAppearancePreset " + saveName);
+            SuperControllerHook.ParsePresetForSimTextures(saveName);
             if (MVR.FileManagement.FileManager.FileExists(saveName))
             {
                 using (MVR.FileManagement.FileEntryStreamReader fileEntryStreamReader = MVR.FileManagement.FileManager.OpenStreamReader(saveName, true))
@@ -43,6 +44,7 @@ namespace VPB
         public static void PreLoadPreset(Atom __instance, string saveName = "savefile")
         {
             LogUtil.Log("[VPB hook]PreLoadPreset " + saveName);
+            SuperControllerHook.ParsePresetForSimTextures(saveName);
             if (MVR.FileManagement.FileManager.FileExists(saveName))
             {
                 using (MVR.FileManagement.FileEntryStreamReader fileEntryStreamReader = MVR.FileManagement.FileManager.OpenStreamReader(saveName, true))
@@ -174,6 +176,7 @@ namespace VPB
             LogUtil.Log($"[VPB hook]PresetManager PreLoadPresetPreFromJSON {atomName} {storableId} {__instance.presetName}");
             if (processJSON != null)
             {
+                SuperControllerHook.ParsePresetForSimTextures(processJSON, __instance.presetName);
                 bool shouldRefreshCatalog = EnsureInstalledFromJSON(processJSON);
                 if (shouldRefreshCatalog)
                 {

@@ -30,11 +30,19 @@ namespace VPB
         /// </summary>
         public static void RegisterSimTexture(string path)
         {
+            RegisterSimTexture(path, null);
+        }
+
+        public static void RegisterSimTexture(string path, string presetPath)
+        {
             if (string.IsNullOrEmpty(path)) return;
-            string normalized = path.ToLowerInvariant();
+            List<string> candidates = BuildSimTextureRegistryCandidates(path, presetPath);
             lock (registryLock)
             {
-                simTextureRegistry.Add(normalized);
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    simTextureRegistry.Add(candidates[i]);
+                }
             }
         }
 
@@ -62,12 +70,25 @@ namespace VPB
                 JSONNode root = UI.LoadJSONWithFallback(presetPath, null);
                 if (root == null) return;
 
-                // Recursively search for simEnabled entries with texture URLs
                 ParseNodeForSimTexturesRecursive(root, presetPath);
             }
             catch (Exception ex)
             {
                 LogUtil.LogWarning($"[VPB SIM] Failed to parse preset for sim textures: {presetPath} - {ex.Message}");
+            }
+        }
+
+        public static void ParsePresetForSimTextures(JSONNode root, string presetPath)
+        {
+            if (root == null) return;
+
+            try
+            {
+                ParseNodeForSimTexturesRecursive(root, presetPath);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB SIM] Failed to parse preset JSON for sim textures: " + ex.Message);
             }
         }
 
@@ -83,10 +104,17 @@ namespace VPB
                     string key = kv.Key;
                     JSONNode value = kv.Value;
 
+                    if (IsSimulationTextureKey(key) && LooksLikeImagePath(value != null ? value.Value : null))
+                    {
+                        string textureUrl = value.Value;
+                        RegisterSimTexture(textureUrl, presetPath);
+                        LogUtil.Log($"[VPB SIM] Registered sim texture from key '{key}': {textureUrl}");
+                    }
+
                     // Check if this entry has simEnabled="true"
                     if (key.Equals("simEnabled", StringComparison.OrdinalIgnoreCase))
                     {
-                        string valStr = value.Value?.ToLowerInvariant();
+                        string valStr = value != null ? value.Value?.ToLowerInvariant() : null;
                         if (valStr == "true" || valStr == "1")
                         {
                             // Look for texture URL in the parent or sibling nodes
@@ -97,7 +125,7 @@ namespace VPB
                             string textureUrl = FindTextureUrlInObject(obj);
                             if (!string.IsNullOrEmpty(textureUrl))
                             {
-                                RegisterSimTexture(textureUrl);
+                                RegisterSimTexture(textureUrl, presetPath);
                                 LogUtil.Log($"[VPB SIM] Registered sim texture from preset: {textureUrl}");
                             }
                         }
@@ -123,7 +151,9 @@ namespace VPB
             if (obj == null) return null;
 
             // Common keys for texture URLs in clothing presets
-            string[] urlKeys = new[] { "url", "Url", "textureUrl", "TextureUrl", 
+            string[] urlKeys = new[] { "simTexture", "SimTexture", "simulationTexture", "SimulationTexture",
+                                       "stimulationTexture", "StimulationTexture", "physicsTexture", "PhysicsTexture",
+                                       "url", "Url", "textureUrl", "TextureUrl",
                                        "diffuseUrl", "normalUrl", "specularUrl", "glossUrl" };
 
             foreach (var key in urlKeys)
@@ -131,8 +161,7 @@ namespace VPB
                 if (obj[key] != null)
                 {
                     string val = obj[key].Value;
-                    if (!string.IsNullOrEmpty(val) && (val.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || 
-                                                        val.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
+                    if (LooksLikeImagePath(val))
                     {
                         return val;
                     }
@@ -153,7 +182,7 @@ namespace VPB
                             kv.Key.IndexOf("url", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
                             string val = kv.Value?.Value;
-                            if (!string.IsNullOrEmpty(val) && (val.EndsWith(".png") || val.EndsWith(".jpg")))
+                            if (LooksLikeImagePath(val))
                                 return val;
                         }
                     }
@@ -161,6 +190,133 @@ namespace VPB
             }
 
             return null;
+        }
+
+        private static List<string> BuildSimTextureRegistryCandidates(string path, string presetPath)
+        {
+            var candidates = new List<string>();
+            AddNormalizedSimTextureCandidate(candidates, path);
+
+            string resolved = ResolveTexturePathRelativeToPreset(path, presetPath);
+            AddNormalizedSimTextureCandidate(candidates, resolved);
+
+            if (!string.IsNullOrEmpty(path))
+            {
+                string trimmed = path.Trim();
+                if (trimmed.StartsWith("./", StringComparison.Ordinal) || trimmed.StartsWith(".\\", StringComparison.Ordinal))
+                {
+                    AddNormalizedSimTextureCandidate(candidates, trimmed.Substring(2));
+                }
+            }
+
+            return candidates;
+        }
+
+        private static void AddNormalizedSimTextureCandidate(List<string> candidates, string path)
+        {
+            string normalized = NormalizeSimTexturePath(path);
+            if (string.IsNullOrEmpty(normalized)) return;
+            if (!candidates.Contains(normalized)) candidates.Add(normalized);
+        }
+
+        private static string NormalizeSimTexturePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+
+            string normalized = path.Trim().Replace('\\', '/').ToLowerInvariant();
+            while (normalized.StartsWith("./", StringComparison.Ordinal))
+                normalized = normalized.Substring(2);
+
+            return normalized;
+        }
+
+        private static string ResolveTexturePathRelativeToPreset(string texturePath, string presetPath)
+        {
+            if (string.IsNullOrEmpty(texturePath) || string.IsNullOrEmpty(presetPath)) return null;
+
+            string tex = texturePath.Trim().Replace('\\', '/');
+            if (tex.IndexOf(":/", StringComparison.Ordinal) >= 0 || tex.StartsWith("/", StringComparison.Ordinal))
+                return tex;
+
+            while (tex.StartsWith("./", StringComparison.Ordinal))
+                tex = tex.Substring(2);
+
+            string preset = presetPath.Trim().Replace('\\', '/');
+            int slash = preset.LastIndexOf('/');
+            if (slash < 0) return null;
+
+            return preset.Substring(0, slash + 1) + tex;
+        }
+
+        private static bool RegistryContainsSimulationTexture(string lowerPath)
+        {
+            string normalized = NormalizeSimTexturePath(lowerPath);
+            if (string.IsNullOrEmpty(normalized)) return false;
+
+            lock (registryLock)
+            {
+                if (simTextureRegistry.Contains(normalized))
+                    return true;
+
+                foreach (string registered in simTextureRegistry)
+                {
+                    if (string.IsNullOrEmpty(registered) || registered.Length < 8) continue;
+                    if (normalized.EndsWith("/" + registered, StringComparison.Ordinal)) return true;
+                    if (registered.EndsWith("/" + normalized, StringComparison.Ordinal)) return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool LooksLikeImagePath(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            return value.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                || value.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                || value.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool IsSimulationTextureKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+
+            if (key.Equals("simTexture", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Equals("simulationTexture", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Equals("stimulationTexture", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Equals("physicsTexture", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.IndexOf("simTexture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (key.IndexOf("simulationTexture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (key.IndexOf("stimulationTexture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (key.IndexOf("physicsTexture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+
+            return false;
+        }
+
+        private static bool IsClothingSimulationMapName(string lowerPath, string filename)
+        {
+            if (string.IsNullOrEmpty(lowerPath) || string.IsNullOrEmpty(filename)) return false;
+            if (lowerPath.IndexOf("/clothing/", StringComparison.Ordinal) < 0) return false;
+
+            if (filename.IndexOf("simtexture", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("simulationtexture", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("stimulationtexture", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("physicstexture", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heatmap", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heat_map", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heat-map", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heatzone", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heat_zone", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heat-zone", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("weightmap", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("weight_map", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("weight-map", StringComparison.Ordinal) >= 0) return true;
+
+            if (Regex.IsMatch(filename, @"(^|[_\-])stim(ulation)?([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
+            if (Regex.IsMatch(filename, @"(^|[_\-])heat([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
+            if (Regex.IsMatch(filename, @"(^|[_\-])zone([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
+
+            return false;
         }
 
         private static bool IsTextureReadableCompat(Texture2D tex)
@@ -229,12 +385,11 @@ namespace VPB
             if (string.IsNullOrEmpty(path)) return false;
             string lower = path.ToLowerInvariant();
 
-            // First check the registry of confirmed sim textures from preset parsing
-            lock (registryLock)
-            {
-                if (simTextureRegistry.Contains(lower))
-                    return true;
-            }
+            // First check the registry of confirmed sim textures from preset parsing.
+            // Many VaM clothing presets use neutral names for their sim/heat maps, so
+            // preset keys are more reliable than filename heuristics when available.
+            if (RegistryContainsSimulationTexture(lower))
+                return true;
 
             // Fall back to heuristic detection
             if (lower.Contains("phys")) return true;
@@ -252,6 +407,8 @@ namespace VPB
             string filename = lastSlash >= 0 ? lower.Substring(lastSlash + 1) : lower;
             int lastDot = filename.LastIndexOf('.');
             if (lastDot > 0) filename = filename.Substring(0, lastDot);
+
+            if (IsClothingSimulationMapName(lower, filename)) return true;
 
             // Conservative fallback only: match "sim" as a token to avoid false positives like "simone".
             // Accepted examples: sim_foo, foo_sim, foo-sim1, sim1, phys_foo, physics-2
@@ -679,6 +836,7 @@ namespace VPB
             {
                 // Clear sim texture registry for new scene
                 ClearSimTextureRegistry();
+                ParsePresetForSimTextures(saveName);
 
                 try
                 {

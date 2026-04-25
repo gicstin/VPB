@@ -117,9 +117,24 @@ namespace VPB
             return "ILM:" + (cacheKey ?? string.Empty);
         }
 
+        private static string GetTextureCacheKey(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null) return string.Empty;
+
+            bool isReadableVariant = SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
+            return qi.imgPath
+                + (isReadableVariant ? "_R" : "")
+                + (qi.linear ? "_L" : "")
+                + (qi.createAlphaFromGrayscale ? "_A" : "")
+                + (qi.isNormalMap ? "_N" : "")
+                + (qi.invert ? "_I" : "")
+                + (qi.createNormalFromBump ? "_BN" : "");
+        }
+
         private string GetCachePath(ImageLoaderThreaded.QueuedImage qi)
         {
-            string pathKey = qi.imgPath + "|" + qi.compress + "|" + qi.linear + "|" + qi.isNormalMap + "|" + qi.createAlphaFromGrayscale + "|" + qi.createNormalFromBump + "|" + qi.invert + "|" + (qi.setSize ? qi.width : 0) + "|" + (qi.setSize ? qi.height : 0) + "|" + qi.bumpStrength;
+            bool isSimPath = SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
+            string pathKey = qi.imgPath + "|" + qi.compress + "|" + qi.linear + "|" + qi.isNormalMap + "|" + qi.createAlphaFromGrayscale + "|" + qi.createNormalFromBump + "|" + qi.invert + "|" + (qi.setSize ? qi.width : 0) + "|" + (qi.setSize ? qi.height : 0) + "|" + qi.bumpStrength + "|" + isSimPath;
 
             lock (cachePathMapLock)
             {
@@ -130,7 +145,6 @@ namespace VPB
                 }
             }
 
-            bool isSimPath = SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
             string vpbCachePath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength, isSimPath);
 
             if (vpbCachePath != null && !File.Exists(vpbCachePath) && qi.setSize)
@@ -387,7 +401,7 @@ namespace VPB
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return false;
             if (Settings.Instance == null || Settings.Instance.ThumbnailThreshold == null) return false;
 
-            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "") + (qi.createAlphaFromGrayscale ? "_A" : "") + (qi.isNormalMap ? "_N" : "") + (qi.invert ? "_I" : "") + (qi.createNormalFromBump ? "_BN" : "");
+            string cacheKey = GetTextureCacheKey(qi);
 
             if (qi.tex == null)
             {
@@ -458,7 +472,7 @@ namespace VPB
             if (qi.setSize && qi.width > 0 && qi.width <= threshold && qi.height > 0 && qi.height <= threshold)
                 return false;
 
-            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "") + (qi.createAlphaFromGrayscale ? "_A" : "") + (qi.isNormalMap ? "_N" : "") + (qi.invert ? "_I" : "") + (qi.createNormalFromBump ? "_BN" : "");
+            string cacheKey = GetTextureCacheKey(qi);
             
             var cacheTexture = GetTextureFromCache(cacheKey);
             if (cacheTexture != null)
@@ -640,7 +654,7 @@ namespace VPB
         public void ResolveInflightForQueuedImage(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
-            string cacheKey = qi.imgPath + (qi.linear ? "_L" : "") + (qi.createAlphaFromGrayscale ? "_A" : "") + (qi.isNormalMap ? "_N" : "") + (qi.invert ? "_I" : "") + (qi.createNormalFromBump ? "_BN" : "");
+            string cacheKey = GetTextureCacheKey(qi);
             
             if (qi.tex != null)
             {
