@@ -435,7 +435,7 @@ namespace VPB
 
             // Fast reopen path: same already-loaded view should just become visible again.
             // Do not run layout/tabs/refresh logic here; it causes the redraw/flicker you reported.
-            if (sameViewReopen && hasLoadedContent)
+            if (sameViewReopen && hasLoadedContent && !shouldRefresh)
             {
                 SetCanvasVisible(true);
                 if (refreshOnNextShow)

@@ -422,7 +422,35 @@ namespace VPB
             }
 
             _sceneSaveFinalizeCoroutine = null;
+            InvalidateSceneSaveGalleryCaches(path);
             EndSaveMode();
+        }
+
+        private void InvalidateSceneSaveGalleryCaches(string scenePath)
+        {
+            if (string.IsNullOrEmpty(scenePath)) return;
+
+            try
+            {
+                string jpgPath = Path.ChangeExtension(scenePath, ".jpg");
+                string pngPath = Path.ChangeExtension(scenePath, ".png");
+                if (CustomImageLoaderThreaded.singleton != null)
+                {
+                    CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(jpgPath);
+                    CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(pngPath);
+                }
+            }
+            catch { }
+
+            try { MVR.FileManagement.FileManager.Refresh(); } catch { }
+            try { VPB.FileManager.Refresh(); } catch { }
+
+            if (_panelsHiddenForSave == null) return;
+            for (int i = 0; i < _panelsHiddenForSave.Count; i++)
+            {
+                GalleryPanel panel = _panelsHiddenForSave[i];
+                if (panel != null) panel.refreshOnNextShow = true;
+            }
         }
 
         private void HidePanelsForSaveTracking()
