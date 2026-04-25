@@ -2030,6 +2030,19 @@ namespace VPB
             txt.text = label;
             txt.fontSize = Mathf.RoundToInt(18 * s);
             txt.color = Color.white;
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.horizontalOverflow = HorizontalWrapMode.Wrap;
+            txt.verticalOverflow = VerticalWrapMode.Truncate;
+            txt.resizeTextForBestFit = false;
+
+            RectTransform txtRT = txt.GetComponent<RectTransform>();
+            if (txtRT != null)
+            {
+                txtRT.anchorMin = Vector2.zero;
+                txtRT.anchorMax = Vector2.one;
+                txtRT.offsetMin = Vector2.zero;
+                txtRT.offsetMax = Vector2.zero;
+            }
 
             // Ensure LayoutElement
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
