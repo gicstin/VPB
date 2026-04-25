@@ -228,6 +228,8 @@ namespace VPB
 
         protected Dictionary<string, string> packageIdToResourceId;
 
+        protected Dictionary<string, string> resourceIdToCategory;
+
         protected JSONStorableAction openUpdatesPanelAction;
 
         protected JSONStorableAction closeUpdatesPanelAction;
@@ -1611,6 +1613,51 @@ namespace VPB
             return value;
         }
 
+        public void ResolveResourceCategory(string resourceId, Action<string> callback)
+        {
+            if (string.IsNullOrEmpty(resourceId) || resourceId == "null")
+            {
+                if (callback != null) callback(null);
+                return;
+            }
+
+            if (resourceIdToCategory == null) resourceIdToCategory = new Dictionary<string, string>();
+
+            string cached;
+            if (resourceIdToCategory.TryGetValue(resourceId, out cached))
+            {
+                if (callback != null) callback(cached);
+                return;
+            }
+
+            JSONClass request = new JSONClass();
+            request["source"] = "VaM";
+            request["action"] = "getResourceDetail";
+            request["resource_id"] = resourceId;
+            StartCoroutine(PostRequest(apiUrl, request.ToString(), jsonNode =>
+            {
+                string category = null;
+                try
+                {
+                    JSONClass resource = jsonNode != null ? jsonNode.AsObject : null;
+                    if (resource != null)
+                    {
+                        category = resource["type"];
+                        if (string.IsNullOrEmpty(category) || category == "null") category = resource["category"];
+                    }
+                }
+                catch { }
+
+                if (category == "null") category = null;
+                resourceIdToCategory[resourceId] = category;
+                if (callback != null) callback(category);
+            }, err =>
+            {
+                resourceIdToCategory[resourceId] = null;
+                if (callback != null) callback(null);
+            }));
+        }
+
         protected void GetPackagesJSONErrorCallback(string err)
         {
             //SuperController.LogError("Error during hub request for packages.json " + err);
@@ -1851,10 +1898,6 @@ namespace VPB
                     downloadQueuedCountJSON.val = "Queued: " + downloadQueue.Count;
                     DownloadRequest request = downloadQueue.Dequeue();
                     yield return BinaryGetRequest(request,request.url, request.startedCallback, request.successCallback, request.errorCallback, request.progressCallback, hubCookies);
-                    if (downloadQueue.Count == 0)
-                    {
-                        VPB.FileManager.Refresh(true, false, false);
-                    }
                 }
                 else
                 {
