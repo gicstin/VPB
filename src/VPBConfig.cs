@@ -4,6 +4,7 @@ using System.IO;
 using System.Collections.Generic;
 using UnityEngine;
 using SimpleJSON;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -19,28 +20,122 @@ namespace VPB
         /// </summary>
         private int _lightweightGalleryTabRefreshSlotsRemaining;
 
+        public static bool IsLogConfigPerfEnabled()
+        {
+            try
+            {
+                return Settings.Instance != null && Settings.Instance.LogConfigPerf != null && Settings.Instance.LogConfigPerf.Value;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
-        /// <summary>Runs <see cref="ConfigChanged"/> subscribers one-by-one (same order as +=).</summary>
-        private void InvokeConfigChanged()
+        private static bool LogConfigPerfVerbose()
+        {
+            return IsLogConfigPerfEnabled();
+        }
+
+        private static void LogPerfSave(string pathForLog, bool notifyListeners, bool lightTabsHint, long buildMs, long toStringMs, long diskMs, long notifyMs, long totalMs)
+        {
+            bool verbose = LogConfigPerfVerbose();
+            bool slow = totalMs >= 75 || notifyMs >= 50 || diskMs >= 25;
+            if (!verbose && !slow)
+                return;
+            string msg = "Config Save total=" + totalMs + "ms build=" + buildMs + "ms toString=" + toStringMs + "ms disk=" + diskMs + "ms ConfigChanged=" + notifyMs + "ms notifyListeners=" + notifyListeners + " lightTabsHint=" + lightTabsHint + " path=" + pathForLog;
+            if (slow && !verbose)
+                VPBLogger.Perf.LogWarning(msg);
+            else
+                VPBLogger.Perf.LogInfo(msg);
+        }
+
+        private static void LogPerfTriggerChange(long notifyMs)
+        {
+            bool verbose = LogConfigPerfVerbose();
+            if (!verbose && notifyMs < 50)
+                return;
+            string msg = "Config TriggerChange ConfigChanged=" + notifyMs + "ms (no disk write)";
+            if (!verbose && notifyMs >= 50)
+                VPBLogger.Perf.LogWarning(msg);
+            else
+                VPBLogger.Perf.LogInfo(msg);
+        }
+
+        private static void LogPerfLoad(string pathForLog, long totalMs, bool fileExisted)
+        {
+            if (!LogConfigPerfVerbose() || !fileExisted)
+                return;
+            VPBLogger.Perf.LogInfo("Config Load total=" + totalMs + "ms path=" + pathForLog);
+        }
+
+        private static string DescribeConfigChangedHandler(Delegate d)
+        {
+            if (d == null)
+                return "?";
+            var m = d.Method;
+            string typeName = m.DeclaringType != null ? m.DeclaringType.Name : "?";
+            string s = typeName + "." + m.Name;
+            UnityEngine.Object uo = d.Target as UnityEngine.Object;
+            if (uo != null)
+                s += " (inst=" + uo.GetInstanceID() + ")";
+            else if (d.Target != null)
+                s += " (tgt=" + d.Target.GetHashCode() + ")";
+            return s;
+        }
+
+        /// <summary>Runs <see cref="ConfigChanged"/> subscribers one-by-one with per-handler timing (same order as +=).</summary>
+        /// <returns>Wall time for all handlers (ms).</returns>
+        private long InvokeConfigChangedWithPerfLogging(string context)
         {
             Delegate[] list = ConfigChanged != null ? ConfigChanged.GetInvocationList() : null;
             if (list == null || list.Length == 0)
-                return;
+                return 0;
 
             ConfigChangedInvocationDepth++;
             try
             {
-                foreach (Delegate d in list)
+                bool verbose = LogConfigPerfVerbose();
+                Stopwatch swTotal = Stopwatch.StartNew();
+                int n = list.Length;
+                long[] msEach = new long[n];
+                string[] names = new string[n];
+
+                for (int i = 0; i < n; i++)
                 {
+                    names[i] = DescribeConfigChangedHandler(list[i]);
+                    Stopwatch sw = Stopwatch.StartNew();
                     try
                     {
-                        ((OnConfigChanged)d).Invoke();
+                        ((OnConfigChanged)list[i]).Invoke();
                     }
                     catch (Exception ex)
                     {
-                        UnityEngine.Debug.LogError("[VPB] ConfigChanged handler threw | " + ex.Message);
+                        VPBLogger.Config.LogError("ConfigChanged handler threw | " + names[i] + " | " + ex.Message);
                     }
+                    msEach[i] = sw.ElapsedMilliseconds;
                 }
+
+                long totalMs = swTotal.ElapsedMilliseconds;
+                bool logAll = verbose || totalMs >= 50;
+
+                try
+                {
+                    int detailLines = 0;
+                    for (int i = 0; i < n; i++)
+                    {
+                        if (logAll || msEach[i] >= 25)
+                        {
+                            VPBLogger.Perf.LogInfo("ConfigChanged+" + context + " [" + (i + 1) + "/" + n + "] " + names[i] + " " + msEach[i] + "ms");
+                            detailLines++;
+                        }
+                    }
+                    if (detailLines > 0 && n > 1)
+                        VPBLogger.Perf.LogInfo("ConfigChanged+" + context + " wall=" + totalMs + "ms for " + n + " handlers");
+                }
+                catch { }
+
+                return totalMs;
             }
             finally
             {
@@ -371,7 +466,7 @@ namespace VPB
             bool cfgExistedAtStart = File.Exists(cfgPath);
             Stopwatch loadSw = Stopwatch.StartNew();
             _lightweightGalleryTabRefreshSlotsRemaining = 0;
-            LogUtil.Log("[VPBConfig.Load] Starting Load() from: " + cfgPath);
+            VPBLogger.Config.LogInfo("Starting Load() from: " + cfgPath);
             // Reset to defaults before loading
             EnableButtonGaps = true;
             ShowSideButtons = "Both";
@@ -543,7 +638,7 @@ namespace VPB
                     try
                     {
                         if (Settings.Instance != null && Settings.Instance.LogVerboseUi != null && Settings.Instance.LogVerboseUi.Value)
-                            LogUtil.Log("[VPBConfig] Loaded cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | AppearanceClothing=" + AppearanceClothingApplyMode + " | ApplyMode=" + ApplyMode);
+                            VPBLogger.Config.LogInfo("cfg path=" + ConfigPath + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | AppearanceClothing=" + AppearanceClothingApplyMode + " | ApplyMode=" + ApplyMode);
                     }
                     catch { }
 
@@ -556,19 +651,27 @@ namespace VPB
                             !string.IsNullOrEmpty(LastGalleryCategory))
                         {
                             s_LastLoggedLoadedGalleryCategory = LastGalleryCategory;
-                            LogUtil.Log("[VPBConfig] Loaded LastGalleryCategory='" + LastGalleryCategory + "' from " + ConfigPath);
+                            VPBLogger.Config.LogInfo("Loaded LastGalleryCategory='" + LastGalleryCategory + "' from " + ConfigPath);
                         }
                     }
                     catch { }
                 }
                 else
                 {
-                    LogUtil.LogWarning("[VPBConfig.Load] Config file DOES NOT EXIST at: " + ConfigPath);
+                    VPBLogger.Config.LogWarning("Error loading config: File DOES NOT EXIST at: " + ConfigPath);
                 }
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogError("[VPB] Error loading config: " + ex.Message);
+                VPBLogger.Config.LogError("Error loading config: " + ex.Message);
+            }
+            finally
+            {
+                try
+                {
+                    LogPerfLoad(cfgPath, loadSw.ElapsedMilliseconds, cfgExistedAtStart);
+                }
+                catch { }
             }
         }
 
@@ -673,22 +776,31 @@ namespace VPB
                 long msAfterToString = sw.ElapsedMilliseconds;
                 File.WriteAllText(path, jsonOutput);
                 long msAfterDisk = sw.ElapsedMilliseconds;
+                long notifyMs = 0;
                 if (notifyListeners)
                 {
                     try
                     {
-                        InvokeConfigChanged();
+                        notifyMs = InvokeConfigChangedWithPerfLogging("Save");
                     }
                     finally
                     {
                         _lightweightGalleryTabRefreshSlotsRemaining = 0;
                     }
                 }
+                long msTotal = sw.ElapsedMilliseconds;
+                long toStringMs = msAfterToString - msBuild;
+                long diskMs = msAfterDisk - msAfterToString;
+                try
+                {
+                    LogPerfSave(path, notifyListeners, lightTabsHint, msBuild, toStringMs, diskMs, notifyMs, msTotal);
+                }
+                catch { }
 
                 try
                 {
                     if (Settings.Instance != null && Settings.Instance.LogVerboseUi != null && Settings.Instance.LogVerboseUi.Value)
-                        LogUtil.Log("[VPBConfig] Saved cfg path=" + path + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | AppearanceClothing=" + AppearanceClothingApplyMode + " | ApplyMode=" + ApplyMode);
+                        VPBLogger.Config.LogInfo("Saved cfg path=" + path + " | LastGalleryCategory=" + LastGalleryCategory + " | DragDropReplaceMode=" + DragDropReplaceMode + " | AppearanceClothing=" + AppearanceClothingApplyMode + " | ApplyMode=" + ApplyMode);
                 }
                 catch { }
 
@@ -704,21 +816,27 @@ namespace VPB
             catch (Exception ex)
             {
                 _lightweightGalleryTabRefreshSlotsRemaining = 0;
-                UnityEngine.Debug.LogError("[VPB] Error saving config: " + ex.Message);
+                VPBLogger.Config.LogError("[VPB] Error saving config: " + ex.Message);
             }
         }
 
         public void TriggerChange()
         {
             _lightweightGalleryTabRefreshSlotsRemaining = 0;
+            long notifyMs = 0;
             try
             {
-                InvokeConfigChanged();
+                notifyMs = InvokeConfigChangedWithPerfLogging("TriggerChange");
             }
             finally
             {
                 _lightweightGalleryTabRefreshSlotsRemaining = 0;
             }
+            try
+            {
+                LogPerfTriggerChange(notifyMs);
+            }
+            catch { }
         }
 
         private void ArmLightweightGalleryTabRefreshInternal()

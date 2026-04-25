@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using VPB.src.util;
 using size_t = System.UIntPtr;
 
 namespace ZstdNet
 {
 	public class CompressionOptions : IDisposable
 	{
+		private static VPBLogSource logger = VPBLogger.GetInstance(VPBModule.Zstd);
 		public CompressionOptions(int compressionLevel)
 		{
 			if(compressionLevel < MinCompressionLevel || compressionLevel > MaxCompressionLevel)
@@ -98,7 +100,7 @@ namespace ZstdNet
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogError("[ZstdNet] Failed to initialize Default CompressionOptions: " + ex.Message);
+                logger.LogError("[ZstdNet] Failed to initialize Default CompressionOptions: " + ex.Message);
             }
         }
 

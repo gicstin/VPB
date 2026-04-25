@@ -9,6 +9,7 @@ using System.Reflection;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -117,7 +118,7 @@ namespace VPB
             if (mode == GalleryLayoutMode.List)
             {
                  BenchmarkStartTime = Time.realtimeSinceStartup;
-                 UnityEngine.Debug.Log("[Benchmark] Starting Switch to List Mode at " + BenchmarkStartTime);
+                 VPBLogger.OneShot("Benchmark").LogInfo("Starting Switch to List Mode at " + BenchmarkStartTime);
             }
 
             layoutMode = mode;

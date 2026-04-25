@@ -701,7 +701,8 @@ namespace VPB
             // Explicitly initialize ZstdNet native library early
             try { ExternMethods.Initialize(); } catch { }
 
-            LogUtil.SetLogSource(Logger);
+            LogUtil.ResetPluginSession();
+            VPBLogger.Init();
 
             try
             {
@@ -979,6 +980,7 @@ namespace VPB
             {
                 Destroy(m_QuickMenuCanvas.gameObject);
             }
+            VPBLogger.Destroy();
         }
         // Called on (hard) restart as well.
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -997,6 +999,7 @@ namespace VPB
         }
         void OnEnable()
         {
+            VPBLogger.Init(); // in case the plugin is ever partially reloaded for some reason
             MessageKit<string>.addObserver(MessageDef.UpdateLoading, OnProgress);
             MessageKit.addObserver(MessageDef.DeactivateWorldUI, OnDeactivateWorldUI);
 
