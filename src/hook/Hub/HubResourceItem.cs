@@ -459,6 +459,49 @@ namespace VPB
             }
 
             List<HubResourcePackage> packages = BuildDownloadPackageList();
+
+            bool needsDetailFetchForDeps = false;
+            int depBuilt = 0;
+            if (hasDependenciesJSON != null && hasDependenciesJSON.val)
+            {
+                for (int i = 0; i < packages.Count; i++)
+                {
+                    HubResourcePackage pkg = packages[i];
+                    if (pkg == null) continue;
+                    if (!pkg.IsDependency) continue;
+                    depBuilt++;
+                    if (pkg.NeedsDownload && !pkg.HasValidDownloadUrl)
+                    {
+                        needsDetailFetchForDeps = true;
+                        break;
+                    }
+                }
+
+                // Some Hub browse payloads only include dependency_count (and maybe total size),
+                // but omit the dependency file list + URLs. In that case, force the detail fetch.
+                if (!needsDetailFetchForDeps && depBuilt == 0)
+                {
+                    needsDetailFetchForDeps = true;
+                }
+            }
+
+            if (needsDetailFetchForDeps && browser != null && !string.IsNullOrEmpty(resource_id) && resource_id != "null")
+            {
+                browser.DirectDownloadAllFromResourceDetail(resource_id);
+                return;
+            }
+
+            StartDirectDownloads(packages);
+        }
+
+        public List<HubResourcePackage> GetDownloadPackageList()
+        {
+            return BuildDownloadPackageList();
+        }
+
+        public void StartDirectDownloads(List<HubResourcePackage> packages)
+        {
+            if (packages == null) return;
             quickDownloadPackages = new List<HubResourcePackage>();
             for (int i = 0; i < packages.Count; i++)
             {

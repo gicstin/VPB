@@ -123,6 +123,7 @@ namespace VPB
         protected bool _hasBeenRefreshed;
 
         protected Coroutine refreshResourcesRoutine;
+        protected int _lastApiPerPage = -1;
 
         protected JSONStorableAction refreshResourcesAction;
 
@@ -844,7 +845,7 @@ namespace VPB
                 {
                     return;
                 }
-                numResourcesJSON.val = "Total: " + asObject2["total_found"];
+                int totalFound = asObject2["total_found"].AsInt;
                 numPagesJSON.val = asObject2["total_pages"];
                 if (items != null)
                 {
@@ -874,20 +875,23 @@ namespace VPB
                 int count = 0;
                 bool onlyDl = onlyDownloadable != null && onlyDownloadable.val;
                 bool hideDl = hideDownloaded != null && hideDownloaded.val;
+                int clientFilteredCount = 0;
+
                 IEnumerator enumerator2 = asArray.GetEnumerator();
                 try
                 {
                     while (enumerator2.MoveNext())
                     {
-                        if (count >= _numPerPageInt)
-                        {
-                            break;
-                        }
                         JSONClass resource = (JSONClass)enumerator2.Current;
                         bool canShow = CanShowResourceAfterClientFilters(resource, onlyDl, hideDl);
                         // Do not show items that cannot be downloaded
                         if (canShow)
                         {
+                            clientFilteredCount++;
+                            if (count >= _numPerPageInt)
+                            {
+                                continue;
+                            }
                             HubResourceItem hubResourceItem = new HubResourceItem(resource, this, page);
                             hubResourceItem.Refresh();
 
@@ -904,6 +908,21 @@ namespace VPB
                                 count++;
                             }
                         }
+                    }
+                    // "total_found" is the server-side total for the query; clientFilteredCount reflects local filters
+                    // (e.g. hide downloaded / only downloadable) applied to the current page payload.
+                    if (onlyDl || hideDl)
+                    {
+                        int totalPages = asObject2["total_pages"].AsInt;
+                        // total_pages comes from the API pagination. In client-filter/backfill mode, the API uses a
+                        // larger perpage (e.g. 192/200) than the UI displays (e.g. 48). The user expects totals in
+                        // UI-page units, so estimate using _numPerPageInt.
+                        int estimatedFilteredTotal = (totalPages > 0) ? (totalPages * _numPerPageInt) : totalFound;
+                        numResourcesJSON.val = "Total: " + estimatedFilteredTotal;
+                    }
+                    else
+                    {
+                        numResourcesJSON.val = "Total: " + totalFound;
                     }
                     LogUtil.Log($"HubBrowse.RefreshCallback DONE page={page} items={count} ms={sw.ElapsedMilliseconds}");
                     return;
@@ -936,7 +955,8 @@ namespace VPB
                 jSONClass["action"] = "getResources";
                 jSONClass["latest_image"] = "Y";
                 bool hasClientSideFilter = (onlyDownloadable != null && onlyDownloadable.val) || (hideDownloaded != null && hideDownloaded.val);
-                jSONClass["perpage"] = _numPerPageInt.ToString();
+                int apiPerPage = _numPerPageInt;
+                jSONClass["perpage"] = apiPerPage.ToString();
                 string page = _currentPageString;
                 jSONClass["page"] = page;
                 if (_hostedOption != "All")
@@ -978,7 +998,8 @@ namespace VPB
                 if (hasClientSideFilter)
                 {
                     int backfillApiPerPage = Mathf.Clamp(_numPerPageInt * 4, 100, 200);
-                    jSONClass["perpage"] = backfillApiPerPage.ToString();
+                    apiPerPage = backfillApiPerPage;
+                    jSONClass["perpage"] = apiPerPage.ToString();
                     refreshResourcesRoutine = StartCoroutine(RefreshResourcesWithBackfill(jSONClass, page));
                 }
                 else
@@ -988,6 +1009,9 @@ namespace VPB
                         jsonNode => { RefreshCallback(jsonNode, page); },
                         RefreshErrorCallback));
                 }
+
+                // Track the API perpage used to compute estimated totals quickly.
+                _lastApiPerPage = apiPerPage;
                 if (refreshIndicator != null)
                 {
                     refreshIndicator.SetActive(true);
@@ -1136,6 +1160,8 @@ namespace VPB
                 RefreshErrorCallback("No Hub data returned");
             }
         }
+
+        // (removed) full filtered-total scan: replaced by fast estimate using total_pages * perpage
 
         protected void SyncNumResources(string s)
         {
@@ -1433,6 +1459,43 @@ namespace VPB
                     hubResourceItemDetail.RegisterUI(hridui);
                 }
             }
+        }
+
+        public void DirectDownloadAllFromResourceDetail(string resourceId)
+        {
+            if (!_hubEnabled) return;
+            if (string.IsNullOrEmpty(resourceId) || resourceId == "null") return;
+            StartCoroutine(DirectDownloadAllFromResourceDetailRoutine(resourceId));
+        }
+
+        private IEnumerator DirectDownloadAllFromResourceDetailRoutine(string resourceId)
+        {
+            JSONClass request = new JSONClass();
+            request["source"] = "VaM";
+            request["action"] = "getResourceDetail";
+            request["latest_image"] = "Y";
+            request["resource_id"] = resourceId;
+
+            SimpleJSON.JSONNode responseNode = null;
+            string requestError = null;
+            yield return StartCoroutine(PostRequest(apiUrl, request.ToString(),
+                jsonNode => { responseNode = jsonNode; },
+                err => { requestError = err; }));
+
+            if (!string.IsNullOrEmpty(requestError) || responseNode == null)
+            {
+                yield break;
+            }
+
+            JSONClass resource = responseNode.AsObject;
+            if (resource == null)
+            {
+                yield break;
+            }
+
+            HubResourceItem item = new HubResourceItem(resource, this, "DirectDownloadAllDetail", true);
+            List<HubResourcePackage> packages = item.GetDownloadPackageList();
+            item.StartDirectDownloads(packages);
         }
 
         public void OpenDetail(string resource_id, bool isPackageName = false)
@@ -2055,13 +2118,40 @@ namespace VPB
                     downloadQueuedCountJSON.val = "Queued: " + downloadQueue.Count;
                     DownloadRequest request = downloadQueue.Dequeue();
                     yield return BinaryGetRequest(request,request.url, request.startedCallback, request.successCallback, request.errorCallback, request.progressCallback, hubCookies);
+
+                    // Only refresh once after the entire queue drains; avoids heavy package rescans per file.
+                    if (downloadQueue.Count == 0)
+                    {
+                        TryRunDeferredRefreshAfterDownloads();
+                    }
                 }
                 else
                 {
                     isDownloadingJSON.val = false;
+                    // In case the queue drained between frames, flush any pending refresh.
+                    TryRunDeferredRefreshAfterDownloads();
                 }
                 yield return null;
             }
+        }
+
+        private bool _deferredRefreshAfterDownloads;
+
+        public void DeferRefreshUntilQueueDrains()
+        {
+            _deferredRefreshAfterDownloads = true;
+        }
+
+        private void TryRunDeferredRefreshAfterDownloads()
+        {
+            if (!_deferredRefreshAfterDownloads) return;
+            if (downloadQueue != null && downloadQueue.Count > 0) return;
+
+            _deferredRefreshAfterDownloads = false;
+
+            try { FileManager.Refresh(); } catch { }
+            try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
+            RefreshResources();
         }
 
         protected void OnPackageRefresh()
@@ -2823,8 +2913,7 @@ namespace VPB
                     string filename = fileNode["filename"];
                     if (string.IsNullOrEmpty(filename)) return false;
                     string packageName = Regex.Replace(filename, ".var$", string.Empty);
-                    VarPackage package = FileManager.GetPackage(packageName, ensureInstalled: false);
-                    if (package == null) return false;
+                    if (FileManager.GetPackage(packageName, ensureInstalled: false) == null) return false;
                 }
             }
             finally

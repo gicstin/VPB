@@ -166,6 +166,17 @@ namespace VPB
             }
         }
 
+        public bool HasValidDownloadUrl
+        {
+            get
+            {
+                if (downloadUrl == null) return false;
+                if (downloadUrl == string.Empty) return false;
+                if (downloadUrl == "null") return false;
+                return true;
+            }
+        }
+
         public bool IsDownloading
         {
             get
@@ -492,9 +503,8 @@ namespace VPB
 
                 if (browser != null)
                 {
-                    try { FileManager.Refresh(); } catch { }
-                    try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
-                    browser.RefreshResources();
+                    // Defer heavy refresh work until the download queue drains.
+                    browser.DeferRefreshUntilQueueDrains();
                 }
             }
             catch (Exception)
