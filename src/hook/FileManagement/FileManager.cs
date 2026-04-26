@@ -103,6 +103,13 @@ namespace VPB
             protected set;
         }
 
+        // Cache for missing dependency package-IDs (strings that look like package uids but are not present locally).
+        // Computing this requires scanning every package's RecursivePackageDependencies, which is expensive on large libraries.
+        // We cache it per package refresh timestamp to keep UI actions (Hub missing packages panel) fast.
+        private static readonly object s_MissingDependenciesCacheLock = new object();
+        private static DateTime s_MissingDependenciesCacheForRefreshTime;
+        private static List<string> s_MissingDependenciesCache;
+
         // Packages added/removed in the most recent scan — consumed by the gallery for incremental updates.
         // Written on the main thread inside RefreshCo; read on the main thread inside AutoRefreshAfterPackageScan.
         public static readonly List<VarPackage> lastAddedPackages = new List<VarPackage>();
@@ -1174,26 +1181,69 @@ namespace VPB
 
 		public List<string> GetMissingDependenciesNames()
 		{
-			HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			if (packagesByUid != null)
-			{
-				foreach (var item in packagesByUid)
-				{
-					VarPackage vp = item.Value;
-					if (vp != null && vp.RecursivePackageDependencies != null)
-					{
-						foreach (var key in vp.RecursivePackageDependencies)
-						{
-							if (!FileManager.IsPackage(key))
-							{
-								hashSet.Add(key);
-							}
-						}
-					}
-				}
-			}
-			LogUtil.Log("GetMissingDependenciesNames " + hashSet.Count);
-			return hashSet.ToList();
+            // Fast path: return cached value if nothing has refreshed since it was computed.
+            // lastPackageRefreshTime is updated at the end of RefreshCo.
+            lock (s_MissingDependenciesCacheLock)
+            {
+                if (s_MissingDependenciesCache != null && s_MissingDependenciesCacheForRefreshTime == lastPackageRefreshTime)
+                {
+                    return new List<string>(s_MissingDependenciesCache);
+                }
+            }
+
+            // Normalize missing dependency ids for hub queries:
+            // - Treat any versioned dependency "Author.Name.3" as "Author.Name.latest"
+            //   so we only search/download the newest hub version (user preference).
+            // - Keep ".latest" as-is.
+            // - Keep ".minN" as ".latest" as well, because the hub can satisfy it with the latest.
+            string NormalizeForHub(string depId)
+            {
+                if (string.IsNullOrEmpty(depId)) return depId;
+                Match m;
+                if ((m = Regex.Match(depId, "^([^\\.]+\\.[^\\.]+)\\.(?:[0-9]+|min[0-9]+|latest)$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)).Success)
+                {
+                    return m.Groups[1].Value + ".latest";
+                }
+                return depId;
+            }
+
+            HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (packagesByUid != null)
+            {
+                foreach (var item in packagesByUid)
+                {
+                    VarPackage vp = item.Value;
+                    if (vp != null && vp.RecursivePackageDependencies != null)
+                    {
+                        foreach (var key in vp.RecursivePackageDependencies)
+                        {
+                            string normalized = NormalizeForHub(key);
+
+                            // Important: IsPackage only checks exact UID/path; it does not treat ".latest" as an alias.
+                            // Use GetPackage so ".latest"/".minN" resolve to an installed package when present.
+                            if (string.IsNullOrEmpty(normalized)) continue;
+                            VarPackage resolved = null;
+                            try { resolved = GetPackage(normalized, ensureInstalled: false); } catch { }
+                            if (resolved == null)
+                            {
+                                hashSet.Add(normalized);
+                            }
+                        }
+                    }
+                }
+            }
+
+            var list = hashSet.ToList();
+            lock (s_MissingDependenciesCacheLock)
+            {
+                s_MissingDependenciesCacheForRefreshTime = lastPackageRefreshTime;
+                s_MissingDependenciesCache = list;
+            }
+            if (debug)
+            {
+                LogUtil.Log("GetMissingDependenciesNames " + list.Count);
+            }
+            return new List<string>(list);
 		}
 
 		public static bool IsSecureReadPath(string path)

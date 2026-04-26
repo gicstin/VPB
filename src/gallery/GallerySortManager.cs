@@ -102,15 +102,7 @@ namespace VPB
                     });
                     break;
                 case SortType.DateCreated:
-                    files.Sort((a, b) => {
-                        DateTime ca = GetSortCreationTime(a);
-                        DateTime cb = GetSortCreationTime(b);
-                        int res = (state.Direction == SortDirection.Ascending)
-                            ? ca.CompareTo(cb)
-                            : cb.CompareTo(ca);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedDateTime(files, GetSortCreationTime, state.Direction);
                     break;
                 case SortType.Size:
                     files.Sort((a, b) => {
@@ -122,51 +114,21 @@ namespace VPB
                     });
                     break;
                 case SortType.Rating:
-                    files.Sort((a, b) => {
-                        int rA = RatingsManager.Instance.GetRating(a);
-                        int rB = RatingsManager.Instance.GetRating(b);
-                        int res = (state.Direction == SortDirection.Ascending)
-                            ? rA.CompareTo(rB)
-                            : rB.CompareTo(rA);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedInt(files, f => RatingsManager.Instance.GetRating(f), state.Direction);
                     break;
                 case SortType.Deps:
-                    files.Sort((a, b) => {
-                        int dA = GetDepsCount(a);
-                        int dB = GetDepsCount(b);
-                        int res = (state.Direction == SortDirection.Ascending) ? dA.CompareTo(dB) : dB.CompareTo(dA);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    // IMPORTANT: GetDepsCount for scene JSON may stream-scan the file. Never call it from the comparer.
+                    SortByPrecomputedInt(files, GetDepsCount, state.Direction);
                     break;
                 case SortType.Dependents:
-                    files.Sort((a, b) => {
-                        int dA = GetDependentsCount(a);
-                        int dB = GetDependentsCount(b);
-                        int res = (state.Direction == SortDirection.Ascending) ? dA.CompareTo(dB) : dB.CompareTo(dA);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedInt(files, GetDependentsCount, state.Direction);
                     break;
                 case SortType.Missing:
-                    files.Sort((a, b) => {
-                        int mA = GetMissingDepsCount(a);
-                        int mB = GetMissingDepsCount(b);
-                        int res = (state.Direction == SortDirection.Ascending) ? mA.CompareTo(mB) : mB.CompareTo(mA);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    // IMPORTANT: GetMissingDepsCount may scan dependencies. Never call it from the comparer.
+                    SortByPrecomputedInt(files, GetMissingDepsCount, state.Direction);
                     break;
                 case SortType.Hidden:
-                    files.Sort((a, b) => {
-                        int ha = PackageHidePrefs.IsGalleryHideBadgeVisible(a) ? 1 : 0;
-                        int hb = PackageHidePrefs.IsGalleryHideBadgeVisible(b) ? 1 : 0;
-                        int res = (state.Direction == SortDirection.Ascending) ? ha.CompareTo(hb) : hb.CompareTo(ha);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedInt(files, f => PackageHidePrefs.IsGalleryHideBadgeVisible(f) ? 1 : 0, state.Direction);
                     break;
                 case SortType.HiddenOnly:
                 case SortType.AutoInstallOnly:
@@ -178,15 +140,97 @@ namespace VPB
                         files.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
                     break;
                 case SortType.AutoInstall:
-                    files.Sort((a, b) => {
-                        int ia = a.IsAutoInstall() ? 1 : 0;
-                        int ib = b.IsAutoInstall() ? 1 : 0;
-                        int res = (state.Direction == SortDirection.Ascending) ? ia.CompareTo(ib) : ib.CompareTo(ia);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedInt(files, f => f != null && f.IsAutoInstall() ? 1 : 0, state.Direction);
                     break;
             }
+        }
+
+        private struct SortKeyInt
+        {
+            public FileEntry File;
+            public int Key;
+            public string Name;
+        }
+
+        private struct SortKeyDateTime
+        {
+            public FileEntry File;
+            public DateTime Key;
+            public string Name;
+        }
+
+        private static void SortByPrecomputedInt(List<FileEntry> files, Func<FileEntry, int> getKey, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+            if (getKey == null) return;
+
+            var list = new List<SortKeyInt>(files.Count);
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                int k = 0;
+                try { k = getKey(f); } catch { k = 0; }
+                list.Add(new SortKeyInt { File = f, Key = k, Name = f != null ? (f.Name ?? "") : "" });
+            }
+
+            if (dir == SortDirection.Ascending)
+            {
+                list.Sort((a, b) =>
+                {
+                    int res = a.Key.CompareTo(b.Key);
+                    if (res != 0) return res;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+            else
+            {
+                list.Sort((a, b) =>
+                {
+                    int res = b.Key.CompareTo(a.Key);
+                    if (res != 0) return res;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+
+            for (int i = 0; i < files.Count; i++)
+                files[i] = list[i].File;
+        }
+
+        private static void SortByPrecomputedDateTime(List<FileEntry> files, Func<FileEntry, DateTime> getKey, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+            if (getKey == null) return;
+
+            var list = new List<SortKeyDateTime>(files.Count);
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                DateTime k = DateTime.MinValue;
+                try { k = getKey(f); } catch { k = DateTime.MinValue; }
+                list.Add(new SortKeyDateTime { File = f, Key = k, Name = f != null ? (f.Name ?? "") : "" });
+            }
+
+            if (dir == SortDirection.Ascending)
+            {
+                list.Sort((a, b) =>
+                {
+                    int res = a.Key.CompareTo(b.Key);
+                    if (res != 0) return res;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+            else
+            {
+                list.Sort((a, b) =>
+                {
+                    int res = b.Key.CompareTo(a.Key);
+                    if (res != 0) return res;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+
+            for (int i = 0; i < files.Count; i++)
+                files[i] = list[i].File;
         }
 
         /// <summary>

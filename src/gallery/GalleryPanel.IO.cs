@@ -1971,8 +1971,21 @@ namespace VPB
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
         {
             int navSessionForThisRun = _boundCategoryNavSessionForCurrentRefresh;
+            var swDeep = LogGalleryRefreshDeepTiming ? System.Diagnostics.Stopwatch.StartNew() : null;
+            long deepAfterFirstYieldMs = -1;
+            long deepAfterDrainMs = -1;
+            long deepAfterSysFilesMs = -1;
+            long deepAfterSortMs = -1;
+            long deepAfterGridBindMs = -1;
+            long deepAfterEarlyMetaWaitMs = -1;
+            long deepUpdateLayoutMs = -1;
+            int deepFilesCountAfterDrain = 0;
+            int deepSysFilesAdded = 0;
+            bool deepSysCacheHit = false;
+
             yield return null; // Allow UI to render first
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_after_first_yield");
+            if (swDeep != null) deepAfterFirstYieldMs = swDeep.ElapsedMilliseconds;
 
             // Reset pose facet counts for this refresh
             posePeopleFacetCountSingle = 0;
@@ -2303,11 +2316,11 @@ namespace VPB
                     {
                         List<VpbLocalDatabase.Row> idxRows = new List<VpbLocalDatabase.Row>();
                         bool useSqliteIndex;
+                        List<string> pathExclusions = null;
                         if (VpbSqlite3.IsAvailable
                             && activeContentSnap == ContentType.Category
                             && canFileListSnapKeyMain)
                         {
-                            List<string> pathExclusions = null;
                             if (currentPaths != null && currentPaths.Count > 0)
                             {
                                 for (int i = 0; i < currentPaths.Count; i++)
@@ -2359,9 +2372,7 @@ namespace VPB
                                 VpbLocalDatabase.Row r = idxRows[ri];
                                 string internalPath = r.InternalPath;
 
-                                // SQL filters (name, tags, path exclusions) are now applied in the query.
-                                // We still keep RefreshWorkerPathMatches for complex path logic that SQL can't easily do,
-                                // but most rows should already be filtered out.
+                                // Path prefix filter (mirrors RefreshFilesRoutine ThreadPool worker logic)
                                 if (!RefreshWorkerPathMatches(internalPath, currentPaths, currentPath)) continue;
 
                                 string varHint = r.VarPath ?? "";
@@ -2406,8 +2417,7 @@ namespace VPB
                                     if (!wantsLoaded && loaded) continue;
                                 }
 
-                                // Name filter and active tags are now handled by SQL.
-                                // We can skip MatchesAllTermsInEither here for the SQL path.
+                                // Name filter and active tags are handled in SQL when available (and in PassesFilters on main thread otherwise).
 
                                 // Clothing: with an active subfilter, avoid ClassifyClothingHairPath per row when the SQLite
                                 // index carries packed attrs (rebuild after schema bump); else fall back to path classification.
@@ -2641,6 +2651,11 @@ namespace VPB
                 swDrainMain.Stop();
                 refreshDrainWallMs = swDrainMain.ElapsedMilliseconds;
             }
+            if (swDeep != null)
+            {
+                deepAfterDrainMs = swDeep.ElapsedMilliseconds;
+                deepFilesCountAfterDrain = files != null ? files.Count : 0;
+            }
 
             List<string> pathsToSearch = new List<string>();
             if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
@@ -2696,6 +2711,8 @@ namespace VPB
                         sysCacheHit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(sysCacheKey, sysCacheSig, sysCachedRows);
                     }
                     catch { sysCacheHit = false; sysCachedRows = null; }
+                    if (swDeep != null)
+                        deepSysCacheHit = sysCacheHit;
 
                     if (sysCacheHit && sysCachedRows != null)
                     {
@@ -2729,6 +2746,7 @@ namespace VPB
                             if (!PassesFilters(sysEntryFast, true)) continue;
                             files.Add(sysEntryFast);
                             if (sysLooseFilesAddedCount != null) sysLooseFilesAddedCount[0]++;
+                            if (swDeep != null) deepSysFilesAdded++;
                         }
                         if (prunedMissingCachedRows)
                         {
@@ -2820,6 +2838,7 @@ namespace VPB
                                 files.Add(sysEntry);
                                 if (sysLooseFilesAddedCount != null)
                                     sysLooseFilesAddedCount[0]++;
+                                if (swDeep != null) deepSysFilesAdded++;
 
                                 try
                                 {
@@ -2846,10 +2865,25 @@ namespace VPB
             }
             }
 
+            if (swDeep != null) deepAfterSysFilesMs = swDeep.ElapsedMilliseconds;
+
             if (!fileListFromCache)
             {
                 yield return null; // Yield before sorting
                 var sortState = GetSortState("Files");
+                if (LogGalleryRefreshDeepTiming)
+                {
+                    try
+                    {
+                        LogUtil.Log("[VPB.Gallery.DeepTiming] Sort start"
+                            + " | type=" + (sortState != null ? sortState.Type.ToString() : "(null)")
+                            + " | dir=" + (sortState != null ? sortState.Direction.ToString() : "(null)")
+                            + " | count=" + (files != null ? files.Count : 0)
+                            + " | title='" + (currentCategoryTitle ?? "") + "'"
+                            + " | path='" + (currentPath ?? "") + "'");
+                    }
+                    catch { }
+                }
                 bool sortSnapStillMatches = fileListSortSnapForWorker != null
                     && sortState.Type == fileListSortSnapForWorker.Type
                     && sortState.Direction == fileListSortSnapForWorker.Direction;
@@ -2860,9 +2894,14 @@ namespace VPB
                 if (!skipMainThreadSort)
                     GallerySortManager.Instance.SortFiles(files, sortState);
                 swSortMain.Stop();
+                if (LogGalleryRefreshDeepTiming)
+                {
+                    try { LogUtil.Log("[VPB.Gallery.DeepTiming] Sort done ms=" + swSortMain.ElapsedMilliseconds); } catch { }
+                }
                 if (canFileListCache && fileListSnapKey != null)
                     GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
             }
+            if (swDeep != null) deepAfterSortMs = swDeep.ElapsedMilliseconds;
 
             // Cache the filtered list for selection operations (Select All, counts, etc)
             lastFilteredFiles.Clear();
@@ -2933,6 +2972,7 @@ namespace VPB
                     recyclingGrid.SetItemCountAtScroll(currentFilteredFiles.Count, savedScrollNormalizedPos);
                 }
             }
+            if (swDeep != null) deepAfterGridBindMs = swDeep.ElapsedMilliseconds;
 
             // We still need to clear activeButtons if they were used outside recycling grid,
             // but RecyclingGridView manages its own pool now.
@@ -2973,9 +3013,33 @@ namespace VPB
                         StoreSharedSideMetaIfRoom(sideMetaCacheKey, earlyNewCreators, earlyNewCatCounts);
                 }
             }
+            if (swDeep != null) deepAfterEarlyMetaWaitMs = swDeep.ElapsedMilliseconds;
 
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_before_UpdateLayout");
+            if (swDeep != null)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.DeepTiming] RefreshFilesRoutine pre-UpdateLayout"
+                        + " | t=" + swDeep.ElapsedMilliseconds + "ms"
+                        + " | afterFirstYield=" + deepAfterFirstYieldMs + "ms"
+                        + " | afterDrain=" + deepAfterDrainMs + "ms"
+                        + " | drainWall=" + refreshDrainWallMs + "ms"
+                        + " | afterSysFiles=" + deepAfterSysFilesMs + "ms"
+                        + " | sysCacheHit=" + (deepSysCacheHit ? "1" : "0")
+                        + " | sysAdded=" + deepSysFilesAdded
+                        + " | afterSort=" + deepAfterSortMs + "ms"
+                        + " | afterGridBind=" + deepAfterGridBindMs + "ms"
+                        + " | afterEarlyMetaWait=" + deepAfterEarlyMetaWaitMs + "ms"
+                        + " | filesAfterDrain=" + deepFilesCountAfterDrain
+                        + " | filesFinal=" + (files != null ? files.Count : 0)
+                        + " | title='" + (currentCategoryTitle ?? "") + "'"
+                        + " | path='" + (currentPath ?? "") + "'");
+                }
+                catch { }
+            }
             UpdateLayout();
+            if (swDeep != null) deepUpdateLayoutMs = swDeep.ElapsedMilliseconds;
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_after_UpdateLayout");
             // Layout rebuild can clamp ScrollRect and undo the position we just set.
             if (scrollRect != null && !scrollToBottom)
@@ -2998,6 +3062,20 @@ namespace VPB
             hasLoadedContent = true;
             refreshCoroutine = null;
             CompletePaneLoadTimingIfPending();
+
+            if (swDeep != null)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.DeepTiming] RefreshFilesRoutine DONE"
+                        + " | total=" + swDeep.ElapsedMilliseconds + "ms"
+                        + " | updateLayoutAt=" + deepUpdateLayoutMs + "ms"
+                        + " | title='" + (currentCategoryTitle ?? "") + "'"
+                        + " | path='" + (currentPath ?? "") + "'"
+                        + " | files=" + (files != null ? files.Count : 0));
+                }
+                catch { }
+            }
 
             // Show() used UpdateTabsImpl(false) while this coroutine ran, so category/creator/tag side lists stay stale until here.
             // Defer one frame (same as first-load / Pose) so we do not block overlay hide; covers every category switch.

@@ -217,6 +217,100 @@ namespace VPB
 
         protected JSONStorableAction downloadAllMissingPackagesAction;
 
+        // Missing-packages network flow can be expensive (thousands of ids).
+        // Keep it single-flight and rate-limited to avoid tight error loops that stall VaM.
+        protected Coroutine missingPackagesCoroutine;
+        protected bool missingPackagesRequestInFlight;
+        protected float nextMissingPackagesRequestAllowedRealtime;
+
+        // UI: Hide "Not On Hub" missing-package rows
+        protected JSONStorableBool hideMissingNotOnHubJSON;
+        protected UIDynamicToggle hideMissingNotOnHubToggleUI;
+        protected UIDynamicButton copyMissingFromHubButtonUI;
+        protected Color? copyMissingFromHubButtonDefaultColor;
+
+        private void PositionHideNotOnHubToggle(MVR.Hub.HubBrowseUI ui, RectTransform toggleRt)
+        {
+            if (ui == null || toggleRt == null) return;
+            var closeBtn = ui.closeMissingPackagesPanelButton;
+            RectTransform closeRt = closeBtn != null ? (closeBtn.transform as RectTransform) : null;
+            if (closeRt == null) return;
+
+            // Ensure same parent space as the close button.
+            if (toggleRt.parent != closeRt.parent)
+            {
+                toggleRt.SetParent(closeRt.parent, worldPositionStays: false);
+            }
+
+            // Prevent stretching to full width by forcing fixed anchors/pivot/size.
+            toggleRt.anchorMin = closeRt.anchorMin;
+            toggleRt.anchorMax = closeRt.anchorMax;
+            toggleRt.pivot = new Vector2(0f, 0f);
+
+            float h = closeRt.rect.height > 1f ? closeRt.rect.height : 60f;
+            toggleRt.sizeDelta = new Vector2(320f, h);
+
+            const float gap = 20f;
+            toggleRt.anchoredPosition = closeRt.anchoredPosition + new Vector2(closeRt.rect.width + gap, 0f);
+        }
+
+        private void PositionCopyMissingFromHubButton(MVR.Hub.HubBrowseUI ui, RectTransform btnRt)
+        {
+            if (ui == null || btnRt == null) return;
+            RectTransform closeRt = ui.closeMissingPackagesPanelButton != null ? (ui.closeMissingPackagesPanelButton.transform as RectTransform) : null;
+            if (closeRt == null) return;
+
+            RectTransform toggleRt = hideMissingNotOnHubToggleUI != null ? (hideMissingNotOnHubToggleUI.transform as RectTransform) : null;
+            if (toggleRt == null) return;
+
+            if (btnRt.parent != closeRt.parent)
+            {
+                btnRt.SetParent(closeRt.parent, worldPositionStays: false);
+            }
+
+            btnRt.anchorMin = closeRt.anchorMin;
+            btnRt.anchorMax = closeRt.anchorMax;
+            btnRt.pivot = new Vector2(0f, 0f);
+
+            float h = closeRt.rect.height > 1f ? closeRt.rect.height : 60f;
+            btnRt.sizeDelta = new Vector2(420f, h);
+
+            const float gap = 20f;
+            float toggleW = toggleRt.rect.width > 1f ? toggleRt.rect.width : toggleRt.sizeDelta.x;
+            btnRt.anchoredPosition = closeRt.anchoredPosition + new Vector2(closeRt.rect.width + gap + toggleW + gap, 0f);
+        }
+
+        private void CopyMissingFromHubListToClipboard()
+        {
+            try
+            {
+                if (missingPackages == null) return;
+
+                HashSet<string> ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var ui in missingPackages)
+                {
+                    if (ui == null || ui.connectedItem == null) continue;
+                    if (ui.connectedItem.HasValidDownloadUrl) continue; // only "Not On Hub"
+                    string n = ui.connectedItem.Name;
+                    if (string.IsNullOrEmpty(n)) continue;
+                    ids.Add(n);
+                }
+
+                var list = ids.ToList();
+                list.Sort(StringComparer.OrdinalIgnoreCase);
+
+                GUIUtility.systemCopyBuffer = string.Join("\n", list.ToArray());
+
+                if (copyMissingFromHubButtonUI != null)
+                {
+                    if (!copyMissingFromHubButtonDefaultColor.HasValue)
+                        copyMissingFromHubButtonDefaultColor = copyMissingFromHubButtonUI.buttonColor;
+                    copyMissingFromHubButtonUI.buttonColor = new Color32(133, 255, 133, 255);
+                }
+            }
+            catch { }
+        }
+
         protected GameObject updatesPanel;
 
         protected RectTransform updatesContainer;
@@ -1342,12 +1436,23 @@ namespace VPB
             }
             if (flag)
             {
-                triggerCountdown = 0.5f;
-                if (triggerResetRefreshRoutine == null)
-                {
-                    triggerResetRefreshRoutine = StartCoroutine(TriggerResetRefresh());
-                }
+                ScheduleResetRefresh(0.5f);
             }
+        }
+
+        protected void ScheduleResetRefresh(float delaySeconds)
+        {
+            if (suppressRefresh) return;
+
+            triggerCountdown = Mathf.Max(0f, delaySeconds);
+
+            // Debounce: if user keeps typing / changing filters, only refresh once after they pause.
+            if (triggerResetRefreshRoutine != null)
+            {
+                StopCoroutine(triggerResetRefreshRoutine);
+                triggerResetRefreshRoutine = null;
+            }
+            triggerResetRefreshRoutine = StartCoroutine(TriggerResetRefresh());
         }
 
         protected IEnumerator TriggerResetRefresh()
@@ -1364,7 +1469,7 @@ namespace VPB
             {
                 Settings.Instance.HubCategoryFilter.Value = _categoryFilter;
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.2f);
         }
 
         public void SetPayTypeAndCategoryFilter(string payType, string category, bool onlyTheseFilters = true)
@@ -1388,7 +1493,7 @@ namespace VPB
             {
                 Settings.Instance.HubCreatorFilter.Value = _creatorFilter;
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.2f);
         }
 
         protected void SyncTagsFilter(string s)
@@ -1398,7 +1503,7 @@ namespace VPB
             {
                 Settings.Instance.HubTagsFilter.Value = _tagsFilter;
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.35f);
         }
 
         protected void SyncSortPrimary(string s)
@@ -1408,7 +1513,7 @@ namespace VPB
             {
                 Settings.Instance.HubSortPrimary.Value = _sortPrimary;
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.1f);
         }
 
         protected void SyncSortSecondary(string s)
@@ -1418,7 +1523,7 @@ namespace VPB
             {
                 Settings.Instance.HubSortSecondary.Value = _sortSecondary;
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.1f);
         }
 
         public void NavigateWebPanel(string url)
@@ -1668,88 +1773,29 @@ namespace VPB
 
         protected void FindMissingPackagesCallback(SimpleJSON.JSONNode jsonNode)
         {
-            if (!(jsonNode != null))
+            // Legacy single-request path kept for compatibility; now render via shared renderer.
+            if (jsonNode == null) return;
+            JSONClass root = jsonNode.AsObject;
+            if (root == null) return;
+            string status = root["status"];
+            if (status != null && status == "error")
             {
+                string err = jsonNode["error"];
+                LogUtil.LogError("findPackages returned error " + err);
                 return;
             }
-            JSONClass asObject = jsonNode.AsObject;
-            if (!(asObject != null))
+            JSONClass pkgsObj = jsonNode["packages"].AsObject;
+            if (pkgsObj == null) return;
+
+            Dictionary<string, JSONClass> serverPackages = new Dictionary<string, JSONClass>(StringComparer.OrdinalIgnoreCase);
+            if (checkMissingPackageNames != null)
             {
-                return;
-            }
-            string text = asObject["status"];
-            if (text != null && text == "error")
-            {
-                string text2 = jsonNode["error"];
-                LogUtil.LogError("findPackages returned error " + text2);
-                return;
-            }
-            JSONClass asObject2 = jsonNode["packages"].AsObject;
-            if (!(asObject2 != null))
-            {
-                return;
-            }
-            if (missingPackages != null)
-            {
-                foreach (HubResourcePackageUI missingPackage in missingPackages)
+                foreach (string pkgId in checkMissingPackageNames)
                 {
-                    UnityEngine.Object.Destroy(missingPackage.gameObject);
+                    JSONClass pkg = pkgsObj[pkgId].AsObject;
+                    if (pkg != null) serverPackages[pkgId] = pkg;
                 }
-                missingPackages.Clear();
-            }
-            else
-            {
-                missingPackages = new List<HubResourcePackageUI>();
-            }
-            foreach (string checkMissingPackageName in checkMissingPackageNames)
-            {
-                JSONClass jSONClass = asObject2[checkMissingPackageName].AsObject;
-                if (jSONClass == null)
-                {
-                    jSONClass = new JSONClass();
-                    jSONClass["filename"] = checkMissingPackageName;
-                    jSONClass["downloadUrl"] = "null";
-                }
-                else
-                {
-                    if (Regex.IsMatch(checkMissingPackageName, "[0-9]+$"))
-                    {
-                        string text3 = jSONClass["filename"];
-                        if (text3 == null || text3 == "null" || text3 != checkMissingPackageName + ".var")
-                        {
-                            LogUtil.LogError("Missing file name " + text3 + " does not match missing package name " + checkMissingPackageName);
-                            jSONClass["filename"] = checkMissingPackageName;
-                            jSONClass["file_size"] = "null";
-                            jSONClass["licenseType"] = "null";
-                            jSONClass["downloadUrl"] = "null";
-                        }
-                    }
-                    else
-                    {
-                        string text4 = jSONClass["filename"];
-                        if (text4 == null || text4 == "null")
-                        {
-                            jSONClass["filename"] = checkMissingPackageName;
-                        }
-                    }
-                    string text5 = jSONClass["resource_id"];
-                    if (text5 == null || text5 == "null")
-                    {
-                        jSONClass["downloadUrl"] = "null";
-                    }
-                }
-                HubResourcePackage hubResourcePackage = new HubResourcePackage(jSONClass, this, true);
-                RectTransform rectTransform = CreateDownloadPrefabInstance();
-                if (rectTransform != null)
-                {
-                    rectTransform.SetParent(missingPackagesContainer, false);
-                    HubResourcePackageUI component = rectTransform.GetComponent<HubResourcePackageUI>();
-                    if (component != null)
-                    {
-                        missingPackages.Add(component);
-                        hubResourcePackage.RegisterUI(component);
-                    }
-                }
+                RenderMissingPackages(serverPackages, checkMissingPackageNames);
             }
         }
 
@@ -1772,17 +1818,27 @@ namespace VPB
                     return;
                 }
 
+                // Debounce / single-flight: opening the panel repeatedly (or UI re-entrancy)
+                // must not start multiple concurrent requests.
+                if (missingPackagesRequestInFlight)
+                {
+                    return;
+                }
+                if (Time.realtimeSinceStartup < nextMissingPackagesRequestAllowedRealtime)
+                {
+                    return;
+                }
 
                 List<string> missingPackageNames = FileManager.singleton.GetMissingDependenciesNames();
                 if (missingPackageNames.Count > 0)
                 {
-                    JSONClass jSONClass = new JSONClass();
-                    jSONClass["source"] = "VaM";
-                    jSONClass["action"] = "findPackages";
                     checkMissingPackageNames = missingPackageNames;
-                    jSONClass["packages"] = string.Join(",", missingPackageNames.ToArray());
-                    string postData = jSONClass.ToString();
-                    StartCoroutine(PostRequest(apiUrl, postData, FindMissingPackagesCallback, FindMissingPackagesErrorCallback));
+                    if (missingPackagesCoroutine != null)
+                    {
+                        try { StopCoroutine(missingPackagesCoroutine); } catch { }
+                        missingPackagesCoroutine = null;
+                    }
+                    missingPackagesCoroutine = StartCoroutine(FindMissingPackagesBatched(missingPackageNames));
                 }
                 else if (missingPackages != null)
                 {
@@ -1805,10 +1861,202 @@ namespace VPB
 
         public void CloseMissingPackagesPanel()
         {
+            // Cancel in-flight batched lookups to prevent background CPU/network churn.
+            if (missingPackagesCoroutine != null)
+            {
+                try { StopCoroutine(missingPackagesCoroutine); } catch { }
+                missingPackagesCoroutine = null;
+            }
+            missingPackagesRequestInFlight = false;
             if (missingPackagesPanel != null)
             {
                 missingPackagesPanel.SetActive(false);
             }
+        }
+
+        private IEnumerator FindMissingPackagesBatched(List<string> missingPackageNames)
+        {
+            missingPackagesRequestInFlight = true;
+            try
+            {
+                // Avoid huge payloads that can yield empty/invalid JSON responses from the hub.
+                // Keep batches modest and add minimal delay between them.
+                const int batchSize = 200;
+
+                // If the hub is having issues, don't hammer it: backoff after errors.
+                int attempts = 0;
+                float backoffSeconds = 1f;
+
+                // Accumulate server results (keyed by missing package id).
+                Dictionary<string, JSONClass> serverPackages = new Dictionary<string, JSONClass>(StringComparer.OrdinalIgnoreCase);
+
+                // Clear UI once, then render once at the end.
+                if (missingPackages != null)
+                {
+                    foreach (HubResourcePackageUI missingPackage in missingPackages)
+                    {
+                        UnityEngine.Object.Destroy(missingPackage.gameObject);
+                    }
+                    missingPackages.Clear();
+                }
+                else
+                {
+                    missingPackages = new List<HubResourcePackageUI>();
+                }
+
+                for (int i = 0; i < missingPackageNames.Count; i += batchSize)
+                {
+                    if (missingPackagesPanel == null || !missingPackagesPanel.activeInHierarchy)
+                    {
+                        yield break;
+                    }
+
+                    int take = Math.Min(batchSize, missingPackageNames.Count - i);
+                    List<string> batch = missingPackageNames.GetRange(i, take);
+
+                    JSONClass req = new JSONClass();
+                    req["source"] = "VaM";
+                    req["action"] = "findPackages";
+                    req["packages"] = string.Join(",", batch.ToArray());
+                    string postData = req.ToString();
+
+                    bool done = false;
+                    bool ok = false;
+                    string err = null;
+                    SimpleJSON.JSONNode respNode = null;
+
+                    yield return StartCoroutine(PostRequest(apiUrl, postData,
+                        jsonNode => { ok = true; respNode = jsonNode; done = true; },
+                        e => { ok = false; err = e; done = true; }
+                    ));
+
+                    // PostRequest is synchronous in the coroutine sense, but keep this in case of early abort paths.
+                    while (!done) yield return null;
+
+                    if (!ok || respNode == null)
+                    {
+                        attempts++;
+                        // Rate limit further attempts for a bit even after we return.
+                        nextMissingPackagesRequestAllowedRealtime = Time.realtimeSinceStartup + Math.Min(30f, backoffSeconds);
+                        if (attempts >= 5)
+                        {
+                            if (!string.IsNullOrEmpty(err))
+                                LogUtil.LogError("[VPB] Hub missing-packages: aborting after repeated errors: " + err);
+                            yield break;
+                        }
+                        yield return new WaitForSeconds(Math.Min(30f, backoffSeconds));
+                        backoffSeconds = Math.Min(30f, backoffSeconds * 2f);
+                        // retry same batch
+                        i -= batchSize;
+                        continue;
+                    }
+
+                    attempts = 0;
+                    backoffSeconds = 1f;
+
+                    JSONClass root = respNode.AsObject;
+                    if (root != null)
+                    {
+                        JSONClass pkgsObj = root["packages"].AsObject;
+                        if (pkgsObj != null)
+                        {
+                            foreach (string pkgId in batch)
+                            {
+                                JSONClass pkg = pkgsObj[pkgId].AsObject;
+                                if (pkg != null)
+                                {
+                                    serverPackages[pkgId] = pkg;
+                                }
+                            }
+                        }
+                    }
+
+                    // Small yield to keep the UI responsive.
+                    yield return null;
+                }
+
+                // Render once using the accumulated results.
+                RenderMissingPackages(serverPackages, missingPackageNames);
+            }
+            finally
+            {
+                missingPackagesRequestInFlight = false;
+                missingPackagesCoroutine = null;
+                // After a full run, add a small cooldown to prevent immediate re-entry spam.
+                nextMissingPackagesRequestAllowedRealtime = Time.realtimeSinceStartup + 1.0f;
+            }
+        }
+
+        private void RenderMissingPackages(Dictionary<string, JSONClass> serverPackages, List<string> missingPackageNames)
+        {
+            int filenameMismatchLogsRemaining = 3;
+            foreach (string checkMissingPackageName in missingPackageNames)
+            {
+                JSONClass jSONClass = null;
+                if (serverPackages != null)
+                {
+                    serverPackages.TryGetValue(checkMissingPackageName, out jSONClass);
+                }
+                if (jSONClass == null)
+                {
+                    jSONClass = new JSONClass();
+                    jSONClass["filename"] = checkMissingPackageName;
+                    jSONClass["downloadUrl"] = "null";
+                }
+                else
+                {
+                    if (Regex.IsMatch(checkMissingPackageName, "[0-9]+$"))
+                    {
+                        string text3 = jSONClass["filename"];
+                        string expected = checkMissingPackageName + ".var";
+                        if (string.IsNullOrEmpty(text3) || text3 == "null" || !string.Equals(text3, expected, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (filenameMismatchLogsRemaining > 0)
+                            {
+                                filenameMismatchLogsRemaining--;
+                                LogUtil.LogWarning("[VPB] Hub missing-packages: server filename '" + text3 + "' does not match expected '" + expected + "' for '" + checkMissingPackageName + "'. Using package id.");
+                                if (filenameMismatchLogsRemaining == 0)
+                                {
+                                    LogUtil.LogWarning("[VPB] Hub missing-packages: suppressing further filename mismatch logs.");
+                                }
+                            }
+                            jSONClass["filename"] = checkMissingPackageName;
+                            jSONClass["file_size"] = "null";
+                            jSONClass["licenseType"] = "null";
+                            jSONClass["downloadUrl"] = "null";
+                        }
+                    }
+                    else
+                    {
+                        string text4 = jSONClass["filename"];
+                        if (text4 == null || text4 == "null")
+                        {
+                            jSONClass["filename"] = checkMissingPackageName;
+                        }
+                    }
+                    string text5 = jSONClass["resource_id"];
+                    if (text5 == null || text5 == "null")
+                    {
+                        jSONClass["downloadUrl"] = "null";
+                    }
+                }
+
+                HubResourcePackage hubResourcePackage = new HubResourcePackage(jSONClass, this, true);
+                RectTransform rectTransform = CreateDownloadPrefabInstance();
+                if (rectTransform != null)
+                {
+                    rectTransform.SetParent(missingPackagesContainer, false);
+                    HubResourcePackageUI component = rectTransform.GetComponent<HubResourcePackageUI>();
+                    if (component != null)
+                    {
+                        missingPackages.Add(component);
+                        hubResourcePackage.RegisterUI(component);
+                    }
+                }
+            }
+
+            // Apply user filtering after populating the list.
+            ApplyMissingPackagesNotOnHubVisibility();
         }
 
         public void DownloadAllMissingPackages()
@@ -2794,7 +3042,8 @@ namespace VPB
             try
             {
                 componentInChildren.categoryFilterPopup.useFiltering = false;
-                componentInChildren.categoryFilterPopup.numPopupValues = 0;
+                componentInChildren.categoryFilterPopup.useFiltering = true;
+                componentInChildren.categoryFilterPopup.numPopupValues = 30;
                 categoryFilterChooser.RegisterPopup(componentInChildren.categoryFilterPopup, isAlt);
             }
             catch (Exception e)
@@ -2804,7 +3053,8 @@ namespace VPB
             try
             {
                 componentInChildren.creatorFilterPopup.useFiltering = false;
-                componentInChildren.creatorFilterPopup.numPopupValues = 0;
+                componentInChildren.creatorFilterPopup.useFiltering = true;
+                componentInChildren.creatorFilterPopup.numPopupValues = 30;
                 creatorFilterChooser.RegisterPopup(componentInChildren.creatorFilterPopup, isAlt);
             }
             catch (Exception e)
@@ -2814,7 +3064,8 @@ namespace VPB
             try
             {
                 componentInChildren.tagsFilterPopup.useFiltering = false;
-                componentInChildren.tagsFilterPopup.numPopupValues = 0;
+                componentInChildren.tagsFilterPopup.useFiltering = true;
+                componentInChildren.tagsFilterPopup.numPopupValues = 30;
                 tagsFilterChooser.RegisterPopup(componentInChildren.tagsFilterPopup, isAlt);
 
             }
@@ -2890,6 +3141,69 @@ namespace VPB
                     hideDownloaded.toggle = hideToggle.toggle;
                     hideToggle.backgroundImage.color = new Color32(163, 111, 214, 255);
                 }
+
+                // Missing-packages panel toggle (bottom): hide "Not On Hub" entries.
+                // (Create once for the main UI. Alt UI can reuse JSONStorable if it binds separately.)
+                if (!isAlt && missingPackagesPanel != null && hideMissingNotOnHubToggleUI == null)
+                {
+                    hideMissingNotOnHubJSON = new JSONStorableBool(
+                        "Hide Not On Hub",
+                        true,
+                        (JSONStorableBool.SetBoolCallback)(b => ApplyMissingPackagesNotOnHubVisibility()));
+
+                    // Place it next to the panel "Close" button for intuitive UX.
+                    var closeBtn = componentInChildren.closeMissingPackagesPanelButton;
+                    RectTransform closeBtnRt = closeBtn != null ? closeBtn.transform as RectTransform : null;
+                    Transform toggleParent = closeBtnRt != null ? closeBtnRt.parent : missingPackagesPanel.transform;
+                    if (toggleParent != null)
+                    {
+                        RectTransform toggleRt = UnityEngine.Object.Instantiate(manager.configurableTogglePrefab, toggleParent) as RectTransform;
+                        if (toggleRt != null)
+                        {
+                            toggleRt.gameObject.SetActive(true);
+                            toggleRt.localScale = Vector3.one;
+                            PositionHideNotOnHubToggle(componentInChildren, toggleRt);
+
+                            hideMissingNotOnHubToggleUI = toggleRt.GetComponent<UIDynamicToggle>();
+                            if (hideMissingNotOnHubToggleUI != null)
+                            {
+                                hideMissingNotOnHubToggleUI.label = hideMissingNotOnHubJSON.name;
+                                hideMissingNotOnHubJSON.toggle = hideMissingNotOnHubToggleUI.toggle;
+                                hideMissingNotOnHubToggleUI.backgroundImage.color = new Color32(255, 170, 110, 255);
+                            }
+                            // Apply immediately so the initial ON state takes effect without user interaction.
+                            ApplyMissingPackagesNotOnHubVisibility();
+
+                            // Button: copy list of "Not On Hub" items to clipboard.
+                            RectTransform btnRt = UnityEngine.Object.Instantiate(manager.configurableButtonPrefab, toggleParent) as RectTransform;
+                            if (btnRt != null)
+                            {
+                                btnRt.gameObject.SetActive(true);
+                                copyMissingFromHubButtonUI = btnRt.GetComponent<UIDynamicButton>();
+                                if (copyMissingFromHubButtonUI != null)
+                                {
+                                    copyMissingFromHubButtonUI.label = "Copy Missing From Hub List";
+                                    copyMissingFromHubButtonDefaultColor = copyMissingFromHubButtonUI.buttonColor;
+                                    if (copyMissingFromHubButtonUI.button != null)
+                                    {
+                                        copyMissingFromHubButtonUI.button.onClick.AddListener(() =>
+                                        {
+                                            CopyMissingFromHubListToClipboard();
+                                        });
+                                    }
+                                }
+                                PositionCopyMissingFromHubButton(componentInChildren, btnRt);
+                            }
+                        }
+                    }
+                }
+                else if (!isAlt && hideMissingNotOnHubToggleUI != null)
+                {
+                    // UI can be rebuilt; keep it positioned correctly.
+                    PositionHideNotOnHubToggle(componentInChildren, hideMissingNotOnHubToggleUI.transform as RectTransform);
+                    if (copyMissingFromHubButtonUI != null)
+                        PositionCopyMissingFromHubButton(componentInChildren, copyMissingFromHubButtonUI.transform as RectTransform);
+                }
             }
             
 
@@ -2897,6 +3211,33 @@ namespace VPB
         }
         JSONStorableBool onlyDownloadable;
         JSONStorableBool hideDownloaded;
+
+        private void ApplyMissingPackagesNotOnHubVisibility()
+        {
+            try
+            {
+                bool hide = hideMissingNotOnHubJSON != null && hideMissingNotOnHubJSON.val;
+                if (!hide || missingPackages == null) 
+                {
+                    if (missingPackages != null)
+                    {
+                        foreach (var ui in missingPackages)
+                        {
+                            if (ui != null) ui.gameObject.SetActive(true);
+                        }
+                    }
+                    return;
+                }
+
+                foreach (var ui in missingPackages)
+                {
+                    if (ui == null) continue;
+                    bool notOnHub = (ui.connectedItem == null) || !ui.connectedItem.HasValidDownloadUrl;
+                    ui.gameObject.SetActive(!notOnHub);
+                }
+            }
+            catch { }
+        }
 
         protected bool IsResourceAlreadyDownloaded(JSONClass resource)
         {

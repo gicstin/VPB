@@ -903,29 +903,15 @@ namespace VPB
             { var s = UI.LoadIconSprite("vpb_icons/random.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerLoadRandomBtn, s); }
 
             footerHubBtnGO = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.side.hub", "Hub"), 14, 0, 0, AnchorPresets.middleCenter, () => {
-                if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
-                {
-                    if (isFixedLocally) ToggleLeft(ContentType.Hub); else ToggleRight(ContentType.Hub);
-                }
-                else
-                {
-                    VamHookPlugin.singleton?.OpenHubBrowse();
-                    Hide();
-                }
+                VamHookPlugin.singleton?.OpenHubBrowse();
+                Hide();
             });
             footerHubBtnImage = footerHubBtnGO.GetComponent<Image>();
             footerHubBtnImage.color = UI.IconButtonBackdrop;
             footerHubBtnText = footerHubBtnGO.GetComponentInChildren<Text>();
             AddRightClickDelegate(footerHubBtnGO, () => {
-                if (VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
-                {
-                    ToggleRight(ContentType.Hub);
-                }
-                else
-                {
-                    VamHookPlugin.singleton?.OpenHubBrowse();
-                    Hide();
-                }
+                VamHookPlugin.singleton?.OpenHubBrowse();
+                Hide();
             });
             { var s = UI.LoadIconSprite("vpb_icons/hub.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(footerHubBtnGO, s); }
 

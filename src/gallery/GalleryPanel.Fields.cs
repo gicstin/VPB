@@ -53,6 +53,16 @@ namespace VPB
         /// <summary>Incremented at each <see cref="GalleryPanel.RefreshFiles"/> so deferred sub-pane tag counting aborts when a newer refresh supersedes it.</summary>
         private int _deferredSubPaneSessionId;
 
+        /// <summary>
+        /// Extra, high-detail refresh timing logs around <see cref="GalleryPanel.RefreshFilesRoutine"/>.
+        /// Intended for diagnosing stalls that do not show up in catNav timing (e.g. startup, auto-refresh).
+        /// </summary>
+#if DEBUG
+        public static bool LogGalleryRefreshDeepTiming = true;
+#else
+        public static bool LogGalleryRefreshDeepTiming = false;
+#endif
+
         /// <summary>Deferred phase1/phase2 side-tab work after the grid is shown; stopped when a new <see cref="GalleryPanel.RefreshFiles"/> supersedes it.</summary>
         private Coroutine _deferredGallerySideTabsCoroutine;
 
