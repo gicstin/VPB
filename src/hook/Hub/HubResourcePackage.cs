@@ -260,7 +260,7 @@ namespace VPB
             alreadyHaveJSON = new JSONStorableBool("alreadyHave", false);
             alreadyHaveSceneJSON = new JSONStorableBool("alreadyHaveScene", false);
             updateAvailableJSON = new JSONStorableBool("updateAvailable", false);
-            updateMsgJSON = new JSONStorableString("updateMsg", "Update");
+            updateMsgJSON = new JSONStorableString("updateMsg", "Direct Update");
             updateAction = new JSONStorableAction("Update", Update);
             notOnHubJSON = new JSONStorableBool("notOnHub", startingValue3);
             downloadAction = new JSONStorableAction("Download", Download);
@@ -764,7 +764,7 @@ namespace VPB
                     if (package.Version < LatestVersion)
                     {
                         updateAvailableJSON.val = true;
-                        updateMsgJSON.val = package.Version + " -> " + LatestVersion;
+                        updateMsgJSON.val = "Direct Update " + package.Version + " -> " + LatestVersion;
                     }
                     else
                     {
@@ -1113,6 +1113,19 @@ namespace VPB
                 updateMsgJSON.text = ui.updateMsgText;
                 updateAction.button = ui.updateButton;
                 downloadAction.button = ui.downloadButton;
+                if (ui.updateButton != null)
+                {
+                    Image updateImage = ui.updateButton.GetComponent<Image>();
+                    if (updateImage != null)
+                    {
+                        updateImage.color = new Color32(163, 111, 214, 255);
+                    }
+                    Text updateText = ui.updateButton.GetComponentInChildren<Text>(true);
+                    if (updateText != null)
+                    {
+                        updateText.color = new Color32(255, 255, 255, 255);
+                    }
+                }
                 isDownloadQueuedJSON.indicator = ui.isDownloadQueuedIndicator;
                 isDownloadingJSON.indicator = ui.isDownloadingIndicator;
                 isDownloadedJSON.indicator = ui.isDownloadedIndicator;

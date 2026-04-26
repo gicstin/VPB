@@ -273,7 +273,7 @@ namespace VPB
             quickDownloadAllAction = new JSONStorableAction("DownloadAllFromCard", DownloadAll);
             inLibraryJSON = new JSONStorableBool("inLibrary", false);
             updateAvailableJSON = new JSONStorableBool("updateAvailable", false);
-            updateMsgJSON = new JSONStorableString("updateMsg", "Update Available");
+            updateMsgJSON = new JSONStorableString("updateMsg", "Direct Update");
         }
 
         protected void PayTypeAndCategorySelect()
@@ -422,7 +422,7 @@ namespace VPB
                             if (packageGroup.NewestPackage.Version < result)
                             {
                                 val2 = true;
-                                updateMsgJSON.val = "Update Available " + packageGroup.NewestEnabledPackage.Version + " -> " + result;
+                                updateMsgJSON.val = "Direct Update " + packageGroup.NewestEnabledPackage.Version + " -> " + result;
                             }
                         }
                     }
@@ -556,8 +556,14 @@ namespace VPB
                 parent = ui.inLibraryIndicator.transform;
             }
 
-            GameObject buttonObject = new GameObject("QuickDownloadAllButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(Outline), typeof(EventTrigger));
+            GameObject buttonObject = new GameObject("QuickDownloadAllButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(Outline), typeof(EventTrigger), typeof(UIScrollPassthrough));
             buttonObject.transform.SetParent(parent, false);
+
+            UIScrollPassthrough scrollPassthrough = buttonObject.GetComponent<UIScrollPassthrough>();
+            if (scrollPassthrough != null)
+            {
+                scrollPassthrough.target = buttonObject.GetComponentInParent<ScrollRect>();
+            }
 
             RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
             RectTransform sourceRect = ui.inLibraryIndicator.GetComponent<RectTransform>();
@@ -675,7 +681,7 @@ namespace VPB
 
             bool hasDownloadableFiles = varFilesJSONArray != null && varFilesJSONArray.Count > 0;
             bool queueActive = IsQuickDownloadQueueActive();
-            bool showDownloadCta = (hubDownloadableJSON.val && hasDownloadableFiles && !inLibraryJSON.val) || queueActive;
+            bool showDownloadCta = (hubDownloadableJSON.val && hasDownloadableFiles && (!inLibraryJSON.val || updateAvailableJSON.val)) || queueActive;
 
             if (registeredUI.quickDownloadAllButton != null)
             {
@@ -686,7 +692,37 @@ namespace VPB
                 registeredUI.inLibraryIndicator.SetActive(inLibraryJSON.val);
             }
 
+            SyncLandingUpdateIndicatorPresentation(queueActive);
             SyncQuickDownloadCtaPresentation(queueActive);
+        }
+
+        protected void SyncLandingUpdateIndicatorPresentation(bool queueActive)
+        {
+            if (registeredUI == null)
+            {
+                return;
+            }
+
+            if (registeredUI.updateMsgText != null)
+            {
+                if (queueActive && updateAvailableJSON.val)
+                {
+                    registeredUI.updateMsgText.text = "Updating";
+                }
+                else if (updateAvailableJSON.val)
+                {
+                    registeredUI.updateMsgText.text = updateMsgJSON.val;
+                }
+            }
+
+            if (registeredUI.updateAvailableIndicator != null)
+            {
+                Button updateIndicatorButton = registeredUI.updateAvailableIndicator.GetComponent<Button>();
+                if (updateIndicatorButton != null)
+                {
+                    updateIndicatorButton.interactable = !queueActive;
+                }
+            }
         }
 
         protected bool IsQuickDownloadQueueActive()
@@ -767,9 +803,15 @@ namespace VPB
 
             if (queueActive)
             {
-                label.text = "Downloading";
+                label.text = updateAvailableJSON.val ? "Updating" : "Downloading";
                 label.color = new Color(0.35f, 0.06f, 0.32f, 1f);
                 background.color = new Color(0.96f, 0.72f, 0.92f, 1f);
+            }
+            else if (updateAvailableJSON.val)
+            {
+                label.text = updateMsgJSON.val;
+                label.color = new Color32(255, 255, 255, 255);
+                background.color = new Color32(163, 111, 214, 255);
             }
             else
             {
@@ -777,6 +819,35 @@ namespace VPB
                 label.color = new Color32(255, 255, 255, 255);
                 background.color = new Color32(163, 111, 214, 255);
             }
+        }
+
+        protected void ConfigureLandingUpdateIndicatorButton(HubResourceItemUI ui)
+        {
+            if (ui == null || ui.updateAvailableIndicator == null)
+            {
+                return;
+            }
+
+            Button updateIndicatorButton = ui.updateAvailableIndicator.GetComponent<Button>();
+            if (updateIndicatorButton == null)
+            {
+                updateIndicatorButton = ui.updateAvailableIndicator.AddComponent<Button>();
+            }
+
+            Image updateIndicatorBackground = ui.updateAvailableIndicator.GetComponent<Image>();
+            if (updateIndicatorBackground != null)
+            {
+                updateIndicatorButton.targetGraphic = updateIndicatorBackground;
+            }
+
+            updateIndicatorButton.onClick.RemoveAllListeners();
+            updateIndicatorButton.onClick.AddListener(DownloadAll);
+
+            ColorBlock colors = updateIndicatorButton.colors;
+            colors.normalColor = new Color(1f, 1f, 1f, 1f);
+            colors.highlightedColor = new Color(0.9f, 1f, 0.9f, 1f);
+            colors.pressedColor = new Color(0.78f, 0.95f, 0.78f, 1f);
+            updateIndicatorButton.colors = colors;
         }
 
         public void Hide()
@@ -944,6 +1015,19 @@ namespace VPB
                 updateAvailableJSON.indicator = ui.updateAvailableIndicator;
 
                 updateMsgJSON.text = ui.updateMsgText;
+                if (ui.updateAvailableIndicator != null)
+                {
+                    Image updateIndicatorBackground = ui.updateAvailableIndicator.GetComponent<Image>();
+                    if (updateIndicatorBackground != null)
+                    {
+                        updateIndicatorBackground.color = new Color32(163, 111, 214, 255);
+                    }
+                }
+                if (ui.updateMsgText != null)
+                {
+                    ui.updateMsgText.color = new Color32(255, 255, 255, 255);
+                }
+                ConfigureLandingUpdateIndicatorButton(ui);
                 SyncQuickDownloadCtaVisibility();
             }
         }
