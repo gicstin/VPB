@@ -158,6 +158,90 @@ namespace VPB
             return rewritten;
         }
 
+        private static string TryRewriteMissingEntryPathWithinSamePackage(string entryPath)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return null;
+            string p = entryPath.Replace('\\', '/');
+
+            int colonIdx = p.IndexOf(":/", StringComparison.Ordinal);
+            if (colonIdx <= 0 || colonIdx + 2 >= p.Length) return null;
+
+            string uid = p.Substring(0, colonIdx);
+            string internalPath = p.Substring(colonIdx + 2);
+            if (internalPath.StartsWith("/")) internalPath = internalPath.Substring(1);
+            if (string.IsNullOrEmpty(uid) || string.IsNullOrEmpty(internalPath)) return null;
+
+            // If exact entry exists, no rewrite needed.
+            try
+            {
+                if (MVR.FileManagement.FileManager.GetVarFileEntry(p) != null) return null;
+            }
+            catch { }
+
+            VarPackage pkg = null;
+            try { pkg = FileManager.GetPackage(uid, ensureInstalled: false); } catch { pkg = null; }
+            if (pkg == null) return null;
+
+            if (!pkg.TryGetCachedFileEntryData(out List<string> names, out _, out _)) return null;
+            if (names == null || names.Count == 0) return null;
+
+            string reqNorm = internalPath.Replace('\\', '/');
+            string reqDir = Path.GetDirectoryName(reqNorm)?.Replace('\\', '/');
+            if (string.IsNullOrEmpty(reqDir)) reqDir = "";
+            string reqFile = Path.GetFileName(reqNorm);
+            if (string.IsNullOrEmpty(reqFile)) return null;
+
+            // 1) Case-insensitive full path match (fixes zip case-sensitivity issues).
+            for (int i = 0; i < names.Count; i++)
+            {
+                string n = names[i];
+                if (string.IsNullOrEmpty(n)) continue;
+                string nn = n.Replace('\\', '/');
+                if (string.Equals(nn, reqNorm, StringComparison.OrdinalIgnoreCase))
+                {
+                    string rewrittenExact = uid + ":/" + nn;
+                    LogRewriteOnce("casepath|" + uid + "|" + reqNorm,
+                        "[VPB OnDemand] Rewrote missing entry by case-insensitive path match: req=" + p + " -> " + rewrittenExact);
+                    return rewrittenExact;
+                }
+            }
+
+            // 2) Filename match within same package (case-insensitive), prefer closest directory match.
+            string best = null;
+            int bestScore = int.MinValue;
+            int matchCount = 0;
+            for (int i = 0; i < names.Count; i++)
+            {
+                string n = names[i];
+                if (string.IsNullOrEmpty(n)) continue;
+                string nn = n.Replace('\\', '/');
+                if (!string.Equals(Path.GetFileName(nn), reqFile, StringComparison.OrdinalIgnoreCase)) continue;
+
+                matchCount++;
+
+                string candDir = Path.GetDirectoryName(nn)?.Replace('\\', '/') ?? "";
+                int score = 0;
+                if (string.Equals(candDir, reqDir, StringComparison.OrdinalIgnoreCase)) score += 200;
+                else if (!string.IsNullOrEmpty(reqDir) && candDir.EndsWith(reqDir, StringComparison.OrdinalIgnoreCase)) score += 120;
+                // Prefer shallower paths when ambiguous (often the "main" file).
+                score -= nn.Length;
+
+                if (best == null || score > bestScore)
+                {
+                    best = nn;
+                    bestScore = score;
+                }
+            }
+
+            if (string.IsNullOrEmpty(best)) return null;
+
+            string rewritten = uid + ":/" + best;
+            LogRewriteOnce("nameloc|" + uid + "|" + reqFile,
+                "[VPB OnDemand] Rewrote missing entry by filename within same package: req=" + p
+                + " -> " + rewritten + " (matches=" + matchCount + ")");
+            return rewritten;
+        }
+
         // Re-entry guard: prevents infinite recursion when our postfix calls GetVarFileEntry
         [ThreadStatic]
         public static bool s_InOnDemand;
@@ -441,6 +525,33 @@ namespace VPB
             return bestUid + entryPath.Substring(colonIdx);
         }
 
+        private static string TryRewriteEntryPathUidByCaseInsensitiveLookup(string entryPath)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return null;
+            string p = entryPath.Replace('\\', '/');
+            int colonIdx = p.IndexOf(":/", StringComparison.Ordinal);
+            if (colonIdx <= 0) return null;
+
+            string uid = p.Substring(0, colonIdx);
+            if (string.IsNullOrEmpty(uid)) return null;
+
+            // Only rewrite casing when we can resolve the same UID/version.
+            try
+            {
+                VarPackage pkg = FileManager.GetPackage(uid, ensureInstalled: false);
+                if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) return null;
+
+                if (string.Equals(pkg.Uid, uid, StringComparison.Ordinal)) return null;
+                if (!string.Equals(pkg.Uid, uid, StringComparison.OrdinalIgnoreCase)) return null;
+
+                string rewritten = pkg.Uid + p.Substring(colonIdx);
+                LogRewriteOnce("uidcase|" + uid,
+                    "[VPB OnDemand] Rewrote entry UID by case-insensitive package lookup: req=" + p + " -> " + rewritten);
+                return rewritten;
+            }
+            catch { return null; }
+        }
+
         /// <summary>
         /// Rewrites an entry path to a concrete, best-available UID if possible.
         /// This handles both "*.latest:/..." and "Author.Pkg.12:/..." → newest installed.
@@ -449,12 +560,21 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(entryPath)) return entryPath;
 
+            // First, normalize UID casing (VaM sometimes treats UID segment as case-sensitive).
+            string uidCase = TryRewriteEntryPathUidByCaseInsensitiveLookup(entryPath);
+            if (!string.IsNullOrEmpty(uidCase) && !string.Equals(uidCase, entryPath, StringComparison.Ordinal))
+                entryPath = uidCase;
+
             // Prefer explicit .latest rewrite first.
             string rewritten = TryRewriteLatestEntryPath(entryPath, attemptRegister);
             if (!string.IsNullOrEmpty(rewritten) && !string.Equals(rewritten, entryPath, StringComparison.OrdinalIgnoreCase))
             {
                 string pluginRewrite = TryRewritePluginCslistPathByFilename(rewritten);
-                return !string.IsNullOrEmpty(pluginRewrite) ? pluginRewrite : rewritten;
+                string baseRewritten = !string.IsNullOrEmpty(pluginRewrite) ? pluginRewrite : rewritten;
+                string caseUid2 = TryRewriteEntryPathUidByCaseInsensitiveLookup(baseRewritten);
+                if (!string.IsNullOrEmpty(caseUid2)) baseRewritten = caseUid2;
+                string missingRewrite = TryRewriteMissingEntryPathWithinSamePackage(baseRewritten);
+                return !string.IsNullOrEmpty(missingRewrite) ? missingRewrite : baseRewritten;
             }
 
             // Then try versioned best-available rewrite.
@@ -462,12 +582,20 @@ namespace VPB
             if (!string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, entryPath, StringComparison.OrdinalIgnoreCase))
             {
                 string pluginRewrite = TryRewritePluginCslistPathByFilename(rewrittenBest);
-                return !string.IsNullOrEmpty(pluginRewrite) ? pluginRewrite : rewrittenBest;
+                string baseRewritten = !string.IsNullOrEmpty(pluginRewrite) ? pluginRewrite : rewrittenBest;
+                string caseUid2 = TryRewriteEntryPathUidByCaseInsensitiveLookup(baseRewritten);
+                if (!string.IsNullOrEmpty(caseUid2)) baseRewritten = caseUid2;
+                string missingRewrite = TryRewriteMissingEntryPathWithinSamePackage(baseRewritten);
+                return !string.IsNullOrEmpty(missingRewrite) ? missingRewrite : baseRewritten;
             }
 
-            // Finally, if UID is already concrete but the cslist path is wrong, try locating by filename.
+            // Finally, if UID is already concrete but the path is wrong, try locating within the same package.
             string pluginOnly = TryRewritePluginCslistPathByFilename(entryPath);
-            return !string.IsNullOrEmpty(pluginOnly) ? pluginOnly : entryPath;
+            string baseOnly = !string.IsNullOrEmpty(pluginOnly) ? pluginOnly : entryPath;
+            string caseUidOnly = TryRewriteEntryPathUidByCaseInsensitiveLookup(baseOnly);
+            if (!string.IsNullOrEmpty(caseUidOnly)) baseOnly = caseUidOnly;
+            string missingOnly = TryRewriteMissingEntryPathWithinSamePackage(baseOnly);
+            return !string.IsNullOrEmpty(missingOnly) ? missingOnly : baseOnly;
         }
 
         public static bool ShouldDeferStartupOnDemandForPath(string entryPath, string uid)

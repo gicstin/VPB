@@ -1743,6 +1743,9 @@ namespace VPB
                     }
                 }
 
+                // Keep the hover-path count fallback in sync with filter/search refreshes.
+                try { RefreshHoverPathCountTextIfNeeded(); } catch { }
+
                 // With RecyclingGridView, we no longer have "pages".
                 // Just show total count.
                 if (currentFilteredFiles != null)
@@ -2530,7 +2533,8 @@ namespace VPB
             {
                 selectedPath = selectedFiles[0].Path;
                 selectionAnchorPath = selectedPath;
-                SetHoverPath(selectedFiles[0]);
+                // Selection should not "stick" the hover path.
+                SetHoverPath("");
             }
             else
             {

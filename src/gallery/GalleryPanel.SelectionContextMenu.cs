@@ -39,6 +39,7 @@ namespace VPB
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
+        private GameObject tboxOpenHubBtn;
         private GameObject tboxSceneImportBtn;
         private GameObject tboxSelectAllBtn;
         private GameObject tboxClearSelectionBtn;
@@ -147,6 +148,7 @@ namespace VPB
             one(tboxUnloadBtn);
             one(tboxLoadDepsBtn);
             one(tboxCacheTexturesBtn);
+            one(tboxOpenHubBtn);
             one(tboxCopyPkgNamesBtn);
             one(tboxSceneImportBtn);
             one(tboxSelectAllBtn);
@@ -185,6 +187,7 @@ namespace VPB
             d(tboxUnloadBtn);
             d(tboxLoadDepsBtn);
             d(tboxCacheTexturesBtn);
+            d(tboxOpenHubBtn);
             d(tboxCopyPkgNamesBtn);
             d(tboxSceneImportBtn);
             d(tboxSelectAllBtn);
@@ -285,6 +288,7 @@ namespace VPB
             if (tboxUnloadBtn != null) ltr.Add(tboxUnloadBtn);
             if (tboxLoadDepsBtn != null) ltr.Add(tboxLoadDepsBtn);
             if (tboxCacheTexturesBtn != null) ltr.Add(tboxCacheTexturesBtn);
+            if (tboxOpenHubBtn != null) ltr.Add(tboxOpenHubBtn);
             if (tboxCopyPkgNamesBtn != null) ltr.Add(tboxCopyPkgNamesBtn);
             if (tboxSceneImportBtn != null) ltr.Add(tboxSceneImportBtn);
             if (tboxSelectAllBtn != null) ltr.Add(tboxSelectAllBtn);
@@ -665,6 +669,28 @@ namespace VPB
                 }
             }
             catch { }
+
+            tboxOpenHubBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxOpenSelectedItemOnHub
+            );
+            tboxOpenHubBtn.name = "Tbox_OpenOnHub";
+            TboxConfigureActionButtonFlex(tboxOpenHubBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            AddTooltip(tboxOpenHubBtn, "gallery.tooltip.tbox_open_hub", "Open this item in Hub");
+            try
+            {
+                var hubIcon = UI.LoadIconSprite("vpb_icons/hub.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (hubIcon != null) UI.AddIconToButton(tboxOpenHubBtn, hubIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxOpenHubBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.open_hub", "Hub");
+                }
+            }
+            catch { }
+            tboxOpenHubBtn.SetActive(false);
 
             tboxLoadDepsBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -1501,6 +1527,7 @@ namespace VPB
             show(tboxUnloadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxLoadDepsBtn, !isCleanup);
             show(tboxCacheTexturesBtn, !isCleanup);
+            show(tboxOpenHubBtn, !isCleanup);
 
             if (isCleanup)
             {
@@ -1530,6 +1557,7 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxUnloadBtn, false);
                 SetTboxButtonEnabledVisual(tboxLoadDepsBtn, false);
                 SetTboxButtonEnabledVisual(tboxCacheTexturesBtn, false);
+                SetTboxButtonEnabledVisual(tboxOpenHubBtn, false);
 
                 RefreshTboxFlexButtonLayout();
                 return;
@@ -1645,7 +1673,77 @@ namespace VPB
             bool hasAnyPkg = anyPkgInstalled || anyPkgNotInstalled;
             if (tboxUnloadBtn != null)   SetTboxButtonEnabledVisual(tboxUnloadBtn, hasAnyPkg && anyPkgInstalled);
 
+            // Hub button: only for a single selected package row (.var uid resolvable).
+            bool showOpenHub = false;
+            if (selectedFiles != null && selectedFiles.Count == 1 && tboxOpenHubBtn != null)
+            {
+                try
+                {
+                    var uid = TryGetPackageUidForEntry(selectedFiles[0]);
+                    showOpenHub = !string.IsNullOrEmpty(uid);
+                }
+                catch { showOpenHub = false; }
+            }
+            if (tboxOpenHubBtn != null)
+            {
+                tboxOpenHubBtn.SetActive(showOpenHub);
+                SetTboxButtonEnabledVisual(tboxOpenHubBtn, showOpenHub);
+            }
+
             RefreshTboxFlexButtonLayout();
+        }
+
+        private void TboxOpenSelectedItemOnHub()
+        {
+            try
+            {
+                if (selectedFiles == null || selectedFiles.Count != 1)
+                {
+                    ShowTemporaryStatus("Select a single item.");
+                    return;
+                }
+
+                var f = selectedFiles[0];
+                if (f == null)
+                {
+                    ShowTemporaryStatus("Nothing selected.");
+                    return;
+                }
+
+                string uid = TryGetPackageUidForEntry(f);
+                if (string.IsNullOrEmpty(uid))
+                {
+                    ShowTemporaryStatus("This item has no Hub page.");
+                    return;
+                }
+
+                var hub = HubBrowse.singleton;
+                // Open Hub first (ensures singleton is initialized in some VaM setups).
+                try { VamHookPlugin.singleton?.OpenHubBrowse(); } catch { }
+                if (hub == null) hub = HubBrowse.singleton;
+                if (hub == null)
+                {
+                    ShowTemporaryStatus("Hub is not available.");
+                    return;
+                }
+
+                // Prefer resource_id mapping when available, otherwise fall back to package-name lookup.
+                string rid = null;
+                try { rid = hub.GetPackageHubResourceId(uid); } catch { rid = null; }
+                if (!string.IsNullOrEmpty(rid) && rid != "null")
+                {
+                    hub.OpenDetail(rid);
+                    return;
+                }
+
+                // HubBrowse.OpenDetail supports package_name lookup when the second parameter is true.
+                // The Hub backend expects the full package name including ".var".
+                hub.OpenDetail(uid + ".var", isPackageName: true);
+            }
+            catch
+            {
+                ShowTemporaryStatus("Failed to open Hub page. See log.");
+            }
         }
 
         private static void SetTboxCountButtonLabel(GameObject go, string key, string fallbackFmt, int count)

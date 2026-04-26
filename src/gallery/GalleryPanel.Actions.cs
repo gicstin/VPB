@@ -242,7 +242,8 @@ namespace VPB
                 selectedPath = file.Path;
                 selectedHubItem = null;
 
-                SetHoverPath(file);
+                // Selection should not "stick" the hover path. Hover-only content comes from pointer enter.
+                SetHoverPath("");
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
 
@@ -693,22 +694,53 @@ namespace VPB
             SetHoverPath(file.Path);
         }
 
+        private string GetFilteredVisibleItemsCountText()
+        {
+            int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
+            int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
+            if (sel > 0)
+            {
+                // Prefer the selection phrasing used by the tbox label for consistency.
+                string selStr = sel == 1
+                    ? VPBTranslation.T("gallery.tbox.selected_one", "1 Selected")
+                    : string.Format(VPBTranslation.T("gallery.tbox.selected_many", "{0} Selected"), sel);
+                string countStr = string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
+                return string.Format("{0}  ·  {1}", selStr, countStr);
+            }
+            return string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
+        }
+
+        private void RefreshHoverPathCountTextIfNeeded()
+        {
+            if (!hoverPathIsCountMode) return;
+            if (hoverPathText == null) return;
+            if (IsHubMode) return;
+            hoverPathText.text = GetFilteredVisibleItemsCountText();
+        }
+
         public void SetHoverPath(string path)
         {
             bool hasPath = !string.IsNullOrEmpty(path);
-            float targetAlpha = hasPath ? 1f : 0f;
+            hoverPathIsCountMode = !hasPath;
+            float targetAlpha = 1f; // we always show either hovered path or count fallback
 
             if (hoverFadeCoroutine != null) StopCoroutine(hoverFadeCoroutine);
             hoverFadeCoroutine = StartCoroutine(FadeHoverPath(targetAlpha));
 
-            if (hoverPathText != null && hasPath)
+            if (hoverPathText != null)
             {
-                string displayPath = path;
-
-                // Ensure we show full internal paths for .var files without manual line breaks
-                // Text wrapping is now handled by the UI Text component
-                
-                hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B");
+                if (hasPath)
+                {
+                    string displayPath = path;
+                    // Ensure we show full internal paths for .var files without manual line breaks.
+                    // Text wrapping is handled by the UI Text component.
+                    hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B");
+                }
+                else
+                {
+                    // Hover-out fallback: show current filtered visible count.
+                    RefreshHoverPathCountTextIfNeeded();
+                }
             }
         }
 
@@ -733,8 +765,8 @@ namespace VPB
 
         public void RestoreSelectedHoverPath()
         {
-            if (selectedFile != null) SetHoverPath(selectedFile);
-            else SetHoverPath("");
+            // When not hovering an item, always show filtered totals (+ selected count).
+            SetHoverPath("");
         }
 
         private void SetNameFilter(string val)
@@ -918,7 +950,8 @@ namespace VPB
                 selectedHubItem = null;
                 selectionAnchorPath = file.Path;
                 
-                SetHoverPath(file);
+                // Selection should not "stick" the hover path.
+                SetHoverPath("");
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
             }
@@ -1039,7 +1072,8 @@ namespace VPB
             {
                 selectedPath = fileKey;
                 selectedHubItem = null;
-                SetHoverPath(file);
+                // Selection should not "stick" the hover path.
+                SetHoverPath("");
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
             }

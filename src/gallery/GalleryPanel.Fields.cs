@@ -675,6 +675,8 @@ namespace VPB
         private Text footerFilterModeText;
         private GameObject footerFilterModeSpacerGO;
         private Text hoverPathText;
+        // True when hoverPathText is showing the filtered item count fallback (not an item path).
+        private bool hoverPathIsCountMode = false;
         private RectTransform hoverPathRT;
         private CanvasGroup hoverPathCanvasGroup;
         private Coroutine hoverFadeCoroutine;
