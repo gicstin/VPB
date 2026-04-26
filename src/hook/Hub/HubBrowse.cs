@@ -114,7 +114,7 @@ namespace VPB
 
         protected GameObject refreshIndicator;
 
-        public bool _isShowing;
+        protected bool _isShowing;
 
         public PreShowCallback preShowCallbacks;
 
@@ -766,7 +766,8 @@ namespace VPB
                 // Clear the pay type and downloadable filters to ensure all items are visible.
                 _payTypeFilter = "All";
                 if (payTypeFilterChooser != null) payTypeFilterChooser.valNoCallback = "All";
-                // Don't clear onlyDownloadable and hideDownloaded - preserve user preference
+                if (onlyDownloadable != null) onlyDownloadable.valNoCallback = false;
+                if (hideDownloaded != null) hideDownloaded.valNoCallback = false;
 
                 // CRITICAL: Clear search filter as it was observed to persist (e.g. "qingfeng")
                 _searchFilter = string.Empty;
@@ -777,7 +778,8 @@ namespace VPB
                     if (Settings.Instance.HubCurrentPage != null) Settings.Instance.HubCurrentPage.Value = 1;
                     if (Settings.Instance.HubHostedOption != null) Settings.Instance.HubHostedOption.Value = "All";
                     if (Settings.Instance.HubPayTypeFilter != null) Settings.Instance.HubPayTypeFilter.Value = "All";
-                    // Don't clear onlyDownloadable and hideDownloaded - preserve user preference
+                    if (Settings.Instance.HubOnlyDownloadable != null) Settings.Instance.HubOnlyDownloadable.Value = false;
+                    if (Settings.Instance.HubHideDownloaded != null) Settings.Instance.HubHideDownloaded.Value = false;
                     if (Settings.Instance.HubSearchText != null) Settings.Instance.HubSearchText.Value = string.Empty;
                 }
             }
@@ -882,16 +884,15 @@ namespace VPB
                         {
                             canShow = asBool;
                         }
+                        if (canShow && hideDownloaded != null && hideDownloaded.val && IsResourceAlreadyDownloaded(resource))
+                        {
+                            canShow = false;
+                        }
                         // Do not show items that cannot be downloaded
                         if (canShow)
                         {
                             HubResourceItem hubResourceItem = new HubResourceItem(resource, this, page);
                             hubResourceItem.Refresh();
-
-                            if (hideDownloaded.val && hubResourceItem.inLibraryJSON.val)
-                            {
-                                continue;
-                            }
 
                             RectTransform rectTransform = UnityEngine.Object.Instantiate(itemPrefab);
                             rectTransform.SetParent(itemContainer, false);
@@ -1024,7 +1025,7 @@ namespace VPB
             }
         }
 
-        public void ResetRefresh()
+        protected void ResetRefresh()
         {
             if (suppressRefresh) return;
             CancelOldPageImages();
@@ -1982,6 +1983,11 @@ namespace VPB
             }
         }
 
+        public void OpenDownloadQueue()
+        {
+            OpenDownloading();
+        }
+
         protected void GetInfoCallback(SimpleJSON.JSONNode jsonNode)
         {
             if (refreshingGetInfoPanel != null)
@@ -2219,7 +2225,6 @@ namespace VPB
                 {
                     onlyDownloadable.valNoCallback = onlyDl;
                 }
-
                 bool hideDl = (Settings.Instance.HubHideDownloaded != null) ? Settings.Instance.HubHideDownloaded.Value : false;
                 if (hideDownloaded != null)
                 {
@@ -2618,28 +2623,11 @@ namespace VPB
 
             bool initialOnlyDownloadable = (Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : false;
             onlyDownloadable = new JSONStorableBool("Only Downloadable", initialOnlyDownloadable, SyncOnlyDownloadable);
-
             bool initialHideDownloaded = (Settings.Instance != null && Settings.Instance.HubHideDownloaded != null) ? Settings.Instance.HubHideDownloaded.Value : false;
             hideDownloaded = new JSONStorableBool("Hide Downloaded Packages", initialHideDownloaded, SyncHideDownloaded);
-
             var manager = SuperController.singleton.transform.Find("ScenePluginManager").GetComponent<MVRPluginManager>();
             if (manager != null && manager.configurableTogglePrefab != null)
             {
-                RectTransform hideDownloadedTransform = UnityEngine.Object.Instantiate(manager.configurableTogglePrefab, parent) as RectTransform;
-                hideDownloadedTransform.localPosition = new Vector3(relPos.x, relPos.y+140, relPos.z);
-                hideDownloadedTransform.gameObject.SetActive(true);
-
-                var hideDownloadedUIDynamicToggle = hideDownloadedTransform.GetComponent<UIDynamicToggle>();
-                if (hideDownloadedUIDynamicToggle != null)
-                {
-                    hideDownloadedUIDynamicToggle.label = hideDownloaded.name;
-                    hideDownloaded.toggle = hideDownloadedUIDynamicToggle.toggle;
-                    // Explicitly sync the toggle to match the stored value
-                    hideDownloadedUIDynamicToggle.toggle.isOn = hideDownloaded.val;
-
-                    hideDownloadedUIDynamicToggle.backgroundImage.color = new Color32(255,133,133,255);
-                }
-
                 RectTransform transform = UnityEngine.Object.Instantiate(manager.configurableTogglePrefab, parent) as RectTransform;
                 transform.localPosition = new Vector3(relPos.x, relPos.y+80, relPos.z);
                 transform.gameObject.SetActive(true);
@@ -2649,10 +2637,19 @@ namespace VPB
                 {
                     uIDynamicToggle.label = onlyDownloadable.name;
                     onlyDownloadable.toggle = uIDynamicToggle.toggle;
-                    // Explicitly sync the toggle to match the stored value
-                    uIDynamicToggle.toggle.isOn = onlyDownloadable.val;
 
                     uIDynamicToggle.backgroundImage.color = new Color32(133,255,133,255);
+                }
+
+                RectTransform hideTransform = UnityEngine.Object.Instantiate(manager.configurableTogglePrefab, parent) as RectTransform;
+                hideTransform.localPosition = new Vector3(relPos.x, relPos.y + 140, relPos.z);
+                hideTransform.gameObject.SetActive(true);
+                var hideToggle = hideTransform.GetComponent<UIDynamicToggle>();
+                if (hideToggle != null)
+                {
+                    hideToggle.label = hideDownloaded.name;
+                    hideDownloaded.toggle = hideToggle.toggle;
+                    hideToggle.backgroundImage.color = new Color32(163, 111, 214, 255);
                 }
             }
             
@@ -2660,7 +2657,37 @@ namespace VPB
                 LogUtil.LogVerboseUi("HubBrowse Init End " + _uiSw.ElapsedMilliseconds + "ms");
         }
         JSONStorableBool onlyDownloadable;
-        public JSONStorableBool hideDownloaded;
+        JSONStorableBool hideDownloaded;
+
+        protected bool IsResourceAlreadyDownloaded(JSONClass resource)
+        {
+            if (resource == null) return false;
+            JSONArray hubFiles = resource["hubFiles"].AsArray;
+            if (hubFiles == null || hubFiles.Count == 0) return false;
+
+            IEnumerator enumerator = hubFiles.GetEnumerator();
+            try
+            {
+                while (enumerator.MoveNext())
+                {
+                    SimpleJSON.JSONNode fileNode = (SimpleJSON.JSONNode)enumerator.Current;
+                    string filename = fileNode["filename"];
+                    if (string.IsNullOrEmpty(filename)) return false;
+                    string packageName = Regex.Replace(filename, ".var$", string.Empty);
+                    VarPackage package = FileManager.GetPackage(packageName, ensureInstalled: false);
+                    if (package == null) return false;
+                }
+            }
+            finally
+            {
+                IDisposable disposable;
+                if ((disposable = enumerator as IDisposable) != null)
+                {
+                    disposable.Dispose();
+                }
+            }
+            return true;
+        }
 
         protected void SyncOnlyDownloadable(bool b)
         {
@@ -2676,12 +2703,9 @@ namespace VPB
                 {
                     _payTypeFilter = "Free";
                     if (payTypeFilterChooser != null) payTypeFilterChooser.valNoCallback = "Free";
-                    if (!suppressHubSettingsSave && Settings.Instance != null)
+                    if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubPayTypeFilter != null)
                     {
-                        if (Settings.Instance.HubPayTypeFilter != null)
-                        {
-                            Settings.Instance.HubPayTypeFilter.Value = "Free";
-                        }
+                        Settings.Instance.HubPayTypeFilter.Value = "Free";
                     }
                 }
             }
@@ -2694,32 +2718,9 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubHideDownloaded != null)
             {
                 Settings.Instance.HubHideDownloaded.Value = b;
-                Settings.SaveConfig();
             }
-
             ResetRefresh();
         }
-
-        public IEnumerator DelayedRefresh()
-        {
-            yield return new WaitForSeconds(2.0f);
-            // Manually refresh existing items instead of full network refresh
-            if (items != null && hideDownloaded != null && hideDownloaded.val)
-            {
-                foreach (HubResourceItemUI item in items)
-                {
-                    if (item != null && item.connectedItem != null)
-                    {
-                        item.connectedItem.Refresh();
-                        if (item.connectedItem.inLibraryJSON.val)
-                        {
-                            item.gameObject.SetActive(false);
-                        }
-                    }
-                }
-            }
-        }
-
         protected void OnLoad(ZenFulcrum.EmbeddedBrowser.JSONNode loadData)
         {
             try

@@ -1,10 +1,12 @@
 using System;
 using UnityEngine.Networking;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using MVR.FileManagement;
 using SimpleJSON;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace VPB
@@ -71,6 +73,7 @@ namespace VPB
         protected JSONStorableString lastUpdateJSON;
 
         protected JSONArray varFilesJSONArray;
+        protected JSONClass dependenciesObject;
 
         public JSONStorableBool inLibraryJSON;
 
@@ -79,6 +82,10 @@ namespace VPB
         protected JSONStorableString updateMsgJSON;
 
         protected JSONStorableAction openDetailAction;
+        protected JSONStorableAction quickDownloadAllAction;
+        protected HubResourceItemUI registeredUI;
+        protected List<HubResourcePackage> quickDownloadPackages;
+        protected bool quickDownloadInProgress;
 
         public string ResourceId
         {
@@ -212,12 +219,12 @@ namespace VPB
                 }
             }
             
-            JSONClass deps = resource["dependencies"].AsObject;
-            if (deps != null)
+            dependenciesObject = resource["dependencies"].AsObject;
+            if (dependenciesObject != null)
             {
-                foreach (string key in deps.Keys)
+                foreach (string key in dependenciesObject.Keys)
                 {
-                    JSONArray depFiles = deps[key].AsArray;
+                    JSONArray depFiles = dependenciesObject[key].AsArray;
                     if (depFiles != null)
                     {
                         foreach (JSONNode depFile in depFiles)
@@ -263,6 +270,7 @@ namespace VPB
             ratingJSON = new JSONStorableFloat("rating", asFloat, 0f, 5f, true, false);
             lastUpdateJSON = new JSONStorableString("lastUpdate", startingValue10);
             openDetailAction = new JSONStorableAction("OpenDetail", OpenDetail);
+            quickDownloadAllAction = new JSONStorableAction("DownloadAllFromCard", DownloadAll);
             inLibraryJSON = new JSONStorableBool("inLibrary", false);
             updateAvailableJSON = new JSONStorableBool("updateAvailable", false);
             updateMsgJSON = new JSONStorableString("updateMsg", "Update Available");
@@ -435,11 +443,340 @@ namespace VPB
                 inLibraryJSON.val = false;
                 updateAvailableJSON.val = false;
             }
+            SyncQuickDownloadCtaVisibility();
         }
 
         public void OpenDetail()
         {
             browser.OpenDetail(resource_id);
+        }
+
+        public virtual void DownloadAll()
+        {
+            if (quickDownloadInProgress)
+            {
+                return;
+            }
+
+            List<HubResourcePackage> packages = BuildDownloadPackageList();
+            quickDownloadPackages = new List<HubResourcePackage>();
+            for (int i = 0; i < packages.Count; i++)
+            {
+                HubResourcePackage package = packages[i];
+                if (package != null && package.NeedsDownload)
+                {
+                    quickDownloadPackages.Add(package);
+                    package.Download();
+                }
+            }
+            quickDownloadInProgress = quickDownloadPackages.Count > 0;
+            SyncQuickDownloadCtaVisibility();
+        }
+
+        protected List<HubResourcePackage> BuildDownloadPackageList()
+        {
+            List<HubResourcePackage> packages = new List<HubResourcePackage>();
+            if (varFilesJSONArray != null)
+            {
+                IEnumerator enumerator = varFilesJSONArray.GetEnumerator();
+                try
+                {
+                    while (enumerator.MoveNext())
+                    {
+                        JSONClass packageObject = ((JSONNode)enumerator.Current).AsObject;
+                        if (packageObject != null)
+                        {
+                            packages.Add(new HubResourcePackage(packageObject, browser, false));
+                        }
+                    }
+                }
+                finally
+                {
+                    IDisposable disposable;
+                    if ((disposable = enumerator as IDisposable) != null)
+                    {
+                        disposable.Dispose();
+                    }
+                }
+            }
+
+            if (dependenciesObject != null)
+            {
+                foreach (string key in dependenciesObject.Keys)
+                {
+                    JSONArray dependencyFiles = dependenciesObject[key].AsArray;
+                    if (dependencyFiles == null)
+                    {
+                        continue;
+                    }
+                    IEnumerator dependencyEnumerator = dependencyFiles.GetEnumerator();
+                    try
+                    {
+                        while (dependencyEnumerator.MoveNext())
+                        {
+                            JSONClass packageObject2 = ((JSONNode)dependencyEnumerator.Current).AsObject;
+                            if (packageObject2 != null)
+                            {
+                                packages.Add(new HubResourcePackage(packageObject2, browser, true));
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        IDisposable disposable2;
+                        if ((disposable2 = dependencyEnumerator as IDisposable) != null)
+                        {
+                            disposable2.Dispose();
+                        }
+                    }
+                }
+            }
+
+            return packages;
+        }
+
+        protected Button EnsureQuickDownloadButton(HubResourceItemUI ui)
+        {
+            if (ui is HubResourceItemDetailUI)
+            {
+                return null;
+            }
+            if (ui == null || ui.inLibraryIndicator == null)
+            {
+                return null;
+            }
+            if (ui.quickDownloadAllButton != null)
+            {
+                return ui.quickDownloadAllButton;
+            }
+
+            Transform parent = ui.inLibraryIndicator.transform.parent;
+            if (parent == null)
+            {
+                parent = ui.inLibraryIndicator.transform;
+            }
+
+            GameObject buttonObject = new GameObject("QuickDownloadAllButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(Outline), typeof(EventTrigger));
+            buttonObject.transform.SetParent(parent, false);
+
+            RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+            RectTransform sourceRect = ui.inLibraryIndicator.GetComponent<RectTransform>();
+            if (sourceRect != null)
+            {
+                buttonRect.anchorMin = sourceRect.anchorMin;
+                buttonRect.anchorMax = sourceRect.anchorMax;
+                buttonRect.pivot = sourceRect.pivot;
+                buttonRect.anchoredPosition = sourceRect.anchoredPosition;
+                buttonRect.sizeDelta = sourceRect.sizeDelta;
+                buttonRect.localScale = sourceRect.localScale;
+                buttonRect.SetSiblingIndex(sourceRect.GetSiblingIndex());
+            }
+            else
+            {
+                buttonRect.anchorMin = new Vector2(0f, 0f);
+                buttonRect.anchorMax = new Vector2(1f, 0f);
+                buttonRect.pivot = new Vector2(0.5f, 0f);
+                buttonRect.anchoredPosition = new Vector2(0f, 0f);
+                buttonRect.sizeDelta = new Vector2(0f, 34f);
+            }
+
+            Image buttonImage = buttonObject.GetComponent<Image>();
+            buttonImage.color = new Color(0.52f, 0.96f, 0.52f, 1f);
+
+            Button button = buttonObject.GetComponent<Button>();
+            ColorBlock colors = button.colors;
+            colors.normalColor = new Color(1f, 1f, 1f, 1f);
+            colors.highlightedColor = new Color(0.9f, 1f, 0.9f, 1f);
+            colors.pressedColor = new Color(0.78f, 0.95f, 0.78f, 1f);
+            button.colors = colors;
+
+            Outline hoverOutline = buttonObject.GetComponent<Outline>();
+            hoverOutline.effectDistance = new Vector2(3f, 3f);
+            hoverOutline.effectColor = new Color(0.18f, 0.45f, 0.18f, 0f);
+            hoverOutline.useGraphicAlpha = false;
+
+            EventTrigger hoverTrigger = buttonObject.GetComponent<EventTrigger>();
+            hoverTrigger.triggers = new List<EventTrigger.Entry>();
+            EventTrigger.Entry enterEntry = new EventTrigger.Entry();
+            enterEntry.eventID = EventTriggerType.PointerEnter;
+            enterEntry.callback.AddListener(delegate
+            {
+                if (hoverOutline != null)
+                {
+                    hoverOutline.effectColor = new Color(0.18f, 0.45f, 0.18f, 1f);
+                }
+            });
+            hoverTrigger.triggers.Add(enterEntry);
+
+            EventTrigger.Entry exitEntry = new EventTrigger.Entry();
+            exitEntry.eventID = EventTriggerType.PointerExit;
+            exitEntry.callback.AddListener(delegate
+            {
+                if (hoverOutline != null)
+                {
+                    hoverOutline.effectColor = new Color(0.18f, 0.45f, 0.18f, 0f);
+                }
+            });
+            hoverTrigger.triggers.Add(exitEntry);
+
+            GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            labelObject.transform.SetParent(buttonObject.transform, false);
+            RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = new Vector2(3f, 1f);
+            labelRect.offsetMax = new Vector2(-3f, -1f);
+
+            Text label = labelObject.GetComponent<Text>();
+            label.text = "Direct Download All";
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = new Color32(163, 111, 214, 255);
+            label.fontStyle = FontStyle.Normal;
+            label.resizeTextForBestFit = false;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.verticalOverflow = VerticalWrapMode.Overflow;
+            label.raycastTarget = false;
+            if (ui.creatorText != null && ui.creatorText.font != null)
+            {
+                label.font = ui.creatorText.font;
+            }
+            else
+            {
+                label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+            int nativeSize = 30;
+            if (ui.inLibraryIndicator != null)
+            {
+                Text nativeLabel = ui.inLibraryIndicator.GetComponentInChildren<Text>(true);
+                if (nativeLabel != null)
+                {
+                    nativeSize = Mathf.Max(22, nativeLabel.fontSize);
+                    if (nativeLabel.font != null)
+                    {
+                        label.font = nativeLabel.font;
+                    }
+                    label.fontStyle = nativeLabel.fontStyle;
+                }
+            }
+            label.fontSize = nativeSize;
+
+            ui.quickDownloadAllButton = button;
+            ui.quickDownloadAllButtonBackground = buttonImage;
+            ui.quickDownloadAllButtonLabel = label;
+            return button;
+        }
+
+        protected void SyncQuickDownloadCtaVisibility()
+        {
+            if (registeredUI == null || registeredUI is HubResourceItemDetailUI)
+            {
+                return;
+            }
+
+            bool hasDownloadableFiles = varFilesJSONArray != null && varFilesJSONArray.Count > 0;
+            bool queueActive = IsQuickDownloadQueueActive();
+            bool showDownloadCta = (hubDownloadableJSON.val && hasDownloadableFiles && !inLibraryJSON.val) || queueActive;
+
+            if (registeredUI.quickDownloadAllButton != null)
+            {
+                registeredUI.quickDownloadAllButton.gameObject.SetActive(showDownloadCta);
+            }
+            if (registeredUI.inLibraryIndicator != null)
+            {
+                registeredUI.inLibraryIndicator.SetActive(inLibraryJSON.val);
+            }
+
+            SyncQuickDownloadCtaPresentation(queueActive);
+        }
+
+        protected bool IsQuickDownloadQueueActive()
+        {
+            if (!quickDownloadInProgress || quickDownloadPackages == null || quickDownloadPackages.Count == 0)
+            {
+                quickDownloadInProgress = false;
+                return false;
+            }
+
+            bool anyPending = false;
+            for (int i = quickDownloadPackages.Count - 1; i >= 0; i--)
+            {
+                HubResourcePackage package = quickDownloadPackages[i];
+                if (package == null)
+                {
+                    quickDownloadPackages.RemoveAt(i);
+                    continue;
+                }
+                package.Refresh();
+                if (package.IsDownloading || package.IsDownloadQueued || package.NeedsDownload)
+                {
+                    anyPending = true;
+                }
+            }
+            quickDownloadInProgress = anyPending && quickDownloadPackages.Count > 0;
+            return quickDownloadInProgress;
+        }
+
+        protected float GetQuickDownloadProgress01()
+        {
+            if (quickDownloadPackages == null || quickDownloadPackages.Count == 0)
+            {
+                return 0f;
+            }
+
+            float total = 0f;
+            int count = 0;
+            for (int i = 0; i < quickDownloadPackages.Count; i++)
+            {
+                HubResourcePackage package = quickDownloadPackages[i];
+                if (package == null)
+                {
+                    continue;
+                }
+                float progress = 0f;
+                if (!package.NeedsDownload)
+                {
+                    progress = 1f;
+                }
+                else if (package.IsDownloading)
+                {
+                    progress = Mathf.Clamp01(package.DownloadProgress01);
+                }
+                total += progress;
+                count++;
+            }
+            if (count == 0)
+            {
+                return 0f;
+            }
+            return Mathf.Clamp01(total / count);
+        }
+
+        protected void SyncQuickDownloadCtaPresentation(bool queueActive)
+        {
+            if (registeredUI == null)
+            {
+                return;
+            }
+
+            Text label = registeredUI.quickDownloadAllButtonLabel;
+            Image background = registeredUI.quickDownloadAllButtonBackground;
+            if (label == null || background == null)
+            {
+                return;
+            }
+
+            if (queueActive)
+            {
+                label.text = "Downloading";
+                label.color = new Color(0.35f, 0.06f, 0.32f, 1f);
+                background.color = new Color(0.96f, 0.72f, 0.92f, 1f);
+            }
+            else
+            {
+                label.text = "Direct Download All";
+                label.color = new Color32(255, 255, 255, 255);
+                background.color = new Color32(163, 111, 214, 255);
+            }
         }
 
         public void Hide()
@@ -509,6 +846,7 @@ namespace VPB
         {
             if (ui != null)
             {
+                registeredUI = ui;
                 ui.connectedItem = this;
 
                 titleJSON.text = ui.titleText;
@@ -600,11 +938,13 @@ namespace VPB
                 ratingJSON.slider = ui.ratingSlider;
                 lastUpdateJSON.text = ui.lastUpdateText;
                 openDetailAction.button = ui.openDetailButton;
+                quickDownloadAllAction.button = EnsureQuickDownloadButton(ui);
 
                 inLibraryJSON.indicator = ui.inLibraryIndicator;
                 updateAvailableJSON.indicator = ui.updateAvailableIndicator;
 
                 updateMsgJSON.text = ui.updateMsgText;
+                SyncQuickDownloadCtaVisibility();
             }
         }
     }

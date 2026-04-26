@@ -74,6 +74,9 @@ namespace VPB
         public Slider ratingSlider;
         public Text lastUpdateText;
         public Button openDetailButton;
+        public Button quickDownloadAllButton;
+        public Text quickDownloadAllButtonLabel;
+        public Image quickDownloadAllButtonBackground;
     }
 
 }

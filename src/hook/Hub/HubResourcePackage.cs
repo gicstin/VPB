@@ -182,6 +182,14 @@ namespace VPB
             }
         }
 
+        public float DownloadProgress01
+        {
+            get
+            {
+                return downloadProgressJSON.val;
+            }
+        }
+
         public void SetMainThumbnail(RawImage mainThumbnail)
         {
             mainThumbnailImage = mainThumbnail;
@@ -482,11 +490,11 @@ namespace VPB
                 isDownloadedJSON.val = false;
                 SyncDeleteButton();
 
-                if (browser != null && browser.hideDownloaded != null && browser.hideDownloaded.val && browser._isShowing)
+                if (browser != null)
                 {
                     try { FileManager.Refresh(); } catch { }
                     try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
-                    browser.StartCoroutine(browser.DelayedRefresh());
+                    browser.RefreshResources();
                 }
             }
             catch (Exception)

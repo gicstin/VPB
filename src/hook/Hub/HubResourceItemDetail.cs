@@ -229,7 +229,7 @@ namespace VPB
             }
         }
 
-        public void DownloadAll()
+        public override void DownloadAll()
         {
             foreach (HubResourcePackage downloadPackage in downloadPackages)
             {
