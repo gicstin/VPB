@@ -627,7 +627,7 @@ namespace VPB
                     return;
 
                 LogUtil.RecordOnDemandRetry();
-                VamOnDemandLoader.TryRegisterPackageOnDemand(uid);
+                VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
                 VamOnDemandLoader.s_InOnDemand = true;
                 try
                 {
@@ -1423,7 +1423,7 @@ namespace VPB
                     return;
 
                 LogUtil.RecordOnDemandRetry();
-                VamOnDemandLoader.TryRegisterPackageOnDemand(uid);
+                VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
                 VamOnDemandLoader.s_InOnDemand = true;
                 try
                 {

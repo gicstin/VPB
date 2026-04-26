@@ -20,6 +20,13 @@ namespace VPB
     /// </summary>
     internal static class VamOnDemandLoader
     {
+        private static bool IsPluginEntryPath(string entryPath)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return false;
+            string p = entryPath.Replace('\\', '/');
+            return p.IndexOf(":/Custom/Scripts/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         // Re-entry guard: prevents infinite recursion when our postfix calls GetVarFileEntry
         [ThreadStatic]
         public static bool s_InOnDemand;
@@ -167,7 +174,7 @@ namespace VPB
         /// in VPB's registry but was excluded from VaM's scan.
         /// Returns the VPB VarPackage path found, or null.
         /// </summary>
-        public static string TryRegisterPackageOnDemand(string uid)
+        public static string TryRegisterPackageOnDemand(string uid, bool persistUidOverride = false)
         {
             if (string.IsNullOrEmpty(uid)) return null;
             if (!ScanWhitelistManager.Instance.IsEnabled) return null;
@@ -207,6 +214,19 @@ namespace VPB
                 if (!ScanWhitelistManager.Instance.IsPathWhitelisted(normPath)
                     && !ScanWhitelistManager.Instance.IsUidOverrideIncluded(resolvedUid))
                 {
+                    if (persistUidOverride && !string.IsNullOrEmpty(resolvedUid))
+                    {
+                        try
+                        {
+                            if (ScanWhitelistManager.Instance.AddUidOverride(resolvedUid))
+                            {
+                                ScanWhitelistManager.Instance.Save();
+                                LogUtil.Log("[VPB OnDemand] Persisted plugin whitelist UID override: +" + resolvedUid);
+                            }
+                        }
+                        catch { }
+                    }
+
                     var added = ScanWhitelistManager.Instance.AddTemporaryUidOverrides(new[] { resolvedUid });
                     if (added != null && added.Count > 0)
                     {
@@ -298,6 +318,13 @@ namespace VPB
                 }
             }
             return true;
+        }
+
+        public static string TryRegisterPackageOnDemandForEntryPath(string entryPath)
+        {
+            string uid = UidFromEntryPath(entryPath);
+            if (string.IsNullOrEmpty(uid)) return null;
+            return TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
         }
 
         private static void RegisterNow(string uid, string varPath)
