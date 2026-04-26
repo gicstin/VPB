@@ -1407,12 +1407,10 @@ namespace VPB
                 int count = 0;
                 try
                 {
-                    List<Atom> targets = SuperController.singleton != null
-                        ? SuperController.singleton.GetAtoms().Where(a => a != null && SceneUtils.IsPersonLikeAtom(a)).ToList()
-                        : new List<Atom>();
-
-                    foreach (Atom tgt in targets)
+                    var atoms = SuperController.singleton != null ? SuperController.singleton.GetAtoms() : null;
+                    if (atoms != null) foreach (Atom tgt in atoms)
                     {
+                        if (tgt == null || !SceneUtils.IsPersonLikeAtom(tgt)) continue;
                         HashSet<string> currentUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                         JSONStorable geometry = tgt.GetStorableByID("geometry");
                         if (geometry != null)
@@ -1479,12 +1477,10 @@ namespace VPB
                 int count = 0;
                 try
                 {
-                    List<Atom> targets = SuperController.singleton != null
-                        ? SuperController.singleton.GetAtoms().Where(a => a != null && SceneUtils.IsPersonLikeAtom(a)).ToList()
-                        : new List<Atom>();
-
-                    foreach (Atom tgt in targets)
+                    var atoms = SuperController.singleton != null ? SuperController.singleton.GetAtoms() : null;
+                    if (atoms != null) foreach (Atom tgt in atoms)
                     {
+                        if (tgt == null || !SceneUtils.IsPersonLikeAtom(tgt)) continue;
                         DAZCharacterSelector dcs = tgt.GetComponentInChildren<DAZCharacterSelector>();
                         if (dcs != null && dcs.hairItems != null)
                         {

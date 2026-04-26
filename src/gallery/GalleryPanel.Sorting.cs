@@ -8,6 +8,8 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private static readonly int SortTypeCount = Enum.GetValues(typeof(SortType)).Length;
+
         private void ToggleRatingSort()
         {
             isRatingSortToggleEnabled = !isRatingSortToggleEnabled;
@@ -35,11 +37,12 @@ namespace VPB
 
         private SortState GetSortState(string context)
         {
-            if (!contentSortStates.ContainsKey(context))
+            if (!contentSortStates.TryGetValue(context, out SortState state) || state == null)
             {
-                contentSortStates[context] = GallerySortManager.Instance.GetDefaultSortState(context);
+                state = GallerySortManager.Instance.GetDefaultSortState(context);
+                contentSortStates[context] = state;
             }
-            return contentSortStates[context];
+            return state;
         }
 
         // Overload: Old method for backward compatibility
@@ -52,12 +55,11 @@ namespace VPB
         {
             var state = GetSortState(context);
             int currentType = (int)state.Type;
-            int maxType = Enum.GetNames(typeof(SortType)).Length;
 
             SortType nextType = state.Type;
             do
             {
-                currentType = (currentType + 1) % maxType;
+                currentType = (currentType + 1) % SortTypeCount;
                 nextType = (SortType)currentType;
             } while (!IsSortTypeValid(context, nextType));
 

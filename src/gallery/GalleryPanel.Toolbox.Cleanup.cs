@@ -813,7 +813,7 @@ namespace VPB
             foreach (string reason in allReasons)
             {
                 if (!CleanupReasonMatchesType(reason, type)) continue;
-                if (!matched.Contains(reason)) matched.Add(reason);
+                matched.Add(reason);
             }
             if (matched.Count == 0) return "";
             return label + ": " + string.Join("; ", matched.ToArray());

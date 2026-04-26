@@ -12,6 +12,14 @@ namespace VPB
     {
         private const string DeletedPackagesFolderName = "DeletedPackages";
 
+        private static void LogSuppressed(string context, Exception ex, bool verbose = false)
+        {
+            if (string.IsNullOrEmpty(context)) context = "unknown";
+            string msg = "[VPB] Suppressed exception (" + context + "): " + (ex != null ? ex.Message : "null");
+            if (verbose) LogUtil.LogVerboseUi(msg);
+            else LogUtil.LogWarning(msg);
+        }
+
         /// <summary>Unique package UIDs referenced by the current selection (same basis as copy / delete).</summary>
         private static HashSet<string> CollectUniquePackageUidsFromSelection(IList<FileEntry> files)
         {
@@ -51,7 +59,13 @@ namespace VPB
                         continue;
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    // Conservative: if lock state can't be checked, treat as blocked.
+                    blocked.Add($"{uid}.var (lock check failed)");
+                    LogSuppressed("DeletePackages.LockedPackagesManager.IsLocked", ex);
+                    continue;
+                }
 
                 // Critical: do not delete the currently loaded scene's package
                 if (!string.IsNullOrEmpty(currentScenePkg) && string.Equals(uid, currentScenePkg, StringComparison.OrdinalIgnoreCase))
@@ -92,7 +106,10 @@ namespace VPB
                         continue;
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    LogSuppressed("DeletePackages.PathAlreadyDeletedCheck", ex);
+                }
 
                 // Critical: avoid moving enabled auto-install packages (too easy to break user prefs)
                 try
@@ -101,7 +118,10 @@ namespace VPB
                     if (FileEntry.AutoInstallLookup != null && FileEntry.AutoInstallLookup.Contains(uid))
                         warned.Add($"{uid}.var (auto-install enabled)");
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    LogSuppressed("DeletePackages.AutoInstallLookup", ex);
+                }
 
                 toDelete.Add(uid);
             }
@@ -115,7 +135,8 @@ namespace VPB
             if (uids.Count == 0) return 0;
 
             string currentScenePkg = null;
-            try { currentScenePkg = VamHookPlugin.CurrentScenePackageUid; } catch { }
+            try { currentScenePkg = VamHookPlugin.CurrentScenePackageUid; }
+            catch (Exception ex) { LogSuppressed("DeletePackages.CurrentScenePackageUid", ex); }
             HashSet<string> runningSceneDeps = TryGetRunningSceneDependenciesFast();
 
             var blocked = new List<string>();
@@ -153,7 +174,8 @@ namespace VPB
                 EnsureDeletedLocalScenesDirectory(deletedSceneDir);
 
                 string currentScenePkg = null;
-                try { currentScenePkg = VamHookPlugin.CurrentScenePackageUid; } catch { }
+                try { currentScenePkg = VamHookPlugin.CurrentScenePackageUid; }
+                catch (Exception ex) { LogSuppressed("DeletePackages.CurrentScenePackageUid", ex); }
 
                 HashSet<string> runningSceneDeps = TryGetRunningSceneDependenciesFast();
 
@@ -173,7 +195,10 @@ namespace VPB
                         var rel = GetRelatedGalleryEntryNamesForPackage(uid, maxNames: 16);
                         if (rel != null && rel.Count > 0) relatedEntries[uid] = rel;
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        LogSuppressed("DeletePackages.GetRelatedGalleryEntryNamesForPackage", ex);
+                    }
                 }
 
                 if (toDelete.Count == 0 && localScenes.Count == 0)
@@ -245,7 +270,10 @@ namespace VPB
             {
                 if (!Directory.Exists(deletedDir)) Directory.CreateDirectory(deletedDir);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.EnsureDeletedPackagesDirectory", ex);
+            }
         }
 
         private void PerformDeleteMove(List<string> uids, string deletedDir, out int moved, out int failed)
@@ -286,15 +314,19 @@ namespace VPB
                 }
             }
 
-            try { PurgeGalleryEntriesForMovedPackages(movedUids); } catch { }
+            try { PurgeGalleryEntriesForMovedPackages(movedUids); }
+            catch (Exception ex) { LogSuppressed("DeletePackages.PurgeGalleryEntriesForMovedPackages", ex); }
 
             try
             {
                 // Best-effort refresh to reflect moved packages
-                try { FileManager.Refresh(); } catch { }
-                try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
+                try { FileManager.Refresh(); }
+                catch (Exception ex) { LogSuppressed("DeletePackages.FileManager.Refresh", ex); }
+
+                try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); }
+                catch (Exception ex) { LogSuppressed("DeletePackages.MVR.FileManager.Refresh", ex); }
             }
-            catch { }
+            catch (Exception ex) { LogSuppressed("DeletePackages.RefreshWrapper", ex); }
         }
 
         private static int GetDependentCount(string uid)
@@ -305,7 +337,10 @@ namespace VPB
                 var pkg = FileManager.GetPackageForDependency(uid, false);
                 if (pkg != null) return Math.Max(0, pkg.DependentCount);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.GetDependentCount(FileManager)", ex);
+            }
 
             // Fallback to dependency graph query
             try
@@ -313,7 +348,10 @@ namespace VPB
                 if (DependencyGraph.TryGetTransitiveDependents(uid, out HashSet<string> deps) && deps != null)
                     return deps.Count;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.GetDependentCount(DependencyGraph)", ex);
+            }
 
             return 0;
         }
@@ -336,7 +374,10 @@ namespace VPB
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.ResolveVarPathForUid(FileManager)", ex);
+            }
 
             // Fallback: try common folder by filename
             try
@@ -344,7 +385,10 @@ namespace VPB
                 string candidate = "AddonPackages/" + uid + ".var";
                 if (File.Exists(candidate)) return candidate;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.ResolveVarPathForUid(FallbackExists)", ex);
+            }
 
             return null;
         }
@@ -362,7 +406,10 @@ namespace VPB
                 // This is fast and does not require full JSON walking
                 return DependencyExtractor.ExtractDependenciesFromRawText(json);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.TryGetRunningSceneDependenciesFast", ex);
+            }
             return null;
         }
 
@@ -386,24 +433,30 @@ namespace VPB
                 for (int i = 0; i < sceneCandidates.Length; i++)
                 {
                     MethodInfo mi = null;
-                    try { mi = t.GetMethod(sceneCandidates[i], flags); } catch { }
+                    try { mi = t.GetMethod(sceneCandidates[i], flags); }
+                    catch (Exception ex) { LogSuppressed("DeletePackages.TryGetSceneJsonString.GetMethod(" + sceneCandidates[i] + ")", ex, verbose: true); }
                     if (mi == null) continue;
                     var ps = mi.GetParameters();
                     if (ps != null && ps.Length != 0) continue;
 
                     object result = null;
-                    try { result = mi.Invoke(sc, null); } catch { }
+                    try { result = mi.Invoke(sc, null); }
+                    catch (Exception ex) { LogSuppressed("DeletePackages.TryGetSceneJsonString.Invoke(" + sceneCandidates[i] + ")", ex, verbose: true); }
                     if (result == null) continue;
 
                     if (result is JSONNode node)
                         return node.ToString();
 
                     string s = null;
-                    try { s = result.ToString(); } catch { }
+                    try { s = result.ToString(); }
+                    catch (Exception ex) { LogSuppressed("DeletePackages.TryGetSceneJsonString.ToString(" + sceneCandidates[i] + ")", ex, verbose: true); }
                     if (!string.IsNullOrEmpty(s)) return s;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.TryGetSceneJsonString", ex);
+            }
             return null;
         }
 
@@ -432,7 +485,10 @@ namespace VPB
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.GetRelatedGalleryEntryNamesForPackage(CurrentFilteredFiles)", ex);
+            }
 
             if (names.Count > 0) return names;
 
@@ -451,7 +507,10 @@ namespace VPB
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogSuppressed("DeletePackages.GetRelatedGalleryEntryNamesForPackage(PackageCache)", ex);
+            }
 
             return names;
         }
@@ -497,13 +556,14 @@ namespace VPB
                             if (f is VarFileEntry vfe && vfe.Package != null)
                                 return movedUids.Contains(vfe.Package.Uid);
                         }
-                        catch { }
+                        catch (Exception ex) { LogSuppressed("DeletePackages.PurgeGalleryEntries.SelectionPredicate", ex, verbose: true); }
                         return false;
                     });
                 }
-                try { RefreshSelectionVisuals(); } catch { }
+                try { RefreshSelectionVisuals(); }
+                catch (Exception ex) { LogSuppressed("DeletePackages.RefreshSelectionVisuals", ex); }
             }
-            catch { }
+            catch (Exception ex) { LogSuppressed("DeletePackages.PurgeGalleryEntries.Selection", ex); }
 
             try
             {
@@ -518,7 +578,7 @@ namespace VPB
                             if (f is VarFileEntry vfe && vfe.Package != null)
                                 return movedUids.Contains(vfe.Package.Uid);
                         }
-                        catch { }
+                        catch (Exception ex) { LogSuppressed("DeletePackages.PurgeGalleryEntries.ListPredicate", ex, verbose: true); }
                         return false;
                     });
 
@@ -527,10 +587,11 @@ namespace VPB
                         recyclingGrid.SetItemCount(currentFilteredFiles.Count);
                         recyclingGrid.Refresh();
                     }
-                    try { UpdatePaginationText(); } catch { }
+                    try { UpdatePaginationText(); }
+                    catch (Exception ex) { LogSuppressed("DeletePackages.UpdatePaginationText", ex); }
                 }
             }
-            catch { }
+            catch (Exception ex) { LogSuppressed("DeletePackages.PurgeGalleryEntries.CurrentList", ex); }
         }
     }
 }

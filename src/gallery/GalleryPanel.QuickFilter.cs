@@ -14,21 +14,24 @@ namespace VPB
             
             // Use Preset#N as default name, ensuring uniqueness
             int nextNum = 1;
-            if (QuickFilterSettings.Instance != null)
+            var settings = QuickFilterSettings.Instance;
+            if (settings != null && settings.Filters != null)
             {
-                var existingNames = new HashSet<string>(QuickFilterSettings.Instance.Filters.Select(f => f.Name));
-                while (existingNames.Contains("Preset#" + nextNum))
-                {
-                    nextNum++;
-                }
+                var existingNames = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var f in settings.Filters)
+                    if (!string.IsNullOrEmpty(f?.Name)) existingNames.Add(f.Name);
+
+                string candidate;
+                do { candidate = "Preset#" + nextNum++; }
+                while (existingNames.Contains(candidate));
+
+                entry.Name = candidate;
             }
-            string title = "Preset#" + nextNum;
-            
-            entry.Name = title;
+            else entry.Name = "Preset#" + nextNum;
             entry.CategoryPath = currentPath;
             entry.SearchText = nameFilter;
             entry.Creator = currentCreator;
-            entry.Tags = activeTags.ToList();
+            entry.Tags = new List<string>(activeTags);
             
             var sort = GetSortState("Files");
             if (sort != null) entry.SortState = sort.Clone();
@@ -43,17 +46,24 @@ namespace VPB
             // 1. Restore Category
             if (!string.IsNullOrEmpty(entry.CategoryPath))
             {
-                // Find category with this path
-                var cat = categories.FirstOrDefault(c => c.path == entry.CategoryPath);
-                
-                // If found, update state
-                if (!string.IsNullOrEmpty(cat.name))
+                Gallery.Category? cat = null;
+                if (categories != null)
                 {
-                    currentPath = cat.path;
-                    currentPaths = cat.paths;
-                    currentExtension = cat.extension;
-                    currentCategoryTitle = cat.name;
-                    if (titleText != null) titleText.text = cat.name;
+                    for (int i = 0; i < categories.Count; i++)
+                    {
+                        var c = categories[i];
+                        if (c.path == entry.CategoryPath) { cat = c; break; }
+                    }
+                }
+
+                if (cat.HasValue && !string.IsNullOrEmpty(cat.Value.name))
+                {
+                    var v = cat.Value;
+                    currentPath = v.path;
+                    currentPaths = v.paths;
+                    currentExtension = v.extension;
+                    currentCategoryTitle = v.name;
+                    if (titleText != null) titleText.text = v.name;
                 }
             }
 
