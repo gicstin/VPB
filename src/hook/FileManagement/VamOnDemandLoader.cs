@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Diagnostics;
 using UnityEngine;
+using System.Linq;
 
 namespace VPB
 {
@@ -25,6 +26,136 @@ namespace VPB
             if (string.IsNullOrEmpty(entryPath)) return false;
             string p = entryPath.Replace('\\', '/');
             return p.IndexOf(":/Custom/Scripts/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool TryParseUidGroupAndVersion(string uid, out string group, out int version)
+        {
+            group = null;
+            version = -1;
+            if (string.IsNullOrEmpty(uid)) return false;
+
+            // UID format: "Author.Package.14" (version is final dot-segment)
+            int lastDot = uid.LastIndexOf('.');
+            if (lastDot <= 0 || lastDot >= uid.Length - 1) return false;
+
+            string vStr = uid.Substring(lastDot + 1);
+            if (!int.TryParse(vStr, out version)) return false;
+
+            group = uid.Substring(0, lastDot);
+            return !string.IsNullOrEmpty(group) && version >= 0;
+        }
+
+        private static string ResolveBestAvailableUid(string requestUid)
+        {
+            if (string.IsNullOrEmpty(requestUid)) return null;
+
+            // Explicit ".latest" already handled by existing logic.
+            if (requestUid.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                return ResolveLatestUid(requestUid);
+
+            // If a specific version was requested but doesn't exist, serve the latest
+            // installed version for the same group (if newer).
+            if (!TryParseUidGroupAndVersion(requestUid, out string group, out int requestedVer))
+                return null;
+
+            string latestUid = ResolveLatestUid(group + ".latest");
+            if (string.IsNullOrEmpty(latestUid)) return null;
+
+            if (!TryParseUidGroupAndVersion(latestUid, out _, out int latestVer))
+                return null;
+
+            if (latestVer <= requestedVer) return null;
+            return latestUid;
+        }
+
+        private static bool IsUidAlreadyRegisteredInVam(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            try
+            {
+                var fmType = typeof(MVR.FileManagement.FileManager);
+                // VaM has a static GetPackage(string) in most builds; use reflection to avoid hard dependency.
+                var m = fmType.GetMethod("GetPackage",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                    null, new[] { typeof(string) }, null);
+                if (m != null)
+                {
+                    object r = m.Invoke(null, new object[] { uid });
+                    if (r != null) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static readonly HashSet<string> s_RewriteLogOnceKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object s_RewriteLogLock = new object();
+
+        private static void LogRewriteOnce(string key, string message)
+        {
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(message)) return;
+            lock (s_RewriteLogLock)
+            {
+                if (!s_RewriteLogOnceKeys.Add(key)) return;
+            }
+            LogUtil.Log(message);
+        }
+
+        private static string TryRewritePluginCslistPathByFilename(string entryPath)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return null;
+            string p = entryPath.Replace('\\', '/');
+            if (p.IndexOf(":/Custom/Scripts/", StringComparison.OrdinalIgnoreCase) < 0) return null;
+            if (!p.EndsWith(".cslist", StringComparison.OrdinalIgnoreCase)) return null;
+
+            int colonIdx = p.IndexOf(":/", StringComparison.Ordinal);
+            if (colonIdx <= 0 || colonIdx + 2 >= p.Length) return null;
+
+            string uid = p.Substring(0, colonIdx);
+            string internalPath = p.Substring(colonIdx + 2);
+            if (internalPath.StartsWith("/")) internalPath = internalPath.Substring(1);
+            string filename = Path.GetFileName(internalPath);
+            if (string.IsNullOrEmpty(uid) || string.IsNullOrEmpty(filename)) return null;
+
+            // If the exact entry exists, no rewrite needed.
+            try
+            {
+                if (MVR.FileManagement.FileManager.GetVarFileEntry(p) != null) return null;
+            }
+            catch { }
+
+            VarPackage pkg = null;
+            try { pkg = FileManager.GetPackage(uid, ensureInstalled: false); } catch { pkg = null; }
+            if (pkg == null) return null;
+
+            // Use cached file list (fast) to locate the actual cslist path within the VAR.
+            if (!pkg.TryGetCachedFileEntryData(out List<string> names, out _, out _)) return null;
+            if (names == null || names.Count == 0) return null;
+
+            string best = null;
+            int matchCount = 0;
+            for (int i = 0; i < names.Count; i++)
+            {
+                string n = names[i];
+                if (string.IsNullOrEmpty(n)) continue;
+                string nn = n.Replace('\\', '/');
+                if (!nn.StartsWith("Custom/Scripts/", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!nn.EndsWith("/" + filename, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(nn, "Custom/Scripts/" + filename, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                matchCount++;
+                // Prefer the shortest matching path (closest to root), tends to be the intended entry point.
+                if (best == null || nn.Length < best.Length)
+                    best = nn;
+            }
+
+            if (string.IsNullOrEmpty(best)) return null;
+
+            string rewritten = uid + ":/" + best;
+            LogRewriteOnce("cslistloc|" + uid + "|" + filename,
+                "[VPB OnDemand] Rewrote missing plugin cslist by filename: req=" + p
+                + " -> " + rewritten + " (matches=" + matchCount + ")");
+            return rewritten;
         }
 
         // Re-entry guard: prevents infinite recursion when our postfix calls GetVarFileEntry
@@ -240,6 +371,14 @@ namespace VPB
                 + " resolved=" + resolvedUid + " path=" + normPath);
             SafeRecordStartupOnDemandActivity();
 
+            // If VaM already has this UID registered, treat as success and avoid duplicate registration errors.
+            if (!string.IsNullOrEmpty(resolvedUid) && IsUidAlreadyRegisteredInVam(resolvedUid))
+            {
+                lock (s_RegisteredLock)
+                    s_RegisteredOnDemand.Add(resolvedUid);
+                return normPath;
+            }
+
             if (IsMainThread())
             {
                 RegisterNow(resolvedUid, varPath);
@@ -277,6 +416,58 @@ namespace VPB
                 TryRegisterPackageOnDemand(resolvedUid);
 
             return resolvedUid + entryPath.Substring(colonIdx);
+        }
+
+        /// <summary>
+        /// For entry paths like "Author.Pkg.12:/Custom/...", rewrites to the latest available
+        /// installed version if the request version is not present but a newer version is.
+        /// </summary>
+        public static string TryRewriteBestAvailableEntryPath(string entryPath, bool attemptRegister)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return null;
+            int colonIdx = entryPath.IndexOf(':');
+            if (colonIdx <= 0) return null;
+
+            string uid = entryPath.Substring(0, colonIdx);
+            if (string.IsNullOrEmpty(uid)) return null;
+
+            string bestUid = ResolveBestAvailableUid(uid);
+            if (string.IsNullOrEmpty(bestUid)) return null;
+            if (string.Equals(bestUid, uid, StringComparison.OrdinalIgnoreCase)) return null;
+
+            if (attemptRegister)
+                TryRegisterPackageOnDemand(bestUid);
+
+            return bestUid + entryPath.Substring(colonIdx);
+        }
+
+        /// <summary>
+        /// Rewrites an entry path to a concrete, best-available UID if possible.
+        /// This handles both "*.latest:/..." and "Author.Pkg.12:/..." → newest installed.
+        /// </summary>
+        public static string RewriteEntryPathToBestAvailable(string entryPath, bool attemptRegister)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return entryPath;
+
+            // Prefer explicit .latest rewrite first.
+            string rewritten = TryRewriteLatestEntryPath(entryPath, attemptRegister);
+            if (!string.IsNullOrEmpty(rewritten) && !string.Equals(rewritten, entryPath, StringComparison.OrdinalIgnoreCase))
+            {
+                string pluginRewrite = TryRewritePluginCslistPathByFilename(rewritten);
+                return !string.IsNullOrEmpty(pluginRewrite) ? pluginRewrite : rewritten;
+            }
+
+            // Then try versioned best-available rewrite.
+            string rewrittenBest = TryRewriteBestAvailableEntryPath(entryPath, attemptRegister);
+            if (!string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, entryPath, StringComparison.OrdinalIgnoreCase))
+            {
+                string pluginRewrite = TryRewritePluginCslistPathByFilename(rewrittenBest);
+                return !string.IsNullOrEmpty(pluginRewrite) ? pluginRewrite : rewrittenBest;
+            }
+
+            // Finally, if UID is already concrete but the cslist path is wrong, try locating by filename.
+            string pluginOnly = TryRewritePluginCslistPathByFilename(entryPath);
+            return !string.IsNullOrEmpty(pluginOnly) ? pluginOnly : entryPath;
         }
 
         public static bool ShouldDeferStartupOnDemandForPath(string entryPath, string uid)
@@ -415,6 +606,16 @@ namespace VPB
 
             // 2) Fallback: resolve file directly from disk/cache using UID.
             string candidatePath = TryFindVarPathForUid(candidateUid);
+            if (string.IsNullOrEmpty(candidatePath))
+            {
+                // Versioned request missing on disk: serve the latest available version.
+                string bestUid = ResolveBestAvailableUid(candidateUid);
+                if (!string.IsNullOrEmpty(bestUid))
+                {
+                    candidateUid = bestUid;
+                    candidatePath = TryFindVarPathForUid(candidateUid);
+                }
+            }
             if (string.IsNullOrEmpty(candidatePath)) return false;
 
             resolvedUid = UidFromVarPath(candidatePath);

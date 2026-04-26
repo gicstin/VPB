@@ -581,6 +581,14 @@ namespace VPB
             {
                 path = rewritten;
             }
+
+            // If VaM is about to resolve a var entry path, ensure it targets a concrete newest UID
+            // so plugin compiles/includes don't keep using an older missing versioned prefix.
+            string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
+            if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+            {
+                path = best;
+            }
         }
 
         public static void PreFileExists(ref string __0)
@@ -589,6 +597,12 @@ namespace VPB
             if (!string.Equals(rewritten, __0, StringComparison.Ordinal))
             {
                 __0 = rewritten;
+            }
+
+            string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(__0, attemptRegister: true);
+            if (!string.Equals(best, __0, StringComparison.OrdinalIgnoreCase))
+            {
+                __0 = best;
             }
         }
 
@@ -644,6 +658,16 @@ namespace VPB
                     {
                         LogUtil.RecordOnDemandRetry();
                         if (MVR.FileManagement.FileManager.GetVarFileEntry(rewritten) != null)
+                            result = true;
+                    }
+
+                    // VaM may also request a specific version that isn't installed anymore
+                    // (e.g. Author.Pkg.11), while a newer version exists (e.g. .14).
+                    string rewrittenBest = VamOnDemandLoader.TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
+                    if (!string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogUtil.RecordOnDemandRetry();
+                        if (MVR.FileManagement.FileManager.GetVarFileEntry(rewrittenBest) != null)
                             result = true;
                     }
                 }
@@ -1437,6 +1461,14 @@ namespace VPB
                     {
                         LogUtil.RecordOnDemandRetry();
                         __result = MVR.FileManagement.FileManager.GetVarFileEntry(rewritten);
+                    }
+
+                    // Also handle versioned UIDs where the requested version doesn't exist.
+                    string rewrittenBest = VamOnDemandLoader.TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
+                    if (__result == null && !string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogUtil.RecordOnDemandRetry();
+                        __result = MVR.FileManagement.FileManager.GetVarFileEntry(rewrittenBest);
                     }
                 }
                 finally
