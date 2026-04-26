@@ -6,12 +6,28 @@ namespace VPB
     class Settings
     {
         private static Settings instance;
+        private static ConfigFile configFile;
         public static Settings Instance
         {
             get
             {
                 if (instance == null) instance = new Settings();
                 return instance;
+            }
+        }
+
+        public static void SaveConfig()
+        {
+            if (configFile != null)
+            {
+                try
+                {
+                    configFile.Save();
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("Failed to save config: " + ex.Message);
+                }
             }
         }
 
@@ -58,6 +74,7 @@ namespace VPB
         public ConfigEntry<int> HubItemsPerPage;
         public ConfigEntry<int> HubCurrentPage;
         public ConfigEntry<bool> HubOnlyDownloadable;
+        public ConfigEntry<bool> HubHideDownloaded;
 
         public ConfigEntry<bool> LogImageQueueEvents;
         public ConfigEntry<bool> LogVerboseUi;
@@ -132,6 +149,7 @@ namespace VPB
             HubItemsPerPage = config.Bind<int>("HubBrowser", "ItemsPerPage", 48, "Hub Browser: Items per page.");
             HubCurrentPage = config.Bind<int>("HubBrowser", "CurrentPage", 1, "Hub Browser: Current page.");
             HubOnlyDownloadable = config.Bind<bool>("HubBrowser", "OnlyDownloadable", false, "Hub Browser: Only show downloadable resources.");
+            HubHideDownloaded = config.Bind<bool>("HubBrowser", "HideDownloaded", false, "Hub Browser: Hide packages already downloaded to disk.");
 
 
             AutoOptimizeCache = config.Bind<bool>("Optimze", "AutoOptimizeCache", false, "When checked, clicking Compress Cache button will start compression without opening the confirmation window.");

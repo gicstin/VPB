@@ -72,7 +72,7 @@ namespace VPB
 
         protected JSONArray varFilesJSONArray;
 
-        protected JSONStorableBool inLibraryJSON;
+        public JSONStorableBool inLibraryJSON;
 
         protected JSONStorableBool updateAvailableJSON;
 

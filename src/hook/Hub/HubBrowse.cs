@@ -114,7 +114,7 @@ namespace VPB
 
         protected GameObject refreshIndicator;
 
-        protected bool _isShowing;
+        public bool _isShowing;
 
         public PreShowCallback preShowCallbacks;
 
@@ -766,7 +766,7 @@ namespace VPB
                 // Clear the pay type and downloadable filters to ensure all items are visible.
                 _payTypeFilter = "All";
                 if (payTypeFilterChooser != null) payTypeFilterChooser.valNoCallback = "All";
-                if (onlyDownloadable != null) onlyDownloadable.valNoCallback = false;
+                // Don't clear onlyDownloadable and hideDownloaded - preserve user preference
 
                 // CRITICAL: Clear search filter as it was observed to persist (e.g. "qingfeng")
                 _searchFilter = string.Empty;
@@ -777,7 +777,7 @@ namespace VPB
                     if (Settings.Instance.HubCurrentPage != null) Settings.Instance.HubCurrentPage.Value = 1;
                     if (Settings.Instance.HubHostedOption != null) Settings.Instance.HubHostedOption.Value = "All";
                     if (Settings.Instance.HubPayTypeFilter != null) Settings.Instance.HubPayTypeFilter.Value = "All";
-                    if (Settings.Instance.HubOnlyDownloadable != null) Settings.Instance.HubOnlyDownloadable.Value = false;
+                    // Don't clear onlyDownloadable and hideDownloaded - preserve user preference
                     if (Settings.Instance.HubSearchText != null) Settings.Instance.HubSearchText.Value = string.Empty;
                 }
             }
@@ -887,6 +887,11 @@ namespace VPB
                         {
                             HubResourceItem hubResourceItem = new HubResourceItem(resource, this, page);
                             hubResourceItem.Refresh();
+
+                            if (hideDownloaded.val && hubResourceItem.inLibraryJSON.val)
+                            {
+                                continue;
+                            }
 
                             RectTransform rectTransform = UnityEngine.Object.Instantiate(itemPrefab);
                             rectTransform.SetParent(itemContainer, false);
@@ -1019,7 +1024,7 @@ namespace VPB
             }
         }
 
-        protected void ResetRefresh()
+        public void ResetRefresh()
         {
             if (suppressRefresh) return;
             CancelOldPageImages();
@@ -1088,6 +1093,7 @@ namespace VPB
             _tagsFilter = "All";
             tagsFilterChooser.valNoCallback = "All";
             if (onlyDownloadable != null) onlyDownloadable.valNoCallback = false;
+            if (hideDownloaded != null) hideDownloaded.valNoCallback = false;
 
             // Persist the cleared state to settings
             if (Settings.Instance != null)
@@ -1099,6 +1105,7 @@ namespace VPB
                 if (Settings.Instance.HubCreatorFilter != null) Settings.Instance.HubCreatorFilter.Value = "All";
                 if (Settings.Instance.HubTagsFilter != null) Settings.Instance.HubTagsFilter.Value = "All";
                 if (Settings.Instance.HubOnlyDownloadable != null) Settings.Instance.HubOnlyDownloadable.Value = false;
+                if (Settings.Instance.HubHideDownloaded != null) Settings.Instance.HubHideDownloaded.Value = false;
             }
         }
 
@@ -2213,6 +2220,12 @@ namespace VPB
                     onlyDownloadable.valNoCallback = onlyDl;
                 }
 
+                bool hideDl = (Settings.Instance.HubHideDownloaded != null) ? Settings.Instance.HubHideDownloaded.Value : false;
+                if (hideDownloaded != null)
+                {
+                    hideDownloaded.valNoCallback = hideDl;
+                }
+
                 string hosted = (Settings.Instance.HubHostedOption != null) ? Settings.Instance.HubHostedOption.Value : _hostedOption;
                 hosted = ValidateChoice(hostedOptionChooser, hosted, "All");
                 _hostedOption = hosted;
@@ -2605,9 +2618,28 @@ namespace VPB
 
             bool initialOnlyDownloadable = (Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : false;
             onlyDownloadable = new JSONStorableBool("Only Downloadable", initialOnlyDownloadable, SyncOnlyDownloadable);
+
+            bool initialHideDownloaded = (Settings.Instance != null && Settings.Instance.HubHideDownloaded != null) ? Settings.Instance.HubHideDownloaded.Value : false;
+            hideDownloaded = new JSONStorableBool("Hide Downloaded Packages", initialHideDownloaded, SyncHideDownloaded);
+
             var manager = SuperController.singleton.transform.Find("ScenePluginManager").GetComponent<MVRPluginManager>();
             if (manager != null && manager.configurableTogglePrefab != null)
             {
+                RectTransform hideDownloadedTransform = UnityEngine.Object.Instantiate(manager.configurableTogglePrefab, parent) as RectTransform;
+                hideDownloadedTransform.localPosition = new Vector3(relPos.x, relPos.y+140, relPos.z);
+                hideDownloadedTransform.gameObject.SetActive(true);
+
+                var hideDownloadedUIDynamicToggle = hideDownloadedTransform.GetComponent<UIDynamicToggle>();
+                if (hideDownloadedUIDynamicToggle != null)
+                {
+                    hideDownloadedUIDynamicToggle.label = hideDownloaded.name;
+                    hideDownloaded.toggle = hideDownloadedUIDynamicToggle.toggle;
+                    // Explicitly sync the toggle to match the stored value
+                    hideDownloadedUIDynamicToggle.toggle.isOn = hideDownloaded.val;
+
+                    hideDownloadedUIDynamicToggle.backgroundImage.color = new Color32(255,133,133,255);
+                }
+
                 RectTransform transform = UnityEngine.Object.Instantiate(manager.configurableTogglePrefab, parent) as RectTransform;
                 transform.localPosition = new Vector3(relPos.x, relPos.y+80, relPos.z);
                 transform.gameObject.SetActive(true);
@@ -2617,6 +2649,8 @@ namespace VPB
                 {
                     uIDynamicToggle.label = onlyDownloadable.name;
                     onlyDownloadable.toggle = uIDynamicToggle.toggle;
+                    // Explicitly sync the toggle to match the stored value
+                    uIDynamicToggle.toggle.isOn = onlyDownloadable.val;
 
                     uIDynamicToggle.backgroundImage.color = new Color32(133,255,133,255);
                 }
@@ -2626,6 +2660,7 @@ namespace VPB
                 LogUtil.LogVerboseUi("HubBrowse Init End " + _uiSw.ElapsedMilliseconds + "ms");
         }
         JSONStorableBool onlyDownloadable;
+        public JSONStorableBool hideDownloaded;
 
         protected void SyncOnlyDownloadable(bool b)
         {
@@ -2641,15 +2676,50 @@ namespace VPB
                 {
                     _payTypeFilter = "Free";
                     if (payTypeFilterChooser != null) payTypeFilterChooser.valNoCallback = "Free";
-                    if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubPayTypeFilter != null)
+                    if (!suppressHubSettingsSave && Settings.Instance != null)
                     {
-                        Settings.Instance.HubPayTypeFilter.Value = "Free";
+                        if (Settings.Instance.HubPayTypeFilter != null)
+                        {
+                            Settings.Instance.HubPayTypeFilter.Value = "Free";
+                        }
                     }
                 }
             }
 
             ResetRefresh();
         }
+
+        protected void SyncHideDownloaded(bool b)
+        {
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubHideDownloaded != null)
+            {
+                Settings.Instance.HubHideDownloaded.Value = b;
+                Settings.SaveConfig();
+            }
+
+            ResetRefresh();
+        }
+
+        public IEnumerator DelayedRefresh()
+        {
+            yield return new WaitForSeconds(2.0f);
+            // Manually refresh existing items instead of full network refresh
+            if (items != null && hideDownloaded != null && hideDownloaded.val)
+            {
+                foreach (HubResourceItemUI item in items)
+                {
+                    if (item != null && item.connectedItem != null)
+                    {
+                        item.connectedItem.Refresh();
+                        if (item.connectedItem.inLibraryJSON.val)
+                        {
+                            item.gameObject.SetActive(false);
+                        }
+                    }
+                }
+            }
+        }
+
         protected void OnLoad(ZenFulcrum.EmbeddedBrowser.JSONNode loadData)
         {
             try

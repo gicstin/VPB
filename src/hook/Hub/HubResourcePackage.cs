@@ -481,6 +481,13 @@ namespace VPB
                 updateAvailableJSON.val = false;
                 isDownloadedJSON.val = false;
                 SyncDeleteButton();
+
+                if (browser != null && browser.hideDownloaded != null && browser.hideDownloaded.val && browser._isShowing)
+                {
+                    try { FileManager.Refresh(); } catch { }
+                    try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
+                    browser.StartCoroutine(browser.DelayedRefresh());
+                }
             }
             catch (Exception)
             {
