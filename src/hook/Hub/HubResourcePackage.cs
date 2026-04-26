@@ -460,12 +460,12 @@ namespace VPB
         {
             downloadProgressJSON.val = f;
 
-            fileSizeJSON.val = string.Format("{0}/{1}", SizeSuffix((int)downloadedBytes,2), SizeSuffix(FileSize));
+            fileSizeJSON.val = string.Format("{0}/{1}", SizeSuffix((int)downloadedBytes, 2), SizeSuffix(FileSize));
         }
 
         protected void DownloadComplete(byte[] data, Dictionary<string, string> responseHeaders)
         {
-            fileSizeJSON.val =SizeSuffix(FileSize);
+            fileSizeJSON.val = SizeSuffix(FileSize);
 
             isDownloadingJSON.val = false;
             isDownloadedJSON.val = true;

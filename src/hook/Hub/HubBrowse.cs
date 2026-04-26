@@ -872,6 +872,8 @@ namespace VPB
                     return;
                 }
                 int count = 0;
+                bool onlyDl = onlyDownloadable != null && onlyDownloadable.val;
+                bool hideDl = hideDownloaded != null && hideDownloaded.val;
                 IEnumerator enumerator2 = asArray.GetEnumerator();
                 try
                 {
@@ -882,16 +884,7 @@ namespace VPB
                             break;
                         }
                         JSONClass resource = (JSONClass)enumerator2.Current;
-                        bool canShow = true;
-                        bool asBool = resource["hubDownloadable"].AsBool;
-                        if(onlyDownloadable.val)
-                        {
-                            canShow = asBool;
-                        }
-                        if (canShow && hideDownloaded != null && hideDownloaded.val && IsResourceAlreadyDownloaded(resource))
-                        {
-                            canShow = false;
-                        }
+                        bool canShow = CanShowResourceAfterClientFilters(resource, onlyDl, hideDl);
                         // Do not show items that cannot be downloaded
                         if (canShow)
                         {
@@ -960,7 +953,7 @@ namespace VPB
                     jSONClass["category"] = _payTypeFilter;
                 }
                 // If "Only Downloadable" is checked, payType must be free, reducing the returned data
-                if (onlyDownloadable.val)
+                if (onlyDownloadable != null && onlyDownloadable.val)
                 {
                     jSONClass["category"] = "Free";
                 }
@@ -986,7 +979,6 @@ namespace VPB
                 {
                     int backfillApiPerPage = Mathf.Clamp(_numPerPageInt * 4, 100, 200);
                     jSONClass["perpage"] = backfillApiPerPage.ToString();
-                    LogUtil.Log($"HubBrowse.RefreshResources using backfill page={page} perPage={_numPerPageInt} apiPerPage={backfillApiPerPage}");
                     refreshResourcesRoutine = StartCoroutine(RefreshResourcesWithBackfill(jSONClass, page));
                 }
                 else
@@ -1003,45 +995,16 @@ namespace VPB
             }
         }
 
-        private int CountVisibleResources(JSONArray resources)
-        {
-            if (resources == null) return 0;
-
-            int visible = 0;
-            IEnumerator enumerator = resources.GetEnumerator();
-            try
-            {
-                while (enumerator.MoveNext())
-                {
-                    JSONClass resource = enumerator.Current as JSONClass;
-                    if (resource == null) continue;
-
-                    if (CanShowResourceAfterClientFilters(resource))
-                    {
-                        visible++;
-                        if (visible >= _numPerPageInt)
-                        {
-                            return visible;
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                IDisposable disposable;
-                if ((disposable = enumerator as IDisposable) != null)
-                {
-                    disposable.Dispose();
-                }
-            }
-            return visible;
-        }
-
         private bool CanShowResourceAfterClientFilters(JSONClass resource)
         {
-            if (resource == null) return false;
             bool onlyDl = onlyDownloadable != null && onlyDownloadable.val;
             bool hideDl = hideDownloaded != null && hideDownloaded.val;
+            return CanShowResourceAfterClientFilters(resource, onlyDl, hideDl);
+        }
+
+        private bool CanShowResourceAfterClientFilters(JSONClass resource, bool onlyDl, bool hideDl)
+        {
+            if (resource == null) return false;
 
             if (onlyDl && !resource["hubDownloadable"].AsBool)
             {
@@ -1063,18 +1026,20 @@ namespace VPB
             }
             int currentApiPage = 1;
             int targetSkipVisible = (requestedVisiblePage - 1) * _numPerPageInt;
-            LogUtil.Log($"HubBrowse.RefreshResourcesWithBackfill START startPage={initialPage} visiblePage={requestedVisiblePage} apiPage={currentApiPage} perPage={_numPerPageInt} skipVisible={targetSkipVisible}");
 
             const int maxPagesToScan = 20;
             int scannedPages = 0;
             int totalPages = -1;
             int seenVisible = 0;
+            bool onlyDl = onlyDownloadable != null && onlyDownloadable.val;
+            bool hideDl = hideDownloaded != null && hideDownloaded.val;
 
             JSONClass mergedResponse = null;
             JSONArray mergedResources = new JSONArray();
 
             while (scannedPages < maxPagesToScan && (totalPages < 0 || currentApiPage <= totalPages))
             {
+                scannedPages++;
                 requestTemplate["page"] = currentApiPage.ToString();
                 string postData = requestTemplate.ToString();
 
@@ -1096,7 +1061,6 @@ namespace VPB
                 bool successByResources = responseObj != null && responseObj["resources"] != null;
                 if (responseObj == null || (!successByStatus && !successByResources))
                 {
-                    LogUtil.LogWarning($"HubBrowse.RefreshResourcesWithBackfill FALLBACK startPage={initialPage} fetchPage={currentApiPage} status={status ?? "<null>"}");
                     RefreshCallback(responseNode, initialPage);
                     yield break;
                 }
@@ -1114,7 +1078,6 @@ namespace VPB
                 JSONArray pageResources = responseObj["resources"].AsArray;
                 if (pageResources == null || pageResources.Count == 0)
                 {
-                    LogUtil.Log($"HubBrowse.RefreshResourcesWithBackfill STOP_EMPTY startPage={initialPage} fetchPage={currentApiPage}");
                     break;
                 }
 
@@ -1132,7 +1095,7 @@ namespace VPB
                         SimpleJSON.JSONNode node = enumerator.Current as SimpleJSON.JSONNode;
                         JSONClass resource = node != null ? node.AsObject : null;
                         if (resource == null) continue;
-                        if (!CanShowResourceAfterClientFilters(resource)) continue;
+                        if (!CanShowResourceAfterClientFilters(resource, onlyDl, hideDl)) continue;
 
                         if (seenVisible < targetSkipVisible)
                         {
@@ -1158,18 +1121,14 @@ namespace VPB
 
                 if (mergedResources.Count >= _numPerPageInt)
                 {
-                    LogUtil.Log($"HubBrowse.RefreshResourcesWithBackfill STOP_FILLED startPage={initialPage} fetchPage={currentApiPage} visibleCollected={mergedResources.Count} visibleSeen={seenVisible}");
                     break;
                 }
 
-                scannedPages++;
                 currentApiPage++;
             }
 
             if (mergedResponse != null)
             {
-                int visibleCount = CountVisibleResources(mergedResources);
-                LogUtil.Log($"HubBrowse.RefreshResourcesWithBackfill DONE startPage={initialPage} scannedPages={scannedPages + 1} rawItems={mergedResources.Count} visibleItems={visibleCount} requestedPerPage={_numPerPageInt} visibleSeen={seenVisible} skipVisible={targetSkipVisible}");
                 RefreshCallback(mergedResponse, initialPage);
             }
             else

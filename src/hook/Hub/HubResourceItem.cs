@@ -297,7 +297,7 @@ namespace VPB
 
         protected void SyncCreatorIconUrl(string url)
         {
-            if (url == null || url == string.Empty) return;
+            if (string.IsNullOrEmpty(url)) return;
             if (VPB.HubImageLoaderThreaded.singleton != null)
             {
                 VPB.HubImageLoaderThreaded.QueuedImage queuedImage = VPB.HubImageLoaderThreaded.singleton.GetQI();
@@ -337,7 +337,7 @@ namespace VPB
 
         protected void SyncThumbnailUrl(string url)
         {
-            if (url == null || url == string.Empty) return;
+            if (string.IsNullOrEmpty(url)) return;
             if (VPB.HubImageLoaderThreaded.singleton != null)
             {
                 VPB.HubImageLoaderThreaded.QueuedImage queuedImage = VPB.HubImageLoaderThreaded.singleton.GetQI();
