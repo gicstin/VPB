@@ -877,6 +877,10 @@ namespace VPB
                 {
                     while (enumerator2.MoveNext())
                     {
+                        if (count >= _numPerPageInt)
+                        {
+                            break;
+                        }
                         JSONClass resource = (JSONClass)enumerator2.Current;
                         bool canShow = true;
                         bool asBool = resource["hubDownloadable"].AsBool;
@@ -926,7 +930,7 @@ namespace VPB
 
         public void RefreshResources()
         {
-            LogUtil.Log($"HubBrowse.RefreshResources: Page={_currentPageString}, Sort={_sortPrimary},{_sortSecondary}, Filter=[Hosted:{_hostedOption}, Pay:{_payTypeFilter}, Cat:{_categoryFilter}, Creator:{_creatorFilter}, Tags:{_tagsFilter}, Search:{_searchFilter}]");
+            LogUtil.Log($"HubBrowse.RefreshResources: Page={_currentPageString}, Sort={_sortPrimary},{_sortSecondary}, Filter=[Hosted:{_hostedOption}, Pay:{_payTypeFilter}, Cat:{_categoryFilter}, Creator:{_creatorFilter}, Tags:{_tagsFilter}, Search:{_searchFilter}, OnlyDl:{(onlyDownloadable != null && onlyDownloadable.val)}, HideDownloaded:{(hideDownloaded != null && hideDownloaded.val)}]");
             _hasBeenRefreshed = true;
             if (_hubEnabled)
             {
@@ -938,6 +942,7 @@ namespace VPB
                 jSONClass["source"] = "VaM";
                 jSONClass["action"] = "getResources";
                 jSONClass["latest_image"] = "Y";
+                bool hasClientSideFilter = (onlyDownloadable != null && onlyDownloadable.val) || (hideDownloaded != null && hideDownloaded.val);
                 jSONClass["perpage"] = _numPerPageInt.ToString();
                 string page = _currentPageString;
                 jSONClass["page"] = page;
@@ -977,14 +982,199 @@ namespace VPB
                     text = text + "," + _sortSecondary;
                 }
                 jSONClass["sort"] = text;
-                string postData = jSONClass.ToString();
-                refreshResourcesRoutine = StartCoroutine(PostRequest(apiUrl, postData, 
-                    jsonNode => { RefreshCallback(jsonNode, page); }, 
-                    RefreshErrorCallback));
+                if (hasClientSideFilter)
+                {
+                    int backfillApiPerPage = Mathf.Clamp(_numPerPageInt * 4, 100, 200);
+                    jSONClass["perpage"] = backfillApiPerPage.ToString();
+                    LogUtil.Log($"HubBrowse.RefreshResources using backfill page={page} perPage={_numPerPageInt} apiPerPage={backfillApiPerPage}");
+                    refreshResourcesRoutine = StartCoroutine(RefreshResourcesWithBackfill(jSONClass, page));
+                }
+                else
+                {
+                    string postData = jSONClass.ToString();
+                    refreshResourcesRoutine = StartCoroutine(PostRequest(apiUrl, postData,
+                        jsonNode => { RefreshCallback(jsonNode, page); },
+                        RefreshErrorCallback));
+                }
                 if (refreshIndicator != null)
                 {
                     refreshIndicator.SetActive(true);
                 }
+            }
+        }
+
+        private int CountVisibleResources(JSONArray resources)
+        {
+            if (resources == null) return 0;
+
+            int visible = 0;
+            IEnumerator enumerator = resources.GetEnumerator();
+            try
+            {
+                while (enumerator.MoveNext())
+                {
+                    JSONClass resource = enumerator.Current as JSONClass;
+                    if (resource == null) continue;
+
+                    if (CanShowResourceAfterClientFilters(resource))
+                    {
+                        visible++;
+                        if (visible >= _numPerPageInt)
+                        {
+                            return visible;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                IDisposable disposable;
+                if ((disposable = enumerator as IDisposable) != null)
+                {
+                    disposable.Dispose();
+                }
+            }
+            return visible;
+        }
+
+        private bool CanShowResourceAfterClientFilters(JSONClass resource)
+        {
+            if (resource == null) return false;
+            bool onlyDl = onlyDownloadable != null && onlyDownloadable.val;
+            bool hideDl = hideDownloaded != null && hideDownloaded.val;
+
+            if (onlyDl && !resource["hubDownloadable"].AsBool)
+            {
+                return false;
+            }
+            if (hideDl && IsResourceAlreadyDownloaded(resource))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        private IEnumerator RefreshResourcesWithBackfill(JSONClass requestTemplate, string initialPage)
+        {
+            int requestedVisiblePage = 1;
+            if (!int.TryParse(initialPage, out requestedVisiblePage) || requestedVisiblePage < 1)
+            {
+                requestedVisiblePage = 1;
+            }
+            int currentApiPage = 1;
+            int targetSkipVisible = (requestedVisiblePage - 1) * _numPerPageInt;
+            LogUtil.Log($"HubBrowse.RefreshResourcesWithBackfill START startPage={initialPage} visiblePage={requestedVisiblePage} apiPage={currentApiPage} perPage={_numPerPageInt} skipVisible={targetSkipVisible}");
+
+            const int maxPagesToScan = 20;
+            int scannedPages = 0;
+            int totalPages = -1;
+            int seenVisible = 0;
+
+            JSONClass mergedResponse = null;
+            JSONArray mergedResources = new JSONArray();
+
+            while (scannedPages < maxPagesToScan && (totalPages < 0 || currentApiPage <= totalPages))
+            {
+                requestTemplate["page"] = currentApiPage.ToString();
+                string postData = requestTemplate.ToString();
+
+                SimpleJSON.JSONNode responseNode = null;
+                string requestError = null;
+                yield return StartCoroutine(PostRequest(apiUrl, postData,
+                    jsonNode => { responseNode = jsonNode; },
+                    err => { requestError = err; }));
+
+                if (!string.IsNullOrEmpty(requestError))
+                {
+                    RefreshErrorCallback(requestError);
+                    yield break;
+                }
+
+                JSONClass responseObj = responseNode != null ? responseNode.AsObject : null;
+                string status = responseObj != null ? responseObj["status"] : null;
+                bool successByStatus = !string.IsNullOrEmpty(status) && string.Equals(status.Trim(), "success", StringComparison.OrdinalIgnoreCase);
+                bool successByResources = responseObj != null && responseObj["resources"] != null;
+                if (responseObj == null || (!successByStatus && !successByResources))
+                {
+                    LogUtil.LogWarning($"HubBrowse.RefreshResourcesWithBackfill FALLBACK startPage={initialPage} fetchPage={currentApiPage} status={status ?? "<null>"}");
+                    RefreshCallback(responseNode, initialPage);
+                    yield break;
+                }
+
+                JSONClass pagination = responseObj["pagination"].AsObject;
+                if (pagination != null)
+                {
+                    int parsedPages;
+                    if (int.TryParse(pagination["total_pages"], out parsedPages) && parsedPages > 0)
+                    {
+                        totalPages = parsedPages;
+                    }
+                }
+
+                JSONArray pageResources = responseObj["resources"].AsArray;
+                if (pageResources == null || pageResources.Count == 0)
+                {
+                    LogUtil.Log($"HubBrowse.RefreshResourcesWithBackfill STOP_EMPTY startPage={initialPage} fetchPage={currentApiPage}");
+                    break;
+                }
+
+                if (mergedResponse == null)
+                {
+                    mergedResponse = responseObj;
+                    mergedResponse["resources"] = mergedResources;
+                }
+
+                IEnumerator enumerator = pageResources.GetEnumerator();
+                try
+                {
+                    while (enumerator.MoveNext())
+                    {
+                        SimpleJSON.JSONNode node = enumerator.Current as SimpleJSON.JSONNode;
+                        JSONClass resource = node != null ? node.AsObject : null;
+                        if (resource == null) continue;
+                        if (!CanShowResourceAfterClientFilters(resource)) continue;
+
+                        if (seenVisible < targetSkipVisible)
+                        {
+                            seenVisible++;
+                            continue;
+                        }
+
+                        mergedResources.Add(node);
+                        if (mergedResources.Count >= _numPerPageInt)
+                        {
+                            break;
+                        }
+                    }
+                }
+                finally
+                {
+                    IDisposable disposable;
+                    if ((disposable = enumerator as IDisposable) != null)
+                    {
+                        disposable.Dispose();
+                    }
+                }
+
+                if (mergedResources.Count >= _numPerPageInt)
+                {
+                    LogUtil.Log($"HubBrowse.RefreshResourcesWithBackfill STOP_FILLED startPage={initialPage} fetchPage={currentApiPage} visibleCollected={mergedResources.Count} visibleSeen={seenVisible}");
+                    break;
+                }
+
+                scannedPages++;
+                currentApiPage++;
+            }
+
+            if (mergedResponse != null)
+            {
+                int visibleCount = CountVisibleResources(mergedResources);
+                LogUtil.Log($"HubBrowse.RefreshResourcesWithBackfill DONE startPage={initialPage} scannedPages={scannedPages + 1} rawItems={mergedResources.Count} visibleItems={visibleCount} requestedPerPage={_numPerPageInt} visibleSeen={seenVisible} skipVisible={targetSkipVisible}");
+                RefreshCallback(mergedResponse, initialPage);
+            }
+            else
+            {
+                RefreshErrorCallback("No Hub data returned");
             }
         }
 
