@@ -271,7 +271,7 @@ namespace VPB
             alreadyHaveJSON = new JSONStorableBool("alreadyHave", false);
             alreadyHaveSceneJSON = new JSONStorableBool("alreadyHaveScene", false);
             updateAvailableJSON = new JSONStorableBool("updateAvailable", false);
-            updateMsgJSON = new JSONStorableString("updateMsg", "Direct Update");
+            updateMsgJSON = new JSONStorableString("updateMsg", "Update");
             updateAction = new JSONStorableAction("Update", Update);
             notOnHubJSON = new JSONStorableBool("notOnHub", startingValue3);
             downloadAction = new JSONStorableAction("Download", Download);
@@ -774,7 +774,7 @@ namespace VPB
                     if (package.Version < LatestVersion)
                     {
                         updateAvailableJSON.val = true;
-                        updateMsgJSON.val = "Direct Update " + package.Version + " -> " + LatestVersion;
+                        updateMsgJSON.val = "Update";
                     }
                     else
                     {

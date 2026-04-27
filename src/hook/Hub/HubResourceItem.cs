@@ -746,8 +746,21 @@ namespace VPB
                 return;
             }
 
+            // "Direct Update" label is a landing-list CTA only (like "Direct Download All").
+            // Detail pages should not show this label.
+            if (registeredUI is HubResourceItemDetailUI)
+            {
+                if (registeredUI.updateMsgText != null)
+                {
+                    registeredUI.updateMsgText.gameObject.SetActive(false);
+                }
+                return;
+            }
+
             if (registeredUI.updateMsgText != null)
             {
+                // Only show when there is an update to apply.
+                registeredUI.updateMsgText.gameObject.SetActive(updateAvailableJSON.val);
                 if (queueActive && updateAvailableJSON.val)
                 {
                     registeredUI.updateMsgText.text = "Updating";
