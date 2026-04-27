@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
+using MVR.FileManagement;
 using UnityEngine;
 
 namespace VPB
@@ -49,7 +50,7 @@ namespace VPB
         /// <summary>High bit: row has <see cref="ClothingAttrPacked"/> from index rebuild (fast clothing subfilter path).</summary>
         internal const int ClothingAttrPresentFlag = unchecked((int)0x80000000);
 
-        private const int SchemaVersion = 8;
+        private const int SchemaVersion = 9;
 
         private static readonly object s_Sync = new object();
         private static volatile bool s_RebuildScheduled;
@@ -256,12 +257,107 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_sf_key ON sys_file(cache_key);" +
                 "CREATE TABLE IF NOT EXISTS cache_usage (cache_path TEXT PRIMARY KEY, hit_count INTEGER NOT NULL DEFAULT 0, last_accessed INTEGER NOT NULL);" +
                 "CREATE INDEX IF NOT EXISTS idx_cu_last ON cache_usage(last_accessed);" +
+                "CREATE TABLE IF NOT EXISTS item_usage (item_key TEXT PRIMARY KEY, kind TEXT, use_count INTEGER NOT NULL DEFAULT 0, last_used INTEGER NOT NULL);" +
+                "CREATE INDEX IF NOT EXISTS idx_iu_count ON item_usage(use_count);" +
+                "CREATE INDEX IF NOT EXISTS idx_iu_last ON item_usage(last_used);" +
                 "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN var_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN list_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN pctime TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN cloth_attr TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
+        }
+
+        internal static string BuildUsageKey(FileEntry file)
+        {
+            if (file == null) return "";
+            try
+            {
+                string k = file.Uid;
+                if (string.IsNullOrEmpty(k)) k = file.Path;
+                if (string.IsNullOrEmpty(k)) return "";
+                return (k.Replace('\\', '/').Trim()).ToLowerInvariant();
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        internal static void TryRecordItemUse(string itemKey, string kind)
+        {
+            if (!VpbSqlite3.IsAvailable) return;
+            if (string.IsNullOrEmpty(itemKey)) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare(
+                        "INSERT INTO item_usage(item_key, kind, use_count, last_used) VALUES(?, ?, 1, ?) " +
+                        "ON CONFLICT(item_key) DO UPDATE SET use_count = use_count + 1, last_used = excluded.last_used, kind = excluded.kind"))
+                    {
+                        st.BindText(1, itemKey);
+                        st.BindText(2, kind ?? "");
+                        st.BindInt64(3, DateTime.UtcNow.ToBinary());
+                        st.Step();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static bool TryReadItemUseCountsForKeys(IList<string> keys, Dictionary<string, int> outCounts)
+        {
+            if (outCounts == null) return false;
+            outCounts.Clear();
+            if (!VpbSqlite3.IsAvailable) return false;
+            if (keys == null || keys.Count == 0) return true;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+
+                    const int MaxVars = 900;
+                    for (int start = 0; start < keys.Count; start += MaxVars)
+                    {
+                        int n = Math.Min(MaxVars, keys.Count - start);
+                        var sb = new StringBuilder(64 + n * 3);
+                        sb.Append("SELECT item_key, use_count FROM item_usage WHERE item_key IN (");
+                        for (int i = 0; i < n; i++)
+                        {
+                            if (i > 0) sb.Append(",");
+                            sb.Append("?");
+                        }
+                        sb.Append(")");
+
+                        using (var st = conn.Prepare(sb.ToString()))
+                        {
+                            for (int i = 0; i < n; i++)
+                            {
+                                string k = keys[start + i] ?? "";
+                                st.BindText(i + 1, k);
+                            }
+
+                            while (st.Step() == VpbSqlite3.SqliteRow)
+                            {
+                                string k = st.ColumnText(0) ?? "";
+                                int c = 0;
+                                try { c = (int)st.ColumnInt64(1); } catch { c = 0; }
+                                if (!string.IsNullOrEmpty(k)) outCounts[k] = c;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                outCounts.Clear();
+                return false;
+            }
         }
 
         internal static void TrySaveCategoryFilterState(string panelId, string catKey, string stateJson)

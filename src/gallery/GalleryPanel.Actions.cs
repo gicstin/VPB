@@ -106,6 +106,7 @@ namespace VPB
                     {
                         try
                         {
+                            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(file), "package"); } catch { }
                             NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, file.Path);
                             return true;
                         }

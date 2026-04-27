@@ -209,6 +209,8 @@ namespace VPB
             }
             _lastLoadSceneStartTime = now;
 
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(entry), "scene"); } catch { }
+
             List<string> temporaryUidOverrides = null;
             SceneLoadCleanupState cleanupState = null;
             try

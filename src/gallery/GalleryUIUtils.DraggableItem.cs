@@ -347,6 +347,7 @@ namespace VPB
                         // apply to that person (instead of spawning a new person).
                         if (itemType == ItemType.Appearance && atom.type == "Person")
                         {
+                            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "appearance"); } catch { }
                             ApplyClothingToAtom(atom, FileEntry.Uid, null);
                         }
                         else if (IsAmbiguousDrop(atom, FileEntry))
@@ -355,6 +356,23 @@ namespace VPB
                         }
                         else
                         {
+                            string kind = "item";
+                            try
+                            {
+                                switch (itemType)
+                                {
+                                    case ItemType.Clothing: kind = "clothing"; break;
+                                    case ItemType.Hair: kind = "hair"; break;
+                                    case ItemType.Skin: kind = "skin"; break;
+                                    case ItemType.Morphs: kind = "morphs"; break;
+                                    case ItemType.Appearance: kind = "appearance"; break;
+                                    case ItemType.Pose: kind = "pose"; break;
+                                    case ItemType.Plugins: kind = "plugins"; break;
+                                    default: kind = "item"; break;
+                                }
+                            }
+                            catch { kind = "item"; }
+                            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), kind); } catch { }
                             ApplyClothingToAtom(atom, FileEntry.Uid);
                         }
                     }
@@ -450,6 +468,7 @@ namespace VPB
 
         public void LoadCUA(string path)
         {
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "cua"); } catch { }
             string normalizedPath = UI.NormalizePath(path);
             LogUtil.Log($"[DragDropDebug] Loading CUA: {normalizedPath}");
             if (Panel != null) Panel.StartCoroutine(LoadCUACoroutine(normalizedPath));
@@ -469,6 +488,7 @@ namespace VPB
 
         public void LoadCUAIntoAtom(Atom atom, string path)
         {
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "cua"); } catch { }
             if (Panel != null) Panel.StartCoroutine(LoadCUAIntoAtomCoroutine(atom, path));
             else StartCoroutine(LoadCUAIntoAtomCoroutine(atom, path));
         }
@@ -565,6 +585,7 @@ namespace VPB
 
         public void LoadSubScene(string path)
         {
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "subscene"); } catch { }
             bool installed = EnsureInstalled();
 
             if (installed)
@@ -648,6 +669,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadClothing: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "clothing"); } catch { }
             LogUtil.Log($"[VPB] LoadClothing: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
@@ -659,6 +681,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadHair: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "hair"); } catch { }
             LogUtil.Log($"[VPB] LoadHair: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
@@ -670,6 +693,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadSkin: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "skin"); } catch { }
             LogUtil.Log($"[VPB] LoadSkin: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
@@ -681,6 +705,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadMorphs: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "morphs"); } catch { }
             LogUtil.Log($"[VPB] LoadMorphs: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
@@ -692,6 +717,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadPlugins: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "plugins"); } catch { }
             LogUtil.Log($"[VPB] LoadPlugins: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
@@ -703,6 +729,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadAppearance: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "appearance"); } catch { }
             string cfgAppearanceClothing = VPBConfig.Instance != null ? VPBConfig.Instance.AppearanceClothingApplyMode : "replace";
             LogUtil.Log($"[VPB] LoadAppearance: Applying {FileEntry.Name} to {target.uid} (explicitMode: {mode ?? "<resolve>"}, AppearanceClothingCfg={cfgAppearanceClothing})");
             ApplyClothingToAtom(target, FileEntry.Uid, mode);
@@ -715,6 +742,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadPose: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "pose"); } catch { }
 
             string normalizedPath = UI.NormalizePath(FileEntry.Path);
             LogUtil.Log($"[VPB] LoadPose: Applying {FileEntry.Name} to {target.uid} (SuppressRoot: {suppressRoot})");

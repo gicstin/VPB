@@ -3326,6 +3326,35 @@ namespace VPB
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
             }
+            else if (type == SortType.UnusedOnly)
+            {
+                try
+                {
+                    var keys = new List<string>(list.Count);
+                    for (int i = 0; i < list.Count; i++)
+                        keys.Add(VpbLocalDatabase.BuildUsageKey(list[i]));
+
+                    var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                    if (!VpbLocalDatabase.TryReadItemUseCountsForKeys(keys, counts))
+                        return;
+
+                    for (int i = list.Count - 1; i >= 0; i--)
+                    {
+                        try
+                        {
+                            string k = VpbLocalDatabase.BuildUsageKey(list[i]);
+                            int c = 0;
+                            if (!string.IsNullOrEmpty(k) && counts.TryGetValue(k, out int got)) c = got;
+                            if (c != 0) list.RemoveAt(i);
+                        }
+                        catch { try { list.RemoveAt(i); } catch { } }
+                    }
+                }
+                catch
+                {
+                    // If usage DB is unavailable, keep the list unchanged (fail open).
+                }
+            }
         }
 
         private IEnumerator PostFilesListHideAndSortFollowupRoutine(string groupId, bool keepScroll, bool scrollToBottom, float targetScrollNormalizedPos)

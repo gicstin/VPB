@@ -30,7 +30,11 @@ namespace VPB
         /// <summary>Show only loaded packages (AddonPackages/ + Custom/ + Saves/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
         LoadedOnly = 14,
         /// <summary>Show only unloaded packages (e.g. AllPackages/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
-        UnloadedOnly = 15
+        UnloadedOnly = 15,
+        /// <summary>Local "used" counter (scene launches + clothing applies).</summary>
+        UsageCount = 16,
+        /// <summary>Show only items with zero local usage.</summary>
+        UnusedOnly = 17
     }
 
     public enum SortDirection
@@ -134,6 +138,7 @@ namespace VPB
                 case SortType.AutoInstallOnly:
                 case SortType.LoadedOnly:
                 case SortType.UnloadedOnly:
+                case SortType.UnusedOnly:
                     if (state.Direction == SortDirection.Ascending)
                         files.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
                     else
@@ -142,7 +147,31 @@ namespace VPB
                 case SortType.AutoInstall:
                     SortByPrecomputedInt(files, f => f != null && f.IsAutoInstall() ? 1 : 0, state.Direction);
                     break;
+                case SortType.UsageCount:
+                    SortByUsageCount(files, state.Direction);
+                    break;
             }
+        }
+
+        private static void SortByUsageCount(List<FileEntry> files, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+
+            var keys = new List<string>(files.Count);
+            for (int i = 0; i < files.Count; i++)
+            {
+                keys.Add(VpbLocalDatabase.BuildUsageKey(files[i]));
+            }
+
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            try { VpbLocalDatabase.TryReadItemUseCountsForKeys(keys, counts); } catch { counts.Clear(); }
+
+            SortByPrecomputedInt(files, f =>
+            {
+                string k = VpbLocalDatabase.BuildUsageKey(f);
+                if (string.IsNullOrEmpty(k)) return 0;
+                return counts.TryGetValue(k, out int c) ? c : 0;
+            }, dir);
         }
 
         private struct SortKeyInt

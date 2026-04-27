@@ -74,7 +74,7 @@ namespace VPB
             var state = GetSortState(context);
             SortType prevType = state.Type;
             state.Type = newType;
-            if (state.Type == SortType.Name || state.Type == SortType.HiddenOnly || state.Type == SortType.AutoInstallOnly || state.Type == SortType.LoadedOnly || state.Type == SortType.UnloadedOnly)
+            if (state.Type == SortType.Name || state.Type == SortType.HiddenOnly || state.Type == SortType.AutoInstallOnly || state.Type == SortType.LoadedOnly || state.Type == SortType.UnloadedOnly || state.Type == SortType.UnusedOnly)
                 state.Direction = SortDirection.Ascending;
             else
                 state.Direction = SortDirection.Descending;
@@ -112,12 +112,14 @@ namespace VPB
                         prevType == SortType.HiddenOnly ||
                         prevType == SortType.AutoInstallOnly ||
                         prevType == SortType.LoadedOnly ||
-                        prevType == SortType.UnloadedOnly;
+                        prevType == SortType.UnloadedOnly ||
+                        prevType == SortType.UnusedOnly;
                     bool nextExclusive =
                         newType == SortType.HiddenOnly ||
                         newType == SortType.AutoInstallOnly ||
                         newType == SortType.LoadedOnly ||
-                        newType == SortType.UnloadedOnly;
+                        newType == SortType.UnloadedOnly ||
+                        newType == SortType.UnusedOnly;
 
                     // Exclusive "only" modes prune the list in-place. Switching to/from them must rebuild the base list,
                     // otherwise the user can't "clear" the mode without changing categories.
@@ -173,6 +175,8 @@ namespace VPB
         private static readonly SortType[] FileSortDropdownOrder =
         {
             SortType.Name, SortType.Date, SortType.DateCreated, SortType.Size, SortType.Rating,
+            SortType.UsageCount,
+            SortType.UnusedOnly,
             SortType.Deps, SortType.Dependents, SortType.Missing,
             SortType.Hidden, SortType.HiddenOnly, SortType.AutoInstall, SortType.AutoInstallOnly, SortType.LoadedOnly, SortType.UnloadedOnly
         };
@@ -186,6 +190,8 @@ namespace VPB
                 case SortType.DateCreated: return VPBTranslation.T("gallery.sort.full.date_created", "Date created");
                 case SortType.Size: return VPBTranslation.T("gallery.sort.full.size", "File size");
                 case SortType.Rating: return VPBTranslation.T("gallery.sort.full.rating", "Rating");
+                case SortType.UsageCount: return VPBTranslation.T("gallery.sort.full.usage_count", "Usage count");
+                case SortType.UnusedOnly: return VPBTranslation.T("gallery.sort.full.unused_only", "Unused (only)");
                 case SortType.Deps: return VPBTranslation.T("gallery.sort.full.deps", "Dependencies");
                 case SortType.Dependents: return VPBTranslation.T("gallery.sort.full.dependents", "Dependents");
                 case SortType.Missing: return VPBTranslation.T("gallery.sort.full.missing", "Missing dependencies");
@@ -544,6 +550,8 @@ namespace VPB
             if (context == "Files")
             {
                 return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
+                    || type == SortType.UsageCount
+                    || type == SortType.UnusedOnly
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
             }
             else if (context == "Category" || context == "Creator" || context == "Path" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
@@ -691,6 +699,8 @@ namespace VPB
                 case SortType.Count: symbol = "#"; break;
                 case SortType.Score: symbol = "Sc"; break;
                 case SortType.Rating: symbol = "Rt"; break;
+                case SortType.UsageCount: symbol = "Us"; break;
+                case SortType.UnusedOnly: symbol = "U0"; break;
                 case SortType.Deps: symbol = "Dp"; break;
                 case SortType.Dependents: symbol = "Dn"; break;
                 case SortType.Missing: symbol = "Ms"; break;
@@ -720,6 +730,8 @@ namespace VPB
                     case SortType.Count: symbol = "#"; break;
                     case SortType.Score: symbol = "Sc"; break;
                     case SortType.Rating: symbol = "Rt"; break;
+                    case SortType.UsageCount: symbol = "Us"; break;
+                    case SortType.UnusedOnly: symbol = "U0"; break;
                     case SortType.Deps: symbol = "Dp"; break;
                     case SortType.Dependents: symbol = "Dn"; break;
                     case SortType.Missing: symbol = "Ms"; break;

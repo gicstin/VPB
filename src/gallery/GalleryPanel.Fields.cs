@@ -853,7 +853,9 @@ namespace VPB
             }
         }
 
+        #pragma warning disable CS0414
         private Hub.GalleryHubItem selectedHubItem;
+        #pragma warning restore CS0414
         
         // Define colors for different content types
         public static readonly Color ColorCategory = new Color(0.5f, 0.15f, 0.15f, 1f); // Darker Red

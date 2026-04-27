@@ -8,6 +8,7 @@ namespace VPB
     public partial class GalleryPanel
     {
         // Legacy hub state fields referenced by UI/tabs code
+        #pragma warning disable CS0414
         private string currentHubCategory = "All";
         private string currentHubCreator = "All";
         private string currentHubPayType = "All";
@@ -15,6 +16,7 @@ namespace VPB
         private HashSet<string> currentHubTags = new HashSet<string>();
         private int hubTagPage = 0;
         private int hubCreatorPage = 0;
+        #pragma warning restore CS0414
 
         public bool IsHubMode => false;
 
