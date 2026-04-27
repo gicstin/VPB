@@ -775,6 +775,7 @@ namespace VPB
             }
 
             Settings.Init(this.Config);
+            try { QuickMenuMigrateAnchorBaselineOnce(); } catch { }
             try
             {
                 // Ensure dependency whitelist (Saves/PluginData/VPB/dependency_whitelist.json) is loaded early.
@@ -1204,38 +1205,52 @@ namespace VPB
             }
             else if (m_ShowHideButtonGO != null && Gallery.singleton != null)
             {
-                if (!Settings.Instance.QuickMenuShowHideEnabled.Value)
-                {
-                    if (m_ShowHideButtonGO.activeSelf)
-                        m_ShowHideButtonGO.SetActive(false);
-                    if (m_CloseAllButtonGO != null && m_CloseAllButtonGO.activeSelf)
-                        m_CloseAllButtonGO.SetActive(false);
-                    if (m_BringFrontButtonGO != null && m_BringFrontButtonGO.activeSelf)
-                        m_BringFrontButtonGO.SetActive(false);
-                    return;
-                }
-
                 int count = Gallery.singleton.PanelCount;
                 bool shouldShow = count > 0;
-                if (m_ShowHideButtonGO.activeSelf != shouldShow)
-                {
-                    m_ShowHideButtonGO.SetActive(shouldShow);
-                }
-                if (m_CloseAllButtonGO != null && m_CloseAllButtonGO.activeSelf != shouldShow)
-                {
-                    m_CloseAllButtonGO.SetActive(shouldShow);
-                }
-                if (m_BringFrontButtonGO != null && m_BringFrontButtonGO.activeSelf != shouldShow)
-                {
-                    m_BringFrontButtonGO.SetActive(shouldShow);
-                }
+                if (m_ShowHideButtonGO.activeSelf != shouldShow) m_ShowHideButtonGO.SetActive(shouldShow);
+                if (m_CloseAllButtonGO != null && m_CloseAllButtonGO.activeSelf != shouldShow) m_CloseAllButtonGO.SetActive(shouldShow);
+                if (m_BringFrontButtonGO != null && m_BringFrontButtonGO.activeSelf != shouldShow) m_BringFrontButtonGO.SetActive(shouldShow);
 
                 if (shouldShow && m_ShowHideButton != null)
                 {
                     m_ShowHideButtonLastCount = count;
                     m_ShowHideButton.label = VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide") + " (" + count + ")";
                 }
+
+                // Keep icon visuals current (Show/Hide toggles eye icon based on visibility).
+                try
+                {
+                    if (m_QuickMenuGridButtons != null)
+                    {
+                        for (int i = 0; i < m_QuickMenuGridButtons.Length; i++)
+                        {
+                            var a = QuickMenuGetSlotAction(i);
+                            bool requiresGallery = a == QuickMenuAssignableAction.ShowHide ||
+                                                   a == QuickMenuAssignableAction.BringFront ||
+                                                   a == QuickMenuAssignableAction.CloseAll;
+                            if (requiresGallery)
+                            {
+                                var go = m_QuickMenuGridButtons[i];
+                                if (go != null && go.activeSelf != shouldShow) go.SetActive(shouldShow);
+                            }
+
+                            if (a == QuickMenuAssignableAction.ShowHide ||
+                                a == QuickMenuAssignableAction.ReplaceAddToggle ||
+                                a == QuickMenuAssignableAction.AutoHideGallery ||
+                                a == QuickMenuAssignableAction.ShowHiddenPackages ||
+                                a == QuickMenuAssignableAction.FpsCounter ||
+                                i == m_QuickMenuEditSlotIdx ||
+                                i == m_QuickMenuPageToggleSlotIdx)
+                                QuickMenuRefreshSlotVisual(i);
+                        }
+                    }
+                }
+                catch { }
             }
+
+            // Live preview: reposition the quick-menu grid when the anchor setting changes.
+            // (Do this every frame; the helper is internally throttled.)
+            try { QuickMenuUpdateGridLayoutLive(); } catch { }
         }
 
 
@@ -1500,8 +1515,6 @@ namespace VPB
         RectTransform m_CloseAllButtonRT;
         RectTransform m_BringFrontButtonRT;
         RectTransform m_ShowHideButtonRT;
-
-
         void CreateQuickMenuButton()
         {
             try
@@ -1566,181 +1579,185 @@ namespace VPB
                     m_QuickMenuCanvas.transform.localEulerAngles = new Vector3(0, 180, 0);
                 }
 
-                // Button 1: Create Gallery (Left)
-                if (Settings.Instance.QuickMenuCreateGalleryEnabled.Value)
+                EnsureQuickMenuGridArrays();
+
+                // Load quick menu icons
+                Color tint = new Color(0.92f, 0.92f, 0.92f, 1f);
+                m_QmIconCreate   = UI.LoadIconSprite("vpb_icons/gallery_clone.png", tint);
+                m_QmIconEyeOn    = UI.LoadIconSprite("vpb_icons/eye.png", tint);
+                m_QmIconEyeOff   = UI.LoadIconSprite("vpb_icons/eye_off.png", tint);
+                m_QmIconBringFront = UI.LoadIconSprite("vpb_icons/focus_centered.png", tint);
+                m_QmIconCloseAll = UI.LoadIconSprite("vpb_icons/close.png", tint);
+                m_QmIconEditPlus = UI.LoadIconSprite("vpb_icons/settings_plus.png", tint);
+                m_QmIconEditOff  = UI.LoadIconSprite("vpb_icons/settings_off.png", tint);
+                m_QmIconAssignEmpty = UI.LoadIconSprite("vpb_icons/button_placeholder.png", tint);
+                m_QmIconSave   = UI.LoadIconSprite("vpb_icons/gallery_save.png", tint);
+                m_QmIconRandom = UI.LoadIconSprite("vpb_icons/random.png", tint);
+                m_QmIconUndo   = UI.LoadIconSprite("vpb_icons/undo.png", tint);
+                m_QmIconRedo   = UI.LoadIconSprite("vpb_icons/redo.png", tint);
+                m_QmIconHub    = UI.LoadIconSprite("vpb_icons/hub.png", tint);
+                m_QmIconCleanup = UI.LoadIconSprite("vpb_icons/cleanup.png", tint);
+                m_QmIconReplace = UI.LoadIconSprite("vpb_icons/gallery_replace.png", tint);
+                m_QmIconAdd     = UI.LoadIconSprite("vpb_icons/gallery_add.png", tint);
+                m_QmIconCompressCache = UI.LoadIconSprite("vpb_icons/cache_texture.png", tint);
+                m_QmIconAutoHideOff = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", tint);
+                m_QmIconAutoHideOn  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  tint);
+                m_QmIconShowHiddenOff = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", tint);
+                m_QmIconShowHiddenOn  = UI.LoadIconSprite("vpb_icons/show_hidden.png",     tint);
+                m_QmIconPages = new Sprite[]
                 {
-                    Transform btnTr = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                    if (btnTr != null && m_QuickMenuCanvas.transform != null)
-                    {
-                        m_CreateGalleryButtonGO = btnTr.gameObject;
-                        btnTr.SetParent(m_QuickMenuCanvas.transform, false);
+                    UI.LoadIconSprite("vpb_icons/page_0.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_1.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_2.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_3.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_4.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_5.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_6.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_7.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_8.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_9.png", tint),
+                };
 
-                        RectTransform rt = btnTr.GetComponent<RectTransform>();
-                        if (rt != null)
-                        {
-                            m_CreateGalleryButtonRT = rt;
-                            rt.sizeDelta = new Vector2(100f, 40f);
-                            rt.anchoredPosition = isVR ? Settings.Instance.QuickMenuCreateGalleryPosVR.Value : Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
-                        }
+                // Anchor center used for layout; positions are kept live in Update().
+                Vector2 createCenter = isVR ? Settings.Instance.QuickMenuCreateGalleryPosVR.Value : Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
+                Vector2 rootTopLeft = createCenter + new Vector2(-QuickMenuAnchorOldButtonW * 0.5f, QuickMenuAnchorOldButtonH * 0.5f);
 
-                        UIDynamicButton uiBtn = btnTr.GetComponent<UIDynamicButton>();
-                        if (uiBtn != null)
-                        {
-                            m_CreateGalleryButton = uiBtn;
-                            uiBtn.label = VPBTranslation.T("hook.qmbutton.create_gallery", "Create Gallery");
-                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
-                            if (uiBtn.button != null)
-                            {
-                                uiBtn.button.onClick.AddListener(() =>
-                                {
-                                    OpenCreateGallery();
-                                });
-                            }
+                // New grid: square buttons + uniform gaps.
+                float cell = QuickMenuGridCell;
+                Vector2 popupOffset = new Vector2(260f, -20f);
 
-                            // Use HoverHandler for dynamic transparency
-                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                            hover.targetButton = uiBtn;
-                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
-                        }
-                    }
-                }
+                // Top-left slot center (slot 0). Every other slot is offset from this.
+                Vector2 slot0Center = new Vector2(
+                    rootTopLeft.x + (QuickMenuGridButtonSize * 0.5f),
+                    rootTopLeft.y - (QuickMenuGridButtonSize * 0.5f)
+                );
 
-                Vector2 createPos = isVR ? Settings.Instance.QuickMenuCreateGalleryPosVR.Value : Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
-                Vector2 step = new Vector2(0f, -50f);
+                // Load persisted page configs (or seed defaults on first run).
+                QuickMenuEnsureDefaultsAndLoadFromConfig();
 
-                Vector2 showHidePos = createPos + step;
-                Vector2 bringFrontPos = createPos + step * 2f;
-                Vector2 closeAllPos = createPos + step * 3f;
+                // Slot 13 (1-based) reserved for Settings/Edit toggle.
+                int editSlotIdx = 12; // 0-based
+                m_QuickMenuEditSlotIdx = editSlotIdx;
+
+                // Slot 16 (1-based) reserved for Page toggle.
+                m_QuickMenuPageToggleSlotIdx = 15; // 0-based
 
                 bool initialShouldShow = Gallery.singleton != null && Gallery.singleton.PanelCount > 0;
 
-                // Button 1.5: Close All
+                for (int i = 0; i < QuickMenuGridSlotCount; i++)
                 {
-                    Transform btnTrMid = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                    if (btnTrMid != null && m_QuickMenuCanvas.transform != null)
+                    // Build a clean square button (do NOT use VaM's configurableButtonPrefab; it can enforce wide layouts).
+                    GameObject go = new GameObject("VPB_QM_Slot_" + i);
+                    go.transform.SetParent(m_QuickMenuCanvas.transform, false);
+                    m_QuickMenuGridButtons[i] = go;
+
+                    RectTransform rt = go.AddComponent<RectTransform>();
+                    m_QuickMenuGridButtonRTs[i] = rt;
+                    rt.anchorMin = new Vector2(0.5f, 0.5f);
+                    rt.anchorMax = new Vector2(0.5f, 0.5f);
+                    rt.pivot = new Vector2(0.5f, 0.5f);
+                    rt.sizeDelta = new Vector2(QuickMenuGridButtonSize, QuickMenuGridButtonSize);
+                    int col = i % QuickMenuGridCols;
+                    int row = i / QuickMenuGridCols;
+                    rt.anchoredPosition = slot0Center + new Vector2(col * cell, -row * cell);
+
+                    Image img = go.AddComponent<Image>();
+                    Color normalBackdrop = new Color(0.35f, 0.35f, 0.35f, 0.5f);
+                    img.color = normalBackdrop;
+                    m_QuickMenuGridBackdropImages[i] = img;
+
+                    Button btn = go.AddComponent<Button>();
+                    btn.transition = Selectable.Transition.None;
+                    btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                    m_QuickMenuGridUnityButtons[i] = btn;
+
+                    var hover = go.AddComponent<QuickMenuSquareHover>();
+                    hover.target = img;
+                    hover.normal = normalBackdrop;
+                    hover.hover = new Color(0.35f, 0.35f, 0.35f, 0.75f);
+
+                    int idxCopy = i;
+                    btn.onClick.AddListener(() =>
                     {
-                        m_CloseAllButtonGO = btnTrMid.gameObject;
-                        btnTrMid.SetParent(m_QuickMenuCanvas.transform, false);
-
-                        RectTransform rt = btnTrMid.GetComponent<RectTransform>();
-                        if (rt != null)
+                        if (idxCopy == editSlotIdx)
                         {
-                            m_CloseAllButtonRT = rt;
-                            rt.sizeDelta = new Vector2(100f, 40f);
-                            rt.anchoredPosition = closeAllPos;
+                            m_QuickMenuEditMode = !m_QuickMenuEditMode;
+                            QuickMenuHideAssignPopup();
+                            for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
+                            return;
                         }
 
-                        UIDynamicButton uiBtn = btnTrMid.GetComponent<UIDynamicButton>();
-                        if (uiBtn != null)
+                        if (idxCopy == m_QuickMenuPageToggleSlotIdx)
                         {
-                            m_CloseAllButton = uiBtn;
-                            uiBtn.label = VPBTranslation.T("hook.qmbutton.close_all", "Close All");
-                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
-                            if (uiBtn.button != null)
-                            {
-                                uiBtn.button.onClick.AddListener(() =>
-                                {
-                                    if (Gallery.singleton != null)
-                                    {
-                                        Gallery.singleton.CloseAll();
-                                    }
-                                });
-                            }
-
-                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                            hover.targetButton = uiBtn;
-                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                            QuickMenuChangePage(+1);
+                            for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
+                            return;
                         }
-                        m_CloseAllButtonGO.SetActive(initialShouldShow);
+
+                        if (m_QuickMenuEditMode)
+                        {
+                            Vector2 pos = (m_QuickMenuGridButtonRTs != null && m_QuickMenuGridButtonRTs[idxCopy] != null)
+                                ? m_QuickMenuGridButtonRTs[idxCopy].anchoredPosition
+                                : createCenter;
+                            QuickMenuShowAssignPopup(idxCopy, pos + popupOffset);
+                            return;
+                        }
+
+                        var act = QuickMenuGetSlotAction(idxCopy);
+                        // Save opens a submenu; remember which slot invoked it.
+                        if (act == QuickMenuAssignableAction.Save) m_QuickMenuSavePopupTargetIdx = idxCopy;
+                        QuickMenuExecuteAssignment(act);
+                    });
+
+                    // Right-click on Page button goes backwards.
+                    if (i == m_QuickMenuPageToggleSlotIdx)
+                    {
+                        var rc = go.AddComponent<QuickMenuRightClickHandler>();
+                        rc.onRightClick = () =>
+                        {
+                            QuickMenuChangePage(-1);
+                            for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
+                        };
                     }
+
+                    var a0 = QuickMenuGetSlotAction(i);
+                    bool requiresGallery = (a0 == QuickMenuAssignableAction.ShowHide) ||
+                                           (a0 == QuickMenuAssignableAction.BringFront) ||
+                                           (a0 == QuickMenuAssignableAction.CloseAll);
+                    if (requiresGallery) go.SetActive(initialShouldShow);
                 }
 
-                // Button 1.75: Bring Front
+                // Bind legacy refs to assigned slots so existing update paths continue working.
+                m_CreateGalleryButtonGO = m_QuickMenuGridButtons[0];
+                m_ShowHideButtonGO = m_QuickMenuGridButtons[1];
+                m_BringFrontButtonGO = m_QuickMenuGridButtons[2];
+                m_CloseAllButtonGO = m_QuickMenuGridButtons[3];
+                m_CreateGalleryButtonRT = (m_QuickMenuGridButtonRTs != null) ? m_QuickMenuGridButtonRTs[0] : null;
+                m_ShowHideButtonRT = (m_QuickMenuGridButtonRTs != null) ? m_QuickMenuGridButtonRTs[1] : null;
+                m_BringFrontButtonRT = (m_QuickMenuGridButtonRTs != null) ? m_QuickMenuGridButtonRTs[2] : null;
+                m_CloseAllButtonRT = (m_QuickMenuGridButtonRTs != null) ? m_QuickMenuGridButtonRTs[3] : null;
+                // These were UIDynamicButton refs in the old implementation; grid is icon-only now.
+                m_CreateGalleryButton = null;
+                m_ShowHideButton = null;
+                m_BringFrontButton = null;
+                m_CloseAllButton = null;
+
+                // Assignment popup (simple list)
+                m_QuickMenuAssignPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.85f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero);
+                m_QuickMenuAssignPopupRoot.name = "VPB_QM_AssignPopup";
+                m_QuickMenuAssignPopupRT = m_QuickMenuAssignPopupRoot.GetComponent<RectTransform>();
+                if (m_QuickMenuAssignPopupRT != null)
                 {
-                    Transform btnTrMid2 = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                    if (btnTrMid2 != null && m_QuickMenuCanvas.transform != null)
-                    {
-                        m_BringFrontButtonGO = btnTrMid2.gameObject;
-                        btnTrMid2.SetParent(m_QuickMenuCanvas.transform, false);
-
-                        RectTransform rt = btnTrMid2.GetComponent<RectTransform>();
-                        if (rt != null)
-                        {
-                            m_BringFrontButtonRT = rt;
-                            rt.sizeDelta = new Vector2(100f, 40f);
-                            rt.anchoredPosition = bringFrontPos;
-                        }
-
-                        UIDynamicButton uiBtn = btnTrMid2.GetComponent<UIDynamicButton>();
-                        if (uiBtn != null)
-                        {
-                            m_BringFrontButton = uiBtn;
-                            uiBtn.label = VPBTranslation.T("hook.qmbutton.bring_front", "Bring Front");
-                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 22;
-                            if (uiBtn.button != null)
-                            {
-                                uiBtn.button.onClick.AddListener(() =>
-                                {
-                                    if (Gallery.singleton != null)
-                                    {
-                                        Gallery.singleton.BringAllToFront();
-                                    }
-                                });
-                            }
-
-                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                            hover.targetButton = uiBtn;
-                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
-                        }
-                        m_BringFrontButtonGO.SetActive(initialShouldShow);
-                    }
+                    m_QuickMenuAssignPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
+                    // Pivot at bottom-left so we can grow options upward from the click point.
+                    m_QuickMenuAssignPopupRT.pivot = new Vector2(0f, 0f);
                 }
+                m_QuickMenuAssignPopupRoot.SetActive(false);
+                QuickMenuRebuildAssignPopupButtons();
 
-                // Button 2: Show/Hide (Right)
-                if (Settings.Instance.QuickMenuShowHideEnabled.Value)
-                {
-                    Transform btnTr2 = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                    if (btnTr2 != null && m_QuickMenuCanvas.transform != null)
-                    {
-                        m_ShowHideButtonGO = btnTr2.gameObject;
-                        btnTr2.SetParent(m_QuickMenuCanvas.transform, false);
-
-                        RectTransform rt = btnTr2.GetComponent<RectTransform>();
-                        if (rt != null)
-                        {
-                            m_ShowHideButtonRT = rt;
-                            rt.sizeDelta = new Vector2(100f, 40f);
-                            rt.anchoredPosition = showHidePos;
-                        }
-
-                        UIDynamicButton uiBtn = btnTr2.GetComponent<UIDynamicButton>();
-                        if (uiBtn != null)
-                        {
-                            m_ShowHideButton = uiBtn;
-                            uiBtn.label = VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide");
-                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
-                            if (uiBtn.button != null)
-                            {
-                                uiBtn.button.onClick.AddListener(() =>
-                                {
-                                    if (Gallery.singleton != null)
-                                    {
-                                        if (Gallery.singleton.IsVisible)
-                                            Gallery.singleton.Hide();
-                                        else
-                                            OpenGallery();
-                                    }
-                                });
-                            }
-
-                            // Use HoverHandler for dynamic transparency
-                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                            hover.targetButton = uiBtn;
-                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
-                        }
-                        m_ShowHideButtonGO.SetActive(initialShouldShow);
-                    }
-                }
+                // Initial visuals (icons / showhide state)
+                for (int i = 0; i < QuickMenuGridSlotCount; i++) QuickMenuRefreshSlotVisual(i);
 
                 m_QuickMenuButtonInited = true;
                 LogUtil.LogVerboseUi("QuickMenuButton created. VR: " + isVR);

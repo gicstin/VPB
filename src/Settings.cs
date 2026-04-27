@@ -49,6 +49,7 @@ namespace VPB
         public ConfigEntry<bool> QuickMenuShowHideUseSameInVR;
         public ConfigEntry<bool> QuickMenuCreateGalleryEnabled;
         public ConfigEntry<bool> QuickMenuShowHideEnabled;
+        public ConfigEntry<bool> QuickMenuCreateGalleryAnchorBaselineMigrated;
         public ConfigEntry<bool> PluginsAlwaysEnabled;
         public ConfigEntry<bool> EnableZstdCompression;
         public ConfigEntry<int> ZstdCompressionLevel;
@@ -106,14 +107,17 @@ namespace VPB
             UIScale = config.Bind<float>("UI", "Scale", 1.5f, "Set UI Scale.");
             UIPosition = config.Bind<Vector2>("UI", "Position", Vector2.zero, "Set UI Position.");
             MiniMode = config.Bind<bool>("UI", "MiniMode", false, "Set Mini Mode.");
-            QuickMenuCreateGalleryPosDesktop = config.Bind<Vector2>("UI", "QuickMenuCreateGalleryPosDesktop", new Vector2(-470f, -66f), "Anchored position for Quick Menu Create Gallery button in Desktop mode.");
-            QuickMenuCreateGalleryPosVR = config.Bind<Vector2>("UI", "QuickMenuCreateGalleryPosVR", new Vector2(-470f, -66f), "Anchored position for Quick Menu Create Gallery button in VR mode.");
+            // Baseline anchor: treated as "0,0" in the UI position window (see QuickMenuAnchorBaseline in VamHookPlugin).
+            QuickMenuCreateGalleryPosDesktop = config.Bind<Vector2>("UI", "QuickMenuCreateGalleryPosDesktop", new Vector2(-515f, -12f), "Anchored position for Quick Menu Create Gallery button in Desktop mode.");
+            QuickMenuCreateGalleryPosVR = config.Bind<Vector2>("UI", "QuickMenuCreateGalleryPosVR", new Vector2(-515f, -12f), "Anchored position for Quick Menu Create Gallery button in VR mode.");
             QuickMenuShowHidePosDesktop = config.Bind<Vector2>("UI", "QuickMenuShowHidePosDesktop", new Vector2(-470f, -216f), "Anchored position for Quick Menu Show/Hide button in Desktop mode.");
             QuickMenuShowHidePosVR = config.Bind<Vector2>("UI", "QuickMenuShowHidePosVR", new Vector2(-470f, -216f), "Anchored position for Quick Menu Show/Hide button in VR mode.");
             QuickMenuCreateGalleryUseSameInVR = config.Bind<bool>("UI", "QuickMenuCreateGalleryUseSameInVR", true, "Use the same Quick Menu Create Gallery position in VR as Desktop.");
             QuickMenuShowHideUseSameInVR = config.Bind<bool>("UI", "QuickMenuShowHideUseSameInVR", true, "Use the same Quick Menu Show/Hide position in VR as Desktop.");
             QuickMenuCreateGalleryEnabled = config.Bind<bool>("UI", "QuickMenuCreateGalleryEnabled", true, "Show the Quick Menu Create Gallery button.");
             QuickMenuShowHideEnabled = config.Bind<bool>("UI", "QuickMenuShowHideEnabled", true, "Show the Quick Menu Show/Hide button.");
+            // One-time migration: force everyone to the baseline anchor once, then allow custom.
+            QuickMenuCreateGalleryAnchorBaselineMigrated = config.Bind<bool>("UI", "QuickMenuCreateGalleryAnchorBaselineMigrated", false, "Internal: set true after Quick Menu anchor baseline migration runs once.");
             PluginsAlwaysEnabled = config.Bind<bool>("Settings", "PluginsAlwaysEnabled", false, "Plugins will always enabled.");
             EnableZstdCompression = config.Bind<bool>("Optimze", "EnableZstdCompression", true, "Enable Zstd compression for texture cache.");
             

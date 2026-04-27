@@ -238,6 +238,11 @@ namespace VPB
         /// <summary>When HoldToLaunch is enabled, drag&drop is forced off; this stores the prior setting for restore.</summary>
         public bool HoldToLaunchPrevEnableDragDrop = false;
 
+        // Quick Menu assignable buttons (persistent, forward-compatible via string IDs)
+        public int QuickMenuButtonsVersion = 1;
+        public int QuickMenuButtonsCurrentPage = 0; // 0-based
+        public string[][] QuickMenuButtonsPages = null; // [page][slot] => actionId (""/null = none)
+
         private static readonly string[] s_HoverPreviewModeCanonical = { "Off", "List", "Grid", "Both" };
         public static string NormalizeHoverPreviewMode(string value)
         {
@@ -453,6 +458,9 @@ namespace VPB
             SpringScrollButtonEnabled = true;
             HoldToLaunchEnabled = false;
             HoldToLaunchPrevEnableDragDrop = false;
+            QuickMenuButtonsVersion = 1;
+            QuickMenuButtonsCurrentPage = 0;
+            QuickMenuButtonsPages = null;
 
             try
             {
@@ -568,6 +576,41 @@ namespace VPB
                         if (node["SpringScrollButtonEnabled"] != null) SpringScrollButtonEnabled = node["SpringScrollButtonEnabled"].AsBool;
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["HoldToLaunchPrevEnableDragDrop"] != null) HoldToLaunchPrevEnableDragDrop = node["HoldToLaunchPrevEnableDragDrop"].AsBool;
+                        // Quick Menu buttons (pages)
+                        try
+                        {
+                            JSONNode qm = node["QuickMenuButtons"];
+                            if (qm != null)
+                            {
+                                if (qm["version"] != null) QuickMenuButtonsVersion = qm["version"].AsInt;
+                                if (qm["currentPage"] != null) QuickMenuButtonsCurrentPage = qm["currentPage"].AsInt;
+
+                                JSONNode pages = qm["pages"];
+                                // SimpleJSON variant in VaM does not expose IsArray; treat nodes with children as arrays.
+                                if (pages != null && pages.Count > 0)
+                                {
+                                    int pageCount = pages.Count;
+                                    QuickMenuButtonsPages = new string[pageCount][];
+                                    for (int p = 0; p < pageCount; p++)
+                                    {
+                                        JSONNode pa = pages[p];
+                                        if (pa != null && pa.Count > 0)
+                                        {
+                                            int slotCount = pa.Count;
+                                            var slots = new string[slotCount];
+                                            for (int s = 0; s < slotCount; s++)
+                                                slots[s] = pa[s] != null ? pa[s].Value : "";
+                                            QuickMenuButtonsPages[p] = slots;
+                                        }
+                                        else
+                                        {
+                                            QuickMenuButtonsPages[p] = new string[0];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
                         if (node["UiLocale"] != null) UiLocale = node["UiLocale"].Value;
                         if (node["HiddenCategories"] != null)
                         {
@@ -708,6 +751,28 @@ namespace VPB
                 node["HoldToLaunchPrevEnableDragDrop"].AsBool = HoldToLaunchPrevEnableDragDrop;
                 node["UiLocale"] = UiLocale ?? "en";
                 node["HiddenCategories"] = string.Join(",", new List<string>(HiddenCategories ?? new HashSet<string>()).ToArray());
+                // Quick Menu buttons (pages)
+                try
+                {
+                    JSONClass qm = new JSONClass();
+                    qm["version"].AsInt = QuickMenuButtonsVersion;
+                    qm["currentPage"].AsInt = QuickMenuButtonsCurrentPage;
+                    JSONArray pages = new JSONArray();
+                    if (QuickMenuButtonsPages != null)
+                    {
+                        for (int p = 0; p < QuickMenuButtonsPages.Length; p++)
+                        {
+                            JSONArray slots = new JSONArray();
+                            var arr = QuickMenuButtonsPages[p] ?? new string[0];
+                            for (int s = 0; s < arr.Length; s++)
+                                slots.Add(arr[s] ?? "");
+                            pages.Add(slots);
+                        }
+                    }
+                    qm["pages"] = pages;
+                    node["QuickMenuButtons"] = qm;
+                }
+                catch { }
                 long msBuild = sw.ElapsedMilliseconds;
                 string jsonOutput = node.ToString();
                 long msAfterToString = sw.ElapsedMilliseconds;
