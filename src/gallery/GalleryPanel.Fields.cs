@@ -284,6 +284,13 @@ namespace VPB
         private float sideContextLastUpdateTime = 0f;
         private const float SideContextUpdateInterval = 0.25f;
 
+        // Selection toolbox/context menu updates can be expensive (package lookups, layout refresh).
+        // Throttle them to avoid per-frame work when selection is active.
+        private float selectionContextLastUpdateTime = 0f;
+        private const float SelectionContextUpdateInterval = 0.25f;
+        private int _selectionContextLastSelCount = -1;
+        private int _selectionContextLastTotalCount = -1;
+
         private string previewRemoveClothingAtomUid = null;
         private string previewRemoveClothingItemUid = null;
         private bool? previewRemoveClothingPrevGeometryVal = null;

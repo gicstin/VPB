@@ -45,7 +45,20 @@ namespace VPB
                 }
                 catch { }
 
-                try { UpdateSelectionContextMenu(); } catch { }
+                try
+                {
+                    int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
+                    int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
+                    bool countsChanged = sel != _selectionContextLastSelCount || total != _selectionContextLastTotalCount;
+                    if (countsChanged || (Time.unscaledTime - selectionContextLastUpdateTime) >= SelectionContextUpdateInterval)
+                    {
+                        selectionContextLastUpdateTime = Time.unscaledTime;
+                        _selectionContextLastSelCount = sel;
+                        _selectionContextLastTotalCount = total;
+                        UpdateSelectionContextMenu();
+                    }
+                }
+                catch { }
 
                 try { ApplyVamMenuGateVisibility(); } catch { }
                 try { ApplyVamMenuAnchoring(); } catch { }

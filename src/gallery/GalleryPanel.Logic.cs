@@ -1781,12 +1781,31 @@ namespace VPB
             {
                 try { redoStack.Clear(); } catch { }
             }
+            TrimUndoRedoStacks();
             UpdateUndoRedoButtonLabels();
-            if (undoStack.Count > 20) // Limit stack size
-            {
-                // Stack doesn't have RemoveFromBottom, but 20 is small enough.
-                // Or we can just let it grow a bit. 20 is safe.
-            }
+        }
+
+        private const int MaxUndoRedoHistory = 6;
+
+        private static void TrimStackToMax<T>(ref Stack<T> stack, int max)
+        {
+            if (stack == null) { stack = new Stack<T>(); return; }
+            if (max < 0) max = 0;
+            if (stack.Count <= max) return;
+
+            // Stack.ToArray() returns items in LIFO order (top first). Keep the most recent entries.
+            T[] keptTopFirst = stack.ToArray();
+            if (max < keptTopFirst.Length)
+                Array.Resize(ref keptTopFirst, max);
+
+            // Rebuild stack preserving order for the kept subset.
+            stack = new Stack<T>(keptTopFirst.Reverse());
+        }
+
+        private void TrimUndoRedoStacks()
+        {
+            TrimStackToMax(ref undoStack, MaxUndoRedoHistory);
+            TrimStackToMax(ref redoStack, MaxUndoRedoHistory);
         }
 
         private void UpdateUndoRedoButtonLabels()
@@ -2288,6 +2307,7 @@ namespace VPB
                     isApplyingUndoRedo = false;
                 }
 
+                TrimUndoRedoStacks();
                 UpdateUndoRedoButtonLabels();
                 try
                 {
@@ -2328,6 +2348,7 @@ namespace VPB
                     isApplyingUndoRedo = false;
                 }
 
+                TrimUndoRedoStacks();
                 UpdateUndoRedoButtonLabels();
                 try
                 {
