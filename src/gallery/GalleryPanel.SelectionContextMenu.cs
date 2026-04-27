@@ -657,7 +657,7 @@ namespace VPB
             );
             tboxCacheTexturesBtn.name = "Tbox_CacheTextures";
             TboxConfigureActionButtonFlex(tboxCacheTexturesBtn, innerRowH, innerRowH, innerRowH); // square icon button
-            AddTooltip(tboxCacheTexturesBtn, "gallery.tooltip.tbox_cache_textures", "Build VPB texture cache for selected .var packages. Hold Ctrl to rewrite existing zstd cache files.");
+            AddTooltip(tboxCacheTexturesBtn, "gallery.tooltip.tbox_cache_textures", "Build VPB texture cache for selected .var packages (includes dependency packages). Hold Ctrl to rewrite existing zstd cache files. Hold Ctrl+Shift to purge the cache for selected items.");
             try
             {
                 var cacheTextureIcon = UI.LoadIconSprite("vpb_icons/cache_texture.png", new Color(0.92f, 0.92f, 0.92f, 1f));

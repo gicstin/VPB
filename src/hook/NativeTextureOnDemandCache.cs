@@ -615,6 +615,27 @@ namespace VPB
             host.StartCoroutine(BuildPackageCacheCoroutine(packagePath));
         }
 
+        public static void TryPurgePackageCacheOnDemand(MonoBehaviour host, string packagePath)
+        {
+            if (host == null) return;
+
+            if (s_OnDemandBusy)
+            {
+                ThrottledLog("[VPB] On-demand cache already running.");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(packagePath))
+            {
+                ThrottledLog("[VPB] On-demand purge skipped: no package path.");
+                return;
+            }
+
+            if (!s_BatchMode) BeginUiJob("Purging Texture Cache...");
+            s_OnDemandBusy = true;
+            host.StartCoroutine(PurgePackageCacheCoroutine(packagePath));
+        }
+
         private static string ResolveCurrentScenePath()
         {
             string scenePath = LogUtil.GetSceneLoadName();
@@ -795,6 +816,22 @@ namespace VPB
                 yield return BuildCacheForSelectedPackageUnity(packagePath);
                 ThrottledLog("[VPB] On-demand package cache finished.");
                 if (!s_BatchMode) EndUiJob(s_CancelRequested ? "Texture caching cancelled" : "Texture caching complete");
+            }
+            finally
+            {
+                s_OnDemandBusy = false;
+            }
+        }
+
+        private static IEnumerator PurgePackageCacheCoroutine(string packagePath)
+        {
+            ThrottledLog("[VPB] On-demand package purge start: " + packagePath);
+
+            try
+            {
+                yield return PurgeCacheForSelectedPackageUnity(packagePath);
+                ThrottledLog("[VPB] On-demand package purge finished.");
+                if (!s_BatchMode) EndUiJob(s_CancelRequested ? "Texture purge cancelled" : "Texture purge complete");
             }
             finally
             {
@@ -1794,6 +1831,92 @@ namespace VPB
             }
         }
 
+        private static IEnumerator WorkerPurgeSelectiveUnityCoroutine(VarPackage pkg, Dictionary<string, List<TextureFlags>> internalLowerToFlags, Dictionary<string, string> internalLowerToOriginal)
+        {
+            if (pkg == null || internalLowerToOriginal == null || internalLowerToOriginal.Count == 0) yield break;
+
+            foreach (var kv in internalLowerToOriginal)
+            {
+                if (s_CancelRequested) yield break;
+                string internalLower = kv.Key;
+                string internalPath = kv.Value;
+                if (string.IsNullOrEmpty(internalPath)) continue;
+
+                try
+                {
+                    List<TextureFlags> variants;
+                    if (internalLowerToFlags == null || !internalLowerToFlags.TryGetValue(internalLower, out variants) || variants == null || variants.Count == 0)
+                    {
+                        variants = new List<TextureFlags>
+                        {
+                            new TextureFlags
+                            {
+                                compress = true,
+                                linear = false,
+                                isNormalMap = false,
+                                createAlphaFromGrayscale = false,
+                                createNormalFromBump = false,
+                                invert = false,
+                                isReadable = false,
+                                bumpStrength = 1f
+                            }
+                        };
+                    }
+
+                    string imgUidPath = pkg.Uid + ":/" + internalPath;
+
+                    bool buildSized = false;
+                    int[] sizedWidths = buildSized ? new[] { 0, DefaultSizedCacheWidth } : new[] { 0 };
+                    int[] sizedHeights = buildSized ? new[] { 0, DefaultSizedCacheHeight } : new[] { 0 };
+
+                    for (int v = 0; v < variants.Count; v++)
+                    {
+                        TextureFlags flags = variants[v];
+                        ApplyPathHeuristics(internalPath, ref flags);
+
+                        for (int si = 0; si < sizedWidths.Length; si++)
+                        {
+                            int targetWidth = sizedWidths[si];
+                            int targetHeight = sizedHeights[si];
+
+                            string nativePath = null;
+                            try { nativePath = GetNativeCachePathDynamic(imgUidPath, flags, 0, default(DateTime), targetWidth, targetHeight); }
+                            catch { nativePath = null; }
+
+                            if (!string.IsNullOrEmpty(nativePath))
+                            {
+                                try { if (File.Exists(nativePath)) File.Delete(nativePath); } catch { }
+                                try { if (File.Exists(nativePath + "meta")) File.Delete(nativePath + "meta"); } catch { }
+                            }
+
+                            string zstdPath = null;
+                            try
+                            {
+                                zstdPath = TextureUtil.GetZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
+                            }
+                            catch { zstdPath = null; }
+
+                            if (!string.IsNullOrEmpty(zstdPath))
+                            {
+                                try { if (File.Exists(zstdPath)) File.Delete(zstdPath); } catch { }
+                                try { if (File.Exists(zstdPath + "meta")) File.Delete(zstdPath + "meta"); } catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                yield return null;
+
+                s_TexturesProcessed++;
+                if (!s_BatchMode)
+                {
+                    s_ProcessedWork++;
+                }
+                UpdateUiStatus();
+            }
+        }
+
         private static bool TryFileEntryExists(string uidPath)
         {
             try { return FileManager.GetFileEntry(uidPath) != null; }
@@ -2556,6 +2679,129 @@ namespace VPB
                 }
 
                 yield return WorkerBuildSelectiveUnityCoroutine(tp, flagsMap, origMap);
+
+                if (!s_BatchMode)
+                {
+                    s_PackagesProcessed = pkgIndex;
+                    UpdateUiStatus();
+                }
+            }
+        }
+
+        private static IEnumerator PurgeCacheForSelectedPackageUnity(string packagePath)
+        {
+            if (string.IsNullOrEmpty(packagePath)) yield break;
+
+            VarPackage pkg = null;
+            try { pkg = FileManager.GetPackage(packagePath, false); }
+            catch { pkg = null; }
+
+            if (pkg == null) yield break;
+
+            try { pkg.Scan(); }
+            catch { }
+
+            var required = BuildRequiredTexturesFromPackagePresetsFollowDeps(pkg);
+            if (required == null || required.Count == 0) yield break;
+
+            var byPkgFlags = new Dictionary<string, Dictionary<string, List<TextureFlags>>>(StringComparer.OrdinalIgnoreCase);
+            var byPkgOrig = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < required.Count; i++)
+            {
+                RequiredTexture rt = required[i];
+                if (string.IsNullOrEmpty(rt.PackageId) || string.IsNullOrEmpty(rt.InternalPath)) continue;
+
+                VarPackage tp = ResolvePackageWithFallback(rt.PackageId);
+                if (tp == null) continue;
+
+                string pkgUid = tp.Uid;
+                string internalLower = rt.InternalPath.ToLowerInvariant();
+
+                Dictionary<string, List<TextureFlags>> flagsMap;
+                if (!byPkgFlags.TryGetValue(pkgUid, out flagsMap))
+                {
+                    flagsMap = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
+                    byPkgFlags[pkgUid] = flagsMap;
+                }
+
+                Dictionary<string, string> origMap;
+                if (!byPkgOrig.TryGetValue(pkgUid, out origMap))
+                {
+                    origMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    byPkgOrig[pkgUid] = origMap;
+                }
+
+                AddFlagVariant(flagsMap, internalLower, rt.Flags);
+                if (!origMap.ContainsKey(internalLower))
+                {
+                    origMap[internalLower] = rt.InternalPath;
+                }
+            }
+
+            int totalWork = 0;
+            foreach (var kv in byPkgOrig)
+            {
+                if (kv.Value != null) totalWork += kv.Value.Count;
+            }
+            if (totalWork <= 0) yield break;
+
+            s_CurrentPackage = pkg.Uid;
+            if (s_BatchMode)
+            {
+                s_TexturesPlanned += totalWork;
+                UpdateUiStatus();
+            }
+            else
+            {
+                s_PackagesPlanned = byPkgOrig.Count;
+                s_PackagesProcessed = 0;
+                s_TexturesPlanned = totalWork;
+                s_TexturesProcessed = 0;
+                s_TotalWork = Math.Max(1, totalWork);
+                s_ProcessedWork = 0;
+                UpdateUiStatus();
+            }
+
+            int pkgIndex = 0;
+            foreach (var kv in byPkgFlags)
+            {
+                string pkgUid = kv.Key;
+                Dictionary<string, List<TextureFlags>> flagsMap = kv.Value;
+                Dictionary<string, string> origMap;
+                byPkgOrig.TryGetValue(pkgUid, out origMap);
+
+                VarPackage tp = ResolvePackageWithFallback(pkgUid);
+                if (tp == null)
+                {
+                    int missing = (origMap != null) ? origMap.Count : 0;
+                    if (missing > 0)
+                    {
+                        if (s_BatchMode)
+                        {
+                            s_TexturesPlanned = Math.Max(0, s_TexturesPlanned - missing);
+                        }
+                        else
+                        {
+                            s_TexturesPlanned = Math.Max(0, s_TexturesPlanned - missing);
+                            s_TotalWork = Math.Max(1, s_TexturesPlanned);
+                            s_PackagesPlanned = Math.Max(0, s_PackagesPlanned - 1);
+                        }
+                    }
+                    UpdateUiStatus();
+                    continue;
+                }
+
+                pkgIndex++;
+
+                s_CurrentPackage = tp.Uid;
+                if (!s_BatchMode)
+                {
+                    s_PackagesProcessed = pkgIndex - 1;
+                    UpdateUiStatus();
+                }
+
+                yield return WorkerPurgeSelectiveUnityCoroutine(tp, flagsMap, origMap);
 
                 if (!s_BatchMode)
                 {

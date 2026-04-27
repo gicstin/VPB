@@ -191,6 +191,19 @@ namespace VPB
                     return;
                 }
 
+                bool purgeCache = IsCtrlShiftHeldForTextureCachePurge();
+                if (purgeCache)
+                {
+                    if (paths.Count == 1)
+                    {
+                        NativeTextureOnDemandCache.TryPurgePackageCacheOnDemand(this, paths[0]);
+                        return;
+                    }
+
+                    StartCoroutine(TboxPurgeTexturesBatchCoroutine(paths));
+                    return;
+                }
+
                 bool rewriteExistingZstd = IsCtrlHeldForTextureCacheRewrite();
                 NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.ZstdOnly);
                 NativeTextureOnDemandCache.SetNextJobRewriteExistingZstd(rewriteExistingZstd);
@@ -226,6 +239,20 @@ namespace VPB
             }
         }
 
+        private static bool IsCtrlShiftHeldForTextureCachePurge()
+        {
+            try
+            {
+                bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+                bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                return ctrl && shift;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private IEnumerator TboxCacheTexturesBatchCoroutine(List<string> paths)
         {
             NativeTextureOnDemandCache.BeginBatchJob("Caching Textures...", paths.Count);
@@ -249,6 +276,32 @@ namespace VPB
             {
                 NativeTextureOnDemandCache.EndBatchJob(
                     NativeTextureOnDemandCache.CancelRequested ? "Texture caching cancelled" : "Texture caching complete");
+            }
+        }
+
+        private IEnumerator TboxPurgeTexturesBatchCoroutine(List<string> paths)
+        {
+            NativeTextureOnDemandCache.BeginBatchJob("Purging Texture Cache...", paths.Count);
+            try
+            {
+                for (int i = 0; i < paths.Count; i++)
+                {
+                    if (NativeTextureOnDemandCache.CancelRequested) break;
+                    string p = paths[i];
+                    if (string.IsNullOrEmpty(p)) continue;
+
+                    NativeTextureOnDemandCache.BatchItemStart(p);
+                    NativeTextureOnDemandCache.TryPurgePackageCacheOnDemand(this, p);
+                    while (NativeTextureOnDemandCache.IsOnDemandBusy)
+                        yield return null;
+                    NativeTextureOnDemandCache.BatchItemDone();
+                    yield return null;
+                }
+            }
+            finally
+            {
+                NativeTextureOnDemandCache.EndBatchJob(
+                    NativeTextureOnDemandCache.CancelRequested ? "Texture purge cancelled" : "Texture purge complete");
             }
         }
 
