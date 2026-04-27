@@ -847,35 +847,17 @@ namespace VPB
             }
 
             // If we are opening the hub from a hidden state and sorting by Submission Date, 
-            // reset to page 1 and clear the hosted filter to ensure the user sees the latest submissions.
+            // reset to page 1 to ensure the user sees the latest submissions.
             if (!alreadyShowing && (_sortPrimary == SortSubmissionDate || _sortSecondary == SortSubmissionDate))
             {
                 _currentPageString = "1";
                 _currentPageInt = 1;
                 currentPageJSON.valNoCallback = _currentPageString;
-                
-                // Clear the hosted option as it's the most likely filter to be "stuck" and hiding results.
-                _hostedOption = "All";
-                if (hostedOptionChooser != null) hostedOptionChooser.valNoCallback = "All";
-
-                // Clear the pay type and downloadable filters to ensure all items are visible.
-                _payTypeFilter = "All";
-                if (payTypeFilterChooser != null) payTypeFilterChooser.valNoCallback = "All";
-                if (onlyDownloadable != null) onlyDownloadable.valNoCallback = false;
-                if (hideDownloaded != null) hideDownloaded.valNoCallback = false;
-
-                // CRITICAL: Clear search filter as it was observed to persist (e.g. "qingfeng")
-                _searchFilter = string.Empty;
-                if (searchFilterJSON != null) searchFilterJSON.valNoCallback = string.Empty;
 
                 if (!suppressHubSettingsSave && Settings.Instance != null)
                 {
                     if (Settings.Instance.HubCurrentPage != null) Settings.Instance.HubCurrentPage.Value = 1;
-                    if (Settings.Instance.HubHostedOption != null) Settings.Instance.HubHostedOption.Value = "All";
-                    if (Settings.Instance.HubPayTypeFilter != null) Settings.Instance.HubPayTypeFilter.Value = "All";
-                    if (Settings.Instance.HubOnlyDownloadable != null) Settings.Instance.HubOnlyDownloadable.Value = false;
-                    if (Settings.Instance.HubHideDownloaded != null) Settings.Instance.HubHideDownloaded.Value = false;
-                    if (Settings.Instance.HubSearchText != null) Settings.Instance.HubSearchText.Value = string.Empty;
+                    Settings.SaveConfig();
                 }
             }
 
@@ -1376,6 +1358,7 @@ namespace VPB
                 if (Settings.Instance.HubTagsFilter != null) Settings.Instance.HubTagsFilter.Value = "All";
                 if (Settings.Instance.HubOnlyDownloadable != null) Settings.Instance.HubOnlyDownloadable.Value = false;
                 if (Settings.Instance.HubHideDownloaded != null) Settings.Instance.HubHideDownloaded.Value = false;
+                Settings.SaveConfig();
             }
         }
 
@@ -1392,6 +1375,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubHostedOption != null)
             {
                 Settings.Instance.HubHostedOption.Value = _hostedOption;
+                Settings.SaveConfig();
             }
             ResetRefresh();
         }
@@ -1402,6 +1386,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubPayTypeFilter != null)
             {
                 Settings.Instance.HubPayTypeFilter.Value = _payTypeFilter;
+                Settings.SaveConfig();
             }
             if (_payTypeFilter != "Free" && _hostedOption != "All")
             {
@@ -1419,6 +1404,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubSearchText != null)
             {
                 Settings.Instance.HubSearchText.Value = _searchFilter;
+                Settings.SaveConfig();
             }
             bool flag = false;
             if (_searchFilter.Length > 2)
@@ -1468,6 +1454,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubCategoryFilter != null)
             {
                 Settings.Instance.HubCategoryFilter.Value = _categoryFilter;
+                Settings.SaveConfig();
             }
             ScheduleResetRefresh(0.2f);
         }
@@ -1483,6 +1470,12 @@ namespace VPB
             payTypeFilterChooser.valNoCallback = payType;
             _categoryFilter = category;
             categoryFilterChooser.valNoCallback = category;
+            if (!suppressHubSettingsSave && Settings.Instance != null)
+            {
+                if (Settings.Instance.HubPayTypeFilter != null) Settings.Instance.HubPayTypeFilter.Value = _payTypeFilter;
+                if (Settings.Instance.HubCategoryFilter != null) Settings.Instance.HubCategoryFilter.Value = _categoryFilter;
+                Settings.SaveConfig();
+            }
             ResetRefresh();
         }
 
@@ -1492,6 +1485,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubCreatorFilter != null)
             {
                 Settings.Instance.HubCreatorFilter.Value = _creatorFilter;
+                Settings.SaveConfig();
             }
             ScheduleResetRefresh(0.2f);
         }
@@ -1502,6 +1496,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubTagsFilter != null)
             {
                 Settings.Instance.HubTagsFilter.Value = _tagsFilter;
+                Settings.SaveConfig();
             }
             ScheduleResetRefresh(0.35f);
         }
@@ -1512,6 +1507,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubSortPrimary != null)
             {
                 Settings.Instance.HubSortPrimary.Value = _sortPrimary;
+                Settings.SaveConfig();
             }
             ScheduleResetRefresh(0.1f);
         }
@@ -1522,6 +1518,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubSortSecondary != null)
             {
                 Settings.Instance.HubSortSecondary.Value = _sortSecondary;
+                Settings.SaveConfig();
             }
             ScheduleResetRefresh(0.1f);
         }
@@ -3273,6 +3270,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null)
             {
                 Settings.Instance.HubOnlyDownloadable.Value = b;
+                Settings.SaveConfig();
             }
 
             if (b)
@@ -3285,6 +3283,7 @@ namespace VPB
                     if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubPayTypeFilter != null)
                     {
                         Settings.Instance.HubPayTypeFilter.Value = "Free";
+                        Settings.SaveConfig();
                     }
                 }
             }
@@ -3297,6 +3296,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubHideDownloaded != null)
             {
                 Settings.Instance.HubHideDownloaded.Value = b;
+                Settings.SaveConfig();
             }
             ResetRefresh();
         }
