@@ -58,6 +58,10 @@ namespace VPB
         private int m_QuickMenuSavePopupTargetIdx = -1;
         private GalleryPanel m_QuickMenuSavePopupPanel;
 
+        private RectTransform m_QmTooltipRT;
+        private Text m_QmTooltipText;
+        private string m_QmTooltipCurrent;
+
         private Sprite m_QmIconCreate;
         private Sprite m_QmIconEyeOn;
         private Sprite m_QmIconEyeOff;
@@ -120,6 +124,101 @@ namespace VPB
                 int col = i % QuickMenuGridCols;
                 int row = i / QuickMenuGridCols;
                 rt.anchoredPosition = slot0Center + new Vector2(col * QuickMenuGridCell, -row * QuickMenuGridCell);
+            }
+
+            // Tooltip bar centered above first row
+            if (m_QmTooltipRT != null)
+            {
+                float topEdge = slot0Center.y + QuickMenuGridButtonSize * 0.5f;
+                float centerX = slot0Center.x + QuickMenuGridCell * 1.5f;
+                m_QmTooltipRT.anchoredPosition = new Vector2(centerX, topEdge + 28f);
+                m_QmTooltipRT.sizeDelta = new Vector2(QuickMenuGridCell * 4f - QuickMenuGridGap, 44f);
+            }
+        }
+
+        private void QuickMenuEnsureTooltipUI()
+        {
+            if (m_QuickMenuCanvas == null) return;
+            if (m_QmTooltipRT != null && m_QmTooltipText != null) return;
+
+            GameObject go = new GameObject("VPB_QM_TooltipBar");
+            go.transform.SetParent(m_QuickMenuCanvas.transform, false);
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            m_QmTooltipRT = rt;
+
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0f, 0f, 0f, 0.35f);
+            img.raycastTarget = false;
+
+            GameObject tgo = new GameObject("Text");
+            tgo.transform.SetParent(go.transform, false);
+            var trt = tgo.AddComponent<RectTransform>();
+            trt.anchorMin = Vector2.zero;
+            trt.anchorMax = Vector2.one;
+            trt.pivot = new Vector2(0.5f, 0.5f);
+            trt.sizeDelta = Vector2.zero;
+            trt.anchoredPosition = Vector2.zero;
+
+            var t = tgo.AddComponent<Text>();
+            try { VPBUiFont.ApplyTo(t); } catch { }
+            t.alignment = TextAnchor.MiddleCenter;
+            t.color = Color.white;
+            t.fontSize = 18;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            t.text = "";
+            t.raycastTarget = false;
+            m_QmTooltipText = t;
+        }
+
+        private void QuickMenuSetTooltip(string msg)
+        {
+            if (m_QmTooltipText == null) return;
+            m_QmTooltipCurrent = msg ?? "";
+            m_QmTooltipText.text = m_QmTooltipCurrent;
+        }
+
+        private void QuickMenuClearTooltip(string expected)
+        {
+            if (m_QmTooltipText == null) return;
+            if (expected != null && m_QmTooltipCurrent != expected) return;
+            m_QmTooltipCurrent = "";
+            m_QmTooltipText.text = "";
+        }
+
+        private string QuickMenuGetTooltipForSlot(int idx)
+        {
+            if (idx == m_QuickMenuPageToggleSlotIdx)
+                return VPBTranslation.T("hook.qmtooltip.page_nav", "Next Page (Left Click), Previous Page (Right Click)");
+            if (idx == m_QuickMenuEditSlotIdx)
+                return m_QuickMenuEditMode
+                    ? VPBTranslation.T("hook.qmtooltip.edit_off", "Disable editing")
+                    : VPBTranslation.T("hook.qmtooltip.edit_on", "Enable editing");
+
+            var a = QuickMenuGetSlotAction(idx);
+            switch (a)
+            {
+                case QuickMenuAssignableAction.CreateGallery: return VPBTranslation.T("hook.qmbutton.create_gallery", "Create Gallery");
+                case QuickMenuAssignableAction.ShowHide: return VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide");
+                case QuickMenuAssignableAction.BringFront: return VPBTranslation.T("hook.qmbutton.bring_front", "Bring Front");
+                case QuickMenuAssignableAction.CloseAll: return VPBTranslation.T("hook.qmbutton.close_all", "Close All");
+                case QuickMenuAssignableAction.Save: return VPBTranslation.T("hook.qmtooltip.save_methods", "Save (choose method)");
+                case QuickMenuAssignableAction.Random: return VPBTranslation.T("hook.qmbutton.random", "Random");
+                case QuickMenuAssignableAction.Undo: return VPBTranslation.T("hook.qmbutton.undo", "Undo");
+                case QuickMenuAssignableAction.Redo: return VPBTranslation.T("hook.qmbutton.redo", "Redo");
+                case QuickMenuAssignableAction.Hub: return VPBTranslation.T("hook.qmbutton.hub", "Hub");
+                case QuickMenuAssignableAction.Cleanup: return VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup");
+                case QuickMenuAssignableAction.ReplaceAddToggle: return VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add");
+                case QuickMenuAssignableAction.CompressCache: return VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache");
+                case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.qmbutton.autohide", "Auto-Hide");
+                case QuickMenuAssignableAction.ShowHiddenPackages: return VPBTranslation.T("hook.qmbutton.show_hidden", "Show Hidden");
+                case QuickMenuAssignableAction.FpsCounter: return VPBTranslation.T("hook.qmbutton.fps", "FPS Counter");
+                case QuickMenuAssignableAction.None:
+                default:
+                    return m_QuickMenuEditMode ? VPBTranslation.T("hook.qmtooltip.assign", "Assign button") : "";
             }
         }
 
@@ -381,6 +480,34 @@ namespace VPB
             }
         }
 
+        private class QuickMenuTooltipHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+        {
+            public VamHookPlugin owner;
+            public int slotIdx;
+            private string _msg;
+
+            public void OnPointerEnter(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                try
+                {
+                    _msg = owner.QuickMenuGetTooltipForSlot(slotIdx);
+                    if (!string.IsNullOrEmpty(_msg)) owner.QuickMenuSetTooltip(_msg);
+                }
+                catch { }
+            }
+
+            public void OnPointerExit(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                try
+                {
+                    owner.QuickMenuClearTooltip(_msg);
+                }
+                catch { }
+            }
+        }
+
         private void QuickMenuSetAssignment(int idx, QuickMenuAssignableAction action)
         {
             if (idx < 0 || idx >= QuickMenuGridSlotCount) return;
@@ -391,6 +518,14 @@ namespace VPB
         private static void QuickMenuSetIcon(GameObject buttonGO, Sprite icon, float padding)
         {
             if (buttonGO == null) return;
+
+            // Remove any label; icon-only buttons should not retain stale text across pages.
+            try
+            {
+                var labelTr = buttonGO.transform.Find("Label");
+                if (labelTr != null) DestroyImmediate(labelTr.gameObject);
+            }
+            catch { }
 
             try
             {
@@ -772,6 +907,51 @@ namespace VPB
                 m_QuickMenuAssignPopupRoot.SetActive(false);
         }
 
+        private void QuickMenuClampPopupToScreen()
+        {
+            try
+            {
+                if (m_QuickMenuAssignPopupRT == null) return;
+                if (Camera.main == null) return;
+
+                var rt = m_QuickMenuAssignPopupRT;
+                Vector3[] corners = new Vector3[4];
+                rt.GetWorldCorners(corners);
+
+                float minX = float.PositiveInfinity, maxX = float.NegativeInfinity;
+                float minY = float.PositiveInfinity, maxY = float.NegativeInfinity;
+                for (int i = 0; i < 4; i++)
+                {
+                    Vector3 sp = Camera.main.WorldToScreenPoint(corners[i]);
+                    if (sp.x < minX) minX = sp.x;
+                    if (sp.x > maxX) maxX = sp.x;
+                    if (sp.y < minY) minY = sp.y;
+                    if (sp.y > maxY) maxY = sp.y;
+                }
+
+                float dx = 0f;
+                float dy = 0f;
+                const float pad = 6f;
+                float sw = Screen.width;
+                float sh = Screen.height;
+
+                if (minX < pad) dx = (pad - minX);
+                else if (maxX > (sw - pad)) dx = (sw - pad - maxX);
+
+                if (minY < pad) dy = (pad - minY);
+                else if (maxY > (sh - pad)) dy = (sh - pad - maxY);
+
+                if (Mathf.Abs(dx) < 0.5f && Mathf.Abs(dy) < 0.5f) return;
+
+                Vector3 wp = rt.position;
+                Vector3 sp0 = Camera.main.WorldToScreenPoint(wp);
+                Vector3 sp1 = new Vector3(sp0.x + dx, sp0.y + dy, sp0.z);
+                Vector3 wp1 = Camera.main.ScreenToWorldPoint(sp1);
+                rt.position = wp1;
+            }
+            catch { }
+        }
+
         private void QuickMenuShowAssignPopup(int slotIdx, Vector2 anchoredPos)
         {
             if (m_QuickMenuAssignPopupRoot == null || m_QuickMenuAssignPopupRT == null) return;
@@ -781,6 +961,7 @@ namespace VPB
 
             m_QuickMenuAssignPopupRT.anchoredPosition = anchoredPos;
             if (!m_QuickMenuAssignPopupRoot.activeSelf) m_QuickMenuAssignPopupRoot.SetActive(true);
+            QuickMenuClampPopupToScreen();
         }
 
         private void QuickMenuShowSavePopup(int slotIdx, Vector2 anchoredPos, GalleryPanel panel)
@@ -793,6 +974,7 @@ namespace VPB
             QuickMenuRebuildSavePopupButtons(panel);
             m_QuickMenuAssignPopupRT.anchoredPosition = anchoredPos;
             if (!m_QuickMenuAssignPopupRoot.activeSelf) m_QuickMenuAssignPopupRoot.SetActive(true);
+            QuickMenuClampPopupToScreen();
         }
 
         private void QuickMenuRebuildAssignPopupButtons()

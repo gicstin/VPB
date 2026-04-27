@@ -1635,6 +1635,10 @@ namespace VPB
                 // Load persisted page configs (or seed defaults on first run).
                 QuickMenuEnsureDefaultsAndLoadFromConfig();
 
+                // Tooltip UI (positioned by QuickMenuApplyGridLayoutFromAnchor / live updates)
+                QuickMenuEnsureTooltipUI();
+                try { QuickMenuApplyGridLayoutFromAnchor(createCenter); } catch { }
+
                 // Slot 13 (1-based) reserved for Settings/Edit toggle.
                 int editSlotIdx = 12; // 0-based
                 m_QuickMenuEditSlotIdx = editSlotIdx;
@@ -1671,12 +1675,17 @@ namespace VPB
                     btn.navigation = new Navigation { mode = Navigation.Mode.None };
                     m_QuickMenuGridUnityButtons[i] = btn;
 
+                    int idxCopy = i;
+
                     var hover = go.AddComponent<QuickMenuSquareHover>();
                     hover.target = img;
                     hover.normal = normalBackdrop;
                     hover.hover = new Color(0.35f, 0.35f, 0.35f, 0.75f);
 
-                    int idxCopy = i;
+                    var tip = go.AddComponent<QuickMenuTooltipHoverHandler>();
+                    tip.owner = this;
+                    tip.slotIdx = idxCopy;
+
                     btn.onClick.AddListener(() =>
                     {
                         if (idxCopy == editSlotIdx)
