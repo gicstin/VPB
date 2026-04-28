@@ -723,10 +723,15 @@ namespace VPB
         {
             bool hasPath = !string.IsNullOrEmpty(path);
             hoverPathIsCountMode = !hasPath;
-            float targetAlpha = 1f; // we always show either hovered path or count fallback
+            float targetAlpha = 1f; // pure on/off: always visible (path or count fallback)
 
-            if (hoverFadeCoroutine != null) StopCoroutine(hoverFadeCoroutine);
-            hoverFadeCoroutine = StartCoroutine(FadeHoverPath(targetAlpha));
+            // No fade/transition: snap alpha immediately.
+            if (hoverFadeCoroutine != null)
+            {
+                StopCoroutine(hoverFadeCoroutine);
+                hoverFadeCoroutine = null;
+            }
+            if (hoverPathCanvasGroup != null) hoverPathCanvasGroup.alpha = targetAlpha;
 
             if (hoverPathText != null)
             {
@@ -747,21 +752,9 @@ namespace VPB
 
         private IEnumerator FadeHoverPath(float targetAlpha)
         {
-            if (hoverPathCanvasGroup == null) yield break;
-            
-            float duration = 0.15f; // Fast but smooth
-            float startAlpha = hoverPathCanvasGroup.alpha;
-            float elapsed = 0f;
-
-            while (elapsed < duration)
-            {
-                elapsed += Time.unscaledDeltaTime;
-                hoverPathCanvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, elapsed / duration);
-                yield return null;
-            }
-
-            hoverPathCanvasGroup.alpha = targetAlpha;
+            if (hoverPathCanvasGroup != null) hoverPathCanvasGroup.alpha = targetAlpha;
             hoverFadeCoroutine = null;
+            yield break;
         }
 
         public void RestoreSelectedHoverPath()

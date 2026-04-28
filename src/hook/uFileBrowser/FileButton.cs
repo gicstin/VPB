@@ -88,7 +88,7 @@ namespace VPB
 
         public void Unselect()
         {
-            button.transition = Selectable.Transition.SpriteSwap;
+            button.transition = Selectable.Transition.None;
             buttonImage.overrideSprite = null;
         }
 

@@ -175,7 +175,7 @@ namespace VPB
 
             if (vpbCachePath != null && File.Exists(vpbCachePath))
             {
-                CacheCleanupManager.QueueHit(vpbCachePath);
+                CacheCleanupManager.QueueHit(vpbCachePath, qi.imgPath);
                 lock (cachePathMapLock)
                 {
                     cachePathMap[pathKey] = vpbCachePath;

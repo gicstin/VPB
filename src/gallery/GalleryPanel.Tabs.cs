@@ -179,14 +179,20 @@ namespace VPB
                 {
                     splitView = true;
                 }
+                else if (leftActiveContent == ContentType.CleanupCategories)
+                {
+                    // Split view when filtering stale cache: show age buckets in the sub-pane.
+                    splitView = GetCleanupFilterMode() == 4;
+                }
 
-                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub) && leftSubTabScrollGO != null)
+                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub || leftActiveContent == ContentType.CleanupCategories) && leftSubTabScrollGO != null)
                 {
                     // Split Layout
                     leftSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
                     if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    else if (leftActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (leftActiveContent == ContentType.Category)
                     {
                         string titleSub = titleText != null ? titleText.text : "";
@@ -201,12 +207,20 @@ namespace VPB
                     if (leftSubSortBtn != null)
                         leftSubSortBtn.SetActive(!sceneSourceLeft);
                     if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(sceneSourceLeft);
-                    if (leftSubSearchInput != null)
+                    if (leftActiveContent == ContentType.CleanupCategories)
                     {
-                        leftSubSearchInput.gameObject.SetActive(true);
-                        if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
+                        if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
+                        if (leftSubClearBtn != null) leftSubClearBtn.SetActive(false);
                     }
-                    ApplyLeftSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
+                    else
+                    {
+                        if (leftSubSearchInput != null)
+                        {
+                            leftSubSearchInput.gameObject.SetActive(true);
+                            if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
+                        }
+                        ApplyLeftSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
+                    }
                     if (sceneSourceLeft) SyncSceneSourceSortButtonHighlights();
 
                     RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
@@ -291,14 +305,20 @@ namespace VPB
                 {
                     splitView = true;
                 }
+                else if (rightActiveContent == ContentType.CleanupCategories)
+                {
+                    // Split view when filtering stale cache: show age buckets in the sub-pane.
+                    splitView = GetCleanupFilterMode() == 4;
+                }
 
-                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub) && rightSubTabScrollGO != null)
+                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub || rightActiveContent == ContentType.CleanupCategories) && rightSubTabScrollGO != null)
                 {
                     // Split Layout
                     rightSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
                     if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    else if (rightActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (rightActiveContent == ContentType.Category)
                     {
                         string titleSub = titleText != null ? titleText.text : "";
@@ -318,15 +338,23 @@ namespace VPB
                         srt.anchorMax = new Vector2(1, 0.5f);
                     }
                     if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(sceneSourceRight);
-                    if (rightSubSearchInput != null)
+                    if (rightActiveContent == ContentType.CleanupCategories)
                     {
-                        rightSubSearchInput.gameObject.SetActive(true);
-                        if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
-                        RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
-                        rt.anchorMin = new Vector2(1, 0.5f);
-                        rt.anchorMax = new Vector2(1, 0.5f);
+                        if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
+                        if (rightSubClearBtn != null) rightSubClearBtn.SetActive(false);
                     }
-                    ApplyRightSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
+                    else
+                    {
+                        if (rightSubSearchInput != null)
+                        {
+                            rightSubSearchInput.gameObject.SetActive(true);
+                            if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
+                            RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
+                            rt.anchorMin = new Vector2(1, 0.5f);
+                            rt.anchorMax = new Vector2(1, 0.5f);
+                        }
+                        ApplyRightSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
+                    }
                     if (sceneSourceRight) SyncSceneSourceSortButtonHighlights();
 
                     RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
@@ -1400,6 +1428,50 @@ namespace VPB
                 CreateTabButton(container.transform, labelExcluded, mode == 5 ? cleanupColor : inactive, mode == 5, () =>
                 {
                     SetCleanupFilterMode(5);
+                    UpdateTabs();
+                }, trackedButtons);
+            }
+            else if (contentType == ContentType.CleanupStaleBuckets)
+            {
+                int mode = GetCleanupStaleBucketMode();
+                Color cleanupColor = new Color(0.62f, 0.40f, 0.20f, 1f);
+                Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
+
+                string labelAll = VPBTranslation.T("gallery.cleanup.stale.all", "All") + " (" + GetCleanupStaleBucketCount(0) + ")";
+                string label1w = VPBTranslation.T("gallery.cleanup.stale.1w", "One Week Old") + " (" + GetCleanupStaleBucketCount(1) + ")";
+                string label2w = VPBTranslation.T("gallery.cleanup.stale.2w", "Two Weeks Old") + " (" + GetCleanupStaleBucketCount(2) + ")";
+                string label1m = VPBTranslation.T("gallery.cleanup.stale.1m", "One Month Old") + " (" + GetCleanupStaleBucketCount(3) + ")";
+                string label2m = VPBTranslation.T("gallery.cleanup.stale.2m", "Two Months Old") + " (" + GetCleanupStaleBucketCount(4) + ")";
+                string label6m = VPBTranslation.T("gallery.cleanup.stale.6m", "Half Year Old") + " (" + GetCleanupStaleBucketCount(5) + ")";
+
+                CreateTabButton(container.transform, labelAll, mode == 0 ? cleanupColor : inactive, mode == 0, () =>
+                {
+                    SetCleanupStaleBucketMode(0);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, label1w, mode == 1 ? cleanupColor : inactive, mode == 1, () =>
+                {
+                    SetCleanupStaleBucketMode(1);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, label2w, mode == 2 ? cleanupColor : inactive, mode == 2, () =>
+                {
+                    SetCleanupStaleBucketMode(2);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, label1m, mode == 3 ? cleanupColor : inactive, mode == 3, () =>
+                {
+                    SetCleanupStaleBucketMode(3);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, label2m, mode == 4 ? cleanupColor : inactive, mode == 4, () =>
+                {
+                    SetCleanupStaleBucketMode(4);
+                    UpdateTabs();
+                }, trackedButtons);
+                CreateTabButton(container.transform, label6m, mode == 5 ? cleanupColor : inactive, mode == 5, () =>
+                {
+                    SetCleanupStaleBucketMode(5);
                     UpdateTabs();
                 }, trackedButtons);
             }

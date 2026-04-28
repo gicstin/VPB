@@ -1398,10 +1398,9 @@ namespace VPB
             // Auto-expand toolbox if person atoms present, otherwise require hover or pin
             bool wantExpanded = canExpand && (tboxIsHovered || tboxPinned || hasPersonAtoms);
 
-            // Smooth animate expand T — fast snap
+            // No animation: snap expanded/collapsed state immediately
             float targetT = wantExpanded ? 1f : 0f;
-            tboxExpandT = Mathf.Lerp(tboxExpandT, targetT, Time.deltaTime * 22f);
-            if (Mathf.Abs(tboxExpandT - targetT) < 0.005f) tboxExpandT = targetT;
+            tboxExpandT = targetT;
 
             // Animate bar height: grow offsetMax upward to reveal the button band (1 or 2 rows)
             if (tboxRT != null)
@@ -1421,15 +1420,7 @@ namespace VPB
                 if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
                     btnBand += tboxInfoRowHeight + tboxBtnRowGap;
                 float targetTop = tboxTopOffsetBase + btnBand * tboxExpandT;
-                // Use a slower lerp during category switches to prevent flashing
-                float lerpSpeed = Time.deltaTime * 22f;
-                float currentTop = tboxRT.offsetMax.y;
-                // If the difference is very large (indicating a reset), snap to target immediately to prevent flash
-                if (Mathf.Abs(currentTop - targetTop) > 50f)
-                    currentTop = targetTop;
-                float newTop = Mathf.Lerp(currentTop, targetTop, lerpSpeed);
-                if (Mathf.Abs(newTop - targetTop) < 0.5f) newTop = targetTop;
-                tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, newTop);
+                tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
             }
 
             // Label is suppressed when path/status is actually visible, or buttons are expanded
@@ -1441,7 +1432,7 @@ namespace VPB
             // Label alpha tracks collapse directly — no separate lerp needed
             float labelTarget = (infoShowing || tboxExpandT > 0.05f) ? 0f : 1f;
             if (tboxLabelCG != null)
-                tboxLabelCG.alpha = Mathf.Lerp(tboxLabelCG.alpha, labelTarget, Time.deltaTime * 22f);
+                tboxLabelCG.alpha = labelTarget;
 
             // Buttons stay fully opaque — RectMask2D handles the slide-in reveal as the bar grows.
             // Gate on tboxExpandT only (not infoShowing) so that a fading hover-path label

@@ -1088,7 +1088,7 @@ namespace VPB
                     if (m_FpsSmoothedDelta <= 0f)
                         m_FpsSmoothedDelta = unscaledDt;
                     else
-                        m_FpsSmoothedDelta = Mathf.Lerp(m_FpsSmoothedDelta, unscaledDt, 0.08f);
+                        m_FpsSmoothedDelta = unscaledDt;
 
                     m_FpsUpdateTimer += unscaledDt;
                     if (m_FpsUpdateTimer >= 1.0f)

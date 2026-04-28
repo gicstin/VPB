@@ -256,15 +256,8 @@ namespace VPB
                 {
                     targetGalleryAlpha = Mathf.Max(0.1f, VPBConfig.Instance.GalleryOpacity);
                 }
-
-                if (Mathf.Abs(backgroundCanvasGroup.alpha - targetGalleryAlpha) > 0.01f)
-                {
-                    backgroundCanvasGroup.alpha = Mathf.Lerp(backgroundCanvasGroup.alpha, targetGalleryAlpha, Time.deltaTime * 10f);
-                }
-                else
-                {
-                    backgroundCanvasGroup.alpha = targetGalleryAlpha;
-                }
+                // No fade/transition: snap alpha immediately.
+                backgroundCanvasGroup.alpha = targetGalleryAlpha;
             }
 
             // Status Bar Logic
@@ -337,13 +330,11 @@ namespace VPB
             
             bool enableFade = (VPBConfig.Instance != null) ? VPBConfig.Instance.EnableGalleryFade : true;
             float targetAlpha = (showSideButtons || isResizing || !enableFade) ? 1.0f : 0.0f;
-            if (Mathf.Abs(sideButtonsAlpha - targetAlpha) > 0.01f)
+            // No fade/transition: snap alpha immediately.
+            sideButtonsAlpha = targetAlpha;
+            foreach (var cg in sideButtonGroups)
             {
-                sideButtonsAlpha = Mathf.Lerp(sideButtonsAlpha, targetAlpha, Time.deltaTime * 15.0f);
-                foreach (var cg in sideButtonGroups)
-                {
-                    if (cg != null) cg.alpha = sideButtonsAlpha;
-                }
+                if (cg != null) cg.alpha = sideButtonsAlpha;
             }
 
             if (canvas != null)
@@ -441,7 +432,8 @@ namespace VPB
                                         if (!isReorienting && angleDiff > VPBConfig.Instance.ReorientStartAngle) isReorienting = true;
                                         if (isReorienting)
                                         {
-                                            canvas.transform.rotation = Quaternion.RotateTowards(canvas.transform.rotation, targetFollowRotation, FollowRotateStepDegrees);
+                                            // No transition: snap rotation immediately.
+                                            canvas.transform.rotation = targetFollowRotation;
                                             if (Quaternion.Angle(canvas.transform.rotation, targetFollowRotation) < ReorientStopAngle) isReorienting = false;
                                         }
                                     }

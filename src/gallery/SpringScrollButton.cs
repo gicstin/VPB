@@ -88,8 +88,8 @@ namespace VPB
             if (scrollRect == null) return;
 
             float dt = Time.unscaledDeltaTime;
-            float k = 1f - Mathf.Exp(-Mathf.Max(0.01f, speedSmoothing) * dt);
-            _currentSpeedPx = Mathf.Lerp(_currentSpeedPx, _targetSpeedPx, k);
+            // No smoothing/transition: snap speed immediately.
+            _currentSpeedPx = _targetSpeedPx;
 
             float scrollablePx = 0f;
             try

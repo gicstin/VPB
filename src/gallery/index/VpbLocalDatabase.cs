@@ -256,7 +256,9 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_pd_dep ON pkg_dep(dep_uid);" +
                 "CREATE INDEX IF NOT EXISTS idx_sf_key ON sys_file(cache_key);" +
                 "CREATE TABLE IF NOT EXISTS cache_usage (cache_path TEXT PRIMARY KEY, hit_count INTEGER NOT NULL DEFAULT 0, last_accessed INTEGER NOT NULL);" +
+                "CREATE TABLE IF NOT EXISTS cache_usage_pkg (cache_path TEXT NOT NULL, pkg_uid TEXT NOT NULL, PRIMARY KEY(cache_path, pkg_uid));" +
                 "CREATE INDEX IF NOT EXISTS idx_cu_last ON cache_usage(last_accessed);" +
+                "CREATE INDEX IF NOT EXISTS idx_cup_pkg ON cache_usage_pkg(pkg_uid);" +
                 "CREATE TABLE IF NOT EXISTS item_usage (item_key TEXT PRIMARY KEY, kind TEXT, use_count INTEGER NOT NULL DEFAULT 0, last_used INTEGER NOT NULL);" +
                 "CREATE INDEX IF NOT EXISTS idx_iu_count ON item_usage(use_count);" +
                 "CREATE INDEX IF NOT EXISTS idx_iu_last ON item_usage(last_used);" +
@@ -589,6 +591,70 @@ namespace VPB
             catch { }
         }
 
+        internal struct CacheUsagePkgRow
+        {
+            public string CachePath;
+            public string PackageUid;
+        }
+
+        internal static void TryRecordCacheUsagePackagesBatch(IEnumerable<CacheUsagePkgRow> rows)
+        {
+            if (!VpbSqlite3.IsAvailable || rows == null) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    try
+                    {
+                        using (var st = conn.Prepare("INSERT OR IGNORE INTO cache_usage_pkg(cache_path, pkg_uid) VALUES(?, ?)"))
+                        {
+                            foreach (var r in rows)
+                            {
+                                if (string.IsNullOrEmpty(r.CachePath) || string.IsNullOrEmpty(r.PackageUid)) continue;
+                                st.Reset();
+                                st.BindText(1, r.CachePath);
+                                st.BindText(2, r.PackageUid);
+                                st.Step();
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        internal static void TryGetCacheUsagePackages(string cachePath, List<string> outUids)
+        {
+            if (outUids == null) return;
+            outUids.Clear();
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(cachePath)) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT pkg_uid FROM cache_usage_pkg WHERE cache_path = ?"))
+                    {
+                        st.BindText(1, cachePath);
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string uid = st.ColumnText(0);
+                            if (!string.IsNullOrEmpty(uid)) outUids.Add(uid);
+                        }
+                    }
+                }
+            }
+            catch { outUids.Clear(); }
+        }
+
         internal struct CacheUsageRow
         {
             public string CachePath;
@@ -606,10 +672,10 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
-                    using (var st = conn.Prepare("SELECT cache_path, hit_count, last_accessed FROM cache_usage WHERE last_accessed < ? AND hit_count <= ?"))
+                    // NOTE: stale-cache selection is date-based only; hit_count is tracked but not used for staleness.
+                    using (var st = conn.Prepare("SELECT cache_path, hit_count, last_accessed FROM cache_usage WHERE last_accessed < ?"))
                     {
                         st.BindInt64(1, olderThanBinary);
-                        st.BindInt64(2, (long)maxHits);
                         while (st.Step() == VpbSqlite3.SqliteRow)
                         {
                             outRows.Add(new CacheUsageRow
@@ -633,6 +699,15 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
+                    try
+                    {
+                        using (var st2 = conn.Prepare("DELETE FROM cache_usage_pkg WHERE cache_path = ?"))
+                        {
+                            st2.BindText(1, cachePath);
+                            st2.Step();
+                        }
+                    }
+                    catch { }
                     using (var st = conn.Prepare("DELETE FROM cache_usage WHERE cache_path = ?"))
                     {
                         st.BindText(1, cachePath);
