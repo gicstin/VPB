@@ -825,6 +825,7 @@ namespace VPB
 
                     // Check metadata for resolution and isThumbnail flag
                     JSONNode metaJson = null;
+                    bool isReadable = false;
                     try
                     {
                         metaJson = JSON.Parse(File.ReadAllText(metaPath));
@@ -840,6 +841,8 @@ namespace VPB
                                 CurrentZstdStats.SkippedCount++;
                                 continue;
                             }
+
+                            try { if (metaJson["isReadable"] != null) isReadable = metaJson["isReadable"].AsBool; } catch { isReadable = false; }
                         }
                     }
                     catch { }
@@ -847,6 +850,16 @@ namespace VPB
                     string targetName = Path.GetFileNameWithoutExtension(fileName);
                     targetName += ".zvamcache";
                     string targetPath = Path.Combine(vpbCacheDir, targetName);
+
+                    // SIM textures (marked readable in meta) must never be compressed to VPB .zvamcache.
+                    // If a SIM .zvamcache exists already (possibly corrupted), remove it and skip.
+                    if (isReadable)
+                    {
+                        try { if (File.Exists(targetPath)) File.Delete(targetPath); } catch { }
+                        try { if (File.Exists(targetPath + "meta")) File.Delete(targetPath + "meta"); } catch { }
+                        CurrentZstdStats.SkippedCount++;
+                        continue;
+                    }
 
                     long originalSize = new FileInfo(file).Length;
                     CurrentZstdStats.TotalOriginalSize += originalSize;

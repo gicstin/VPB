@@ -123,11 +123,18 @@ namespace VPB
             if (string.IsNullOrEmpty(p)) return false;
             p = p.Replace('\\', '/');
 
-            try
+            // IMPORTANT: On Windows, absolute disk paths like "C:/.../Saves/scene/foo.json" contain ":/" and can be
+            // misclassified as a package path by VaM helpers that treat any ":/" as "pkg:/internalPath".
+            // Treat rooted drive-letter paths as local disk paths, not package refs.
+            bool isWindowsDriveAbs = (p.Length >= 3 && char.IsLetter(p[0]) && p[1] == ':' && p[2] == '/');
+            if (!isWindowsDriveAbs)
             {
-                if (FileManager.IsPackagePath(p)) return false;
+                try
+                {
+                    if (FileManager.IsPackagePath(p)) return false;
+                }
+                catch { }
             }
-            catch { }
 
             if (!LooksLikeLocalUserScenePath(p)) return false;
 
@@ -137,7 +144,14 @@ namespace VPB
             string full;
             try
             {
-                full = FileManager.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar));
+                if (Path.IsPathRooted(p))
+                {
+                    full = Path.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar));
+                }
+                else
+                {
+                    full = FileManager.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar));
+                }
             }
             catch
             {
@@ -161,7 +175,28 @@ namespace VPB
             }
 
             absoluteJsonPath = full;
-            galleryRelativePath = p;
+            // Normalize to a VaM-relative path ("Saves/scene/...") so FileManager.ReadAllText can open it.
+            try
+            {
+                string rootFull = Path.GetFullPath(sceneRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string fileFull = Path.GetFullPath(full);
+                if (fileFull.Length > rootFull.Length + 1 &&
+                    fileFull.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+                {
+                    string relPart = fileFull.Substring(rootFull.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    relPart = relPart.Replace('\\', '/');
+                    galleryRelativePath = "Saves/scene/" + relPart;
+                }
+                else
+                {
+                    // Fallback: keep the original path as provided by the gallery.
+                    galleryRelativePath = p.TrimStart('/');
+                }
+            }
+            catch
+            {
+                galleryRelativePath = p.TrimStart('/');
+            }
             return true;
         }
 

@@ -415,6 +415,11 @@ namespace VPB
             if (Regex.IsMatch(filename, @"(^|[_\-])sim([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
             if (Regex.IsMatch(filename, @"(^|[_\-])phys(ics)?([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
 
+            // Some clothing packages use names like "pnt3lsim1" without delimiters.
+            // Treat a trailing "sim<digits>" / "phys<digits>" as SIM to prevent non-readable loads.
+            if (Regex.IsMatch(filename, @"sim\d+$", RegexOptions.IgnoreCase)) return true;
+            if (Regex.IsMatch(filename, @"phys(ics)?\d+$", RegexOptions.IgnoreCase)) return true;
+
             return false;
         }
 
@@ -1161,6 +1166,34 @@ namespace VPB
 
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
+
+            // Robust SIM detection: do not rely on filename heuristics.
+            // If this request's callback is VaM's sim-texture handler, register the exact path as SIM now.
+            // This makes the rest of VPB treat it as readable and purge any corrupted .zvamcache before use.
+            try
+            {
+                var cb = qi.callback;
+                if (cb != null)
+                {
+                    var m = cb.Method;
+                    string mName = m != null ? (m.Name ?? "") : "";
+                    string tName = (m != null && m.DeclaringType != null) ? (m.DeclaringType.FullName ?? m.DeclaringType.Name ?? "") : "";
+
+                    bool looksLikeSimCallback =
+                        mName.IndexOf("OnSimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
+                        || mName.IndexOf("SimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
+                        || tName.IndexOf("DAZSkinWrapMaterialOptions", StringComparison.OrdinalIgnoreCase) >= 0
+                        || tName.IndexOf("DAZClothSettingsSimTextureReloader", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    if (looksLikeSimCallback)
+                    {
+                        RegisterSimTexture(qi.imgPath);
+                        if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 1)
+                            LogUtil.Log($"[VPB SIM] Detected SIM request by callback: {qi.imgPath} | cb={tName}.{mName}");
+                    }
+                }
+            }
+            catch { }
 
             try
             {

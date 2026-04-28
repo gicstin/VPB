@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
+using SimpleJSON;
 using UnityEngine;
 using System.Runtime.InteropServices;
 
@@ -9,6 +11,9 @@ namespace VPB
     {
         private static readonly object s_DownscaledActiveLock = new object();
         private static readonly HashSet<string> s_DownscaledActiveKeys = new HashSet<string>();
+
+        private static readonly object s_SimPurgeLock = new object();
+        private static readonly HashSet<string> s_SimPurgedThisSession = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public static int GetDownscaledActiveCount()
         {
@@ -129,6 +134,137 @@ namespace VPB
 
         private static readonly char[] s_InvalidFileNameChars = System.IO.Path.GetInvalidFileNameChars();
 
+        private static void TryPurgeSimZstdCacheVariants(string imgPath, MVR.FileManagement.FileEntry fileEntry, string cacheDir)
+        {
+            if (string.IsNullOrEmpty(imgPath) || fileEntry == null || string.IsNullOrEmpty(cacheDir)) return;
+            try
+            {
+                string fileName = System.IO.Path.GetFileName(imgPath);
+                fileName = SanitizeFileName(fileName).Replace('.', '_');
+                if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
+
+                string sizeStr = fileEntry.Size.ToString();
+                string timeStr = fileEntry.LastWriteTime.ToFileTime().ToString();
+                string prefix = fileName + "_" + sizeStr + "_" + timeStr + "_";
+
+                string[] matches;
+                try { matches = Directory.GetFiles(cacheDir, prefix + "*.zvamcache", SearchOption.TopDirectoryOnly); }
+                catch { matches = null; }
+                if (matches == null || matches.Length == 0) return;
+
+                int deleted = 0;
+                for (int i = 0; i < matches.Length; i++)
+                {
+                    string p = matches[i];
+                    if (string.IsNullOrEmpty(p)) continue;
+                    try
+                    {
+                        if (File.Exists(p))
+                        {
+                            File.Delete(p);
+                            deleted++;
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        string meta = p + "meta";
+                        if (File.Exists(meta)) File.Delete(meta);
+                    }
+                    catch { }
+                }
+
+                try
+                {
+                    if (deleted > 0 && Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 1)
+                        LogUtil.Log($"[VPB SIM] Purged {deleted} corrupted .zvamcache file(s) for sim texture: {imgPath}");
+                }
+                catch { }
+            }
+            catch { }
+        }
+
+        private static bool IsZstdMetaReadable(string zvamcachePath)
+        {
+            if (string.IsNullOrEmpty(zvamcachePath)) return false;
+            try
+            {
+                string metaPath = zvamcachePath + "meta";
+                if (!File.Exists(metaPath)) return false;
+                string json = File.ReadAllText(metaPath);
+                if (string.IsNullOrEmpty(json)) return false;
+                var n = SimpleJSON.JSON.Parse(json);
+                if (n == null) return false;
+                return n["isReadable"].AsBool;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool AnyMatchingZstdVariantHasReadableMeta(string imgPath, MVR.FileManagement.FileEntry fileEntry, string cacheDir)
+        {
+            if (string.IsNullOrEmpty(imgPath) || fileEntry == null || string.IsNullOrEmpty(cacheDir)) return false;
+            try
+            {
+                string fileName = System.IO.Path.GetFileName(imgPath);
+                fileName = SanitizeFileName(fileName).Replace('.', '_');
+                if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
+
+                string sizeStr = fileEntry.Size.ToString();
+                string timeStr = fileEntry.LastWriteTime.ToFileTime().ToString();
+                string prefix = fileName + "_" + sizeStr + "_" + timeStr + "_";
+
+                string[] matches;
+                try { matches = Directory.GetFiles(cacheDir, prefix + "*.zvamcache", SearchOption.TopDirectoryOnly); }
+                catch { matches = null; }
+                if (matches == null || matches.Length == 0) return false;
+
+                for (int i = 0; i < matches.Length; i++)
+                {
+                    string p = matches[i];
+                    if (string.IsNullOrEmpty(p)) continue;
+                    if (IsZstdMetaReadable(p)) return true;
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void TryPurgeSimZstdByFilenameFallback(string imgPath, string cacheDir)
+        {
+            if (string.IsNullOrEmpty(imgPath) || string.IsNullOrEmpty(cacheDir)) return;
+            try
+            {
+                string fileName = System.IO.Path.GetFileName(imgPath);
+                fileName = SanitizeFileName(fileName).Replace('.', '_');
+                if (string.IsNullOrEmpty(fileName)) return;
+                if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
+
+                // Fallback for early scene-load where FileEntry is not available yet.
+                // Cache filenames are: {fileName}_{size}_{time}_{sig}.zvamcache
+                // We match by sanitized filename only, then delete the variants.
+                string[] matches;
+                try { matches = Directory.GetFiles(cacheDir, fileName + "_*_*.zvamcache", SearchOption.TopDirectoryOnly); }
+                catch { matches = null; }
+                if (matches == null || matches.Length == 0) return;
+
+                for (int i = 0; i < matches.Length; i++)
+                {
+                    string p = matches[i];
+                    if (string.IsNullOrEmpty(p)) continue;
+                    try { if (File.Exists(p)) File.Delete(p); } catch { }
+                    try { string meta = p + "meta"; if (File.Exists(meta)) File.Delete(meta); } catch { }
+                }
+            }
+            catch { }
+        }
+
         public static string SanitizeFileName(string value)
         {
             if (string.IsNullOrEmpty(value)) return "img";
@@ -146,6 +282,26 @@ namespace VPB
             if (string.IsNullOrEmpty(imgPath) || imgPath == "NULL") return null;
             
             string cacheDir = VamHookPlugin.GetCacheDir();
+            bool isSimReq = (isReadable || SuperControllerHook.IsSimulationTexturePath(imgPath));
+            if (isSimReq)
+            {
+                // Must never serve SIM from .zvamcache. Purge aggressively, but avoid repeated directory scans.
+                bool shouldPurge = false;
+                lock (s_SimPurgeLock)
+                {
+                    if (!s_SimPurgedThisSession.Contains(imgPath))
+                    {
+                        s_SimPurgedThisSession.Add(imgPath);
+                        shouldPurge = true;
+                    }
+                }
+                if (shouldPurge)
+                {
+                    // Even if FileEntry isn't available yet (early scene-load), remove likely corrupted variants.
+                    TryPurgeSimZstdByFilenameFallback(imgPath, cacheDir);
+                }
+            }
+
             var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
             if (fileEntry == null)
             {
@@ -153,6 +309,19 @@ namespace VPB
                 {
                     LogUtil.LogTextureTrace("GetZstdCachePath_NoFileEntry:" + imgPath, "[VPB] GetZstdCachePath: No FileEntry for " + imgPath);
                 }
+                // If SIM request, we already purged by filename fallback above; always return null.
+                if (isSimReq) return null;
+                return null;
+            }
+
+            // SIM (simulation/physics) textures must never be served from VPB's .zvamcache.
+            // If an old/corrupted .zvamcache exists for a SIM request, delete it now so VaM can rebuild/cache normally.
+            if (isSimReq)
+            {
+                // FileEntry is now available; do the precise purge once.
+                // (This is still guarded by the session set above; if we already purged by filename fallback,
+                // it's still safe to call again, but we avoid extra IO.)
+                TryPurgeSimZstdCacheVariants(imgPath, fileEntry, cacheDir);
                 return null;
             }
 
@@ -174,6 +343,27 @@ namespace VPB
             if (invert) sig += "_I";
             
             string finalPath = System.IO.Path.Combine(cacheDir, $"{fileName}_{sizeStr}_{timeStr}_{sig}.zvamcache");
+
+            // Safety net: some SIM textures have neutral filenames and may not be detected by heuristics at request time.
+            // If an existing cache entry indicates a readable (SIM) texture via meta, purge it and fall back to VaM.
+            try
+            {
+                if (File.Exists(finalPath) && IsZstdMetaReadable(finalPath))
+                {
+                    TryPurgeSimZstdCacheVariants(imgPath, fileEntry, cacheDir);
+                    return null;
+                }
+            }
+            catch { }
+            try
+            {
+                if (AnyMatchingZstdVariantHasReadableMeta(imgPath, fileEntry, cacheDir))
+                {
+                    TryPurgeSimZstdCacheVariants(imgPath, fileEntry, cacheDir);
+                    return null;
+                }
+            }
+            catch { }
             
             if (Settings.Instance.TextureLogLevel.Value >= 2)
             {
