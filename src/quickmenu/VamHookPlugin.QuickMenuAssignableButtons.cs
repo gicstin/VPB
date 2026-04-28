@@ -60,7 +60,18 @@ namespace VPB
 
         private RectTransform m_QmTooltipRT;
         private Text m_QmTooltipText;
+        private Image m_QmTooltipBackdrop;
         private string m_QmTooltipCurrent;
+
+        private float m_QmFpsLastLabelUpdateTime = -999f;
+        private string m_QmFpsCachedLabel = "";
+        private string[] m_QmLastAppliedSlotLabels;
+
+        private void QuickMenuEnsureSlotLabelCache()
+        {
+            if (m_QmLastAppliedSlotLabels == null || m_QmLastAppliedSlotLabels.Length != QuickMenuGridSlotCount)
+                m_QmLastAppliedSlotLabels = new string[QuickMenuGridSlotCount];
+        }
 
         private Sprite m_QmIconCreate;
         private Sprite m_QmIconEyeOn;
@@ -132,14 +143,15 @@ namespace VPB
                 float topEdge = slot0Center.y + QuickMenuGridButtonSize * 0.5f;
                 float centerX = slot0Center.x + QuickMenuGridCell * 1.5f;
                 m_QmTooltipRT.anchoredPosition = new Vector2(centerX, topEdge + 28f);
-                m_QmTooltipRT.sizeDelta = new Vector2(QuickMenuGridCell * 4f - QuickMenuGridGap, 44f);
+                var sd = m_QmTooltipRT.sizeDelta;
+                m_QmTooltipRT.sizeDelta = new Vector2(QuickMenuGridCell * 4f - QuickMenuGridGap, sd.y);
             }
         }
 
         private void QuickMenuEnsureTooltipUI()
         {
             if (m_QuickMenuCanvas == null) return;
-            if (m_QmTooltipRT != null && m_QmTooltipText != null) return;
+            if (m_QmTooltipRT != null && m_QmTooltipText != null && m_QmTooltipBackdrop != null) return;
 
             GameObject go = new GameObject("VPB_QM_TooltipBar");
             go.transform.SetParent(m_QuickMenuCanvas.transform, false);
@@ -152,6 +164,7 @@ namespace VPB
             var img = go.AddComponent<Image>();
             img.color = new Color(0f, 0f, 0f, 0.35f);
             img.raycastTarget = false;
+            m_QmTooltipBackdrop = img;
 
             GameObject tgo = new GameObject("Text");
             tgo.transform.SetParent(go.transform, false);
@@ -172,6 +185,45 @@ namespace VPB
             t.text = "";
             t.raycastTarget = false;
             m_QmTooltipText = t;
+
+            // Start fully hidden (no backdrop shown until we have a message).
+            QuickMenuUpdateTooltipVisual(forceHide: true);
+        }
+
+        private void QuickMenuUpdateTooltipVisual(bool forceHide = false)
+        {
+            if (m_QmTooltipRT == null || m_QmTooltipText == null) return;
+
+            bool hasMsg = !forceHide && !string.IsNullOrEmpty(m_QmTooltipCurrent);
+            if (!hasMsg)
+            {
+                if (m_QmTooltipBackdrop != null) m_QmTooltipBackdrop.enabled = false;
+                m_QmTooltipText.enabled = false;
+
+                var sd0 = m_QmTooltipRT.sizeDelta;
+                m_QmTooltipRT.sizeDelta = new Vector2(sd0.x, 0f);
+                return;
+            }
+
+            if (m_QmTooltipBackdrop != null) m_QmTooltipBackdrop.enabled = true;
+            m_QmTooltipText.enabled = true;
+
+            // Auto-size height to fit wrapped text.
+            // Width is set by layout; height is derived from preferredHeight + padding.
+            try
+            {
+                Canvas.ForceUpdateCanvases();
+            }
+            catch { }
+
+            float prefH = 0f;
+            try { prefH = m_QmTooltipText.preferredHeight; } catch { prefH = 0f; }
+            const float padY = 14f;
+            const float minH = 28f;
+            float h = Mathf.Max(minH, prefH + padY);
+
+            var sd = m_QmTooltipRT.sizeDelta;
+            m_QmTooltipRT.sizeDelta = new Vector2(sd.x, h);
         }
 
         private void QuickMenuSetTooltip(string msg)
@@ -179,6 +231,7 @@ namespace VPB
             if (m_QmTooltipText == null) return;
             m_QmTooltipCurrent = msg ?? "";
             m_QmTooltipText.text = m_QmTooltipCurrent;
+            QuickMenuUpdateTooltipVisual();
         }
 
         private void QuickMenuClearTooltip(string expected)
@@ -187,6 +240,7 @@ namespace VPB
             if (expected != null && m_QmTooltipCurrent != expected) return;
             m_QmTooltipCurrent = "";
             m_QmTooltipText.text = "";
+            QuickMenuUpdateTooltipVisual();
         }
 
         private string QuickMenuGetTooltipForSlot(int idx)
@@ -591,6 +645,7 @@ namespace VPB
             if (m_QuickMenuGridButtons == null) return;
             var go = m_QuickMenuGridButtons[idx];
             if (go == null) return;
+            QuickMenuEnsureSlotLabelCache();
 
             // Note: this quick-menu grid is built from scratch (no VaM prefab),
             // so we must NOT blanket-hide Text components here. Some slots (e.g. FPS) are text-only.
@@ -610,8 +665,8 @@ namespace VPB
                 Image bg = (m_QuickMenuGridBackdropImages != null && idx < m_QuickMenuGridBackdropImages.Length) ? m_QuickMenuGridBackdropImages[idx] : null;
                 if (bg != null)
                 {
-                    Color normal = new Color(0.35f, 0.35f, 0.35f, 0.5f);
-                    Color hover  = new Color(0.35f, 0.35f, 0.35f, 0.75f);
+                    Color normal = new Color(0f, 0f, 0f, 0.35f);
+                    Color hover  = new Color(0f, 0f, 0f, 0.55f);
                     bg.color = normal;
                     var hh = bg.GetComponent<QuickMenuSquareHover>();
                     if (hh != null) { hh.normal = normal; hh.hover = hover; }
@@ -634,8 +689,8 @@ namespace VPB
                 Image bg = (m_QuickMenuGridBackdropImages != null && idx < m_QuickMenuGridBackdropImages.Length) ? m_QuickMenuGridBackdropImages[idx] : null;
                 if (bg != null)
                 {
-                    Color normal = new Color(0.35f, 0.35f, 0.35f, 0.5f);
-                    Color hover  = new Color(0.35f, 0.35f, 0.35f, 0.75f);
+                    Color normal = new Color(0f, 0f, 0f, 0.35f);
+                    Color hover  = new Color(0f, 0f, 0f, 0.55f);
                     bg.color = normal;
                     var hh = bg.GetComponent<QuickMenuSquareHover>();
                     if (hh != null) { hh.normal = normal; hh.hover = hover; }
@@ -719,29 +774,48 @@ namespace VPB
 
             if (action == QuickMenuAssignableAction.FpsCounter)
             {
-                float fps = 0f;
-                try
+                // Throttle text refresh to max 2 Hz; slot visuals may update more frequently.
+                const float interval = 0.5f;
+                float now = 0f;
+                try { now = Time.unscaledTime; } catch { now = 0f; }
+
+                if (string.IsNullOrEmpty(m_QmFpsCachedLabel) || (now - m_QmFpsLastLabelUpdateTime) >= interval)
                 {
-                    fps = 1f / Mathf.Max(0.00001f, m_FpsSmoothedDelta);
+                    m_QmFpsLastLabelUpdateTime = now;
+
+                    float fps = 0f;
+                    try { fps = 1f / Mathf.Max(0.00001f, m_FpsSmoothedDelta); }
+                    catch { fps = 0f; }
+
+                    // Display as an integer 0..999 (no decimals), per quick-menu compact constraint.
+                    if (fps > 999f) fps = 999f;
+                    if (fps < 0f) fps = 0f;
+                    m_QmFpsCachedLabel = ((int)(fps + 0.5f)).ToString(System.Globalization.CultureInfo.InvariantCulture);
                 }
-                catch { fps = 0f; }
-                // Display as an integer 0..999 (no decimals), per quick-menu compact constraint.
-                if (fps > 999f) fps = 999f;
-                if (fps < 0f) fps = 0f;
-                string txt = ((int)(fps + 0.5f)).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                QuickMenuSetLabel(go, txt, clearIcon: true);
+
+                // Only touch UI text if it actually changed (avoids per-frame layout dirties).
+                string last = (m_QmLastAppliedSlotLabels != null) ? m_QmLastAppliedSlotLabels[idx] : null;
+                if (last != m_QmFpsCachedLabel)
+                {
+                    if (m_QmLastAppliedSlotLabels != null) m_QmLastAppliedSlotLabels[idx] = m_QmFpsCachedLabel;
+                    QuickMenuSetLabel(go, m_QmFpsCachedLabel, clearIcon: true);
+                }
             }
             else
+            {
+                if (m_QmLastAppliedSlotLabels != null) m_QmLastAppliedSlotLabels[idx] = null;
                 QuickMenuSetIcon(go, icon, padding: 6f);
+            }
 
             bool isAssigned = action != QuickMenuAssignableAction.None;
             Image bgImg = (m_QuickMenuGridBackdropImages != null && idx < m_QuickMenuGridBackdropImages.Length) ? m_QuickMenuGridBackdropImages[idx] : null;
             if (bgImg != null)
             {
-                Color normalAssigned = new Color(0.35f, 0.35f, 0.35f, 0.5f);
-                Color hoverAssigned  = new Color(0.35f, 0.35f, 0.35f, 0.75f);
-                Color normalEmpty    = new Color(0.35f, 0.35f, 0.35f, 0.0f);
-                Color hoverEmpty     = new Color(0.35f, 0.35f, 0.35f, 0.35f);
+                // Match tooltip backdrop style: black tint with variable alpha.
+                Color normalAssigned = new Color(0f, 0f, 0f, 0.35f);
+                Color hoverAssigned  = new Color(0f, 0f, 0f, 0.55f);
+                Color normalEmpty    = new Color(0f, 0f, 0f, 0.0f);
+                Color hoverEmpty     = new Color(0f, 0f, 0f, 0.20f);
 
                 Color normal = isAssigned ? normalAssigned : normalEmpty;
                 Color hover  = isAssigned ? hoverAssigned  : hoverEmpty;

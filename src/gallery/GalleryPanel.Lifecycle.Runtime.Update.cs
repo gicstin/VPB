@@ -307,7 +307,12 @@ namespace VPB
                 if (fpsTimer >= FpsInterval)
                 {
                     float fps = fpsFrames / fpsTimer;
-                    fpsText.text = string.Format("{0:0} FPS", fps);
+                    string txt = string.Format("{0:0} FPS", fps);
+                    if (_fpsLastAppliedText != txt)
+                    {
+                        _fpsLastAppliedText = txt;
+                        fpsText.text = txt;
+                    }
                     fpsTimer = 0f;
                     fpsFrames = 0;
                 }
