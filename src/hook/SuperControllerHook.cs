@@ -16,6 +16,9 @@ namespace VPB
 {
     public class SuperControllerHook
     {
+        private static readonly Regex s_HubResourcePathRegex =
+            new Regex(@"^/resources/(?<id>\d+)(/|$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
         private static readonly object pluginCreateLock = new object();
         private static readonly Dictionary<int, Stopwatch> pluginCreateSwByThread = new Dictionary<int, Stopwatch>();
         private static readonly Dictionary<int, string> pluginCreateNameByThread = new Dictionary<int, string>();
@@ -739,6 +742,61 @@ namespace VPB
             LogUtil.LogStartupReadyOnce("World UI activated");
             LogUtil.MarkScenePhaseWorldUiActivated();
             LogUtil.EndSceneLoadTotal("WorldUI.Activate");
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SuperController), "OpenLinkInBrowser", new Type[] { typeof(string) })]
+        public static bool PreOpenLinkInBrowser(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return true;
+            if (VamHookPlugin.singleton == null || HubBrowse.singleton == null) return true;
+
+            Uri uri;
+            try
+            {
+                if (!Uri.TryCreate(url, UriKind.Absolute, out uri)) return true;
+            }
+            catch { return true; }
+
+            // Redirect Hub web opens to VPB's in-game Hub browser ("Hook Hub").
+            // This catches buttons/links anywhere in VaM that open hub.virtamate.com pages.
+            if (!string.Equals(uri.Host, "hub.virtamate.com", StringComparison.OrdinalIgnoreCase)) return true;
+
+            // Always open the Hook Hub UI; optionally jump to a resource detail.
+            try { VamHookPlugin.singleton.OpenHubBrowse(); } catch { return true; }
+
+            string resourceId = null;
+            try
+            {
+                string path = uri.AbsolutePath ?? "";
+                var m = s_HubResourcePathRegex.Match(path);
+                if (m.Success) resourceId = m.Groups["id"]?.Value;
+            }
+            catch { resourceId = null; }
+
+            try
+            {
+                if (!string.IsNullOrEmpty(resourceId)) HubBrowse.singleton.OpenDetail(resourceId);
+                else HubBrowse.singleton.Show();
+            }
+            catch { return true; }
+
+            // Skip the original browser-open.
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.Hub.HubBrowse), "Show")]
+        public static bool PreVamNativeHubShow()
+        {
+            // Redirect VaM's native Hub UI to VPB "Hook Hub".
+            var plugin = VamHookPlugin.singleton;
+            if (plugin == null) return true;
+
+            try { plugin.OpenHubBrowse(); }
+            catch { return true; }
+
+            return false;
         }
 
         [HarmonyPrefix]
