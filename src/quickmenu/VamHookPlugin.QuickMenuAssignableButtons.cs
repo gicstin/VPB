@@ -507,6 +507,15 @@ namespace VPB
             var cfg = VPBConfig.Instance;
             if (cfg == null) return;
 
+            // Core/global button slots (settings + page) are persisted separately from per-page actions.
+            m_QuickMenuEditSlotIdx = Mathf.Clamp(cfg.QuickMenuEditSlotIdx, 4, QuickMenuGridSlotCount - 1);
+            m_QuickMenuPageToggleSlotIdx = Mathf.Clamp(cfg.QuickMenuPageToggleSlotIdx, 4, QuickMenuGridSlotCount - 1);
+            if (m_QuickMenuPageToggleSlotIdx == m_QuickMenuEditSlotIdx)
+            {
+                m_QuickMenuPageToggleSlotIdx = 15;
+                if (m_QuickMenuPageToggleSlotIdx == m_QuickMenuEditSlotIdx) m_QuickMenuPageToggleSlotIdx = 14;
+            }
+
             bool hasValid = cfg.QuickMenuButtonsPages != null && cfg.QuickMenuButtonsPages.Length > 0;
             if (hasValid)
             {
@@ -563,6 +572,8 @@ namespace VPB
 
                 cfg.QuickMenuButtonsVersion = 1;
                 cfg.QuickMenuButtonsCurrentPage = Mathf.Clamp(m_QuickMenuCurrentPage, 0, QuickMenuPageCount - 1);
+                cfg.QuickMenuEditSlotIdx = Mathf.Clamp(m_QuickMenuEditSlotIdx, 4, QuickMenuGridSlotCount - 1);
+                cfg.QuickMenuPageToggleSlotIdx = Mathf.Clamp(m_QuickMenuPageToggleSlotIdx, 4, QuickMenuGridSlotCount - 1);
                 cfg.QuickMenuButtonsPages = new string[QuickMenuPageCount][];
                 for (int p = 0; p < QuickMenuPageCount; p++)
                 {

@@ -242,6 +242,8 @@ namespace VPB
         public int QuickMenuButtonsVersion = 1;
         public int QuickMenuButtonsCurrentPage = 0; // 0-based
         public string[][] QuickMenuButtonsPages = null; // [page][slot] => actionId (""/null = none)
+        public int QuickMenuEditSlotIdx = 12; // settings/edit toggle slot (0-based)
+        public int QuickMenuPageToggleSlotIdx = 15; // page toggle slot (0-based)
 
         private static readonly string[] s_HoverPreviewModeCanonical = { "Off", "List", "Grid", "Both" };
         public static string NormalizeHoverPreviewMode(string value)
@@ -461,6 +463,8 @@ namespace VPB
             QuickMenuButtonsVersion = 1;
             QuickMenuButtonsCurrentPage = 0;
             QuickMenuButtonsPages = null;
+            QuickMenuEditSlotIdx = 12;
+            QuickMenuPageToggleSlotIdx = 15;
 
             try
             {
@@ -584,6 +588,8 @@ namespace VPB
                             {
                                 if (qm["version"] != null) QuickMenuButtonsVersion = qm["version"].AsInt;
                                 if (qm["currentPage"] != null) QuickMenuButtonsCurrentPage = qm["currentPage"].AsInt;
+                                if (qm["editSlotIdx"] != null) QuickMenuEditSlotIdx = qm["editSlotIdx"].AsInt;
+                                if (qm["pageToggleSlotIdx"] != null) QuickMenuPageToggleSlotIdx = qm["pageToggleSlotIdx"].AsInt;
 
                                 JSONNode pages = qm["pages"];
                                 // SimpleJSON variant in VaM does not expose IsArray; treat nodes with children as arrays.
@@ -757,6 +763,8 @@ namespace VPB
                     JSONClass qm = new JSONClass();
                     qm["version"].AsInt = QuickMenuButtonsVersion;
                     qm["currentPage"].AsInt = QuickMenuButtonsCurrentPage;
+                    qm["editSlotIdx"].AsInt = QuickMenuEditSlotIdx;
+                    qm["pageToggleSlotIdx"].AsInt = QuickMenuPageToggleSlotIdx;
                     JSONArray pages = new JSONArray();
                     if (QuickMenuButtonsPages != null)
                     {

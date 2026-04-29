@@ -1648,12 +1648,7 @@ namespace VPB
                 QuickMenuEnsureTooltipUI();
                 try { QuickMenuApplyGridLayoutFromAnchor(createCenter); } catch { }
 
-                // Slot 13 (1-based) reserved for Settings/Edit toggle.
-                int editSlotIdx = 12; // 0-based
-                m_QuickMenuEditSlotIdx = editSlotIdx;
-
-                // Slot 16 (1-based) reserved for Page toggle.
-                m_QuickMenuPageToggleSlotIdx = 15; // 0-based
+                // Core slot indices are loaded from persisted config in QuickMenuEnsureDefaultsAndLoadFromConfig().
 
                 bool initialShouldShow = Gallery.singleton != null && Gallery.singleton.PanelCount > 0;
 

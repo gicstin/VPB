@@ -489,6 +489,95 @@ namespace VPB
 
         // ─── Scan Whitelist toolbox actions ───────────────────────────────────────
 
+        private void TboxScanWhitelistTemporaryForSelection()
+        {
+            try
+            {
+                if (!ScanWhitelistManager.Instance.IsEnabled)
+                {
+                    ShowTemporaryStatus("Scan whitelist is disabled. Enable it in VPB settings first.", 2.5f);
+                    return;
+                }
+                if (selectedFiles == null || selectedFiles.Count == 0)
+                {
+                    ShowTemporaryStatus("No selection.", 1.5f);
+                    return;
+                }
+
+                var seenUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var addUids = new List<string>();
+                var selectedRootUids = new List<string>();
+
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    var f = selectedFiles[i];
+                    if (f == null) continue;
+                    if (!TryGetTboxResolvablePackageState(f, out string uid, out _, out _, out _, out _, out _)) continue;
+                    if (!seenUids.Add(uid)) continue;
+                    if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false)) continue;
+                    selectedRootUids.Add(uid);
+                    if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid)) continue;
+                    addUids.Add(uid);
+                }
+
+                // Include full dependency trees for selected packages (session-only; not persisted).
+                var depCandidateIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < selectedRootUids.Count; i++)
+                {
+                    string uid = selectedRootUids[i];
+                    if (string.IsNullOrEmpty(uid)) continue;
+                    try
+                    {
+                        var deps = FileManager.GetDependenciesDeep(uid, 2);
+                        if (deps == null || deps.Count == 0) continue;
+                        foreach (var depId in deps)
+                        {
+                            if (string.IsNullOrEmpty(depId)) continue;
+                            depCandidateIds.Add(depId);
+                        }
+                    }
+                    catch { }
+                }
+                foreach (var depId in depCandidateIds)
+                {
+                    try
+                    {
+                        // Resolve aliases like ".latest" to actual local package UID when possible.
+                        var depPkg = FileManager.GetPackage(depId, ensureInstalled: false);
+                        string depUid = depPkg != null ? depPkg.Uid : depId;
+                        if (string.IsNullOrEmpty(depUid)) continue;
+                        if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(depUid)) continue;
+                        if (!seenUids.Add(depUid)) continue;
+                        addUids.Add(depUid);
+                    }
+                    catch { }
+                }
+
+                if (addUids.Count == 0)
+                {
+                    ShowTemporaryStatus("Nothing new to temporarily whitelist for this session.", 2f);
+                    return;
+                }
+
+                List<string> added = ScanWhitelistManager.Instance.AddTemporaryUidOverrides(addUids);
+                int addedCount = added != null ? added.Count : 0;
+                if (addedCount <= 0)
+                {
+                    ShowTemporaryStatus("Nothing new to temporarily whitelist for this session.", 2f);
+                    return;
+                }
+
+                try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                try { RefreshTboxConditionalActionButtons(); } catch { }
+                ShowTemporaryStatus($"Temporarily whitelisted {addedCount} package(s) for this VaM session.", 2.5f);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] TboxScanWhitelistTemporaryForSelection error: " + ex);
+                ShowTemporaryStatus("Temporary whitelist failed. See log.", 2f);
+            }
+        }
+
         private void TboxScanWhitelistAddFolderForSelection()
         {
             TboxScanWhitelistModifyForSelection(addFolder: true);
