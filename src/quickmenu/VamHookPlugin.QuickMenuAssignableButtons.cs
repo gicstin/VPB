@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -34,6 +35,16 @@ namespace VPB
             AutoHideGallery,
             ShowHiddenPackages,
             FpsCounter,
+            OpenCategoryScenes,
+            OpenCategorySubScenes,
+            OpenCategoryClothing,
+            OpenCategoryHair,
+            OpenCategoryPose,
+            OpenCategoryAppearance,
+            OpenCategoryPlugins,
+            OpenCategoryAll,
+            CoreSettingsButton,
+            CorePageButton,
         }
 
         private const int QuickMenuGridCols = 4;
@@ -52,6 +63,20 @@ namespace VPB
         private GameObject m_QuickMenuAssignPopupRoot;
         private RectTransform m_QuickMenuAssignPopupRT;
         private readonly List<GameObject> m_QuickMenuAssignPopupButtons = new List<GameObject>(32);
+        private GameObject m_QuickMenuAssignCategoryPopupRoot;
+        private RectTransform m_QuickMenuAssignCategoryPopupRT;
+        private RectTransform m_QuickMenuAssignOpenCategoryButtonRT;
+        private readonly List<GameObject> m_QuickMenuAssignCategoryPopupButtons = new List<GameObject>(16);
+        private bool m_QmAssignCategoryHoverMain;
+        private bool m_QmAssignCategoryHoverPopup;
+        private bool m_QmAssignCategoryPinned;
+        private int m_QmAssignCategoryHideRequestSerial;
+        private bool m_QmAssignPalettePinned;
+        private bool m_QmAssignDragActive;
+        private QuickMenuAssignableAction m_QmAssignDragAction = QuickMenuAssignableAction.None;
+        private GameObject m_QmAssignDragGhostGO;
+        private RectTransform m_QmAssignDragGhostRT;
+        private Image m_QmAssignDragGhostImage;
         private int m_QuickMenuAssignPopupTargetIdx = -1;
         private bool m_QuickMenuEditMode;
         private int m_QuickMenuEditSlotIdx = -1;
@@ -94,10 +119,20 @@ namespace VPB
         private Sprite m_QmIconAutoHideOff;
         private Sprite m_QmIconShowHiddenOn;
         private Sprite m_QmIconShowHiddenOff;
+        private Sprite m_QmIconOpenCategory;
+        private Sprite m_QmIconCategoryScenes;
+        private Sprite m_QmIconCategorySubScenes;
+        private Sprite m_QmIconCategoryClothing;
+        private Sprite m_QmIconCategoryHair;
+        private Sprite m_QmIconCategoryPose;
+        private Sprite m_QmIconCategoryAppearance;
+        private Sprite m_QmIconCategoryPlugins;
+        private Sprite m_QmIconCategoryAll;
         private Sprite[] m_QmIconPages; // 10 icons: page_0..page_9
 
         private Vector2 m_QmLastAnchorCenter = new Vector2(float.NaN, float.NaN);
         private bool m_QmLastAnchorIsVR = false;
+        private const float QuickMenuAssignCategoryHoverHideDelaySec = 0.45f;
 
         private static bool QuickMenuIsVrActive()
         {
@@ -142,7 +177,7 @@ namespace VPB
             {
                 float topEdge = slot0Center.y + QuickMenuGridButtonSize * 0.5f;
                 float centerX = slot0Center.x + QuickMenuGridCell * 1.5f;
-                m_QmTooltipRT.anchoredPosition = new Vector2(centerX, topEdge + 28f);
+                m_QmTooltipRT.anchoredPosition = new Vector2(centerX, topEdge + 8f);
                 var sd = m_QmTooltipRT.sizeDelta;
                 m_QmTooltipRT.sizeDelta = new Vector2(QuickMenuGridCell * 4f - QuickMenuGridGap, sd.y);
             }
@@ -158,7 +193,8 @@ namespace VPB
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin = new Vector2(0.5f, 0.5f);
             rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
+            // Grow upward for multi-line text to avoid overlap/clipping into quick-menu row.
+            rt.pivot = new Vector2(0.5f, 0f);
             m_QmTooltipRT = rt;
 
             var img = go.AddComponent<Image>();
@@ -238,6 +274,11 @@ namespace VPB
         {
             if (m_QmTooltipText == null) return;
             if (expected != null && m_QmTooltipCurrent != expected) return;
+            if (m_QuickMenuEditMode)
+            {
+                QuickMenuSetTooltip(VPBTranslation.T("hook.qmtooltip.drag_assign", "Edit mode: drag an action from the list and drop it on a slot to assign."));
+                return;
+            }
             m_QmTooltipCurrent = "";
             m_QmTooltipText.text = "";
             QuickMenuUpdateTooltipVisual();
@@ -251,6 +292,8 @@ namespace VPB
                 return m_QuickMenuEditMode
                     ? VPBTranslation.T("hook.qmtooltip.edit_off", "Disable editing")
                     : VPBTranslation.T("hook.qmtooltip.edit_on", "Enable editing");
+            if (idx >= 0 && idx <= 3)
+                return VPBTranslation.T("hook.qmtooltip.core_locked", "Core button (locked)");
 
             var a = QuickMenuGetSlotAction(idx);
             switch (a)
@@ -270,6 +313,16 @@ namespace VPB
                 case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.qmbutton.autohide", "Auto-Hide");
                 case QuickMenuAssignableAction.ShowHiddenPackages: return VPBTranslation.T("hook.qmbutton.show_hidden", "Show Hidden");
                 case QuickMenuAssignableAction.FpsCounter: return VPBTranslation.T("hook.qmbutton.fps", "FPS Counter");
+                case QuickMenuAssignableAction.OpenCategoryScenes: return VPBTranslation.T("hook.qmbutton.open_category_scenes", "Open Category: Scenes");
+                case QuickMenuAssignableAction.OpenCategorySubScenes: return VPBTranslation.T("hook.qmbutton.open_category_subscenes", "Open Category: SubScenes");
+                case QuickMenuAssignableAction.OpenCategoryClothing: return VPBTranslation.T("hook.qmbutton.open_category_clothing", "Open Category: Clothing");
+                case QuickMenuAssignableAction.OpenCategoryHair: return VPBTranslation.T("hook.qmbutton.open_category_hair", "Open Category: Hair");
+                case QuickMenuAssignableAction.OpenCategoryPose: return VPBTranslation.T("hook.qmbutton.open_category_pose", "Open Category: Pose");
+                case QuickMenuAssignableAction.OpenCategoryAppearance: return VPBTranslation.T("hook.qmbutton.open_category_appearance", "Open Category: Appearance");
+                case QuickMenuAssignableAction.OpenCategoryPlugins: return VPBTranslation.T("hook.qmbutton.open_category_plugins", "Open Category: Plugins");
+                case QuickMenuAssignableAction.OpenCategoryAll: return VPBTranslation.T("hook.qmbutton.open_category_all", "Open Category: All");
+                case QuickMenuAssignableAction.CoreSettingsButton: return VPBTranslation.T("hook.qmbutton.core_settings", "Core: Settings");
+                case QuickMenuAssignableAction.CorePageButton: return VPBTranslation.T("hook.qmbutton.core_page", "Core: Page");
                 case QuickMenuAssignableAction.None:
                 default:
                     return m_QuickMenuEditMode ? VPBTranslation.T("hook.qmtooltip.assign", "Assign button") : "";
@@ -370,6 +423,14 @@ namespace VPB
                 case QuickMenuAssignableAction.AutoHideGallery: return "autohide_gallery";
                 case QuickMenuAssignableAction.ShowHiddenPackages: return "show_hidden_packages";
                 case QuickMenuAssignableAction.FpsCounter: return "fps_counter";
+                case QuickMenuAssignableAction.OpenCategoryScenes: return "open_category_scenes";
+                case QuickMenuAssignableAction.OpenCategorySubScenes: return "open_category_subscenes";
+                case QuickMenuAssignableAction.OpenCategoryClothing: return "open_category_clothing";
+                case QuickMenuAssignableAction.OpenCategoryHair: return "open_category_hair";
+                case QuickMenuAssignableAction.OpenCategoryPose: return "open_category_pose";
+                case QuickMenuAssignableAction.OpenCategoryAppearance: return "open_category_appearance";
+                case QuickMenuAssignableAction.OpenCategoryPlugins: return "open_category_plugins";
+                case QuickMenuAssignableAction.OpenCategoryAll: return "open_category_all";
                 case QuickMenuAssignableAction.None:
                 default:
                     return "";
@@ -397,6 +458,14 @@ namespace VPB
                 case "autohide_gallery": return QuickMenuAssignableAction.AutoHideGallery;
                 case "show_hidden_packages": return QuickMenuAssignableAction.ShowHiddenPackages;
                 case "fps_counter": return QuickMenuAssignableAction.FpsCounter;
+                case "open_category_scenes": return QuickMenuAssignableAction.OpenCategoryScenes;
+                case "open_category_subscenes": return QuickMenuAssignableAction.OpenCategorySubScenes;
+                case "open_category_clothing": return QuickMenuAssignableAction.OpenCategoryClothing;
+                case "open_category_hair": return QuickMenuAssignableAction.OpenCategoryHair;
+                case "open_category_pose": return QuickMenuAssignableAction.OpenCategoryPose;
+                case "open_category_appearance": return QuickMenuAssignableAction.OpenCategoryAppearance;
+                case "open_category_plugins": return QuickMenuAssignableAction.OpenCategoryPlugins;
+                case "open_category_all": return QuickMenuAssignableAction.OpenCategoryAll;
                 default: return QuickMenuAssignableAction.None;
             }
         }
@@ -565,8 +634,142 @@ namespace VPB
         private void QuickMenuSetAssignment(int idx, QuickMenuAssignableAction action)
         {
             if (idx < 0 || idx >= QuickMenuGridSlotCount) return;
+            if (idx >= 0 && idx <= 3) return;
+            if (action == QuickMenuAssignableAction.CoreSettingsButton)
+            {
+                QuickMenuMoveCoreButtonSlot(isSettings: true, targetIdx: idx);
+                return;
+            }
+            if (action == QuickMenuAssignableAction.CorePageButton)
+            {
+                QuickMenuMoveCoreButtonSlot(isSettings: false, targetIdx: idx);
+                return;
+            }
             EnsureQuickMenuGridArrays();
             QuickMenuSetSlotAction(idx, action);
+        }
+
+        private bool QuickMenuIsSlotAssignableTarget(int idx)
+        {
+            if (idx < 0 || idx >= QuickMenuGridSlotCount) return false;
+            if (idx >= 0 && idx <= 3) return false; // locked top row
+            if (idx == m_QuickMenuEditSlotIdx) return false;
+            if (idx == m_QuickMenuPageToggleSlotIdx) return false;
+            return true;
+        }
+
+        private bool QuickMenuCanPlaceActionInSlot(QuickMenuAssignableAction action, int idx)
+        {
+            if (idx < 0 || idx >= QuickMenuGridSlotCount) return false;
+            if (idx >= 0 && idx <= 3) return false;
+
+            if (action == QuickMenuAssignableAction.CoreSettingsButton)
+                return idx != m_QuickMenuPageToggleSlotIdx;
+            if (action == QuickMenuAssignableAction.CorePageButton)
+                return idx != m_QuickMenuEditSlotIdx;
+
+            return idx != m_QuickMenuEditSlotIdx && idx != m_QuickMenuPageToggleSlotIdx;
+        }
+
+        private bool QuickMenuTryAssignDraggedActionToSlot(int idx)
+        {
+            if (!m_QuickMenuEditMode) return false;
+            if (!m_QmAssignDragActive) return false;
+            if (!QuickMenuCanPlaceActionInSlot(m_QmAssignDragAction, idx)) return false;
+            QuickMenuSetAssignment(idx, m_QmAssignDragAction);
+            return true;
+        }
+
+        private void QuickMenuMoveCoreButtonSlot(bool isSettings, int targetIdx)
+        {
+            if (!QuickMenuCanPlaceActionInSlot(isSettings ? QuickMenuAssignableAction.CoreSettingsButton : QuickMenuAssignableAction.CorePageButton, targetIdx))
+                return;
+
+            int oldIdx = isSettings ? m_QuickMenuEditSlotIdx : m_QuickMenuPageToggleSlotIdx;
+            if (oldIdx == targetIdx) return;
+
+            // Core buttons are unique/global and should free previous slot when moved.
+            QuickMenuSetSlotAction(oldIdx, QuickMenuAssignableAction.None);
+            QuickMenuSetSlotAction(targetIdx, QuickMenuAssignableAction.None);
+
+            if (isSettings) m_QuickMenuEditSlotIdx = targetIdx;
+            else m_QuickMenuPageToggleSlotIdx = targetIdx;
+
+            QuickMenuPersistAssignments();
+            QuickMenuRefreshSlotVisual(oldIdx);
+            QuickMenuRefreshSlotVisual(targetIdx);
+        }
+
+        private void QuickMenuEnsureAssignDragGhost()
+        {
+            if (m_QmAssignDragGhostGO != null && m_QmAssignDragGhostRT != null && m_QmAssignDragGhostImage != null) return;
+            if (m_QuickMenuCanvas == null) return;
+
+            m_QmAssignDragGhostGO = new GameObject("VPB_QM_AssignDragGhost");
+            m_QmAssignDragGhostGO.transform.SetParent(m_QuickMenuCanvas.transform, false);
+            m_QmAssignDragGhostRT = m_QmAssignDragGhostGO.AddComponent<RectTransform>();
+            m_QmAssignDragGhostRT.anchorMin = new Vector2(0.5f, 0.5f);
+            m_QmAssignDragGhostRT.anchorMax = new Vector2(0.5f, 0.5f);
+            m_QmAssignDragGhostRT.pivot = new Vector2(0.5f, 0.5f);
+            m_QmAssignDragGhostRT.sizeDelta = new Vector2(34f, 34f);
+
+            m_QmAssignDragGhostImage = m_QmAssignDragGhostGO.AddComponent<Image>();
+            m_QmAssignDragGhostImage.color = new Color(1f, 1f, 1f, 0.5f);
+            m_QmAssignDragGhostImage.preserveAspect = true;
+            m_QmAssignDragGhostImage.raycastTarget = false;
+
+            m_QmAssignDragGhostGO.SetActive(false);
+        }
+
+        private void QuickMenuBeginAssignDragGhost(QuickMenuAssignableAction action, PointerEventData eventData)
+        {
+            QuickMenuEnsureAssignDragGhost();
+            if (m_QmAssignDragGhostGO == null || m_QmAssignDragGhostRT == null || m_QmAssignDragGhostImage == null) return;
+
+            m_QmAssignDragGhostImage.sprite = QuickMenuGetAssignPopupIcon(action);
+            m_QmAssignDragGhostImage.color = new Color(1f, 1f, 1f, 0.5f);
+            m_QmAssignDragGhostGO.SetActive(m_QmAssignDragGhostImage.sprite != null);
+            QuickMenuUpdateAssignDragGhostPosition(eventData);
+        }
+
+        private void QuickMenuUpdateAssignDragGhostPosition(PointerEventData eventData)
+        {
+            if (m_QmAssignDragGhostGO == null || !m_QmAssignDragGhostGO.activeSelf || m_QmAssignDragGhostRT == null) return;
+            if (eventData == null || m_QuickMenuCanvas == null) return;
+            RectTransform canvasRT = m_QuickMenuCanvas.GetComponent<RectTransform>();
+            if (canvasRT == null) return;
+
+            Vector2 local;
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRT, eventData.position, m_QuickMenuCanvas.worldCamera, out local))
+                m_QmAssignDragGhostRT.anchoredPosition = local;
+        }
+
+        private void QuickMenuEndAssignDragGhost()
+        {
+            if (m_QmAssignDragGhostGO != null) m_QmAssignDragGhostGO.SetActive(false);
+        }
+
+        private void QuickMenuSetDropTargetHighlight(int idx, bool on)
+        {
+            if (idx < 0 || idx >= QuickMenuGridSlotCount) return;
+            var bg = (m_QuickMenuGridBackdropImages != null && idx < m_QuickMenuGridBackdropImages.Length) ? m_QuickMenuGridBackdropImages[idx] : null;
+            if (bg == null) return;
+            if (on)
+            {
+                Color c = new Color(1f, 0.92f, 0.2f, 0.65f);
+                bg.color = c;
+                var hh = bg.GetComponent<QuickMenuSquareHover>();
+                if (hh != null) { hh.normal = c; hh.hover = c; }
+            }
+            else
+            {
+                QuickMenuRefreshSlotVisual(idx);
+            }
+        }
+
+        private void QuickMenuClearAllDropTargetHighlights()
+        {
+            for (int i = 0; i < QuickMenuGridSlotCount; i++) QuickMenuRefreshSlotVisual(i);
         }
 
         private static void QuickMenuSetIcon(GameObject buttonGO, Sprite icon, float padding)
@@ -766,6 +969,30 @@ namespace VPB
                     // No icon by request; label will be used (live FPS text).
                     icon = null;
                     break;
+                case QuickMenuAssignableAction.OpenCategoryScenes:
+                    icon = m_QmIconCategoryScenes ?? m_QmIconOpenCategory;
+                    break;
+                case QuickMenuAssignableAction.OpenCategorySubScenes:
+                    icon = m_QmIconCategorySubScenes ?? m_QmIconOpenCategory;
+                    break;
+                case QuickMenuAssignableAction.OpenCategoryClothing:
+                    icon = m_QmIconCategoryClothing ?? m_QmIconOpenCategory;
+                    break;
+                case QuickMenuAssignableAction.OpenCategoryHair:
+                    icon = m_QmIconCategoryHair ?? m_QmIconOpenCategory;
+                    break;
+                case QuickMenuAssignableAction.OpenCategoryPose:
+                    icon = m_QmIconCategoryPose ?? m_QmIconOpenCategory;
+                    break;
+                case QuickMenuAssignableAction.OpenCategoryAppearance:
+                    icon = m_QmIconCategoryAppearance ?? m_QmIconOpenCategory;
+                    break;
+                case QuickMenuAssignableAction.OpenCategoryPlugins:
+                    icon = m_QmIconCategoryPlugins ?? m_QmIconOpenCategory;
+                    break;
+                case QuickMenuAssignableAction.OpenCategoryAll:
+                    icon = m_QmIconCategoryAll ?? m_QmIconOpenCategory;
+                    break;
                 case QuickMenuAssignableAction.None:
                 default:
                     if (m_QuickMenuEditMode) icon = m_QmIconAssignEmpty;
@@ -931,10 +1158,40 @@ namespace VPB
                     if (p != null) p.QuickMenu_ToggleFpsCounter();
                     break;
                 }
+                case QuickMenuAssignableAction.OpenCategoryScenes: QuickMenuOpenGalleryCategory("Scenes"); break;
+                case QuickMenuAssignableAction.OpenCategorySubScenes: QuickMenuOpenGalleryCategory("SubScenes"); break;
+                case QuickMenuAssignableAction.OpenCategoryClothing: QuickMenuOpenGalleryCategory("Clothing"); break;
+                case QuickMenuAssignableAction.OpenCategoryHair: QuickMenuOpenGalleryCategory("Hair"); break;
+                case QuickMenuAssignableAction.OpenCategoryPose: QuickMenuOpenGalleryCategory("Pose"); break;
+                case QuickMenuAssignableAction.OpenCategoryAppearance: QuickMenuOpenGalleryCategory("Appearance"); break;
+                case QuickMenuAssignableAction.OpenCategoryPlugins: QuickMenuOpenGalleryCategory("Plugins"); break;
+                case QuickMenuAssignableAction.OpenCategoryAll: QuickMenuOpenGalleryCategory("All"); break;
                 case QuickMenuAssignableAction.None:
                 default:
                     break;
             }
+        }
+
+        private void QuickMenuOpenGalleryCategory(string categoryName)
+        {
+            if (string.IsNullOrEmpty(categoryName)) return;
+            if (Gallery.singleton == null) return;
+
+            try
+            {
+                if (!m_GalleryCatsInited) InitGalleryCategories();
+                if (m_GalleryCategories != null)
+                {
+                    for (int i = 0; i < m_GalleryCategories.Count; i++)
+                    {
+                        var c = m_GalleryCategories[i];
+                        if (!string.Equals(c.name, categoryName, System.StringComparison.OrdinalIgnoreCase)) continue;
+                        Gallery.singleton.Show(c.name, c.extension, c.path);
+                        return;
+                    }
+                }
+            }
+            catch { }
         }
 
         private void QuickMenuOpenCompressCache()
@@ -977,6 +1234,13 @@ namespace VPB
             m_QuickMenuAssignPopupTargetIdx = -1;
             m_QuickMenuSavePopupTargetIdx = -1;
             m_QuickMenuSavePopupPanel = null;
+            m_QmAssignCategoryHoverMain = false;
+            m_QmAssignCategoryHoverPopup = false;
+            m_QmAssignCategoryPinned = false;
+            m_QmAssignPalettePinned = false;
+            QuickMenuCancelAssignCategoryHide();
+            if (m_QuickMenuAssignCategoryPopupRoot != null && m_QuickMenuAssignCategoryPopupRoot.activeSelf)
+                m_QuickMenuAssignCategoryPopupRoot.SetActive(false);
             if (m_QuickMenuAssignPopupRoot != null && m_QuickMenuAssignPopupRoot.activeSelf)
                 m_QuickMenuAssignPopupRoot.SetActive(false);
         }
@@ -986,9 +1250,18 @@ namespace VPB
             try
             {
                 if (m_QuickMenuAssignPopupRT == null) return;
+                QuickMenuClampRectToScreen(m_QuickMenuAssignPopupRT);
+            }
+            catch { }
+        }
+
+        private void QuickMenuClampRectToScreen(RectTransform rt)
+        {
+            try
+            {
+                if (rt == null) return;
                 if (Camera.main == null) return;
 
-                var rt = m_QuickMenuAssignPopupRT;
                 Vector3[] corners = new Vector3[4];
                 rt.GetWorldCorners(corners);
 
@@ -1029,9 +1302,17 @@ namespace VPB
         private void QuickMenuShowAssignPopup(int slotIdx, Vector2 anchoredPos)
         {
             if (m_QuickMenuAssignPopupRoot == null || m_QuickMenuAssignPopupRT == null) return;
+            if (slotIdx >= 0 && slotIdx <= 3) return;
             m_QuickMenuAssignPopupTargetIdx = slotIdx;
             m_QuickMenuSavePopupTargetIdx = -1;
             m_QuickMenuSavePopupPanel = null;
+            m_QmAssignCategoryHoverMain = false;
+            m_QmAssignCategoryHoverPopup = false;
+            m_QmAssignCategoryPinned = false;
+            m_QmAssignPalettePinned = false;
+            QuickMenuCancelAssignCategoryHide();
+            if (m_QuickMenuAssignCategoryPopupRoot != null && m_QuickMenuAssignCategoryPopupRoot.activeSelf)
+                m_QuickMenuAssignCategoryPopupRoot.SetActive(false);
 
             m_QuickMenuAssignPopupRT.anchoredPosition = anchoredPos;
             if (!m_QuickMenuAssignPopupRoot.activeSelf) m_QuickMenuAssignPopupRoot.SetActive(true);
@@ -1060,9 +1341,11 @@ namespace VPB
             }
             m_QuickMenuAssignPopupButtons.Clear();
 
-            QuickMenuAssignableAction[] actions = new QuickMenuAssignableAction[]
+            var actions = new List<QuickMenuAssignableAction>
             {
                 QuickMenuAssignableAction.None,
+                QuickMenuAssignableAction.CoreSettingsButton,
+                QuickMenuAssignableAction.CorePageButton,
                 QuickMenuAssignableAction.CreateGallery,
                 QuickMenuAssignableAction.ShowHide,
                 QuickMenuAssignableAction.BringFront,
@@ -1079,10 +1362,11 @@ namespace VPB
                 QuickMenuAssignableAction.ShowHiddenPackages,
                 QuickMenuAssignableAction.FpsCounter,
             };
-
-            string[] labels = new string[]
+            var labels = new List<string>
             {
                 VPBTranslation.T("hook.qmassign.none", "None"),
+                VPBTranslation.T("hook.qmbutton.core_settings", "Core: Settings"),
+                VPBTranslation.T("hook.qmbutton.core_page", "Core: Page"),
                 VPBTranslation.T("hook.qmbutton.create_gallery", "Create Gallery"),
                 VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide"),
                 VPBTranslation.T("hook.qmbutton.bring_front", "Bring Front"),
@@ -1107,11 +1391,103 @@ namespace VPB
             float gap = 42f;
             int font = 24;
 
-            int n = Mathf.Min(actions.Length, labels.Length);
+            int n = Mathf.Min(actions.Count, labels.Count);
             for (int i = 0; i < n; i++)
             {
                 int iCopy = i;
                 var btnGo = UI.CreateUIButton(m_QuickMenuAssignPopupRoot, w, h, labels[i], font, 10f, y + gap * i, AnchorPresets.bottomLeft, () =>
+                {
+                    int idx = m_QuickMenuAssignPopupTargetIdx;
+                    bool didAssign = false;
+                    if (idx >= 0 && idx < QuickMenuGridSlotCount)
+                    {
+                        QuickMenuSetAssignment(idx, actions[iCopy]);
+                        didAssign = true;
+                    }
+                    if (didAssign || !m_QmAssignPalettePinned) QuickMenuHideAssignPopup();
+                });
+                QuickMenuAddLeftIconAndKeepLabel(btnGo, QuickMenuGetAssignPopupIcon(actions[iCopy]));
+                QuickMenuAttachAssignDragSource(btnGo, actions[iCopy]);
+                m_QuickMenuAssignPopupButtons.Add(btnGo);
+            }
+
+            var openCatBtn = UI.CreateUIButton(
+                m_QuickMenuAssignPopupRoot,
+                w,
+                h,
+                VPBTranslation.T("hook.qmbutton.open_category", "Open Category >"),
+                font,
+                10f,
+                y + gap * n,
+                AnchorPresets.bottomLeft,
+                () => { }
+            );
+            m_QuickMenuAssignPopupButtons.Add(openCatBtn);
+            m_QuickMenuAssignOpenCategoryButtonRT = openCatBtn != null ? openCatBtn.GetComponent<RectTransform>() : null;
+            QuickMenuAddLeftIconAndKeepLabel(openCatBtn, m_QmIconOpenCategory);
+
+            var openCatBtnComp = openCatBtn != null ? openCatBtn.GetComponent<Button>() : null;
+            if (openCatBtnComp != null) openCatBtnComp.interactable = true;
+            var openCatHover = openCatBtn != null ? openCatBtn.AddComponent<QuickMenuAssignOpenCategoryHoverHandler>() : null;
+            if (openCatHover != null) openCatHover.owner = this;
+
+            QuickMenuRebuildAssignCategoryPopupButtons();
+
+            // Resize popup to fit
+            float totalH = 20f + (n + 1) * gap + 10f;
+            m_QuickMenuAssignPopupRT.sizeDelta = new Vector2(260f, totalH);
+        }
+
+        private void QuickMenuRebuildAssignCategoryPopupButtons()
+        {
+            if (m_QuickMenuAssignCategoryPopupRoot == null) return;
+            foreach (var b in m_QuickMenuAssignCategoryPopupButtons)
+            {
+                try { if (b != null) DestroyImmediate(b); } catch { }
+            }
+            m_QuickMenuAssignCategoryPopupButtons.Clear();
+
+            var actions = new List<QuickMenuAssignableAction>
+            {
+                QuickMenuAssignableAction.OpenCategoryScenes,
+                QuickMenuAssignableAction.OpenCategorySubScenes,
+                QuickMenuAssignableAction.OpenCategoryClothing,
+                QuickMenuAssignableAction.OpenCategoryHair,
+                QuickMenuAssignableAction.OpenCategoryPose,
+                QuickMenuAssignableAction.OpenCategoryAppearance,
+                QuickMenuAssignableAction.OpenCategoryPlugins,
+            };
+            var labels = new List<string>
+            {
+                "Scenes",
+                "SubScenes",
+                "Clothing",
+                "Hair",
+                "Pose",
+                "Appearance",
+                "Plugins",
+            };
+            var icons = new List<Sprite>
+            {
+                m_QmIconCategoryScenes,
+                m_QmIconCategorySubScenes,
+                m_QmIconCategoryClothing,
+                m_QmIconCategoryHair,
+                m_QmIconCategoryPose,
+                m_QmIconCategoryAppearance,
+                m_QmIconCategoryPlugins,
+            };
+
+            float w = 230f;
+            float h = 40f;
+            float y = 20f;
+            float gap = 42f;
+            int font = 22;
+            int n = Mathf.Min(actions.Count, labels.Count);
+            for (int i = 0; i < n; i++)
+            {
+                int iCopy = i;
+                var btnGo = UI.CreateUIButton(m_QuickMenuAssignCategoryPopupRoot, w, h, labels[iCopy], font, 10f, y + gap * iCopy, AnchorPresets.bottomLeft, () =>
                 {
                     int idx = m_QuickMenuAssignPopupTargetIdx;
                     if (idx >= 0 && idx < QuickMenuGridSlotCount)
@@ -1120,12 +1496,188 @@ namespace VPB
                     }
                     QuickMenuHideAssignPopup();
                 });
-                m_QuickMenuAssignPopupButtons.Add(btnGo);
+                try
+                {
+                    if (btnGo != null)
+                    {
+                        var spr = iCopy < icons.Count ? icons[iCopy] : null;
+                        QuickMenuAddLeftIconAndKeepLabel(btnGo, spr);
+                    }
+                }
+                catch { }
+                QuickMenuAttachAssignDragSource(btnGo, actions[iCopy]);
+                m_QuickMenuAssignCategoryPopupButtons.Add(btnGo);
             }
 
-            // Resize popup to fit
-            float totalH = 20f + n * gap + 10f;
-            m_QuickMenuAssignPopupRT.sizeDelta = new Vector2(260f, totalH);
+            var cancelBtn = UI.CreateUIButton(m_QuickMenuAssignCategoryPopupRoot, w, h, "< Cancel", font, 10f, y + gap * n, AnchorPresets.bottomLeft, () =>
+            {
+                m_QmAssignCategoryPinned = false;
+                m_QmAssignCategoryHoverMain = false;
+                m_QmAssignCategoryHoverPopup = false;
+                QuickMenuUpdateAssignCategoryPopupVisibility();
+            });
+            QuickMenuAddLeftIconAndKeepLabel(cancelBtn, m_QmIconCloseAll);
+            m_QuickMenuAssignCategoryPopupButtons.Add(cancelBtn);
+
+            float totalH = 20f + (n + 1) * gap + 10f;
+            m_QuickMenuAssignCategoryPopupRT.sizeDelta = new Vector2(250f, totalH);
+            QuickMenuUpdateAssignCategoryPopupVisibility();
+        }
+
+        private void QuickMenuUpdateAssignCategoryPopupVisibility()
+        {
+            if (m_QuickMenuAssignCategoryPopupRoot == null || m_QuickMenuAssignPopupRT == null || m_QuickMenuAssignCategoryPopupRT == null) return;
+            bool show = (m_QuickMenuAssignPopupRoot != null && m_QuickMenuAssignPopupRoot.activeSelf) && m_QmAssignCategoryPinned;
+            if (show)
+            {
+                var mainPos = m_QuickMenuAssignPopupRT.anchoredPosition;
+                float x = mainPos.x + m_QuickMenuAssignPopupRT.sizeDelta.x;
+                float y = mainPos.y + (m_QuickMenuAssignPopupRT.sizeDelta.y - m_QuickMenuAssignCategoryPopupRT.sizeDelta.y) * 0.5f;
+                m_QuickMenuAssignCategoryPopupRT.anchoredPosition = new Vector2(x, y);
+                QuickMenuClampRectToScreen(m_QuickMenuAssignCategoryPopupRT);
+            }
+            m_QuickMenuAssignCategoryPopupRoot.SetActive(show);
+        }
+
+        private void QuickMenuCancelAssignCategoryHide()
+        {
+            unchecked { m_QmAssignCategoryHideRequestSerial++; }
+        }
+
+        private void QuickMenuScheduleAssignCategoryHide()
+        {
+            unchecked { m_QmAssignCategoryHideRequestSerial++; }
+            int serial = m_QmAssignCategoryHideRequestSerial;
+            StartCoroutine(QuickMenuAssignCategoryHideDelayed(serial));
+        }
+
+        private IEnumerator QuickMenuAssignCategoryHideDelayed(int serial)
+        {
+            float end = 0f;
+            try { end = Time.unscaledTime + QuickMenuAssignCategoryHoverHideDelaySec; }
+            catch { end = 0f; }
+
+            while (true)
+            {
+                if (serial != m_QmAssignCategoryHideRequestSerial) yield break;
+                float now = 0f;
+                try { now = Time.unscaledTime; } catch { now = end + 1f; }
+                if (now >= end) break;
+                yield return null;
+            }
+
+            if (serial != m_QmAssignCategoryHideRequestSerial) yield break;
+            if (!m_QmAssignCategoryHoverMain && !m_QmAssignCategoryHoverPopup)
+                QuickMenuUpdateAssignCategoryPopupVisibility();
+        }
+
+        private static void QuickMenuAddLeftIconAndKeepLabel(GameObject buttonGO, Sprite icon)
+        {
+            if (buttonGO == null || icon == null) return;
+            try
+            {
+                var old = buttonGO.transform.Find("Icon");
+                if (old != null) DestroyImmediate(old.gameObject);
+            }
+            catch { }
+
+            Text t = null;
+            try { t = buttonGO.GetComponentInChildren<Text>(true); } catch { t = null; }
+            if (t != null)
+            {
+                t.gameObject.SetActive(true);
+                t.alignment = TextAnchor.MiddleLeft;
+                var trt = t.GetComponent<RectTransform>();
+                if (trt != null)
+                {
+                    trt.anchorMin = Vector2.zero;
+                    trt.anchorMax = Vector2.one;
+                    trt.sizeDelta = Vector2.zero;
+                    trt.anchoredPosition = new Vector2(42f, 0f);
+                }
+            }
+
+            GameObject iconGO = new GameObject("Icon");
+            iconGO.transform.SetParent(buttonGO.transform, false);
+            Image img = iconGO.AddComponent<Image>();
+            img.sprite = icon;
+            img.color = Color.white;
+            img.preserveAspect = true;
+            img.raycastTarget = false;
+            RectTransform rt = iconGO.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 0.5f);
+            rt.anchorMax = new Vector2(0f, 0.5f);
+            rt.pivot = new Vector2(0f, 0.5f);
+            rt.anchoredPosition = new Vector2(8f, 0f);
+            rt.sizeDelta = new Vector2(24f, 24f);
+        }
+
+        private void QuickMenuAttachAssignDragSource(GameObject buttonGO, QuickMenuAssignableAction action)
+        {
+            if (buttonGO == null) return;
+            var h = buttonGO.GetComponent<QuickMenuAssignDragSourceHandler>();
+            if (h == null) h = buttonGO.AddComponent<QuickMenuAssignDragSourceHandler>();
+            h.owner = this;
+            h.action = action;
+        }
+
+        private void QuickMenuShowAssignPaletteForEditMode()
+        {
+            if (m_QuickMenuAssignPopupRoot == null || m_QuickMenuAssignPopupRT == null) return;
+            m_QmAssignPalettePinned = true;
+            m_QuickMenuAssignPopupTargetIdx = -1;
+            m_QuickMenuSavePopupTargetIdx = -1;
+            m_QuickMenuSavePopupPanel = null;
+            m_QmAssignCategoryPinned = false;
+            m_QmAssignCategoryHoverMain = false;
+            m_QmAssignCategoryHoverPopup = false;
+            if (m_QuickMenuAssignCategoryPopupRoot != null && m_QuickMenuAssignCategoryPopupRoot.activeSelf)
+                m_QuickMenuAssignCategoryPopupRoot.SetActive(false);
+
+            Vector2 pos = Vector2.zero;
+            try
+            {
+                if (m_QuickMenuGridButtonRTs != null && m_QuickMenuEditSlotIdx >= 0 && m_QuickMenuEditSlotIdx < m_QuickMenuGridButtonRTs.Length && m_QuickMenuGridButtonRTs[m_QuickMenuEditSlotIdx] != null)
+                    pos = m_QuickMenuGridButtonRTs[m_QuickMenuEditSlotIdx].anchoredPosition + new Vector2(60f, 0f);
+            }
+            catch { }
+            m_QuickMenuAssignPopupRT.anchoredPosition = pos + QuickMenuPopupOffset;
+            if (!m_QuickMenuAssignPopupRoot.activeSelf) m_QuickMenuAssignPopupRoot.SetActive(true);
+            QuickMenuClampPopupToScreen();
+            QuickMenuSetTooltip(VPBTranslation.T("hook.qmtooltip.drag_assign", "Edit mode: drag an action from the list and drop it on a slot to assign."));
+        }
+
+        private Sprite QuickMenuGetAssignPopupIcon(QuickMenuAssignableAction action)
+        {
+            switch (action)
+            {
+                case QuickMenuAssignableAction.None: return m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.CreateGallery: return m_QmIconCreate;
+                case QuickMenuAssignableAction.ShowHide: return m_QmIconEyeOn ?? m_QmIconEyeOff;
+                case QuickMenuAssignableAction.BringFront: return m_QmIconBringFront;
+                case QuickMenuAssignableAction.CloseAll: return m_QmIconCloseAll;
+                case QuickMenuAssignableAction.Save: return m_QmIconSave;
+                case QuickMenuAssignableAction.Random: return m_QmIconRandom;
+                case QuickMenuAssignableAction.Undo: return m_QmIconUndo;
+                case QuickMenuAssignableAction.Redo: return m_QmIconRedo;
+                case QuickMenuAssignableAction.Hub: return m_QmIconHub;
+                case QuickMenuAssignableAction.Cleanup: return m_QmIconCleanup;
+                case QuickMenuAssignableAction.ReplaceAddToggle: return m_QmIconReplace ?? m_QmIconAdd;
+                case QuickMenuAssignableAction.CompressCache: return m_QmIconCompressCache;
+                case QuickMenuAssignableAction.AutoHideGallery: return m_QmIconAutoHideOff ?? m_QmIconAutoHideOn;
+                case QuickMenuAssignableAction.ShowHiddenPackages: return m_QmIconShowHiddenOff ?? m_QmIconShowHiddenOn;
+                case QuickMenuAssignableAction.FpsCounter: return m_QmIconPages != null && m_QmIconPages.Length > 0 ? m_QmIconPages[0] : m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.OpenCategoryScenes: return m_QmIconCategoryScenes ?? m_QmIconOpenCategory;
+                case QuickMenuAssignableAction.OpenCategorySubScenes: return m_QmIconCategorySubScenes ?? m_QmIconOpenCategory;
+                case QuickMenuAssignableAction.OpenCategoryClothing: return m_QmIconCategoryClothing ?? m_QmIconOpenCategory;
+                case QuickMenuAssignableAction.OpenCategoryHair: return m_QmIconCategoryHair ?? m_QmIconOpenCategory;
+                case QuickMenuAssignableAction.OpenCategoryPose: return m_QmIconCategoryPose ?? m_QmIconOpenCategory;
+                case QuickMenuAssignableAction.OpenCategoryAppearance: return m_QmIconCategoryAppearance ?? m_QmIconOpenCategory;
+                case QuickMenuAssignableAction.OpenCategoryPlugins: return m_QmIconCategoryPlugins ?? m_QmIconOpenCategory;
+                case QuickMenuAssignableAction.CoreSettingsButton: return m_QmIconEditPlus ?? m_QmIconEditOff;
+                case QuickMenuAssignableAction.CorePageButton: return (m_QmIconPages != null && m_QmIconPages.Length > 0) ? m_QmIconPages[0] : m_QmIconAssignEmpty;
+                default: return m_QmIconAssignEmpty;
+            }
         }
 
         private void QuickMenuRebuildSavePopupButtons(GalleryPanel panel)
@@ -1196,6 +1748,101 @@ namespace VPB
             public void OnPointerExit(PointerEventData eventData)
             {
                 if (target != null) target.color = normal;
+            }
+        }
+
+        private class QuickMenuAssignOpenCategoryHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+        {
+            public VamHookPlugin owner;
+            public void OnPointerEnter(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.m_QmAssignCategoryPinned = true;
+                owner.m_QmAssignCategoryHoverMain = true;
+                owner.QuickMenuCancelAssignCategoryHide();
+                owner.QuickMenuUpdateAssignCategoryPopupVisibility();
+            }
+            public void OnPointerExit(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.m_QmAssignCategoryHoverMain = false;
+            }
+        }
+
+        private class QuickMenuAssignCategoryPopupHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+        {
+            public VamHookPlugin owner;
+            public void OnPointerEnter(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.m_QmAssignCategoryHoverPopup = true;
+                owner.QuickMenuCancelAssignCategoryHide();
+                owner.QuickMenuUpdateAssignCategoryPopupVisibility();
+            }
+            public void OnPointerExit(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.m_QmAssignCategoryHoverPopup = false;
+            }
+        }
+
+        private class QuickMenuAssignDragSourceHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+        {
+            public VamHookPlugin owner;
+            public QuickMenuAssignableAction action;
+            private CanvasGroup _cg;
+
+            public void OnBeginDrag(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                if (_cg == null) _cg = GetComponent<CanvasGroup>();
+                if (_cg == null) _cg = gameObject.AddComponent<CanvasGroup>();
+                _cg.blocksRaycasts = false;
+                owner.m_QmAssignDragAction = action;
+                owner.m_QmAssignDragActive = true;
+                owner.QuickMenuBeginAssignDragGhost(action, eventData);
+            }
+
+            public void OnDrag(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.QuickMenuUpdateAssignDragGhostPosition(eventData);
+            }
+
+            public void OnEndDrag(PointerEventData eventData)
+            {
+                if (_cg != null) _cg.blocksRaycasts = true;
+                if (owner == null) return;
+                owner.m_QmAssignDragActive = false;
+                owner.QuickMenuEndAssignDragGhost();
+                owner.QuickMenuClearAllDropTargetHighlights();
+            }
+        }
+
+        private class QuickMenuAssignDropTargetHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
+        {
+            public VamHookPlugin owner;
+            public int slotIdx;
+
+            public void OnPointerEnter(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                if (!owner.m_QmAssignDragActive) return;
+                if (!owner.QuickMenuCanPlaceActionInSlot(owner.m_QmAssignDragAction, slotIdx)) return;
+                owner.QuickMenuSetDropTargetHighlight(slotIdx, true);
+            }
+
+            public void OnPointerExit(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.QuickMenuSetDropTargetHighlight(slotIdx, false);
+            }
+
+            public void OnDrop(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.QuickMenuTryAssignDraggedActionToSlot(slotIdx);
+                owner.QuickMenuSetDropTargetHighlight(slotIdx, false);
             }
         }
     }

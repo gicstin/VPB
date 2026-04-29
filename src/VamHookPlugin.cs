@@ -1604,6 +1604,15 @@ namespace VPB
                 m_QmIconAutoHideOn  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  tint);
                 m_QmIconShowHiddenOff = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", tint);
                 m_QmIconShowHiddenOn  = UI.LoadIconSprite("vpb_icons/show_hidden.png",     tint);
+                m_QmIconOpenCategory = UI.LoadIconSprite("vpb_icons/gallery_category.png", tint);
+                m_QmIconCategoryScenes = UI.LoadIconSprite("vpb_icons/c_scene.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategorySubScenes = UI.LoadIconSprite("vpb_icons/c_subscene.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryClothing = UI.LoadIconSprite("vpb_icons/c_clothing.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryHair = UI.LoadIconSprite("vpb_icons/c_hair.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryPose = UI.LoadIconSprite("vpb_icons/c_pose.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryAppearance = UI.LoadIconSprite("vpb_icons/c_appearance.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryPlugins = UI.LoadIconSprite("vpb_icons/c_plugins.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryAll = UI.LoadIconSprite("vpb_icons/c_all.png", tint) ?? m_QmIconOpenCategory;
                 m_QmIconPages = new Sprite[]
                 {
                     UI.LoadIconSprite("vpb_icons/page_0.png", tint),
@@ -1686,12 +1695,21 @@ namespace VPB
                     tip.owner = this;
                     tip.slotIdx = idxCopy;
 
+                    var drop = go.AddComponent<QuickMenuAssignDropTargetHandler>();
+                    drop.owner = this;
+                    drop.slotIdx = idxCopy;
+
                     btn.onClick.AddListener(() =>
                     {
-                        if (idxCopy == editSlotIdx)
+                        if (idxCopy == m_QuickMenuEditSlotIdx)
                         {
                             m_QuickMenuEditMode = !m_QuickMenuEditMode;
-                            QuickMenuHideAssignPopup();
+                            if (m_QuickMenuEditMode) QuickMenuShowAssignPaletteForEditMode();
+                            else
+                            {
+                                QuickMenuHideAssignPopup();
+                                QuickMenuClearTooltip(null);
+                            }
                             for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
                             return;
                         }
@@ -1718,16 +1736,16 @@ namespace VPB
                         QuickMenuExecuteAssignment(act);
                     });
 
-                    // Right-click on Page button goes backwards.
-                    if (i == m_QuickMenuPageToggleSlotIdx)
+                    // Right-click on current Page button goes backwards (slot is dynamic, so check at click time).
+                    var rc = go.AddComponent<QuickMenuRightClickHandler>();
+                    rc.onRightClick = () =>
                     {
-                        var rc = go.AddComponent<QuickMenuRightClickHandler>();
-                        rc.onRightClick = () =>
+                        if (idxCopy == m_QuickMenuPageToggleSlotIdx)
                         {
                             QuickMenuChangePage(-1);
                             for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
-                        };
-                    }
+                        }
+                    };
 
                     var a0 = QuickMenuGetSlotAction(i);
                     bool requiresGallery = (a0 == QuickMenuAssignableAction.ShowHide) ||
@@ -1763,6 +1781,19 @@ namespace VPB
                     m_QuickMenuAssignPopupRT.pivot = new Vector2(0f, 0f);
                 }
                 m_QuickMenuAssignPopupRoot.SetActive(false);
+
+                m_QuickMenuAssignCategoryPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 250f, 220f, Vector2.zero);
+                m_QuickMenuAssignCategoryPopupRoot.name = "VPB_QM_AssignPopup_Category";
+                m_QuickMenuAssignCategoryPopupRT = m_QuickMenuAssignCategoryPopupRoot.GetComponent<RectTransform>();
+                if (m_QuickMenuAssignCategoryPopupRT != null)
+                {
+                    m_QuickMenuAssignCategoryPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignCategoryPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignCategoryPopupRT.pivot = new Vector2(0f, 0f);
+                }
+                var catHover = m_QuickMenuAssignCategoryPopupRoot.AddComponent<QuickMenuAssignCategoryPopupHoverHandler>();
+                if (catHover != null) catHover.owner = this;
+                m_QuickMenuAssignCategoryPopupRoot.SetActive(false);
                 QuickMenuRebuildAssignPopupButtons();
 
                 // Initial visuals (icons / showhide state)
