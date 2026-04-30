@@ -287,6 +287,7 @@
     <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
     <Compile Include="src\hook\HubImageLoaderThreaded.cs" />
+    <Compile Include="src\hook\HubPixelPackingJobs.cs" />
     <Compile Include="src\hook\CustomAssetLoader.cs" />
     <Compile Include="src\hook\GenericTextureHook.cs" />
     <Compile Include="src\hook\TextureUtil.cs" />

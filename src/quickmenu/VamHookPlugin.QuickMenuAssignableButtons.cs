@@ -292,16 +292,14 @@ namespace VPB
                 return m_QuickMenuEditMode
                     ? VPBTranslation.T("hook.qmtooltip.edit_off", "Disable editing")
                     : VPBTranslation.T("hook.qmtooltip.edit_on", "Enable editing");
-            if (idx >= 0 && idx <= 3)
-                return VPBTranslation.T("hook.qmtooltip.core_locked", "Core button (locked)");
 
             var a = QuickMenuGetSlotAction(idx);
             switch (a)
             {
-                case QuickMenuAssignableAction.CreateGallery: return VPBTranslation.T("hook.qmbutton.create_gallery", "Create Gallery");
-                case QuickMenuAssignableAction.ShowHide: return VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide");
-                case QuickMenuAssignableAction.BringFront: return VPBTranslation.T("hook.qmbutton.bring_front", "Bring Front");
-                case QuickMenuAssignableAction.CloseAll: return VPBTranslation.T("hook.qmbutton.close_all", "Close All");
+                case QuickMenuAssignableAction.CreateGallery: return (idx >= 0 && idx <= 3) ? VPBTranslation.T("hook.qmtooltip.core_locked_create_gallery", "Create Gallery (core locked)") : VPBTranslation.T("hook.qmbutton.create_gallery", "Create Gallery");
+                case QuickMenuAssignableAction.ShowHide: return (idx >= 0 && idx <= 3) ? VPBTranslation.T("hook.qmtooltip.core_locked_show_hide", "Show/Hide (core locked)") : VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide");
+                case QuickMenuAssignableAction.BringFront: return (idx >= 0 && idx <= 3) ? VPBTranslation.T("hook.qmtooltip.core_locked_bring_front", "Bring Front (core locked)") : VPBTranslation.T("hook.qmbutton.bring_front", "Bring Front");
+                case QuickMenuAssignableAction.CloseAll: return (idx >= 0 && idx <= 3) ? VPBTranslation.T("hook.qmtooltip.core_locked_close_all", "Close All (core locked)") : VPBTranslation.T("hook.qmbutton.close_all", "Close All");
                 case QuickMenuAssignableAction.Save: return VPBTranslation.T("hook.qmtooltip.save_methods", "Save (choose method)");
                 case QuickMenuAssignableAction.Random: return VPBTranslation.T("hook.qmbutton.random", "Random");
                 case QuickMenuAssignableAction.Undo: return VPBTranslation.T("hook.qmbutton.undo", "Undo");
@@ -325,6 +323,8 @@ namespace VPB
                 case QuickMenuAssignableAction.CorePageButton: return VPBTranslation.T("hook.qmbutton.core_page", "Core: Page");
                 case QuickMenuAssignableAction.None:
                 default:
+                    if (idx >= 0 && idx <= 3)
+                        return VPBTranslation.T("hook.qmtooltip.core_locked", "Core button (locked)");
                     return m_QuickMenuEditMode ? VPBTranslation.T("hook.qmtooltip.assign", "Assign button") : "";
             }
         }
