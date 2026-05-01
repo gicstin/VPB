@@ -19,6 +19,7 @@ namespace VPB
         public void ShowTemporaryStatus(string msg, float duration = 2.0f)
         {
             temporaryStatusMsg = msg;
+            temporaryStatusOwner = null;
             if (temporaryStatusCoroutine != null) StopCoroutine(temporaryStatusCoroutine);
             temporaryStatusCoroutine = StartCoroutine(ClearTemporaryStatus(duration));
         }
@@ -27,6 +28,7 @@ namespace VPB
         {
             yield return new WaitForSeconds(duration);
             temporaryStatusMsg = null;
+            temporaryStatusOwner = null;
             temporaryStatusCoroutine = null;
         }
     }

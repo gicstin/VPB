@@ -93,6 +93,7 @@ namespace VPB
             public float GalleryGridLabelFontSize;
             public bool GalleryOnlyWhenVamMenuVisible;
             public bool GalleryAnchorToVamMenu;
+            public HashSet<string> HiddenCategories;
         }
 
         private static string NextOf(string cur, string[] options)
@@ -125,6 +126,41 @@ namespace VPB
             }
             if (idx < 0) idx = 0;
             return options[(idx + options.Length - 1) % options.Length];
+        }
+
+        private List<string> BuildCategoryVisibilityNames()
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                if (categories != null)
+                {
+                    for (int i = 0; i < categories.Count; i++)
+                    {
+                        var c = categories[i];
+                        if (string.IsNullOrEmpty(c.name)) continue;
+                        names.Add(c.name);
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (VPBConfig.Instance != null && VPBConfig.Instance.HiddenCategories != null)
+                {
+                    foreach (string hidden in VPBConfig.Instance.HiddenCategories)
+                    {
+                        if (string.IsNullOrEmpty(hidden)) continue;
+                        names.Add(hidden);
+                    }
+                }
+            }
+            catch { }
+
+            var list = new List<string>(names);
+            list.Sort(StringComparer.OrdinalIgnoreCase);
+            return list;
         }
 
         private List<InternalSettingDefinition> BuildInternalSettingDefinitions()
@@ -361,6 +397,32 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryAnchorToVamMenu = v; VPBConfig.Instance.TriggerChange(); ResetFollowOffsets(); }
             });
 
+            var categoryVisibilityNames = BuildCategoryVisibilityNames();
+            for (int i = 0; i < categoryVisibilityNames.Count; i++)
+            {
+                string categoryName = categoryVisibilityNames[i];
+                string capturedName = categoryName;
+                defs.Add(new InternalSettingDefinition
+                {
+                    Key = "categories.show." + capturedName,
+                    GroupKey = "categories",
+                    Label = VPBTranslation.T("settings.category_visibility.show", "Show category: ") + capturedName,
+                    Tooltip = VPBTranslation.T("settings.tip.category_visibility.show", "Toggle whether this category appears in the Categories side list."),
+                    ControlType = InternalSettingControlType.Toggle,
+                    GetBool = () => VPBConfig.Instance != null && !VPBConfig.Instance.IsHiddenCategory(capturedName),
+                    SetBool = v =>
+                    {
+                        if (VPBConfig.Instance == null) return;
+                        if (VPBConfig.Instance.HiddenCategories == null)
+                            VPBConfig.Instance.HiddenCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        if (v) VPBConfig.Instance.HiddenCategories.Remove(capturedName);
+                        else VPBConfig.Instance.HiddenCategories.Add(capturedName);
+                        categoriesCached = false;
+                        UpdateTabs();
+                    }
+                });
+            }
+
             return defs;
         }
 
@@ -413,7 +475,10 @@ namespace VPB
                 GalleryGridLabelsEnabled = VPBConfig.Instance.GalleryGridLabelsEnabled,
                 GalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
-                GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu
+                GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
+                HiddenCategories = VPBConfig.Instance.HiddenCategories != null
+                    ? new HashSet<string>(VPBConfig.Instance.HiddenCategories, StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             };
         }
 
@@ -844,10 +909,14 @@ namespace VPB
             VPBConfig.Instance.GalleryGridLabelFontSize = b.GalleryGridLabelFontSize;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
+            VPBConfig.Instance.HiddenCategories = b.HiddenCategories != null
+                ? new HashSet<string>(b.HiddenCategories, StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             if (this != null)
             {
                 ApplySideButtonScale();
+                categoriesCached = false;
                 RebuildGridLayout();
                 RefreshFiles(true);
             }

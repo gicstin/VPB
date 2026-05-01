@@ -209,12 +209,17 @@ namespace VPB
                 // Helper to add categories while tracking names
                 Action<string, string, string> addCat = (name, ext, path) => {
                     // Consolidate names
-                    if (name.Equals("Person Hair", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Hair", StringComparison.OrdinalIgnoreCase)) name = "Hair";
+                    // Keep hair presets as separate category (used to be separate "subcategory" in side list)
+                    if (name.Equals("Person Hair", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Hair", StringComparison.OrdinalIgnoreCase)) name = "Hair Presets";
                     if (name.Equals("Person Clothing", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Clothing", StringComparison.OrdinalIgnoreCase)) name = "Clothing";
                     if (name.Equals("Person Appearance", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Appearance", StringComparison.OrdinalIgnoreCase)) name = "Appearance";
                     if (name.Equals("Person AppearancePresets", StringComparison.OrdinalIgnoreCase) || name.Equals("Person Appearance Presets", StringComparison.OrdinalIgnoreCase)) name = "Appearance";
                     if (name.Equals("Person Pose", StringComparison.OrdinalIgnoreCase)) name = "Pose";
                     if (name.Equals("Person", StringComparison.OrdinalIgnoreCase)) name = "Pose"; // Merge Person into Pose as requested
+
+                    // Consolidate physics categories
+                    if (name.Equals("Person GlutePhysics", StringComparison.OrdinalIgnoreCase)) name = "Body Physics";
+                    if (name.Equals("Person BreastPhysics", StringComparison.OrdinalIgnoreCase)) name = "Body Physics";
 
                     if (!catDict.ContainsKey(name)) {
                         catDict[name] = new CategoryInfo { ext = ext, paths = new List<string>() };
@@ -251,7 +256,7 @@ namespace VPB
                 addCat("Pose", "json", "Saves/Person"); // Was Person
                 addCat("Appearance", "json|vap", "Saves/Person/appearance");
                 // Clothing/Hair presets are included in the unified Clothing/Hair categories.
-                // addCat("CUA", "assetbundle|unity3d", "Custom/Assets");
+                addCat("CUA", "assetbundle|unity3d", "Custom/Assets");
 
                 // 2. Dynamic Discovery from Custom/Atom
                 string atomRoot = "Custom/Atom";
@@ -358,6 +363,8 @@ namespace VPB
                 }
 
                 addCat("All", "var", "");
+                // List all .var packages as rows (no internal scan). Uses PackageListEntry rows in gallery.
+                addCat("ALL VAR", "varpkg", "");
 
                 // Build list
                 foreach(var kvp in catDict)

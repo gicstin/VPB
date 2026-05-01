@@ -7,6 +7,16 @@ namespace VPB
     {
         private void OpenSettings()
         {
+            // Reset transient quick-menu hover/edit UI so stale tooltip/popup state
+            // cannot leak into or out of the Settings page.
+            try
+            {
+                m_QuickMenuEditMode = false;
+                QuickMenuHideAssignPopup();
+                QuickMenuClearTooltip(null);
+            }
+            catch { }
+
             if (MiniMode)
             {
                 SetMiniMode(false);
@@ -132,6 +142,15 @@ namespace VPB
         {
             m_ShowSettings = false;
             m_SettingsError = null;
+
+            // Clear any lingering hover tooltip/status from quick-menu state.
+            try
+            {
+                m_QuickMenuEditMode = false;
+                QuickMenuHideAssignPopup();
+                QuickMenuClearTooltip(null);
+            }
+            catch { }
         }
 
         private string DrawHotkeyField(string label, string fieldName, string currentValue, float height)

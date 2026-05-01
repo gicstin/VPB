@@ -260,7 +260,7 @@ namespace VPB
 		private const int CodePageGbk = 936;
 		private const int CodePageSystemDefault = 0;
 
-		/// <summary>Browser Assist: plugins under Custom/Scripts as .cs / .cslist / .dll (paths may use \ or / in zip).</summary>
+		/// <summary>Plugins under Custom/Scripts as .cs / .cslist / .dll (paths may use \ or / in zip).</summary>
 		private static bool IsPluginScriptZipEntry(string entryName)
 		{
 			if (string.IsNullOrEmpty(entryName)) return false;
@@ -1297,7 +1297,7 @@ namespace VPB
 												}
 											}
 										}
-										// Session plugins in VARs (BA indexes full archive; VPB previously skipped .cs/.cslist/.dll entirely).
+										// Session plugins in VARs.
 										else if (IsPluginScriptZipEntry(entryName))
 										{
 											VarFileEntry varFileEntry = new VarFileEntry(this, entryName, zipEntry.DateTime, zipEntry.Size);

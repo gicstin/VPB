@@ -196,7 +196,7 @@ namespace VPB
             }
         }
 
-        /// <summary>Plugin script paths under Custom/Scripts (same convention as Browser Assist).</summary>
+        /// <summary>Plugin script paths under Custom/Scripts.</summary>
         private static bool IsPluginScriptGalleryFile(FileEntry file)
         {
             if (file == null || string.IsNullOrEmpty(file.Path)) return false;

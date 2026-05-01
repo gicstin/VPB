@@ -112,6 +112,10 @@ namespace VPB
             nameFilterTerms = new string[0];
             if (titleSearchInput != null) titleSearchInput.text = "";
 
+            // Category navigation reset: creator selection is a filter and should not silently carry
+            // into unrelated categories (causes side-tab counts like ALL VAR to drop to 0).
+            currentCreator = "";
+
             activeTags.Clear();
             currentSceneSourceFilter = "";
             currentAppearanceSourceFilter = "";

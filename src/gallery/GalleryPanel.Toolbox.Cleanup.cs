@@ -1149,6 +1149,38 @@ namespace VPB
                 total, dup, old, dmg, stale);
         }
 
+        // Cleanup view is a temporary task-oriented list. Keep the user's original layout
+        // and restore it once cleanup mode exits.
+        private bool cleanupTemporaryLayoutSessionActive;
+        private GalleryLayoutMode cleanupTemporaryPrevLayoutMode;
+
+        private void EnsureTemporaryTaskListLayoutSession()
+        {
+            if (!cleanupTemporaryLayoutSessionActive)
+            {
+                cleanupTemporaryPrevLayoutMode = layoutMode;
+                cleanupTemporaryLayoutSessionActive = true;
+            }
+
+            if (layoutMode != GalleryLayoutMode.List)
+            {
+                layoutMode = GalleryLayoutMode.List;
+                try { UpdateLayout(); } catch { }
+            }
+        }
+
+        private void TryRestoreLayoutAfterTemporaryTaskExit()
+        {
+            if (!cleanupTemporaryLayoutSessionActive) return;
+
+            cleanupTemporaryLayoutSessionActive = false;
+            if (layoutMode != cleanupTemporaryPrevLayoutMode)
+            {
+                layoutMode = cleanupTemporaryPrevLayoutMode;
+                try { UpdateLayout(); } catch { }
+            }
+        }
+
         private void TboxOpenCleanupView()
         {
             if (cleanupScanInProgress) return;

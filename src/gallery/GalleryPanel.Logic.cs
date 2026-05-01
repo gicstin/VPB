@@ -50,7 +50,7 @@ namespace VPB
             return true;
         }
 
-        /// <summary>VAR zip paths often use '\'; category roots use '/'. Matches Browser Assist-style Custom/Scripts checks.</summary>
+        /// <summary>VAR zip paths often use '\'; category roots use '/'.</summary>
         private static string GalleryNormalizePathSlashes(string p)
         {
             return string.IsNullOrEmpty(p) ? p : p.Replace('\\', '/');
@@ -210,7 +210,10 @@ namespace VPB
             categoryCounts.Clear();
             foreach (var c in categories) categoryCounts[c.name] = 0;
 
-            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, activeTags, currentPackagePathFilter))
+            // Category side list should only "filter down" by creator selection.
+            // If tags are active but no creator selected, keep counts global so categories don't disappear.
+            var tagFilterForCategoryCounts = !string.IsNullOrEmpty(currentCreator) ? activeTags : null;
+            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, tagFilterForCategoryCounts, currentPackagePathFilter))
             {
                 // SQL path succeeded.
             }
@@ -224,6 +227,8 @@ namespace VPB
                 foreach (var c in categories) 
                 {
                     if (string.IsNullOrEmpty(c.extension)) continue;
+                    // Skip package-level pseudo-extension categories from file-entry scans
+                    if (string.Equals(c.extension, "varpkg", StringComparison.OrdinalIgnoreCase)) continue;
                     string[] exts = c.extension.Split('|');
                     foreach(string ext in exts)
                     {
@@ -306,6 +311,40 @@ namespace VPB
                     }
                 }
             }
+
+            // Package-level pseudo-category counts: always recompute last so UI never shows 0/stale values.
+            // SQL/category scans count file-entries; varpkg counts packages.
+            try
+            {
+                if (FileManager.PackagesByUid != null)
+                {
+                    for (int ci = 0; ci < categories.Count; ci++)
+                    {
+                        var c = categories[ci];
+                        if (string.IsNullOrEmpty(c.name) || string.IsNullOrEmpty(c.extension)) continue;
+                        if (!string.Equals(c.extension, "varpkg", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        int n = 0;
+                        foreach (var pkg in FileManager.PackagesByUid.Values)
+                        {
+                            if (pkg == null) continue;
+                            if (!string.IsNullOrEmpty(currentCreator))
+                            {
+                                if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
+                            }
+                            // ALL VAR should remain global navigation root: do not let non-creator filters
+                            // (like path filter restored from previous category state) zero-out its count.
+                            string pkgPathFilterForVarPkg = !string.IsNullOrEmpty(currentCreator) ? currentPackagePathFilter : "";
+                            if (!string.IsNullOrEmpty(pkgPathFilterForVarPkg) &&
+                                !GalleryPathFilterMatchesRawPath(pkg.Path, pkgPathFilterForVarPkg))
+                                continue;
+                            n++;
+                        }
+                        categoryCounts[c.name] = n;
+                    }
+                }
+            }
+            catch { }
 
             // Tab counts are VAR-only above; Custom/Scripts plugins live on local disk (same tree RefreshFiles scans).
             AddLocalCustomScriptsCountToCategory(categoryCounts, currentPackagePathFilter);
@@ -437,7 +476,22 @@ namespace VPB
             if (FileManager.PackagesByUid == null) return;
 
             Dictionary<string, int> counts = new Dictionary<string, int>();
-            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle, currentPackagePathFilter))
+            // Package-only category: creators list must be package creators (not internal-file creators).
+            if (string.Equals(currentExtension, "varpkg", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var pkg in FileManager.PackagesByUid.Values)
+                {
+                    if (pkg == null) continue;
+                    if (string.IsNullOrEmpty(pkg.Creator)) continue;
+                    if (!string.IsNullOrEmpty(currentPackagePathFilter) &&
+                        !GalleryPathFilterMatchesRawPath(pkg.Path, currentPackagePathFilter))
+                        continue;
+                    int cur;
+                    counts.TryGetValue(pkg.Creator, out cur);
+                    counts[pkg.Creator] = cur + 1;
+                }
+            }
+            else if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle, currentPackagePathFilter))
             {
                 string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
                 HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

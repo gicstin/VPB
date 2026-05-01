@@ -95,6 +95,29 @@ namespace VPB
                     titleText.text = currentCategoryTitle;
             }
             UpdateSideContextActions();
+            
+            // Lightweight refresh must still keep split sub-pane lists alive (Hair/Clothing tags, SceneSource, etc.).
+            // Otherwise sub-pane can go empty if a lightweight slot is consumed during category navigation.
+            try
+            {
+                if (leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf && leftActiveContent == ContentType.Category)
+                {
+                    string t = titleText != null ? (titleText.text ?? "") : "";
+                    ContentType subType = ContentType.Tags;
+                    if (t.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0) subType = ContentType.SceneSource;
+                    else if (t.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0) subType = ContentType.AppearanceSource;
+                    UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+                }
+                if (rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf && rightActiveContent == ContentType.Category)
+                {
+                    string t2 = titleText != null ? (titleText.text ?? "") : "";
+                    ContentType subType2 = ContentType.Tags;
+                    if (t2.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0) subType2 = ContentType.SceneSource;
+                    else if (t2.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0) subType2 = ContentType.AppearanceSource;
+                    UpdateTabs(subType2, rightSubTabContainerGO, rightSubActiveTabButtons, false);
+                }
+            }
+            catch { }
             UpdateSideButtonsVisibility();
         }
 
@@ -1093,8 +1116,14 @@ namespace VPB
                     int count = 0;
                     if (categoryCounts.ContainsKey(c.name)) count = categoryCounts[c.name];
                     
-                    // Plugins are mostly local Custom/Scripts files; keep the tab visible even when count is 0 (fresh install).
-                    if (count == 0 && !isActive && !string.Equals(c.name, "Plugins", StringComparison.OrdinalIgnoreCase)) continue;
+                    // Keep some special rows visible even when count is 0.
+                    // - Plugins: mostly local Custom/Scripts files (fresh install -> 0)
+                    // - ALL VAR: package-level listing; should stay available as navigation root
+                    if (count == 0
+                        && !isActive
+                        && !string.Equals(c.name, "Plugins", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(c.name, "ALL VAR", StringComparison.OrdinalIgnoreCase))
+                        continue;
                     if (VPBConfig.Instance != null && VPBConfig.Instance.IsHiddenCategory(c.name) && !isActive) continue;
 
                     string label = c.name + " (" + count + ")";
@@ -1333,6 +1362,7 @@ namespace VPB
                 AddGroupRow("interaction", VPBTranslation.T("settings.header.interaction", "Interaction"));
                 AddGroupRow("desktop", VPBTranslation.T("settings.header.desktop", "Desktop"));
                 AddGroupRow("lists", VPBTranslation.T("settings.header.gallery_side_lists", "Gallery side lists"));
+                AddGroupRow("categories", VPBTranslation.T("settings.header.category_visibility", "Category Visibility"));
                 AddGroupRow("hover", VPBTranslation.T("settings.header.hover_preview", "Hover preview"));
                 AddGroupRow("grid", VPBTranslation.T("settings.header.grid_labels", "Grid Labels"));
                 AddGroupRow("vr", VPBTranslation.T("settings.header.vr_integration", "VR & Game Integration"));
@@ -2978,6 +3008,17 @@ namespace VPB
                 LogUtil.LogError("[VPB] BindFileButton: btnGO or file is null");
                 return;
             }
+
+            // File rows pooled/reused across modes (including Settings).
+            // Clear prior hover handlers (e.g. settings tooltips) so they don't leak into other categories.
+            var hoverDelReset = btnGO.GetComponent<UIHoverDelegate>();
+            if (hoverDelReset != null)
+            {
+                hoverDelReset.OnHoverChange = null;
+                hoverDelReset.OnPointerEnterEvent = null;
+            }
+            // Restore baseline hover tracking for this row.
+            AddHoverDelegate(btnGO);
 
             // Validate file properties
             if (string.IsNullOrEmpty(file.Name) || string.IsNullOrEmpty(file.Path))

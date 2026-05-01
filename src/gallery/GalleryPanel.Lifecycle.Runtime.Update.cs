@@ -261,6 +261,13 @@ namespace VPB
             }
 
             // Status Bar Logic
+            if (temporaryStatusOwner != null && !temporaryStatusOwner.activeInHierarchy)
+            {
+                // Hover owner went away without delivering an exit event; drop stale tooltip.
+                temporaryStatusOwner = null;
+                temporaryStatusMsg = null;
+            }
+
             string finalStatus = null;
             if (dragStatusMsg != null)
             {

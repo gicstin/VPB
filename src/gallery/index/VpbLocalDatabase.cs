@@ -2319,6 +2319,37 @@ namespace VPB
                                 countsByCategoryName[cname] = n;
                         }
                     }
+
+                    // Package-level pseudo-category: ALL VAR (varpkg) is not represented in cat_mem.
+                    // Count directly from pkg table so the side-tab count stays correct even when
+                    // FileManager.PackagesByUid snapshot is not ready.
+                    if (countsByCategoryName.ContainsKey("ALL VAR"))
+                    {
+                        try
+                        {
+                            // Mirror GalleryPanel rule: apply package-path filter only when creator filter is active.
+                            bool applyPath = hasCreator && hasPackagePathFilter;
+                            var sbPkg = new StringBuilder(96);
+                            sbPkg.Append("SELECT COUNT(*) FROM pkg p WHERE 1=1");
+                            if (hasCreator) sbPkg.Append(" AND p.creator = ?");
+                            if (applyPath)
+                                sbPkg.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
+
+                            using (var stPkg = conn.Prepare(sbPkg.ToString()))
+                            {
+                                int b2 = 1;
+                                if (hasCreator) stPkg.BindText(b2++, creatorFilter);
+                                if (applyPath) stPkg.BindText(b2++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
+                                if (stPkg.Step() == VpbSqlite3.SqliteRow)
+                                {
+                                    int nPkg = 0;
+                                    if (!int.TryParse(stPkg.ColumnText(0), out nPkg)) nPkg = (int)stPkg.ColumnInt64(0);
+                                    countsByCategoryName["ALL VAR"] = nPkg;
+                                }
+                            }
+                        }
+                        catch { /* keep previous value */ }
+                    }
                 }
                 return true;
             }

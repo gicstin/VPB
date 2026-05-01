@@ -2528,7 +2528,25 @@ namespace VPB
                         if (_buildCreators)
                         {
                             var counts = new Dictionary<string, int>();
-                            if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath, null, _bCategoryTitle, _bPackagePathFilter))
+                            // Package-only category: count packages by creator (not internal file entries)
+                            if (string.Equals(_bExtension, "varpkg", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (FileManager.PackagesByUid != null)
+                                {
+                                    foreach (var pkg in FileManager.PackagesByUid.Values)
+                                    {
+                                        if (pkg == null) continue;
+                                        if (string.IsNullOrEmpty(pkg.Creator)) continue;
+                                        if (!string.IsNullOrEmpty(_bPackagePathFilter) &&
+                                            !GalleryPathFilterMatchesRawPath(pkg.Path, _bPackagePathFilter))
+                                            continue;
+                                        int cur;
+                                        counts.TryGetValue(pkg.Creator, out cur);
+                                        counts[pkg.Creator] = cur + 1;
+                                    }
+                                }
+                            }
+                            else if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, _bExtension, _bPaths, _bPath, null, _bCategoryTitle, _bPackagePathFilter))
                             {
                                 string[] exts2 = string.IsNullOrEmpty(_bExtension) ? new string[0] : _bExtension.Split('|');
                                 var tExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2684,6 +2702,13 @@ namespace VPB
                             && activeContentSnap == ContentType.Category
                             && canFileListSnapKeyMain)
                         {
+                            // Pseudo-extension category: package-level listing. Not indexed in SQLite; force non-SQL path.
+                            if (string.Equals(extForIndexMain, "varpkg", StringComparison.OrdinalIgnoreCase))
+                            {
+                                useSqliteIndex = false;
+                            }
+                            else
+                            {
                             if (currentPaths != null && currentPaths.Count > 0)
                             {
                                 for (int i = 0; i < currentPaths.Count; i++)
@@ -2712,6 +2737,7 @@ namespace VPB
                                 pathExclusions: pathExclusions,
                                 activeTags: activeTags,
                                 sortState: fileListSortSnapForWorker);
+                            }
                         }
                         else
                         {
@@ -2852,11 +2878,19 @@ namespace VPB
                             }
                             else
                             {
+                                bool wantsPackageListOnly = false;
+                                try
+                                {
+                                    wantsPackageListOnly = (extensions != null && extensions.Length == 1 && string.Equals(extensions[0], "varpkg", StringComparison.OrdinalIgnoreCase));
+                                }
+                                catch { wantsPackageListOnly = false; }
+
                                 foreach (var pkg in FileManager.PackagesByUid.Values)
                                 {
                                 if (localLoadingGroupId != currentLoadingGroupId) return;
 
-                                string filterCreator = currentCreator;
+                                // Use captured snapshot to avoid cross-thread stale reads
+                                string filterCreator = creatorForIndexMain;
                                 if (!string.IsNullOrEmpty(filterCreator))
                                 {
                                     if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
@@ -2864,6 +2898,20 @@ namespace VPB
                                 if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
                                     !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
                                 {
+                                    continue;
+                                }
+
+                                // Special category: list packages only (no internal file enumeration)
+                                if (wantsPackageListOnly)
+                                {
+                                    if (hasNameFilter)
+                                    {
+                                        if (!MatchesAllTermsInEither(pkg != null ? (pkg.Path ?? "") : "", pkg != null ? (pkg.Uid ?? "") : "", nameTerms)) continue;
+                                    }
+                                    lock (candidateQueueLock)
+                                    {
+                                        candidateQueue.Enqueue(new PackageListEntry(pkg));
+                                    }
                                     continue;
                                 }
 

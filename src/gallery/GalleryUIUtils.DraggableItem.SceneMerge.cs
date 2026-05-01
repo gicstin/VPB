@@ -219,7 +219,7 @@ namespace VPB
                 }
                 LogUtil.Log($"[VPB] Scene data application complete: {appliedCount} storables applied, {skippedCount} storables missing on target.");
 
-                // Align with BA SceneImportCache lifecycle: LateRestore next frame + reset sim clothing.
+                // Keep LateRestore on next frame and reset sim clothing.
                 // We only LateRestore storables restored via RestoreFromJSON; preset managers handle their own internal lifecycle.
                 SceneLoadingUtils.SchedulePostPersonApplyFixup(targetAtom, lateRestoreTargets);
             }

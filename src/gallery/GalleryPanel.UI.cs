@@ -222,7 +222,6 @@ namespace VPB
             }
             UpdateLayout();
             UpdateTabs();
-            SyncInternalSettingsListView();
         }
 
         private void CloseSaveSubmenuUI()
@@ -1745,25 +1744,9 @@ namespace VPB
                         bool hasNameFilter = nameFilterTerms != null && nameFilterTerms.Length > 0;
                         if (lastHistoryQueryFailed || !VpbSqlite3.IsAvailable)
                         {
-                            string reason = lastHistoryQueryRejectReason ?? "";
-                            string reasonShort = "";
-                            if (!string.IsNullOrEmpty(reason))
-                            {
-                                int cut = reason.IndexOf(' ');
-                                reasonShort = (cut > 0 ? reason.Substring(0, cut) : reason).Trim();
-                            }
-                            if (!string.IsNullOrEmpty(reasonShort))
-                            {
-                                paginationText.text = string.Format(
-                                    VPBTranslation.T("gallery.history.unavailable_retry_reason", "History unavailable ({0}). Click Refresh/Ctrl+R to retry."),
-                                    reasonShort);
-                            }
-                            else
-                            {
-                                paginationText.text = VPBTranslation.T(
-                                    "gallery.history.unavailable_retry",
-                                    "History unavailable (SQLite/index). Click Refresh/Ctrl+R to retry.");
-                            }
+                            paginationText.text = VPBTranslation.T(
+                                "gallery.history.unavailable_retry",
+                                "History unavailable (SQLite/index). Click Refresh/Ctrl+R to retry.");
                         }
                         else if (hasNameFilter)
                         {
@@ -1779,7 +1762,12 @@ namespace VPB
                         }
                     }
                     else if (selected > 0)
-                        paginationText.text = string.Format(VPBTranslation.T("gallery.items.selected", "{0} / {1} Items"), selected, total);
+                    {
+                        if (historyBrowse)
+                            paginationText.text = string.Format(VPBTranslation.T("gallery.items.selected_unique", "{0} unique / {1} Items"), selected, total);
+                        else
+                            paginationText.text = string.Format(VPBTranslation.T("gallery.items.selected", "{0} / {1} Items"), selected, total);
+                    }
                     else
                         paginationText.text = string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
                 }
@@ -2038,8 +2026,13 @@ namespace VPB
                         temporaryStatusCoroutine = null;
                     }
                     temporaryStatusMsg = msg;
+                    temporaryStatusOwner = go;
                 }
-                else if (temporaryStatusMsg == msg) temporaryStatusMsg = null;
+                else if (temporaryStatusMsg == msg)
+                {
+                    temporaryStatusMsg = null;
+                    if (temporaryStatusOwner == go) temporaryStatusOwner = null;
+                }
             };
         }
 
@@ -2059,8 +2052,13 @@ namespace VPB
                         temporaryStatusCoroutine = null;
                     }
                     temporaryStatusMsg = tooltip;
+                    temporaryStatusOwner = go;
                 }
-                else if (temporaryStatusMsg == tooltip) temporaryStatusMsg = null;
+                else if (temporaryStatusMsg == tooltip)
+                {
+                    temporaryStatusMsg = null;
+                    if (temporaryStatusOwner == go) temporaryStatusOwner = null;
+                }
             };
         }
 
@@ -2166,7 +2164,6 @@ namespace VPB
             }
             UpdateLayout();
             UpdateTabs();
-            SyncInternalSettingsListView();
         }
 
         private void CloseClothingSubmenuUI()
@@ -2533,7 +2530,6 @@ namespace VPB
 
             var list = currentFilteredFiles;
             if (list == null || list.Count == 0) return false;
-            bool historyBrowse = activeContentType == ContentType.History;
 
             if (list.Count > SelectAllSafetyMaxItemCount)
             {
@@ -2549,19 +2545,18 @@ namespace VPB
             selectedFiles.Clear();
             selectedFilePaths.Clear();
             selectionAnchorPath = null;
-            selectionAnchorIdentityKey = null;
-            HashSet<string> historySelectionKeys = historyBrowse ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
 
             for (int i = 0; i < list.Count; i++)
             {
                 var f = list[i];
-                AddFileToSelection(f, historyBrowse, historySelectionKeys);
+                if (f == null || string.IsNullOrEmpty(f.Path)) continue;
+                if (selectedFilePaths.Add(f.Path)) selectedFiles.Add(f);
             }
 
             if (selectedFiles.Count > 0)
             {
-                selectedPath = historyBrowse ? GetSelectionIdentityKey(selectedFiles[0], true) : selectedFiles[0].Path;
-                SetSelectionAnchor(selectedFiles[0], historyBrowse);
+                selectedPath = selectedFiles[0].Path;
+                selectionAnchorPath = selectedPath;
                 // Selection should not "stick" the hover path.
                 SetHoverPath("");
             }
@@ -2586,7 +2581,6 @@ namespace VPB
             selectedFiles.Clear();
             selectedFilePaths.Clear();
             selectionAnchorPath = null;
-            selectionAnchorIdentityKey = null;
             selectedPath = null;
             selectedHubItem = null;
             SetHoverPath("");
@@ -2675,53 +2669,24 @@ namespace VPB
         private void ApplyHistoryBrowseTitle()
         {
             if (titleText == null) return;
-            bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
-            if (activeContentType == ContentType.History || hasHistorySide)
-                titleText.text = GetGalleryHistoryFilterRowLabel(galleryHistoryFilterMode);
-        }
-
-        private bool HasHistorySidePanelOpen()
-        {
-            return leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
-        }
-
-        private bool IsTemporaryListTaskActive()
-        {
-            return cleanupModeActive || HasHistorySidePanelOpen();
-        }
-
-        private void EnsureTemporaryTaskListLayoutSession()
-        {
-            if (temporaryListLayoutSessionActive) return;
-            temporaryListLayoutSessionActive = true;
-            temporaryListPreSessionLayoutMode = layoutMode;
-            if (layoutMode != GalleryLayoutMode.List)
-                SetLayoutMode(GalleryLayoutMode.List, false);
-        }
-
-        private void TryRestoreLayoutAfterTemporaryTaskExit()
-        {
-            if (!temporaryListLayoutSessionActive) return;
-            if (IsTemporaryListTaskActive()) return;
-            temporaryListLayoutSessionActive = false;
-            if (layoutMode != temporaryListPreSessionLayoutMode)
-                SetLayoutMode(temporaryListPreSessionLayoutMode, false);
+            if (activeContentType != ContentType.History) return;
+            titleText.text = VPBTranslation.T("gallery.history.title", "History");
         }
 
         private void ToggleRight(ContentType type)
         {
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             bool wasCleanup = cleanupModeActive;
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History || type == ContentType.Settings))
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History))
                 ExitCleanupModeForSidePanelNavigation();
 
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(false);
             bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
-                && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History || type == ContentType.Settings);
+                && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History);
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("right");
 
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History || type == ContentType.Settings))
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History))
             {
                 // After leaving cleanup, explicit Category/Creator click should open the requested list.
                 rightActiveContent = type;
@@ -2740,25 +2705,27 @@ namespace VPB
 
             SyncActiveContentTypeFromSidePanels();
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
-            if (hasHistorySide) EnsureTemporaryTaskListLayoutSession();
-            else if (hadHistorySide) TryRestoreLayoutAfterTemporaryTaskExit();
             if (!hasHistorySide && hadHistorySide && titleText != null)
                 titleText.text = currentCategoryTitle;
-
+            
             UpdateLayout();
             UpdateTabs();
-            SyncInternalSettingsListView();
 
-            bool settingsPanelOpen = IsSettingsPanelOpen();
             if (hadHistorySide != hasHistorySide || (hasHistorySide && type == ContentType.History))
             {
-                if (!settingsPanelOpen && hasHistorySide)
+                if (hasHistorySide)
                     ApplyHistoryBrowseTitle();
-                if (!settingsPanelOpen && hadHistorySide && !hasHistorySide)
+                if (hadHistorySide && !hasHistorySide)
                     RefreshFiles(true);
-                else if (!settingsPanelOpen && hasHistorySide)
+                else if (hasHistorySide)
+                {
+                    ApplyHistorySortPresetForMode(galleryHistoryFilterMode);
                     RefreshHistoryBrowsePreferLight(true);
+                }
             }
+
+            if (type == ContentType.Settings)
+                SyncInternalSettingsListView();
 
             if (timeCategoryCreatorSwitch)
                 EndSideTabCategoryCreatorTiming();
@@ -2768,16 +2735,16 @@ namespace VPB
         {
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             bool wasCleanup = cleanupModeActive;
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History || type == ContentType.Settings))
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History))
                 ExitCleanupModeForSidePanelNavigation();
 
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(true);
             bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
-                && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History || type == ContentType.Settings);
+                && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History);
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("left");
 
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History || type == ContentType.Settings))
+            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.Path || type == ContentType.History))
             {
                 // After leaving cleanup, explicit Category/Creator click should open the requested list.
                 leftActiveContent = type;
@@ -2796,25 +2763,27 @@ namespace VPB
 
             SyncActiveContentTypeFromSidePanels();
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
-            if (hasHistorySide) EnsureTemporaryTaskListLayoutSession();
-            else if (hadHistorySide) TryRestoreLayoutAfterTemporaryTaskExit();
             if (!hasHistorySide && hadHistorySide && titleText != null)
                 titleText.text = currentCategoryTitle;
-
+            
             UpdateLayout();
             UpdateTabs();
-            SyncInternalSettingsListView();
 
-            bool settingsPanelOpen = IsSettingsPanelOpen();
             if (hadHistorySide != hasHistorySide || (hasHistorySide && type == ContentType.History))
             {
-                if (!settingsPanelOpen && hasHistorySide)
+                if (hasHistorySide)
                     ApplyHistoryBrowseTitle();
-                if (!settingsPanelOpen && hadHistorySide && !hasHistorySide)
+                if (hadHistorySide && !hasHistorySide)
                     RefreshFiles(true);
-                else if (!settingsPanelOpen && hasHistorySide)
+                else if (hasHistorySide)
+                {
+                    ApplyHistorySortPresetForMode(galleryHistoryFilterMode);
                     RefreshHistoryBrowsePreferLight(true);
+                }
             }
+
+            if (type == ContentType.Settings)
+                SyncInternalSettingsListView();
 
             if (timeCategoryCreatorSwitch)
                 EndSideTabCategoryCreatorTiming();

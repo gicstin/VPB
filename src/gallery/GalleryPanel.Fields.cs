@@ -65,7 +65,6 @@ namespace VPB
 
         /// <summary>Deferred phase1/phase2 side-tab work after the grid is shown; stopped when a new <see cref="GalleryPanel.RefreshFiles"/> supersedes it.</summary>
         private Coroutine _deferredGallerySideTabsCoroutine;
-
         /// <summary>Sliced tag/facet scan started from <see cref="GalleryPanel.UpdateTabs"/> (e.g. clothing subfilter) so we never block the main thread like <c>CacheTagCounts()</c>.</summary>
         private Coroutine _sideTabsTagCountSliceCo;
 
@@ -195,11 +194,6 @@ namespace VPB
         private Text rightPathBtnText;
         private Image rightPathBtnImage;
         private Image rightPathBtnIconImage;
-        private Image rightHistoryBtnImage;
-        private Image rightHistoryBtnIconImage;
-        private Text rightSettingsBtnText;
-        private Image rightSettingsBtnImage;
-        private Image rightSettingsBtnIconImage;
         
         private Text footerHubBtnText;
         private Image footerHubBtnImage;
@@ -216,9 +210,20 @@ namespace VPB
         private Image leftPathBtnIconImage;
         private Image leftHistoryBtnImage;
         private Image leftHistoryBtnIconImage;
-        private Text leftSettingsBtnText;
-        private Image leftSettingsBtnImage;
-        private Image leftSettingsBtnIconImage;
+        private Image rightHistoryBtnImage;
+        private Image rightHistoryBtnIconImage;
+
+        private GalleryHistoryFilterMode galleryHistoryFilterMode = GalleryHistoryFilterMode.Recent;
+        private string historyTabFilter = "";
+
+        private string settingsFilter = "";
+        private string currentSettingsGroup = "all";
+        private bool settingsListViewActive = false;
+        private bool internalSettingsSessionActive = false;
+        private InternalSettingsSnapshot internalSettingsBackup;
+        private bool internalSettingsHadPreSessionViewState = false;
+        private GalleryLayoutMode internalSettingsPreSessionLayoutMode = GalleryLayoutMode.Grid;
+        private float internalSettingsPreSessionScrollNormalized = 1f;
 
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
@@ -373,19 +378,10 @@ namespace VPB
         private string categoryFilter = "";
         private string creatorFilter = "";
         private string pathFilter = "";
-        private string historyTabFilter = "";
         private string removeClothingFilter = "";
         private string removeHairFilter = "";
         private string removeAtomFilter = "";
         private string targetFilter = "";
-        private string settingsFilter = "";
-        private string currentSettingsGroup = "all";
-        private bool internalSettingsSessionActive = false;
-        private bool settingsListViewActive = false;
-        private InternalSettingsSnapshot internalSettingsBackup;
-        private bool internalSettingsHadPreSessionViewState = false;
-        private GalleryLayoutMode internalSettingsPreSessionLayoutMode = GalleryLayoutMode.Grid;
-        private float internalSettingsPreSessionScrollNormalized = 1f;
         
         // Creator side-tab virtualization (fast: pool + rebind visible rows on scroll)
         private readonly List<CreatorCacheEntry> _creatorVirtView = new List<CreatorCacheEntry>(512);
@@ -413,6 +409,7 @@ namespace VPB
         private string posePeopleIndexGroupId = "";
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
+        private Coroutine _refreshHistoryLightCo;
         // Hub CDN thumbnail URLs for missing dep packages (dep uid → thumbnail URL), populated async after missing-deps filter is applied.
         private readonly Dictionary<string, string> _hubThumbnailUrlCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private bool _cacheRetryPending = false;
@@ -693,8 +690,6 @@ namespace VPB
         
         private Dictionary<string, int> tagCounts = new Dictionary<string, int>();
         private bool tagsCached = false;
-        private Coroutine _refreshHistoryLightCo;
-        private GalleryHistoryFilterMode galleryHistoryFilterMode = GalleryHistoryFilterMode.Recent;
 
         /// <summary>Incremented on each full <see cref="GalleryPanel.RefreshFiles"/> so background tag scans can abort when superseded.</summary>
         private int galleryFileRefreshSequence;
@@ -857,14 +852,16 @@ namespace VPB
         private HashSet<string> selectedFilePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private string selectionAnchorPath = null;
         private string selectionAnchorIdentityKey = null;
-        private string lastHistoryQueryRejectReason = null;
         private bool lastHistoryQueryFailed = false;
+        private string lastHistoryQueryRejectReason = null;
         private bool lastHistoryQueryHadNameFilter = false;
         private bool pendingHistoryRemoveConfirm = false;
         private int pendingHistoryRemoveConfirmCount = 0;
         private float pendingHistoryRemoveConfirmUntilRealtime = 0f;
         private List<VpbLocalDatabase.ItemUsageSnapshot> pendingHistoryUndoSnapshots = null;
         private float pendingHistoryUndoUntilRealtime = 0f;
+        private readonly Dictionary<GalleryHistoryFilterMode, int> historyModeCounts = new Dictionary<GalleryHistoryFilterMode, int>();
+        private float historyModeCountsLastFetchRealtime = -1000f;
 
         private List<FileEntry> lastFilteredFiles = new List<FileEntry>();
 
@@ -878,7 +875,6 @@ namespace VPB
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
                 selectionAnchorPath = null;
-                selectionAnchorIdentityKey = null;
                 if (value != null) selectedFiles.Add(value);
                 if (value != null && !string.IsNullOrEmpty(value.Path)) selectedFilePaths.Add(value.Path);
             }
@@ -892,15 +888,16 @@ namespace VPB
         public static readonly Color ColorCategory = new Color(0.5f, 0.15f, 0.15f, 1f); // Darker Red
         public static readonly Color ColorCreator = new Color(0.15f, 0.45f, 0.15f, 1f); // Darker Green
         public static readonly Color ColorPath = new Color(0.15f, 0.35f, 0.6f, 1f); // Darker Blue
-        public static readonly Color ColorHistory = new Color(0.35f, 0.35f, 0.6f, 1f); // Purple history button backdrop
+        public static readonly Color ColorHistory = new Color(0.38f, 0.28f, 0.52f, 1f);
+        /// <summary>Side-tab / chrome accent for History (slightly brighter than <see cref="ColorHistory"/>).</summary>
+        public static readonly Color ColorHistoryAccent = new Color(0.48f, 0.34f, 0.65f, 1f);
         public static readonly Color ColorHub = new Color(0.8f, 0.4f, 0f, 1f); // Darker Orange
         public static readonly Color ColorLicense = new Color(0.6f, 0f, 0.6f, 1f); // Darker Magenta
-        public static readonly Color ColorHistoryAccent = new Color(0.35f, 0.35f, 0.6f, 1f); // Side-tab active purple
-        private static readonly Color sideTint = new Color(0.78f, 0.78f, 0.78f, 1f);
 
         private string dragStatusMsg = null;
         private string temporaryStatusMsg = null;
         private Coroutine temporaryStatusCoroutine = null;
+        private GameObject temporaryStatusOwner = null;
 
         public bool isFixedLocally = false;
         private bool isCollapsed = false;
@@ -928,8 +925,6 @@ namespace VPB
         private Dictionary<string, SortState> contentSortStates = new Dictionary<string, SortState>();
 
         public GalleryLayoutMode layoutMode = GalleryLayoutMode.Grid;
-        private bool temporaryListLayoutSessionActive = false;
-        private GalleryLayoutMode temporaryListPreSessionLayoutMode = GalleryLayoutMode.Grid;
         private GameObject footerLayoutBtn;
         private Text footerLayoutBtnText;
         private Image footerLayoutBtnImage;

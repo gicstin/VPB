@@ -1014,52 +1014,73 @@ namespace VPB
         {
             if (entry == null || string.IsNullOrEmpty(entry.Path)) return ItemType.Other;
             string p = entry.Path.Replace('\\', '/');
+            bool isVap = p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase);
+            bool isJson = p.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+            bool isVam = p.EndsWith(".vam", StringComparison.OrdinalIgnoreCase);
             
-            // Check for person preset categories (these use .vap or .json)
-            if (p.IndexOf("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Appearance;
-            if (p.IndexOf("Custom/Atom/Person/AnimationPresets", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Animation;
-            if (p.IndexOf("Custom/Atom/Person/BreastPhysics", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.BreastPhysics;
-            if (p.IndexOf("Custom/Atom/Person/Clothing", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Clothing;
-            if (p.IndexOf("Custom/Atom/Person/Hair", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Hair;
-            if (p.IndexOf("Custom/Atom/Person/Morphs", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Morphs;
-            if (p.IndexOf("Custom/Atom/Person/Plugins", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Plugins;
-            if (p.IndexOf("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) >= 0 || p.EndsWith(".vac", StringComparison.OrdinalIgnoreCase)) return ItemType.Pose;
-            if (p.IndexOf("Custom/Atom/Person/Skin", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.Skin;
-            if (p.IndexOf("Custom/Atom/Person/General", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.General;
+            // Person presets
+            if (p.StartsWith("Custom/Atom/Person/AnimationPresets", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Animation;
+            if (p.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Appearance;
+            if (p.StartsWith("Custom/Atom/Person/BreastPhysics", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.BreastPhysics;
+            if (p.StartsWith("Custom/Atom/Person/Clothing", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Clothing;
+            if (p.StartsWith("Custom/Atom/Person/General", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.General;
+            if (p.StartsWith("Custom/Atom/Person/GlutePhysics", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.General;
+            if (p.StartsWith("Custom/Atom/Person/Hair", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Hair;
+            if (p.StartsWith("Custom/Atom/Person/Morphs", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Morphs;
+            if (p.StartsWith("Custom/Atom/Person/Plugins", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Plugins;
+            if ((p.StartsWith("Custom/Atom/Person/Pose", StringComparison.OrdinalIgnoreCase) && isVap) || p.EndsWith(".vac", StringComparison.OrdinalIgnoreCase)) return ItemType.Pose;
+            if (p.StartsWith("Custom/Atom/Person/Skin", StringComparison.OrdinalIgnoreCase) && isVap) return ItemType.Skin;
             
-            // Check for clothing/hair items (these use .vam and toggle on/off)
-            if (p.IndexOf("Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0)
+            // SubScenes and scenes
+            if (p.StartsWith("Custom/SubScene", StringComparison.OrdinalIgnoreCase) && isJson) return ItemType.SubScene;
+            if (p.StartsWith("Saves/scene", StringComparison.OrdinalIgnoreCase) && isJson) return ItemType.Scene;
+
+            // Clothing and hair
+            if ((p.StartsWith("Custom/Clothing/Female", StringComparison.OrdinalIgnoreCase) || p.StartsWith("Custom/Clothing/Male", StringComparison.OrdinalIgnoreCase)) && isVam)
             {
-                if (p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase)) return ItemType.ClothingPreset;
                 return ItemType.ClothingItem;
             }
-            if (p.IndexOf("Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0)
+            if ((p.StartsWith("Custom/Hair/Female", StringComparison.OrdinalIgnoreCase) || p.StartsWith("Custom/Hair/Male", StringComparison.OrdinalIgnoreCase)) && isVam)
             {
-                if (p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase)) return ItemType.HairPreset;
                 return ItemType.HairItem;
             }
-            
-            // Check for subscenes
-            if (p.IndexOf("Custom/SubScene", StringComparison.OrdinalIgnoreCase) >= 0) return ItemType.SubScene;
-
-            // Scenes
-            if (p.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0 || p.IndexOf("/scene/", StringComparison.OrdinalIgnoreCase) >= 0)
+            if ((p.StartsWith("Custom/Clothing/Female", StringComparison.OrdinalIgnoreCase) || p.StartsWith("Custom/Clothing/Male", StringComparison.OrdinalIgnoreCase)) && isVap)
             {
-                if (p.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return ItemType.Scene;
+                return ItemType.ClothingPreset;
             }
-            if (p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && p.IndexOf("scene", StringComparison.OrdinalIgnoreCase) >= 0)
+            if ((p.StartsWith("Custom/Hair/Female", StringComparison.OrdinalIgnoreCase) || p.StartsWith("Custom/Hair/Male", StringComparison.OrdinalIgnoreCase)) && isVap)
             {
-                return ItemType.Scene;
-            }
-
-            // Pose fallback for loose .json pose presets (non-.vap) when path/name indicates pose
-            if (p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && p.IndexOf("pose", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return ItemType.Pose;
+                return ItemType.HairPreset;
             }
 
             // CUA
-            if (p.IndexOf("Custom/Assets", StringComparison.OrdinalIgnoreCase) >= 0 || p.EndsWith(".assetbundle", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".unity3d", StringComparison.OrdinalIgnoreCase))
+            if (p.StartsWith("Custom/Assets", StringComparison.OrdinalIgnoreCase) &&
+                (p.EndsWith(".assetbundle", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".scene", StringComparison.OrdinalIgnoreCase)))
+            {
+                return ItemType.CUA;
+            }
+
+            // Session plugins and plugin presets
+            if (p.StartsWith("Custom/Scripts", StringComparison.OrdinalIgnoreCase) &&
+                (p.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".cslist", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+            {
+                return ItemType.Plugins;
+            }
+            if (p.StartsWith("Custom/PluginPresets", StringComparison.OrdinalIgnoreCase) && isVap)
+            {
+                return ItemType.Plugins;
+            }
+
+            // Compatibility fallbacks
+            if (isJson && p.IndexOf("scene", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return ItemType.Scene;
+            }
+            if (isJson && p.IndexOf("pose", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return ItemType.Pose;
+            }
+            if (p.EndsWith(".assetbundle", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".unity3d", StringComparison.OrdinalIgnoreCase))
             {
                 return ItemType.CUA;
             }
