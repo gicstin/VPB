@@ -1661,6 +1661,12 @@ namespace VPB
                 try
                 {
                     SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(FileEntry, normalizedPath);
+                    if (ShouldForcePrewarmRefreshBeforeApply(itemType))
+                    {
+                        // First-click reliability: if prewarm queued a coalesced refresh, run it now
+                        // before one-shot preset/material lookup work starts.
+                        VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("pre_apply_prewarm_flush");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -2667,36 +2673,13 @@ namespace VPB
 
             if (geometry != null)
             {
-                // Helper to try toggling
-                bool TryToggle(string p)
-                {
-                    string paramName = "clothing:" + p;
-                    JSONStorableBool param = geometry.GetBoolJSONParam(paramName);
-                    if (param != null) 
-                    {
-                        LogUtil.Log($"[DragDropDebug] Found clothing param: {paramName}, setting to true.");
-                        param.val = true;
-                        return true;
-                    }
-                    paramName = "hair:" + p;
-                    param = geometry.GetBoolJSONParam(paramName);
-                    if (param != null)
-                    {
-                        LogUtil.Log($"[DragDropDebug] Found hair param: {paramName}, setting to true.");
-                        param.val = true;
-                        return true;
-                    }
-                    LogUtil.Log($"[DragDropDebug] Param not found: {paramName}");
-                    return false;
-                }
-
                 LogUtil.Log($"[DragDropDebug] Trying legacy toggle with: {legacyPath}");
-                if (TryToggle(legacyPath)) return;
+                if (TryToggleLegacyClothingHairParam(geometry, legacyPath, "[DragDropDebug]")) return;
 
                 if (normalizedPath != legacyPath)
                 {
                     LogUtil.Log($"[DragDropDebug] Trying legacy toggle with full path: {normalizedPath}");
-                    if (TryToggle(normalizedPath)) return;
+                    if (TryToggleLegacyClothingHairParam(geometry, normalizedPath, "[DragDropDebug]")) return;
                 }
 
                 // Try .vaj replacement for .vam (legacy handling)
@@ -2704,20 +2687,118 @@ namespace VPB
                 {
                     string vajPath = legacyPath.Substring(0, legacyPath.Length - 4) + ".vaj";
                     LogUtil.Log($"[DragDropDebug] Trying .vaj toggle with: {vajPath}");
-                    if (TryToggle(vajPath)) return;
+                    if (TryToggleLegacyClothingHairParam(geometry, vajPath, "[DragDropDebug]")) return;
 
                     if (normalizedPath != legacyPath)
                     {
                         string vajFullPath = normalizedPath.Substring(0, normalizedPath.Length - 4) + ".vaj";
                         LogUtil.Log($"[DragDropDebug] Trying .vaj toggle with full path: {vajFullPath}");
-                        if (TryToggle(vajFullPath)) return;
+                        if (TryToggleLegacyClothingHairParam(geometry, vajFullPath, "[DragDropDebug]")) return;
                     }
+                }
+
+                // On-demand registration can queue a delayed FileManager.Refresh; during that window
+                // geometry bools are not yet populated, so first click can miss.
+                // Retry briefly so the same click still succeeds once handlers finish.
+                if (ShouldRetryLegacyToggle(itemType) && SuperController.singleton != null && atom != null)
+                {
+                    string atomUid = atom.uid;
+                    SuperController.singleton.StartCoroutine(RetryLegacyToggleAfterRefreshCoroutine(atomUid, legacyPath, normalizedPath, ext));
                 }
             }
             else
             {
                 LogUtil.Log("[DragDropDebug] Geometry storable not found on atom.");
             }
+        }
+
+        private IEnumerator RetryLegacyToggleAfterRefreshCoroutine(string atomUid, string legacyPath, string normalizedPath, string ext)
+        {
+            if (string.IsNullOrEmpty(atomUid)) yield break;
+
+            DateTime start = DateTime.UtcNow;
+            bool loggedWait = false;
+            while ((DateTime.UtcNow - start).TotalSeconds < 5.0)
+            {
+                Atom atom = null;
+                try { atom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { }
+                if (atom == null) yield break;
+
+                JSONStorable geometry = null;
+                try { geometry = atom.GetStorableByID("geometry"); } catch { }
+                if (geometry != null)
+                {
+                    if (TryToggleLegacyClothingHairParam(geometry, legacyPath, "[DragDropDebug] Deferred toggle")) yield break;
+                    if (!string.Equals(normalizedPath, legacyPath, StringComparison.Ordinal)
+                        && TryToggleLegacyClothingHairParam(geometry, normalizedPath, "[DragDropDebug] Deferred toggle")) yield break;
+
+                    if (string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string vajPath = legacyPath.Substring(0, legacyPath.Length - 4) + ".vaj";
+                        if (TryToggleLegacyClothingHairParam(geometry, vajPath, "[DragDropDebug] Deferred toggle")) yield break;
+                        if (!string.Equals(normalizedPath, legacyPath, StringComparison.Ordinal))
+                        {
+                            string vajFullPath = normalizedPath.Substring(0, normalizedPath.Length - 4) + ".vaj";
+                            if (TryToggleLegacyClothingHairParam(geometry, vajFullPath, "[DragDropDebug] Deferred toggle")) yield break;
+                        }
+                    }
+                }
+
+                if (!loggedWait)
+                {
+                    LogUtil.Log($"[DragDropDebug] Deferred toggle waiting for catalog refresh to expose geometry bools: {legacyPath}");
+                    loggedWait = true;
+                }
+
+                yield return new WaitForSeconds(0.15f);
+            }
+
+            LogUtil.LogWarning($"[DragDropDebug] Deferred toggle timed out waiting for param: {legacyPath}");
+        }
+
+        private static bool TryToggleLegacyClothingHairParam(JSONStorable geometry, string path, string logPrefix)
+        {
+            if (geometry == null || string.IsNullOrEmpty(path)) return false;
+
+            string paramName = "clothing:" + path;
+            JSONStorableBool param = geometry.GetBoolJSONParam(paramName);
+            if (param != null)
+            {
+                LogUtil.Log($"{logPrefix} found clothing param: {paramName}, setting to true.");
+                param.val = true;
+                return true;
+            }
+
+            paramName = "hair:" + path;
+            param = geometry.GetBoolJSONParam(paramName);
+            if (param != null)
+            {
+                LogUtil.Log($"{logPrefix} found hair param: {paramName}, setting to true.");
+                param.val = true;
+                return true;
+            }
+
+            LogUtil.Log($"{logPrefix} param not found: {paramName}");
+            return false;
+        }
+
+        private static bool ShouldRetryLegacyToggle(ItemType itemType)
+        {
+            return itemType == ItemType.Clothing
+                || itemType == ItemType.Hair
+                || itemType == ItemType.ClothingItem
+                || itemType == ItemType.HairItem;
+        }
+
+        private static bool ShouldForcePrewarmRefreshBeforeApply(ItemType itemType)
+        {
+            return itemType == ItemType.Appearance
+                || itemType == ItemType.Clothing
+                || itemType == ItemType.Hair
+                || itemType == ItemType.ClothingPreset
+                || itemType == ItemType.HairPreset
+                || itemType == ItemType.ClothingItem
+                || itemType == ItemType.HairItem;
         }
 
         private void CreateGhost(PointerEventData eventData)

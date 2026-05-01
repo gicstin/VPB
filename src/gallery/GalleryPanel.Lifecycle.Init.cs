@@ -627,6 +627,7 @@ namespace VPB
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
                     else if (rightActiveContent == ContentType.Creator) creatorFilter = val;
                     else if (rightActiveContent == ContentType.Path) pathFilter = val;
+                    else if (rightActiveContent == ContentType.History) historyTabFilter = val;
                     else if (rightActiveContent == ContentType.RemoveClothing) removeClothingFilter = val;
                     else if (rightActiveContent == ContentType.RemoveHair) removeHairFilter = val;
                     else if (rightActiveContent == ContentType.RemoveAtom) removeAtomFilter = val;
@@ -663,6 +664,10 @@ namespace VPB
                     }
                     else if (rightActiveContent == ContentType.Target) {
                         targetFilter = "";
+                        UpdateTabs();
+                    }
+                    else if (rightActiveContent == ContentType.History) {
+                        historyTabFilter = "";
                         UpdateTabs();
                     }
                 });
@@ -855,6 +860,7 @@ namespace VPB
                     if (leftActiveContent == ContentType.Category) categoryFilter = val;
                     else if (leftActiveContent == ContentType.Creator) creatorFilter = val;
                     else if (leftActiveContent == ContentType.Path) pathFilter = val;
+                    else if (leftActiveContent == ContentType.History) historyTabFilter = val;
                     else if (leftActiveContent == ContentType.RemoveClothing) removeClothingFilter = val;
                     else if (leftActiveContent == ContentType.RemoveHair) removeHairFilter = val;
                     else if (leftActiveContent == ContentType.RemoveAtom) removeAtomFilter = val;
@@ -891,6 +897,10 @@ namespace VPB
                     }
                     else if (leftActiveContent == ContentType.Target) {
                         targetFilter = "";
+                        UpdateTabs();
+                    }
+                    else if (leftActiveContent == ContentType.History) {
+                        historyTabFilter = "";
                         UpdateTabs();
                     }
                 });
@@ -939,6 +949,7 @@ namespace VPB
                     galleryCategorySprite = UI.LoadIconSprite("vpb_icons/gallery_category.png", sideTint);
                     galleryCreatorSprite = UI.LoadIconSprite("vpb_icons/gallery_creator.png", sideTint);
                     galleryPathSprite = UI.LoadIconSprite("vpb_icons/folder.png", sideTint);
+                    galleryHistorySprite = UI.LoadIconSprite("vpb_icons/history.png", sideTint);
                     galleryCreatorOffSprite = UI.LoadIconSprite("vpb_icons/gallery_creator_off.png", sideTint);
                     targetOnSprite  = UI.LoadIconSprite("vpb_icons/target_on.png",  new Color(1f, 1f, 1f, 1f));
                     targetOffSprite = UI.LoadIconSprite("vpb_icons/target_off.png", new Color(0.65f, 0.65f, 0.65f, 1f));
@@ -1174,11 +1185,30 @@ namespace VPB
                     AddTooltip(rightPathBtn, "gallery.tooltip.path_list", "Open package and file path list.");
                 }
 
+                // History (launch / usage SQL browse) — always square to match Path / Category icon rails
+                {
+                    GameObject rightHistoryBtn = UI.CreateUIButton(rightSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => {
+                        if (isFixedLocally) ToggleLeft(ContentType.History); else ToggleRight(ContentType.History);
+                    });
+                    rightHistoryBtnImage = rightHistoryBtn.GetComponent<Image>();
+                    if (galleryHistorySprite != null)
+                    {
+                        UI.AddIconToButton(rightHistoryBtn, galleryHistorySprite, sideIconPad, ColorHistory);
+                        rightHistoryBtnIconImage = rightHistoryBtn.transform.Find("Icon") != null
+                            ? rightHistoryBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else if (rightHistoryBtnImage != null)
+                        rightHistoryBtnImage.color = ColorHistory;
+                    rightSideButtons.Add(rightHistoryBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightHistoryBtn, () => ToggleRight(ContentType.History));
+                    AddTooltip(rightHistoryBtn, "gallery.tooltip.history_list", "Launch history and usage filters.");
+                }
+
                 // Apply Mode (Right) — icon swaps 1-click vs 2-click when both assets exist
                 {
                     float apW = applyIconMode ? sideIconBtn : btnWidth;
                     float apH = applyIconMode ? sideIconBtn : btnHeight;
-                    GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, apW, apH, " ", 8, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                    GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, apW, apH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
                     rightApplyModeBtnImage = rightApplyModeBtn.GetComponent<Image>();
                     rightApplyModeBtnText = rightApplyModeBtn.GetComponentInChildren<Text>(true);
                     if (applyIconMode)
@@ -1210,7 +1240,7 @@ namespace VPB
                 }
 
                 // Appearance outfit: keep current vs load from preset (Right)
-                rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
                 rightKeepClothingBtnImage = rightKeepClothingBtnGO.GetComponent<Image>();
                 rightKeepClothingBtnText = rightKeepClothingBtnGO.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightKeepClothingBtnGO.GetComponent<RectTransform>());
@@ -1221,7 +1251,7 @@ namespace VPB
                     bool replaceIcons = galleryAddSprite != null || galleryReplaceSprite != null;
                     float rpW = replaceIcons ? sideIconBtn : btnWidth;
                     float rpH = replaceIcons ? sideIconBtn : btnHeight;
-                    GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                    GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                     rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                     rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>(true);
                     if (replaceIcons)
@@ -1256,7 +1286,7 @@ namespace VPB
                 {
                     float saveW = gallerySaveSprite != null ? sideIconBtn : btnWidth;
                     float saveH = gallerySaveSprite != null ? sideIconBtn : btnHeight;
-                    rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
+                    rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 13 - groupGap * 4, AnchorPresets.centre, () => {
                         try
                         {
                             ToggleSaveSubmenuFromSideButtons(false);
@@ -1628,11 +1658,28 @@ namespace VPB
                     AddTooltip(leftPathBtn, "gallery.tooltip.path_list", "Open package and file path list.");
                 }
 
+                // History (launch / usage SQL browse) — always square to match Path / Category icon rails
+                {
+                    GameObject leftHistoryBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.History));
+                    leftHistoryBtnImage = leftHistoryBtn.GetComponent<Image>();
+                    if (galleryHistorySprite != null)
+                    {
+                        UI.AddIconToButton(leftHistoryBtn, galleryHistorySprite, sideIconPad, ColorHistory);
+                        leftHistoryBtnIconImage = leftHistoryBtn.transform.Find("Icon") != null
+                            ? leftHistoryBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else if (leftHistoryBtnImage != null)
+                        leftHistoryBtnImage.color = ColorHistory;
+                    leftSideButtons.Add(leftHistoryBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftHistoryBtn, () => ToggleRight(ContentType.History));
+                    AddTooltip(leftHistoryBtn, "gallery.tooltip.history_list", "Launch history and usage filters.");
+                }
+
                 // Apply Mode (Left)
                 {
                     float apW = applyIconMode ? sideIconBtn : btnWidth;
                     float apH = applyIconMode ? sideIconBtn : btnHeight;
-                    GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, apW, apH, " ", 8, 0, startY - spacing * 9 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                    GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, apW, apH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
                     leftApplyModeBtnImage = leftApplyModeBtn.GetComponent<Image>();
                     leftApplyModeBtnText = leftApplyModeBtn.GetComponentInChildren<Text>(true);
                     if (applyIconMode)
@@ -1664,7 +1711,7 @@ namespace VPB
                 }
 
                 // Appearance outfit: keep current vs load from preset (Left)
-                leftKeepClothingBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                leftKeepClothingBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
                 leftKeepClothingBtnImage = leftKeepClothingBtnGO.GetComponent<Image>();
                 leftKeepClothingBtnText = leftKeepClothingBtnGO.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftKeepClothingBtnGO.GetComponent<RectTransform>());
@@ -1675,7 +1722,7 @@ namespace VPB
                     bool replaceIcons = galleryAddSprite != null || galleryReplaceSprite != null;
                     float rpW = replaceIcons ? sideIconBtn : btnWidth;
                     float rpH = replaceIcons ? sideIconBtn : btnHeight;
-                    GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                    GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                     leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                     leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>(true);
                     if (replaceIcons)
@@ -1710,7 +1757,7 @@ namespace VPB
                 {
                     float saveW = gallerySaveSprite != null ? sideIconBtn : btnWidth;
                     float saveH = gallerySaveSprite != null ? sideIconBtn : btnHeight;
-                    leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, () => {
+                    leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 13 - groupGap * 4, AnchorPresets.centre, () => {
                         try
                         {
                             ToggleSaveSubmenuFromSideButtons(true);

@@ -16,6 +16,7 @@ namespace VPB
         private Text tboxHintLabel;
         private GameObject tboxCopyPkgNamesBtn;
         private GameObject tboxDeleteBtn;
+        private GameObject tboxRemoveHistoryBtn;
         private GameObject tboxCleanupBtn;
         private GameObject tboxCleanupApplyBtn;
         private GameObject tboxCleanupFilterAllBtn;
@@ -134,6 +135,7 @@ namespace VPB
             one(tboxScanWhitelistRemoveFolderBtn);
             one(tboxAutoInstallBtn);
             one(tboxDeleteBtn);
+            one(tboxRemoveHistoryBtn);
             one(tboxCleanupBtn);
             one(tboxCleanupApplyBtn);
             one(tboxCleanupFilterAllBtn);
@@ -175,6 +177,7 @@ namespace VPB
             d(tboxScanWhitelistRemoveFolderBtn);
             d(tboxAutoInstallBtn);
             d(tboxDeleteBtn);
+            d(tboxRemoveHistoryBtn);
             d(tboxCleanupBtn);
             d(tboxCleanupApplyBtn);
             d(tboxCleanupFilterAllBtn);
@@ -278,6 +281,7 @@ namespace VPB
             if (tboxScanWhitelistRemoveFolderBtn != null) ltr.Add(tboxScanWhitelistRemoveFolderBtn);
             if (tboxAutoInstallBtn != null) ltr.Add(tboxAutoInstallBtn);
             if (tboxDeleteBtn != null) ltr.Add(tboxDeleteBtn);
+            if (tboxRemoveHistoryBtn != null) ltr.Add(tboxRemoveHistoryBtn);
             if (tboxCleanupBtn != null) ltr.Add(tboxCleanupBtn);
             if (tboxCleanupApplyBtn != null) ltr.Add(tboxCleanupApplyBtn);
             if (tboxCleanupFilterAllBtn != null) ltr.Add(tboxCleanupFilterAllBtn);
@@ -819,6 +823,29 @@ namespace VPB
                 }
             }
             catch { }
+
+            tboxRemoveHistoryBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxRemoveSelectedFromHistory
+            );
+            tboxRemoveHistoryBtn.name = "Tbox_RemoveHistory";
+            TboxConfigureActionButtonFlex(tboxRemoveHistoryBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxRemoveHistoryBtn, "gallery.tooltip.tbox_remove_history", "Remove selected entries from History (does not delete packages or files)");
+            try
+            {
+                var rhIcon = UI.LoadIconSprite("vpb_icons/list_remove.png", new Color(0.92f, 0.82f, 0.55f, 1f));
+                if (rhIcon != null)
+                    UI.AddIconToButton(tboxRemoveHistoryBtn, rhIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxRemoveHistoryBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.remove_history", "Rm Hist");
+                }
+            }
+            catch { }
+            if (tboxRemoveHistoryBtn != null) tboxRemoveHistoryBtn.SetActive(false);
 
             tboxSelectAllBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -1510,7 +1537,7 @@ namespace VPB
                 tboxButtonsCG.interactable = canExpand && tboxExpandT > 0.85f;
             }
 
-            if (sel > 0 || cleanupModeActive)
+            if (sel > 0 || cleanupModeActive || (!IsHubMode && activeContentType == ContentType.History))
                 RefreshTboxConditionalActionButtons();
 
             // JSON bench is dev-only; RefreshTboxConditionalActionButtons does not run when selection is empty.
@@ -1563,6 +1590,7 @@ namespace VPB
                 if (!anyCleanupEntry) cleanupModeActive = false;
             }
             bool isCleanup = cleanupModeActive;
+            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
             void show(GameObject go, bool on)
             {
                 if (go != null && go.activeSelf != on) go.SetActive(on);
@@ -1601,6 +1629,7 @@ namespace VPB
 
             if (isCleanup)
             {
+                show(tboxRemoveHistoryBtn, false);
                 int selectedCount = selectedFiles != null ? selectedFiles.Count : 0;
                 SetTboxButtonEnabledVisual(tboxDeleteBtn, selectedCount > 0);
                 SetTboxButtonEnabledVisual(tboxCleanupApplyBtn, false);
@@ -1807,7 +1836,89 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, showOpenHub);
             }
 
+            show(tboxRemoveHistoryBtn, historyBrowse);
+            if (tboxRemoveHistoryBtn != null)
+                SetTboxButtonEnabledVisual(
+                    tboxRemoveHistoryBtn,
+                    historyBrowse && selectedFiles != null && selectedFiles.Count > 0);
+
             RefreshTboxFlexButtonLayout();
+        }
+
+        private void TboxRemoveSelectedFromHistory()
+        {
+            if (activeContentType != ContentType.History || selectedFiles == null || selectedFiles.Count == 0)
+                return;
+            var keys = new List<string>(selectedFiles.Count);
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                var f = selectedFiles[i];
+                if (f == null) continue;
+                try
+                {
+                    string k = null;
+                    if (f is VarFileEntry vfe && !string.IsNullOrEmpty(vfe.GalleryItemUsageKey))
+                        k = vfe.GalleryItemUsageKey;
+                    else
+                        k = VpbLocalDatabase.BuildUsageKey(f);
+                    if (VpbLocalDatabase.LogHistoryUsageDebug)
+                    {
+                        try
+                        {
+                            string gk = (f is VarFileEntry v2) ? (v2.GalleryItemUsageKey ?? "") : "";
+                            string bk = "";
+                            try { bk = VpbLocalDatabase.BuildUsageKey(f) ?? ""; } catch { }
+                            LogUtil.Log("[VPB.History] remove_selection[" + i + "] type=" + f.GetType().Name +
+                                        " galleryItemUsageKey=" + (string.IsNullOrEmpty(gk) ? "(none)" : gk) +
+                                        " deleteKeyUsed=" + (k ?? "") +
+                                        " buildUsageKey=" + bk +
+                                        " entryUid=" + (f.Uid ?? "") +
+                                        " entryPath=" + (f.Path ?? ""));
+                        }
+                        catch { }
+                    }
+                    if (!string.IsNullOrEmpty(k)) keys.Add(k);
+                }
+                catch { }
+            }
+            if (keys.Count == 0)
+            {
+                if (VpbLocalDatabase.LogHistoryUsageDebug)
+                {
+                    try { LogUtil.Log("[VPB.History] TboxRemoveSelectedFromHistory: no keys resolved; nothing deleted."); } catch { }
+                }
+                return;
+            }
+            if (VpbLocalDatabase.LogHistoryUsageDebug)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.History] TboxRemoveSelectedFromHistory calling TryDeleteItemUsageForKeys count=" + keys.Count +
+                                " db=" + Path.GetFileName(VpbLocalDatabase.GetLocalDatabasePathForDiagnostics()));
+                }
+                catch { }
+            }
+            VpbLocalDatabase.TryDeleteItemUsageForKeys(keys);
+            try
+            {
+                selectedFiles.Clear();
+                selectedFilePaths.Clear();
+                selectionAnchorPath = null;
+                selectedPath = null;
+                selectedHubItem = null;
+                RefreshSelectionVisuals();
+            }
+            catch { }
+            if (VpbLocalDatabase.LogHistoryUsageDebug)
+            {
+                try { LogUtil.Log("[VPB.History] TboxRemoveSelectedFromHistory RefreshHistoryListInPlace next"); } catch { }
+            }
+            RefreshHistoryListInPlace(true);
+            ShowTemporaryStatus(
+                string.Format(
+                    VPBTranslation.T("gallery.history.removed_n", "Removed {0} from History."),
+                    keys.Count),
+                2f);
         }
 
         private void TboxOpenSelectedItemOnHub()

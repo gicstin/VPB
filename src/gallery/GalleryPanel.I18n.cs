@@ -69,7 +69,37 @@ namespace VPB
                 case ContentType.Target:         return VPBTranslation.T("gallery.search.target", "Filter Targets...");
                 case ContentType.CleanupCategories: return VPBTranslation.T("gallery.search.cleanup", "Filter Cleanup Categories...");
                 case ContentType.CleanupStaleBuckets: return VPBTranslation.T("gallery.search.cleanup_stale", "Filter Stale Cache Buckets...");
+                case ContentType.History:      return VPBTranslation.T("gallery.search.history_tabs", "Filter history tabs...");
                 default:                       return VPBTranslation.T("gallery.search.main", "Search...");
+            }
+        }
+
+        internal static string GetGalleryHistoryFilterRowLabel(GalleryHistoryFilterMode mode)
+        {
+            switch (mode)
+            {
+                case GalleryHistoryFilterMode.Recent:
+                    return VPBTranslation.T("gallery.history.row.history", "History");
+                case GalleryHistoryFilterMode.MostUsed:
+                    return VPBTranslation.T("gallery.history.row.most_used", "Most used");
+                case GalleryHistoryFilterMode.Scenes:
+                    return VPBTranslation.T("gallery.history.row.scenes", "Scenes");
+                case GalleryHistoryFilterMode.Appearance:
+                    return VPBTranslation.T("gallery.history.row.appearance", "Appearance");
+                case GalleryHistoryFilterMode.Clothing:
+                    return VPBTranslation.T("gallery.history.row.clothing", "Clothing");
+                case GalleryHistoryFilterMode.Hair:
+                    return VPBTranslation.T("gallery.history.row.hair", "Hair");
+                case GalleryHistoryFilterMode.Plugins:
+                    return VPBTranslation.T("gallery.history.row.plugins", "Plugins");
+                case GalleryHistoryFilterMode.Pose:
+                    return VPBTranslation.T("gallery.history.row.pose", "Poses");
+                case GalleryHistoryFilterMode.Body:
+                    return VPBTranslation.T("gallery.history.row.body", "Body");
+                case GalleryHistoryFilterMode.Misc:
+                    return VPBTranslation.T("gallery.history.row.misc", "Misc");
+                default:
+                    return VPBTranslation.T("gallery.history.row.history", "History");
             }
         }
 

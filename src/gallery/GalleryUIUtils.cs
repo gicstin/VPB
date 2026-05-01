@@ -20,6 +20,19 @@ namespace VPB
         private static List<string> BuildSceneLoadUidAllowList(FileEntry entry, List<string> movedUids)
         {
             var needed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void addUidFromPath(string raw)
+            {
+                if (string.IsNullOrEmpty(raw)) return;
+                string p = raw.Replace('\\', '/').Trim();
+                if (p.Length == 0) return;
+                int sep = p.IndexOf(":/", StringComparison.Ordinal);
+                if (sep <= 0) return;
+                // Ignore Windows drive paths like C:/...
+                if (sep == 1 && char.IsLetter(p[0])) return;
+                string uid = p.Substring(0, sep);
+                if (!string.IsNullOrEmpty(uid)) needed.Add(uid);
+            }
+
             try
             {
                 foreach (var uid in SceneLoadingUtils.CollectReferencedPackageUids(entry))
@@ -37,6 +50,18 @@ namespace VPB
                     if (!string.IsNullOrEmpty(uid)) needed.Add(uid);
                 }
             }
+
+            // History rows can be lazy/deferred and dependency parsing may fail before package resolution.
+            // Always include the host package UID from entry identifiers as fallback.
+            try
+            {
+                if (entry != null)
+                {
+                    addUidFromPath(entry.Uid);
+                    addUidFromPath(entry.Path);
+                }
+            }
+            catch { }
 
             return needed.ToList();
         }
@@ -209,6 +234,7 @@ namespace VPB
             }
             _lastLoadSceneStartTime = now;
 
+            // History: record only this scene entry (not EnsureInstalled / dependency work below).
             try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(entry), "scene"); } catch { }
 
             List<string> temporaryUidOverrides = null;

@@ -1279,6 +1279,48 @@ namespace VPB
                     }
                 }
             }
+            else if (contentType == ContentType.History)
+            {
+                GalleryHistoryFilterMode[] modes = new GalleryHistoryFilterMode[]
+                {
+                    GalleryHistoryFilterMode.Recent,
+                    GalleryHistoryFilterMode.MostUsed,
+                    GalleryHistoryFilterMode.Scenes,
+                    GalleryHistoryFilterMode.Appearance,
+                    GalleryHistoryFilterMode.Clothing,
+                    GalleryHistoryFilterMode.Hair,
+                    GalleryHistoryFilterMode.Plugins,
+                    GalleryHistoryFilterMode.Pose,
+                    GalleryHistoryFilterMode.Body,
+                    GalleryHistoryFilterMode.Misc,
+                };
+
+                string tabFilter = historyTabFilter ?? "";
+                for (int mi = 0; mi < modes.Length; mi++)
+                {
+                    GalleryHistoryFilterMode mode = modes[mi];
+                    string label = GetGalleryHistoryFilterRowLabel(mode);
+                    if (!string.IsNullOrEmpty(tabFilter) && label.IndexOf(tabFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    bool isActive = galleryHistoryFilterMode == mode;
+                    Color btnColor = isActive ? ColorHistory : new Color(0.25f, 0.25f, 0.25f, 1f);
+                    GalleryHistoryFilterMode modeCap = mode;
+                    CreateTabButton(container.transform, label, btnColor, isActive, () =>
+                    {
+                        galleryHistoryFilterMode = modeCap;
+                        selectedFiles.Clear();
+                        selectedFilePaths.Clear();
+                        selectionAnchorPath = null;
+                        selectedPath = null;
+                        selectedHubItem = null;
+                        RefreshSelectionVisuals();
+                        UpdatePaginationText();
+                        ApplyHistoryBrowseTitle();
+                        RefreshHistoryBrowsePreferLight(false);
+                        UpdateTabs();
+                    }, trackedButtons);
+                }
+            }
             else if (contentType == ContentType.Ratings)
             {
                 var ratingsList = new List<string> { "All Ratings", "5 Stars", "4 Stars", "3 Stars", "2 Stars", "1 Star", "No Ratings" };

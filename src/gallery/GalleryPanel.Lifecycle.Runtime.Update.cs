@@ -506,7 +506,14 @@ namespace VPB
             {
                 if (selectedFiles != null && selectedFiles.Count > 0)
                 {
-                    try { TboxDeleteSelectedPackages(); } catch { }
+                    if (!IsHubMode && activeContentType == ContentType.History)
+                    {
+                        try { TboxRemoveSelectedFromHistory(); } catch { }
+                    }
+                    else
+                    {
+                        try { TboxDeleteSelectedPackages(); } catch { }
+                    }
                 }
                 return;
             }
@@ -580,29 +587,34 @@ namespace VPB
                         selectedFiles.Clear();
                         selectedFilePaths.Clear();
                     }
+                    bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+                    var historySelectionKeys = historyBrowse ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
+                    if (historyBrowse && ctrl)
+                    {
+                        for (int i = 0; i < selectedFiles.Count; i++)
+                        {
+                            string existingKey = GetSelectionIdentityKey(selectedFiles[i], true);
+                            if (!string.IsNullOrEmpty(existingKey)) historySelectionKeys.Add(existingKey);
+                        }
+                    }
 
                     for (int i = lo; i <= hi; i++)
                     {
                         var f = currentFilteredFiles[i];
-                        if (selectedFilePaths.Add(f.Path))
-                        {
-                            selectedFiles.Add(f);
-                        }
+                        AddFileToSelection(f, historyBrowse, historySelectionKeys);
                     }
                 }
                 else
                 {
                     // Single Select (or Toggle with Ctrl)
+                    bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
                     if (!ctrl)
                     {
                         selectedFiles.Clear();
                         selectedFilePaths.Clear();
                     }
                     
-                    if (selectedFilePaths.Add(newFile.Path))
-                    {
-                        selectedFiles.Add(newFile);
-                    }
+                    AddFileToSelection(newFile, historyBrowse);
                     selectionAnchorPath = newFile.Path; // Move anchor
                 }
 

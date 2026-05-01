@@ -209,6 +209,15 @@ namespace VPB
         private Text leftPathBtnText;
         private Image leftPathBtnImage;
         private Image leftPathBtnIconImage;
+        private Image leftHistoryBtnImage;
+        private Image leftHistoryBtnIconImage;
+        private Image rightHistoryBtnImage;
+        private Image rightHistoryBtnIconImage;
+
+        /// <summary>Active filter row in the History side pane.</summary>
+        private GalleryHistoryFilterMode galleryHistoryFilterMode = GalleryHistoryFilterMode.Recent;
+        /// <summary>Filters History pane tab labels (same pattern as category filter).</summary>
+        private string historyTabFilter = "";
 
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
@@ -394,6 +403,8 @@ namespace VPB
         private string posePeopleIndexGroupId = "";
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
+        /// <summary>Lightweight History-only grid refresh (SQLite usage query only; no full <see cref="GalleryPanel.RefreshFiles"/>).</summary>
+        private Coroutine _refreshHistoryLightCo;
         // Hub CDN thumbnail URLs for missing dep packages (dep uid → thumbnail URL), populated async after missing-deps filter is applied.
         private readonly Dictionary<string, string> _hubThumbnailUrlCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private bool _cacheRetryPending = false;
@@ -817,6 +828,7 @@ namespace VPB
         private Sprite galleryCategorySprite;
         private Sprite galleryCreatorSprite;
         private Sprite galleryPathSprite;
+        private Sprite galleryHistorySprite;
         private Sprite targetOnSprite;
         private Sprite targetOffSprite;
         private Sprite galleryApplySprite;
@@ -862,6 +874,7 @@ namespace VPB
         public static readonly Color ColorCategory = new Color(0.5f, 0.15f, 0.15f, 1f); // Darker Red
         public static readonly Color ColorCreator = new Color(0.15f, 0.45f, 0.15f, 1f); // Darker Green
         public static readonly Color ColorPath = new Color(0.15f, 0.35f, 0.6f, 1f); // Darker Blue
+        public static readonly Color ColorHistory = new Color(0.38f, 0.28f, 0.52f, 1f);
         public static readonly Color ColorHub = new Color(0.8f, 0.4f, 0f, 1f); // Darker Orange
         public static readonly Color ColorLicense = new Color(0.6f, 0f, 0.6f, 1f); // Darker Magenta
 

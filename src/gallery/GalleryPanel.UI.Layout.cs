@@ -92,6 +92,7 @@ namespace VPB
                     if (type == ContentType.Category) target = categoryFilter;
                     else if (type == ContentType.Creator) target = creatorFilter;
                     else if (type == ContentType.Path) target = pathFilter;
+                    else if (type == ContentType.History) target = historyTabFilter;
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
@@ -137,6 +138,7 @@ namespace VPB
                     if (type == ContentType.Category) target = categoryFilter;
                     else if (type == ContentType.Creator) target = creatorFilter;
                     else if (type == ContentType.Path) target = pathFilter;
+                    else if (type == ContentType.History) target = historyTabFilter;
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
@@ -898,6 +900,7 @@ namespace VPB
             int idxCategory = -1;
             int idxCreator = -1;
             int idxPath = -1;
+            int idxHistory = -1;
             int idxCreatorClear = -1;
             int idxTarget = -1;
             int idxApplyMode = -1;
@@ -964,6 +967,14 @@ namespace VPB
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == saveGo);
                         if (i >= 0) idxSave = i;
                     }
+
+                    GameObject histGo = rightHistoryBtnImage != null ? rightHistoryBtnImage.gameObject : null;
+                    if (histGo == null && leftHistoryBtnImage != null) histGo = leftHistoryBtnImage.gameObject;
+                    if (histGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == histGo);
+                        if (i >= 0) idxHistory = i;
+                    }
                 }
             }
             catch { }
@@ -978,6 +989,7 @@ namespace VPB
                 new SideButtonLayoutEntry(idxCreatorClear, 0, 0), // Clear Creator
                 new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
                 new SideButtonLayoutEntry(idxPath, 0, 0), // Path
+                new SideButtonLayoutEntry(idxHistory, 0, 0), // History (directly under Path)
 
                 new SideButtonLayoutEntry(idxSave, 0, 2), // Save
 
@@ -1587,6 +1599,8 @@ namespace VPB
                     return true;
                 if (galleryPathSprite != null && rightPathBtnIconImage != null && rightPathBtnImage != null && go == rightPathBtnImage.gameObject)
                     return true;
+                if (rightHistoryBtnImage != null && go == rightHistoryBtnImage.gameObject)
+                    return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && rightApplyModeBtnIconImage != null && rightApplyModeBtnImage != null && go == rightApplyModeBtnImage.gameObject)
                     return true;
                 if ((galleryAddSprite != null || galleryReplaceSprite != null) && rightReplaceBtnIconImage != null && rightReplaceBtnImage != null && go == rightReplaceBtnImage.gameObject)
@@ -1606,6 +1620,8 @@ namespace VPB
                 if (galleryCreatorSprite != null && leftCreatorBtnIconImage != null && leftCreatorBtnImage != null && go == leftCreatorBtnImage.gameObject)
                     return true;
                 if (galleryPathSprite != null && leftPathBtnIconImage != null && leftPathBtnImage != null && go == leftPathBtnImage.gameObject)
+                    return true;
+                if (leftHistoryBtnImage != null && go == leftHistoryBtnImage.gameObject)
                     return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && leftApplyModeBtnIconImage != null && leftApplyModeBtnImage != null && go == leftApplyModeBtnImage.gameObject)
                     return true;

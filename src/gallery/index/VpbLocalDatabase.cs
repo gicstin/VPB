@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using MVR.FileManagement;
+using Prime31.MessageKit;
 using UnityEngine;
 
 namespace VPB
@@ -15,6 +16,11 @@ namespace VPB
     /// </summary>
     internal static class VpbLocalDatabase
     {
+        /// <summary>Logs history delete, SQL repopulation, and remove-toolbox context (prefix <c>[VPB.History]</c>).</summary>
+        internal static bool LogHistoryUsageDebug = true;
+        /// <summary>When true, logs every <see cref="TryRecordItemUse"/> (very chatty; use to audit where tracking runs).</summary>
+        internal static bool LogHistoryRecordWrites = false;
+
         internal struct Row
         {
             public string PackageUid;
@@ -35,6 +41,15 @@ namespace VPB
             /// From <c>pkg.loaded</c>: package is &quot;loaded&quot; when its .var lives under <c>AddonPackages/</c>, or under <c>Custom/</c> / <c>Saves/</c> (always loaded).
             /// </summary>
             public bool PackageIsLoaded;
+            /// <summary>
+            /// History browse only: raw <c>item_usage.item_key</c> from SQL — matches what <see cref="TryRecordItemUse"/> stored (same as <see cref="BuildUsageKey"/> at apply time).
+            /// Empty for category-index queries.
+            /// </summary>
+            public string ItemUsageKey;
+            /// <summary>History browse: <c>item_usage.use_count</c> for this row (before package dedupe).</summary>
+            public int ItemUsageCount;
+            /// <summary>History browse: <c>item_usage.last_used</c> (<see cref="DateTime.ToBinary"/>).</summary>
+            public long ItemLastUsedBinary;
         }
 
         internal struct PackageRow
@@ -112,6 +127,34 @@ namespace VPB
         {
             try { return Path.GetFullPath(DbPath); }
             catch { return DbPath; }
+        }
+
+        private static string HistoryDebugTruncate(string s, int maxLen = 220)
+        {
+            if (string.IsNullOrEmpty(s)) return "(empty)";
+            if (s.Length <= maxLen) return s;
+            return s.Substring(0, maxLen) + "…(" + s.Length + " chars)";
+        }
+
+        /// <summary>How many of the given keys currently exist in <c>item_usage</c> (same batching as delete).</summary>
+        private static long CountItemUsageKeysPresent(VpbSqlite3.Connection conn, IList<string> itemKeys, int start, int n)
+        {
+            if (n <= 0) return 0;
+            var sb = new StringBuilder(56 + n * 2);
+            sb.Append("SELECT COUNT(*) FROM item_usage WHERE item_key IN (");
+            for (int i = 0; i < n; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append('?');
+            }
+            sb.Append(')');
+            using (var st = conn.Prepare(sb.ToString()))
+            {
+                for (int i = 0; i < n; i++)
+                    st.BindText(i + 1, itemKeys[start + i] ?? "");
+                if (st.Step() != VpbSqlite3.SqliteRow) return -1;
+                return st.ColumnInt64(0);
+            }
         }
 
         private static long ScalarInt64(VpbSqlite3.Connection conn, string sqlUtf8)
@@ -286,6 +329,11 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Gallery usage / History: records one row per <paramref name="itemKey"/> (see <see cref="BuildUsageKey"/>).
+        /// Call only for <b>direct user actions</b> — explicit click apply, footer Random, drag-and-drop apply, or scene load for the chosen entry.
+        /// Do not call for dependency installs, package scans, thumbnails, or background automation.
+        /// </summary>
         internal static void TryRecordItemUse(string itemKey, string kind)
         {
             if (!VpbSqlite3.IsAvailable) return;
@@ -305,8 +353,124 @@ namespace VPB
                         st.Step();
                     }
                 }
+                try { MessageKit.post(MessageDef.GalleryItemUsageRecorded); } catch { }
+                if (LogHistoryRecordWrites)
+                {
+                    try
+                    {
+                        LogUtil.Log("[VPB.History] TryRecordItemUse kind=" + (kind ?? "") + " key=" + HistoryDebugTruncate(itemKey));
+                    }
+                    catch { }
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                if (LogHistoryUsageDebug || LogHistoryRecordWrites)
+                {
+                    try { LogUtil.LogWarning("[VPB.History] TryRecordItemUse failed: " + ex.Message); } catch { }
+                }
+            }
+        }
+
+        /// <summary>Removes usage rows for the given keys (same strings as <see cref="BuildUsageKey"/>).</summary>
+        internal static void TryDeleteItemUsageForKeys(IList<string> itemKeys)
+        {
+            if (!VpbSqlite3.IsAvailable || itemKeys == null || itemKeys.Count == 0)
+            {
+                if (LogHistoryUsageDebug)
+                {
+                    try
+                    {
+                        LogUtil.Log("[VPB.History] TryDeleteItemUsageForKeys skipped (sqlite_unavailable or empty keys). sqlite=" +
+                                    VpbSqlite3.IsAvailable + " count=" + (itemKeys != null ? itemKeys.Count : -1));
+                    }
+                    catch { }
+                }
+                return;
+            }
+            const int MaxVars = 900;
+            try
+            {
+                string dbLabel = "";
+                try { dbLabel = Path.GetFileName(GetLocalDatabasePathForDiagnostics()); } catch { dbLabel = "?"; }
+
+                if (LogHistoryUsageDebug)
+                {
+                    try
+                    {
+                        var sbKeys = new StringBuilder(itemKeys.Count * 48);
+                        int maxKeys = Math.Min(itemKeys.Count, 12);
+                        for (int i = 0; i < maxKeys; i++)
+                        {
+                            if (i > 0) sbKeys.Append(" | ");
+                            sbKeys.Append(HistoryDebugTruncate(itemKeys[i] ?? ""));
+                        }
+                        if (itemKeys.Count > maxKeys) sbKeys.Append(" …(+" + (itemKeys.Count - maxKeys) + " more)");
+                        LogUtil.Log("[VPB.History] TryDeleteItemUsageForKeys db=" + dbLabel + " batch_keys=" + itemKeys.Count + " sample=" + sbKeys);
+                    }
+                    catch { }
+                }
+
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    long totalBefore = 0;
+                    long totalAfter = 0;
+                    for (int start = 0; start < itemKeys.Count; start += MaxVars)
+                    {
+                        int n = Math.Min(MaxVars, itemKeys.Count - start);
+                        long before = CountItemUsageKeysPresent(conn, itemKeys, start, n);
+                        if (before >= 0) totalBefore += before;
+
+                        var sb = new StringBuilder(48 + n * 2);
+                        sb.Append("DELETE FROM item_usage WHERE item_key IN (");
+                        for (int i = 0; i < n; i++)
+                        {
+                            if (i > 0) sb.Append(',');
+                            sb.Append('?');
+                        }
+                        sb.Append(')');
+                        using (var st = conn.Prepare(sb.ToString()))
+                        {
+                            for (int i = 0; i < n; i++)
+                                st.BindText(i + 1, itemKeys[start + i] ?? "");
+                            st.Step();
+                        }
+
+                        long after = CountItemUsageKeysPresent(conn, itemKeys, start, n);
+                        if (after >= 0) totalAfter += after;
+
+                        if (LogHistoryUsageDebug)
+                        {
+                            try
+                            {
+                                LogUtil.Log("[VPB.History] TryDeleteItemUsageForKeys batch start=" + start + " n=" + n +
+                                            " matched_before_delete=" + before + " matched_after_delete=" + after);
+                            }
+                            catch { }
+                        }
+                    }
+
+                    if (LogHistoryUsageDebug)
+                    {
+                        try
+                        {
+                            LogUtil.Log("[VPB.History] TryDeleteItemUsageForKeys done db=" + dbLabel +
+                                        " total_keys_requested=" + itemKeys.Count +
+                                        " sum_matched_before=" + totalBefore + " sum_still_present_after=" + totalAfter +
+                                        " (if matched_before=0 keys do not match DB; if after>0 DELETE missed)");
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (LogHistoryUsageDebug)
+                {
+                    try { LogUtil.LogWarning("[VPB.History] TryDeleteItemUsageForKeys exception: " + ex.Message); } catch { }
+                }
+            }
         }
 
         internal static bool TryReadItemUseCountsForKeys(IList<string> keys, Dictionary<string, int> outCounts)
@@ -2748,6 +2912,7 @@ namespace VPB
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
                         {
                             Row r;
+                            r.ItemUsageKey = null;
                             r.PackageUid = stmt.ColumnText(0);
                             r.InternalPath = stmt.ColumnText(1);
                             r.ListPath = stmt.ColumnText(2) ?? "";
@@ -2757,6 +2922,8 @@ namespace VPB
                             r.PackageCreationTicksOrInvalid = stmt.ColumnInt64(6);
                             r.ClothingAttrPacked = (int)stmt.ColumnInt64(7);
                             r.PackageIsLoaded = stmt.ColumnInt64(8) != 0;
+                            r.ItemUsageCount = 0;
+                            r.ItemLastUsedBinary = 0;
                             if (r.PackageUid.Length > 0 && r.InternalPath.Length > 0)
                                 outRows.Add(r);
                         }
@@ -2772,6 +2939,322 @@ namespace VPB
             {
                 s_LastError = ex.Message;
                 stats.RejectReason = "exception:" + ex.Message;
+                return false;
+            }
+        }
+
+        private static string BuildGalleryHistoryKindSqlAnd(GalleryHistoryFilterMode mode)
+        {
+            switch (mode)
+            {
+                case GalleryHistoryFilterMode.Recent:
+                case GalleryHistoryFilterMode.MostUsed:
+                    return "";
+                case GalleryHistoryFilterMode.Scenes:
+                    return " AND i.kind = 'scene'";
+                case GalleryHistoryFilterMode.Appearance:
+                    return " AND i.kind = 'appearance'";
+                case GalleryHistoryFilterMode.Clothing:
+                    return " AND i.kind = 'clothing'";
+                case GalleryHistoryFilterMode.Hair:
+                    return " AND i.kind = 'hair'";
+                case GalleryHistoryFilterMode.Plugins:
+                    return " AND i.kind = 'plugins'";
+                case GalleryHistoryFilterMode.Pose:
+                    return " AND i.kind = 'pose'";
+                case GalleryHistoryFilterMode.Body:
+                    return " AND i.kind IN ('skin','morphs')";
+                case GalleryHistoryFilterMode.Misc:
+                    return " AND i.kind NOT IN ('scene','appearance','clothing','hair','plugins','pose','skin','morphs')";
+                default:
+                    return "";
+            }
+        }
+
+        private static string BuildGalleryHistoryOrderSql(GalleryHistoryFilterMode mode)
+        {
+            if (mode == GalleryHistoryFilterMode.MostUsed)
+                return " ORDER BY i.use_count DESC, i.last_used DESC, i.item_key ASC";
+            return " ORDER BY i.last_used DESC, i.item_key ASC";
+        }
+
+        /// <summary>
+        /// Collapses multiple <c>item_usage</c> rows per VAR package to a single grid row (same <c>pkg.uid</c>).
+        /// Recent modes: keep the row with latest <c>last_used</c>. Most used: order packages by sum of uses, pick the hottest item row as representative.
+        /// </summary>
+        private static void DedupeHistoryGalleryRowsByPackage(GalleryHistoryFilterMode mode, List<Row> rows)
+        {
+            if (rows == null || rows.Count < 2) return;
+
+            var uidCmp = StringComparer.OrdinalIgnoreCase;
+
+            int BetterRep(Row a, Row b)
+            {
+                int c = a.ItemUsageCount.CompareTo(b.ItemUsageCount);
+                if (c != 0) return c;
+                c = a.ItemLastUsedBinary.CompareTo(b.ItemLastUsedBinary);
+                if (c != 0) return c;
+                return string.Compare(a.ItemUsageKey ?? "", b.ItemUsageKey ?? "", StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (mode == GalleryHistoryFilterMode.MostUsed)
+            {
+                var groups = new Dictionary<string, MostUsedPkgAgg>(uidCmp);
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    Row r = rows[i];
+                    string u = r.PackageUid ?? "";
+                    if (u.Length == 0) continue;
+
+                    long cnt = r.ItemUsageCount;
+                    if (cnt < 0) cnt = 0;
+
+                    if (!groups.TryGetValue(u, out MostUsedPkgAgg agg))
+                    {
+                        agg = new MostUsedPkgAgg
+                        {
+                            Rep = r,
+                            SumUses = cnt,
+                            MaxLastUsed = r.ItemLastUsedBinary
+                        };
+                        groups[u] = agg;
+                        continue;
+                    }
+
+                    agg.SumUses += cnt;
+                    if (r.ItemLastUsedBinary > agg.MaxLastUsed)
+                        agg.MaxLastUsed = r.ItemLastUsedBinary;
+                    if (BetterRep(r, agg.Rep) > 0)
+                        agg.Rep = r;
+                    groups[u] = agg;
+                }
+
+                rows.Clear();
+                var order = new List<KeyValuePair<string, MostUsedPkgAgg>>(groups);
+                order.Sort((a, b) =>
+                {
+                    int c = b.Value.SumUses.CompareTo(a.Value.SumUses);
+                    if (c != 0) return c;
+                    c = b.Value.MaxLastUsed.CompareTo(a.Value.MaxLastUsed);
+                    if (c != 0) return c;
+                    return string.Compare(a.Key, b.Key, StringComparison.OrdinalIgnoreCase);
+                });
+
+                for (int i = 0; i < order.Count; i++)
+                {
+                    Row rep = order[i].Value.Rep;
+                    long su = order[i].Value.SumUses;
+                    if (su > int.MaxValue) su = int.MaxValue;
+                    rep.ItemUsageCount = (int)su;
+                    rows.Add(rep);
+                }
+                return;
+            }
+
+            var recentBest = new Dictionary<string, Row>(uidCmp);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                Row r = rows[i];
+                string u = r.PackageUid ?? "";
+                if (u.Length == 0) continue;
+
+                if (!recentBest.TryGetValue(u, out Row existing))
+                {
+                    recentBest[u] = r;
+                    continue;
+                }
+
+                if (r.ItemLastUsedBinary > existing.ItemLastUsedBinary)
+                    recentBest[u] = r;
+                else if (r.ItemLastUsedBinary == existing.ItemLastUsedBinary &&
+                         string.Compare(r.ItemUsageKey ?? "", existing.ItemUsageKey ?? "", StringComparison.OrdinalIgnoreCase) < 0)
+                    recentBest[u] = r;
+            }
+
+            rows.Clear();
+            var rl = new List<Row>(recentBest.Values);
+            rl.Sort((a, b) =>
+            {
+                int c = b.ItemLastUsedBinary.CompareTo(a.ItemLastUsedBinary);
+                if (c != 0) return c;
+                return string.Compare(a.ItemUsageKey ?? "", b.ItemUsageKey ?? "", StringComparison.OrdinalIgnoreCase);
+            });
+            rows.AddRange(rl);
+        }
+
+        private struct MostUsedPkgAgg
+        {
+            public long SumUses;
+            public long MaxLastUsed;
+            public Row Rep;
+        }
+
+        /// <summary>
+        /// Lists launched/applied items from <c>item_usage</c>, joined to <c>pkg</c> and matching <c>cat_mem</c> rows for thumbnails.
+        /// Uses <c>item_usage</c> (see <see cref="TryRecordItemUse"/>). Does not require the category index to be "ready".
+        /// </summary>
+        internal static bool TryQueryGalleryHistoryRows(
+            GalleryHistoryFilterMode mode,
+            string[] nameTerms,
+            List<Row> outRows,
+            out GalleryCategoryQueryStats stats)
+        {
+            stats = new GalleryCategoryQueryStats();
+            outRows.Clear();
+            if (!VpbSqlite3.IsAvailable)
+            {
+                stats.RejectReason = "sqlite_unavailable";
+                if (LogHistoryUsageDebug)
+                {
+                    try { LogUtil.Log("[VPB.History] TryQueryGalleryHistoryRows skipped (sqlite_unavailable) mode=" + mode); } catch { }
+                }
+                return false;
+            }
+
+            try
+            {
+                var swSql = Stopwatch.StartNew();
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+
+                    bool pkgHasLoadedCol = false;
+                    try { pkgHasLoadedCol = PkgHasLoadedColumn(conn); } catch { pkgHasLoadedCol = false; }
+
+                    string loadedSelect = pkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
+                    string kindSql = BuildGalleryHistoryKindSqlAnd(mode);
+                    string orderSql = BuildGalleryHistoryOrderSql(mode);
+
+                    // item_usage.item_key is BuildUsageKey(): often "uid:/internal..." for VAR entries.
+                    // Extract package UID + internal path so history can resolve specific preset/subpreset rows.
+                    const string usagePkgKey =
+                        "(CASE WHEN instr(i.item_key,':/')>0 THEN substr(i.item_key,1,instr(i.item_key,':/')-1) ELSE i.item_key END)";
+                    const string usageInternalKey =
+                        "(CASE WHEN instr(i.item_key,':/')>0 THEN substr(i.item_key,instr(i.item_key,':/')+2) ELSE '' END)";
+
+                    var sb = new StringBuilder(768);
+                    sb.Append(
+                        "SELECT i.item_key, p.uid, " +
+                        "COALESCE(NULLIF(mx.internal_path,''), NULLIF(mr.internal_path,''), NULLIF(" + usageInternalKey + ",''), 'meta.json'), " +
+                        "TRIM(COALESCE(mx.list_path, mr.list_path,'')), " +
+                        "ifnull(p.var_path,''), " +
+                        "p.wtime, p.psize, p.pctime, " +
+                        "ifnull(COALESCE(mx.cloth_attr, mr.cloth_attr),''), " +
+                        loadedSelect +
+                        ", i.use_count, i.last_used " +
+                        "FROM item_usage i " +
+                        "INNER JOIN pkg p ON lower(p.uid) = " + usagePkgKey + " " +
+                        "LEFT JOIN cat_mem mx ON mx.pkg_uid = p.uid AND (" +
+                        "lower(TRIM(ifnull(mx.list_path,''))) = lower(TRIM(i.item_key)) OR " +
+                        "lower(TRIM(ifnull(mx.internal_path,''))) = lower(TRIM(" + usageInternalKey + "))) " +
+                        "LEFT JOIN cat_mem mr ON mr.pkg_uid = p.uid AND mr.rowid = (" +
+                        "SELECT MIN(cm.rowid) FROM cat_mem cm WHERE cm.pkg_uid = p.uid) " +
+                        "WHERE 1=1");
+                    sb.Append(kindSql);
+
+                    if (nameTerms != null && nameTerms.Length > 0)
+                    {
+                        for (int t = 0; t < nameTerms.Length; t++)
+                        {
+                            if (string.IsNullOrEmpty(nameTerms[t])) continue;
+                            sb.Append(" AND (ifnull(COALESCE(mx.list_path, mr.list_path),'') LIKE ? ESCAPE '\\' OR ifnull(COALESCE(mx.internal_path, mr.internal_path),'') LIKE ? ESCAPE '\\' OR ifnull(p.var_path,'') LIKE ? ESCAPE '\\')");
+                        }
+                    }
+
+                    sb.Append(orderSql);
+
+                    List<string> dbgSampleKeys = LogHistoryUsageDebug ? new List<string>(18) : null;
+
+                    using (var stmt = conn.Prepare(sb.ToString()))
+                    {
+                        int bind = 1;
+                        if (nameTerms != null && nameTerms.Length > 0)
+                        {
+                            for (int t = 0; t < nameTerms.Length; t++)
+                            {
+                                if (string.IsNullOrEmpty(nameTerms[t])) continue;
+                                string esc = "%" + EscapeLike(nameTerms[t]) + "%";
+                                stmt.BindText(bind++, esc);
+                                stmt.BindText(bind++, esc);
+                                stmt.BindText(bind++, esc);
+                            }
+                        }
+
+                        int step;
+                        while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
+                        {
+                            Row r;
+                            r.ItemUsageKey = stmt.ColumnText(0) ?? "";
+                            r.PackageUid = stmt.ColumnText(1);
+                            r.InternalPath = stmt.ColumnText(2);
+                            r.ListPath = stmt.ColumnText(3) ?? "";
+                            r.VarPath = stmt.ColumnText(4) ?? "";
+                            r.LastWriteTicksOrInvalid = stmt.ColumnInt64(5);
+                            r.PackageSizeOrInvalid = stmt.ColumnInt64(6);
+                            r.PackageCreationTicksOrInvalid = stmt.ColumnInt64(7);
+                            r.ClothingAttrPacked = (int)stmt.ColumnInt64(8);
+                            r.PackageIsLoaded = stmt.ColumnInt64(9) != 0;
+                            r.ItemUsageCount = (int)Math.Min(Math.Max(stmt.ColumnInt64(10), 0), int.MaxValue);
+                            r.ItemLastUsedBinary = stmt.ColumnInt64(11);
+                            if (dbgSampleKeys != null && dbgSampleKeys.Count < 18 && !string.IsNullOrEmpty(r.ItemUsageKey))
+                                dbgSampleKeys.Add(r.ItemUsageKey);
+                            if (r.PackageUid.Length > 0 && r.InternalPath.Length > 0)
+                                outRows.Add(r);
+                        }
+                    }
+
+                    // Keep per-item history rows (do not collapse to one row per package).
+
+                    if (LogHistoryUsageDebug)
+                    {
+                        try
+                        {
+                            long totalUsageRows = -1;
+                            try
+                            {
+                                using (var stc = conn.Prepare("SELECT COUNT(*) FROM item_usage"))
+                                {
+                                    if (stc.Step() == VpbSqlite3.SqliteRow)
+                                        totalUsageRows = stc.ColumnInt64(0);
+                                }
+                            }
+                            catch { }
+
+                            var sj = new StringBuilder(dbgSampleKeys != null ? dbgSampleKeys.Count * 64 : 8);
+                            if (dbgSampleKeys != null)
+                            {
+                                for (int i = 0; i < dbgSampleKeys.Count; i++)
+                                {
+                                    if (i > 0) sj.Append(" | ");
+                                    sj.Append(HistoryDebugTruncate(dbgSampleKeys[i]));
+                                }
+                            }
+
+                            string dbLabel = "";
+                            try { dbLabel = Path.GetFileName(GetLocalDatabasePathForDiagnostics()); } catch { dbLabel = "?"; }
+
+                            LogUtil.Log("[VPB.History] TryQueryGalleryHistoryRows mode=" + mode + " db=" + dbLabel +
+                                        " joined_rows=" + outRows.Count + " item_usage_row_count=" + totalUsageRows +
+                                        " sql_ms=" + swSql.ElapsedMilliseconds +
+                                        " sample_item_keys=" + (sj.Length > 0 ? sj.ToString() : "(none)"));
+                        }
+                        catch { }
+                    }
+                }
+                swSql.Stop();
+                stats.ExecutedQuery = true;
+                stats.SqlElapsedMs = swSql.ElapsedMilliseconds;
+                stats.RowsRead = outRows.Count;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                s_LastError = ex.Message;
+                stats.RejectReason = "exception:" + ex.Message;
+                if (LogHistoryUsageDebug)
+                {
+                    try { LogUtil.LogWarning("[VPB.History] TryQueryGalleryHistoryRows failed: " + ex.Message); } catch { }
+                }
                 return false;
             }
         }

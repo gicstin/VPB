@@ -468,7 +468,7 @@ namespace VPB
 
         public void LoadCUA(string path)
         {
-            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "cua"); } catch { }
+            // Usage recorded in LoadCUAIntoAtom when the asset is actually applied (avoid double-count).
             string normalizedPath = UI.NormalizePath(path);
             LogUtil.Log($"[DragDropDebug] Loading CUA: {normalizedPath}");
             if (Panel != null) Panel.StartCoroutine(LoadCUACoroutine(normalizedPath));

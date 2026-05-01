@@ -556,7 +556,8 @@ namespace VPB
             {
                 var st = GetSortState("Files");
                 ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
-                GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
+                if (activeContentType != ContentType.History)
+                    GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
             }
             catch { }
 
@@ -581,7 +582,8 @@ namespace VPB
             {
                 var st = GetSortState("Files");
                 ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
-                GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
+                if (activeContentType != ContentType.History)
+                    GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
             }
             catch { }
             try { UpdatePaginationText(); } catch { }
@@ -1340,6 +1342,40 @@ namespace VPB
         {
             if (entry == null) return false;
 
+            // History grid comes from item_usage + SQL; do not apply the main category's browse filters
+            // (scene source, rating, size, scene-specific UI) or rows disappear while title still says "Scenes", etc.
+            if (activeContentType == ContentType.History)
+            {
+                if (!string.IsNullOrEmpty(currentPackagePathFilter))
+                {
+                    string folder = TryGetPathFilterFolderForEntry(entry);
+                    if (!GalleryPathFilterMatchesFolder(folder, currentPackagePathFilter))
+                        return false;
+                }
+                if (nameFilterTerms != null && nameFilterTerms.Length > 0)
+                    if (!MatchesAllTermsInEither(entry.Path, "", nameFilterTerms))
+                        return false;
+                if (activeTags != null && activeTags.Count > 0)
+                {
+                    bool tagMatch = false;
+                    foreach (var tag in activeTags)
+                    {
+                        if (entry.Path != null && entry.Path.IndexOf(tag, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            tagMatch = true;
+                            break;
+                        }
+                        if (TagsManager.Instance.HasTag(entry.Uid, tag))
+                        {
+                            tagMatch = true;
+                            break;
+                        }
+                    }
+                    if (!tagMatch) return false;
+                }
+                return true;
+            }
+
             if (!string.IsNullOrEmpty(currentPackagePathFilter))
             {
                 string folder = TryGetPathFilterFolderForEntry(entry);
@@ -1611,6 +1647,11 @@ namespace VPB
             unchecked { _deferredSubPaneSessionId++; }
             System.Threading.Interlocked.Increment(ref galleryFileRefreshSequence);
             if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
+            if (_refreshHistoryLightCo != null)
+            {
+                try { StopCoroutine(_refreshHistoryLightCo); } catch { }
+                _refreshHistoryLightCo = null;
+            }
             _boundCategoryNavSessionForCurrentRefresh = _categoryTypeNavStopwatch != null ? _categoryTypeNavTargetSession : 0;
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
@@ -1783,8 +1824,11 @@ namespace VPB
                     lastFilteredFiles.AddRange(newEntries);
 
                     var sortState = GetSortState("Files");
-                    GallerySortManager.Instance.SortFiles(currentFilteredFiles, sortState);
-                    GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState);
+                    if (activeContentType != ContentType.History)
+                    {
+                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, sortState);
+                        GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState);
+                    }
 
                     changed = true;
                 }
@@ -1835,6 +1879,8 @@ namespace VPB
             {
                 var sb = new StringBuilder(640);
                 sb.Append((int)activeContentType).Append('\u001E');
+                if (activeContentType == ContentType.History)
+                    sb.Append((int)galleryHistoryFilterMode).Append('\u001E');
                 sb.Append(currentExtension ?? "").Append('\u001E');
                 sb.Append(currentPath ?? "").Append('\u001E');
                 if (currentPaths != null)
@@ -1966,6 +2012,282 @@ namespace VPB
 
             targetFiles.Add(entry);
             return yieldWatch.ElapsedMilliseconds > maxMsBudget;
+        }
+
+        /// <summary>Builds History browse <see cref="VarFileEntry"/> rows from SQLite index rows (same rules as RefreshFilesRoutine worker).</summary>
+        private List<FileEntry> BuildHistoryBulkListFromRows(List<VpbLocalDatabase.Row> idxRows, string localLoadingGroupId, int wantsLoadedStateForIndexMain)
+        {
+            var bulk = new List<FileEntry>(idxRows != null && idxRows.Count > 0 ? idxRows.Count : 16);
+            if (idxRows == null) return bulk;
+            for (int ri = 0; ri < idxRows.Count; ri++)
+            {
+                if (localLoadingGroupId != currentLoadingGroupId) return bulk;
+
+                VpbLocalDatabase.Row r = idxRows[ri];
+                string internalPath = r.InternalPath;
+                // Do not derive launch path from item_usage.item_key here.
+                // History may contain legacy/bad keys (e.g. missing leading 'S' in "Saves/..."),
+                // and using them can break EnsureInstalled + scene load.
+                // Keep ItemUsageKey only for history-delete identity; use indexed catalog paths for launch.
+
+                string varHint = r.VarPath ?? "";
+                string listPath = r.ListPath ?? "";
+                if (!string.IsNullOrEmpty(r.ItemUsageKey))
+                {
+                    if (!string.IsNullOrEmpty(varHint))
+                    {
+                        listPath = string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase)
+                            ? varHint
+                            : varHint + ":/" + internalPath;
+                    }
+                }
+                else if (string.IsNullOrEmpty(listPath))
+                {
+                    if (!string.IsNullOrEmpty(varHint))
+                    {
+                        listPath = string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase)
+                            ? varHint
+                            : varHint + ":/" + internalPath;
+                    }
+                }
+                if (string.IsNullOrEmpty(listPath))
+                    continue;
+
+                if (wantsLoadedStateForIndexMain != -1)
+                {
+                    bool loaded = r.PackageIsLoaded;
+                    if (!loaded)
+                    {
+                        string lp = (listPath ?? "").Replace('\\', '/');
+                        int sep = lp.IndexOf(":/", StringComparison.Ordinal);
+                        string root = (sep >= 0) ? lp.Substring(0, sep) : lp;
+                        loaded =
+                            root.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
+                            root.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
+                            root.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase);
+                    }
+                    bool wantsLoaded = wantsLoadedStateForIndexMain == 1;
+                    if (wantsLoaded && !loaded) continue;
+                    if (!wantsLoaded && loaded) continue;
+                }
+
+                DateTime entryTime = DateTime.MinValue;
+                if (r.LastWriteTicksOrInvalid != long.MinValue)
+                {
+                    try { entryTime = DateTime.FromBinary(r.LastWriteTicksOrInvalid); }
+                    catch { entryTime = DateTime.MinValue; }
+                }
+                long entrySize = 0;
+                if (r.PackageSizeOrInvalid != long.MinValue)
+                    entrySize = r.PackageSizeOrInvalid;
+
+                VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, r.ItemUsageKey);
+                bulk.Add(vfe);
+            }
+            return bulk;
+        }
+
+        /// <summary>
+        /// Re-queries <c>item_usage</c> and rebinds the recycling grid without <see cref="RefreshFiles"/> (no package enumeration, loose-file scan, or early side-meta thread).
+        /// Use after usage DB changes (e.g. remove-from-history) while the History side pane is active.
+        /// </summary>
+        public void RefreshHistoryListInPlace(bool keepScroll = true)
+        {
+            if (Gallery.IsSuppressed()) return;
+            if (IsHubMode) return;
+            if (activeContentType != ContentType.History)
+            {
+                RefreshFiles(keepScroll);
+                return;
+            }
+            string snapProbe;
+            if (!TryBuildFileListSnapshotCacheKey(out snapProbe))
+            {
+                RefreshFiles(keepScroll);
+                return;
+            }
+
+            if (refreshCoroutine != null)
+            {
+                try { StopCoroutine(refreshCoroutine); } catch { }
+                refreshCoroutine = null;
+            }
+            if (_refreshHistoryLightCo != null)
+            {
+                try { StopCoroutine(_refreshHistoryLightCo); } catch { }
+                _refreshHistoryLightCo = null;
+            }
+
+            if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
+                CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
+            currentLoadingGroupId = Guid.NewGuid().ToString();
+            unchecked { _deferredSubPaneSessionId++; }
+            System.Threading.Interlocked.Increment(ref galleryFileRefreshSequence);
+
+            _refreshHistoryLightCo = StartCoroutine(RefreshHistoryListInPlaceRoutine(keepScroll));
+        }
+
+        /// <summary>No-op unless this pane is on the History tab — lightweight SQLite re-query when the grid is warm, else full <see cref="RefreshFiles"/>.</summary>
+        public void RefreshHistoryBrowseIfActive(bool keepScroll = true)
+        {
+            if (activeContentType != ContentType.History) return;
+            RefreshHistoryBrowsePreferLight(keepScroll);
+        }
+
+        /// <summary>
+        /// History browse: SQLite-only refresh when the grid is already loaded; otherwise full file scan.
+        /// Prefer this over <see cref="RefreshFiles"/> when opening the History side pane or switching History filters.
+        /// </summary>
+        public void RefreshHistoryBrowsePreferLight(bool keepScroll = true)
+        {
+            if (Gallery.IsSuppressed()) return;
+            if (IsHubMode) return;
+            if (activeContentType != ContentType.History)
+            {
+                RefreshFiles(keepScroll);
+                return;
+            }
+            if (hasLoadedContent && recyclingGrid != null && scrollRect != null)
+            {
+                RefreshHistoryListInPlace(keepScroll);
+                return;
+            }
+            RefreshFiles(keepScroll);
+        }
+
+        private IEnumerator RefreshHistoryListInPlaceRoutine(bool keepScroll)
+        {
+            yield return null;
+
+            bool useCenterItemRestore = keepScroll && hasLoadedContent;
+            int savedCenterItemIndex = (useCenterItemRestore && recyclingGrid != null)
+                ? recyclingGrid.GetCenterItemIndex()
+                : -1;
+            float savedScrollNormalizedPos = useCenterItemRestore
+                ? (scrollRect != null ? scrollRect.verticalNormalizedPosition : 1f)
+                : _pendingScrollRestore;
+
+            string localId = currentLoadingGroupId;
+            var histMode = galleryHistoryFilterMode;
+            string[] nameTerms = nameFilterTerms;
+
+            int wantsLoadedStateForIndexMain = -1;
+            try
+            {
+                SortType st = GetSortState("Files").Type;
+                if (st == SortType.LoadedOnly) wantsLoadedStateForIndexMain = 1;
+                else if (st == SortType.UnloadedOnly) wantsLoadedStateForIndexMain = 0;
+            }
+            catch { }
+
+            List<FileEntry> bulkResult = null;
+            var workerDone = new int[1];
+
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    if (!VpbSqlite3.IsAvailable) return;
+                    var idxRows = new List<VpbLocalDatabase.Row>();
+                    VpbLocalDatabase.GalleryCategoryQueryStats histStats;
+                    if (!VpbLocalDatabase.TryQueryGalleryHistoryRows(histMode, nameTerms, idxRows, out histStats))
+                        idxRows.Clear();
+                    bulkResult = BuildHistoryBulkListFromRows(idxRows, localId, wantsLoadedStateForIndexMain);
+                }
+                catch
+                {
+                    bulkResult = null;
+                }
+                finally
+                {
+                    workerDone[0] = 1;
+                }
+            });
+
+            while (workerDone[0] == 0)
+                yield return null;
+
+            if (localId != currentLoadingGroupId)
+            {
+                _refreshHistoryLightCo = null;
+                yield break;
+            }
+
+            List<FileEntry> bulk = bulkResult ?? new List<FileEntry>();
+            var sortState = GetSortState("Files");
+            ApplyFilesSortExclusiveFiltersInPlace(bulk, sortState.Type);
+
+            var filtered = new List<FileEntry>(bulk.Count);
+            for (int i = 0; i < bulk.Count; i++)
+            {
+                if (PassesFilters(bulk[i], true, true))
+                    filtered.Add(bulk[i]);
+            }
+
+            currentFilteredFiles = filtered;
+            lastFilteredFiles = new List<FileEntry>(filtered);
+
+            string snapKey;
+            if (TryBuildFileListSnapshotCacheKey(out snapKey))
+                GalleryFileListSnapshotCache.Put(snapKey, filtered);
+
+            if (recyclingGrid != null && contentGO != null)
+            {
+                recyclingGrid.scrollRect = scrollRect;
+                recyclingGrid.content = contentGO.GetComponent<RectTransform>();
+                recyclingGrid.onCreateItem = () => CreateNewFileButtonGO();
+                recyclingGrid.onBindItem = (go, index) =>
+                {
+                    if (index >= 0 && index < currentFilteredFiles.Count)
+                    {
+                        int centerIdx = recyclingGrid != null ? recyclingGrid.CachedCenterItemIndex : 0;
+                        int dist = Mathf.Abs(index - centerIdx);
+                        _nextThumbPriority = Mathf.Min(90, dist * 3);
+                        BindFileButton(go, currentFilteredFiles[index]);
+                    }
+                };
+
+                if (layoutMode == GalleryLayoutMode.List)
+                {
+                    recyclingGrid.fixedColumns = 1;
+                    recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
+                    recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true);
+                }
+                else
+                {
+                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, GridColumnCount);
+                    recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false);
+                }
+
+                if (savedCenterItemIndex >= 0)
+                    recyclingGrid.SetItemCountAtItem(currentFilteredFiles.Count, savedCenterItemIndex);
+                else
+                    recyclingGrid.SetItemCountAtScroll(currentFilteredFiles.Count, savedScrollNormalizedPos);
+            }
+
+            UpdatePaginationText();
+            UpdateLayout();
+
+            if (scrollRect != null && recyclingGrid != null)
+            {
+                if (savedCenterItemIndex >= 0)
+                    recyclingGrid.ScrollToCenterItem(savedCenterItemIndex);
+                else
+                {
+                    scrollRect.verticalNormalizedPosition = savedScrollNormalizedPos;
+                    recyclingGrid.Refresh();
+                }
+            }
+
+            try
+            {
+                StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId, keepScroll, false, savedScrollNormalizedPos));
+            }
+            catch { }
+
+            try { UpdateSelectionContextMenu(); } catch { }
+
+            _refreshHistoryLightCo = null;
         }
 
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
@@ -2304,6 +2626,7 @@ namespace VPB
                 }
                 catch { }
                 ContentType activeContentSnap = activeContentType;
+                GalleryHistoryFilterMode histFilterSnap = galleryHistoryFilterMode;
                 ClothingSubfilter sqliteWorkerClothingSub = clothingSubfilter;
                 bool sqliteDrainSkipClothingGateOnMain = (titleForIndexMain.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0);
 
@@ -2318,6 +2641,18 @@ namespace VPB
                         bool useSqliteIndex;
                         List<string> pathExclusions = null;
                         if (VpbSqlite3.IsAvailable
+                            && activeContentSnap == ContentType.History
+                            && canFileListSnapKeyMain)
+                        {
+                            bool hr = VpbLocalDatabase.TryQueryGalleryHistoryRows(
+                                histFilterSnap,
+                                nameTerms,
+                                idxRows,
+                                out catQueryStats);
+                            if (!hr) idxRows.Clear();
+                            useSqliteIndex = true;
+                        }
+                        else if (VpbSqlite3.IsAvailable
                             && activeContentSnap == ContentType.Category
                             && canFileListSnapKeyMain)
                         {
@@ -2355,6 +2690,8 @@ namespace VPB
                             useSqliteIndex = false;
                             if (!VpbSqlite3.IsAvailable)
                                 catQueryStats.RejectReason = "gate:sqlite_unavailable";
+                            else if (activeContentSnap == ContentType.History)
+                                catQueryStats.RejectReason = "gate:history_snapshot_cache_key_failed";
                             else if (activeContentSnap != ContentType.Category)
                                 catQueryStats.RejectReason = "gate:not_category_content";
                             else
@@ -2364,92 +2701,97 @@ namespace VPB
                         if (useSqliteIndex)
                         {
                             var swBulk = System.Diagnostics.Stopwatch.StartNew();
-                            var bulk = new List<FileEntry>(idxRows.Count > 0 ? idxRows.Count : 16);
-                            for (int ri = 0; ri < idxRows.Count; ri++)
+                            List<FileEntry> bulk;
+                            if (activeContentSnap == ContentType.History)
                             {
-                                if (localLoadingGroupId != currentLoadingGroupId) return;
-
-                                VpbLocalDatabase.Row r = idxRows[ri];
-                                string internalPath = r.InternalPath;
-
-                                // Path prefix filter (mirrors RefreshFilesRoutine ThreadPool worker logic)
-                                if (!RefreshWorkerPathMatches(internalPath, currentPaths, currentPath)) continue;
-
-                                string varHint = r.VarPath ?? "";
-                                string listPath = r.ListPath ?? "";
-                                if (string.IsNullOrEmpty(listPath))
+                                bulk = BuildHistoryBulkListFromRows(idxRows, localLoadingGroupId, wantsLoadedStateForIndexMain);
+                            }
+                            else
+                            {
+                                bulk = new List<FileEntry>(idxRows.Count > 0 ? idxRows.Count : 16);
+                                for (int ri = 0; ri < idxRows.Count; ri++)
                                 {
-                                    if (!string.IsNullOrEmpty(varHint))
+                                    if (localLoadingGroupId != currentLoadingGroupId) return;
+
+                                    VpbLocalDatabase.Row r = idxRows[ri];
+                                    string internalPath = r.InternalPath;
+
+                                    if (!RefreshWorkerPathMatches(internalPath, currentPaths, currentPath)) continue;
+
+                                    string varHint = r.VarPath ?? "";
+                                    string listPath = r.ListPath ?? "";
+                                    if (string.IsNullOrEmpty(listPath))
                                     {
-                                        listPath = string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase)
-                                            ? varHint
-                                            : varHint + ":/" + internalPath;
+                                        if (!string.IsNullOrEmpty(varHint))
+                                        {
+                                            listPath = string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase)
+                                                ? varHint
+                                                : varHint + ":/" + internalPath;
+                                        }
                                     }
-                                }
-                                if (string.IsNullOrEmpty(listPath))
-                                    continue;
-
-                                if (!string.IsNullOrEmpty(packagePathFilterForIndexMain))
-                                {
-                                    string rawPath = !string.IsNullOrEmpty(varHint) ? varHint : listPath;
-                                    if (!GalleryPathFilterMatchesRawPath(rawPath, packagePathFilterForIndexMain))
+                                    if (string.IsNullOrEmpty(listPath))
                                         continue;
-                                }
 
-                                // Exclusive filter (Loaded-only) is pushed into SQLite query when possible,
-                                // but keep a defensive check here for any non-indexed paths.
-                                if (wantsLoadedStateForIndexMain != -1)
-                                {
-                                    bool loaded = r.PackageIsLoaded;
-                                    if (!loaded)
+                                    if (!string.IsNullOrEmpty(packagePathFilterForIndexMain))
                                     {
-                                        // "Loaded" means the PACKAGE ROOT is under AddonPackages/, or a loose path under Custom/ / Saves/.
-                                        string lp = (listPath ?? "").Replace('\\', '/');
-                                        int sep = lp.IndexOf(":/", StringComparison.Ordinal);
-                                        string root = (sep >= 0) ? lp.Substring(0, sep) : lp;
-                                        loaded =
-                                            root.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
-                                            root.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
-                                            root.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase);
-                                    }
-                                    bool wantsLoaded = wantsLoadedStateForIndexMain == 1;
-                                    if (wantsLoaded && !loaded) continue;
-                                    if (!wantsLoaded && loaded) continue;
-                                }
-
-                                // Name filter and active tags are handled in SQL when available (and in PassesFilters on main thread otherwise).
-
-                                // Clothing: with an active subfilter, avoid ClassifyClothingHairPath per row when the SQLite
-                                // index carries packed attrs (rebuild after schema bump); else fall back to path classification.
-                                if (sqliteDrainSkipClothingGateOnMain && sqliteWorkerClothingSub != 0)
-                                {
-                                    if ((r.ClothingAttrPacked & VpbLocalDatabase.ClothingAttrPresentFlag) != 0)
-                                    {
-                                        if (!VpbLocalDatabase.ClothingPackedAttrMatchesSubfilter(r.ClothingAttrPacked, sqliteWorkerClothingSub))
+                                        string rawPath = !string.IsNullOrEmpty(varHint) ? varHint : listPath;
+                                        if (!GalleryPathFilterMatchesRawPath(rawPath, packagePathFilterForIndexMain))
                                             continue;
                                     }
-                                    else
+
+                                    if (wantsLoadedStateForIndexMain != -1)
                                     {
-                                        if (!PassesClothingGalleryFiltersForPath(listPath, sqliteWorkerClothingSub, true))
-                                            continue;
+                                        bool loaded = r.PackageIsLoaded;
+                                        if (!loaded)
+                                        {
+                                            string lp = (listPath ?? "").Replace('\\', '/');
+                                            int sep = lp.IndexOf(":/", StringComparison.Ordinal);
+                                            string root = (sep >= 0) ? lp.Substring(0, sep) : lp;
+                                            loaded =
+                                                root.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase) ||
+                                                root.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
+                                                root.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase);
+                                        }
+                                        bool wantsLoaded = wantsLoadedStateForIndexMain == 1;
+                                        if (wantsLoaded && !loaded) continue;
+                                        if (!wantsLoaded && loaded) continue;
                                     }
-                                }
 
-                                DateTime entryTime = DateTime.MinValue;
-                                if (r.LastWriteTicksOrInvalid != long.MinValue)
-                                {
-                                    try { entryTime = DateTime.FromBinary(r.LastWriteTicksOrInvalid); }
-                                    catch { entryTime = DateTime.MinValue; }
-                                }
-                                long entrySize = 0;
-                                if (r.PackageSizeOrInvalid != long.MinValue)
-                                    entrySize = r.PackageSizeOrInvalid;
+                                    if (sqliteDrainSkipClothingGateOnMain && sqliteWorkerClothingSub != 0)
+                                    {
+                                        if ((r.ClothingAttrPacked & VpbLocalDatabase.ClothingAttrPresentFlag) != 0)
+                                        {
+                                            if (!VpbLocalDatabase.ClothingPackedAttrMatchesSubfilter(r.ClothingAttrPacked, sqliteWorkerClothingSub))
+                                                continue;
+                                        }
+                                        else
+                                        {
+                                            if (!PassesClothingGalleryFiltersForPath(listPath, sqliteWorkerClothingSub, true))
+                                                continue;
+                                        }
+                                    }
 
-                                VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid);
-                                bulk.Add(vfe);
+                                    DateTime entryTime = DateTime.MinValue;
+                                    if (r.LastWriteTicksOrInvalid != long.MinValue)
+                                    {
+                                        try { entryTime = DateTime.FromBinary(r.LastWriteTicksOrInvalid); }
+                                        catch { entryTime = DateTime.MinValue; }
+                                    }
+                                    long entrySize = 0;
+                                    if (r.PackageSizeOrInvalid != long.MinValue)
+                                        entrySize = r.PackageSizeOrInvalid;
+
+                                    VarFileEntry vfe = new VarFileEntry(r.PackageUid, internalPath, entryTime, entrySize, listPath, varHint, r.PackageCreationTicksOrInvalid, null);
+                                    bulk.Add(vfe);
+                                }
                             }
 
-                            if (bulk.Count >= 2 && fileListSortSnapForWorker != null)
+                            if (activeContentSnap == ContentType.History)
+                            {
+                                if (sqliteBulkSortedOnWorkerFlag != null)
+                                    sqliteBulkSortedOnWorkerFlag[0] = 1;
+                            }
+                            else if (bulk.Count >= 2 && fileListSortSnapForWorker != null)
                             {
                                 bool alreadySorted = false;
                                 switch (fileListSortSnapForWorker.Type)
@@ -2891,7 +3233,8 @@ namespace VPB
                     && sqliteBulkSortedOnWorkerFlag != null && sqliteBulkSortedOnWorkerFlag[0] != 0
                     && sysLooseFilesAddedCount != null && sysLooseFilesAddedCount[0] == 0;
                 var swSortMain = System.Diagnostics.Stopwatch.StartNew();
-                if (!skipMainThreadSort)
+                bool historyBrowseOrder = activeContentType == ContentType.History;
+                if (!historyBrowseOrder && !skipMainThreadSort)
                     GallerySortManager.Instance.SortFiles(files, sortState);
                 swSortMain.Stop();
                 if (LogGalleryRefreshDeepTiming)
@@ -3397,7 +3740,8 @@ namespace VPB
                 int beforeExclusive = currentFilteredFiles.Count;
                 ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
 
-                GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
+                if (activeContentType != ContentType.History)
+                    GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
             }
             catch { }
 

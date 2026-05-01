@@ -744,6 +744,8 @@ namespace VPB
             try
             {
                 SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(entry, path);
+                // Ensure geometry bool catalogs are populated before immediate toggle/apply.
+                VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("clothing_item_prewarm_flush");
             }
             catch (Exception ex)
             {

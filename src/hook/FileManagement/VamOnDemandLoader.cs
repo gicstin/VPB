@@ -1134,6 +1134,41 @@ namespace VPB
                 return s_PendingVamRefresh;
         }
 
+        /// <summary>
+        /// Forces a pending coalesced VaM FileManager.Refresh to run immediately.
+        /// Returns true when a pending refresh existed and was executed.
+        /// </summary>
+        public static bool ForceRunPendingCoalescedVamRefresh(string reasonOverride = null)
+        {
+            int requestCount = 0;
+            string reason = null;
+            lock (s_RefreshRequestLock)
+            {
+                if (!s_PendingVamRefresh) return false;
+                requestCount = s_PendingVamRefreshRequestCount;
+                reason = !string.IsNullOrEmpty(reasonOverride) ? reasonOverride : s_PendingVamRefreshReason;
+
+                s_PendingVamRefresh = false;
+                s_PendingVamRefreshRequestedAt = 0f;
+                s_PendingVamRefreshFirstRequestedAt = 0f;
+                s_PendingVamRefreshRequestCount = 0;
+                s_PendingVamRefreshReason = null;
+            }
+
+            try
+            {
+                LogUtil.Log("[VPB OnDemand] Running forced FileManager.Refresh (pending_requests="
+                    + requestCount + ", reason=" + (string.IsNullOrEmpty(reason) ? "forced" : reason) + ")");
+                MVR.FileManagement.FileManager.Refresh();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] Forced FileManager.Refresh failed: " + ex.Message);
+            }
+
+            return true;
+        }
+
         private static void MaybeLogStartupSummary()
         {
             bool ready = SafeIsStartupReadyLogged();

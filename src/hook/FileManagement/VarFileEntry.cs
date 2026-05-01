@@ -29,6 +29,11 @@ namespace VPB
 		/// <summary>Package <see cref="VarPackage.CreationTime"/> from SQLite (<c>pkg.pctime</c>); avoids resolving <see cref="Package"/> for DateCreated sort.</summary>
 		private long _galleryIndexedCreationTicks = long.MinValue;
 
+		/// <summary>When set (History grid), exact <c>item_usage.item_key</c> for deletes (matches usage tracking keys).</summary>
+		private string _galleryItemUsageKey;
+
+		public string GalleryItemUsageKey => _galleryItemUsageKey;
+
 		public string InternalPath { get; protected set; }
 
 		public long EntrySize
@@ -72,13 +77,14 @@ namespace VPB
 		{
 		}
 
-		public VarFileEntry(string packageUid, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath, string indexedVarPathHint, long packageCreationTicksOrMin)
+		public VarFileEntry(string packageUid, string entryName, DateTime lastWriteTime, long size, string indexedGalleryPath, string indexedVarPathHint, long packageCreationTicksOrMin, string galleryItemUsageKey = null)
 		{
 			if (string.IsNullOrEmpty(packageUid))
 				throw new ArgumentException("packageUid must not be null or empty.", "packageUid");
 			_deferredPackageUid = packageUid;
 			_deferredVarPathHint = indexedVarPathHint ?? "";
 			_galleryIndexedCreationTicks = packageCreationTicksOrMin;
+			_galleryItemUsageKey = galleryItemUsageKey;
 			Package = null;
 			InternalPath = entryName ?? "";
 			Uid = packageUid + ":/" + InternalPath;

@@ -98,6 +98,7 @@ namespace VPB
         void OnEnable()
         {
             MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+            MessageKit.addObserver(MessageDef.GalleryItemUsageRecorded, OnGalleryItemUsageRecorded);
             if (genderMapInitCoroutine == null)
                 genderMapInitCoroutine = StartCoroutine(InitCharacterGenderMapEarly());
         }
@@ -105,6 +106,7 @@ namespace VPB
         void OnDisable()
         {
             MessageKit.removeObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+            MessageKit.removeObserver(MessageDef.GalleryItemUsageRecorded, OnGalleryItemUsageRecorded);
             if (genderMapInitCoroutine != null)
             {
                 StopCoroutine(genderMapInitCoroutine);
@@ -118,6 +120,19 @@ namespace VPB
             // READY still waits on completion via StartupSettleUpdate pending checks.
             yield return JSONExtensions.LoadCharacterGenderMap();
             genderMapInitCoroutine = null;
+        }
+
+        private void OnGalleryItemUsageRecorded()
+        {
+            if (IsSuppressed()) return;
+            var ps = panels;
+            if (ps == null) return;
+            for (int i = 0; i < ps.Count; i++)
+            {
+                var p = ps[i];
+                if (p == null || p.IsHubMode) continue;
+                try { p.RefreshHistoryBrowseIfActive(true); } catch { }
+            }
         }
 
         private void OnFileManagerRefresh()

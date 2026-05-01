@@ -88,21 +88,28 @@ namespace VPB
                 {
                     try
                     {
-                        if (filterSearchBaseFiles != null)
+                        if (activeContentType == ContentType.History)
                         {
-                            List<FileEntry> rebuilt = BuildFilterModeView(filterSearchBaseFiles, filterSearchLower);
-                            currentFilteredFiles.Clear();
-                            currentFilteredFiles.AddRange(rebuilt);
+                            RefreshHistoryListInPlace(true);
                         }
-                        ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, state.Type);
-                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
-                        if (recyclingGrid != null)
+                        else
                         {
-                            recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                            recyclingGrid.Refresh();
+                            if (filterSearchBaseFiles != null)
+                            {
+                                List<FileEntry> rebuilt = BuildFilterModeView(filterSearchBaseFiles, filterSearchLower);
+                                currentFilteredFiles.Clear();
+                                currentFilteredFiles.AddRange(rebuilt);
+                            }
+                            ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, state.Type);
+                            GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
+                            if (recyclingGrid != null)
+                            {
+                                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                                recyclingGrid.Refresh();
+                            }
+                            ScrollGalleryToTop();
+                            UpdatePaginationText();
                         }
-                        ScrollGalleryToTop();
-                        UpdatePaginationText();
                     }
                     catch { }
                 }
@@ -149,6 +156,12 @@ namespace VPB
 
             try
             {
+                if (activeContentType == ContentType.History)
+                {
+                    RefreshHistoryListInPlace(true);
+                    return true;
+                }
+
                 SortState st = GetSortState("Files");
                 ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
                 GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
@@ -525,14 +538,19 @@ namespace VPB
                 {
                     try
                     {
-                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
-                        if (recyclingGrid != null)
+                        if (activeContentType == ContentType.History)
+                            RefreshHistoryListInPlace(true);
+                        else
                         {
-                            recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                            recyclingGrid.Refresh();
+                            GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
+                            if (recyclingGrid != null)
+                            {
+                                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                                recyclingGrid.Refresh();
+                            }
+                            ScrollGalleryToTop();
+                            UpdatePaginationText();
                         }
-                        ScrollGalleryToTop();
-                        UpdatePaginationText();
                     }
                     catch { }
                 }
