@@ -3359,6 +3359,3 @@ namespace VPB
         }
     }
 }
-
-    }
-}

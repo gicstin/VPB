@@ -371,6 +371,7 @@
     <Compile Include="src\gallery\GalleryPanel.UI.Overlays.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Layout.cs" />
     <Compile Include="src\gallery\GalleryPanel.SelectionContextMenu.cs" />
+    <Compile Include="src\gallery\GalleryPanel.JsonBench.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.Cleanup.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeletePackages.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalScenes.cs" />
@@ -379,6 +380,8 @@
     <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickMenuExports.cs" />
     <Compile Include="src\util\JSONExtensions.cs" />
+    <Compile Include="src\util\BoyerMooreHorspool.cs" />
+    <Compile Include="src\util\Utf8JsonBmhRootKeyProbe.cs" />
     <Compile Include="src\util\CUAConverter.cs" />
     <Compile Include="src\util\CUAClothing.cs" />
     <Compile Include="src\util\CUAClothing.Data.cs" />

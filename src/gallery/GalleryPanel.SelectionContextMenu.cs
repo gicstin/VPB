@@ -1,7 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
+using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
@@ -40,6 +40,7 @@ namespace VPB
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
+        private GameObject tboxJsonParserBenchBtn;
         private GameObject tboxOpenHubBtn;
         private GameObject tboxSceneImportBtn;
         private GameObject tboxSelectAllBtn;
@@ -150,6 +151,7 @@ namespace VPB
             one(tboxUnloadBtn);
             one(tboxLoadDepsBtn);
             one(tboxCacheTexturesBtn);
+            one(tboxJsonParserBenchBtn);
             one(tboxOpenHubBtn);
             one(tboxCopyPkgNamesBtn);
             one(tboxSceneImportBtn);
@@ -190,6 +192,7 @@ namespace VPB
             d(tboxUnloadBtn);
             d(tboxLoadDepsBtn);
             d(tboxCacheTexturesBtn);
+            d(tboxJsonParserBenchBtn);
             d(tboxOpenHubBtn);
             d(tboxCopyPkgNamesBtn);
             d(tboxSceneImportBtn);
@@ -292,6 +295,8 @@ namespace VPB
             if (tboxUnloadBtn != null) ltr.Add(tboxUnloadBtn);
             if (tboxLoadDepsBtn != null) ltr.Add(tboxLoadDepsBtn);
             if (tboxCacheTexturesBtn != null) ltr.Add(tboxCacheTexturesBtn);
+            if (tboxJsonParserBenchBtn != null && VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
+                ltr.Add(tboxJsonParserBenchBtn);
             if (tboxOpenHubBtn != null) ltr.Add(tboxOpenHubBtn);
             if (tboxCopyPkgNamesBtn != null) ltr.Add(tboxCopyPkgNamesBtn);
             if (tboxSceneImportBtn != null) ltr.Add(tboxSceneImportBtn);
@@ -671,6 +676,39 @@ namespace VPB
                     Text t = tboxCacheTexturesBtn.GetComponentInChildren<Text>(true);
                     if (t != null) t.text = VPBTranslation.T("gallery.tbox.cache_textures", "Cache Textures");
                 }
+            }
+            catch { }
+
+            // JSON meta.json bench (SimpleJSON vs BMH): handler in GalleryPanel.JsonBench.cs
+            tboxJsonParserBenchBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxBenchmarkJsonParsersSelected
+            );
+            tboxJsonParserBenchBtn.name = "Tbox_JsonParserBench";
+            TboxConfigureActionButtonFlex(tboxJsonParserBenchBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(
+                tboxJsonParserBenchBtn,
+                "gallery.tooltip.tbox_json_parser_bench",
+                "Developer Mode: benchmark library meta.json with SimpleJSON vs Boyer-Moore-Horspool"
+            );
+            try
+            {
+                var parserIcon = UI.LoadIconSprite("vpb_icons/fps.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (parserIcon != null) UI.AddIconToButton(tboxJsonParserBenchBtn, parserIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxJsonParserBenchBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = "JSON";
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (tboxJsonParserBenchBtn != null)
+                    tboxJsonParserBenchBtn.SetActive(VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode && !cleanupModeActive);
             }
             catch { }
 
@@ -1475,6 +1513,18 @@ namespace VPB
             if (sel > 0 || cleanupModeActive)
                 RefreshTboxConditionalActionButtons();
 
+            // JSON bench is dev-only; RefreshTboxConditionalActionButtons does not run when selection is empty.
+            try
+            {
+                bool benchVisible = !cleanupModeActive && VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode;
+                if (tboxJsonParserBenchBtn != null && tboxJsonParserBenchBtn.activeSelf != benchVisible)
+                {
+                    tboxJsonParserBenchBtn.SetActive(benchVisible);
+                    RefreshTboxFlexButtonLayout();
+                }
+            }
+            catch { }
+
             // Keep grid / side tab scrollers above the footer while tbox height animates.
             try
             {
@@ -1546,6 +1596,7 @@ namespace VPB
             show(tboxUnloadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxLoadDepsBtn, !isCleanup);
             show(tboxCacheTexturesBtn, !isCleanup);
+            show(tboxJsonParserBenchBtn, !isCleanup && VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode);
             show(tboxOpenHubBtn, !isCleanup);
 
             if (isCleanup)
@@ -1577,6 +1628,7 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxUnloadBtn, false);
                 SetTboxButtonEnabledVisual(tboxLoadDepsBtn, false);
                 SetTboxButtonEnabledVisual(tboxCacheTexturesBtn, false);
+                SetTboxButtonEnabledVisual(tboxJsonParserBenchBtn, false);
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, false);
 
                 RefreshTboxFlexButtonLayout();
@@ -1731,6 +1783,10 @@ namespace VPB
             // Load/LoadDeps should always be available (requested); Unload still reflects install state.
             if (tboxLoadBtn != null)     SetTboxButtonEnabledVisual(tboxLoadBtn, true);
             if (tboxLoadDepsBtn != null) SetTboxButtonEnabledVisual(tboxLoadDepsBtn, true);
+            if (tboxJsonParserBenchBtn != null)
+                SetTboxButtonEnabledVisual(
+                    tboxJsonParserBenchBtn,
+                    VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode && selectedFiles != null && selectedFiles.Count > 0);
             bool hasAnyPkg = anyPkgInstalled || anyPkgNotInstalled;
             if (tboxUnloadBtn != null)   SetTboxButtonEnabledVisual(tboxUnloadBtn, hasAnyPkg && anyPkgInstalled);
 
