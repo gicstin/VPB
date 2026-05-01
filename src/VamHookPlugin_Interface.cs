@@ -416,7 +416,17 @@ namespace VPB
 
         public void Refresh()
         {
-            FileManager.Refresh(true);
+            Refresh(null);
+        }
+
+        /// <summary>
+        /// Refresh with an explicit reason tag (e.g. "autoload", "autoinstall", "manual").
+        /// Reasons propagate to FileManager scan-stats logging so coalesced startup passes
+        /// can be diagnosed without a stack trace.
+        /// </summary>
+        public void Refresh(string reason)
+        {
+            FileManager.Refresh(reason, true);
             MVR.FileManagement.FileManager.Refresh();
             RemoveEmptyFolder("AllPackages");
         }
@@ -464,6 +474,15 @@ namespace VPB
         public void OpenHubBrowse()
         {
             SuperController.singleton.ActivateWorldUI();
+            if (m_HubBrowse == null)
+            {
+                if (MVR.Hub.HubBrowse.singleton == null)
+                {
+                    LogUtil.LogWarning("[VPB] HubBrowse is not available yet");
+                    return;
+                }
+                CreateHubBrowse();
+            }
             m_HubBrowse.Show();
         }
         public void OpenCustomScene()

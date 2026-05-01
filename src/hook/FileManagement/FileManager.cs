@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Linq;
@@ -34,6 +35,13 @@ namespace VPB
         bool m_RefreshPendingInit = false;
         bool m_RefreshPendingClean = false;
         bool m_RefreshPendingRemoveOldVersion = false;
+
+        // Reason tracking for the current and pending refresh passes.
+        // Used to identify which startup actor triggered each scan (init/autoload/autoinstall/manual)
+        // so coalesced passes can be diagnosed without a stack trace.
+        readonly HashSet<string> m_CurrentRefreshReasons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        readonly HashSet<string> m_PendingRefreshReasons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        readonly object m_RefreshReasonsLock = new object();
 
         internal static readonly object packagesLock = new object();
         protected static Dictionary<string, VarPackage> packagesByUid;
@@ -533,21 +541,52 @@ namespace VPB
 
         public static void Refresh(bool init = false, bool clean = false, bool removeOldVersion = false)
         {
-            if (singleton != null)
+            Refresh(null, init, clean, removeOldVersion);
+        }
+
+        /// <summary>
+        /// Refresh with an explicit reason tag (e.g. "init", "autoload", "autoinstall", "manual").
+        /// Reasons are accumulated across coalesced calls and emitted in the per-pass scan stats log.
+        /// </summary>
+        public static void Refresh(string reason, bool init = false, bool clean = false, bool removeOldVersion = false)
+        {
+            if (singleton == null) return;
+
+            string normalizedReason = string.IsNullOrEmpty(reason) ? "manual" : reason;
+
+            // Coalesce refresh requests.
+            // Refresh triggers a full var enumeration which is expensive on large libraries.
+            // Some UI actions can call Refresh multiple times in short succession; stopping/restarting
+            // the coroutine causes repeated enumerations.
+            if (singleton.m_RefreshCo != null)
             {
-                // Coalesce refresh requests.
-                // Refresh triggers a full var enumeration which is expensive on large libraries.
-                // Some UI actions can call Refresh multiple times in short succession; stopping/restarting
-                // the coroutine causes repeated enumerations.
-                if (singleton.m_RefreshCo != null)
+                singleton.m_RefreshPending = true;
+                singleton.m_RefreshPendingInit |= init;
+                singleton.m_RefreshPendingClean |= clean;
+                singleton.m_RefreshPendingRemoveOldVersion |= removeOldVersion;
+                lock (singleton.m_RefreshReasonsLock)
                 {
-                    singleton.m_RefreshPending = true;
-                    singleton.m_RefreshPendingInit |= init;
-                    singleton.m_RefreshPendingClean |= clean;
-                    singleton.m_RefreshPendingRemoveOldVersion |= removeOldVersion;
-                    return;
+                    singleton.m_PendingRefreshReasons.Add(normalizedReason);
                 }
-                singleton.m_RefreshCo = singleton.StartCoroutine(singleton.RefreshCo(init, clean, removeOldVersion));
+                return;
+            }
+
+            lock (singleton.m_RefreshReasonsLock)
+            {
+                singleton.m_CurrentRefreshReasons.Clear();
+                singleton.m_CurrentRefreshReasons.Add(normalizedReason);
+            }
+            singleton.m_RefreshCo = singleton.StartCoroutine(singleton.RefreshCo(init, clean, removeOldVersion));
+        }
+
+        string GetCurrentReasonsForLog()
+        {
+            lock (m_RefreshReasonsLock)
+            {
+                if (m_CurrentRefreshReasons.Count == 0) return "manual";
+                var arr = m_CurrentRefreshReasons.ToArray();
+                Array.Sort(arr, StringComparer.Ordinal);
+                return string.Join(",", arr);
             }
         }
 
@@ -641,6 +680,10 @@ namespace VPB
 
                     HashSet<string> hashSet = new HashSet<string>();
                     HashSet<string> addSet = new HashSet<string>();
+                    // Pre-dedupe by UID so we only attempt to register one canonical path per UID.
+                    // This avoids hammering RegisterPackage with duplicates and surfacing per-row error logs.
+                    Dictionary<string, string> addByUid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    Dictionary<string, List<string>> duplicateUidPaths = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
                     if (varPaths != null)
                     {
                         string[] _varPaths = varPaths;
@@ -664,7 +707,46 @@ namespace VPB
                             }
                             else
                             {
+                                string candidateUid = packagePathToUid(varPath).Trim();
+                                if (!string.IsNullOrEmpty(candidateUid) && packagesByUid.ContainsKey(candidateUid))
+                                {
+                                    // UID already registered under a different path; record as duplicate
+                                    // so we can emit a single aggregated summary instead of per-row errors.
+                                    List<string> dups;
+                                    if (!duplicateUidPaths.TryGetValue(candidateUid, out dups))
+                                    {
+                                        dups = new List<string>();
+                                        duplicateUidPaths.Add(candidateUid, dups);
+                                    }
+                                    dups.Add(varPath);
+                                    continue;
+                                }
+
+                                if (!string.IsNullOrEmpty(candidateUid) && addByUid.TryGetValue(candidateUid, out string existingNewPath))
+                                {
+                                    // Two new paths share the same UID in this scan. Pick AddonPackages over AllPackages,
+                                    // then prefer shorter (root-most) path as the canonical registration target.
+                                    string canonical = ChooseCanonicalDuplicatePath(existingNewPath, varPath);
+                                    string loser = string.Equals(canonical, existingNewPath, StringComparison.OrdinalIgnoreCase) ? varPath : existingNewPath;
+                                    addByUid[candidateUid] = canonical;
+                                    addSet.Remove(loser);
+                                    addSet.Add(canonical);
+
+                                    List<string> dups;
+                                    if (!duplicateUidPaths.TryGetValue(candidateUid, out dups))
+                                    {
+                                        dups = new List<string>();
+                                        duplicateUidPaths.Add(candidateUid, dups);
+                                    }
+                                    dups.Add(loser);
+                                    continue;
+                                }
+
                                 addSet.Add(varPath);
+                                if (!string.IsNullOrEmpty(candidateUid))
+                                {
+                                    addByUid[candidateUid] = varPath;
+                                }
                             }
                         }
                     }
@@ -738,6 +820,32 @@ namespace VPB
                                 lastAddedPackages.Add(pkg);
                         }
                     }
+
+                    // Aggregate duplicate-UID diagnostics into a single summary line.
+                    // Per-package error spam during large-library startup is replaced by counts and a sample.
+                    if (duplicateUidPaths.Count > 0)
+                    {
+                        int dupCount = 0;
+                        foreach (var kv in duplicateUidPaths) dupCount += kv.Value.Count;
+                        StringBuilder sb = new StringBuilder(256);
+                        sb.Append("Duplicate package uids skipped: count=");
+                        sb.Append(duplicateUidPaths.Count);
+                        sb.Append(" extraPaths=");
+                        sb.Append(dupCount);
+                        sb.Append(" sample=");
+                        int shown = 0;
+                        foreach (var kv in duplicateUidPaths)
+                        {
+                            if (shown >= 3) break;
+                            if (shown > 0) sb.Append(';');
+                            sb.Append(kv.Key);
+                            sb.Append("(+");
+                            sb.Append(kv.Value.Count);
+                            sb.Append(")");
+                            shown++;
+                        }
+                        LogUtil.LogWarning(sb.ToString());
+                    }
                 }
                 catch (Exception arg)
                 {
@@ -776,6 +884,12 @@ namespace VPB
                     m_RefreshPendingInit = false;
                     m_RefreshPendingClean = false;
                     m_RefreshPendingRemoveOldVersion = false;
+                    lock (m_RefreshReasonsLock)
+                    {
+                        m_CurrentRefreshReasons.Clear();
+                        foreach (var r in m_PendingRefreshReasons) m_CurrentRefreshReasons.Add(r);
+                        m_PendingRefreshReasons.Clear();
+                    }
                     m_RefreshCo = StartCoroutine(RefreshCo(nextInit, nextClean, nextRemoveOld));
                 }
             }
@@ -859,11 +973,15 @@ namespace VPB
 		IEnumerator ScanVarPackagesCo(bool clean, List<VarPackage> invalid)
 		{
 			if (packagesByUid == null) yield break;
+			// Reset per-pass scan counters so logged stats reflect THIS pass only,
+			// not the cumulative totals across all coalesced/follow-up passes.
+			VarPackage.ResetScanCounters();
 			Stopwatch indexAllSw = Stopwatch.StartNew();
 			VarPackage[] packages = packagesByUid.Values.ToArray();
 			int idx = 0;
 			int allCount = packages.Length;
 			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 100 : 200;
+			string reasonsTag = GetCurrentReasonsForLog();
 			{
 				int maxWorkers = Math.Min(8, Math.Max(1, System.Environment.ProcessorCount));
 				int nextIndex = -1;
@@ -925,13 +1043,13 @@ namespace VPB
 			}
 			indexAllSw.Stop();
 			double indexSeconds = indexAllSw.Elapsed.TotalSeconds;
-			LogUtil.Log("VarPackageMgr index all packages " + allCount + " in " + indexSeconds.ToString("0.00") + "s (" + indexAllSw.ElapsedMilliseconds + "ms)");
+			LogUtil.Log("VarPackageMgr index all packages " + allCount + " in " + indexSeconds.ToString("0.00") + "s (" + indexAllSw.ElapsedMilliseconds + "ms) reason=" + reasonsTag);
 			long total;
 			long cacheValidatedHit;
 			long cacheHit;
 			long zipScan;
 			VarPackage.GetScanCounters(out total, out cacheValidatedHit, out cacheHit, out zipScan);
-			LogUtil.Log("VarPackageMgr scan stats total=" + total + " cacheValidatedHit=" + cacheValidatedHit + " cacheHit=" + cacheHit + " zipScan=" + zipScan);
+			LogUtil.Log("VarPackageMgr scan stats total=" + total + " cacheValidatedHit=" + cacheValidatedHit + " cacheHit=" + cacheHit + " zipScan=" + zipScan + " reason=" + reasonsTag);
 		}
 
 		public List<string> GetAllVars()
@@ -1961,9 +2079,23 @@ namespace VPB
 			return value;
 		}
 
-		public static string CleanFilePath(string path)
+        public static string CleanFilePath(string path)
 		{
 			return path?.Replace('\\', '/');
+		}
+
+		// Pick the canonical path for a duplicate-UID pair. Preference order:
+		// 1) AddonPackages over AllPackages (Addon is the live install location).
+		// 2) Shorter path (closer to the package root) over deeper subfolders.
+		private static string ChooseCanonicalDuplicatePath(string a, string b)
+		{
+			if (string.IsNullOrEmpty(a)) return b;
+			if (string.IsNullOrEmpty(b)) return a;
+			bool aAddon = a.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase);
+			bool bAddon = b.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase);
+			if (aAddon != bAddon) return aAddon ? a : b;
+			if (a.Length != b.Length) return a.Length < b.Length ? a : b;
+			return string.Compare(a, b, StringComparison.OrdinalIgnoreCase) <= 0 ? a : b;
 		}
 
 		[StructLayout(LayoutKind.Sequential)]

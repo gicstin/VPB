@@ -261,6 +261,8 @@
   "hook.gc_refresh.title": "GC と更新",
   "hook.gc_refresh.info1": "更新でパッケージ一覧を再読み込みし、ディスク上の変更（追加/移動/削除）を反映します。",
   "hook.gc_refresh.info2": "GC はキャッシュを消去し Unity/.NET に解放させ、長時間閲覧後のメモリを減らします。",
+  "hook.startup.ready_label": "READY",
+  "hook.startup.starting_label": "起動中",
   "hook.saved": "{0} 節約",
   "hook.done": "完了！",
   "hook.drag_area_hint": "{0:0.0}s | ドラッグ領域 | 切替：{1}",

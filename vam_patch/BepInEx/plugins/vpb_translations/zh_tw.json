@@ -261,6 +261,8 @@
   "hook.gc_refresh.title": "GC 與重新整理",
   "hook.gc_refresh.info1": "重新整理功能會更新套件清單，使 VPB 顯示目前磁碟上的內容（新增/移動/刪除的檔案）。",
   "hook.gc_refresh.info2": "GC 會透過清除快取並讓 Unity/.NET 進行清理，嘗試在大量瀏覽後釋放記憶體。",
+  "hook.startup.ready_label": "已就緒",
+  "hook.startup.starting_label": "啟動中",
   "hook.saved": "已節省 {0}",
   "hook.done": "完成！",
   "hook.drag_area_hint": "{0:0.0}s | 可拖動區域 | 切換：{1}",

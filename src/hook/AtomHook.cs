@@ -180,8 +180,7 @@ namespace VPB
                 bool shouldRefreshCatalog = EnsureInstalledFromJSON(processJSON);
                 if (shouldRefreshCatalog)
                 {
-                    try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-                    try { VPB.FileManager.Refresh(); } catch { }
+                    try { VamOnDemandLoader.RequestCoalescedVamRefresh("preset_json_catalog"); } catch { }
                 }
             }
         }

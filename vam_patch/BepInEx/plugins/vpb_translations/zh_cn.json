@@ -261,6 +261,8 @@
   "hook.gc_refresh.title": "GC 与刷新",
   "hook.gc_refresh.info1": "刷新功能会更新资源包列表，使 VPB 显示当前磁盘上的内容（新增/移动/删除的文件）。",
   "hook.gc_refresh.info2": "GC 会通过清除缓存并让 Unity/.NET 进行清理，尝试在大量浏览后释放内存。",
+  "hook.startup.ready_label": "已就绪",
+  "hook.startup.starting_label": "启动中",
   "hook.saved": "已节省 {0}",
   "hook.done": "完成！",
   "hook.drag_area_hint": "{0:0.0}s | 可拖动区域 | 切换：{1}",

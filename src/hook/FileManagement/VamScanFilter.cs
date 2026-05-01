@@ -90,6 +90,24 @@ namespace VPB
 
         public static bool HasRegisterMethodAccess => s_VamRegisterPackageMethod != null;
 
+        // VaM's FileManager exposes RegisterPackage even before its first Refresh has populated
+        // internal AssetBundle/file dictionaries. Calling RegisterPackage too early throws
+        // NullReferenceException inside VaM (e.g. AssetBundleManager.RemapVariantName).
+        // Mark this true after the first MVR.FileManagement.FileManager.Refresh has run so
+        // on-demand registration can avoid those doomed startup invocations.
+        private static int s_HasVamRefreshedAtLeastOnce;
+
+        public static bool HasVamRefreshedAtLeastOnce => s_HasVamRefreshedAtLeastOnce != 0;
+
+        public static void MarkVamRefreshed()
+        {
+            int prev = System.Threading.Interlocked.Exchange(ref s_HasVamRefreshedAtLeastOnce, 1);
+            if (prev == 0)
+            {
+                VamOnDemandLoader.NotifyVamFileManagerRefreshed();
+            }
+        }
+
         // Counters for the current scan cycle, reset at the start of each Refresh
         private static int s_ScanAllowed;
         private static int s_ScanBlocked;

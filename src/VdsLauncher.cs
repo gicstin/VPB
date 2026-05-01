@@ -275,7 +275,7 @@ namespace VPB
                 LogUtil.LogError("VDS could not invoke scene load");
             }
             executed = true;
-            LogUtil.LogReadyOnce("VDS initialized");
+            LogUtil.LogUiReadyOnce("VDS initialized");
         }
 
         static void ApplyOverridesOnce()

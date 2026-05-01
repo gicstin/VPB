@@ -691,11 +691,10 @@ namespace VPB
             {
                 try
                 {
-                    LogUtil.Log($"[VPB OnDemand] Triggering FileManager.Refresh for clothing catalog update ({newlyRegistered} new package(s))");
-                    MVR.FileManagement.FileManager.Refresh();
+                    LogUtil.Log($"[VPB OnDemand] Queueing coalesced FileManager.Refresh for clothing catalog update ({newlyRegistered} new package(s))");
+                    VamOnDemandLoader.RequestCoalescedVamRefresh("scene_prewarm_clothing_catalog");
                 }
                 catch { }
-                try { FileManager.Refresh(); } catch { }
             }
 
             return uidCandidates.Count;

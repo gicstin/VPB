@@ -1512,6 +1512,9 @@ namespace VPB
         public static void PostRefreshLogScanResult()
         {
             VamScanFilter.LogScanResult();
+            // Signal VaM internals are now usable so VPB on-demand registration can stop
+            // deferring requests that would have NRE'd against pre-Refresh VaM state.
+            VamScanFilter.MarkVamRefreshed();
         }
 
         /// <summary>

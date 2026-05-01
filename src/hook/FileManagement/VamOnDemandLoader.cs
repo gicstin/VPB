@@ -281,6 +281,7 @@ namespace VPB
         private static long s_StartupFailCount;
         private static long s_StartupSkippedRecentFailCount;
         private static long s_StartupAttemptTotalMs;
+        private static long s_StartupVamNotReadyDeferredCount;
         private static bool s_StartupSummaryLogged;
         private static bool s_StartupFinalSummaryLogged;
         private static readonly object s_StartupStatsLock = new object();
@@ -290,8 +291,20 @@ namespace VPB
         // Queue for off-main-thread registration requests
         private static readonly Queue<string> s_PendingPaths = new Queue<string>();
         private static readonly object s_QueueLock = new object();
+        // Requests that arrive before VaM's first Refresh has completed.
+        // These are promoted once MarkVamRefreshed() fires.
+        private static readonly Queue<string> s_VamNotReadyDeferredPaths = new Queue<string>();
+        private static readonly HashSet<string> s_VamNotReadyDeferredUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object s_VamNotReadyLock = new object();
+        private static readonly object s_RefreshRequestLock = new object();
+        private static bool s_PendingVamRefresh;
+        private static float s_PendingVamRefreshRequestedAt;
+        private static int s_PendingVamRefreshRequestCount;
+        private static string s_PendingVamRefreshReason;
 
         private const int MaxDrainPerFrame = 10;
+        private const float CoalescedVamRefreshDelayStartupSeconds = 1.0f;
+        private const float CoalescedVamRefreshDelayReadySeconds = 0.25f;
 
         // Unity main thread ID, set during plugin initialization
         private static int s_MainThreadId = -1;
@@ -381,6 +394,7 @@ namespace VPB
                 s_StartupDeferredScriptUidsLogged.Clear();
                 s_StartupDeferredAnyUidsLogged.Clear();
             }
+            Interlocked.Exchange(ref s_StartupVamNotReadyDeferredCount, 0);
         }
 
         /// <summary>
@@ -460,7 +474,27 @@ namespace VPB
             {
                 lock (s_RegisteredLock)
                     s_RegisteredOnDemand.Add(resolvedUid);
-                return normPath;
+                // IMPORTANT: callers use non-null as "newly registered"; returning null here
+                // prevents unnecessary catalog refreshes when VaM already had this package.
+                return null;
+            }
+
+            // VaM can throw NREs in RegisterPackage before its first Refresh finishes
+            // initializing internal managers. Defer these on-demand requests and replay
+            // them once VamScanFilter.MarkVamRefreshed() signals readiness.
+            if (!VamScanFilter.HasVamRefreshedAtLeastOnce && !SafeIsStartupReadyLogged())
+            {
+                bool added;
+                string deferUid = !string.IsNullOrEmpty(resolvedUid) ? resolvedUid : uid;
+                lock (s_VamNotReadyLock)
+                {
+                    added = s_VamNotReadyDeferredUids.Add(deferUid);
+                    if (added)
+                        s_VamNotReadyDeferredPaths.Enqueue(varPath);
+                }
+                if (added)
+                    Interlocked.Increment(ref s_StartupVamNotReadyDeferredCount);
+                return null;
             }
 
             if (IsMainThread())
@@ -646,8 +680,49 @@ namespace VPB
             return TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
         }
 
+        /// <summary>
+        /// Called from VamScanFilter.MarkVamRefreshed once VaM's first Refresh completes.
+        /// Promotes deferred requests into the normal main-thread drain queue.
+        /// </summary>
+        public static void NotifyVamFileManagerRefreshed()
+        {
+            int promoted = 0;
+            lock (s_VamNotReadyLock)
+            {
+                while (s_VamNotReadyDeferredPaths.Count > 0)
+                {
+                    string path = s_VamNotReadyDeferredPaths.Dequeue();
+                    if (string.IsNullOrEmpty(path)) continue;
+                    lock (s_QueueLock)
+                        s_PendingPaths.Enqueue(path);
+                    promoted++;
+                }
+                s_VamNotReadyDeferredUids.Clear();
+            }
+
+            if (promoted > 0)
+                LogUtil.Log("[VPB OnDemand] VaM FileManager ready - promoted " + promoted + " deferred registrations");
+        }
+
         private static void RegisterNow(string uid, string varPath)
         {
+            if (string.IsNullOrEmpty(uid))
+            {
+                uid = UidFromVarPath(varPath);
+                if (string.IsNullOrEmpty(uid)) return;
+            }
+
+            // Deferred startup requests can become "already registered" by the time they drain
+            // (e.g. VaM's first Refresh scanned the temporary allow-list). Skip duplicate invokes.
+            if (IsUidAlreadyRegisteredInVam(uid))
+            {
+                lock (s_RegisteredLock)
+                    s_RegisteredOnDemand.Add(uid);
+                lock (s_FailedLock)
+                    s_LastFailedAttemptTicksByUid.Remove(uid);
+                return;
+            }
+
             var sw = Stopwatch.StartNew();
             bool ok = VamScanFilter.TryRegisterVarInVam(varPath);
             sw.Stop();
@@ -877,6 +952,70 @@ namespace VPB
                 }
                 drained++;
             }
+
+            DrainCoalescedVamRefresh();
+        }
+
+        /// <summary>
+        /// Request a single delayed VaM FileManager.Refresh. Multiple requests in a short
+        /// burst are coalesced into one refresh to avoid repeated startup stalls.
+        /// </summary>
+        public static void RequestCoalescedVamRefresh(string reason)
+        {
+            lock (s_RefreshRequestLock)
+            {
+                s_PendingVamRefresh = true;
+                s_PendingVamRefreshRequestedAt = Time.realtimeSinceStartup;
+                s_PendingVamRefreshRequestCount++;
+                if (!string.IsNullOrEmpty(reason))
+                    s_PendingVamRefreshReason = reason;
+            }
+        }
+
+        private static void DrainCoalescedVamRefresh()
+        {
+            bool shouldRun = false;
+            int requestCount = 0;
+            string reason = null;
+
+            lock (s_RefreshRequestLock)
+            {
+                if (!s_PendingVamRefresh) return;
+
+                float now = Time.realtimeSinceStartup;
+                float delay = SafeIsStartupReadyLogged()
+                    ? CoalescedVamRefreshDelayReadySeconds
+                    : CoalescedVamRefreshDelayStartupSeconds;
+                if (now - s_PendingVamRefreshRequestedAt < delay) return;
+
+                shouldRun = true;
+                requestCount = s_PendingVamRefreshRequestCount;
+                reason = s_PendingVamRefreshReason;
+
+                s_PendingVamRefresh = false;
+                s_PendingVamRefreshRequestedAt = 0f;
+                s_PendingVamRefreshRequestCount = 0;
+                s_PendingVamRefreshReason = null;
+            }
+
+            if (!shouldRun) return;
+
+            try
+            {
+                LogUtil.Log("[VPB OnDemand] Running coalesced FileManager.Refresh (requests="
+                    + requestCount + ", reason=" + (string.IsNullOrEmpty(reason) ? "unknown" : reason) + ")");
+                MVR.FileManagement.FileManager.Refresh();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] Coalesced FileManager.Refresh failed: " + ex.Message);
+            }
+        }
+
+        public static bool HasPendingCoalescedVamRefresh()
+        {
+            lock (s_RefreshRequestLock)
+                return s_PendingVamRefresh;
         }
 
         private static void MaybeLogStartupSummary()
@@ -912,6 +1051,7 @@ namespace VPB
                 else s_StartupFinalSummaryLogged = true;
             }
 
+            long vamNotReady = Interlocked.Read(ref s_StartupVamNotReadyDeferredCount);
             LogUtil.Log("[VPB OnDemand][Startup" + (ready ? ":final" : ":checkpoint") + "] attempts=" + a
                 + " success=" + s
                 + " fail=" + f
@@ -919,6 +1059,7 @@ namespace VPB
                 + " deferred_non_script=" + dn
                 + " allowed_script=" + ascr
                 + " deferred_script=" + ds
+                + " deferred_vam_not_ready=" + vamNotReady
                 + " invoke_ms_total=" + ms
                 + " cooldown_ms=" + FailedRetryCooldownMs
                 + " top_fail_uids=" + (string.IsNullOrEmpty(topFail) ? "(none)" : topFail));

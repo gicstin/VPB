@@ -121,10 +121,18 @@ namespace VPB
         static readonly Dictionary<string, float> recentLogRealtime = new Dictionary<string, float>(StringComparer.Ordinal);
         static readonly List<SlowDiskSample> slowDisk = new List<SlowDiskSample>(128);
         static bool pluginAwakeMarked;
+        static bool uiReadyLogged;
         static bool readyLogged;
         static double? readyProcessSeconds;
+        static float readyLoggedRealtime;
         static bool startupReadyLogged;
         static bool startupAutoReadyLogged;
+        static bool startupSettledLogged;
+        static float startupSettledQuietSinceRealtime;
+        const float StartupSettleInitialDelaySeconds = 2.0f;
+        const float StartupSettleQuietWindowSeconds = 0.5f;
+        static readonly Queue<Action> postReadyQueue = new Queue<Action>();
+        static readonly object postReadyQueueLock = new object();
 
         static LogUtil()
         {
@@ -144,12 +152,45 @@ namespace VPB
         {
             pluginSessionStartTime = DateTime.Now;
             pluginSessionEngineStartSeconds = Time.realtimeSinceStartup;
+            uiReadyLogged = false;
             readyLogged = false;
             startupReadyLogged = false;
             startupAutoReadyLogged = false;
+            startupSettledLogged = false;
+            startupSettledQuietSinceRealtime = 0f;
             readyProcessSeconds = null;
+            readyLoggedRealtime = 0f;
             sincePluginAwake.Reset();
             pluginAwakeMarked = false;
+        }
+
+        public static void RegisterPostReadyOnce(Action action)
+        {
+            if (action == null) return;
+            lock (postReadyQueueLock)
+            {
+                postReadyQueue.Enqueue(action);
+            }
+        }
+
+        public static void DrainPostReadyQueue()
+        {
+            if (!readyLogged) return;
+            while (true)
+            {
+                Action action = null;
+                lock (postReadyQueueLock)
+                {
+                    if (postReadyQueue.Count == 0) break;
+                    action = postReadyQueue.Dequeue();
+                }
+
+                try { action?.Invoke(); }
+                catch (Exception ex)
+                {
+                    LogWarning("[VPB] PostReady action failed: " + ex.Message);
+                }
+            }
         }
 
         static string lastTimeString;
@@ -468,6 +509,44 @@ namespace VPB
 
             startupAutoReadyLogged = true;
             LogReadyOnce("AutoReady.Timeout");
+        }
+
+        public static void StartupSettleUpdate()
+        {
+            if (readyLogged) return;
+            if (startupSettledLogged) return;
+            if (!uiReadyLogged) return;
+            if (readyLoggedRealtime <= 0f) return;
+
+            float now = Time.realtimeSinceStartup;
+            // Give post-READY bootstrap a chance to schedule follow-up work.
+            if ((now - readyLoggedRealtime) < StartupSettleInitialDelaySeconds) return;
+
+            bool hasPendingWork = false;
+            try
+            {
+                if (VamOnDemandLoader.HasPendingCoalescedVamRefresh()) hasPendingWork = true;
+                if (!hasPendingWork && Gallery.HasStartupDeferredWork()) hasPendingWork = true;
+                if (!hasPendingWork && !VPB.src.util.JSONExtensions.IsCharacterGenderMapInitComplete()) hasPendingWork = true;
+            }
+            catch { }
+
+            if (hasPendingWork)
+            {
+                startupSettledQuietSinceRealtime = 0f;
+                return;
+            }
+
+            if (startupSettledQuietSinceRealtime <= 0f)
+            {
+                startupSettledQuietSinceRealtime = now;
+                return;
+            }
+
+            if ((now - startupSettledQuietSinceRealtime) < StartupSettleQuietWindowSeconds) return;
+
+            startupSettledLogged = true;
+            LogReadyOnce("Startup settled");
         }
 
         public static double? GetSceneClickSecondsForDisplay()
@@ -1587,6 +1666,21 @@ namespace VPB
             }
         }
 
+        public static void LogUiReadyOnce(string context)
+        {
+            if (uiReadyLogged)
+            {
+                return;
+            }
+
+            uiReadyLogged = true;
+            readyLoggedRealtime = Time.realtimeSinceStartup;
+            var sinceProcessStart = DateTime.Now - processStartTime;
+            var sincePluginSessionStart = DateTime.Now - pluginSessionStartTime;
+            var sincePluginStart = sincePluginAwake.IsRunning ? sincePluginAwake.Elapsed : TimeSpan.Zero;
+            LogWarning(string.Format("UI_READY {0} | since plugin session start: {1:0.000}s | since process start: {2:0.000}s | since plugin awake: {3:0.000}s", context, sincePluginSessionStart.TotalSeconds, sinceProcessStart.TotalSeconds, sincePluginStart.TotalSeconds));
+        }
+
         public static void LogReadyOnce(string context)
         {
             if (readyLogged)
@@ -1596,7 +1690,8 @@ namespace VPB
 
             readyLogged = true;
 
-            readyProcessSeconds = (double)(Time.realtimeSinceStartup - pluginSessionEngineStartSeconds);
+            // Keep hook-pane startup display aligned with READY log's "since process start" metric.
+            readyProcessSeconds = GetSecondsSinceProcessStart();
             var sinceProcessStart = DateTime.Now - processStartTime;
             var sincePluginSessionStart = DateTime.Now - pluginSessionStartTime;
             var sincePluginStart = sincePluginAwake.IsRunning ? sincePluginAwake.Elapsed : TimeSpan.Zero;
@@ -1608,6 +1703,11 @@ namespace VPB
             return (DateTime.Now - processStartTime).TotalSeconds;
         }
 
+        public static bool IsReadyLogged()
+        {
+            return readyLogged;
+        }
+
         public static double GetStartupSecondsForDisplay()
         {
             if (readyProcessSeconds.HasValue)
@@ -1615,7 +1715,7 @@ namespace VPB
                 return readyProcessSeconds.Value;
             }
 
-            return (double)(Time.realtimeSinceStartup - pluginSessionEngineStartSeconds);
+            return GetSecondsSinceProcessStart();
         }
 
         static class StringBuilderPool

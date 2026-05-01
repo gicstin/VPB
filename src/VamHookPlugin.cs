@@ -1072,6 +1072,7 @@ namespace VPB
             try
             {
                 LogUtil.StartupWatchdogUpdate(IsFileManagerInited, m_UIInited);
+                LogUtil.StartupSettleUpdate();
             }
             catch { }
 
@@ -1176,10 +1177,9 @@ namespace VPB
                 {
                     if (MVR.Hub.HubBrowse.singleton != null)
                     {
-                        CreateHubBrowse();
                         CreateFileBrowser();
                         m_UIInited = true;
-                        LogUtil.LogReadyOnce("UI initialized");
+                        LogUtil.LogUiReadyOnce("UI initialized");
                     }
                     else if (VdsLauncher.IsVdsEnabled())
                     {
@@ -1187,7 +1187,7 @@ namespace VPB
                         // to enable FPS display and other UI features.
                         CreateFileBrowser();
                         m_UIInited = true;
-                        LogUtil.LogReadyOnce("UI initialized (VDS)");
+                        LogUtil.LogUiReadyOnce("UI initialized (VDS)");
                     }
                 }
             }
@@ -2299,18 +2299,24 @@ namespace VPB
                         var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
                         var sceneClickSeconds = LogUtil.GetSceneClickSecondsForDisplay();
                         var sceneLoadSeconds = LogUtil.GetSceneLoadSecondsForDisplay();
+                        string startupLabel = LogUtil.IsReadyLogged()
+                            ? VPBTranslation.T("hook.startup.ready_label", "READY")
+                            : VPBTranslation.T("hook.startup.starting_label", "STARTING");
                         string tagText;
                         if (sceneLoadSeconds.HasValue)
                         {
-                            tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneLoadSeconds.Value);
+                            tagText = string.Format("VPB {0} | {1} {2:0.0}s | {3:0.0}s",
+                                PluginVersionInfo.Version, startupLabel, startupSeconds, sceneLoadSeconds.Value);
                         }
                         else if (sceneClickSeconds.HasValue)
                         {
-                            tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneClickSeconds.Value);
+                            tagText = string.Format("VPB {0} | {1} {2:0.0}s | {3:0.0}s",
+                                PluginVersionInfo.Version, startupLabel, startupSeconds, sceneClickSeconds.Value);
                         }
                         else
                         {
-                            tagText = string.Format("VPB {0} | {1:0.0}s", PluginVersionInfo.Version, startupSeconds);
+                            tagText = string.Format("VPB {0} | {1} {2:0.0}s",
+                                PluginVersionInfo.Version, startupLabel, startupSeconds);
                         }
 
                         var tagContent = new GUIContent(tagText);

@@ -71,6 +71,9 @@ namespace VPB
 
         private Coroutine autoRefreshCoroutine;
         private bool autoRefreshPending;
+        private Coroutine startupDeferredAutoRefreshCoroutine;
+        private bool startupDeferredAutoRefreshPending;
+        private Coroutine genderMapInitCoroutine;
 
         void Awake()
         {
@@ -95,12 +98,26 @@ namespace VPB
         void OnEnable()
         {
             MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
-            StartCoroutine(JSONExtensions.LoadCharacterGenderMap());
+            if (genderMapInitCoroutine == null)
+                genderMapInitCoroutine = StartCoroutine(InitCharacterGenderMapEarly());
         }
 
         void OnDisable()
         {
             MessageKit.removeObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+            if (genderMapInitCoroutine != null)
+            {
+                StopCoroutine(genderMapInitCoroutine);
+                genderMapInitCoroutine = null;
+            }
+        }
+
+        private IEnumerator InitCharacterGenderMapEarly()
+        {
+            // Start immediately so this heavy task can overlap with startup work.
+            // READY still waits on completion via StartupSettleUpdate pending checks.
+            yield return JSONExtensions.LoadCharacterGenderMap();
+            genderMapInitCoroutine = null;
         }
 
         private void OnFileManagerRefresh()
@@ -148,12 +165,56 @@ namespace VPB
 
             _hasHadInitialRefresh = true;
 
+            if (!LogUtil.IsStartupReadyLogged())
+            {
+                startupDeferredAutoRefreshPending = true;
+                if (startupDeferredAutoRefreshCoroutine == null)
+                    startupDeferredAutoRefreshCoroutine = StartCoroutine(RunDeferredAutoRefreshAfterStartupReady());
+                return;
+            }
+
             if (autoRefreshCoroutine != null)
             {
                 autoRefreshPending = true;
                 return;
             }
             autoRefreshCoroutine = StartCoroutine(AutoRefreshAfterPackageScan());
+        }
+
+        private IEnumerator RunDeferredAutoRefreshAfterStartupReady()
+        {
+            while (!LogUtil.IsStartupReadyLogged())
+                yield return null;
+
+            startupDeferredAutoRefreshCoroutine = null;
+            if (!startupDeferredAutoRefreshPending) yield break;
+            startupDeferredAutoRefreshPending = false;
+
+            if (autoRefreshCoroutine != null)
+            {
+                autoRefreshPending = true;
+                yield break;
+            }
+            autoRefreshCoroutine = StartCoroutine(AutoRefreshAfterPackageScan());
+        }
+
+        public static bool HasStartupDeferredWork()
+        {
+            var g = singleton;
+            if (g == null) return false;
+            if (g.genderMapInitCoroutine != null) return true;
+            if (g.startupDeferredAutoRefreshCoroutine != null) return true;
+            if (g.autoRefreshCoroutine != null) return true;
+            if (g.panels != null)
+            {
+                for (int i = 0; i < g.panels.Count; i++)
+                {
+                    var p = g.panels[i];
+                    if (p != null && p.HasDeferredStartupRefreshPending)
+                        return true;
+                }
+            }
+            return false;
         }
 
         private IEnumerator AutoRefreshAfterPackageScan()

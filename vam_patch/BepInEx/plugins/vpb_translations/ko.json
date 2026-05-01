@@ -261,6 +261,8 @@
   "hook.gc_refresh.title": "GC 및 새로 고침",
   "hook.gc_refresh.info1": "새로 고침으로 패키지 목록을 갱신해 디스크의 변경(추가/이동/삭제)을 반영합니다.",
   "hook.gc_refresh.info2": "GC는 캐시를 비우고 Unity/.NET이 정리하도록 해 긴 탐색 후 메모리를 줄입니다.",
+  "hook.startup.ready_label": "준비됨",
+  "hook.startup.starting_label": "시작 중",
   "hook.saved": "{0} 절약",
   "hook.done": "완료!",
   "hook.drag_area_hint": "{0:0.0}s | 드래그 영역 | 전환: {1}",

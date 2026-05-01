@@ -420,6 +420,13 @@ namespace VPB
             // Decide refresh before UpdateLayout so we can avoid synchronous full-library cache scans
             // (CacheCreators / CacheCategoryCounts) when RefreshFilesRoutine will rebuild them on a worker thread.
             bool shouldRefresh = paramsChanged || !hasLoadedContent || packagesChanged;
+            bool startupDeferredInitialRefresh = false;
+            if (shouldRefresh && !hasLoadedContent && !LogUtil.IsStartupReadyLogged())
+            {
+                startupDeferredInitialRefresh = true;
+                shouldRefresh = false;
+                ScheduleInitialRefreshAfterStartupReady();
+            }
 
             try
             {
@@ -480,7 +487,11 @@ namespace VPB
                 LogGalleryCategoryTypeNavPhase("Show_after_RefreshFiles_invoke");
             }
             else
+            {
+                if (startupDeferredInitialRefresh)
+                    LogUtil.Log("[VPB] GalleryPanel.Show: deferred initial RefreshFiles until startup ready");
                 LogGalleryCategoryTypeNavPhase("Show_skip_RefreshFiles");
+            }
 
             // Same-view reopen: keep the existing side-tab/button tree and avoid synchronous count rebuilds.
             // Full refresh path: keep UI lightweight while RefreshFilesRoutine rebuilds caches in the background.
@@ -520,6 +531,31 @@ namespace VPB
             if (refreshCoroutine == null)
                 FinalizeGalleryCategoryTypeNavigationSync("(Show end, no async refresh)");
             LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
+        }
+
+        private Coroutine deferredStartupRefreshCoroutine;
+        public bool HasDeferredStartupRefreshPending => deferredStartupRefreshCoroutine != null;
+
+        private void ScheduleInitialRefreshAfterStartupReady()
+        {
+            if (deferredStartupRefreshCoroutine != null) return;
+            deferredStartupRefreshCoroutine = StartCoroutine(DeferredInitialRefreshAfterStartupReady());
+        }
+
+        private IEnumerator DeferredInitialRefreshAfterStartupReady()
+        {
+            while (!LogUtil.IsStartupReadyLogged())
+                yield return null;
+
+            deferredStartupRefreshCoroutine = null;
+            if (hasLoadedContent) yield break;
+            if (canvas == null || !canvas.enabled) yield break;
+
+            try
+            {
+                RefreshFiles(false);
+            }
+            catch { }
         }
 
         public void Hide()
