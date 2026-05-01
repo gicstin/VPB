@@ -1228,8 +1228,7 @@ namespace VPB
                             var a = QuickMenuGetSlotAction(i);
                             bool requiresGallery = a == QuickMenuAssignableAction.ShowHide ||
                                                    a == QuickMenuAssignableAction.BringFront ||
-                                                   a == QuickMenuAssignableAction.CloseAll ||
-                                                   a == QuickMenuAssignableAction.OpenGalleryHistory;
+                                                   a == QuickMenuAssignableAction.CloseAll ;
                             if (requiresGallery)
                             {
                                 var go = m_QuickMenuGridButtons[i];
@@ -1612,7 +1611,6 @@ namespace VPB
                 m_QmIconUndo   = UI.LoadIconSprite("vpb_icons/undo.png", tint);
                 m_QmIconRedo   = UI.LoadIconSprite("vpb_icons/redo.png", tint);
                 m_QmIconHub    = UI.LoadIconSprite("vpb_icons/hub.png", tint);
-                m_QmIconHistory = UI.LoadIconSprite("vpb_icons/history.png", tint);
                 m_QmIconCleanup = UI.LoadIconSprite("vpb_icons/cleanup.png", tint);
                 m_QmIconReplace = UI.LoadIconSprite("vpb_icons/gallery_replace.png", tint);
                 m_QmIconAdd     = UI.LoadIconSprite("vpb_icons/gallery_add.png", tint);
@@ -1762,8 +1760,7 @@ namespace VPB
                     var a0 = QuickMenuGetSlotAction(i);
                     bool requiresGallery = (a0 == QuickMenuAssignableAction.ShowHide) ||
                                            (a0 == QuickMenuAssignableAction.BringFront) ||
-                                           (a0 == QuickMenuAssignableAction.CloseAll) ||
-                                           (a0 == QuickMenuAssignableAction.OpenGalleryHistory);
+                                           (a0 == QuickMenuAssignableAction.CloseAll) ;
                     if (requiresGallery) go.SetActive(initialShouldShow);
                 }
 

@@ -95,6 +95,23 @@ namespace VPB
             }
             catch { }
         }
+
+        /// <summary>Open Cleanup mode using the same entry point as the toolbox Cleanup action.</summary>
+        internal void QuickMenu_OpenCleanupMode()
+        {
+            try { TboxOpenCleanupView(); } catch { }
+        }
+
+        /// <summary>Toggle Cleanup mode: open when closed, exit to previous side state when open.</summary>
+        internal void QuickMenu_ToggleCleanupMode()
+        {
+            try
+            {
+                if (cleanupModeActive) ExitCleanupModeForSidePanelNavigation();
+                else TboxOpenCleanupView();
+            }
+            catch { }
+        }
     }
 }
 

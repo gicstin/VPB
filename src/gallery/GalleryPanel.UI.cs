@@ -2680,6 +2680,34 @@ namespace VPB
                 titleText.text = GetGalleryHistoryFilterRowLabel(galleryHistoryFilterMode);
         }
 
+        private bool HasHistorySidePanelOpen()
+        {
+            return leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
+        }
+
+        private bool IsTemporaryListTaskActive()
+        {
+            return cleanupModeActive || HasHistorySidePanelOpen();
+        }
+
+        private void EnsureTemporaryTaskListLayoutSession()
+        {
+            if (temporaryListLayoutSessionActive) return;
+            temporaryListLayoutSessionActive = true;
+            temporaryListPreSessionLayoutMode = layoutMode;
+            if (layoutMode != GalleryLayoutMode.List)
+                SetLayoutMode(GalleryLayoutMode.List, false);
+        }
+
+        private void TryRestoreLayoutAfterTemporaryTaskExit()
+        {
+            if (!temporaryListLayoutSessionActive) return;
+            if (IsTemporaryListTaskActive()) return;
+            temporaryListLayoutSessionActive = false;
+            if (layoutMode != temporaryListPreSessionLayoutMode)
+                SetLayoutMode(temporaryListPreSessionLayoutMode, false);
+        }
+
         private void ToggleRight(ContentType type)
         {
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
@@ -2712,6 +2740,8 @@ namespace VPB
 
             SyncActiveContentTypeFromSidePanels();
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
+            if (hasHistorySide) EnsureTemporaryTaskListLayoutSession();
+            else if (hadHistorySide) TryRestoreLayoutAfterTemporaryTaskExit();
             if (!hasHistorySide && hadHistorySide && titleText != null)
                 titleText.text = currentCategoryTitle;
 
@@ -2766,6 +2796,8 @@ namespace VPB
 
             SyncActiveContentTypeFromSidePanels();
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
+            if (hasHistorySide) EnsureTemporaryTaskListLayoutSession();
+            else if (hadHistorySide) TryRestoreLayoutAfterTemporaryTaskExit();
             if (!hasHistorySide && hadHistorySide && titleText != null)
                 titleText.text = currentCategoryTitle;
 

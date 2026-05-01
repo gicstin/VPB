@@ -106,6 +106,8 @@ namespace VPB
         private const string CleanupExcludeTag = "Exclude";
         private readonly HashSet<string> cleanupExcludedKeyCache = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly List<CleanupCandidate> cleanupCandidatesAll = new List<CleanupCandidate>();
+        private readonly List<CleanupCandidate> cleanupCandidatesCachedSnapshot = new List<CleanupCandidate>();
+        private long cleanupCandidatesCachedScanClockBinary = long.MinValue;
         private readonly Dictionary<string, CleanupCandidate> cleanupCandidateByPath =
             new Dictionary<string, CleanupCandidate>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CleanupHashCacheEntry> cleanupHashCacheByPath =
@@ -344,6 +346,66 @@ namespace VPB
             };
             byPath[norm] = c;
             return c;
+        }
+
+        private static CleanupCandidate CloneCleanupCandidate(CleanupCandidate src)
+        {
+            if (src == null) return null;
+            return new CleanupCandidate
+            {
+                SourcePath = src.SourcePath,
+                NormalizedPath = src.NormalizedPath,
+                PackageUid = src.PackageUid,
+                GroupKey = src.GroupKey,
+                SourceKind = src.SourceKind,
+                NumericVersion = src.NumericVersion,
+                IsExcluded = src.IsExcluded,
+                StaleCacheLastAccessedBinary = src.StaleCacheLastAccessedBinary,
+                Flags = new HashSet<CleanupCandidateType>(src.Flags),
+                Reasons = new HashSet<string>(src.Reasons, StringComparer.OrdinalIgnoreCase),
+            };
+        }
+
+        private static void CloneCleanupCandidatesInto(List<CleanupCandidate> source, List<CleanupCandidate> destination)
+        {
+            if (destination == null) return;
+            destination.Clear();
+            if (source == null) return;
+            for (int i = 0; i < source.Count; i++)
+            {
+                var clone = CloneCleanupCandidate(source[i]);
+                if (clone != null) destination.Add(clone);
+            }
+        }
+
+        private static long TryGetCleanupScanClockBinary()
+        {
+            try { return FileManager.lastPackageRefreshTime.ToBinary(); }
+            catch { return long.MinValue; }
+        }
+
+        private bool TryLoadCleanupCandidatesFromCache(bool testMode)
+        {
+            if (testMode) return false; // Shift+Cleanup should always force a fresh scan.
+            if (cleanupCandidatesCachedSnapshot == null || cleanupCandidatesCachedSnapshot.Count == 0) return false;
+            long nowClock = TryGetCleanupScanClockBinary();
+            if (nowClock == long.MinValue || cleanupCandidatesCachedScanClockBinary == long.MinValue) return false;
+            if (nowClock != cleanupCandidatesCachedScanClockBinary) return false;
+
+            CloneCleanupCandidatesInto(cleanupCandidatesCachedSnapshot, cleanupCandidatesAll);
+            return cleanupCandidatesAll.Count > 0;
+        }
+
+        private void SaveCleanupCandidatesToCache()
+        {
+            cleanupCandidatesCachedScanClockBinary = TryGetCleanupScanClockBinary();
+            CloneCleanupCandidatesInto(cleanupCandidatesAll, cleanupCandidatesCachedSnapshot);
+        }
+
+        private void InvalidateCleanupCandidatesCache()
+        {
+            cleanupCandidatesCachedScanClockBinary = long.MinValue;
+            cleanupCandidatesCachedSnapshot.Clear();
         }
 
         private List<CleanupCandidate> BuildCleanupCandidatesGlobal(bool testMode = false)
@@ -1009,13 +1071,29 @@ namespace VPB
         {
             if (!cleanupModeActive) return;
             var sw = Stopwatch.StartNew();
-            cleanupCandidatesAll.Clear();
-            cleanupCandidatesAll.AddRange(BuildCleanupCandidatesGlobal(testMode));
+
+            bool loadedFromCache = TryLoadCleanupCandidatesFromCache(testMode);
+            if (!loadedFromCache)
+            {
+                cleanupCandidatesAll.Clear();
+                cleanupCandidatesAll.AddRange(BuildCleanupCandidatesGlobal(testMode));
+                SaveCleanupCandidatesToCache();
+            }
+
+            // Exclude status may change independently of package refresh.
+            RefreshCleanupExcludedKeyCache();
+            for (int i = 0; i < cleanupCandidatesAll.Count; i++)
+            {
+                var c = cleanupCandidatesAll[i];
+                if (c == null) continue;
+                c.IsExcluded = IsCleanupCandidateExcluded(c);
+            }
+
             ApplyCleanupFilterToList(clearSelection);
             if (showSummaryStatus)
                 ShowTemporaryStatus(BuildCleanupSummaryText(), 3f);
             sw.Stop();
-            LogUtil.LogWarning("[VPB] Cleanup(list) rebuild done in " + sw.ElapsedMilliseconds + " ms.");
+            LogUtil.LogWarning("[VPB] Cleanup(list) rebuild done in " + sw.ElapsedMilliseconds + " ms. source=" + (loadedFromCache ? "cache" : "scan"));
         }
 
         private void ApplyCleanupFilterToList(bool clearSelection)
@@ -1082,7 +1160,7 @@ namespace VPB
                 cleanupFilterMode = 0;
                 LogUtil.LogWarning("[VPB] Cleanup(list) open: starting scan...");
 
-                try { SetLayoutMode(GalleryLayoutMode.List); } catch { }
+                try { EnsureTemporaryTaskListLayoutSession(); } catch { }
 
                 currentCategoryTitle = VPBTranslation.T("gallery.tbox.cleanup", "Cleanup");
                 ActivateCleanupSideTabs();
@@ -1115,12 +1193,28 @@ namespace VPB
             cleanupCandidatesAll.Clear();
             cleanupCandidateByPath.Clear();
 
-            if (leftActiveContent.HasValue && leftActiveContent.Value == ContentType.CleanupCategories)
+            if (cleanupSideHostIsLeft)
+            {
+                if (leftActiveContent.HasValue && leftActiveContent.Value == ContentType.CleanupCategories)
+                    leftActiveContent = cleanupPrevHostContent;
+                else if (leftActiveContent == ContentType.CleanupStaleBuckets)
+                    leftActiveContent = cleanupPrevHostContent;
+            }
+            else
+            {
+                if (rightActiveContent.HasValue && rightActiveContent.Value == ContentType.CleanupCategories)
+                    rightActiveContent = cleanupPrevHostContent;
+                else if (rightActiveContent == ContentType.CleanupStaleBuckets)
+                    rightActiveContent = cleanupPrevHostContent;
+            }
+            if (leftActiveContent == ContentType.CleanupCategories || leftActiveContent == ContentType.CleanupStaleBuckets)
                 leftActiveContent = null;
-            if (rightActiveContent.HasValue && rightActiveContent.Value == ContentType.CleanupCategories)
+            if (rightActiveContent == ContentType.CleanupCategories || rightActiveContent == ContentType.CleanupStaleBuckets)
                 rightActiveContent = null;
 
             cleanupPrevHostContent = null;
+
+            TryRestoreLayoutAfterTemporaryTaskExit();
 
             // Return to the normal gallery dataset after leaving cleanup mode.
             try { RefreshFiles(); } catch { }
@@ -1374,7 +1468,10 @@ namespace VPB
                 }
 
                 if (movedPaths.Count > 0)
+                {
+                    InvalidateCleanupCandidatesCache();
                     cleanupCandidatesAll.RemoveAll(c => c != null && movedPaths.Contains(c.NormalizedPath));
+                }
                 ApplyCleanupFilterToList(true);
 
                 if (failed == 0)

@@ -936,13 +936,24 @@ namespace VPB
 
             tboxCleanupBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup", "Cleanup"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxOpenCleanupView
             );
             tboxCleanupBtn.name = "Tbox_Cleanup";
-            TboxConfigureActionButtonFlex(tboxCleanupBtn, 78f, 92f, innerRowH);
+            TboxConfigureActionButtonFlex(tboxCleanupBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxCleanupBtn, "gallery.tooltip.tbox_cleanup", "Scan globally for duplicate, old, and damaged packages/local files.");
+            try
+            {
+                var cleanupIcon = UI.LoadIconSprite("vpb_icons/cleanup.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                if (cleanupIcon != null) UI.AddIconToButton(tboxCleanupBtn, cleanupIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxCleanupBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.cleanup", "Cleanup");
+                }
+            }
+            catch { }
 
             tboxCleanupApplyBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,

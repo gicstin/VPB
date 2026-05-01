@@ -29,7 +29,6 @@ namespace VPB
             Undo,
             Redo,
             Hub,
-            OpenGalleryHistory,
             Cleanup,
             ReplaceAddToggle,
             CompressCache,
@@ -112,7 +111,6 @@ namespace VPB
         private Sprite m_QmIconUndo;
         private Sprite m_QmIconRedo;
         private Sprite m_QmIconHub;
-        private Sprite m_QmIconHistory;
         private Sprite m_QmIconCleanup;
         private Sprite m_QmIconReplace;
         private Sprite m_QmIconAdd;
@@ -307,7 +305,6 @@ namespace VPB
                 case QuickMenuAssignableAction.Undo: return VPBTranslation.T("hook.qmbutton.undo", "Undo");
                 case QuickMenuAssignableAction.Redo: return VPBTranslation.T("hook.qmbutton.redo", "Redo");
                 case QuickMenuAssignableAction.Hub: return VPBTranslation.T("hook.qmbutton.hub", "Hub");
-                case QuickMenuAssignableAction.OpenGalleryHistory: return VPBTranslation.T("hook.qmbutton.history", "History");
                 case QuickMenuAssignableAction.Cleanup: return VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup");
                 case QuickMenuAssignableAction.ReplaceAddToggle: return VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add");
                 case QuickMenuAssignableAction.CompressCache: return VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache");
@@ -420,7 +417,6 @@ namespace VPB
                 case QuickMenuAssignableAction.Undo: return "undo";
                 case QuickMenuAssignableAction.Redo: return "redo";
                 case QuickMenuAssignableAction.Hub: return "hub";
-                case QuickMenuAssignableAction.OpenGalleryHistory: return "open_gallery_history";
                 case QuickMenuAssignableAction.Cleanup: return "cleanup";
                 case QuickMenuAssignableAction.ReplaceAddToggle: return "replace_add_toggle";
                 case QuickMenuAssignableAction.CompressCache: return "compress_cache";
@@ -456,7 +452,6 @@ namespace VPB
                 case "undo": return QuickMenuAssignableAction.Undo;
                 case "redo": return QuickMenuAssignableAction.Redo;
                 case "hub": return QuickMenuAssignableAction.Hub;
-                case "open_gallery_history": return QuickMenuAssignableAction.OpenGalleryHistory;
                 case "cleanup": return QuickMenuAssignableAction.Cleanup;
                 case "replace_add_toggle": return QuickMenuAssignableAction.ReplaceAddToggle;
                 case "compress_cache": return QuickMenuAssignableAction.CompressCache;
@@ -954,9 +949,6 @@ namespace VPB
                 case QuickMenuAssignableAction.Hub:
                     icon = m_QmIconHub;
                     break;
-                case QuickMenuAssignableAction.OpenGalleryHistory:
-                    icon = m_QmIconHistory ?? m_QmIconHub;
-                    break;
                 case QuickMenuAssignableAction.Cleanup:
                     icon = m_QmIconCleanup;
                     break;
@@ -1137,15 +1129,21 @@ namespace VPB
                 case QuickMenuAssignableAction.Hub:
                     OpenHubBrowse();
                     break;
-                case QuickMenuAssignableAction.OpenGalleryHistory:
+                case QuickMenuAssignableAction.Cleanup:
                 {
                     var p = QuickMenuGetTargetPanel();
-                    if (p != null) p.QuickMenu_OpenGalleryHistory();
+                    if (p != null)
+                    {
+                        p.QuickMenu_ToggleCleanupMode();
+                    }
+                    else
+                    {
+                        OpenGallery();
+                        p = QuickMenuGetTargetPanel();
+                        if (p != null) p.QuickMenu_ToggleCleanupMode();
+                    }
                     break;
                 }
-                case QuickMenuAssignableAction.Cleanup:
-                    CacheCleanupManager.FlushHitsBatch();
-                    break;
                 case QuickMenuAssignableAction.ReplaceAddToggle:
                 {
                     var p = QuickMenuGetTargetPanel();
@@ -1380,7 +1378,6 @@ namespace VPB
                 QuickMenuAssignableAction.Undo,
                 QuickMenuAssignableAction.Redo,
                 QuickMenuAssignableAction.Hub,
-                QuickMenuAssignableAction.OpenGalleryHistory,
                 QuickMenuAssignableAction.Cleanup,
                 QuickMenuAssignableAction.ReplaceAddToggle,
                 QuickMenuAssignableAction.CompressCache,
@@ -1402,7 +1399,6 @@ namespace VPB
                 VPBTranslation.T("hook.qmbutton.undo", "Undo"),
                 VPBTranslation.T("hook.qmbutton.redo", "Redo"),
                 VPBTranslation.T("hook.qmbutton.hub", "Hub"),
-                VPBTranslation.T("hook.qmbutton.history", "History"),
                 VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup"),
                 VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add"),
                 VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache"),
@@ -1688,7 +1684,6 @@ namespace VPB
                 case QuickMenuAssignableAction.Undo: return m_QmIconUndo;
                 case QuickMenuAssignableAction.Redo: return m_QmIconRedo;
                 case QuickMenuAssignableAction.Hub: return m_QmIconHub;
-                case QuickMenuAssignableAction.OpenGalleryHistory: return m_QmIconHistory ?? m_QmIconHub;
                 case QuickMenuAssignableAction.Cleanup: return m_QmIconCleanup;
                 case QuickMenuAssignableAction.ReplaceAddToggle: return m_QmIconReplace ?? m_QmIconAdd;
                 case QuickMenuAssignableAction.CompressCache: return m_QmIconCompressCache;
