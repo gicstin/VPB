@@ -312,36 +312,17 @@ namespace VPB
                 }
             }
 
-            // Package-level pseudo-category counts: always recompute last so UI never shows 0/stale values.
-            // SQL/category scans count file-entries; varpkg counts packages.
+            // Package-level pseudo-category counts: varpkg counts packages (use SQL pkg table).
             try
             {
-                if (FileManager.PackagesByUid != null)
+                for (int ci = 0; ci < categories.Count; ci++)
                 {
-                    for (int ci = 0; ci < categories.Count; ci++)
-                    {
-                        var c = categories[ci];
-                        if (string.IsNullOrEmpty(c.name) || string.IsNullOrEmpty(c.extension)) continue;
-                        if (!string.Equals(c.extension, "varpkg", StringComparison.OrdinalIgnoreCase)) continue;
-
-                        int n = 0;
-                        foreach (var pkg in FileManager.PackagesByUid.Values)
-                        {
-                            if (pkg == null) continue;
-                            if (!string.IsNullOrEmpty(currentCreator))
-                            {
-                                if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
-                            }
-                            // ALL VAR should remain global navigation root: do not let non-creator filters
-                            // (like path filter restored from previous category state) zero-out its count.
-                            string pkgPathFilterForVarPkg = !string.IsNullOrEmpty(currentCreator) ? currentPackagePathFilter : "";
-                            if (!string.IsNullOrEmpty(pkgPathFilterForVarPkg) &&
-                                !GalleryPathFilterMatchesRawPath(pkg.Path, pkgPathFilterForVarPkg))
-                                continue;
-                            n++;
-                        }
+                    var c = categories[ci];
+                    if (string.IsNullOrEmpty(c.name) || string.IsNullOrEmpty(c.extension)) continue;
+                    if (!string.Equals(c.extension, "varpkg", StringComparison.OrdinalIgnoreCase)) continue;
+                    string pkgPathFilterForVarPkg = !string.IsNullOrEmpty(currentCreator) ? currentPackagePathFilter : "";
+                    if (VpbLocalDatabase.TryCountVarPackages(currentCreator, pkgPathFilterForVarPkg, applyPathOnlyWhenCreator: true, out int n))
                         categoryCounts[c.name] = n;
-                    }
                 }
             }
             catch { }
@@ -479,16 +460,19 @@ namespace VPB
             // Package-only category: creators list must be package creators (not internal-file creators).
             if (string.Equals(currentExtension, "varpkg", StringComparison.OrdinalIgnoreCase))
             {
-                foreach (var pkg in FileManager.PackagesByUid.Values)
+                if (!VpbLocalDatabase.TryReadVarPackageCreatorCounts(counts, currentPackagePathFilter))
                 {
-                    if (pkg == null) continue;
-                    if (string.IsNullOrEmpty(pkg.Creator)) continue;
-                    if (!string.IsNullOrEmpty(currentPackagePathFilter) &&
-                        !GalleryPathFilterMatchesRawPath(pkg.Path, currentPackagePathFilter))
-                        continue;
-                    int cur;
-                    counts.TryGetValue(pkg.Creator, out cur);
-                    counts[pkg.Creator] = cur + 1;
+                    foreach (var pkg in FileManager.PackagesByUid.Values)
+                    {
+                        if (pkg == null) continue;
+                        if (string.IsNullOrEmpty(pkg.Creator)) continue;
+                        if (!string.IsNullOrEmpty(currentPackagePathFilter) &&
+                            !GalleryPathFilterMatchesRawPath(pkg.Path, currentPackagePathFilter))
+                            continue;
+                        int cur;
+                        counts.TryGetValue(pkg.Creator, out cur);
+                        counts[pkg.Creator] = cur + 1;
+                    }
                 }
             }
             else if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle, currentPackagePathFilter))

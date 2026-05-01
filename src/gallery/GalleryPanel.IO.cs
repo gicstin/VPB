@@ -419,23 +419,6 @@ namespace VPB
                 }
             }
             catch { }
-
-            foreach (VarPackage pkg2 in FileManager.PackagesByUid.Values)
-            {
-                if (pkg2 == null) continue;
-                try
-                {
-                    var otherDeps = pkg2.RecursivePackageDependencies;
-                    if (otherDeps == null) continue;
-                    for (int di = 0; di < otherDeps.Count; di++)
-                    {
-                        if (!DepRefersToTarget(otherDeps[di], targetUid, targetShort)) continue;
-                        if (!string.IsNullOrEmpty(pkg2.Uid)) uids.Add(pkg2.Uid);
-                        break;
-                    }
-                }
-                catch { }
-            }
             return uids;
         }
 
@@ -469,6 +452,16 @@ namespace VPB
         private static void AddVarFileEntriesThatDependOnPackageUid(List<FileEntry> filtered, FileEntry master, IList<FileEntry> source, string targetUid, string targetShort)
         {
             if (filtered == null || source == null || string.IsNullOrEmpty(targetUid)) return;
+            try
+            {
+                var fromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (VpbLocalDatabase.TryReadDependentUids(targetUid, targetShort, fromSql))
+                {
+                    AddVarFileEntriesWithPackageInUidSet(filtered, master, source, fromSql);
+                    return;
+                }
+            }
+            catch { }
             for (int i = 0; i < source.Count; i++)
             {
                 FileEntry other = source[i];
@@ -2531,7 +2524,7 @@ namespace VPB
                             // Package-only category: count packages by creator (not internal file entries)
                             if (string.Equals(_bExtension, "varpkg", StringComparison.OrdinalIgnoreCase))
                             {
-                                if (FileManager.PackagesByUid != null)
+                                if (!VpbLocalDatabase.TryReadVarPackageCreatorCounts(counts, _bPackagePathFilter) && FileManager.PackagesByUid != null)
                                 {
                                     foreach (var pkg in FileManager.PackagesByUid.Values)
                                     {
@@ -2885,6 +2878,70 @@ namespace VPB
                                 }
                                 catch { wantsPackageListOnly = false; }
 
+                                if (wantsPackageListOnly)
+                                {
+                                    bool built = false;
+                                    if (VpbSqlite3.IsAvailable)
+                                    {
+                                        try
+                                        {
+                                            var rows = new List<VpbLocalDatabase.PackageRow>();
+                                            if (VpbLocalDatabase.TryQueryVarPackageRowsForList(
+                                                creatorForIndexMain,
+                                                packagePathFilterForIndexMain,
+                                                wantsLoadedStateForIndexMain,
+                                                nameTerms,
+                                                fileListSortSnapForWorker,
+                                                rows))
+                                            {
+                                                for (int ri = 0; ri < rows.Count; ri++)
+                                                {
+                                                    if (localLoadingGroupId != currentLoadingGroupId) return;
+                                                    var r = rows[ri];
+                                                    DateTime wt = DateTime.MinValue;
+                                                    try { if (r.LastWriteTicksOrInvalid != long.MinValue) wt = DateTime.FromBinary(r.LastWriteTicksOrInvalid); } catch { wt = DateTime.MinValue; }
+                                                    long sz = r.PackageSizeOrInvalid != long.MinValue ? r.PackageSizeOrInvalid : 0;
+                                                    try
+                                                    {
+                                                        var row = new PackageListEntry(r.PackageUid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid);
+                                                        if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row)) continue;
+                                                        lock (candidateQueueLock) { candidateQueue.Enqueue(row); }
+                                                    }
+                                                    catch
+                                                    {
+                                                        lock (candidateQueueLock) { candidateQueue.Enqueue(new MissingPackageListEntry(r.PackageUid)); }
+                                                    }
+                                                }
+                                                built = true;
+                                            }
+                                        }
+                                        catch { }
+                                    }
+
+                                    if (!built && FileManager.PackagesByUid != null)
+                                    {
+                                        foreach (var pkg in FileManager.PackagesByUid.Values)
+                                        {
+                                            if (localLoadingGroupId != currentLoadingGroupId) return;
+                                            if (pkg == null) continue;
+                                            string filterCreator = creatorForIndexMain;
+                                            if (!string.IsNullOrEmpty(filterCreator))
+                                            {
+                                                if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
+                                            }
+                                            if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
+                                                !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
+                                                continue;
+                                            if (hasNameFilter)
+                                            {
+                                                if (!MatchesAllTermsInEither(pkg.Path ?? "", pkg.Uid ?? "", nameTerms)) continue;
+                                            }
+                                            lock (candidateQueueLock) { candidateQueue.Enqueue(new PackageListEntry(pkg)); }
+                                        }
+                                    }
+                                    return;
+                                }
+
                                 foreach (var pkg in FileManager.PackagesByUid.Values)
                                 {
                                 if (localLoadingGroupId != currentLoadingGroupId) return;
@@ -2898,20 +2955,6 @@ namespace VPB
                                 if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
                                     !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
                                 {
-                                    continue;
-                                }
-
-                                // Special category: list packages only (no internal file enumeration)
-                                if (wantsPackageListOnly)
-                                {
-                                    if (hasNameFilter)
-                                    {
-                                        if (!MatchesAllTermsInEither(pkg != null ? (pkg.Path ?? "") : "", pkg != null ? (pkg.Uid ?? "") : "", nameTerms)) continue;
-                                    }
-                                    lock (candidateQueueLock)
-                                    {
-                                        candidateQueue.Enqueue(new PackageListEntry(pkg));
-                                    }
                                     continue;
                                 }
 

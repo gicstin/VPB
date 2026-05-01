@@ -1630,13 +1630,13 @@ namespace VPB
                             Color btnColor = isActive ? active : inactive;
 
                             int cnt = 0;
-                            if (opt == "Real Clothing") cnt = clothingSubfilterCountReal;
-                            else if (opt == "Presets") cnt = clothingSubfilterCountPresets;
-                            else if (opt == "Custom") cnt = clothingSubfilterCountCustom;
-                            else if (opt == "Items") cnt = clothingSubfilterCountItems;
-                            else if (opt == "Male") cnt = clothingSubfilterCountMale;
-                            else if (opt == "Female") cnt = clothingSubfilterCountFemale;
-                            else if (opt == "Decals") cnt = clothingSubfilterCountDecals;
+                            if (opt == "Real Clothing") cnt = isActive ? clothingSubfilterCountReal : clothingSubfilterFacetCountReal;
+                            else if (opt == "Presets") cnt = isActive ? clothingSubfilterCountPresets : clothingSubfilterFacetCountPresets;
+                            else if (opt == "Custom") cnt = isActive ? clothingSubfilterCountCustom : clothingSubfilterFacetCountCustom;
+                            else if (opt == "Items") cnt = isActive ? clothingSubfilterCountItems : clothingSubfilterFacetCountItems;
+                            else if (opt == "Male") cnt = isActive ? clothingSubfilterCountMale : clothingSubfilterFacetCountMale;
+                            else if (opt == "Female") cnt = isActive ? clothingSubfilterCountFemale : clothingSubfilterFacetCountFemale;
+                            else if (opt == "Decals") cnt = isActive ? clothingSubfilterCountDecals : clothingSubfilterFacetCountDecals;
 
                             string label = opt + " (" + cnt + ")";
 
