@@ -216,6 +216,15 @@ namespace VPB
         private GalleryHistoryFilterMode galleryHistoryFilterMode = GalleryHistoryFilterMode.Recent;
         private string historyTabFilter = "";
 
+        private string settingsFilter = "";
+        private string currentSettingsGroup = "all";
+        private bool settingsListViewActive = false;
+        private bool internalSettingsSessionActive = false;
+        private InternalSettingsSnapshot internalSettingsBackup;
+        private bool internalSettingsHadPreSessionViewState = false;
+        private GalleryLayoutMode internalSettingsPreSessionLayoutMode = GalleryLayoutMode.Grid;
+        private float internalSettingsPreSessionScrollNormalized = 1f;
+
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
         private Image rightReplaceBtnIconImage;
@@ -669,8 +678,6 @@ namespace VPB
 
         private GameObject footerLoadRandomBtn;
 
-        // Settings Pane
-        private SettingsPanel settingsPanel;
         private QuickFiltersUI quickFiltersUI; // NEW
         
         private List<CreatorCacheEntry> cachedCreators = new List<CreatorCacheEntry>();
@@ -882,6 +889,8 @@ namespace VPB
         public static readonly Color ColorCreator = new Color(0.15f, 0.45f, 0.15f, 1f); // Darker Green
         public static readonly Color ColorPath = new Color(0.15f, 0.35f, 0.6f, 1f); // Darker Blue
         public static readonly Color ColorHistory = new Color(0.38f, 0.28f, 0.52f, 1f);
+        /// <summary>Side-tab / chrome accent for History (slightly brighter than <see cref="ColorHistory"/>).</summary>
+        public static readonly Color ColorHistoryAccent = new Color(0.48f, 0.34f, 0.65f, 1f);
         public static readonly Color ColorHub = new Color(0.8f, 0.4f, 0f, 1f); // Darker Orange
         public static readonly Color ColorLicense = new Color(0.6f, 0f, 0.6f, 1f); // Darker Magenta
 

@@ -106,7 +106,7 @@ namespace VPB
                     {
                         try
                         {
-                            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(file), "package"); } catch { }
+                            // Not a user "open" — cache warm only; do not write History / item_usage.
                             NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, file.Path);
                             return true;
                         }
@@ -237,7 +237,6 @@ namespace VPB
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
                 selectionAnchorPath = null;
-                selectionAnchorIdentityKey = null;
 
                 selectedFiles.Add(file);
                 if (!string.IsNullOrEmpty(file.Path)) selectedFilePaths.Add(file.Path);
@@ -348,6 +347,10 @@ namespace VPB
                 if (hasLoadedContent)
                     SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
 
+                if (leftActiveContent == ContentType.History) leftActiveContent = null;
+                if (rightActiveContent == ContentType.History) rightActiveContent = null;
+                SyncActiveContentTypeFromSidePanels();
+
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
@@ -380,8 +383,8 @@ namespace VPB
             }
             else if (paramsChanged)
             {
-                // Category switch: restore only categories we've visited in this runtime session.
-                // First visit in this run still starts at top, avoiding stale positions from previous launches.
+                // Category switch: only restore positions that were captured in this runtime session.
+                // Persisted cache values from previous runs are intentionally ignored here to prevent stale/random starts.
                 if (sessionCategoryScrollKeys.Contains(nextCategoryKey) &&
                     categoryScrollPositions.TryGetValue(nextCategoryKey, out float _sp))
                     _pendingScrollRestore = Mathf.Clamp01(_sp);
@@ -971,15 +974,15 @@ namespace VPB
             // Right click selects if not selected.
             // Note: We intentionally do NOT open the actions panel here; right-click should not
             // force any bottom UI to appear (a separate context menu implementation will handle actions).
-            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
-            if (!IsFileSelected(file, historyBrowse))
+            if (!selectedFilePaths.Contains(file.Path))
             {
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
-                AddFileToSelection(file, historyBrowse);
-                selectedPath = historyBrowse ? GetSelectionIdentityKey(file, true) : file.Path;
+                selectedFiles.Add(file);
+                selectedFilePaths.Add(file.Path);
+                selectedPath = file.Path;
                 selectedHubItem = null;
-                SetSelectionAnchor(file, historyBrowse);
+                selectionAnchorPath = file.Path;
                 
                 // Selection should not "stick" the hover path.
                 SetHoverPath("");
@@ -992,215 +995,6 @@ namespace VPB
                 VPBConfig.Instance.DesktopFixedHeightMode = 1; // Custom height
                 UpdateFooterHeightState();
                 UpdateLayout();
-            }
-        }
-
-        private string GetSelectionIdentityKey(FileEntry file, bool historyBrowse)
-        {
-            if (file == null) return null;
-
-            if (historyBrowse)
-            {
-                if (file is VarFileEntry vf && !string.IsNullOrEmpty(vf.GalleryItemUsageKey))
-                    return "hist:" + vf.GalleryItemUsageKey;
-
-                try
-                {
-                    string usageKey = VpbLocalDatabase.BuildUsageKey(file);
-                    if (!string.IsNullOrEmpty(usageKey))
-                        return "hist:" + usageKey;
-                }
-                catch { }
-            }
-
-            if (!string.IsNullOrEmpty(file.Path))
-                return "path:" + file.Path;
-            if (!string.IsNullOrEmpty(file.Uid))
-                return "uid:" + file.Uid;
-            return null;
-        }
-
-        private string GetCurrentSelectionAnchorIdentityKey(bool historyBrowse)
-        {
-            if (!historyBrowse) return selectionAnchorPath;
-            if (!string.IsNullOrEmpty(selectionAnchorIdentityKey)) return selectionAnchorIdentityKey;
-            if (!string.IsNullOrEmpty(selectionAnchorPath)) return selectionAnchorPath;
-            if (!string.IsNullOrEmpty(selectedPath)) return selectedPath;
-            return null;
-        }
-
-        private void SetSelectionAnchor(FileEntry file, bool historyBrowse)
-        {
-            if (file == null)
-            {
-                selectionAnchorPath = null;
-                selectionAnchorIdentityKey = null;
-                return;
-            }
-
-            selectionAnchorPath = file.Path;
-            selectionAnchorIdentityKey = historyBrowse ? GetSelectionIdentityKey(file, true) : selectionAnchorPath;
-        }
-
-        private int FindIndexBySelectionIdentity(List<FileEntry> files, string identityKey, bool historyBrowse)
-        {
-            if (files == null || files.Count == 0 || string.IsNullOrEmpty(identityKey)) return -1;
-            for (int i = 0; i < files.Count; i++)
-            {
-                string key = GetSelectionIdentityKey(files[i], historyBrowse);
-                if (string.Equals(key, identityKey, StringComparison.OrdinalIgnoreCase))
-                    return i;
-            }
-            return -1;
-        }
-
-        private bool AddFileToSelection(FileEntry file, bool historyBrowse, HashSet<string> historySelectionKeys = null)
-        {
-            if (file == null) return false;
-
-            if (!historyBrowse)
-            {
-                if (string.IsNullOrEmpty(file.Path)) return false;
-                if (selectedFilePaths.Add(file.Path))
-                {
-                    selectedFiles.Add(file);
-                    return true;
-                }
-                return false;
-            }
-
-            if (!string.IsNullOrEmpty(file.Path))
-                selectedFilePaths.Add(file.Path); // Keep path-highlighting behavior for history rows.
-
-            if (historySelectionKeys == null)
-                historySelectionKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            string key = GetSelectionIdentityKey(file, true);
-            if (string.IsNullOrEmpty(key))
-            {
-                selectedFiles.Add(file);
-                return true;
-            }
-
-            if (historySelectionKeys.Add(key))
-            {
-                selectedFiles.Add(file);
-                return true;
-            }
-            return false;
-        }
-
-        private bool IsFileSelected(FileEntry file, bool historyBrowse)
-        {
-            if (file == null) return false;
-            if (!historyBrowse)
-                return !string.IsNullOrEmpty(file.Path) && selectedFilePaths.Contains(file.Path);
-
-            string key = GetSelectionIdentityKey(file, true);
-            if (string.IsNullOrEmpty(key))
-                return selectedFiles.Contains(file);
-            for (int i = 0; i < selectedFiles.Count; i++)
-            {
-                if (string.Equals(GetSelectionIdentityKey(selectedFiles[i], true), key, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
-        }
-
-        private bool RemoveFileFromSelection(FileEntry file, bool historyBrowse)
-        {
-            if (file == null) return false;
-
-            if (!historyBrowse)
-            {
-                if (string.IsNullOrEmpty(file.Path) || !selectedFilePaths.Contains(file.Path))
-                    return false;
-                selectedFilePaths.Remove(file.Path);
-                selectedFiles.RemoveAll(f => f != null && string.Equals(f.Path, file.Path, StringComparison.OrdinalIgnoreCase));
-                return true;
-            }
-
-            string key = GetSelectionIdentityKey(file, true);
-            bool removed = false;
-            if (!string.IsNullOrEmpty(key))
-            {
-                for (int i = selectedFiles.Count - 1; i >= 0; i--)
-                {
-                    if (string.Equals(GetSelectionIdentityKey(selectedFiles[i], true), key, StringComparison.OrdinalIgnoreCase))
-                    {
-                        selectedFiles.RemoveAt(i);
-                        removed = true;
-                    }
-                }
-            }
-            else
-            {
-                removed = selectedFiles.Remove(file);
-            }
-
-            if (removed && !string.IsNullOrEmpty(file.Path))
-            {
-                bool hasSamePath = false;
-                for (int i = 0; i < selectedFiles.Count; i++)
-                {
-                    if (selectedFiles[i] != null && string.Equals(selectedFiles[i].Path, file.Path, StringComparison.OrdinalIgnoreCase))
-                    {
-                        hasSamePath = true;
-                        break;
-                    }
-                }
-                if (!hasSamePath) selectedFilePaths.Remove(file.Path);
-            }
-            return removed;
-        }
-
-        private void PruneSelectionToCurrentFilteredView(bool historyBrowse)
-        {
-            if (selectedFiles == null || selectedFiles.Count == 0) return;
-            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0)
-            {
-                selectedFiles.Clear();
-                selectedFilePaths.Clear();
-                selectionAnchorPath = null;
-                selectionAnchorIdentityKey = null;
-                selectedPath = null;
-                selectedHubItem = null;
-                return;
-            }
-
-            var visibleKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < currentFilteredFiles.Count; i++)
-            {
-                string key = GetSelectionIdentityKey(currentFilteredFiles[i], historyBrowse);
-                if (!string.IsNullOrEmpty(key)) visibleKeys.Add(key);
-            }
-
-            for (int i = selectedFiles.Count - 1; i >= 0; i--)
-            {
-                string selectedKey = GetSelectionIdentityKey(selectedFiles[i], historyBrowse);
-                if (string.IsNullOrEmpty(selectedKey) || !visibleKeys.Contains(selectedKey))
-                    selectedFiles.RemoveAt(i);
-            }
-
-            selectedFilePaths.Clear();
-            for (int i = 0; i < selectedFiles.Count; i++)
-            {
-                var f = selectedFiles[i];
-                if (f != null && !string.IsNullOrEmpty(f.Path))
-                    selectedFilePaths.Add(f.Path);
-            }
-
-            if (selectedFiles.Count == 0)
-            {
-                selectionAnchorPath = null;
-                selectionAnchorIdentityKey = null;
-                selectedPath = null;
-                selectedHubItem = null;
-            }
-            else
-            {
-                selectedPath = historyBrowse ? GetSelectionIdentityKey(selectedFiles[0], true) : selectedFiles[0].Path;
-                SetSelectionAnchor(selectedFiles[0], historyBrowse);
             }
         }
 
@@ -1227,10 +1021,7 @@ namespace VPB
             }
 
             float time = Time.realtimeSinceStartup;
-            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
-            string fileKey = historyBrowse
-                ? GetSelectionIdentityKey(file, true)
-                : (!string.IsNullOrEmpty(file.Path) ? file.Path : file.Uid);
+            string fileKey = !string.IsNullOrEmpty(file.Path) ? file.Path : file.Uid;
             bool isDoubleClick = (time - lastClickTime < 0.3f && string.Equals(selectedPath, fileKey, StringComparison.OrdinalIgnoreCase));
             lastClickTime = time;
 
@@ -1239,14 +1030,20 @@ namespace VPB
             // Update selection set (Ctrl toggle / Shift range / single)
             if (shift && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
             {
-                string anchorKey = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
-                if (string.IsNullOrEmpty(anchorKey))
-                    anchorKey = GetSelectionIdentityKey(file, historyBrowse);
+                string anchorPath = selectionAnchorPath;
+                if (string.IsNullOrEmpty(anchorPath)) anchorPath = selectedPath;
+                if (string.IsNullOrEmpty(anchorPath)) anchorPath = file.Path;
 
                 int anchorIndex = -1;
                 int clickIndex = -1;
-                anchorIndex = FindIndexBySelectionIdentity(currentFilteredFiles, anchorKey, historyBrowse);
-                clickIndex = FindIndexBySelectionIdentity(currentFilteredFiles, GetSelectionIdentityKey(file, historyBrowse), historyBrowse);
+                for (int i = 0; i < currentFilteredFiles.Count; i++)
+                {
+                    var f = currentFilteredFiles[i];
+                    if (f == null || string.IsNullOrEmpty(f.Path)) continue;
+                    if (anchorIndex < 0 && string.Equals(f.Path, anchorPath, StringComparison.OrdinalIgnoreCase)) anchorIndex = i;
+                    if (clickIndex < 0 && string.Equals(f.Path, file.Path, StringComparison.OrdinalIgnoreCase)) clickIndex = i;
+                    if (anchorIndex >= 0 && clickIndex >= 0) break;
+                }
 
                 if (anchorIndex < 0) anchorIndex = clickIndex;
                 if (clickIndex < 0) clickIndex = anchorIndex;
@@ -1262,41 +1059,46 @@ namespace VPB
                         selectedFilePaths.Clear();
                         selectionChanged = true;
                     }
-                    var historySelectionKeys = historyBrowse ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
-                    if (historyBrowse && ctrl)
-                    {
-                        for (int i = 0; i < selectedFiles.Count; i++)
-                        {
-                            string existingKey = GetSelectionIdentityKey(selectedFiles[i], true);
-                            if (!string.IsNullOrEmpty(existingKey)) historySelectionKeys.Add(existingKey);
-                        }
-                    }
 
                     for (int i = lo; i <= hi; i++)
                     {
                         var f = currentFilteredFiles[i];
-                        if (AddFileToSelection(f, historyBrowse, historySelectionKeys)) selectionChanged = true;
+                        if (f == null || string.IsNullOrEmpty(f.Path)) continue;
+                        if (selectedFilePaths.Add(f.Path))
+                        {
+                            selectedFiles.Add(f);
+                            selectionChanged = true;
+                        }
                     }
                 }
             }
             else if (ctrl)
             {
-                if (IsFileSelected(file, historyBrowse))
-                    selectionChanged = RemoveFileFromSelection(file, historyBrowse);
+                if (selectedFilePaths.Contains(file.Path))
+                {
+                    selectedFilePaths.Remove(file.Path);
+                    selectedFiles.RemoveAll(f => f != null && string.Equals(f.Path, file.Path, StringComparison.OrdinalIgnoreCase));
+                    selectionChanged = true;
+                }
                 else
-                    selectionChanged = AddFileToSelection(file, historyBrowse);
-                SetSelectionAnchor(file, historyBrowse);
+                {
+                    selectedFilePaths.Add(file.Path);
+                    selectedFiles.Add(file);
+                    selectionChanged = true;
+                }
+                selectionAnchorPath = file.Path;
             }
             else
             {
-                bool alreadySingleSelected = selectedFiles.Count == 1 && IsFileSelected(file, historyBrowse);
-                if (!alreadySingleSelected)
+                if (!(selectedFiles.Count == 1 && selectedFilePaths.Contains(file.Path)))
                 {
                     selectedFiles.Clear();
                     selectedFilePaths.Clear();
-                    selectionChanged = AddFileToSelection(file, historyBrowse);
+                    selectedFiles.Add(file);
+                    selectedFilePaths.Add(file.Path);
+                    selectionChanged = true;
                 }
-                SetSelectionAnchor(file, historyBrowse);
+                selectionAnchorPath = file.Path;
             }
 
             // Keep primary selection path for double-click detection / hover path
@@ -1409,6 +1211,69 @@ namespace VPB
             return best;
         }
 
+        private string GetSelectionIdentityKey(FileEntry file, bool historyBrowse)
+        {
+            if (file == null) return "";
+            if (historyBrowse)
+            {
+                if (!string.IsNullOrEmpty(file.Path)) return file.Path;
+                return file.Uid ?? "";
+            }
+            return !string.IsNullOrEmpty(file.Path) ? file.Path : (file.Uid ?? "");
+        }
+
+        private string GetCurrentSelectionAnchorIdentityKey(bool historyBrowse)
+        {
+            if (!string.IsNullOrEmpty(selectionAnchorIdentityKey)) return selectionAnchorIdentityKey;
+            if (!string.IsNullOrEmpty(selectionAnchorPath)) return selectionAnchorPath;
+            if (selectedFiles != null && selectedFiles.Count > 0)
+                return GetSelectionIdentityKey(selectedFiles[0], historyBrowse);
+            if (!string.IsNullOrEmpty(selectedPath)) return selectedPath;
+            return "";
+        }
+
+        private int FindIndexBySelectionIdentity(List<FileEntry> files, string key, bool historyBrowse)
+        {
+            if (files == null || string.IsNullOrEmpty(key)) return -1;
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                if (f == null) continue;
+                string k = GetSelectionIdentityKey(f, historyBrowse);
+                if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase)) return i;
+            }
+            return -1;
+        }
+
+        private void AddFileToSelection(FileEntry file, bool historyBrowse, HashSet<string> historySelectionKeys = null)
+        {
+            if (file == null) return;
+            if (!historyBrowse)
+            {
+                string p = file.Path;
+                if (string.IsNullOrEmpty(p)) p = file.Uid;
+                if (string.IsNullOrEmpty(p)) return;
+                if (selectedFilePaths.Add(p)) selectedFiles.Add(file);
+                return;
+            }
+            string idKey = GetSelectionIdentityKey(file, true);
+            if (historySelectionKeys != null)
+            {
+                if (string.IsNullOrEmpty(idKey) || historySelectionKeys.Contains(idKey)) return;
+                historySelectionKeys.Add(idKey);
+            }
+            string addKey = !string.IsNullOrEmpty(file.Path) ? file.Path : (file.Uid ?? "");
+            if (string.IsNullOrEmpty(addKey)) return;
+            if (selectedFilePaths.Add(addKey)) selectedFiles.Add(file);
+        }
+
+        private void SetSelectionAnchor(FileEntry file, bool historyBrowse)
+        {
+            if (file == null) return;
+            selectionAnchorPath = file.Path;
+            selectionAnchorIdentityKey = GetSelectionIdentityKey(file, historyBrowse);
+        }
+
         private void RefreshSelectionVisuals()
         {
             // Iterate over active buttons in the recycling grid content
@@ -1452,11 +1317,6 @@ namespace VPB
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
-        }
-
-        public void ToggleSettings(bool onRight)
-        {
-            if (settingsPanel != null) settingsPanel.Toggle(onRight);
         }
 
         public bool NotifyPackagesChanged(DateTime refreshTime)

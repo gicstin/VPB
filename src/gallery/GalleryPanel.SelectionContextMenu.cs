@@ -16,7 +16,6 @@ namespace VPB
         private Text tboxHintLabel;
         private GameObject tboxCopyPkgNamesBtn;
         private GameObject tboxDeleteBtn;
-        private GameObject tboxRemoveHistoryBtn;
         private GameObject tboxCleanupBtn;
         private GameObject tboxCleanupApplyBtn;
         private GameObject tboxCleanupFilterAllBtn;
@@ -40,6 +39,8 @@ namespace VPB
         private GameObject tboxLoadBtn;
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
+        private GameObject tboxSettingsSaveBtn;
+        private GameObject tboxSettingsCancelBtn;
         private GameObject tboxCacheTexturesBtn;
         private GameObject tboxJsonParserBenchBtn;
         private GameObject tboxOpenHubBtn;
@@ -94,6 +95,7 @@ namespace VPB
         private HorizontalLayoutGroup tboxBtnRow1HLG;
         private GameObject tboxButtonStash;
         private int tboxButtonLayoutRows = 1;
+        private bool tboxDeleteActsOnHistory = false;
         private float tboxLastFlexAvailW = -1f;
         private const float tboxBtnRowGap = 4f;
 
@@ -135,7 +137,6 @@ namespace VPB
             one(tboxScanWhitelistRemoveFolderBtn);
             one(tboxAutoInstallBtn);
             one(tboxDeleteBtn);
-            one(tboxRemoveHistoryBtn);
             one(tboxCleanupBtn);
             one(tboxCleanupApplyBtn);
             one(tboxCleanupFilterAllBtn);
@@ -152,6 +153,8 @@ namespace VPB
             one(tboxLoadBtn);
             one(tboxUnloadBtn);
             one(tboxLoadDepsBtn);
+            one(tboxSettingsSaveBtn);
+            one(tboxSettingsCancelBtn);
             one(tboxCacheTexturesBtn);
             one(tboxJsonParserBenchBtn);
             one(tboxOpenHubBtn);
@@ -177,7 +180,6 @@ namespace VPB
             d(tboxScanWhitelistRemoveFolderBtn);
             d(tboxAutoInstallBtn);
             d(tboxDeleteBtn);
-            d(tboxRemoveHistoryBtn);
             d(tboxCleanupBtn);
             d(tboxCleanupApplyBtn);
             d(tboxCleanupFilterAllBtn);
@@ -194,6 +196,8 @@ namespace VPB
             d(tboxLoadBtn);
             d(tboxUnloadBtn);
             d(tboxLoadDepsBtn);
+            d(tboxSettingsSaveBtn);
+            d(tboxSettingsCancelBtn);
             d(tboxCacheTexturesBtn);
             d(tboxJsonParserBenchBtn);
             d(tboxOpenHubBtn);
@@ -232,6 +236,9 @@ namespace VPB
         private void RefreshTboxFlexButtonLayout()
         {
             if (tboxButtonsFlexRootRT == null || tboxBtnRow0HLG == null || tboxBtnRow1HLG == null) return;
+            bool forceTwoRowsGalleryMode = !IsSettingsPanelOpen()
+                && !cleanupModeActive
+                && activeContentType != ContentType.History;
 
             float innerH = Mathf.Max(34f, tboxInfoRowHeight - 8f);
             if (tboxBtnRow0LE != null) { tboxBtnRow0LE.minHeight = innerH; tboxBtnRow0LE.preferredHeight = innerH; }
@@ -270,42 +277,48 @@ namespace VPB
             }
 
             var ltr = new List<GameObject>(28 + tboxPersonAtomBtns.Count);
+            void AddIfActive(GameObject go)
+            {
+                if (go == null) return;
+                if (!go.activeSelf) return;
+                ltr.Add(go);
+            }
             // Person atom target buttons appear leftmost in the toolbar
-            foreach (var go in tboxPersonAtomBtns) { if (go != null) ltr.Add(go); }
+            foreach (var go in tboxPersonAtomBtns) { AddIfActive(go); }
             // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
-            if (tboxDisableAutoInstallBtn != null) ltr.Add(tboxDisableAutoInstallBtn);
-            if (tboxUnhideBtn != null) ltr.Add(tboxUnhideBtn);
-            if (tboxHideBtn != null) ltr.Add(tboxHideBtn);
-            if (tboxScanWhitelistTemporaryBtn != null) ltr.Add(tboxScanWhitelistTemporaryBtn);
-            if (tboxScanWhitelistAddFolderBtn != null) ltr.Add(tboxScanWhitelistAddFolderBtn);
-            if (tboxScanWhitelistRemoveFolderBtn != null) ltr.Add(tboxScanWhitelistRemoveFolderBtn);
-            if (tboxAutoInstallBtn != null) ltr.Add(tboxAutoInstallBtn);
-            if (tboxDeleteBtn != null) ltr.Add(tboxDeleteBtn);
-            if (tboxRemoveHistoryBtn != null) ltr.Add(tboxRemoveHistoryBtn);
-            if (tboxCleanupBtn != null) ltr.Add(tboxCleanupBtn);
-            if (tboxCleanupApplyBtn != null) ltr.Add(tboxCleanupApplyBtn);
-            if (tboxCleanupFilterAllBtn != null) ltr.Add(tboxCleanupFilterAllBtn);
-            if (tboxCleanupFilterDupBtn != null) ltr.Add(tboxCleanupFilterDupBtn);
-            if (tboxCleanupFilterOldBtn != null) ltr.Add(tboxCleanupFilterOldBtn);
-            if (tboxCleanupFilterDamagedBtn != null) ltr.Add(tboxCleanupFilterDamagedBtn);
-            if (tboxCleanupSelectVisibleBtn != null) ltr.Add(tboxCleanupSelectVisibleBtn);
-            if (tboxCleanupSelectDupBtn != null) ltr.Add(tboxCleanupSelectDupBtn);
-            if (tboxCleanupSelectOldBtn != null) ltr.Add(tboxCleanupSelectOldBtn);
-            if (tboxCleanupSelectDamagedBtn != null) ltr.Add(tboxCleanupSelectDamagedBtn);
-            if (tboxCleanupClearBtn != null) ltr.Add(tboxCleanupClearBtn);
-            if (tboxCleanupAddExcludeBtn != null) ltr.Add(tboxCleanupAddExcludeBtn);
-            if (tboxCleanupRemoveExcludeBtn != null) ltr.Add(tboxCleanupRemoveExcludeBtn);
-            if (tboxLoadBtn != null) ltr.Add(tboxLoadBtn);
-            if (tboxUnloadBtn != null) ltr.Add(tboxUnloadBtn);
-            if (tboxLoadDepsBtn != null) ltr.Add(tboxLoadDepsBtn);
-            if (tboxCacheTexturesBtn != null) ltr.Add(tboxCacheTexturesBtn);
-            if (tboxJsonParserBenchBtn != null && VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode)
-                ltr.Add(tboxJsonParserBenchBtn);
-            if (tboxOpenHubBtn != null) ltr.Add(tboxOpenHubBtn);
-            if (tboxCopyPkgNamesBtn != null) ltr.Add(tboxCopyPkgNamesBtn);
-            if (tboxSceneImportBtn != null) ltr.Add(tboxSceneImportBtn);
-            if (tboxSelectAllBtn != null) ltr.Add(tboxSelectAllBtn);
-            if (tboxClearSelectionBtn != null) ltr.Add(tboxClearSelectionBtn);
+            AddIfActive(tboxDisableAutoInstallBtn);
+            AddIfActive(tboxUnhideBtn);
+            AddIfActive(tboxHideBtn);
+            AddIfActive(tboxScanWhitelistTemporaryBtn);
+            AddIfActive(tboxScanWhitelistAddFolderBtn);
+            AddIfActive(tboxScanWhitelistRemoveFolderBtn);
+            AddIfActive(tboxAutoInstallBtn);
+            AddIfActive(tboxDeleteBtn);
+            AddIfActive(tboxCleanupBtn);
+            AddIfActive(tboxCleanupApplyBtn);
+            AddIfActive(tboxCleanupFilterAllBtn);
+            AddIfActive(tboxCleanupFilterDupBtn);
+            AddIfActive(tboxCleanupFilterOldBtn);
+            AddIfActive(tboxCleanupFilterDamagedBtn);
+            AddIfActive(tboxCleanupSelectVisibleBtn);
+            AddIfActive(tboxCleanupSelectDupBtn);
+            AddIfActive(tboxCleanupSelectOldBtn);
+            AddIfActive(tboxCleanupSelectDamagedBtn);
+            AddIfActive(tboxCleanupClearBtn);
+            AddIfActive(tboxCleanupAddExcludeBtn);
+            AddIfActive(tboxCleanupRemoveExcludeBtn);
+            AddIfActive(tboxLoadBtn);
+            AddIfActive(tboxUnloadBtn);
+            AddIfActive(tboxLoadDepsBtn);
+            AddIfActive(tboxSettingsSaveBtn);
+            AddIfActive(tboxSettingsCancelBtn);
+            AddIfActive(tboxCacheTexturesBtn);
+            AddIfActive(tboxJsonParserBenchBtn);
+            AddIfActive(tboxOpenHubBtn);
+            AddIfActive(tboxCopyPkgNamesBtn);
+            AddIfActive(tboxSceneImportBtn);
+            AddIfActive(tboxSelectAllBtn);
+            AddIfActive(tboxClearSelectionBtn);
 
             var rtl = new List<GameObject>(ltr.Count);
             for (int i = ltr.Count - 1; i >= 0; i--)
@@ -319,39 +332,52 @@ namespace VPB
             List<GameObject> row0rtl = new List<GameObject>();
             List<GameObject> row1rtl = new List<GameObject>();
 
-            if (FitsOneRowMin())
+            if (!forceTwoRowsGalleryMode && FitsOneRowMin())
             {
                 tboxButtonLayoutRows = 1;
                 row0rtl.AddRange(rtl);
             }
             else
             {
-                float used = 0f;
-                for (int i = 0; i < rtl.Count; i++)
+                if (forceTwoRowsGalleryMode)
                 {
-                    GameObject go = rtl[i];
-                    if (!TryGetWidths(go, out float mw, out _)) continue;
-                    float need = mw + (row0rtl.Count > 0 ? gap : 0f);
-                    if (used + need <= avail + 1f)
+                    int split = Mathf.CeilToInt(rtl.Count * 0.5f);
+                    for (int i = 0; i < rtl.Count; i++)
                     {
-                        row0rtl.Add(go);
-                        used += need;
+                        if (i < split) row0rtl.Add(rtl[i]);
+                        else row1rtl.Add(rtl[i]);
                     }
-                    else
+                    tboxButtonLayoutRows = 2;
+                }
+                else
+                {
+                    float used = 0f;
+                    for (int i = 0; i < rtl.Count; i++)
                     {
-                        for (int j = i; j < rtl.Count; j++)
+                        GameObject go = rtl[i];
+                        if (!TryGetWidths(go, out float mw, out _)) continue;
+                        float need = mw + (row0rtl.Count > 0 ? gap : 0f);
+                        if (used + need <= avail + 1f)
+                        {
+                            row0rtl.Add(go);
+                            used += need;
+                        }
+                        else
+                        {
+                            for (int j = i; j < rtl.Count; j++)
+                                row1rtl.Add(rtl[j]);
+                            break;
+                        }
+                    }
+                    if (row0rtl.Count == 0 && rtl.Count > 0)
+                    {
+                        row0rtl.Add(rtl[0]);
+                        row1rtl.Clear();
+                        for (int j = 1; j < rtl.Count; j++)
                             row1rtl.Add(rtl[j]);
-                        break;
                     }
+                    tboxButtonLayoutRows = row1rtl.Count > 0 ? 2 : 1;
                 }
-                if (row0rtl.Count == 0 && rtl.Count > 0)
-                {
-                    row0rtl.Add(rtl[0]);
-                    row1rtl.Clear();
-                    for (int j = 1; j < rtl.Count; j++)
-                        row1rtl.Add(rtl[j]);
-                }
-                tboxButtonLayoutRows = row1rtl.Count > 0 ? 2 : 1;
             }
 
             TboxDetachAllActionButtonsForLayout();
@@ -683,7 +709,6 @@ namespace VPB
             }
             catch { }
 
-            // JSON meta.json bench (SimpleJSON vs BMH): handler in GalleryPanel.JsonBench.cs
             tboxJsonParserBenchBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -695,7 +720,7 @@ namespace VPB
             AddTooltip(
                 tboxJsonParserBenchBtn,
                 "gallery.tooltip.tbox_json_parser_bench",
-                "Developer Mode: benchmark library meta.json with SimpleJSON vs Boyer-Moore-Horspool"
+                "Developer: benchmark library meta.json with SimpleJSON vs Boyer-Moore-Horspool"
             );
             try
             {
@@ -706,13 +731,6 @@ namespace VPB
                     Text t = tboxJsonParserBenchBtn.GetComponentInChildren<Text>(true);
                     if (t != null) t.text = "JSON";
                 }
-            }
-            catch { }
-
-            try
-            {
-                if (tboxJsonParserBenchBtn != null)
-                    tboxJsonParserBenchBtn.SetActive(VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode && !cleanupModeActive);
             }
             catch { }
 
@@ -755,6 +773,56 @@ namespace VPB
                 {
                     Text t = tboxLoadDepsBtn.GetComponentInChildren<Text>(true);
                     if (t != null) t.text = VPBTranslation.T("gallery.tbox.load_deps", "Load Deps");
+                }
+            }
+            catch { }
+
+            tboxSettingsSaveBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                () => ExitInternalSettingsMode(true)
+            );
+            tboxSettingsSaveBtn.name = "Tbox_SettingsSave";
+            TboxConfigureActionButtonFlex(tboxSettingsSaveBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            AddTooltipPlain(tboxSettingsSaveBtn, VPBTranslation.T("settings.save", "Save"));
+            try
+            {
+                var saveIcon = UI.LoadIconSprite("vpb_icons/gallery_save.png", new Color(0.95f, 0.95f, 0.95f, 1f));
+                if (saveIcon != null) UI.AddIconToButton(tboxSettingsSaveBtn, saveIcon, padding: 6f);
+                else
+                {
+                    Text tx = tboxSettingsSaveBtn.GetComponentInChildren<Text>(true);
+                    if (tx != null)
+                    {
+                        tx.text = VPBTranslation.T("settings.save", "Save").ToUpperInvariant();
+                        tx.color = Color.white;
+                    }
+                }
+            }
+            catch { }
+
+            tboxSettingsCancelBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                () => ExitInternalSettingsMode(false)
+            );
+            tboxSettingsCancelBtn.name = "Tbox_SettingsCancel";
+            TboxConfigureActionButtonFlex(tboxSettingsCancelBtn, innerRowH, innerRowH, innerRowH); // square icon button
+            AddTooltipPlain(tboxSettingsCancelBtn, VPBTranslation.T("settings.cancel", "Cancel"));
+            try
+            {
+                var cancelIcon = UI.LoadIconSprite("vpb_icons/close.png", new Color(0.95f, 0.95f, 0.95f, 1f));
+                if (cancelIcon != null) UI.AddIconToButton(tboxSettingsCancelBtn, cancelIcon, padding: 6f);
+                else
+                {
+                    Text tx = tboxSettingsCancelBtn.GetComponentInChildren<Text>(true);
+                    if (tx != null)
+                    {
+                        tx.text = VPBTranslation.T("settings.cancel", "Cancel").ToUpperInvariant();
+                        tx.color = Color.white;
+                    }
                 }
             }
             catch { }
@@ -823,29 +891,6 @@ namespace VPB
                 }
             }
             catch { }
-
-            tboxRemoveHistoryBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                "", tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxRemoveSelectedFromHistory
-            );
-            tboxRemoveHistoryBtn.name = "Tbox_RemoveHistory";
-            TboxConfigureActionButtonFlex(tboxRemoveHistoryBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxRemoveHistoryBtn, "gallery.tooltip.tbox_remove_history", "Remove selected entries from History (does not delete packages or files)");
-            try
-            {
-                var rhIcon = UI.LoadIconSprite("vpb_icons/list_remove.png", new Color(0.92f, 0.82f, 0.55f, 1f));
-                if (rhIcon != null)
-                    UI.AddIconToButton(tboxRemoveHistoryBtn, rhIcon, padding: 6f);
-                else
-                {
-                    Text t = tboxRemoveHistoryBtn.GetComponentInChildren<Text>(true);
-                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.remove_history", "Rm Hist");
-                }
-            }
-            catch { }
-            if (tboxRemoveHistoryBtn != null) tboxRemoveHistoryBtn.SetActive(false);
 
             tboxSelectAllBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -1464,7 +1509,8 @@ namespace VPB
 
             // Action buttons when there is a selection, cleanup mode active, or person atoms present; pin persists until user toggles (saved in VPB.cfg).
             bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
-            bool canExpand = sel > 0 || cleanupModeActive || hasPersonAtoms;
+            bool settingsModeActive = IsSettingsPanelOpen();
+            bool canExpand = settingsModeActive || sel > 0 || cleanupModeActive || hasPersonAtoms;
             // Only force collapse if not pinned and not currently expanded (preserve expansion state during category switches)
             if (!canExpand && !tboxPinned && tboxExpandT < 0.01f)
             {
@@ -1488,7 +1534,7 @@ namespace VPB
             }
 
             // Auto-expand toolbox if person atoms present, otherwise require hover or pin
-            bool wantExpanded = canExpand && (tboxIsHovered || tboxPinned || hasPersonAtoms);
+            bool wantExpanded = settingsModeActive || (canExpand && (tboxIsHovered || tboxPinned || hasPersonAtoms));
 
             // No animation: snap expanded/collapsed state immediately
             float targetT = wantExpanded ? 1f : 0f;
@@ -1537,20 +1583,8 @@ namespace VPB
                 tboxButtonsCG.interactable = canExpand && tboxExpandT > 0.85f;
             }
 
-            if (sel > 0 || cleanupModeActive || (!IsHubMode && activeContentType == ContentType.History))
+            if (sel > 0 || cleanupModeActive || settingsModeActive)
                 RefreshTboxConditionalActionButtons();
-
-            // JSON bench is dev-only; RefreshTboxConditionalActionButtons does not run when selection is empty.
-            try
-            {
-                bool benchVisible = !cleanupModeActive && VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode;
-                if (tboxJsonParserBenchBtn != null && tboxJsonParserBenchBtn.activeSelf != benchVisible)
-                {
-                    tboxJsonParserBenchBtn.SetActive(benchVisible);
-                    RefreshTboxFlexButtonLayout();
-                }
-            }
-            catch { }
 
             // Keep grid / side tab scrollers above the footer while tbox height animates.
             try
@@ -1569,6 +1603,27 @@ namespace VPB
         }
 
         /// <summary>Copy/Delete/Hide/Unhide/Autoinstall: counts in labels and compact layout for the hide/AI group.</summary>
+        private void ConfigureTboxDeleteButtonMode(bool historyMode)
+        {
+            if (tboxDeleteBtn == null) return;
+            if (tboxDeleteActsOnHistory == historyMode) return;
+
+            Button btn = tboxDeleteBtn.GetComponent<Button>();
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                if (historyMode) btn.onClick.AddListener(TboxRemoveSelectedFromHistory);
+                else btn.onClick.AddListener(TboxDeleteSelectedPackages);
+            }
+
+            if (historyMode)
+                AddTooltipPlain(tboxDeleteBtn, "Delete selected entries from History.");
+            else
+                AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes");
+
+            tboxDeleteActsOnHistory = historyMode;
+        }
+
         private void RefreshTboxConditionalActionButtons()
         {
             int copyN = 0, deleteN = 0, hideN = 0, unhideN = 0, aiN = 0, noAiN = 0, scanWlTemporaryN = 0;
@@ -1590,10 +1645,52 @@ namespace VPB
                 if (!anyCleanupEntry) cleanupModeActive = false;
             }
             bool isCleanup = cleanupModeActive;
-            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            bool isHistoryBrowse = activeContentType == ContentType.History;
             void show(GameObject go, bool on)
             {
                 if (go != null && go.activeSelf != on) go.SetActive(on);
+            }
+
+            if (IsSettingsPanelOpen())
+            {
+                ConfigureTboxDeleteButtonMode(false);
+                show(tboxCleanupBtn, false);
+                show(tboxCleanupApplyBtn, false);
+                show(tboxCleanupFilterAllBtn, false);
+                show(tboxCleanupFilterDupBtn, false);
+                show(tboxCleanupFilterOldBtn, false);
+                show(tboxCleanupFilterDamagedBtn, false);
+                show(tboxCleanupSelectVisibleBtn, false);
+                show(tboxCleanupSelectDupBtn, false);
+                show(tboxCleanupSelectOldBtn, false);
+                show(tboxCleanupSelectDamagedBtn, false);
+                show(tboxCleanupClearBtn, false);
+                show(tboxCleanupAddExcludeBtn, false);
+                show(tboxCleanupRemoveExcludeBtn, false);
+                show(tboxAutoInstallBtn, false);
+                show(tboxDisableAutoInstallBtn, false);
+                show(tboxHideBtn, false);
+                show(tboxUnhideBtn, false);
+                show(tboxScanWhitelistTemporaryBtn, false);
+                show(tboxScanWhitelistAddFolderBtn, false);
+                show(tboxScanWhitelistRemoveFolderBtn, false);
+                show(tboxLoadBtn, false);
+                show(tboxUnloadBtn, false);
+                show(tboxLoadDepsBtn, false);
+                show(tboxCacheTexturesBtn, false);
+                show(tboxJsonParserBenchBtn, false);
+                show(tboxOpenHubBtn, false);
+                show(tboxDeleteBtn, false);
+                show(tboxCopyPkgNamesBtn, false);
+                show(tboxSceneImportBtn, false);
+                show(tboxSelectAllBtn, false);
+                show(tboxClearSelectionBtn, false);
+                show(tboxSettingsSaveBtn, true);
+                show(tboxSettingsCancelBtn, true);
+                SetTboxButtonEnabledVisual(tboxSettingsSaveBtn, true);
+                SetTboxButtonEnabledVisual(tboxSettingsCancelBtn, true);
+                RefreshTboxFlexButtonLayout();
+                return;
             }
 
             show(tboxCleanupBtn, !isCleanup);
@@ -1623,13 +1720,20 @@ namespace VPB
             show(tboxLoadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxUnloadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxLoadDepsBtn, !isCleanup);
+            show(tboxSettingsSaveBtn, false);
+            show(tboxSettingsCancelBtn, false);
             show(tboxCacheTexturesBtn, !isCleanup);
             show(tboxJsonParserBenchBtn, !isCleanup && VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode);
             show(tboxOpenHubBtn, !isCleanup);
+            show(tboxDeleteBtn, true);
+            show(tboxCopyPkgNamesBtn, true);
+            show(tboxSceneImportBtn, true);
+            show(tboxSelectAllBtn, true);
+            show(tboxClearSelectionBtn, true);
+            ConfigureTboxDeleteButtonMode(isHistoryBrowse);
 
             if (isCleanup)
             {
-                show(tboxRemoveHistoryBtn, false);
                 int selectedCount = selectedFiles != null ? selectedFiles.Count : 0;
                 SetTboxButtonEnabledVisual(tboxDeleteBtn, selectedCount > 0);
                 SetTboxButtonEnabledVisual(tboxCleanupApplyBtn, false);
@@ -1775,7 +1879,10 @@ namespace VPB
             if (tboxCopyPkgNamesBtn != null)
                 SetTboxCountButtonLabel(tboxCopyPkgNamesBtn, "gallery.tbox.copy_names_count", "Copy Names ({0})", copyN);
             // Delete is an icon button; count is intentionally not shown on the label.
-            SetTboxButtonEnabledVisual(tboxDeleteBtn, deleteN > 0);
+            if (isHistoryBrowse)
+                SetTboxButtonEnabledVisual(tboxDeleteBtn, selectedFiles != null && selectedFiles.Count > 0);
+            else
+                SetTboxButtonEnabledVisual(tboxDeleteBtn, deleteN > 0);
 
             bool showHide = hideN > 0;
             bool showUnhide = unhideN > 0;
@@ -1812,10 +1919,7 @@ namespace VPB
             // Load/LoadDeps should always be available (requested); Unload still reflects install state.
             if (tboxLoadBtn != null)     SetTboxButtonEnabledVisual(tboxLoadBtn, true);
             if (tboxLoadDepsBtn != null) SetTboxButtonEnabledVisual(tboxLoadDepsBtn, true);
-            if (tboxJsonParserBenchBtn != null)
-                SetTboxButtonEnabledVisual(
-                    tboxJsonParserBenchBtn,
-                    VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode && selectedFiles != null && selectedFiles.Count > 0);
+            if (tboxJsonParserBenchBtn != null) SetTboxButtonEnabledVisual(tboxJsonParserBenchBtn, selectedFiles != null && selectedFiles.Count > 0);
             bool hasAnyPkg = anyPkgInstalled || anyPkgNotInstalled;
             if (tboxUnloadBtn != null)   SetTboxButtonEnabledVisual(tboxUnloadBtn, hasAnyPkg && anyPkgInstalled);
 
@@ -1836,154 +1940,7 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, showOpenHub);
             }
 
-            show(tboxRemoveHistoryBtn, historyBrowse);
-            if (tboxRemoveHistoryBtn != null)
-                SetTboxButtonEnabledVisual(
-                    tboxRemoveHistoryBtn,
-                    historyBrowse && selectedFiles != null && selectedFiles.Count > 0);
-
             RefreshTboxFlexButtonLayout();
-        }
-
-        private void TboxRemoveSelectedFromHistory()
-        {
-            if (activeContentType != ContentType.History || selectedFiles == null || selectedFiles.Count == 0)
-                return;
-
-            float now = Time.realtimeSinceStartup;
-            if (selectedFiles.Count > 1)
-            {
-                bool confirmed = pendingHistoryRemoveConfirm
-                    && pendingHistoryRemoveConfirmCount == selectedFiles.Count
-                    && now <= pendingHistoryRemoveConfirmUntilRealtime;
-                if (!confirmed)
-                {
-                    pendingHistoryRemoveConfirm = true;
-                    pendingHistoryRemoveConfirmCount = selectedFiles.Count;
-                    pendingHistoryRemoveConfirmUntilRealtime = now + 4f;
-                    ShowTemporaryStatus(
-                        string.Format(
-                            VPBTranslation.T("gallery.history.confirm_remove_n", "Press Remove History again to confirm removing {0} items."),
-                            selectedFiles.Count),
-                        4f);
-                    return;
-                }
-                pendingHistoryRemoveConfirm = false;
-                pendingHistoryRemoveConfirmCount = 0;
-                pendingHistoryRemoveConfirmUntilRealtime = 0f;
-            }
-
-            var keySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var keys = new List<string>(selectedFiles.Count);
-            for (int i = 0; i < selectedFiles.Count; i++)
-            {
-                var f = selectedFiles[i];
-                if (f == null) continue;
-                try
-                {
-                    string k = null;
-                    if (f is VarFileEntry vfe && !string.IsNullOrEmpty(vfe.GalleryItemUsageKey))
-                        k = vfe.GalleryItemUsageKey;
-                    else
-                        k = VpbLocalDatabase.BuildUsageKey(f);
-                    if (VpbLocalDatabase.LogHistoryUsageDebug)
-                    {
-                        try
-                        {
-                            string gk = (f is VarFileEntry v2) ? (v2.GalleryItemUsageKey ?? "") : "";
-                            string bk = "";
-                            try { bk = VpbLocalDatabase.BuildUsageKey(f) ?? ""; } catch { }
-                            LogUtil.Log("[VPB.History] remove_selection[" + i + "] type=" + f.GetType().Name +
-                                        " galleryItemUsageKey=" + (string.IsNullOrEmpty(gk) ? "(none)" : gk) +
-                                        " deleteKeyUsed=" + (k ?? "") +
-                                        " buildUsageKey=" + bk +
-                                        " entryUid=" + (f.Uid ?? "") +
-                                        " entryPath=" + (f.Path ?? ""));
-                        }
-                        catch { }
-                    }
-                    if (!string.IsNullOrEmpty(k) && keySet.Add(k)) keys.Add(k);
-                }
-                catch { }
-            }
-            if (keys.Count == 0)
-            {
-                if (VpbLocalDatabase.LogHistoryUsageDebug)
-                {
-                    try { LogUtil.Log("[VPB.History] TboxRemoveSelectedFromHistory: no keys resolved; nothing deleted."); } catch { }
-                }
-                return;
-            }
-            var snapshotMap = new Dictionary<string, VpbLocalDatabase.ItemUsageSnapshot>(StringComparer.OrdinalIgnoreCase);
-            VpbLocalDatabase.TryReadItemUsageSnapshotsForKeys(keys, snapshotMap);
-            pendingHistoryUndoSnapshots = new List<VpbLocalDatabase.ItemUsageSnapshot>(snapshotMap.Values);
-            pendingHistoryUndoUntilRealtime = now + 5f;
-
-            if (VpbLocalDatabase.LogHistoryUsageDebug)
-            {
-                try
-                {
-                    LogUtil.Log("[VPB.History] TboxRemoveSelectedFromHistory calling TryDeleteItemUsageForKeys count=" + keys.Count +
-                                " db=" + Path.GetFileName(VpbLocalDatabase.GetLocalDatabasePathForDiagnostics()));
-                }
-                catch { }
-            }
-            VpbLocalDatabase.TryDeleteItemUsageForKeys(keys);
-            try
-            {
-                selectedFiles.Clear();
-                selectedFilePaths.Clear();
-                selectionAnchorPath = null;
-                selectionAnchorIdentityKey = null;
-                selectedPath = null;
-                selectedHubItem = null;
-                RefreshSelectionVisuals();
-            }
-            catch { }
-            if (VpbLocalDatabase.LogHistoryUsageDebug)
-            {
-                try { LogUtil.Log("[VPB.History] TboxRemoveSelectedFromHistory RefreshHistoryListInPlace next"); } catch { }
-            }
-            RefreshHistoryListInPlace(true);
-            ShowTemporaryStatus(
-                string.Format(
-                    VPBTranslation.T("gallery.history.removed_n_with_undo", "Removed {0} from History. Press Ctrl+Z within 5s to undo."),
-                    keys.Count),
-                5f);
-        }
-
-        private bool TryUndoRecentHistoryRemoval()
-        {
-            if (pendingHistoryUndoSnapshots == null || pendingHistoryUndoSnapshots.Count == 0)
-                return false;
-
-            if (Time.realtimeSinceStartup > pendingHistoryUndoUntilRealtime)
-            {
-                pendingHistoryUndoSnapshots = null;
-                pendingHistoryUndoUntilRealtime = 0f;
-                return false;
-            }
-
-            bool restored = VpbLocalDatabase.TryRestoreItemUsageSnapshots(pendingHistoryUndoSnapshots);
-            int restoredCount = pendingHistoryUndoSnapshots.Count;
-            pendingHistoryUndoSnapshots = null;
-            pendingHistoryUndoUntilRealtime = 0f;
-
-            if (!restored)
-            {
-                ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.history.undo_failed", "Could not restore removed History entries. See log."),
-                    2f);
-                return true;
-            }
-
-            RefreshHistoryListInPlace(true);
-            ShowTemporaryStatus(
-                string.Format(
-                    VPBTranslation.T("gallery.history.undo_restored_n", "Restored {0} History entries."),
-                    restoredCount),
-                2f);
-            return true;
         }
 
         private void TboxOpenSelectedItemOnHub()
@@ -2372,6 +2329,96 @@ namespace VPB
                 file = file.Substring(0, file.Length - 4);
 
             return string.IsNullOrEmpty(file) ? null : file;
+        }
+
+        private bool TryUndoRecentHistoryRemoval()
+        {
+            if (pendingHistoryUndoSnapshots == null || pendingHistoryUndoSnapshots.Count == 0)
+                return false;
+            if (Time.realtimeSinceStartup > pendingHistoryUndoUntilRealtime)
+            {
+                pendingHistoryUndoSnapshots = null;
+                pendingHistoryUndoUntilRealtime = 0f;
+                return false;
+            }
+
+            bool ok = false;
+            try { ok = VpbLocalDatabase.TryRestoreItemUsageSnapshots(pendingHistoryUndoSnapshots); } catch { ok = false; }
+            pendingHistoryUndoSnapshots = null;
+            pendingHistoryUndoUntilRealtime = 0f;
+            if (!ok) return false;
+
+            try { RefreshHistoryBrowsePreferLight(true); } catch { }
+            ShowTemporaryStatus("History removal undone.", 1.6f);
+            return true;
+        }
+
+        private void TboxRemoveSelectedFromHistory()
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0)
+            {
+                ShowTemporaryStatus("No history items selected.", 1.4f);
+                return;
+            }
+
+            var keys = new List<string>(selectedFiles.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                var f = selectedFiles[i];
+                if (f == null) continue;
+                string usageKey = null;
+                if (f is VarFileEntry vf && !string.IsNullOrEmpty(vf.GalleryItemUsageKey))
+                    usageKey = vf.GalleryItemUsageKey;
+                if (string.IsNullOrEmpty(usageKey))
+                {
+                    try { usageKey = VpbLocalDatabase.BuildUsageKey(f); } catch { usageKey = null; }
+                }
+                if (string.IsNullOrEmpty(usageKey)) continue;
+                if (seen.Add(usageKey)) keys.Add(usageKey);
+            }
+
+            if (keys.Count == 0)
+            {
+                ShowTemporaryStatus("Selected rows are not removable history entries.", 1.8f);
+                return;
+            }
+
+            float now = Time.realtimeSinceStartup;
+            bool confirmMatches = pendingHistoryRemoveConfirm
+                               && pendingHistoryRemoveConfirmCount == keys.Count
+                               && now <= pendingHistoryRemoveConfirmUntilRealtime;
+            if (!confirmMatches)
+            {
+                pendingHistoryRemoveConfirm = true;
+                pendingHistoryRemoveConfirmCount = keys.Count;
+                pendingHistoryRemoveConfirmUntilRealtime = now + 1.5f;
+                ShowTemporaryStatus("Press Delete again to remove from history. Ctrl+Z to undo.", 1.6f);
+                return;
+            }
+
+            var snapMap = new Dictionary<string, VpbLocalDatabase.ItemUsageSnapshot>(StringComparer.OrdinalIgnoreCase);
+            try { VpbLocalDatabase.TryReadItemUsageSnapshotsForKeys(keys, snapMap); } catch { snapMap.Clear(); }
+            pendingHistoryUndoSnapshots = (snapMap != null && snapMap.Count > 0)
+                ? new List<VpbLocalDatabase.ItemUsageSnapshot>(snapMap.Values)
+                : null;
+            pendingHistoryUndoUntilRealtime = now + 12f;
+
+            try { VpbLocalDatabase.TryDeleteItemUsageForKeys(keys); } catch { }
+
+            pendingHistoryRemoveConfirm = false;
+            pendingHistoryRemoveConfirmCount = 0;
+            pendingHistoryRemoveConfirmUntilRealtime = 0f;
+
+            selectedFiles.Clear();
+            selectedFilePaths.Clear();
+            selectionAnchorPath = null;
+            selectionAnchorIdentityKey = null;
+            selectedPath = null;
+            selectedHubItem = null;
+
+            try { RefreshHistoryBrowsePreferLight(true); } catch { }
+            ShowTemporaryStatus("Removed " + keys.Count + " history entr" + (keys.Count == 1 ? "y." : "ies."), 1.8f);
         }
     }
 }

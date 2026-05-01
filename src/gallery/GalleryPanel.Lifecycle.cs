@@ -49,6 +49,13 @@ namespace VPB
 
             if (leftClearCreatorBtn != null) leftClearCreatorBtn.SetActive(showLeftSide && !string.IsNullOrEmpty(currentCreator));
             if (rightClearCreatorBtn != null) rightClearCreatorBtn.SetActive(showRightSide && !string.IsNullOrEmpty(currentCreator));
+
+            // Keep History side buttons on the same purple family as active side-tab buttons.
+            Color historyBackdrop = ColorHistoryAccent;
+            if (rightHistoryBtnImage != null) rightHistoryBtnImage.color = historyBackdrop;
+            if (leftHistoryBtnImage != null) leftHistoryBtnImage.color = historyBackdrop;
+            if (rightHistoryBtnIconImage != null) rightHistoryBtnIconImage.color = Color.white;
+            if (leftHistoryBtnIconImage != null) leftHistoryBtnIconImage.color = Color.white;
         }
 
         private void UpdateClearButtonPosition(bool isRight, ContentType type)

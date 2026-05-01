@@ -111,7 +111,7 @@ namespace VPB
 
         public static float BenchmarkStartTime = 0f;
 
-        public void SetLayoutMode(GalleryLayoutMode mode)
+        public void SetLayoutMode(GalleryLayoutMode mode, bool persistConfig = true)
         {
             if (layoutMode == mode) return;
             
@@ -123,16 +123,19 @@ namespace VPB
 
             layoutMode = mode;
 
-            // Persist across restarts
-            try
+            // Persist across restarts unless this is a temporary mode switch.
+            if (persistConfig)
             {
-                if (VPBConfig.Instance != null)
+                try
                 {
-                    VPBConfig.Instance.GalleryLayoutMode = (int)layoutMode;
-                    VPBConfig.Instance.Save(true, true);
+                    if (VPBConfig.Instance != null)
+                    {
+                        VPBConfig.Instance.GalleryLayoutMode = (int)layoutMode;
+                        VPBConfig.Instance.Save(true, true);
+                    }
                 }
+                catch { }
             }
-            catch { }
             
             // ALWAYS use internal UI now
             if (scrollRect != null) scrollRect.gameObject.SetActive(true);

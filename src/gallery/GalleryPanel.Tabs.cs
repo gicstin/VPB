@@ -87,18 +87,13 @@ namespace VPB
         /// <summary>Header/footer/side chrome without recreating category/creator/tag tab buttons when <see cref="VPBConfig.Save(bool,bool)"/> used <c>preferLightGalleryTabChromeOnly: true</c>.</summary>
         private void UpdateTabsLightChromeOnlyStandardGallery()
         {
-                if (titleText != null)
-                {
-                    bool showTitle = !IsFilterActive;
-                    if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
-                    if (showTitle)
-                    {
-                        if (activeContentType == ContentType.History)
-                            titleText.text = VPBTranslation.T("gallery.history.title", "History");
-                        else
-                            titleText.text = currentCategoryTitle;
-                    }
-                }
+            if (titleText != null)
+            {
+                bool showTitle = !IsFilterActive;
+                if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
+                if (showTitle)
+                    titleText.text = currentCategoryTitle;
+            }
             UpdateSideContextActions();
             UpdateSideButtonsVisibility();
         }
@@ -150,8 +145,6 @@ namespace VPB
                 if (showTitle)
                 {
                     if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
-                    else if (activeContentType == ContentType.History)
-                        titleText.text = VPBTranslation.T("gallery.history.title", "History");
                     else titleText.text = currentCategoryTitle;
                 }
             }
@@ -1288,48 +1281,61 @@ namespace VPB
             }
             else if (contentType == ContentType.History)
             {
-                bool countsFresh = (Time.realtimeSinceStartup - historyModeCountsLastFetchRealtime) <= 1.5f;
-                if (!countsFresh)
+                string filterNow = (historyTabFilter ?? "").Trim();
+                var countsByMode = new Dictionary<GalleryHistoryFilterMode, int>();
+                bool hasCounts = VpbLocalDatabase.TryReadGalleryHistoryModeCounts(countsByMode);
+                foreach (GalleryHistoryFilterMode mode in Enum.GetValues(typeof(GalleryHistoryFilterMode)))
                 {
-                    if (VpbLocalDatabase.TryReadGalleryHistoryModeCounts(historyModeCounts))
-                        historyModeCountsLastFetchRealtime = Time.realtimeSinceStartup;
-                }
-
-                GalleryHistoryFilterMode[] modes = new GalleryHistoryFilterMode[]
-                {
-                    GalleryHistoryFilterMode.Recent,
-                    GalleryHistoryFilterMode.MostUsed,
-                    GalleryHistoryFilterMode.Scenes,
-                    GalleryHistoryFilterMode.Appearance,
-                    GalleryHistoryFilterMode.Clothing,
-                    GalleryHistoryFilterMode.Hair,
-                    GalleryHistoryFilterMode.Plugins,
-                    GalleryHistoryFilterMode.Pose,
-                    GalleryHistoryFilterMode.Body,
-                    GalleryHistoryFilterMode.Misc,
-                };
-
-                string tabFilter = historyTabFilter ?? "";
-                for (int mi = 0; mi < modes.Length; mi++)
-                {
-                    GalleryHistoryFilterMode mode = modes[mi];
-                    string label = GetGalleryHistoryFilterRowLabel(mode);
-                    if (historyModeCounts.TryGetValue(mode, out int modeCount))
-                        label += " (" + modeCount + ")";
-                    if (!string.IsNullOrEmpty(tabFilter) && label.IndexOf(tabFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    string modeLabel = GetGalleryHistoryFilterRowLabel(mode);
+                    if (!string.IsNullOrEmpty(filterNow)
+                        && modeLabel.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
 
                     bool isActive = galleryHistoryFilterMode == mode;
-                    Color btnColor = isActive ? ColorHistory : new Color(0.25f, 0.25f, 0.25f, 1f);
-                    GalleryHistoryFilterMode modeCap = mode;
+                    int count = 0;
+                    if (hasCounts) countsByMode.TryGetValue(mode, out count);
+                    string label = hasCounts ? (modeLabel + " (" + count + ")") : modeLabel;
+                    Color btnColor = isActive ? ColorHistoryAccent : new Color(0.25f, 0.25f, 0.25f, 1f);
+                    GalleryHistoryFilterMode modeSnap = mode;
                     CreateTabButton(container.transform, label, btnColor, isActive, () =>
                     {
-                        galleryHistoryFilterMode = modeCap;
-                        ApplyHistorySortPresetForMode(galleryHistoryFilterMode);
+                        if (galleryHistoryFilterMode == modeSnap) return;
+                        galleryHistoryFilterMode = modeSnap;
                         ApplyHistoryBrowseTitle();
-                        RefreshHistoryBrowsePreferLight(false);
+                        ApplyHistorySortPresetForMode(modeSnap);
+                        RefreshHistoryBrowsePreferLight(true);
                         UpdateTabs();
                     }, trackedButtons);
                 }
+            }
+            else if (contentType == ContentType.Settings)
+            {
+                Color groupActive = new Color(0.35f, 0.35f, 0.65f, 1f);
+                Color groupInactive = new Color(0.18f, 0.18f, 0.18f, 1f);
+                string filterNow = (settingsFilter ?? "").Trim();
+                bool MatchFilter(string label) =>
+                    string.IsNullOrEmpty(filterNow) || (label ?? "").IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) >= 0;
+                void AddGroupRow(string key, string label)
+                {
+                    if (!MatchFilter(label)) return;
+                    bool isActive = string.Equals(currentSettingsGroup, key, StringComparison.OrdinalIgnoreCase);
+                    CreateTabButton(container.transform, label, isActive ? groupActive : groupInactive, isActive, () =>
+                    {
+                        currentSettingsGroup = key;
+                        UpdateTabs();
+                        RefreshInternalSettingsListRows(true);
+                    }, trackedButtons);
+                }
+
+                AddGroupRow("all", VPBTranslation.T("settings.group.all", "All"));
+                AddGroupRow("visuals", VPBTranslation.T("settings.header.visuals", "Visuals"));
+                AddGroupRow("follow", VPBTranslation.T("settings.header.follow_mode", "Follow Mode"));
+                AddGroupRow("interaction", VPBTranslation.T("settings.header.interaction", "Interaction"));
+                AddGroupRow("desktop", VPBTranslation.T("settings.header.desktop", "Desktop"));
+                AddGroupRow("lists", VPBTranslation.T("settings.header.gallery_side_lists", "Gallery side lists"));
+                AddGroupRow("hover", VPBTranslation.T("settings.header.hover_preview", "Hover preview"));
+                AddGroupRow("grid", VPBTranslation.T("settings.header.grid_labels", "Grid Labels"));
+                AddGroupRow("vr", VPBTranslation.T("settings.header.vr_integration", "VR & Game Integration"));
             }
             else if (contentType == ContentType.Ratings)
             {
@@ -2990,7 +2996,7 @@ namespace VPB
             }
 
             // Color missing entries red
-            if (file is VirtualFileEntry)
+            if (file is VirtualFileEntry && !(file is InternalSettingRowEntry))
             {
                 if (img != null) img.color = new Color(0.4f, 0.15f, 0.15f, 0.8f); // Red shade
             }
@@ -3020,6 +3026,83 @@ namespace VPB
             rightClick.OnRightClick = () => OnFileRightClick(file);
 
             bool isListMode = (layoutMode == GalleryLayoutMode.List);
+            bool isSettingsRow = file is InternalSettingRowEntry;
+
+            if (isSettingsRow)
+            {
+                // Special settings list-row mode: no package affordances (thumb/rating/badges/meta columns).
+                Transform listRowTrSpecial = btnGO.transform.Find("ListRow");
+                if (listRowTrSpecial != null)
+                {
+                    listRowTrSpecial.gameObject.SetActive(true);
+                    RectTransform listRowRT = listRowTrSpecial as RectTransform;
+                    if (listRowRT != null)
+                    {
+                        listRowRT.offsetMin = new Vector2(8, 0);
+                        listRowRT.offsetMax = new Vector2(-8, 0);
+                    }
+
+                    Transform nameTr = listRowTrSpecial.Find("Name");
+                    if (nameTr != null)
+                    {
+                        Text t = nameTr.GetComponent<Text>();
+                        if (t != null)
+                        {
+                            t.text = file.Name ?? "";
+                            t.fontSize = 24;
+                            t.alignment = TextAnchor.MiddleLeft;
+                        }
+                    }
+
+                    Transform detailsTr = listRowTrSpecial.Find("Details");
+                    if (detailsTr != null) detailsTr.gameObject.SetActive(false);
+                }
+
+                ConfigureInternalSettingsRowUI(btnGO, file);
+
+                void HideChild(string p)
+                {
+                    Transform tr = btnGO.transform.Find(p);
+                    if (tr != null) tr.gameObject.SetActive(false);
+                }
+
+                HideChild("GridLabel");
+                HideChild("Thumbnail");
+                HideChild("Rating");
+                HideChild("RatingSelector");
+                HideChild("AutoInstallBadge");
+                HideChild("HidePackageBadge");
+                HideChild("ScanExcludedBadge");
+                HideChild("ListHoverBar");
+                HideChild("ListSelectionBar");
+
+                UIHoverReveal hoverSpecial = btnGO.GetComponent<UIHoverReveal>();
+                if (hoverSpecial != null) hoverSpecial.file = null;
+                var holdSpecial = btnGO.GetComponent<HoldToApplyOnHover>();
+                if (holdSpecial != null) holdSpecial.enabled = false;
+                return;
+            }
+
+            // Reset any settings-only controls on recycled rows when binding normal files.
+            Transform listRowTrReset = btnGO.transform.Find("ListRow");
+            if (listRowTrReset != null)
+            {
+                Transform detailsTrReset = listRowTrReset.Find("Details");
+                if (detailsTrReset != null)
+                {
+                    for (int i = 0; i < detailsTrReset.childCount; i++)
+                    {
+                        Transform ch = detailsTrReset.GetChild(i);
+                        if (ch == null) continue;
+                        if (string.Equals(ch.name, "SettingsControlContainer", StringComparison.Ordinal))
+                        {
+                            UnityEngine.Object.Destroy(ch.gameObject);
+                            continue;
+                        }
+                        ch.gameObject.SetActive(true);
+                    }
+                }
+            }
 
             // List Row + Rating selector visibility (List/Table mode)
             Transform listRowTr = btnGO.transform.Find("ListRow");

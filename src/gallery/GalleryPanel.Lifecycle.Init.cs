@@ -196,7 +196,6 @@ namespace VPB
                 }
             };
 
-            settingsPanel = new SettingsPanel(this, backgroundBoxGO);
             quickFiltersUI = new QuickFiltersUI(this, backgroundBoxGO);
 
             // Register Panel
@@ -364,7 +363,8 @@ namespace VPB
 
             // Settings (title bar, left of filter presets; side rails no longer host Settings)
             GameObject titleBarSettingsBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.title.settings_abbrev", "S"), 16, 0, 0, AnchorPresets.middleCenter, () => {
-                ToggleSettings(!isFixedLocally);
+                if (isFixedLocally) ToggleLeft(ContentType.Settings);
+                else ToggleRight(ContentType.Settings);
             });
             titleBarSettingsBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             titleBarSettingsBtnText = titleBarSettingsBtn.GetComponentInChildren<Text>();
@@ -628,11 +628,14 @@ namespace VPB
                     else if (rightActiveContent == ContentType.Creator) creatorFilter = val;
                     else if (rightActiveContent == ContentType.Path) pathFilter = val;
                     else if (rightActiveContent == ContentType.History) historyTabFilter = val;
+                    else if (rightActiveContent == ContentType.Settings) settingsFilter = val;
                     else if (rightActiveContent == ContentType.RemoveClothing) removeClothingFilter = val;
                     else if (rightActiveContent == ContentType.RemoveHair) removeHairFilter = val;
                     else if (rightActiveContent == ContentType.RemoveAtom) removeAtomFilter = val;
                     else if (rightActiveContent == ContentType.Target) targetFilter = val;
                     UpdateTabs();
+                    if (rightActiveContent == ContentType.Settings)
+                        try { RefreshInternalSettingsListRows(true); } catch { }
                 }, () => {
                     if (rightActiveContent == ContentType.Creator) {
                         currentCreator = "";
@@ -669,6 +672,11 @@ namespace VPB
                     else if (rightActiveContent == ContentType.History) {
                         historyTabFilter = "";
                         UpdateTabs();
+                    }
+                    else if (rightActiveContent == ContentType.Settings) {
+                        settingsFilter = "";
+                        UpdateTabs();
+                        try { RefreshInternalSettingsListRows(true); } catch { }
                     }
                 });
                 RectTransform rSearchRT = rightSearchInput.GetComponent<RectTransform>();
@@ -861,11 +869,14 @@ namespace VPB
                     else if (leftActiveContent == ContentType.Creator) creatorFilter = val;
                     else if (leftActiveContent == ContentType.Path) pathFilter = val;
                     else if (leftActiveContent == ContentType.History) historyTabFilter = val;
+                    else if (leftActiveContent == ContentType.Settings) settingsFilter = val;
                     else if (leftActiveContent == ContentType.RemoveClothing) removeClothingFilter = val;
                     else if (leftActiveContent == ContentType.RemoveHair) removeHairFilter = val;
                     else if (leftActiveContent == ContentType.RemoveAtom) removeAtomFilter = val;
                     else if (leftActiveContent == ContentType.Target) targetFilter = val;
                     UpdateTabs();
+                    if (leftActiveContent == ContentType.Settings)
+                        try { RefreshInternalSettingsListRows(true); } catch { }
                 }, () => {
                     if (leftActiveContent == ContentType.Creator) {
                         currentCreator = "";
@@ -902,6 +913,11 @@ namespace VPB
                     else if (leftActiveContent == ContentType.History) {
                         historyTabFilter = "";
                         UpdateTabs();
+                    }
+                    else if (leftActiveContent == ContentType.Settings) {
+                        settingsFilter = "";
+                        UpdateTabs();
+                        try { RefreshInternalSettingsListRows(true); } catch { }
                     }
                 });
                 RectTransform lSearchRT = leftSearchInput.GetComponent<RectTransform>();

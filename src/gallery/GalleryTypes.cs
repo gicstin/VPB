@@ -4,25 +4,11 @@ using MeshVR;
 
 namespace VPB
 {
-    public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource, RemoveClothing, RemoveHair, RemoveAtom, SavePresets, Target, CleanupCategories, CleanupStaleBuckets, Path, History }
-
-    /// <summary>History side-pane modes (<see cref="ContentType.History"/>).</summary>
-    public enum GalleryHistoryFilterMode
-    {
-        Recent = 0,
-        MostUsed = 1,
-        Scenes = 2,
-        Appearance = 3,
-        Clothing = 4,
-        Hair = 5,
-        Plugins = 6,
-        Pose = 7,
-        Body = 8,
-        Misc = 9
-    }
+    public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource, RemoveClothing, RemoveHair, RemoveAtom, SavePresets, Target, CleanupCategories, CleanupStaleBuckets, Path, History, Settings }
     public enum ApplyMode { SingleClick, DoubleClick }
     public enum TabSide { Hidden, Left, Right }
     public enum GalleryLayoutMode { Grid, List }
+    public enum GalleryHistoryFilterMode { Recent, MostUsed, Scenes, Appearance, Clothing, Hair, Plugins, Pose, Body, Misc }
     
     public struct CreatorCacheEntry 
     { 

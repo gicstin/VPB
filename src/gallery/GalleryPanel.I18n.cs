@@ -28,7 +28,7 @@ namespace VPB
                 CloseLanguageMenu();
                 try { CloseFileSortTypeMenu(); } catch { }
                 RefreshLocalizedUi();
-                try { settingsPanel?.RefreshLocalizedUi(); } catch { }
+                try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
                 try { quickFiltersUI?.RefreshLocalizedUi(); } catch { }
             }
             catch { }
@@ -70,6 +70,7 @@ namespace VPB
                 case ContentType.CleanupCategories: return VPBTranslation.T("gallery.search.cleanup", "Filter Cleanup Categories...");
                 case ContentType.CleanupStaleBuckets: return VPBTranslation.T("gallery.search.cleanup_stale", "Filter Stale Cache Buckets...");
                 case ContentType.History:      return VPBTranslation.T("gallery.search.history_tabs", "Filter history tabs...");
+                case ContentType.Settings:     return VPBTranslation.T("gallery.search.settings", "Filter settings...");
                 default:                       return VPBTranslation.T("gallery.search.main", "Search...");
             }
         }

@@ -123,7 +123,7 @@ namespace VPB
                         }
 
                         // If NOT hovering gallery and NOT hovering side buttons and NOT hovering trigger, collapse after delay
-                        bool isHoveringAny = hoverCount > 0 || isHoveringTrigger || isHoveringTriggerManual || (settingsPanel != null && settingsPanel.settingsPaneGO != null && settingsPanel.settingsPaneGO.activeSelf);
+                        bool isHoveringAny = hoverCount > 0 || isHoveringTrigger || isHoveringTriggerManual || IsSettingsPanelOpen();
                         if (!isHoveringAny)
                         {
                             collapseTimer += Time.deltaTime;

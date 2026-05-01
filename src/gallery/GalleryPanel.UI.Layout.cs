@@ -93,6 +93,7 @@ namespace VPB
                     else if (type == ContentType.Creator) target = creatorFilter;
                     else if (type == ContentType.Path) target = pathFilter;
                     else if (type == ContentType.History) target = historyTabFilter;
+                    else if (type == ContentType.Settings) target = settingsFilter;
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
@@ -139,6 +140,7 @@ namespace VPB
                     else if (type == ContentType.Creator) target = creatorFilter;
                     else if (type == ContentType.Path) target = pathFilter;
                     else if (type == ContentType.History) target = historyTabFilter;
+                    else if (type == ContentType.Settings) target = settingsFilter;
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;

@@ -325,7 +325,6 @@
     <Compile Include="src\MessageKit\MessageKitLite.cs" />
     <Compile Include="src\Messager.cs" />
     <Compile Include="src\Settings.cs" />
-    <Compile Include="src\SettingsPanel.cs" />
     <Compile Include="src\VPBConfig.cs" />
     <Compile Include="src\VPBTranslation.cs" />
     <Compile Include="src\VPBUiFont.cs" />
@@ -354,6 +353,7 @@
     <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
     <Compile Include="src\gallery\GalleryPanel.Helpers.cs" />
     <Compile Include="src\gallery\GalleryPanel.IO.cs" />
     <Compile Include="src\gallery\GalleryPanel.NavigationTiming.cs" />
