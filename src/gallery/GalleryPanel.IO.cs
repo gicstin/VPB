@@ -1342,8 +1342,7 @@ namespace VPB
         {
             if (entry == null) return false;
 
-            // History grid comes from item_usage + SQL; do not apply the main category's browse filters
-            // (scene source, rating, size, scene-specific UI) or rows disappear while title still says "Scenes", etc.
+            // History: skip category-only filters (rating/size/source); keep path filter, search, tags.
             if (activeContentType == ContentType.History)
             {
                 if (!string.IsNullOrEmpty(currentPackagePathFilter))
@@ -2014,7 +2013,7 @@ namespace VPB
             return yieldWatch.ElapsedMilliseconds > maxMsBudget;
         }
 
-        /// <summary>Builds History browse <see cref="VarFileEntry"/> rows from SQLite index rows (same rules as RefreshFilesRoutine worker).</summary>
+        /// <summary>Map SQLite History rows to <see cref="VarFileEntry"/>.</summary>
         private List<FileEntry> BuildHistoryBulkListFromRows(List<VpbLocalDatabase.Row> idxRows, string localLoadingGroupId, int wantsLoadedStateForIndexMain)
         {
             var bulk = new List<FileEntry>(idxRows != null && idxRows.Count > 0 ? idxRows.Count : 16);
@@ -2025,10 +2024,7 @@ namespace VPB
 
                 VpbLocalDatabase.Row r = idxRows[ri];
                 string internalPath = r.InternalPath;
-                // Do not derive launch path from item_usage.item_key here.
-                // History may contain legacy/bad keys (e.g. missing leading 'S' in "Saves/..."),
-                // and using them can break EnsureInstalled + scene load.
-                // Keep ItemUsageKey only for history-delete identity; use indexed catalog paths for launch.
+                // Launch from index paths; ItemUsageKey is for remove-from-history identity only (legacy keys can break load).
 
                 string varHint = r.VarPath ?? "";
                 string listPath = r.ListPath ?? "";
@@ -2087,10 +2083,7 @@ namespace VPB
             return bulk;
         }
 
-        /// <summary>
-        /// Re-queries <c>item_usage</c> and rebinds the recycling grid without <see cref="RefreshFiles"/> (no package enumeration, loose-file scan, or early side-meta thread).
-        /// Use after usage DB changes (e.g. remove-from-history) while the History side pane is active.
-        /// </summary>
+        /// <summary>Re-query History and rebind the grid (no full <see cref="RefreshFiles"/>).</summary>
         public void RefreshHistoryListInPlace(bool keepScroll = true)
         {
             if (Gallery.IsSuppressed()) return;
@@ -2127,23 +2120,21 @@ namespace VPB
             _refreshHistoryLightCo = StartCoroutine(RefreshHistoryListInPlaceRoutine(keepScroll));
         }
 
-        /// <summary>No-op unless this pane is on the History tab — lightweight SQLite re-query when the grid is warm, else full <see cref="RefreshFiles"/>.</summary>
         public void RefreshHistoryBrowseIfActive(bool keepScroll = true)
         {
             if (activeContentType != ContentType.History) return;
             RefreshHistoryBrowsePreferLight(keepScroll);
         }
 
-        /// <summary>
-        /// History browse: SQLite-only refresh when the grid is already loaded; otherwise full file scan.
-        /// Prefer this over <see cref="RefreshFiles"/> when opening the History side pane or switching History filters.
-        /// </summary>
         public void RefreshHistoryBrowsePreferLight(bool keepScroll = true)
         {
             if (Gallery.IsSuppressed()) return;
             if (IsHubMode) return;
             if (activeContentType != ContentType.History)
             {
+                lastHistoryQueryFailed = false;
+                lastHistoryQueryRejectReason = null;
+                lastHistoryQueryHadNameFilter = false;
                 RefreshFiles(keepScroll);
                 return;
             }
@@ -2153,6 +2144,24 @@ namespace VPB
                 return;
             }
             RefreshFiles(keepScroll);
+        }
+
+        public void RetryHistoryBrowseQuery()
+        {
+            if (IsHubMode || activeContentType != ContentType.History) return;
+            lastHistoryQueryFailed = false;
+            lastHistoryQueryRejectReason = null;
+            RefreshHistoryBrowsePreferLight(true);
+        }
+
+        /// <summary>Apply History query failure state for footer text (call on main thread after worker).</summary>
+        private void SyncHistoryBrowseFailureFlagsFromStats(ContentType contentSnap, VpbLocalDatabase.GalleryCategoryQueryStats stats, string[] nameTermsSnapshot)
+        {
+            if (contentSnap != ContentType.History) return;
+            bool failed = !stats.ExecutedQuery || !string.IsNullOrEmpty(stats.RejectReason);
+            lastHistoryQueryFailed = failed;
+            lastHistoryQueryRejectReason = failed ? (stats.RejectReason ?? "history_query_failed") : null;
+            lastHistoryQueryHadNameFilter = nameTermsSnapshot != null && nameTermsSnapshot.Length > 0;
         }
 
         private IEnumerator RefreshHistoryListInPlaceRoutine(bool keepScroll)
@@ -2182,20 +2191,35 @@ namespace VPB
 
             List<FileEntry> bulkResult = null;
             var workerDone = new int[1];
+            bool historyQuerySucceeded = false;
+            string historyRejectReason = null;
+            bool hadNameFilter = nameTerms != null && nameTerms.Length > 0;
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
-                    if (!VpbSqlite3.IsAvailable) return;
+                    if (!VpbSqlite3.IsAvailable)
+                    {
+                        historyRejectReason = "sqlite_unavailable";
+                        return;
+                    }
                     var idxRows = new List<VpbLocalDatabase.Row>();
                     VpbLocalDatabase.GalleryCategoryQueryStats histStats;
                     if (!VpbLocalDatabase.TryQueryGalleryHistoryRows(histMode, nameTerms, idxRows, out histStats))
+                    {
+                        historyRejectReason = histStats.RejectReason ?? "history_query_failed";
                         idxRows.Clear();
+                    }
+                    else
+                    {
+                        historyQuerySucceeded = true;
+                    }
                     bulkResult = BuildHistoryBulkListFromRows(idxRows, localId, wantsLoadedStateForIndexMain);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    historyRejectReason = "exception:" + ex.Message;
                     bulkResult = null;
                 }
                 finally
@@ -2226,6 +2250,9 @@ namespace VPB
 
             currentFilteredFiles = filtered;
             lastFilteredFiles = new List<FileEntry>(filtered);
+            lastHistoryQueryHadNameFilter = hadNameFilter;
+            lastHistoryQueryFailed = !historyQuerySucceeded;
+            lastHistoryQueryRejectReason = lastHistoryQueryFailed ? (historyRejectReason ?? "history_query_failed") : null;
 
             string snapKey;
             if (TryBuildFileListSnapshotCacheKey(out snapKey))
@@ -2649,7 +2676,8 @@ namespace VPB
                                 nameTerms,
                                 idxRows,
                                 out catQueryStats);
-                            if (!hr) idxRows.Clear();
+                            if (!hr)
+                                idxRows.Clear();
                             useSqliteIndex = true;
                         }
                         else if (VpbSqlite3.IsAvailable
@@ -2817,8 +2845,15 @@ namespace VPB
                         }
                         else
                         {
-                            foreach (var pkg in FileManager.PackagesByUid.Values)
+                            if (activeContentSnap == ContentType.History)
                             {
+                                sqliteBulkList = new List<FileEntry>();
+                                Thread.MemoryBarrier();
+                            }
+                            else
+                            {
+                                foreach (var pkg in FileManager.PackagesByUid.Values)
+                                {
                                 if (localLoadingGroupId != currentLoadingGroupId) return;
 
                                 string filterCreator = currentCreator;
@@ -2886,6 +2921,7 @@ namespace VPB
                                         candidateQueue.Enqueue(new VarFileEntry(pkg, internalPath, entryTime, entrySize));
                                     }
                                 }
+                                }
                             }
                         }
                     }
@@ -2940,6 +2976,8 @@ namespace VPB
                         List<FileEntry> bulk = sqliteBulkList;
                         sqliteBulkList = null;
                         sqliteBulkConsumed = true;
+                        if (activeContentSnap == ContentType.History)
+                            SyncHistoryBrowseFailureFlagsFromStats(activeContentSnap, catQueryStats, nameTerms);
                         long bulkBudgetMs = maxMsPerFrame;
                         int bc = bulk.Count;
                         if (bc >= 16000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 160L);

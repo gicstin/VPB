@@ -10,6 +10,28 @@ namespace VPB
     {
         private static readonly int SortTypeCount = Enum.GetValues(typeof(SortType)).Length;
 
+        private void ApplyHistorySortPresetForMode(GalleryHistoryFilterMode mode)
+        {
+            SortState st = GetSortState("Files");
+            if (st == null) return;
+
+            if (mode == GalleryHistoryFilterMode.MostUsed)
+            {
+                st.Type = SortType.UsageCount;
+                st.Direction = SortDirection.Descending;
+                ShowTemporaryStatus(VPBTranslation.T("gallery.history.sort_preset_most_used", "History sort preset: Usage count (desc)."), 1.8f);
+            }
+            else
+            {
+                st.Type = SortType.Date;
+                st.Direction = SortDirection.Descending;
+                ShowTemporaryStatus(VPBTranslation.T("gallery.history.sort_preset_recent", "History sort preset: Last used (desc)."), 1.8f);
+            }
+
+            SaveSortState("Files", st);
+            UpdateSortButtonText(fileSortTypeText, fileSortDirText, st);
+        }
+
         private void ToggleRatingSort()
         {
             isRatingSortToggleEnabled = !isRatingSortToggleEnabled;

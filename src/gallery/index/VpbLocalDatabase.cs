@@ -16,9 +16,9 @@ namespace VPB
     /// </summary>
     internal static class VpbLocalDatabase
     {
-        /// <summary>Logs history delete, SQL repopulation, and remove-toolbox context (prefix <c>[VPB.History]</c>).</summary>
-        internal static bool LogHistoryUsageDebug = true;
-        /// <summary>When true, logs every <see cref="TryRecordItemUse"/> (very chatty; use to audit where tracking runs).</summary>
+        /// <summary>Optional <c>[VPB.History]</c> trace logs (default off).</summary>
+        internal static bool LogHistoryUsageDebug = false;
+        /// <summary>Logs every <see cref="TryRecordItemUse"/> (very chatty).</summary>
         internal static bool LogHistoryRecordWrites = false;
 
         internal struct Row
@@ -41,14 +41,11 @@ namespace VPB
             /// From <c>pkg.loaded</c>: package is &quot;loaded&quot; when its .var lives under <c>AddonPackages/</c>, or under <c>Custom/</c> / <c>Saves/</c> (always loaded).
             /// </summary>
             public bool PackageIsLoaded;
-            /// <summary>
-            /// History browse only: raw <c>item_usage.item_key</c> from SQL — matches what <see cref="TryRecordItemUse"/> stored (same as <see cref="BuildUsageKey"/> at apply time).
-            /// Empty for category-index queries.
-            /// </summary>
+            /// <summary><c>item_usage.item_key</c> when this row is from History SQL; empty for category index rows.</summary>
             public string ItemUsageKey;
-            /// <summary>History browse: <c>item_usage.use_count</c> for this row (before package dedupe).</summary>
+            /// <summary><c>item_usage.use_count</c> when <see cref="ItemUsageKey"/> is set.</summary>
             public int ItemUsageCount;
-            /// <summary>History browse: <c>item_usage.last_used</c> (<see cref="DateTime.ToBinary"/>).</summary>
+            /// <summary><c>item_usage.last_used</c> (<see cref="DateTime.ToBinary"/>).</summary>
             public long ItemLastUsedBinary;
         }
 
@@ -329,11 +326,7 @@ namespace VPB
             }
         }
 
-        /// <summary>
-        /// Gallery usage / History: records one row per <paramref name="itemKey"/> (see <see cref="BuildUsageKey"/>).
-        /// Call only for <b>direct user actions</b> — explicit click apply, footer Random, drag-and-drop apply, or scene load for the chosen entry.
-        /// Do not call for dependency installs, package scans, thumbnails, or background automation.
-        /// </summary>
+        /// <summary>Upserts <c>item_usage</c> for <paramref name="itemKey"/> (<see cref="BuildUsageKey"/>). Use for explicit user applies only, not scans/thumbnails/deps.</summary>
         internal static void TryRecordItemUse(string itemKey, string kind)
         {
             if (!VpbSqlite3.IsAvailable) return;
@@ -522,6 +515,163 @@ namespace VPB
             catch
             {
                 outCounts.Clear();
+                return false;
+            }
+        }
+
+        internal static bool TryReadGalleryHistoryModeCounts(Dictionary<GalleryHistoryFilterMode, int> outCounts)
+        {
+            if (outCounts == null) return false;
+            outCounts.Clear();
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+
+                    string internalPathExpr = GalleryHistoryResolvedInternalPathSql();
+                    foreach (GalleryHistoryFilterMode mode in Enum.GetValues(typeof(GalleryHistoryFilterMode)))
+                    {
+                        string kindSql = BuildGalleryHistoryKindSqlAnd(mode);
+                        var sb = new StringBuilder(768);
+                        sb.Append("SELECT COUNT(DISTINCT i.item_key) ");
+                        AppendGalleryHistoryJoinFromWhere(sb);
+                        sb.Append(kindSql);
+                        sb.Append(" AND length(trim(ifnull(p.uid,''))) > 0");
+                        sb.Append(" AND length(trim(").Append(internalPathExpr).Append(")) > 0");
+
+                        using (var st = conn.Prepare(sb.ToString()))
+                        {
+                            int n = 0;
+                            if (st.Step() == VpbSqlite3.SqliteRow)
+                                n = (int)Math.Min(Math.Max(st.ColumnInt64(0), 0), int.MaxValue);
+                            outCounts[mode] = n;
+                        }
+                    }
+
+                    return true;
+                }
+            }
+            catch
+            {
+                outCounts.Clear();
+                return false;
+            }
+        }
+
+        internal struct ItemUsageSnapshot
+        {
+            public string ItemKey;
+            public string Kind;
+            public int UseCount;
+            public long LastUsed;
+        }
+
+        internal static bool TryReadItemUsageSnapshotsForKeys(IList<string> keys, Dictionary<string, ItemUsageSnapshot> outSnapshots)
+        {
+            if (outSnapshots == null) return false;
+            outSnapshots.Clear();
+            if (!VpbSqlite3.IsAvailable) return false;
+            if (keys == null || keys.Count == 0) return true;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+
+                    const int MaxVars = 900;
+                    for (int start = 0; start < keys.Count; start += MaxVars)
+                    {
+                        int n = Math.Min(MaxVars, keys.Count - start);
+                        var sb = new StringBuilder(96 + n * 3);
+                        sb.Append("SELECT item_key, ifnull(kind,''), use_count, last_used FROM item_usage WHERE item_key IN (");
+                        for (int i = 0; i < n; i++)
+                        {
+                            if (i > 0) sb.Append(",");
+                            sb.Append("?");
+                        }
+                        sb.Append(")");
+
+                        using (var st = conn.Prepare(sb.ToString()))
+                        {
+                            for (int i = 0; i < n; i++)
+                                st.BindText(i + 1, keys[start + i] ?? "");
+
+                            while (st.Step() == VpbSqlite3.SqliteRow)
+                            {
+                                string itemKey = st.ColumnText(0) ?? "";
+                                if (string.IsNullOrEmpty(itemKey)) continue;
+
+                                string kind = st.ColumnText(1) ?? "";
+                                int useCount = 0;
+                                long lastUsed = 0;
+                                try { useCount = (int)st.ColumnInt64(2); } catch { useCount = 0; }
+                                try { lastUsed = st.ColumnInt64(3); } catch { lastUsed = 0; }
+                                if (useCount < 1) useCount = 1;
+
+                                outSnapshots[itemKey] = new ItemUsageSnapshot
+                                {
+                                    ItemKey = itemKey,
+                                    Kind = kind,
+                                    UseCount = useCount,
+                                    LastUsed = lastUsed,
+                                };
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                outSnapshots.Clear();
+                return false;
+            }
+        }
+
+        internal static bool TryRestoreItemUsageSnapshots(IList<ItemUsageSnapshot> snapshots)
+        {
+            if (!VpbSqlite3.IsAvailable) return false;
+            if (snapshots == null || snapshots.Count == 0) return true;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    try
+                    {
+                        using (var st = conn.Prepare("INSERT OR REPLACE INTO item_usage(item_key, kind, use_count, last_used) VALUES(?, ?, ?, ?)"))
+                        {
+                            for (int i = 0; i < snapshots.Count; i++)
+                            {
+                                ItemUsageSnapshot snap = snapshots[i];
+                                if (string.IsNullOrEmpty(snap.ItemKey)) continue;
+
+                                st.Reset();
+                                st.BindText(1, snap.ItemKey);
+                                st.BindText(2, snap.Kind ?? "");
+                                st.BindInt64(3, snap.UseCount > 0 ? snap.UseCount : 1);
+                                st.BindInt64(4, snap.LastUsed);
+                                st.Step();
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                        return true;
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        return false;
+                    }
+                }
+            }
+            catch
+            {
                 return false;
             }
         }
@@ -2978,121 +3128,31 @@ namespace VPB
             return " ORDER BY i.last_used DESC, i.item_key ASC";
         }
 
-        /// <summary>
-        /// Collapses multiple <c>item_usage</c> rows per VAR package to a single grid row (same <c>pkg.uid</c>).
-        /// Recent modes: keep the row with latest <c>last_used</c>. Most used: order packages by sum of uses, pick the hottest item row as representative.
-        /// </summary>
-        private static void DedupeHistoryGalleryRowsByPackage(GalleryHistoryFilterMode mode, List<Row> rows)
+        // item_usage.item_key uid/path split (keep in sync with TryQueryGalleryHistoryRows + mode counts).
+        private const string GalleryHistoryUsagePkgKeySql =
+            "(CASE WHEN instr(i.item_key,':/')>0 THEN substr(i.item_key,1,instr(i.item_key,':/')-1) ELSE i.item_key END)";
+
+        private const string GalleryHistoryUsageInternalKeySql =
+            "(CASE WHEN instr(i.item_key,':/')>0 THEN substr(i.item_key,instr(i.item_key,':/')+2) ELSE '' END)";
+
+        private static string GalleryHistoryResolvedInternalPathSql()
         {
-            if (rows == null || rows.Count < 2) return;
-
-            var uidCmp = StringComparer.OrdinalIgnoreCase;
-
-            int BetterRep(Row a, Row b)
-            {
-                int c = a.ItemUsageCount.CompareTo(b.ItemUsageCount);
-                if (c != 0) return c;
-                c = a.ItemLastUsedBinary.CompareTo(b.ItemLastUsedBinary);
-                if (c != 0) return c;
-                return string.Compare(a.ItemUsageKey ?? "", b.ItemUsageKey ?? "", StringComparison.OrdinalIgnoreCase);
-            }
-
-            if (mode == GalleryHistoryFilterMode.MostUsed)
-            {
-                var groups = new Dictionary<string, MostUsedPkgAgg>(uidCmp);
-                for (int i = 0; i < rows.Count; i++)
-                {
-                    Row r = rows[i];
-                    string u = r.PackageUid ?? "";
-                    if (u.Length == 0) continue;
-
-                    long cnt = r.ItemUsageCount;
-                    if (cnt < 0) cnt = 0;
-
-                    if (!groups.TryGetValue(u, out MostUsedPkgAgg agg))
-                    {
-                        agg = new MostUsedPkgAgg
-                        {
-                            Rep = r,
-                            SumUses = cnt,
-                            MaxLastUsed = r.ItemLastUsedBinary
-                        };
-                        groups[u] = agg;
-                        continue;
-                    }
-
-                    agg.SumUses += cnt;
-                    if (r.ItemLastUsedBinary > agg.MaxLastUsed)
-                        agg.MaxLastUsed = r.ItemLastUsedBinary;
-                    if (BetterRep(r, agg.Rep) > 0)
-                        agg.Rep = r;
-                    groups[u] = agg;
-                }
-
-                rows.Clear();
-                var order = new List<KeyValuePair<string, MostUsedPkgAgg>>(groups);
-                order.Sort((a, b) =>
-                {
-                    int c = b.Value.SumUses.CompareTo(a.Value.SumUses);
-                    if (c != 0) return c;
-                    c = b.Value.MaxLastUsed.CompareTo(a.Value.MaxLastUsed);
-                    if (c != 0) return c;
-                    return string.Compare(a.Key, b.Key, StringComparison.OrdinalIgnoreCase);
-                });
-
-                for (int i = 0; i < order.Count; i++)
-                {
-                    Row rep = order[i].Value.Rep;
-                    long su = order[i].Value.SumUses;
-                    if (su > int.MaxValue) su = int.MaxValue;
-                    rep.ItemUsageCount = (int)su;
-                    rows.Add(rep);
-                }
-                return;
-            }
-
-            var recentBest = new Dictionary<string, Row>(uidCmp);
-            for (int i = 0; i < rows.Count; i++)
-            {
-                Row r = rows[i];
-                string u = r.PackageUid ?? "";
-                if (u.Length == 0) continue;
-
-                if (!recentBest.TryGetValue(u, out Row existing))
-                {
-                    recentBest[u] = r;
-                    continue;
-                }
-
-                if (r.ItemLastUsedBinary > existing.ItemLastUsedBinary)
-                    recentBest[u] = r;
-                else if (r.ItemLastUsedBinary == existing.ItemLastUsedBinary &&
-                         string.Compare(r.ItemUsageKey ?? "", existing.ItemUsageKey ?? "", StringComparison.OrdinalIgnoreCase) < 0)
-                    recentBest[u] = r;
-            }
-
-            rows.Clear();
-            var rl = new List<Row>(recentBest.Values);
-            rl.Sort((a, b) =>
-            {
-                int c = b.ItemLastUsedBinary.CompareTo(a.ItemLastUsedBinary);
-                if (c != 0) return c;
-                return string.Compare(a.ItemUsageKey ?? "", b.ItemUsageKey ?? "", StringComparison.OrdinalIgnoreCase);
-            });
-            rows.AddRange(rl);
+            return "COALESCE(NULLIF(mx.internal_path,''), NULLIF(mr.internal_path,''), NULLIF(" + GalleryHistoryUsageInternalKeySql + ",''), 'meta.json')";
         }
 
-        private struct MostUsedPkgAgg
+        private static void AppendGalleryHistoryJoinFromWhere(StringBuilder sb)
         {
-            public long SumUses;
-            public long MaxLastUsed;
-            public Row Rep;
+            sb.Append("FROM item_usage i ");
+            sb.Append("INNER JOIN pkg p ON lower(p.uid) = ").Append(GalleryHistoryUsagePkgKeySql).Append(" ");
+            sb.Append("LEFT JOIN cat_mem mx ON mx.pkg_uid = p.uid AND (");
+            sb.Append("lower(TRIM(ifnull(mx.list_path,''))) = lower(TRIM(i.item_key)) OR ");
+            sb.Append("lower(TRIM(ifnull(mx.internal_path,''))) = lower(TRIM(").Append(GalleryHistoryUsageInternalKeySql).Append("))) ");
+            sb.Append("LEFT JOIN cat_mem mr ON mr.pkg_uid = p.uid AND mr.rowid = (");
+            sb.Append("SELECT MIN(cm.rowid) FROM cat_mem cm WHERE cm.pkg_uid = p.uid) ");
+            sb.Append("WHERE 1=1");
         }
 
-        /// <summary>
-        /// Lists launched/applied items from <c>item_usage</c>, joined to <c>pkg</c> and matching <c>cat_mem</c> rows for thumbnails.
-        /// Uses <c>item_usage</c> (see <see cref="TryRecordItemUse"/>). Does not require the category index to be "ready".
-        /// </summary>
+        /// <summary>History browse SQL (<c>item_usage</c>, <c>pkg</c>, <c>cat_mem</c>).</summary>
         internal static bool TryQueryGalleryHistoryRows(
             GalleryHistoryFilterMode mode,
             string[] nameTerms,
@@ -3125,31 +3185,17 @@ namespace VPB
                     string kindSql = BuildGalleryHistoryKindSqlAnd(mode);
                     string orderSql = BuildGalleryHistoryOrderSql(mode);
 
-                    // item_usage.item_key is BuildUsageKey(): often "uid:/internal..." for VAR entries.
-                    // Extract package UID + internal path so history can resolve specific preset/subpreset rows.
-                    const string usagePkgKey =
-                        "(CASE WHEN instr(i.item_key,':/')>0 THEN substr(i.item_key,1,instr(i.item_key,':/')-1) ELSE i.item_key END)";
-                    const string usageInternalKey =
-                        "(CASE WHEN instr(i.item_key,':/')>0 THEN substr(i.item_key,instr(i.item_key,':/')+2) ELSE '' END)";
-
                     var sb = new StringBuilder(768);
                     sb.Append(
                         "SELECT i.item_key, p.uid, " +
-                        "COALESCE(NULLIF(mx.internal_path,''), NULLIF(mr.internal_path,''), NULLIF(" + usageInternalKey + ",''), 'meta.json'), " +
+                        GalleryHistoryResolvedInternalPathSql() + ", " +
                         "TRIM(COALESCE(mx.list_path, mr.list_path,'')), " +
                         "ifnull(p.var_path,''), " +
                         "p.wtime, p.psize, p.pctime, " +
                         "ifnull(COALESCE(mx.cloth_attr, mr.cloth_attr),''), " +
                         loadedSelect +
-                        ", i.use_count, i.last_used " +
-                        "FROM item_usage i " +
-                        "INNER JOIN pkg p ON lower(p.uid) = " + usagePkgKey + " " +
-                        "LEFT JOIN cat_mem mx ON mx.pkg_uid = p.uid AND (" +
-                        "lower(TRIM(ifnull(mx.list_path,''))) = lower(TRIM(i.item_key)) OR " +
-                        "lower(TRIM(ifnull(mx.internal_path,''))) = lower(TRIM(" + usageInternalKey + "))) " +
-                        "LEFT JOIN cat_mem mr ON mr.pkg_uid = p.uid AND mr.rowid = (" +
-                        "SELECT MIN(cm.rowid) FROM cat_mem cm WHERE cm.pkg_uid = p.uid) " +
-                        "WHERE 1=1");
+                        ", i.use_count, i.last_used ");
+                    AppendGalleryHistoryJoinFromWhere(sb);
                     sb.Append(kindSql);
 
                     if (nameTerms != null && nameTerms.Length > 0)
@@ -3202,8 +3248,6 @@ namespace VPB
                                 outRows.Add(r);
                         }
                     }
-
-                    // Keep per-item history rows (do not collapse to one row per package).
 
                     if (LogHistoryUsageDebug)
                     {

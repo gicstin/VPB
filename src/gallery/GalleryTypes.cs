@@ -6,12 +6,10 @@ namespace VPB
 {
     public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource, RemoveClothing, RemoveHair, RemoveAtom, SavePresets, Target, CleanupCategories, CleanupStaleBuckets, Path, History }
 
-    /// <summary>Side-pane filters for <see cref="ContentType.History"/> (SQLite-backed).</summary>
+    /// <summary>History side-pane modes (<see cref="ContentType.History"/>).</summary>
     public enum GalleryHistoryFilterMode
     {
-        /// <summary>Latest launches first (<c>ORDER BY item_usage.last_used DESC</c>).</summary>
         Recent = 0,
-        /// <summary>Highest local use counts (<c>ORDER BY use_count DESC</c>).</summary>
         MostUsed = 1,
         Scenes = 2,
         Appearance = 3,
@@ -19,9 +17,7 @@ namespace VPB
         Hair = 5,
         Plugins = 6,
         Pose = 7,
-        /// <summary>Skin / morph applies.</summary>
         Body = 8,
-        /// <summary>Package opens, CUA, subscenes, and other kinds.</summary>
         Misc = 9
     }
     public enum ApplyMode { SingleClick, DoubleClick }

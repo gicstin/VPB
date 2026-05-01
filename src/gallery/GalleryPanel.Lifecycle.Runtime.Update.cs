@@ -492,6 +492,22 @@ namespace VPB
 
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            if (ctrl && Input.GetKeyDown(KeyCode.R))
+            {
+                if (!IsHubMode && activeContentType == ContentType.History)
+                {
+                    try { RefreshHistoryBrowsePreferLight(true); } catch { }
+                    return;
+                }
+            }
+            if (ctrl && Input.GetKeyDown(KeyCode.Z))
+            {
+                if (!IsHubMode && activeContentType == ContentType.History)
+                {
+                    if (TryUndoRecentHistoryRemoval())
+                        return;
+                }
+            }
             bool a = Input.GetKeyDown(KeyCode.A);
             bool del = Input.GetKeyDown(KeyCode.Delete) || Input.GetKeyDown(KeyCode.Backspace);
 
@@ -534,11 +550,12 @@ namespace VPB
             int currentIndex = -1;
             
             // Prefer anchor path if available for navigation continuity
-            string navPath = !string.IsNullOrEmpty(selectionAnchorPath) ? selectionAnchorPath : selectedPath;
+            bool historyBrowseForNav = !IsHubMode && activeContentType == ContentType.History;
+            string navPath = GetCurrentSelectionAnchorIdentityKey(historyBrowseForNav);
             
             if (!string.IsNullOrEmpty(navPath))
             {
-                currentIndex = currentFilteredFiles.FindIndex(f => f.Path == navPath);
+                currentIndex = FindIndexBySelectionIdentity(currentFilteredFiles, navPath, historyBrowseForNav);
             }
 
             if (currentIndex < 0) 
@@ -572,10 +589,11 @@ namespace VPB
                 
                 if (shift)
                 {
+                    bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
                     // Range Select
-                    string anchor = selectionAnchorPath;
+                    string anchor = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
                     int anchorIndex = -1;
-                    if (!string.IsNullOrEmpty(anchor)) anchorIndex = currentFilteredFiles.FindIndex(f => f.Path == anchor);
+                    if (!string.IsNullOrEmpty(anchor)) anchorIndex = FindIndexBySelectionIdentity(currentFilteredFiles, anchor, historyBrowse);
                     
                     if (anchorIndex < 0) anchorIndex = currentIndex; 
 
@@ -587,7 +605,6 @@ namespace VPB
                         selectedFiles.Clear();
                         selectedFilePaths.Clear();
                     }
-                    bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
                     var historySelectionKeys = historyBrowse ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
                     if (historyBrowse && ctrl)
                     {
@@ -615,10 +632,10 @@ namespace VPB
                     }
                     
                     AddFileToSelection(newFile, historyBrowse);
-                    selectionAnchorPath = newFile.Path; // Move anchor
+                    SetSelectionAnchor(newFile, historyBrowse); // Move anchor
                 }
 
-                selectedPath = newFile.Path;
+                selectedPath = historyBrowseForNav ? GetSelectionIdentityKey(newFile, true) : newFile.Path;
                 selectedHubItem = null;
                 SetHoverPath(newFile);
                 RefreshSelectionVisuals();

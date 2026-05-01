@@ -1039,6 +1039,7 @@ namespace VPB
                     if (selectedFiles != null) selectedFiles.Clear();
                     if (selectedFilePaths != null) selectedFilePaths.Clear();
                     selectionAnchorPath = null;
+                    selectionAnchorIdentityKey = null;
                 }
                 catch { }
             }
@@ -1183,6 +1184,7 @@ namespace VPB
                 if (selectedFiles != null) selectedFiles.Clear();
                 if (selectedFilePaths != null) selectedFilePaths.Clear();
                 selectionAnchorPath = null;
+                selectionAnchorIdentityKey = null;
                 try { RefreshSelectionVisuals(); } catch { }
             }
             catch { }

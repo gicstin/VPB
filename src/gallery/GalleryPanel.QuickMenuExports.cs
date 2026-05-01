@@ -84,6 +84,17 @@ namespace VPB
             }
             catch { }
         }
+
+        /// <summary>Same as the History side button: toggle History browse / usage filters.</summary>
+        internal void QuickMenu_OpenGalleryHistory()
+        {
+            try
+            {
+                if (isFixedLocally) ToggleLeft(ContentType.History);
+                else ToggleRight(ContentType.History);
+            }
+            catch { }
+        }
     }
 }
 

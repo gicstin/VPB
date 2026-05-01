@@ -65,7 +65,6 @@ namespace VPB
 
         /// <summary>Deferred phase1/phase2 side-tab work after the grid is shown; stopped when a new <see cref="GalleryPanel.RefreshFiles"/> supersedes it.</summary>
         private Coroutine _deferredGallerySideTabsCoroutine;
-
         /// <summary>Sliced tag/facet scan started from <see cref="GalleryPanel.UpdateTabs"/> (e.g. clothing subfilter) so we never block the main thread like <c>CacheTagCounts()</c>.</summary>
         private Coroutine _sideTabsTagCountSliceCo;
 
@@ -214,9 +213,7 @@ namespace VPB
         private Image rightHistoryBtnImage;
         private Image rightHistoryBtnIconImage;
 
-        /// <summary>Active filter row in the History side pane.</summary>
         private GalleryHistoryFilterMode galleryHistoryFilterMode = GalleryHistoryFilterMode.Recent;
-        /// <summary>Filters History pane tab labels (same pattern as category filter).</summary>
         private string historyTabFilter = "";
 
         private Text rightReplaceBtnText;
@@ -403,7 +400,6 @@ namespace VPB
         private string posePeopleIndexGroupId = "";
         private string currentLoadingGroupId = "";
         private Coroutine refreshCoroutine;
-        /// <summary>Lightweight History-only grid refresh (SQLite usage query only; no full <see cref="GalleryPanel.RefreshFiles"/>).</summary>
         private Coroutine _refreshHistoryLightCo;
         // Hub CDN thumbnail URLs for missing dep packages (dep uid → thumbnail URL), populated async after missing-deps filter is applied.
         private readonly Dictionary<string, string> _hubThumbnailUrlCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -848,6 +844,17 @@ namespace VPB
         public List<FileEntry> selectedFiles = new List<FileEntry>();
         private HashSet<string> selectedFilePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private string selectionAnchorPath = null;
+        private string selectionAnchorIdentityKey = null;
+        private bool lastHistoryQueryFailed = false;
+        private string lastHistoryQueryRejectReason = null;
+        private bool lastHistoryQueryHadNameFilter = false;
+        private bool pendingHistoryRemoveConfirm = false;
+        private int pendingHistoryRemoveConfirmCount = 0;
+        private float pendingHistoryRemoveConfirmUntilRealtime = 0f;
+        private List<VpbLocalDatabase.ItemUsageSnapshot> pendingHistoryUndoSnapshots = null;
+        private float pendingHistoryUndoUntilRealtime = 0f;
+        private readonly Dictionary<GalleryHistoryFilterMode, int> historyModeCounts = new Dictionary<GalleryHistoryFilterMode, int>();
+        private float historyModeCountsLastFetchRealtime = -1000f;
 
         private List<FileEntry> lastFilteredFiles = new List<FileEntry>();
 

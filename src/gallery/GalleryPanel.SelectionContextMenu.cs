@@ -1849,6 +1849,31 @@ namespace VPB
         {
             if (activeContentType != ContentType.History || selectedFiles == null || selectedFiles.Count == 0)
                 return;
+
+            float now = Time.realtimeSinceStartup;
+            if (selectedFiles.Count > 1)
+            {
+                bool confirmed = pendingHistoryRemoveConfirm
+                    && pendingHistoryRemoveConfirmCount == selectedFiles.Count
+                    && now <= pendingHistoryRemoveConfirmUntilRealtime;
+                if (!confirmed)
+                {
+                    pendingHistoryRemoveConfirm = true;
+                    pendingHistoryRemoveConfirmCount = selectedFiles.Count;
+                    pendingHistoryRemoveConfirmUntilRealtime = now + 4f;
+                    ShowTemporaryStatus(
+                        string.Format(
+                            VPBTranslation.T("gallery.history.confirm_remove_n", "Press Remove History again to confirm removing {0} items."),
+                            selectedFiles.Count),
+                        4f);
+                    return;
+                }
+                pendingHistoryRemoveConfirm = false;
+                pendingHistoryRemoveConfirmCount = 0;
+                pendingHistoryRemoveConfirmUntilRealtime = 0f;
+            }
+
+            var keySet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var keys = new List<string>(selectedFiles.Count);
             for (int i = 0; i < selectedFiles.Count; i++)
             {
@@ -1877,7 +1902,7 @@ namespace VPB
                         }
                         catch { }
                     }
-                    if (!string.IsNullOrEmpty(k)) keys.Add(k);
+                    if (!string.IsNullOrEmpty(k) && keySet.Add(k)) keys.Add(k);
                 }
                 catch { }
             }
@@ -1889,6 +1914,11 @@ namespace VPB
                 }
                 return;
             }
+            var snapshotMap = new Dictionary<string, VpbLocalDatabase.ItemUsageSnapshot>(StringComparer.OrdinalIgnoreCase);
+            VpbLocalDatabase.TryReadItemUsageSnapshotsForKeys(keys, snapshotMap);
+            pendingHistoryUndoSnapshots = new List<VpbLocalDatabase.ItemUsageSnapshot>(snapshotMap.Values);
+            pendingHistoryUndoUntilRealtime = now + 5f;
+
             if (VpbLocalDatabase.LogHistoryUsageDebug)
             {
                 try
@@ -1904,6 +1934,7 @@ namespace VPB
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
                 selectionAnchorPath = null;
+                selectionAnchorIdentityKey = null;
                 selectedPath = null;
                 selectedHubItem = null;
                 RefreshSelectionVisuals();
@@ -1916,9 +1947,43 @@ namespace VPB
             RefreshHistoryListInPlace(true);
             ShowTemporaryStatus(
                 string.Format(
-                    VPBTranslation.T("gallery.history.removed_n", "Removed {0} from History."),
+                    VPBTranslation.T("gallery.history.removed_n_with_undo", "Removed {0} from History. Press Ctrl+Z within 5s to undo."),
                     keys.Count),
+                5f);
+        }
+
+        private bool TryUndoRecentHistoryRemoval()
+        {
+            if (pendingHistoryUndoSnapshots == null || pendingHistoryUndoSnapshots.Count == 0)
+                return false;
+
+            if (Time.realtimeSinceStartup > pendingHistoryUndoUntilRealtime)
+            {
+                pendingHistoryUndoSnapshots = null;
+                pendingHistoryUndoUntilRealtime = 0f;
+                return false;
+            }
+
+            bool restored = VpbLocalDatabase.TryRestoreItemUsageSnapshots(pendingHistoryUndoSnapshots);
+            int restoredCount = pendingHistoryUndoSnapshots.Count;
+            pendingHistoryUndoSnapshots = null;
+            pendingHistoryUndoUntilRealtime = 0f;
+
+            if (!restored)
+            {
+                ShowTemporaryStatus(
+                    VPBTranslation.T("gallery.history.undo_failed", "Could not restore removed History entries. See log."),
+                    2f);
+                return true;
+            }
+
+            RefreshHistoryListInPlace(true);
+            ShowTemporaryStatus(
+                string.Format(
+                    VPBTranslation.T("gallery.history.undo_restored_n", "Restored {0} History entries."),
+                    restoredCount),
                 2f);
+            return true;
         }
 
         private void TboxOpenSelectedItemOnHub()

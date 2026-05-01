@@ -1738,8 +1738,36 @@ namespace VPB
                 {
                     int total = currentFilteredFiles.Count;
                     int selected = selectedFiles.Count;
-                    if (selected > 0)
-                        paginationText.text = string.Format(VPBTranslation.T("gallery.items.selected", "{0} / {1} Items"), selected, total);
+                    bool historyBrowse = activeContentType == ContentType.History;
+                    if (historyBrowse && total == 0)
+                    {
+                        bool hasNameFilter = nameFilterTerms != null && nameFilterTerms.Length > 0;
+                        if (lastHistoryQueryFailed || !VpbSqlite3.IsAvailable)
+                        {
+                            paginationText.text = VPBTranslation.T(
+                                "gallery.history.unavailable_retry",
+                                "History unavailable (SQLite/index). Click Refresh/Ctrl+R to retry.");
+                        }
+                        else if (hasNameFilter)
+                        {
+                            paginationText.text = VPBTranslation.T(
+                                "gallery.history.empty_filtered",
+                                "No History matches current filter. Clear search/filter.");
+                        }
+                        else
+                        {
+                            paginationText.text = VPBTranslation.T(
+                                "gallery.history.empty",
+                                "History is empty.");
+                        }
+                    }
+                    else if (selected > 0)
+                    {
+                        if (historyBrowse)
+                            paginationText.text = string.Format(VPBTranslation.T("gallery.items.selected_unique", "{0} unique / {1} Items"), selected, total);
+                        else
+                            paginationText.text = string.Format(VPBTranslation.T("gallery.items.selected", "{0} / {1} Items"), selected, total);
+                    }
                     else
                         paginationText.text = string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
                 }
@@ -2492,7 +2520,6 @@ namespace VPB
 
             var list = currentFilteredFiles;
             if (list == null || list.Count == 0) return false;
-            bool historyBrowse = activeContentType == ContentType.History;
 
             if (list.Count > SelectAllSafetyMaxItemCount)
             {
@@ -2508,12 +2535,12 @@ namespace VPB
             selectedFiles.Clear();
             selectedFilePaths.Clear();
             selectionAnchorPath = null;
-            HashSet<string> historySelectionKeys = historyBrowse ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
 
             for (int i = 0; i < list.Count; i++)
             {
                 var f = list[i];
-                AddFileToSelection(f, historyBrowse, historySelectionKeys);
+                if (f == null || string.IsNullOrEmpty(f.Path)) continue;
+                if (selectedFilePaths.Add(f.Path)) selectedFiles.Add(f);
             }
 
             if (selectedFiles.Count > 0)
@@ -2632,9 +2659,8 @@ namespace VPB
         private void ApplyHistoryBrowseTitle()
         {
             if (titleText == null) return;
-            bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
-            if (activeContentType == ContentType.History || hasHistorySide)
-                titleText.text = GetGalleryHistoryFilterRowLabel(galleryHistoryFilterMode);
+            if (activeContentType != ContentType.History) return;
+            titleText.text = VPBTranslation.T("gallery.history.title", "History");
         }
 
         private void ToggleRight(ContentType type)
@@ -2671,7 +2697,7 @@ namespace VPB
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             if (!hasHistorySide && hadHistorySide && titleText != null)
                 titleText.text = currentCategoryTitle;
-
+            
             UpdateLayout();
             UpdateTabs();
 
@@ -2682,7 +2708,10 @@ namespace VPB
                 if (hadHistorySide && !hasHistorySide)
                     RefreshFiles(true);
                 else if (hasHistorySide)
+                {
+                    ApplyHistorySortPresetForMode(galleryHistoryFilterMode);
                     RefreshHistoryBrowsePreferLight(true);
+                }
             }
 
             if (timeCategoryCreatorSwitch)
@@ -2723,7 +2752,7 @@ namespace VPB
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             if (!hasHistorySide && hadHistorySide && titleText != null)
                 titleText.text = currentCategoryTitle;
-
+            
             UpdateLayout();
             UpdateTabs();
 
@@ -2734,7 +2763,10 @@ namespace VPB
                 if (hadHistorySide && !hasHistorySide)
                     RefreshFiles(true);
                 else if (hasHistorySide)
+                {
+                    ApplyHistorySortPresetForMode(galleryHistoryFilterMode);
                     RefreshHistoryBrowsePreferLight(true);
+                }
             }
 
             if (timeCategoryCreatorSwitch)

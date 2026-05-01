@@ -1185,7 +1185,6 @@ namespace VPB
                     AddTooltip(rightPathBtn, "gallery.tooltip.path_list", "Open package and file path list.");
                 }
 
-                // History (launch / usage SQL browse) — always square to match Path / Category icon rails
                 {
                     GameObject rightHistoryBtn = UI.CreateUIButton(rightSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => {
                         if (isFixedLocally) ToggleLeft(ContentType.History); else ToggleRight(ContentType.History);
@@ -1658,7 +1657,6 @@ namespace VPB
                     AddTooltip(leftPathBtn, "gallery.tooltip.path_list", "Open package and file path list.");
                 }
 
-                // History (launch / usage SQL browse) — always square to match Path / Category icon rails
                 {
                     GameObject leftHistoryBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.History));
                     leftHistoryBtnImage = leftHistoryBtn.GetComponent<Image>();

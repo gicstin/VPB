@@ -237,6 +237,7 @@ namespace VPB
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
                 selectionAnchorPath = null;
+                selectionAnchorIdentityKey = null;
 
                 selectedFiles.Add(file);
                 if (!string.IsNullOrEmpty(file.Path)) selectedFilePaths.Add(file.Path);
@@ -379,8 +380,8 @@ namespace VPB
             }
             else if (paramsChanged)
             {
-                // Category switch: only restore positions that were captured in this runtime session.
-                // Persisted cache values from previous runs are intentionally ignored here to prevent stale/random starts.
+                // Category switch: restore only categories we've visited in this runtime session.
+                // First visit in this run still starts at top, avoiding stale positions from previous launches.
                 if (sessionCategoryScrollKeys.Contains(nextCategoryKey) &&
                     categoryScrollPositions.TryGetValue(nextCategoryKey, out float _sp))
                     _pendingScrollRestore = Mathf.Clamp01(_sp);
@@ -970,15 +971,15 @@ namespace VPB
             // Right click selects if not selected.
             // Note: We intentionally do NOT open the actions panel here; right-click should not
             // force any bottom UI to appear (a separate context menu implementation will handle actions).
-            if (!selectedFilePaths.Contains(file.Path))
+            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            if (!IsFileSelected(file, historyBrowse))
             {
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
-                selectedFiles.Add(file);
-                selectedFilePaths.Add(file.Path);
-                selectedPath = file.Path;
+                AddFileToSelection(file, historyBrowse);
+                selectedPath = historyBrowse ? GetSelectionIdentityKey(file, true) : file.Path;
                 selectedHubItem = null;
-                selectionAnchorPath = file.Path;
+                SetSelectionAnchor(file, historyBrowse);
                 
                 // Selection should not "stick" the hover path.
                 SetHoverPath("");
@@ -1017,6 +1018,40 @@ namespace VPB
             if (!string.IsNullOrEmpty(file.Uid))
                 return "uid:" + file.Uid;
             return null;
+        }
+
+        private string GetCurrentSelectionAnchorIdentityKey(bool historyBrowse)
+        {
+            if (!historyBrowse) return selectionAnchorPath;
+            if (!string.IsNullOrEmpty(selectionAnchorIdentityKey)) return selectionAnchorIdentityKey;
+            if (!string.IsNullOrEmpty(selectionAnchorPath)) return selectionAnchorPath;
+            if (!string.IsNullOrEmpty(selectedPath)) return selectedPath;
+            return null;
+        }
+
+        private void SetSelectionAnchor(FileEntry file, bool historyBrowse)
+        {
+            if (file == null)
+            {
+                selectionAnchorPath = null;
+                selectionAnchorIdentityKey = null;
+                return;
+            }
+
+            selectionAnchorPath = file.Path;
+            selectionAnchorIdentityKey = historyBrowse ? GetSelectionIdentityKey(file, true) : selectionAnchorPath;
+        }
+
+        private int FindIndexBySelectionIdentity(List<FileEntry> files, string identityKey, bool historyBrowse)
+        {
+            if (files == null || files.Count == 0 || string.IsNullOrEmpty(identityKey)) return -1;
+            for (int i = 0; i < files.Count; i++)
+            {
+                string key = GetSelectionIdentityKey(files[i], historyBrowse);
+                if (string.Equals(key, identityKey, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+            return -1;
         }
 
         private bool AddFileToSelection(FileEntry file, bool historyBrowse, HashSet<string> historySelectionKeys = null)
@@ -1127,6 +1162,7 @@ namespace VPB
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
                 selectionAnchorPath = null;
+                selectionAnchorIdentityKey = null;
                 selectedPath = null;
                 selectedHubItem = null;
                 return;
@@ -1157,13 +1193,14 @@ namespace VPB
             if (selectedFiles.Count == 0)
             {
                 selectionAnchorPath = null;
+                selectionAnchorIdentityKey = null;
                 selectedPath = null;
                 selectedHubItem = null;
             }
             else
             {
-                selectedPath = selectedFiles[0].Path;
-                selectionAnchorPath = selectedPath;
+                selectedPath = historyBrowse ? GetSelectionIdentityKey(selectedFiles[0], true) : selectedFiles[0].Path;
+                SetSelectionAnchor(selectedFiles[0], historyBrowse);
             }
         }
 
@@ -1190,30 +1227,26 @@ namespace VPB
             }
 
             float time = Time.realtimeSinceStartup;
-            string fileKey = !string.IsNullOrEmpty(file.Path) ? file.Path : file.Uid;
+            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            string fileKey = historyBrowse
+                ? GetSelectionIdentityKey(file, true)
+                : (!string.IsNullOrEmpty(file.Path) ? file.Path : file.Uid);
             bool isDoubleClick = (time - lastClickTime < 0.3f && string.Equals(selectedPath, fileKey, StringComparison.OrdinalIgnoreCase));
             lastClickTime = time;
-            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
 
             bool selectionChanged = false;
 
             // Update selection set (Ctrl toggle / Shift range / single)
             if (shift && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
             {
-                string anchorPath = selectionAnchorPath;
-                if (string.IsNullOrEmpty(anchorPath)) anchorPath = selectedPath;
-                if (string.IsNullOrEmpty(anchorPath)) anchorPath = file.Path;
+                string anchorKey = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
+                if (string.IsNullOrEmpty(anchorKey))
+                    anchorKey = GetSelectionIdentityKey(file, historyBrowse);
 
                 int anchorIndex = -1;
                 int clickIndex = -1;
-                for (int i = 0; i < currentFilteredFiles.Count; i++)
-                {
-                    var f = currentFilteredFiles[i];
-                    if (f == null || string.IsNullOrEmpty(f.Path)) continue;
-                    if (anchorIndex < 0 && string.Equals(f.Path, anchorPath, StringComparison.OrdinalIgnoreCase)) anchorIndex = i;
-                    if (clickIndex < 0 && string.Equals(f.Path, file.Path, StringComparison.OrdinalIgnoreCase)) clickIndex = i;
-                    if (anchorIndex >= 0 && clickIndex >= 0) break;
-                }
+                anchorIndex = FindIndexBySelectionIdentity(currentFilteredFiles, anchorKey, historyBrowse);
+                clickIndex = FindIndexBySelectionIdentity(currentFilteredFiles, GetSelectionIdentityKey(file, historyBrowse), historyBrowse);
 
                 if (anchorIndex < 0) anchorIndex = clickIndex;
                 if (clickIndex < 0) clickIndex = anchorIndex;
@@ -1252,7 +1285,7 @@ namespace VPB
                     selectionChanged = RemoveFileFromSelection(file, historyBrowse);
                 else
                     selectionChanged = AddFileToSelection(file, historyBrowse);
-                selectionAnchorPath = file.Path;
+                SetSelectionAnchor(file, historyBrowse);
             }
             else
             {
@@ -1263,7 +1296,7 @@ namespace VPB
                     selectedFilePaths.Clear();
                     selectionChanged = AddFileToSelection(file, historyBrowse);
                 }
-                selectionAnchorPath = file.Path;
+                SetSelectionAnchor(file, historyBrowse);
             }
 
             // Keep primary selection path for double-click detection / hover path

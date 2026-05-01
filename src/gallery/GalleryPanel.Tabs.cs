@@ -87,13 +87,18 @@ namespace VPB
         /// <summary>Header/footer/side chrome without recreating category/creator/tag tab buttons when <see cref="VPBConfig.Save(bool,bool)"/> used <c>preferLightGalleryTabChromeOnly: true</c>.</summary>
         private void UpdateTabsLightChromeOnlyStandardGallery()
         {
-            if (titleText != null)
-            {
-                bool showTitle = !IsFilterActive;
-                if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
-                if (showTitle)
-                    titleText.text = currentCategoryTitle;
-            }
+                if (titleText != null)
+                {
+                    bool showTitle = !IsFilterActive;
+                    if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
+                    if (showTitle)
+                    {
+                        if (activeContentType == ContentType.History)
+                            titleText.text = VPBTranslation.T("gallery.history.title", "History");
+                        else
+                            titleText.text = currentCategoryTitle;
+                    }
+                }
             UpdateSideContextActions();
             UpdateSideButtonsVisibility();
         }
@@ -145,6 +150,8 @@ namespace VPB
                 if (showTitle)
                 {
                     if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
+                    else if (activeContentType == ContentType.History)
+                        titleText.text = VPBTranslation.T("gallery.history.title", "History");
                     else titleText.text = currentCategoryTitle;
                 }
             }
@@ -1281,6 +1288,13 @@ namespace VPB
             }
             else if (contentType == ContentType.History)
             {
+                bool countsFresh = (Time.realtimeSinceStartup - historyModeCountsLastFetchRealtime) <= 1.5f;
+                if (!countsFresh)
+                {
+                    if (VpbLocalDatabase.TryReadGalleryHistoryModeCounts(historyModeCounts))
+                        historyModeCountsLastFetchRealtime = Time.realtimeSinceStartup;
+                }
+
                 GalleryHistoryFilterMode[] modes = new GalleryHistoryFilterMode[]
                 {
                     GalleryHistoryFilterMode.Recent,
@@ -1300,6 +1314,8 @@ namespace VPB
                 {
                     GalleryHistoryFilterMode mode = modes[mi];
                     string label = GetGalleryHistoryFilterRowLabel(mode);
+                    if (historyModeCounts.TryGetValue(mode, out int modeCount))
+                        label += " (" + modeCount + ")";
                     if (!string.IsNullOrEmpty(tabFilter) && label.IndexOf(tabFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
 
                     bool isActive = galleryHistoryFilterMode == mode;
@@ -1308,13 +1324,7 @@ namespace VPB
                     CreateTabButton(container.transform, label, btnColor, isActive, () =>
                     {
                         galleryHistoryFilterMode = modeCap;
-                        selectedFiles.Clear();
-                        selectedFilePaths.Clear();
-                        selectionAnchorPath = null;
-                        selectedPath = null;
-                        selectedHubItem = null;
-                        RefreshSelectionVisuals();
-                        UpdatePaginationText();
+                        ApplyHistorySortPresetForMode(galleryHistoryFilterMode);
                         ApplyHistoryBrowseTitle();
                         RefreshHistoryBrowsePreferLight(false);
                         UpdateTabs();
