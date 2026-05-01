@@ -1034,6 +1034,7 @@ namespace VPB
         void Update()
         {
             VamOnDemandLoader.DrainMainThreadQueue();
+            LogUtil.DrainPostReadyQueue();
             CacheCleanupManager.CheckAutoFlush();
             if (m_PendingGc)
             {
@@ -1054,7 +1055,7 @@ namespace VPB
             if (m_PendingAutoLoadRefresh)
             {
                 m_PendingAutoLoadRefresh = false;
-                Refresh();
+                Refresh("autoload");
             }
 
             float unscaledDt = Time.unscaledDeltaTime;
@@ -1072,7 +1073,6 @@ namespace VPB
             try
             {
                 LogUtil.StartupWatchdogUpdate(IsFileManagerInited, m_UIInited);
-                LogUtil.StartupSettleUpdate();
             }
             catch { }
 
@@ -1177,9 +1177,10 @@ namespace VPB
                 {
                     if (MVR.Hub.HubBrowse.singleton != null)
                     {
+                        CreateHubBrowse();
                         CreateFileBrowser();
                         m_UIInited = true;
-                        LogUtil.LogUiReadyOnce("UI initialized");
+                        LogUtil.LogReadyOnce("UI initialized");
                     }
                     else if (VdsLauncher.IsVdsEnabled())
                     {
@@ -1187,7 +1188,7 @@ namespace VPB
                         // to enable FPS display and other UI features.
                         CreateFileBrowser();
                         m_UIInited = true;
-                        LogUtil.LogUiReadyOnce("UI initialized (VDS)");
+                        LogUtil.LogReadyOnce("UI initialized (VDS)");
                     }
                 }
             }
@@ -1281,7 +1282,7 @@ namespace VPB
             if (flag)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                VPB.FileManager.Refresh();
+                VPB.FileManager.Refresh("autoinstall", true);
             }
         }
 
@@ -1303,7 +1304,11 @@ namespace VPB
                 {
                     IsFileManagerInited = true;
                     TryAutoInstall();
-                    VarPackageMgr.singleton.Refresh();
+                    // Cache write is non-critical for UI readiness; defer until after READY so
+                    // first-startup writes (which can be tens of MB on large libraries) do not
+                    // sit on the critical UI-ready path. Subsequent refreshes also queue here
+                    // (they're always dirty-gated via VarPackageMgr.dirtyExternal).
+                    LogUtil.RegisterPostReadyOnce(() => VarPackageMgr.singleton.Refresh());
                 });
             }
 
@@ -1316,7 +1321,7 @@ namespace VPB
             if (!s_FileManagerInitialRefreshCompleted)
             {
                 System.Diagnostics.Stopwatch refreshSw = System.Diagnostics.Stopwatch.StartNew();
-                FileManager.Refresh(true);
+                FileManager.Refresh("init", true);
                 refreshSw.Stop();
                 LogUtil.Log("FileManager.Refresh call took " + refreshSw.ElapsedMilliseconds + "ms");
                 s_FileManagerInitialRefreshCompleted = true;
@@ -1333,7 +1338,17 @@ namespace VPB
         {
             if (m_FileBrowser == null)
             {
+                if (SuperController.singleton == null || SuperController.singleton.fileBrowserWorldUI == null)
+                {
+                    return;
+                }
+
                 var go = SuperController.singleton.fileBrowserWorldUI.gameObject;
+                if (go == null)
+                {
+                    return;
+                }
+
                 GameObject newgo = Instantiate(go);
                 newgo.transform.SetParent(go.transform.parent, false);
                 newgo.SetActive(true);
@@ -2299,24 +2314,18 @@ namespace VPB
                         var startupSeconds = LogUtil.GetStartupSecondsForDisplay();
                         var sceneClickSeconds = LogUtil.GetSceneClickSecondsForDisplay();
                         var sceneLoadSeconds = LogUtil.GetSceneLoadSecondsForDisplay();
-                        string startupLabel = LogUtil.IsReadyLogged()
-                            ? VPBTranslation.T("hook.startup.ready_label", "READY")
-                            : VPBTranslation.T("hook.startup.starting_label", "STARTING");
                         string tagText;
                         if (sceneLoadSeconds.HasValue)
                         {
-                            tagText = string.Format("VPB {0} | {1} {2:0.0}s | {3:0.0}s",
-                                PluginVersionInfo.Version, startupLabel, startupSeconds, sceneLoadSeconds.Value);
+                            tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneLoadSeconds.Value);
                         }
                         else if (sceneClickSeconds.HasValue)
                         {
-                            tagText = string.Format("VPB {0} | {1} {2:0.0}s | {3:0.0}s",
-                                PluginVersionInfo.Version, startupLabel, startupSeconds, sceneClickSeconds.Value);
+                            tagText = string.Format("VPB {0} | {1:0.0}s | {2:0.0}s", PluginVersionInfo.Version, startupSeconds, sceneClickSeconds.Value);
                         }
                         else
                         {
-                            tagText = string.Format("VPB {0} | {1} {2:0.0}s",
-                                PluginVersionInfo.Version, startupLabel, startupSeconds);
+                            tagText = string.Format("VPB {0} | {1:0.0}s", PluginVersionInfo.Version, startupSeconds);
                         }
 
                         var tagContent = new GUIContent(tagText);

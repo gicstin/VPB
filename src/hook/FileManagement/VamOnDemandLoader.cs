@@ -296,9 +296,15 @@ namespace VPB
         private static readonly Queue<string> s_VamNotReadyDeferredPaths = new Queue<string>();
         private static readonly HashSet<string> s_VamNotReadyDeferredUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_VamNotReadyLock = new object();
+        // Requests that arrive while VaM FileManager.Refresh is actively running.
+        // RegisterPackage during this window can race with VaM dictionary enumeration.
+        private static readonly Queue<string> s_RefreshInProgressDeferredPaths = new Queue<string>();
+        private static readonly HashSet<string> s_RefreshInProgressDeferredUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object s_RefreshInProgressLock = new object();
         private static readonly object s_RefreshRequestLock = new object();
         private static bool s_PendingVamRefresh;
         private static float s_PendingVamRefreshRequestedAt;
+        private static float s_PendingVamRefreshFirstRequestedAt;
         private static int s_PendingVamRefreshRequestCount;
         private static string s_PendingVamRefreshReason;
 
@@ -336,6 +342,23 @@ namespace VPB
             try
             {
                 MethodInfo m = typeof(LogUtil).GetMethod("IsStartupReadyLogged",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                    null, Type.EmptyTypes, null);
+                if (m != null)
+                {
+                    object r = m.Invoke(null, null);
+                    if (r is bool b) return b;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static bool SafeIsReadyLogged()
+        {
+            try
+            {
+                MethodInfo m = typeof(LogUtil).GetMethod("IsReadyLogged",
                     BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
                     null, Type.EmptyTypes, null);
                 if (m != null)
@@ -395,6 +418,19 @@ namespace VPB
                 s_StartupDeferredAnyUidsLogged.Clear();
             }
             Interlocked.Exchange(ref s_StartupVamNotReadyDeferredCount, 0);
+            lock (s_RefreshRequestLock)
+            {
+                s_PendingVamRefresh = false;
+                s_PendingVamRefreshRequestedAt = 0f;
+                s_PendingVamRefreshFirstRequestedAt = 0f;
+                s_PendingVamRefreshRequestCount = 0;
+                s_PendingVamRefreshReason = null;
+            }
+            lock (s_RefreshInProgressLock)
+            {
+                s_RefreshInProgressDeferredPaths.Clear();
+                s_RefreshInProgressDeferredUids.Clear();
+            }
         }
 
         /// <summary>
@@ -494,6 +530,21 @@ namespace VPB
                 }
                 if (added)
                     Interlocked.Increment(ref s_StartupVamNotReadyDeferredCount);
+                return null;
+            }
+
+            // VaM can enumerate package dictionaries during Refresh. Registering during this
+            // window can trigger "InvalidOperationException: out of sync" in VaM.
+            if (VamScanFilter.IsVamRefreshInProgress)
+            {
+                string deferUid = !string.IsNullOrEmpty(resolvedUid) ? resolvedUid : uid;
+                bool added;
+                lock (s_RefreshInProgressLock)
+                {
+                    added = s_RefreshInProgressDeferredUids.Add(deferUid);
+                    if (added)
+                        s_RefreshInProgressDeferredPaths.Enqueue(varPath);
+                }
                 return null;
             }
 
@@ -661,6 +712,13 @@ namespace VPB
                 return false;
             }
 
+            // VDS startup should prioritize dependency availability over startup deferral
+            // so hair/morph/asset dependencies resolve before scene bootstrap continues.
+            if (VdsLauncher.IsVdsEnabled())
+            {
+                return false;
+            }
+
             lock (s_StartupStatsLock) s_StartupDeferredNonScriptCount++;
             if (!string.IsNullOrEmpty(uid))
             {
@@ -677,7 +735,20 @@ namespace VPB
         {
             string uid = UidFromEntryPath(entryPath);
             if (string.IsNullOrEmpty(uid)) return null;
-            return TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
+            string registeredPath = TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
+            if (!string.IsNullOrEmpty(registeredPath))
+            {
+                try
+                {
+                    // Clothing/hair/morph catalogs are populated from Refresh package handlers.
+                    // Coalesce to avoid spamming refresh while still making newly on-demand
+                    // packages visible during active scene/bootstrap load.
+                    if (!IsPluginEntryPath(entryPath))
+                        RequestCoalescedVamRefresh("entrypath_on_demand_catalog");
+                }
+                catch { }
+            }
+            return registeredPath;
         }
 
         /// <summary>
@@ -702,6 +773,30 @@ namespace VPB
 
             if (promoted > 0)
                 LogUtil.Log("[VPB OnDemand] VaM FileManager ready - promoted " + promoted + " deferred registrations");
+        }
+
+        /// <summary>
+        /// Called whenever VaM's Refresh lifecycle fully exits.
+        /// Promotes registrations deferred due to refresh-in-progress back to the normal queue.
+        /// </summary>
+        public static void NotifyVamRefreshCompleted()
+        {
+            int promoted = 0;
+            lock (s_RefreshInProgressLock)
+            {
+                while (s_RefreshInProgressDeferredPaths.Count > 0)
+                {
+                    string path = s_RefreshInProgressDeferredPaths.Dequeue();
+                    if (string.IsNullOrEmpty(path)) continue;
+                    lock (s_QueueLock)
+                        s_PendingPaths.Enqueue(path);
+                    promoted++;
+                }
+                s_RefreshInProgressDeferredUids.Clear();
+            }
+
+            if (promoted > 0)
+                LogUtil.Log("[VPB OnDemand] VaM refresh completed - promoted " + promoted + " deferred registrations");
         }
 
         private static void RegisterNow(string uid, string varPath)
@@ -932,6 +1027,7 @@ namespace VPB
         {
             if (!ScanWhitelistManager.Instance.IsEnabled) return;
             MaybeLogStartupSummary();
+            if (VamScanFilter.IsVamRefreshInProgress) return;
 
             int drained = 0;
             while (drained < MaxDrainPerFrame)
@@ -964,8 +1060,12 @@ namespace VPB
         {
             lock (s_RefreshRequestLock)
             {
+                bool wasPending = s_PendingVamRefresh;
                 s_PendingVamRefresh = true;
-                s_PendingVamRefreshRequestedAt = Time.realtimeSinceStartup;
+                float now = Time.realtimeSinceStartup;
+                if (!wasPending)
+                    s_PendingVamRefreshFirstRequestedAt = now;
+                s_PendingVamRefreshRequestedAt = now;
                 s_PendingVamRefreshRequestCount++;
                 if (!string.IsNullOrEmpty(reason))
                     s_PendingVamRefreshReason = reason;
@@ -983,6 +1083,21 @@ namespace VPB
                 if (!s_PendingVamRefresh) return;
 
                 float now = Time.realtimeSinceStartup;
+                float firstRequestedAt = s_PendingVamRefreshFirstRequestedAt > 0f
+                    ? s_PendingVamRefreshFirstRequestedAt
+                    : s_PendingVamRefreshRequestedAt;
+                float pendingAge = now - firstRequestedAt;
+                bool startupReady = SafeIsStartupReadyLogged();
+                bool startupSettled = SafeIsReadyLogged();
+
+                // Startup fast-path:
+                // avoid triggering expensive VaM.Refresh during early bootstrap unless the request has
+                // been waiting a long time. Gate on full READY (startup settled), not UI_READY.
+                // This prevents "preset_json_catalog" refreshes from injecting 1-3s stalls into
+                // the tail of startup while keeping a safety escape hatch on very long sessions.
+                const float MaxPreReadyDeferralSeconds = 12f;
+                if ((!startupReady || !startupSettled) && pendingAge < MaxPreReadyDeferralSeconds) return;
+
                 float delay = SafeIsStartupReadyLogged()
                     ? CoalescedVamRefreshDelayReadySeconds
                     : CoalescedVamRefreshDelayStartupSeconds;
@@ -994,6 +1109,7 @@ namespace VPB
 
                 s_PendingVamRefresh = false;
                 s_PendingVamRefreshRequestedAt = 0f;
+                s_PendingVamRefreshFirstRequestedAt = 0f;
                 s_PendingVamRefreshRequestCount = 0;
                 s_PendingVamRefreshReason = null;
             }

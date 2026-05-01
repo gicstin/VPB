@@ -576,7 +576,6 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static void PreRefresh()
         {
-            LogUtil.Log("FileManager PreRefresh");
             try { PackageHidePrefs.InvalidateHideMarkerCache(); } catch { }
         }
 
@@ -731,7 +730,6 @@ namespace VPB
         [HarmonyPatch(typeof(SuperController), "DeactivateWorldUI")]
         public static void PostDeactivateWorldUI(SuperController __instance)
         {
-            LogUtil.Log("PostDeactivateWorldUI");
             MessageKit.post(MessageDef.DeactivateWorldUI);
         }
 
@@ -1409,36 +1407,8 @@ namespace VPB
 
     }
 
-    //[HarmonyPatch(typeof(HairLODSettings), nameof(HairLODSettings.GetDencity))]
-    //class PatchHairLODSettings1
-    //{
-    //    static void Postfix(HairLODSettings __instance,ref int __result)
-    //    {
-    //        //if (!Settings.Instance.UseNewCahe.Value) return;
-    //        //if (!__instance.UseFixedSettings)
-    //            __result = 1;// (int)__instance.Density.Min;
-    //    }
-    //}
-    //[HarmonyPatch(typeof(HairLODSettings), nameof(HairLODSettings.GetWidth))]
-    //class PatchHairLODSettings2
-    //{
-    //    static void Postfix(HairLODSettings __instance, ref float __result)
-    //    {
-    //        //if (!Settings.Instance.UseNewCahe.Value) return;
-    //        //if (!__instance.UseFixedSettings)
-    //        __result = __result*5;
-    //    }
-    //}
-
     class PatchAssetLoader
     {
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(MeshVR.AssetLoader),"Start")]
-        //static bool Start(MeshVR.AssetLoader __instance)
-        //{
-        //    LogUtil.Log("PatchAssetLoader Start");
-        //    return false; // Prevent the original method from running
-        //}
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MeshVR.AssetLoader), "QueueLoadAssetBundleFromFile")]
         static bool QueueLoadAssetBundleFromFile(MeshVR.AssetLoader.AssetBundleFromFileRequest abffr)
@@ -1504,6 +1474,7 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static void PreRefreshResetScanCounters()
         {
+            VamScanFilter.MarkVamRefreshBegin();
             VamScanFilter.ResetScanCounters();
         }
 
@@ -1511,10 +1482,16 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static void PostRefreshLogScanResult()
         {
-            VamScanFilter.LogScanResult();
-            // Signal VaM internals are now usable so VPB on-demand registration can stop
-            // deferring requests that would have NRE'd against pre-Refresh VaM state.
             VamScanFilter.MarkVamRefreshed();
+            VamScanFilter.LogScanResult();
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
+        public static Exception FinalizeRefresh(Exception __exception)
+        {
+            VamScanFilter.MarkVamRefreshEnd();
+            return __exception;
         }
 
         /// <summary>

@@ -111,6 +111,9 @@ namespace VPB
         // Counters for the current scan cycle, reset at the start of each Refresh
         private static int s_ScanAllowed;
         private static int s_ScanBlocked;
+        // Tracks nested/in-flight VaM refresh calls so on-demand registration can avoid
+        // mutating package dictionaries while VaM is enumerating them.
+        private static int s_VamRefreshInProgressCount;
 
         public static void ResetScanCounters() { s_ScanAllowed = 0; s_ScanBlocked = 0; }
         public static void RecordScanAllowed() { System.Threading.Interlocked.Increment(ref s_ScanAllowed); }
@@ -121,6 +124,24 @@ namespace VPB
             LogUtil.Log(string.Format(
                 "[VPB ScanWhitelist] VaM scan filter: {0} allowed, {1} blocked by prefix patch",
                 s_ScanAllowed, s_ScanBlocked));
+        }
+
+        public static bool IsVamRefreshInProgress => System.Threading.Interlocked.CompareExchange(ref s_VamRefreshInProgressCount, 0, 0) > 0;
+
+        public static void MarkVamRefreshBegin()
+        {
+            System.Threading.Interlocked.Increment(ref s_VamRefreshInProgressCount);
+        }
+
+        public static void MarkVamRefreshEnd()
+        {
+            int next = System.Threading.Interlocked.Decrement(ref s_VamRefreshInProgressCount);
+            if (next <= 0)
+            {
+                // Clamp to zero in case another plugin/finalizer sequencing causes extra end calls.
+                if (next < 0) System.Threading.Interlocked.Exchange(ref s_VamRefreshInProgressCount, 0);
+                VamOnDemandLoader.NotifyVamRefreshCompleted();
+            }
         }
     }
 }
