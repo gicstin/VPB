@@ -62,7 +62,7 @@ namespace VPB
         /// <summary>High bit: row has <see cref="ClothingAttrPacked"/> from index rebuild (fast clothing subfilter path).</summary>
         internal const int ClothingAttrPresentFlag = unchecked((int)0x80000000);
 
-        private const int SchemaVersion = 9;
+        private const int SchemaVersion = 10;
 
         private static readonly object s_Sync = new object();
         private static volatile bool s_RebuildScheduled;
@@ -303,12 +303,688 @@ namespace VPB
                 "CREATE TABLE IF NOT EXISTS item_usage (item_key TEXT PRIMARY KEY, kind TEXT, use_count INTEGER NOT NULL DEFAULT 0, last_used INTEGER NOT NULL);" +
                 "CREATE INDEX IF NOT EXISTS idx_iu_count ON item_usage(use_count);" +
                 "CREATE INDEX IF NOT EXISTS idx_iu_last ON item_usage(last_used);" +
-                "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);");
+                "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);" +
+                "CREATE TABLE IF NOT EXISTS gallery_user_tag (tag_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);" +
+                "CREATE TABLE IF NOT EXISTS gallery_item_user_tag (category TEXT NOT NULL, pkg_uid TEXT NOT NULL, internal_path TEXT NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY(category, pkg_uid, internal_path, tag_id));" +
+                "CREATE INDEX IF NOT EXISTS idx_giut_tag ON gallery_item_user_tag(tag_id);" +
+                "CREATE INDEX IF NOT EXISTS idx_giut_lookup ON gallery_item_user_tag(category, pkg_uid, internal_path);");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN var_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN list_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN pctime TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN cloth_attr TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
+            BumpMetaSchemaVersionAfterUserTagTables(conn);
+        }
+
+        internal const int GalleryUserTagNameMaxLength = 30;
+        internal const int GalleryUserTagVocabularyMaxCount = 10000;
+        internal const int GalleryUserTagMaxPerItem = 100;
+        internal const int GalleryUserTagPasteMaxUniqueNames = 10000;
+
+        /// <summary>
+        /// Normalize gallery user tag: trim, lowercase, collapse whitespace to single spaces (tabs/newlines → space, never stored as tab),
+        /// allow letters, digits, <c>-</c>/<c>_</c>, single internal spaces; reject other characters; length 1–<see cref="GalleryUserTagNameMaxLength"/>.
+        /// </summary>
+        internal static string NormalizeGalleryUserTagName(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "";
+            string s = raw.Trim().ToLowerInvariant();
+            if (s.Length == 0) return "";
+            var sb = new StringBuilder(s.Length);
+            bool prevSpace = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (char.IsWhiteSpace(c))
+                {
+                    if (!prevSpace && sb.Length > 0) { sb.Append(' '); prevSpace = true; }
+                    continue;
+                }
+                if (!IsGalleryUserTagAllowedNonSpaceChar(c))
+                    return "";
+                sb.Append(c);
+                prevSpace = false;
+            }
+            string r = sb.ToString().Trim();
+            if (r.Length == 0 || r.Length > GalleryUserTagNameMaxLength) return "";
+            return r;
+        }
+
+        private static bool IsGalleryUserTagAllowedNonSpaceChar(char c)
+        {
+            if (c == '-' || c == '_') return true;
+            return char.IsLetter(c) || char.IsDigit(c);
+        }
+
+        private static void BumpMetaSchemaVersionAfterUserTagTables(VpbSqlite3.Connection conn)
+        {
+            try
+            {
+                string v = MetaGet(conn, "schema_version");
+                int mv;
+                if (int.TryParse(v, out mv) && mv >= SchemaVersion) return;
+                using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                {
+                    st.BindText(1, "schema_version");
+                    st.BindText(2, SchemaVersion.ToString());
+                    st.Step();
+                }
+            }
+            catch { }
+        }
+
+        private static void AppendSqlActiveUserTagExists(StringBuilder sb, List<string> bindNamesOut, HashSet<string> activeUserTags, string mAlias)
+        {
+            if (activeUserTags == null || activeUserTags.Count == 0 || bindNamesOut == null) return;
+            foreach (var raw in activeUserTags)
+            {
+                string n = NormalizeGalleryUserTagName(raw);
+                if (string.IsNullOrEmpty(n)) continue;
+                bindNamesOut.Add(n);
+                sb.Append(" AND EXISTS (SELECT 1 FROM gallery_item_user_tag gut");
+                sb.Append(" INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id");
+                sb.Append(" WHERE gut.category=").Append(mAlias).Append(".category");
+                sb.Append(" AND gut.pkg_uid=").Append(mAlias).Append(".pkg_uid");
+                sb.Append(" AND gut.internal_path=").Append(mAlias).Append(".internal_path");
+                sb.Append(" AND gt.name=?)");
+            }
+        }
+
+        /// <summary>Side tab: distinct user tag names with counts for current category (+ creator/path filters).</summary>
+        internal static bool TryReadGalleryUserTagSideTabCounts(
+            string categoryTitle,
+            string creatorFilter,
+            string packagePathFilter,
+            Dictionary<string, int> countsOut)
+        {
+            countsOut?.Clear();
+            if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
+            if (string.IsNullOrEmpty(categoryTitle)) return false;
+
+            long scanBin = DateTime.MinValue.Ticks;
+            try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+
+            string catSig = null;
+            long readyScan = long.MinValue;
+            lock (s_Sync)
+            {
+                readyScan = s_ReadyScanBinary;
+                catSig = s_ReadyCategoriesSig;
+            }
+            if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+            {
+                AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
+                return false;
+            }
+
+            string normalizedPackagePathFilter = "";
+            bool hasPackagePathFilter = false;
+            if (!string.IsNullOrEmpty(packagePathFilter))
+            {
+                normalizedPackagePathFilter = packagePathFilter.Replace('\\', '/').Trim().Trim('/');
+                hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
+            }
+            bool hasCreator = !string.IsNullOrEmpty(creatorFilter);
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    var sb = new StringBuilder(512);
+                    sb.Append("SELECT gt.name, COUNT(*) FROM gallery_item_user_tag gut");
+                    sb.Append(" INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id");
+                    sb.Append(" INNER JOIN cat_mem m ON m.category=gut.category AND m.pkg_uid=gut.pkg_uid AND m.internal_path=gut.internal_path");
+                    sb.Append(" INNER JOIN pkg p ON p.uid=m.pkg_uid");
+                    sb.Append(" WHERE gut.category=?");
+                    if (hasCreator) sb.Append(" AND p.creator=?");
+                    if (hasPackagePathFilter)
+                        sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
+                    sb.Append(" GROUP BY gt.name");
+
+                    using (var stmt = conn.Prepare(sb.ToString()))
+                    {
+                        int bind = 1;
+                        stmt.BindText(bind++, categoryTitle);
+                        if (hasCreator) stmt.BindText(bind++, creatorFilter);
+                        if (hasPackagePathFilter)
+                            stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
+
+                        int step;
+                        while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
+                        {
+                            string name = stmt.ColumnText(0) ?? "";
+                            int n;
+                            if (!int.TryParse(stmt.ColumnText(1), out n)) n = (int)stmt.ColumnInt64(1);
+                            if (!string.IsNullOrEmpty(name)) countsOut[name] = n;
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>All distinct gallery user tag names (pick list vocabulary). Order: case-insensitive.</summary>
+        internal static bool TryReadAllGalleryUserTagNames(List<string> namesOut)
+        {
+            namesOut?.Clear();
+            if (!VpbSqlite3.IsAvailable || namesOut == null) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var stmt = conn.Prepare("SELECT name FROM gallery_user_tag ORDER BY name"))
+                    {
+                        int step;
+                        while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
+                        {
+                            string name = stmt.ColumnText(0) ?? "";
+                            if (!string.IsNullOrEmpty(name)) namesOut.Add(name);
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>One gallery row ↔ user tag link (for YAML export).</summary>
+        internal struct GalleryUserTagAssignmentRow
+        {
+            public string TagName;
+            public string Category;
+            public string PkgUid;
+            public string InternalPath;
+        }
+
+        /// <summary>All <c>gallery_item_user_tag</c> rows with tag names (full assignment table).</summary>
+        internal static bool TryReadAllGalleryUserTagAssignments(List<GalleryUserTagAssignmentRow> rowsOut)
+        {
+            rowsOut?.Clear();
+            if (!VpbSqlite3.IsAvailable || rowsOut == null) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var stmt = conn.Prepare(
+                        "SELECT gt.name, gut.category, gut.pkg_uid, gut.internal_path FROM gallery_item_user_tag gut " +
+                        "INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id " +
+                        "ORDER BY gt.name, gut.category, gut.pkg_uid, gut.internal_path"))
+                    {
+                        int step;
+                        while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
+                        {
+                            string tag = stmt.ColumnText(0) ?? "";
+                            string cat = stmt.ColumnText(1) ?? "";
+                            string pkg = stmt.ColumnText(2) ?? "";
+                            string ip = stmt.ColumnText(3) ?? "";
+                            if (string.IsNullOrEmpty(tag) || string.IsNullOrEmpty(cat) || string.IsNullOrEmpty(pkg) || string.IsNullOrEmpty(ip))
+                                continue;
+                            rowsOut.Add(new GalleryUserTagAssignmentRow
+                            {
+                                TagName = tag,
+                                Category = cat,
+                                PkgUid = pkg,
+                                InternalPath = ip
+                            });
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static long TryGetOrCreateGalleryUserTagId(VpbSqlite3.Connection conn, string normalizedName)
+        {
+            if (conn == null || string.IsNullOrEmpty(normalizedName)) return -1;
+            try
+            {
+                using (var sel0 = conn.Prepare("SELECT tag_id FROM gallery_user_tag WHERE name=?"))
+                {
+                    sel0.BindText(1, normalizedName);
+                    if (sel0.Step() == VpbSqlite3.SqliteRow)
+                        return sel0.ColumnInt64(0);
+                }
+                using (var cnt = conn.Prepare("SELECT COUNT(*) FROM gallery_user_tag"))
+                {
+                    if (cnt.Step() == VpbSqlite3.SqliteRow && cnt.ColumnInt64(0) >= GalleryUserTagVocabularyMaxCount)
+                        return -1;
+                }
+                using (var ins = conn.Prepare("INSERT OR IGNORE INTO gallery_user_tag(name) VALUES(?)"))
+                {
+                    ins.BindText(1, normalizedName);
+                    ins.Step();
+                }
+                using (var sel = conn.Prepare("SELECT tag_id FROM gallery_user_tag WHERE name=?"))
+                {
+                    sel.BindText(1, normalizedName);
+                    if (sel.Step() == VpbSqlite3.SqliteRow)
+                        return sel.ColumnInt64(0);
+                }
+            }
+            catch { }
+            return -1;
+        }
+
+        /// <summary>Assign normalized tags to one indexed row. Creates tag rows as needed.</summary>
+        internal static bool TryAssignGalleryUserTagsToRow(string categoryTitle, string pkgUid, string internalPath, IEnumerable<string> normalizedTagNames, out int inserted)
+        {
+            inserted = 0;
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(categoryTitle) || string.IsNullOrEmpty(pkgUid) || string.IsNullOrEmpty(internalPath))
+                return false;
+            if (normalizedTagNames == null) return true;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    var existingOnRow = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    using (var ex = conn.Prepare(
+                        "SELECT gt.name FROM gallery_item_user_tag gut INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id WHERE gut.category=? AND gut.pkg_uid=? AND gut.internal_path=?"))
+                    {
+                        ex.BindText(1, categoryTitle);
+                        ex.BindText(2, pkgUid);
+                        ex.BindText(3, internalPath);
+                        while (ex.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string n = ex.ColumnText(0);
+                            if (!string.IsNullOrEmpty(n)) existingOnRow.Add(n);
+                        }
+                    }
+                    int rowTagCount = existingOnRow.Count;
+                    conn.ExecUtf8("BEGIN;");
+                    try
+                    {
+                        using (var insIt = conn.Prepare(
+                            "INSERT OR IGNORE INTO gallery_item_user_tag(category, pkg_uid, internal_path, tag_id) VALUES(?,?,?,?)"))
+                        {
+                            foreach (var rawName in normalizedTagNames)
+                            {
+                                string name = NormalizeGalleryUserTagName(rawName);
+                                if (string.IsNullOrEmpty(name)) continue;
+                                if (existingOnRow.Contains(name)) continue;
+                                if (rowTagCount >= GalleryUserTagMaxPerItem) break;
+                                long tid = TryGetOrCreateGalleryUserTagId(conn, name);
+                                if (tid < 0) continue;
+                                insIt.BindText(1, categoryTitle);
+                                insIt.BindText(2, pkgUid);
+                                insIt.BindText(3, internalPath);
+                                insIt.BindInt64(4, tid);
+                                insIt.Step();
+                                insIt.Reset();
+                                inserted++;
+                                existingOnRow.Add(name);
+                                rowTagCount++;
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                        return true;
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
+            catch
+            {
+                inserted = 0;
+                return false;
+            }
+        }
+
+        internal static bool TryRemoveGalleryUserTagsFromRow(string categoryTitle, string pkgUid, string internalPath, IEnumerable<string> normalizedTagNames, out int deleted)
+        {
+            deleted = 0;
+            if (!VpbSqlite3.IsAvailable || normalizedTagNames == null) return true;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    foreach (var rawName in normalizedTagNames)
+                    {
+                        string name = NormalizeGalleryUserTagName(rawName);
+                        if (string.IsNullOrEmpty(name)) continue;
+                        using (var del = conn.Prepare(
+                            "DELETE FROM gallery_item_user_tag WHERE category=? AND pkg_uid=? AND internal_path=? AND tag_id=(SELECT tag_id FROM gallery_user_tag WHERE name=?)"))
+                        {
+                            del.BindText(1, categoryTitle);
+                            del.BindText(2, pkgUid);
+                            del.BindText(3, internalPath);
+                            del.BindText(4, name);
+                            del.Step();
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>True when row has every listed user tag (AND). Names must already be normalized.</summary>
+        internal static bool TryGalleryRowMatchesAllUserTags(string categoryTitle, string pkgUid, string internalPath, HashSet<string> normalizedUserTags)
+        {
+            if (normalizedUserTags == null || normalizedUserTags.Count == 0) return true;
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(categoryTitle)) return false;
+            var need = new List<string>();
+            foreach (var t in normalizedUserTags)
+            {
+                string n = NormalizeGalleryUserTagName(t);
+                if (!string.IsNullOrEmpty(n)) need.Add(n);
+            }
+            if (need.Count == 0) return true;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    var sb = new StringBuilder(120 + need.Count * 4);
+                    sb.Append("SELECT COUNT(DISTINCT gt.name) FROM gallery_item_user_tag gut");
+                    sb.Append(" INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id");
+                    sb.Append(" WHERE gut.category=? AND gut.pkg_uid=? AND gut.internal_path=? AND gt.name IN (");
+                    for (int i = 0; i < need.Count; i++)
+                    {
+                        if (i > 0) sb.Append(',');
+                        sb.Append('?');
+                    }
+                    sb.Append(')');
+                    using (var st = conn.Prepare(sb.ToString()))
+                    {
+                        int b = 1;
+                        st.BindText(b++, categoryTitle);
+                        st.BindText(b++, pkgUid ?? "");
+                        st.BindText(b++, internalPath ?? "");
+                        for (int i = 0; i < need.Count; i++)
+                            st.BindText(b++, need[i]);
+                        if (st.Step() != VpbSqlite3.SqliteRow) return false;
+                        long cnt = st.ColumnInt64(0);
+                        return cnt >= need.Count;
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Tags on one indexed row; reuses <paramref name="conn"/> (one connection for many rows — selection pane, batch export).</summary>
+        internal static bool TryGetGalleryUserTagsForRow(VpbSqlite3.Connection conn, string categoryTitle, string pkgUid, string internalPath, HashSet<string> outNames)
+        {
+            outNames?.Clear();
+            if (conn == null || outNames == null || string.IsNullOrEmpty(categoryTitle)) return false;
+            try
+            {
+                using (var st = conn.Prepare(
+                    "SELECT gt.name FROM gallery_item_user_tag gut INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id WHERE gut.category=? AND gut.pkg_uid=? AND gut.internal_path=?"))
+                {
+                    st.BindText(1, categoryTitle);
+                    st.BindText(2, pkgUid ?? "");
+                    st.BindText(3, internalPath ?? "");
+                    while (st.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string n = st.ColumnText(0);
+                        if (!string.IsNullOrEmpty(n)) outNames.Add(n);
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static bool TryGetGalleryUserTagsForRow(string categoryTitle, string pkgUid, string internalPath, HashSet<string> outNames)
+        {
+            if (!VpbSqlite3.IsAvailable || outNames == null || string.IsNullOrEmpty(categoryTitle)) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    return TryGetGalleryUserTagsForRow(conn, categoryTitle, pkgUid, internalPath, outNames);
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Aggregates tag→how many selected rows have it, single DB connection (vs N opens per row).</summary>
+        internal static bool TryAccumulateGalleryUserTagSelectionCounts(
+            string categoryTitle,
+            List<KeyValuePair<string, string>> uniquePkgInternalPaths,
+            Dictionary<string, int> countsOut)
+        {
+            countsOut?.Clear();
+            if (!VpbSqlite3.IsAvailable || countsOut == null || string.IsNullOrEmpty(categoryTitle)) return false;
+            if (uniquePkgInternalPaths == null || uniquePkgInternalPaths.Count == 0) return true;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    var rowTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < uniquePkgInternalPaths.Count; i++)
+                    {
+                        KeyValuePair<string, string> kv = uniquePkgInternalPaths[i];
+                        rowTags.Clear();
+                        if (!TryGetGalleryUserTagsForRow(conn, categoryTitle, kv.Key, kv.Value, rowTags)) continue;
+                        foreach (string t in rowTags)
+                        {
+                            if (string.IsNullOrEmpty(t)) continue;
+                            if (countsOut.TryGetValue(t, out int c)) countsOut[t] = c + 1;
+                            else countsOut[t] = 1;
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Ensure a row exists in <c>gallery_user_tag</c> (tag vocabulary only).</summary>
+        internal static bool TryEnsureGalleryUserTagInVocabulary(string rawName, out string normalizedOut)
+        {
+            normalizedOut = NormalizeGalleryUserTagName(rawName);
+            if (string.IsNullOrEmpty(normalizedOut)) return false;
+            if (!VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    long id = TryGetOrCreateGalleryUserTagId(conn, normalizedOut);
+                    return id >= 0;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Remove all gallery_item_user_tag rows for tag and delete its gallery_user_tag row.</summary>
+        internal static bool TryPurgeGalleryUserTagGlobally(string normalizedName, out int itemLinksRemoved)
+        {
+            itemLinksRemoved = 0;
+            string n = NormalizeGalleryUserTagName(normalizedName);
+            if (string.IsNullOrEmpty(n)) return false;
+            if (!VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN;");
+                    try
+                    {
+                        long tid = -1;
+                        using (var sel = conn.Prepare("SELECT tag_id FROM gallery_user_tag WHERE name=?"))
+                        {
+                            sel.BindText(1, n);
+                            if (sel.Step() == VpbSqlite3.SqliteRow)
+                                tid = sel.ColumnInt64(0);
+                        }
+                        if (tid < 0)
+                        {
+                            conn.ExecUtf8("COMMIT;");
+                            return true;
+                        }
+                        using (var cnt = conn.Prepare("SELECT COUNT(*) FROM gallery_item_user_tag WHERE tag_id=?"))
+                        {
+                            cnt.BindInt64(1, tid);
+                            if (cnt.Step() == VpbSqlite3.SqliteRow)
+                                itemLinksRemoved = (int)cnt.ColumnInt64(0);
+                        }
+                        using (var delIt = conn.Prepare("DELETE FROM gallery_item_user_tag WHERE tag_id=?"))
+                        {
+                            delIt.BindInt64(1, tid);
+                            delIt.Step();
+                        }
+                        using (var delTag = conn.Prepare("DELETE FROM gallery_user_tag WHERE tag_id=?"))
+                        {
+                            delTag.BindInt64(1, tid);
+                            delTag.Step();
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                        return true;
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
+            catch
+            {
+                itemLinksRemoved = 0;
+                return false;
+            }
+        }
+
+        /// <summary>Move all item assignments from source tags into <paramref name="rawTargetName"/>; delete emptied source tag rows. Target row is created if missing.</summary>
+        internal static bool TryMergeGalleryUserTagsInto(IEnumerable<string> sourceDisplayNames, string rawTargetName, out string normalizedTargetOut, out int itemAssignmentsUpdated)
+        {
+            normalizedTargetOut = "";
+            itemAssignmentsUpdated = 0;
+            if (!VpbSqlite3.IsAvailable || sourceDisplayNames == null) return false;
+            normalizedTargetOut = NormalizeGalleryUserTagName(rawTargetName);
+            if (string.IsNullOrEmpty(normalizedTargetOut)) return false;
+
+            var sourceTids = new HashSet<long>();
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    foreach (var raw in sourceDisplayNames)
+                    {
+                        string n = NormalizeGalleryUserTagName(raw);
+                        if (string.IsNullOrEmpty(n)) continue;
+                        using (var sel = conn.Prepare("SELECT tag_id FROM gallery_user_tag WHERE name=?"))
+                        {
+                            sel.BindText(1, n);
+                            if (sel.Step() == VpbSqlite3.SqliteRow)
+                                sourceTids.Add(sel.ColumnInt64(0));
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (sourceTids.Count == 0) return false;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN;");
+                    try
+                    {
+                        long targetTid = TryGetOrCreateGalleryUserTagId(conn, normalizedTargetOut);
+                        if (targetTid < 0)
+                        {
+                            conn.ExecUtf8("ROLLBACK;");
+                            return false;
+                        }
+
+                        foreach (long sourceTid in sourceTids)
+                        {
+                            if (sourceTid == targetTid) continue;
+
+                            using (var cnt = conn.Prepare("SELECT COUNT(*) FROM gallery_item_user_tag WHERE tag_id=?"))
+                            {
+                                cnt.BindInt64(1, sourceTid);
+                                if (cnt.Step() == VpbSqlite3.SqliteRow)
+                                    itemAssignmentsUpdated += (int)cnt.ColumnInt64(0);
+                            }
+
+                            using (var ins = conn.Prepare(
+                                "INSERT OR IGNORE INTO gallery_item_user_tag(category, pkg_uid, internal_path, tag_id) " +
+                                "SELECT category, pkg_uid, internal_path, ? FROM gallery_item_user_tag WHERE tag_id=?"))
+                            {
+                                ins.BindInt64(1, targetTid);
+                                ins.BindInt64(2, sourceTid);
+                                ins.Step();
+                            }
+
+                            using (var delIt = conn.Prepare("DELETE FROM gallery_item_user_tag WHERE tag_id=?"))
+                            {
+                                delIt.BindInt64(1, sourceTid);
+                                delIt.Step();
+                            }
+
+                            using (var delTag = conn.Prepare("DELETE FROM gallery_user_tag WHERE tag_id=?"))
+                            {
+                                delTag.BindInt64(1, sourceTid);
+                                delTag.Step();
+                            }
+                        }
+
+                        conn.ExecUtf8("COMMIT;");
+                        return true;
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
+            catch
+            {
+                itemAssignmentsUpdated = 0;
+                return false;
+            }
         }
 
         internal static string BuildUsageKey(FileEntry file)
@@ -2259,7 +2935,8 @@ namespace VPB
             Dictionary<string, int> countsByCategoryName,
             string creatorFilter = "",
             HashSet<string> activeTags = null,
-            string packagePathFilter = "")
+            string packagePathFilter = "",
+            HashSet<string> activeUserTags = null)
         {
             if (!VpbSqlite3.IsAvailable || countsByCategoryName == null || countsByCategoryName.Count == 0) return false;
 
@@ -2294,6 +2971,7 @@ namespace VPB
                         hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
                     }
                     bool hasTags = activeTags != null && activeTags.Count > 0;
+                    var userTagBindNames = new List<string>();
                     
                     var sb = new StringBuilder();
                     sb.Append("SELECT m.category, COUNT(*) FROM cat_mem m");
@@ -2313,6 +2991,7 @@ namespace VPB
                             sb.Append(" AND m.list_path LIKE ? ESCAPE '\\'");
                         }
                     }
+                    AppendSqlActiveUserTagExists(sb, userTagBindNames, activeUserTags, "m");
                     
                     sb.Append(" GROUP BY m.category");
 
@@ -2329,6 +3008,8 @@ namespace VPB
                                 stmt.BindText(bind++, "%[" + EscapeLike(tag) + "]%");
                             }
                         }
+                        for (int ui = 0; ui < userTagBindNames.Count; ui++)
+                            stmt.BindText(bind++, userTagBindNames[ui]);
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
@@ -2391,7 +3072,8 @@ namespace VPB
             string singlePathPrefix,
             HashSet<string> activeTags = null,
             string categoryTitle = null,
-            string packagePathFilter = null)
+            string packagePathFilter = null,
+            HashSet<string> activeUserTags = null)
         {
             if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
             countsOut.Clear();
@@ -2454,6 +3136,8 @@ namespace VPB
                             sb.Append(" AND m.list_path LIKE ? ESCAPE '\\'");
                         }
                     }
+                    var utBind = new List<string>();
+                    AppendSqlActiveUserTagExists(sb, utBind, activeUserTags, "m");
                     
                     sb.Append(" GROUP BY p.creator");
 
@@ -2470,6 +3154,8 @@ namespace VPB
                                 stmt.BindText(bind++, "%[" + EscapeLike(tag) + "]%");
                             }
                         }
+                        for (int ui = 0; ui < utBind.Count; ui++)
+                            stmt.BindText(bind++, utBind[ui]);
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
@@ -2502,7 +3188,8 @@ namespace VPB
             string singlePathPrefix,
             HashSet<string> activeTags,
             string categoryTitle,
-            string creatorFilter)
+            string creatorFilter,
+            HashSet<string> activeUserTags = null)
         {
             if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
             countsOut.Clear();
@@ -2609,6 +3296,8 @@ namespace VPB
                         foreach (var _ in activeTags)
                             sb.Append(" AND m.list_path LIKE ? ESCAPE '\\'");
                     }
+                    var utBindPf = new List<string>();
+                    AppendSqlActiveUserTagExists(sb, utBindPf, activeUserTags, "m");
 
                     sb.Append(" GROUP BY p.var_path");
 
@@ -2646,6 +3335,8 @@ namespace VPB
                             foreach (var tag in activeTags)
                                 stmt.BindText(bind++, "%[" + EscapeLike(tag) + "]%");
                         }
+                        for (int ui = 0; ui < utBindPf.Count; ui++)
+                            stmt.BindText(bind++, utBindPf[ui]);
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
@@ -2943,6 +3634,7 @@ namespace VPB
             string[] nameTerms = null,
             List<string> pathExclusions = null,
             HashSet<string> activeTags = null,
+            HashSet<string> activeUserTags = null,
             SortState sortState = null)
         {
             stats = new GalleryCategoryQueryStats();
@@ -3058,6 +3750,10 @@ namespace VPB
                         }
                         tagSqlAnd = sb.ToString();
                     }
+                    var userTagBindNames = new List<string>();
+                    var sbUt = new StringBuilder();
+                    AppendSqlActiveUserTagExists(sbUt, userTagBindNames, activeUserTags, "m");
+                    string userTagSqlAnd = sbUt.ToString();
 
                     string loadedSelect = pkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
                     string orderBy = "";
@@ -3075,7 +3771,7 @@ namespace VPB
                     string sql =
                         "SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, p.pctime, ifnull(m.cloth_attr,''), " + loadedSelect + " FROM cat_mem m " +
                         "INNER JOIN pkg p ON p.uid = m.pkg_uid " +
-                        "WHERE m.category = ? AND ((length(trim(?)) = 0) OR (p.creator = ?))" + clothSqlAnd + loadedSqlAnd + nameSqlAnd + exclusionSqlAnd + tagSqlAnd + orderBy;
+                        "WHERE m.category = ? AND ((length(trim(?)) = 0) OR (p.creator = ?))" + clothSqlAnd + loadedSqlAnd + nameSqlAnd + exclusionSqlAnd + tagSqlAnd + userTagSqlAnd + orderBy;
                     
                     using (var stmt = conn.Prepare(sql))
                     {
@@ -3114,6 +3810,8 @@ namespace VPB
                                 stmt.BindText(bind++, esc);
                             }
                         }
+                        for (int ui = 0; ui < userTagBindNames.Count; ui++)
+                            stmt.BindText(bind++, userTagBindNames[ui]);
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)

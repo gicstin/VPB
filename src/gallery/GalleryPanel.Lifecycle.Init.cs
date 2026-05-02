@@ -483,11 +483,7 @@ namespace VPB
                     { var rt = rsSubRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
                     Button rightSubSortButton = rightSubSortBtn.GetComponent<Button>();
                     rightSubSortButton.onClick.RemoveAllListeners();
-                    rightSubSortButton.onClick.AddListener(() =>
-                    {
-                        RectTransform rt = rightSubSortBtn != null ? rightSubSortBtn.GetComponent<RectTransform>() : null;
-                        ToggleSidePaneSortMenu("Tags", rt);
-                    });
+                    rightSubSortButton.onClick.AddListener(OnRightSubSortButtonClicked);
                 }
 
                 {
@@ -516,7 +512,24 @@ namespace VPB
 
                 // Right Sub Search
                 rightSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 60f, (val) => {
-                    tagFilter = val;
+                    bool utAppliedPane = rightActiveContent == ContentType.UserTags && rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf;
+                    if (utAppliedPane)
+                        userTagAppliedFilter = val;
+                    else
+                    {
+                        tagFilter = val;
+                        hubTagPage = 0;
+                    }
+                    UpdateTabs();
+                }, () => {
+                    bool utAppliedPane = rightActiveContent == ContentType.UserTags && rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf;
+                    if (utAppliedPane)
+                    {
+                        userTagAppliedFilter = "";
+                        UpdateTabs();
+                        return;
+                    }
+                    tagFilter = "";
                     hubTagPage = 0;
                     UpdateTabs();
                 });
@@ -626,6 +639,7 @@ namespace VPB
                 rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
                     else if (rightActiveContent == ContentType.Creator) creatorFilter = val;
+                    else if (rightActiveContent == ContentType.UserTags) userTagFilter = val;
                     else if (rightActiveContent == ContentType.Path) pathFilter = val;
                     else if (rightActiveContent == ContentType.History) historyTabFilter = val;
                     else if (rightActiveContent == ContentType.Settings) settingsFilter = val;
@@ -643,6 +657,10 @@ namespace VPB
                         pathsCached = false;
                         tagsCached = false;
                             RefreshFiles();
+                        UpdateTabs();
+                    }
+                    else if (rightActiveContent == ContentType.UserTags) {
+                        userTagFilter = "";
                         UpdateTabs();
                     }
                     else if (rightActiveContent == ContentType.Path) {
@@ -739,11 +757,7 @@ namespace VPB
                     { var rt = lsSubRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
                     Button leftSubSortButton = leftSubSortBtn.GetComponent<Button>();
                     leftSubSortButton.onClick.RemoveAllListeners();
-                    leftSubSortButton.onClick.AddListener(() =>
-                    {
-                        RectTransform rt = leftSubSortBtn != null ? leftSubSortBtn.GetComponent<RectTransform>() : null;
-                        ToggleSidePaneSortMenu("Tags", rt);
-                    });
+                    leftSubSortButton.onClick.AddListener(OnLeftSubSortButtonClicked);
                 }
 
                 // Scene sub-pane: one square button cycling 4 file-sort modes
@@ -773,7 +787,24 @@ namespace VPB
 
                 // Left Sub Search
                 leftSubSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 60f, (val) => {
-                    tagFilter = val;
+                    bool utAppliedPane = leftActiveContent == ContentType.UserTags && leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf;
+                    if (utAppliedPane)
+                        userTagAppliedFilter = val;
+                    else
+                    {
+                        tagFilter = val;
+                        hubTagPage = 0;
+                    }
+                    UpdateTabs();
+                }, () => {
+                    bool utAppliedPane = leftActiveContent == ContentType.UserTags && leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf;
+                    if (utAppliedPane)
+                    {
+                        userTagAppliedFilter = "";
+                        UpdateTabs();
+                        return;
+                    }
+                    tagFilter = "";
                     hubTagPage = 0;
                     UpdateTabs();
                 });
@@ -867,6 +898,7 @@ namespace VPB
                 leftSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
                     if (leftActiveContent == ContentType.Category) categoryFilter = val;
                     else if (leftActiveContent == ContentType.Creator) creatorFilter = val;
+                    else if (leftActiveContent == ContentType.UserTags) userTagFilter = val;
                     else if (leftActiveContent == ContentType.Path) pathFilter = val;
                     else if (leftActiveContent == ContentType.History) historyTabFilter = val;
                     else if (leftActiveContent == ContentType.Settings) settingsFilter = val;
@@ -884,6 +916,10 @@ namespace VPB
                         pathsCached = false;
                         tagsCached = false;
                             RefreshFiles();
+                        UpdateTabs();
+                    }
+                    else if (leftActiveContent == ContentType.UserTags) {
+                        userTagFilter = "";
                         UpdateTabs();
                     }
                     else if (leftActiveContent == ContentType.Path) {
@@ -1113,13 +1149,45 @@ namespace VPB
                     AddTooltip(rightCatBtn, "gallery.tooltip.category_list", "Open category list.");
                 }
 
+                // User-defined tags (SQLite) — directly under Category
+                {
+                    Color colorUserTagRail = new Color(0.14f, 0.42f, 0.48f, 1f);
+                    float utW = sideIconBtn;
+                    float utH = sideIconBtn;
+                    Sprite utSpr = null;
+                    try { utSpr = UI.LoadIconSprite("vpb_icons/tags.png", Color.white); } catch { }
+                    GameObject rightUserTagsBtn = UI.CreateUIButton(rightSideContainer, utW, utH, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () =>
+                    {
+                        if (isFixedLocally) ToggleLeft(ContentType.UserTags);
+                        else ToggleRight(ContentType.UserTags);
+                    });
+                    rightUserTagsSideBtn = rightUserTagsBtn;
+                    Image utImg = rightUserTagsBtn.GetComponent<Image>();
+                    Text utTxt = rightUserTagsBtn.GetComponentInChildren<Text>(true);
+                    if (utSpr != null)
+                        UI.AddIconToButton(rightUserTagsBtn, utSpr, sideIconPad, colorUserTagRail);
+                    else if (utImg != null)
+                    {
+                        utImg.color = colorUserTagRail;
+                        if (utTxt != null)
+                        {
+                            utTxt.text = VPBTranslation.T("gallery.side.usertags_short", "Tag");
+                            utTxt.fontSize = btnFontSize;
+                            utTxt.gameObject.SetActive(true);
+                        }
+                    }
+                    rightSideButtons.Add(rightUserTagsBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightUserTagsBtn, () => ToggleRight(ContentType.UserTags));
+                    AddTooltip(rightUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
+                }
+
                 // Creator (Green)
                 {
                     float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
                     float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
 
-                    // Clear Creator Filter (icon) — normal rail entry above Creator
-                    rightClearCreatorBtn = UI.CreateUIButton(rightSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => {
+                    // Clear Creator Filter (icon) — beside Creator, after Tags
+                    rightClearCreatorBtn = UI.CreateUIButton(rightSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
                         currentCreator = "";
                         categoriesCached = false;
                         pathsCached = false;
@@ -1143,7 +1211,7 @@ namespace VPB
                     rightSideButtons.Add(rightClearCreatorBtn.GetComponent<RectTransform>());
                     AddTooltip(rightClearCreatorBtn, "gallery.tooltip.creator_clear", "Clear creator filter.");
 
-                    GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, crW, crH, " ", 8, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
+                    GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, crW, crH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => {
                         if (isFixedLocally) ToggleLeft(ContentType.Creator); else ToggleRight(ContentType.Creator);
                     });
                     rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
@@ -1174,7 +1242,7 @@ namespace VPB
                 {
                     float pW = galleryPathSprite != null ? sideIconBtn : btnWidth;
                     float pH = galleryPathSprite != null ? sideIconBtn : btnHeight;
-                    GameObject rightPathBtn = UI.CreateUIButton(rightSideContainer, pW, pH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => {
+                    GameObject rightPathBtn = UI.CreateUIButton(rightSideContainer, pW, pH, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => {
                         if (isFixedLocally) ToggleLeft(ContentType.Path); else ToggleRight(ContentType.Path);
                     });
                     rightPathBtnImage = rightPathBtn.GetComponent<Image>();
@@ -1202,7 +1270,7 @@ namespace VPB
                 }
 
                 {
-                    GameObject rightHistoryBtn = UI.CreateUIButton(rightSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => {
+                    GameObject rightHistoryBtn = UI.CreateUIButton(rightSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 9 - groupGap * 3, AnchorPresets.centre, () => {
                         if (isFixedLocally) ToggleLeft(ContentType.History); else ToggleRight(ContentType.History);
                     });
                     rightHistoryBtnImage = rightHistoryBtn.GetComponent<Image>();
@@ -1223,7 +1291,7 @@ namespace VPB
                 {
                     float apW = applyIconMode ? sideIconBtn : btnWidth;
                     float apH = applyIconMode ? sideIconBtn : btnHeight;
-                    GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, apW, apH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                    GameObject rightApplyModeBtn = UI.CreateUIButton(rightSideContainer, apW, apH, " ", 8, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
                     rightApplyModeBtnImage = rightApplyModeBtn.GetComponent<Image>();
                     rightApplyModeBtnText = rightApplyModeBtn.GetComponentInChildren<Text>(true);
                     if (applyIconMode)
@@ -1255,7 +1323,7 @@ namespace VPB
                 }
 
                 // Appearance outfit: keep current vs load from preset (Right)
-                rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
                 rightKeepClothingBtnImage = rightKeepClothingBtnGO.GetComponent<Image>();
                 rightKeepClothingBtnText = rightKeepClothingBtnGO.GetComponentInChildren<Text>();
                 rightSideButtons.Add(rightKeepClothingBtnGO.GetComponent<RectTransform>());
@@ -1266,7 +1334,7 @@ namespace VPB
                     bool replaceIcons = galleryAddSprite != null || galleryReplaceSprite != null;
                     float rpW = replaceIcons ? sideIconBtn : btnWidth;
                     float rpH = replaceIcons ? sideIconBtn : btnHeight;
-                    GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                    GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 13 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                     rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
                     rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>(true);
                     if (replaceIcons)
@@ -1301,7 +1369,7 @@ namespace VPB
                 {
                     float saveW = gallerySaveSprite != null ? sideIconBtn : btnWidth;
                     float saveH = gallerySaveSprite != null ? sideIconBtn : btnHeight;
-                    rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 13 - groupGap * 4, AnchorPresets.centre, () => {
+                    rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 14 - groupGap * 4, AnchorPresets.centre, () => {
                         try
                         {
                             ToggleSaveSubmenuFromSideButtons(false);
@@ -1589,13 +1657,41 @@ namespace VPB
                     AddTooltip(leftCatBtn, "gallery.tooltip.category_list", "Open category list.");
                 }
 
+                // User-defined tags (SQLite) — directly under Category
+                {
+                    Color colorUserTagRailL = new Color(0.14f, 0.42f, 0.48f, 1f);
+                    float utW = sideIconBtn;
+                    float utH = sideIconBtn;
+                    Sprite utSprL = null;
+                    try { utSprL = UI.LoadIconSprite("vpb_icons/tags.png", Color.white); } catch { }
+                    GameObject leftUserTagsBtn = UI.CreateUIButton(leftSideContainer, utW, utH, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.UserTags));
+                    leftUserTagsSideBtn = leftUserTagsBtn;
+                    Image utImgL = leftUserTagsBtn.GetComponent<Image>();
+                    Text utTxtL = leftUserTagsBtn.GetComponentInChildren<Text>(true);
+                    if (utSprL != null)
+                        UI.AddIconToButton(leftUserTagsBtn, utSprL, sideIconPad, colorUserTagRailL);
+                    else if (utImgL != null)
+                    {
+                        utImgL.color = colorUserTagRailL;
+                        if (utTxtL != null)
+                        {
+                            utTxtL.text = VPBTranslation.T("gallery.side.usertags_short", "Tag");
+                            utTxtL.fontSize = btnFontSize;
+                            utTxtL.gameObject.SetActive(true);
+                        }
+                    }
+                    leftSideButtons.Add(leftUserTagsBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftUserTagsBtn, () => ToggleRight(ContentType.UserTags));
+                    AddTooltip(leftUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
+                }
+
                 // Creator (Green)
                 {
                     float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
                     float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
 
-                    // Clear Creator Filter (icon) — normal rail entry above Creator
-                    leftClearCreatorBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => {
+                    // Clear Creator Filter (icon) — beside Creator, after Tags
+                    leftClearCreatorBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
                         currentCreator = "";
                         categoriesCached = false;
                         pathsCached = false;
@@ -1619,7 +1715,7 @@ namespace VPB
                     leftSideButtons.Add(leftClearCreatorBtn.GetComponent<RectTransform>());
                     AddTooltip(leftClearCreatorBtn, "gallery.tooltip.creator_clear", "Clear creator filter.");
 
-                    GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, crW, crH, " ", 8, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
+                    GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, crW, crH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
                     leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
                     leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>(true);
                     if (galleryCreatorSprite != null)
@@ -1648,7 +1744,7 @@ namespace VPB
                 {
                     float pW = galleryPathSprite != null ? sideIconBtn : btnWidth;
                     float pH = galleryPathSprite != null ? sideIconBtn : btnHeight;
-                    GameObject leftPathBtn = UI.CreateUIButton(leftSideContainer, pW, pH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Path));
+                    GameObject leftPathBtn = UI.CreateUIButton(leftSideContainer, pW, pH, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Path));
                     leftPathBtnImage = leftPathBtn.GetComponent<Image>();
                     leftPathBtnText = leftPathBtn.GetComponentInChildren<Text>(true);
                     if (galleryPathSprite != null)
@@ -1674,7 +1770,7 @@ namespace VPB
                 }
 
                 {
-                    GameObject leftHistoryBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.History));
+                    GameObject leftHistoryBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 9 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.History));
                     leftHistoryBtnImage = leftHistoryBtn.GetComponent<Image>();
                     if (galleryHistorySprite != null)
                     {
@@ -1693,7 +1789,7 @@ namespace VPB
                 {
                     float apW = applyIconMode ? sideIconBtn : btnWidth;
                     float apH = applyIconMode ? sideIconBtn : btnHeight;
-                    GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, apW, apH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
+                    GameObject leftApplyModeBtn = UI.CreateUIButton(leftSideContainer, apW, apH, " ", 8, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleApplyMode);
                     leftApplyModeBtnImage = leftApplyModeBtn.GetComponent<Image>();
                     leftApplyModeBtnText = leftApplyModeBtn.GetComponentInChildren<Text>(true);
                     if (applyIconMode)
@@ -1725,7 +1821,7 @@ namespace VPB
                 }
 
                 // Appearance outfit: keep current vs load from preset (Left)
-                leftKeepClothingBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 11 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
+                leftKeepClothingBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
                 leftKeepClothingBtnImage = leftKeepClothingBtnGO.GetComponent<Image>();
                 leftKeepClothingBtnText = leftKeepClothingBtnGO.GetComponentInChildren<Text>();
                 leftSideButtons.Add(leftKeepClothingBtnGO.GetComponent<RectTransform>());
@@ -1736,7 +1832,7 @@ namespace VPB
                     bool replaceIcons = galleryAddSprite != null || galleryReplaceSprite != null;
                     float rpW = replaceIcons ? sideIconBtn : btnWidth;
                     float rpH = replaceIcons ? sideIconBtn : btnHeight;
-                    GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
+                    GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 13 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
                     leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
                     leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>(true);
                     if (replaceIcons)
@@ -1771,7 +1867,7 @@ namespace VPB
                 {
                     float saveW = gallerySaveSprite != null ? sideIconBtn : btnWidth;
                     float saveH = gallerySaveSprite != null ? sideIconBtn : btnHeight;
-                    leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 13 - groupGap * 4, AnchorPresets.centre, () => {
+                    leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 14 - groupGap * 4, AnchorPresets.centre, () => {
                         try
                         {
                             ToggleSaveSubmenuFromSideButtons(true);

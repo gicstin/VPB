@@ -826,6 +826,11 @@ namespace VPB
             le.flexibleWidth = 0f;
             le.flexibleHeight = 0f;
 
+            // HorizontalLayoutGroup row height can exceed edgeLengthPx; match width to height so icon stays square.
+            AspectRatioFitter arf = go.AddComponent<AspectRatioFitter>();
+            arf.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
+            arf.aspectRatio = 1f;
+
             if (icon != null)
                 AddIconToButton(go, icon, iconPadding, backdrop);
 

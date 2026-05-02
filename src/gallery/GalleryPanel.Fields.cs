@@ -396,6 +396,12 @@ namespace VPB
         private int _leftCreatorVirtLastFirstIdx = -1;
         private int _rightCreatorVirtLastFirstIdx = -1;
         private string tagFilter = ""; // NEW
+        private string userTagFilter = "";
+        /// <summary>Lower split pane when <see cref="ContentType.UserTags"/> — filters tags applied to current selection.</summary>
+        private string userTagAppliedFilter = "";
+        /// <summary>Selected row in applied-tags list for <see cref="GalleryPanel.RemoveFocusedAppliedUserTagFromSelection"/>.</summary>
+        private string userTagAppliedRemoveFocus = null;
+        private readonly List<UserTagSideTabEntry> cachedAppliedUserTagsSelection = new List<UserTagSideTabEntry>(32);
         private string currentSceneSourceFilter = ""; // NEW
         private string currentAppearanceSourceFilter = "";
         private string currentPackagePathFilter = "";
@@ -429,6 +435,27 @@ namespace VPB
         // Tagging
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> activeUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>SQLite category query already enforced <see cref="activeUserTags"/>; skip redundant per-row SQL in <see cref="GalleryPanel.PassesFilters"/>.</summary>
+        private bool _suppressGalleryUserTagSqlInPassesFilters;
+        private bool userTagsCached = false;
+        private List<UserTagSideTabEntry> cachedUserTagSideTab = new List<UserTagSideTabEntry>(64);
+
+        /// <summary>Dim overlay on gallery pane + centered panel for <see cref="GalleryPanel.ShowUserTagListEditor"/>.</summary>
+        private GameObject _userTagEditorRoot;
+        private Transform _userTagEditorRowsParent;
+        private InputField _userTagEditorFilterInput;
+        private InputField _userTagEditorNewTagInput;
+        private Image _userTagEditorSortIconImage;
+        private Text _userTagEditorTitleText;
+        private GameObject _userTagEditorMergeModalGo;
+        private Text _userTagEditorMergeModalTitleText;
+        private InputField _userTagEditorMergeModalInput;
+        /// <summary>0=name asc, 1=name desc, 2=count desc, 3=count asc.</summary>
+        private int _userTagEditorSortMode;
+        private readonly HashSet<string> _userTagEditorRowSelection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Last row clicked without Shift; anchor for Shift+click range in tag editor list.</summary>
+        private string _userTagEditorAnchorTag;
 
         [Flags]
         internal enum ClothingSubfilter
@@ -673,6 +700,9 @@ namespace VPB
         private List<RectTransform> leftSideButtons = new List<RectTransform>();
         private GameObject leftClearCreatorBtn;
         private GameObject rightClearCreatorBtn;
+        /// <summary>Side-rail Tags (UserTags) buttons — for layout / edge-align.</summary>
+        private GameObject leftUserTagsSideBtn;
+        private GameObject rightUserTagsSideBtn;
 
         private Sprite galleryCreatorOffSprite;
 

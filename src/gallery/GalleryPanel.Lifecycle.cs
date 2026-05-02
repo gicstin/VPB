@@ -69,26 +69,12 @@ namespace VPB
             
             // We need to find the specific button rect. 
             // We store them in sideButtons list but we need to know WHICH one corresponds to the type.
-            // Indices based on GalleryPanel.UI.cs creation order:
-            // 0: Fixed/Floating
-            // 1: Settings
-            // 2: Follow
-            // 3: Clone
-            // 4: Category
-            // 5: Creator
-            // 6: Target
-            // 9: Apply Mode
-            // 10: Replace
-            // 11: Hub
-            // 12: Undo
-            // 13: Remove Clothing (context)
-            // 14: Remove Hair (context)
-            // 15: Random
+            // Indices: 0 desk, 1 follow, 2 clone, 3 category, 4 user tags, 5 clear creator, 6 creator, …
 
             int targetIndex = -1;
             switch(type)
             {
-                case ContentType.Creator: targetIndex = 5; break;
+                case ContentType.Creator: targetIndex = 6; break;
             }
 
             if (targetIndex >= 0)

@@ -116,6 +116,10 @@ namespace VPB
                     else if (t2.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0) subType2 = ContentType.AppearanceSource;
                     UpdateTabs(subType2, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
+                if (leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf && leftActiveContent == ContentType.UserTags && leftSubTabContainerGO != null)
+                    UpdateTabs(ContentType.UserTagsApplied, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+                if (rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf && rightActiveContent == ContentType.UserTags && rightSubTabContainerGO != null)
+                    UpdateTabs(ContentType.UserTagsApplied, rightSubTabContainerGO, rightSubActiveTabButtons, false);
             }
             catch { }
             UpdateSideButtonsVisibility();
@@ -208,13 +212,15 @@ namespace VPB
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub || leftActiveContent == ContentType.CleanupCategories) && leftSubTabScrollGO != null)
+                if (((splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub || leftActiveContent == ContentType.CleanupCategories))
+                     || leftActiveContent == ContentType.UserTags) && leftSubTabScrollGO != null)
                 {
                     // Split Layout
                     leftSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
-                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    if (leftActiveContent == ContentType.UserTags) subType = ContentType.UserTagsApplied;
+                    else if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
                     else if (leftActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (leftActiveContent == ContentType.Category)
                     {
@@ -230,10 +236,23 @@ namespace VPB
                     if (leftSubSortBtn != null)
                         leftSubSortBtn.SetActive(!sceneSourceLeft);
                     if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(sceneSourceLeft);
+                    if (leftActiveContent == ContentType.UserTags && leftSubClearBtn != null)
+                        leftSubClearBtn.SetActive(false);
                     if (leftActiveContent == ContentType.CleanupCategories)
                     {
                         if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
                         if (leftSubClearBtn != null) leftSubClearBtn.SetActive(false);
+                    }
+                    else if (leftActiveContent == ContentType.UserTags)
+                    {
+                        if (leftSubSearchInput != null)
+                        {
+                            leftSubSearchInput.gameObject.SetActive(true);
+                            if (leftSubSearchInput.text != userTagAppliedFilter) leftSubSearchInput.text = userTagAppliedFilter ?? "";
+                            if (leftSubSearchInput.placeholder is Text phUt)
+                                phUt.text = GetContentTypePlaceholder(ContentType.UserTagsApplied);
+                        }
+                        ApplyLeftSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
                     }
                     else
                     {
@@ -241,6 +260,8 @@ namespace VPB
                         {
                             leftSubSearchInput.gameObject.SetActive(true);
                             if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
+                            if (leftSubSearchInput.placeholder is Text phT)
+                                phT.text = GetContentTypePlaceholder(ContentType.Tags);
                         }
                         ApplyLeftSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
                     }
@@ -334,13 +355,15 @@ namespace VPB
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub || rightActiveContent == ContentType.CleanupCategories) && rightSubTabScrollGO != null)
+                if (((splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub || rightActiveContent == ContentType.CleanupCategories))
+                     || rightActiveContent == ContentType.UserTags) && rightSubTabScrollGO != null)
                 {
                     // Split Layout
                     rightSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
-                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    if (rightActiveContent == ContentType.UserTags) subType = ContentType.UserTagsApplied;
+                    else if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
                     else if (rightActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (rightActiveContent == ContentType.Category)
                     {
@@ -361,10 +384,26 @@ namespace VPB
                         srt.anchorMax = new Vector2(1, 0.5f);
                     }
                     if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(sceneSourceRight);
+                    if (rightActiveContent == ContentType.UserTags && rightSubClearBtn != null)
+                        rightSubClearBtn.SetActive(false);
                     if (rightActiveContent == ContentType.CleanupCategories)
                     {
                         if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
                         if (rightSubClearBtn != null) rightSubClearBtn.SetActive(false);
+                    }
+                    else if (rightActiveContent == ContentType.UserTags)
+                    {
+                        if (rightSubSearchInput != null)
+                        {
+                            rightSubSearchInput.gameObject.SetActive(true);
+                            if (rightSubSearchInput.text != userTagAppliedFilter) rightSubSearchInput.text = userTagAppliedFilter ?? "";
+                            if (rightSubSearchInput.placeholder is Text phUt)
+                                phUt.text = GetContentTypePlaceholder(ContentType.UserTagsApplied);
+                            RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
+                            rt.anchorMin = new Vector2(1, 0.5f);
+                            rt.anchorMax = new Vector2(1, 0.5f);
+                        }
+                        ApplyRightSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
                     }
                     else
                     {
@@ -372,6 +411,8 @@ namespace VPB
                         {
                             rightSubSearchInput.gameObject.SetActive(true);
                             if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
+                            if (rightSubSearchInput.placeholder is Text phT)
+                                phT.text = GetContentTypePlaceholder(ContentType.Tags);
                             RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
                             rt.anchorMin = new Vector2(1, 0.5f);
                             rt.anchorMax = new Vector2(1, 0.5f);
@@ -487,6 +528,8 @@ namespace VPB
                     }
                     UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
                 }
+                if (leftActiveContent == ContentType.UserTags && leftSubTabScrollGO != null && leftSubTabContainerGO != null)
+                    UpdateTabs(ContentType.UserTagsApplied, leftSubTabContainerGO, leftSubActiveTabButtons, true);
             }
 
             if (rightActiveContent.HasValue)
@@ -520,6 +563,8 @@ namespace VPB
                     }
                     UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
+                if (rightActiveContent == ContentType.UserTags && rightSubTabScrollGO != null && rightSubTabContainerGO != null)
+                    UpdateTabs(ContentType.UserTagsApplied, rightSubTabContainerGO, rightSubActiveTabButtons, false);
             }
         }
 
@@ -1094,6 +1139,7 @@ namespace VPB
             trackedButtons.Clear();
 
             CleanupSideTabLabeledRows(container.transform);
+            DestroyEphemeralSideTabBlocksForContentType(container.transform, contentType);
 
             if (contentType == ContentType.Category)
             {
@@ -1267,6 +1313,7 @@ namespace VPB
                         categoriesCached = false;
                         creatorsCached = false;
                         tagsCached = false;
+                        userTagsCached = false;
                         RefreshFiles();
                         UpdateTabs();
                     }, trackedButtons, () =>
@@ -1275,6 +1322,7 @@ namespace VPB
                         categoriesCached = false;
                         creatorsCached = false;
                         tagsCached = false;
+                        userTagsCached = false;
                         RefreshFiles();
                         UpdateTabs();
                     }, pathValue);
@@ -1307,6 +1355,150 @@ namespace VPB
                         }
                     }
                 }
+            }
+            else if (contentType == ContentType.UserTags)
+            {
+                EnsureUserTagSideTabBulkBlock(container.transform);
+                Transform utBulk = container.transform.Find("VPB_UserTagBulkBlock_v3");
+                if (utBulk == null) utBulk = container.transform.Find("VPB_UserTagBulkBlock_v2");
+                if (utBulk == null) utBulk = container.transform.Find("VPB_UserTagBulkBlock");
+                if (utBulk != null) utBulk.SetAsFirstSibling();
+
+                if (!userTagsCached) CacheUserTagsSideTab();
+                Color utAccent = new Color(0.45f, 0.38f, 0.55f, 1f);
+                var sortUt = GetSortState("UserTags");
+                var rowsUt = new List<UserTagSideTabEntry>(cachedUserTagSideTab);
+                if (sortUt.Type == SortType.Count)
+                {
+                    if (sortUt.Direction == SortDirection.Ascending)
+                        rowsUt.Sort((a, b) => a.Count.CompareTo(b.Count));
+                    else
+                        rowsUt.Sort((a, b) => b.Count.CompareTo(a.Count));
+                }
+                else
+                {
+                    if (sortUt.Direction == SortDirection.Ascending)
+                        rowsUt.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                    else
+                        rowsUt.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+                }
+
+                string filterUt = userTagFilter ?? "";
+                if (activeUserTags.Count > 0)
+                {
+                    CreateTabButton(container.transform,
+                        VPBTranslation.T("gallery.usertags.clear_filters", "Clear user tag filters"),
+                        new Color(0.55f, 0.22f, 0.22f, 1f), false,
+                        () =>
+                        {
+                            activeUserTags.Clear();
+                            categoriesCached = false;
+                            creatorsCached = false;
+                            pathsCached = false;
+                            userTagsCached = false;
+                            RefreshFiles();
+                            UpdateTabs();
+                        }, trackedButtons);
+                }
+
+                for (int ui = 0; ui < rowsUt.Count; ui++)
+                {
+                    UserTagSideTabEntry ut = rowsUt[ui];
+                    if (string.IsNullOrEmpty(ut.Name)) continue;
+                    if (!string.IsNullOrEmpty(filterUt) && ut.Name.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    bool isSel = activeUserTags.Contains(ut.Name);
+
+                    string labelUt = ut.Name + " (" + ut.Count + ")";
+                    string tagSnap = ut.Name;
+                    CreateTabButton(container.transform, labelUt, isSel ? utAccent : new Color(0.25f, 0.25f, 0.25f, 1f), isSel, () =>
+                    {
+                        if (activeUserTags.Contains(tagSnap)) activeUserTags.Remove(tagSnap);
+                        else activeUserTags.Add(tagSnap);
+                        categoriesCached = false;
+                        creatorsCached = false;
+                        pathsCached = false;
+                        // Pick-list counts/vocabulary unchanged when toggling filter — avoid full CacheUserTagsSideTab SQL every click.
+                        RefreshFiles();
+                        UpdateTabs();
+                    }, trackedButtons, null, VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle filter & multi-select. Drag to Applied below."));
+                    GameObject pickGo = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
+                    if (pickGo != null)
+                    {
+                        UserTagPickDragSource dr = pickGo.GetComponent<UserTagPickDragSource>();
+                        if (dr == null) dr = pickGo.AddComponent<UserTagPickDragSource>();
+                        dr.Panel = this;
+                        dr.PrimaryTag = tagSnap;
+                    }
+                }
+            }
+            else if (contentType == ContentType.UserTagsApplied)
+            {
+                EnsureUserTagsAppliedToolbar(container.transform);
+                Transform utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v2");
+                if (utAppTb == null) utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v1");
+                if (utAppTb != null) utAppTb.SetAsFirstSibling();
+
+                CacheAppliedUserTagsForSelection();
+                if (selectedFiles == null || selectedFiles.Count == 0)
+                    userTagAppliedRemoveFocus = null;
+                else if (!string.IsNullOrEmpty(userTagAppliedRemoveFocus))
+                {
+                    bool focusOk = false;
+                    for (int fi = 0; fi < cachedAppliedUserTagsSelection.Count; fi++)
+                    {
+                        if (string.Equals(cachedAppliedUserTagsSelection[fi].Name, userTagAppliedRemoveFocus, StringComparison.OrdinalIgnoreCase))
+                        {
+                            focusOk = true;
+                            break;
+                        }
+                    }
+                    if (!focusOk) userTagAppliedRemoveFocus = null;
+                }
+
+                Color utAppAccent = new Color(0.38f, 0.42f, 0.52f, 1f);
+                var sortApp = GetSortState("UserTagsApplied");
+                var rowsApp = new List<UserTagSideTabEntry>(cachedAppliedUserTagsSelection);
+                if (sortApp.Type == SortType.Count)
+                {
+                    if (sortApp.Direction == SortDirection.Ascending)
+                        rowsApp.Sort((a, b) => a.Count.CompareTo(b.Count));
+                    else
+                        rowsApp.Sort((a, b) => b.Count.CompareTo(a.Count));
+                }
+                else
+                {
+                    if (sortApp.Direction == SortDirection.Ascending)
+                        rowsApp.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                    else
+                        rowsApp.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+                }
+
+                string filterApp = userTagAppliedFilter ?? "";
+                for (int ai = 0; ai < rowsApp.Count; ai++)
+                {
+                    UserTagSideTabEntry ae = rowsApp[ai];
+                    if (string.IsNullOrEmpty(ae.Name)) continue;
+                    if (!string.IsNullOrEmpty(filterApp) && ae.Name.IndexOf(filterApp, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    bool isFocus = !string.IsNullOrEmpty(userTagAppliedRemoveFocus)
+                        && string.Equals(ae.Name, userTagAppliedRemoveFocus, StringComparison.OrdinalIgnoreCase);
+                    int selTot = selectedFiles != null ? selectedFiles.Count : 0;
+                    // Consolidate: one row per tag; (n) = how many selected grid/list rows carry that tag (VAR-backed only).
+                    string labelA = selTot > 1 ? (ae.Name + " (" + ae.Count + ")") : ae.Name;
+                    string tagFocusSnap = ae.Name;
+                    CreateTabButton(container.transform, labelA, isFocus ? utAppAccent : new Color(0.25f, 0.25f, 0.25f, 1f), isFocus, () =>
+                    {
+                        if (string.Equals(userTagAppliedRemoveFocus, tagFocusSnap, StringComparison.OrdinalIgnoreCase))
+                            userTagAppliedRemoveFocus = null;
+                        else
+                            userTagAppliedRemoveFocus = tagFocusSnap;
+                        UpdateTabs();
+                    }, trackedButtons);
+                }
+
+                SyncUserTagsAppliedToolbarDropZones(container.transform);
+                EnsureUserTagApplyDropCatchStrip(container.transform);
             }
             else if (contentType == ContentType.History)
             {
@@ -2141,6 +2333,30 @@ namespace VPB
             }
         }
 
+        /// <summary>Strip ephemeral User Tags UI blocks when rebuilding a different tab in the same scroll content.</summary>
+        private static void DestroyEphemeralSideTabBlocksForContentType(Transform container, ContentType contentType)
+        {
+            if (container == null) return;
+            if (contentType != ContentType.UserTags)
+            {
+                DestroyChildIfPresent(container, "VPB_UserTagBulkBlock");
+                DestroyChildIfPresent(container, "VPB_UserTagBulkBlock_v2");
+                DestroyChildIfPresent(container, "VPB_UserTagBulkBlock_v3");
+            }
+            if (contentType != ContentType.UserTagsApplied)
+            {
+                DestroyChildIfPresent(container, "VPB_UserTagsAppliedToolbar_v1");
+                DestroyChildIfPresent(container, "VPB_UserTagsAppliedToolbar_v2");
+            }
+        }
+
+        private static void DestroyChildIfPresent(Transform container, string childName)
+        {
+            Transform ch = container.Find(childName);
+            if (ch != null)
+                UnityEngine.Object.Destroy(ch.gameObject);
+        }
+
         private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null)
         {
             GameObject btnGO = GetTabButton(parent);
@@ -2347,6 +2563,9 @@ namespace VPB
                 hoverDel.OnHoverChange = null;
                 hoverDel.OnPointerEnterEvent = null;
             }
+            var pickDrag = btn.GetComponent<UserTagPickDragSource>();
+            if (pickDrag != null)
+                UnityEngine.Object.Destroy(pickDrag);
             // Keep parented to ensure cleanup on destroy
             if (backgroundBoxGO != null) btn.transform.SetParent(backgroundBoxGO.transform, false);
             tabButtonPool.Push(btn);

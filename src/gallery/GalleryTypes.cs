@@ -4,7 +4,7 @@ using MeshVR;
 
 namespace VPB
 {
-    public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource, RemoveClothing, RemoveHair, RemoveAtom, SavePresets, Target, CleanupCategories, CleanupStaleBuckets, Path, History, Settings }
+    public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource, RemoveClothing, RemoveHair, RemoveAtom, SavePresets, Target, CleanupCategories, CleanupStaleBuckets, UserTags, UserTagsApplied, Path, History, Settings }
     public enum ApplyMode { SingleClick, DoubleClick }
     public enum TabSide { Hidden, Left, Right }
     public enum GalleryLayoutMode { Grid, List }
@@ -19,6 +19,12 @@ namespace VPB
     public struct PathCacheEntry
     {
         public string Path;
+        public int Count;
+    }
+
+    public struct UserTagSideTabEntry
+    {
+        public string Name;
         public int Count;
     }
 

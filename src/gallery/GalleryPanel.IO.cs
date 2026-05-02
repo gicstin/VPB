@@ -1565,6 +1565,20 @@ namespace VPB
                 if (!tagMatch) return false;
             }
 
+            if (!_suppressGalleryUserTagSqlInPassesFilters && activeUserTags != null && activeUserTags.Count > 0 && activeContentType != ContentType.History)
+            {
+                string catUt = currentCategoryTitle ?? "";
+                if (titleText != null && string.IsNullOrEmpty(catUt)) catUt = titleText.text ?? "";
+                if (string.IsNullOrEmpty(catUt)) return false;
+                VarFileEntry vfeUt = entry as VarFileEntry;
+                if (vfeUt == null || vfeUt.Package == null) return false;
+                string puid = vfeUt.Package.Uid;
+                string ipt = vfeUt.InternalPath ?? "";
+                if (string.IsNullOrEmpty(puid) || string.IsNullOrEmpty(ipt)) return false;
+                if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(catUt, puid, ipt, activeUserTags))
+                    return false;
+            }
+
             return true;
         }
 
@@ -1854,6 +1868,7 @@ namespace VPB
             refreshOnNextShow = false;
             creatorsCached = false;
             tagsCached = false;
+            userTagsCached = false;
             categoriesCached = false;
             pathsCached = false;
         }
@@ -2648,6 +2663,7 @@ namespace VPB
                 object candidateQueueLock = new object();
                 int workerDoneFlag = 0;
                 List<FileEntry> sqliteBulkList = null;
+                int[] categorySqliteUserTagsInQuery = new int[1];
 
                 string snapKeyProbeMain;
                 bool canFileListSnapKeyMain = TryBuildFileListSnapshotCacheKey(out snapKeyProbeMain);
@@ -2729,7 +2745,10 @@ namespace VPB
                                 nameTerms: nameTerms,
                                 pathExclusions: pathExclusions,
                                 activeTags: activeTags,
+                                activeUserTags: activeUserTags,
                                 sortState: fileListSortSnapForWorker);
+                            if (useSqliteIndex && activeUserTags != null && activeUserTags.Count > 0)
+                                categorySqliteUserTagsInQuery[0] = 1;
                             }
                         }
                         else
@@ -3075,6 +3094,9 @@ namespace VPB
                         else if (bc >= 8000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 120L);
                         else if (bc >= 3000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 80L);
 
+                        _suppressGalleryUserTagSqlInPassesFilters = categorySqliteUserTagsInQuery[0] != 0;
+                        try
+                        {
                                 if (RefreshFilesRoutineCanFastAppendSqliteBulkList(wantsPoseCounts) && bulk.Count > 0)
                                 {
                                     if (localLoadingGroupId != currentLoadingGroupId)
@@ -3109,6 +3131,11 @@ namespace VPB
                                         }
                                     }
                                 }
+                        }
+                        finally
+                        {
+                            _suppressGalleryUserTagSqlInPassesFilters = false;
+                        }
 
                         hadWork = true;
                     }
@@ -3121,6 +3148,7 @@ namespace VPB
                 }
                 swDrainMain.Stop();
                 refreshDrainWallMs = swDrainMain.ElapsedMilliseconds;
+            }
             }
             if (swDeep != null)
             {
@@ -3136,6 +3164,10 @@ namespace VPB
             {
                 if (string.IsNullOrEmpty(currentCreator))
                 {
+                    // When file list came from GalleryFileListSnapshotCache, it already merged VAR index + loose files for this key.
+                    // Re-enumerating Saves/* (SafeGetFiles + PassesFilters per path) duplicates work and can burn 10s+ on large trees with sysAdded=0.
+                    if (!fileListFromCache)
+                    {
                     // Fast path: reuse SQLite-cached loose-file listings for this category/path/ext combo when unchanged.
                     string sysCacheKey = null;
                     string sysCacheSig = null;
@@ -3332,8 +3364,8 @@ namespace VPB
                         }
                         catch { }
                     }
+                    }
                 }
-            }
             }
 
             if (swDeep != null) deepAfterSysFilesMs = swDeep.ElapsedMilliseconds;

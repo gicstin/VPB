@@ -15,6 +15,7 @@ namespace VPB
         private Text tboxLabel;
         private Text tboxHintLabel;
         private GameObject tboxCopyPkgNamesBtn;
+        private GameObject tboxUserTagsBtn;
         private GameObject tboxDeleteBtn;
         private GameObject tboxRemoveHistoryBtn;
         private GameObject tboxCleanupBtn;
@@ -160,6 +161,7 @@ namespace VPB
             one(tboxJsonParserBenchBtn);
             one(tboxOpenHubBtn);
             one(tboxCopyPkgNamesBtn);
+            one(tboxUserTagsBtn);
             one(tboxSceneImportBtn);
             one(tboxSelectAllBtn);
             one(tboxClearSelectionBtn);
@@ -204,6 +206,7 @@ namespace VPB
             d(tboxJsonParserBenchBtn);
             d(tboxOpenHubBtn);
             d(tboxCopyPkgNamesBtn);
+            d(tboxUserTagsBtn);
             d(tboxSceneImportBtn);
             d(tboxSelectAllBtn);
             d(tboxClearSelectionBtn);
@@ -322,6 +325,7 @@ namespace VPB
                 if (vis(tboxJsonParserBenchBtn)) ltr.Add(tboxJsonParserBenchBtn);
                 if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
                 if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
+                if (vis(tboxUserTagsBtn)) ltr.Add(tboxUserTagsBtn);
                 if (vis(tboxSceneImportBtn)) ltr.Add(tboxSceneImportBtn);
                 if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
                 if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
@@ -681,6 +685,22 @@ namespace VPB
             tboxCopyPkgNamesBtn.name = "Tbox_CopyPackageNames";
             TboxConfigureActionButtonFlex(tboxCopyPkgNamesBtn, innerRowH, innerRowH, innerRowH); // square icon button
             WireCopyNamesTooltip(tboxCopyPkgNamesBtn);
+
+            tboxUserTagsBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.user_tags", "Tags"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                OpenUserTagsSidePanelFromToolbox
+            );
+            tboxUserTagsBtn.name = "Tbox_UserTags";
+            TboxConfigureActionButtonFlex(tboxUserTagsBtn, innerRowH, 112f, innerRowH);
+            AddTooltip(tboxUserTagsBtn, "gallery.tooltip.tbox_user_tags", "Open Tags side panel.");
+            try
+            {
+                var tagSpr = UI.LoadIconSprite("vpb_icons/tag.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                if (tagSpr != null) UI.AddIconToButton(tboxUserTagsBtn, tagSpr, padding: 6f);
+            }
+            catch { }
             try
             {
                 tboxClipboardListSprite  = UI.LoadIconSprite("vpb_icons/clipboard_list.png",  new Color(0.92f, 0.92f, 0.92f, 1f));
@@ -1706,6 +1726,7 @@ namespace VPB
                 show(tboxJsonParserBenchBtn, false);
                 show(tboxOpenHubBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
+                show(tboxUserTagsBtn, false);
                 show(tboxSceneImportBtn, false);
                 show(tboxDeleteBtn, false);
                 show(tboxRemoveHistoryBtn, false);
@@ -1964,6 +1985,23 @@ namespace VPB
                 SetTboxButtonEnabledVisual(
                     tboxRemoveHistoryBtn,
                     historyBrowse && selectedFiles != null && selectedFiles.Count > 0);
+
+            bool showUt = !isSettings && !isCleanup && !IsHubMode && activeContentType == ContentType.Category
+                && selectedFiles != null && selectedFiles.Count > 0;
+            show(tboxUserTagsBtn, showUt);
+            if (tboxUserTagsBtn != null)
+            {
+                bool anyVar = false;
+                if (showUt && selectedFiles != null)
+                {
+                    for (int ti = 0; ti < selectedFiles.Count; ti++)
+                    {
+                        string _p, _i;
+                        if (TryGetVarCatMemForUserTags(selectedFiles[ti], out _p, out _i)) { anyVar = true; break; }
+                    }
+                }
+                SetTboxButtonEnabledVisual(tboxUserTagsBtn, showUt && anyVar);
+            }
 
             RefreshTboxFlexButtonLayout();
         }

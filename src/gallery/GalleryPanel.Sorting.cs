@@ -594,7 +594,7 @@ namespace VPB
                     || type == SortType.UnusedOnly
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
             }
-            else if (context == "Category" || context == "Creator" || context == "Path" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
+            else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
             {
                 return type == SortType.Name || type == SortType.Count;
             }
@@ -603,7 +603,7 @@ namespace VPB
 
         private static bool SupportsSidePaneFourModeSort(string context)
         {
-            return context == "Category" || context == "Creator" || context == "Path" || context == "Status" || context == "Tags" || context == "Hub";
+            return context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "Hub";
         }
 
         /// <summary>Upper side pane: name A→Z, name Z→A, count low→high, count high→low (same icons as scene file sort).</summary>
@@ -681,13 +681,22 @@ namespace VPB
                 SyncSidePaneFourModeSortButtonVisual(rightSortBtnBackdrop, rightSortBtnIconImage, rightSortBtnText, GetSortState(ctx), SupportsSidePaneFourModeSort(ctx));
             }
 
-            const string tagCtx = "Tags";
-            SortState tagSt = GetSortState(tagCtx);
-            bool tagIcon = SupportsSidePaneFourModeSort(tagCtx);
             if (leftSubSortBtn != null && leftSubSortBtn.activeSelf)
+            {
+                string subCtx = "Tags";
+                if (leftActiveContent == ContentType.UserTags) subCtx = "UserTagsApplied";
+                SortState tagSt = GetSortState(subCtx);
+                bool tagIcon = SupportsSidePaneFourModeSort(subCtx);
                 SyncSidePaneFourModeSortButtonVisual(leftSubSortBtnBackdrop, leftSubSortBtnIconImage, leftSubSortBtnText, tagSt, tagIcon);
+            }
             if (rightSubSortBtn != null && rightSubSortBtn.activeSelf)
-                SyncSidePaneFourModeSortButtonVisual(rightSubSortBtnBackdrop, rightSubSortBtnIconImage, rightSubSortBtnText, tagSt, tagIcon);
+            {
+                string subCtxR = "Tags";
+                if (rightActiveContent == ContentType.UserTags) subCtxR = "UserTagsApplied";
+                SortState tagStR = GetSortState(subCtxR);
+                bool tagIconR = SupportsSidePaneFourModeSort(subCtxR);
+                SyncSidePaneFourModeSortButtonVisual(rightSubSortBtnBackdrop, rightSubSortBtnIconImage, rightSubSortBtnText, tagStR, tagIconR);
+            }
         }
 
         private void SyncSidePaneFourModeSortButtonVisual(Image backdrop, Image iconImg, Text legacyText, SortState st, bool iconMode)

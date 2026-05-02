@@ -34,6 +34,7 @@ namespace VPB
             {
                 if (!creatorsCached) CacheCreators();
                 if (!categoriesCached) CacheCategoryCounts();
+                if (!userTagsCached) CacheUserTagsSideTab();
             }
 
             if (contentScrollRT == null) return;
@@ -91,6 +92,7 @@ namespace VPB
 
                     if (type == ContentType.Category) target = categoryFilter;
                     else if (type == ContentType.Creator) target = creatorFilter;
+                    else if (type == ContentType.UserTags) target = userTagFilter;
                     else if (type == ContentType.Path) target = pathFilter;
                     else if (type == ContentType.History) target = historyTabFilter;
                     else if (type == ContentType.Settings) target = settingsFilter;
@@ -138,6 +140,7 @@ namespace VPB
 
                     if (type == ContentType.Category) target = categoryFilter;
                     else if (type == ContentType.Creator) target = creatorFilter;
+                    else if (type == ContentType.UserTags) target = userTagFilter;
                     else if (type == ContentType.Path) target = pathFilter;
                     else if (type == ContentType.History) target = historyTabFilter;
                     else if (type == ContentType.Settings) target = settingsFilter;
@@ -904,6 +907,7 @@ namespace VPB
             int idxPath = -1;
             int idxHistory = -1;
             int idxCreatorClear = -1;
+            int idxUserTags = -1;
             int idxTarget = -1;
             int idxApplyMode = -1;
             int idxKeepOutfit = -1;
@@ -942,6 +946,13 @@ namespace VPB
                     {
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == clearGo);
                         if (i >= 0) idxCreatorClear = i;
+                    }
+
+                    GameObject utGo = rightUserTagsSideBtn != null ? rightUserTagsSideBtn : leftUserTagsSideBtn;
+                    if (utGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == utGo);
+                        if (i >= 0) idxUserTags = i;
                     }
 
                     if (rightRemoveAllHairBtn != null)
@@ -988,6 +999,7 @@ namespace VPB
                 new SideButtonLayoutEntry(idxFollow, 0, 0), // Follow
 
                 new SideButtonLayoutEntry(idxCategory, 0, 2), // Category
+                new SideButtonLayoutEntry(idxUserTags, 0, 0), // Tags (UserTags)
                 new SideButtonLayoutEntry(idxCreatorClear, 0, 0), // Clear Creator
                 new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
                 new SideButtonLayoutEntry(idxPath, 0, 0), // Path
@@ -1595,6 +1607,7 @@ namespace VPB
             if (isRight)
             {
                 if (galleryCreatorOffSprite != null && rightClearCreatorBtn != null && go == rightClearCreatorBtn) return true;
+                if (rightUserTagsSideBtn != null && go == rightUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && rightCategoryBtnIconImage != null && rightCategoryBtnImage != null && go == rightCategoryBtnImage.gameObject)
                     return true;
                 if (galleryCreatorSprite != null && rightCreatorBtnIconImage != null && rightCreatorBtnImage != null && go == rightCreatorBtnImage.gameObject)
@@ -1617,6 +1630,7 @@ namespace VPB
             else
             {
                 if (galleryCreatorOffSprite != null && leftClearCreatorBtn != null && go == leftClearCreatorBtn) return true;
+                if (leftUserTagsSideBtn != null && go == leftUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
                     return true;
                 if (galleryCreatorSprite != null && leftCreatorBtnIconImage != null && leftCreatorBtnImage != null && go == leftCreatorBtnImage.gameObject)

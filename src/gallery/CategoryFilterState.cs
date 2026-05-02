@@ -9,6 +9,7 @@ namespace VPB
         public string NameFilter = "";
         public string Creator = "";
         public List<string> Tags = new List<string>();
+        public List<string> UserTags = new List<string>();
         public string SceneSourceFilter = "";
         public string AppearanceSourceFilter = "";
         public string PackagePathFilter = "";
@@ -33,6 +34,11 @@ namespace VPB
             if (Tags != null)
                 foreach (var t in Tags) tagsArr.Add(t);
             node["tags"] = tagsArr;
+
+            var utArr = new JSONArray();
+            if (UserTags != null)
+                foreach (var t in UserTags) utArr.Add(t);
+            node["utags"] = utArr;
 
             if (FileSortState != null)
             {
@@ -67,6 +73,11 @@ namespace VPB
                 if (tagsArr != null)
                     foreach (JSONNode t in tagsArr)
                         if (!string.IsNullOrEmpty(t)) s.Tags.Add(t);
+
+                var utArr = node["utags"].AsArray;
+                if (utArr != null)
+                    foreach (JSONNode t in utArr)
+                        if (!string.IsNullOrEmpty(t)) s.UserTags.Add(t);
 
                 var sortNode = node["sort"];
                 if (sortNode != null && sortNode.Count > 0)

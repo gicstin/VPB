@@ -144,6 +144,10 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/arrow_merge.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/auto.png",
         "IsDirectory":  false
     },
@@ -248,6 +252,14 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/file_export.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/file_import.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/filter.png",
         "IsDirectory":  false
     },
@@ -345,6 +357,10 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/hub.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/info_square.png",
         "IsDirectory":  false
     },
     {
@@ -525,6 +541,18 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/TABLER_ICONS_LICENSE.txt",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/tag_minus.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/tag_plus.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/tags.png",
         "IsDirectory":  false
     },
     {

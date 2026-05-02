@@ -349,6 +349,8 @@
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UserTags.cs" />
+    <Compile Include="src\gallery\GalleryUserTagYamlBrain.cs" />
     <Compile Include="src\gallery\GalleryPanel.CategoryFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />

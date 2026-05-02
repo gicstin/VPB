@@ -355,6 +355,7 @@ namespace VPB
                 tagsCached = false;
                 categoriesCached = false;
                 pathsCached = false;
+                userTagsCached = false;
             }
             else if (packagesChanged)
             {
@@ -362,6 +363,7 @@ namespace VPB
                 tagsCached = false;
                 categoriesCached = false;
                 pathsCached = false;
+                userTagsCached = false;
             }
 
             currentCategoryTitle = title;
@@ -1317,6 +1319,7 @@ namespace VPB
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
+            try { RefreshAppliedUserTagsPaneAfterSelectionChange(); } catch { }
         }
 
         public bool NotifyPackagesChanged(DateTime refreshTime)

@@ -213,7 +213,8 @@ namespace VPB
             // Category side list should only "filter down" by creator selection.
             // If tags are active but no creator selected, keep counts global so categories don't disappear.
             var tagFilterForCategoryCounts = !string.IsNullOrEmpty(currentCreator) ? activeTags : null;
-            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, tagFilterForCategoryCounts, currentPackagePathFilter))
+            var userTagFilterForCategoryCounts = !string.IsNullOrEmpty(currentCreator) ? activeUserTags : null;
+            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, tagFilterForCategoryCounts, currentPackagePathFilter, userTagFilterForCategoryCounts))
             {
                 // SQL path succeeded.
             }
@@ -475,7 +476,7 @@ namespace VPB
                     }
                 }
             }
-            else if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle, currentPackagePathFilter))
+            else if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle, currentPackagePathFilter, activeUserTags))
             {
                 string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
                 HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -650,7 +651,8 @@ namespace VPB
                 currentPath,
                 activeTags,
                 currentCategoryTitle,
-                currentCreator);
+                currentCreator,
+                activeUserTags);
 
             // SQL path is VAR-backed; include loose files from current loaded list so Custom/Saves are represented.
             // If SQL is unavailable/stale, include VAR rows too from current loaded list.
@@ -665,9 +667,38 @@ namespace VPB
             pathsCached = true;
         }
 
+        private void CacheUserTagsSideTab()
+        {
+            cachedUserTagSideTab.Clear();
+            string cat = currentCategoryTitle ?? "";
+            if (titleText != null && string.IsNullOrEmpty(cat)) cat = titleText.text ?? "";
+
+            var allNames = new List<string>(128);
+            if (!VpbLocalDatabase.TryReadAllGalleryUserTagNames(allNames))
+            {
+                userTagsCached = true;
+                return;
+            }
+
+            var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            bool countsOk = false;
+            if (!string.IsNullOrEmpty(cat))
+                countsOk = VpbLocalDatabase.TryReadGalleryUserTagSideTabCounts(cat, "", "", dict);
+
+            for (int i = 0; i < allNames.Count; i++)
+            {
+                string name = allNames[i];
+                int c = 0;
+                if (countsOk) dict.TryGetValue(name, out c);
+                cachedUserTagSideTab.Add(new UserTagSideTabEntry { Name = name, Count = c });
+            }
+            userTagsCached = true;
+        }
+
         public void InvalidateTags()
         {
             tagsCached = false;
+            userTagsCached = false;
             try { GalleryTagCountSnapshotCache.Clear(); } catch { }
         }
 

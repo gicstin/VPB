@@ -497,6 +497,17 @@ namespace VPB
             return leftActiveContent == ContentType.Settings || rightActiveContent == ContentType.Settings;
         }
 
+        /// <summary>Closes Settings side tab(s) and syncs internal session — use when navigating to Tags so Save→Tags never leaves Settings open on other rail.</summary>
+        private void ForceCloseSettingsSidePanels()
+        {
+            if (leftActiveContent != ContentType.Settings && rightActiveContent != ContentType.Settings)
+                return;
+            if (leftActiveContent == ContentType.Settings) leftActiveContent = null;
+            if (rightActiveContent == ContentType.Settings) rightActiveContent = null;
+            SyncInternalSettingsListView();
+            try { RefreshTboxConditionalActionButtons(); } catch { }
+        }
+
         private void SyncInternalSettingsListView()
         {
             bool open = IsSettingsPanelOpen();

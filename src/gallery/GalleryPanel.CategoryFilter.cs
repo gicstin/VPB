@@ -18,6 +18,7 @@ namespace VPB
             s.NameFilter = nameFilter ?? "";
             s.Creator = currentCreator ?? "";
             s.Tags = new List<string>(activeTags);
+            s.UserTags = new List<string>(activeUserTags);
             s.SceneSourceFilter = currentSceneSourceFilter ?? "";
             s.AppearanceSourceFilter = currentAppearanceSourceFilter ?? "";
             s.PackagePathFilter = currentPackagePathFilter ?? "";
@@ -90,6 +91,14 @@ namespace VPB
             if (state.Tags != null)
                 foreach (var t in state.Tags) activeTags.Add(t);
 
+            activeUserTags.Clear();
+            if (state.UserTags != null)
+                foreach (var t in state.UserTags)
+                {
+                    string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
+                    if (!string.IsNullOrEmpty(n)) activeUserTags.Add(n);
+                }
+
             currentSceneSourceFilter = state.SceneSourceFilter ?? "";
             currentAppearanceSourceFilter = state.AppearanceSourceFilter ?? "";
             currentPackagePathFilter = state.PackagePathFilter ?? "";
@@ -117,6 +126,7 @@ namespace VPB
             currentCreator = "";
 
             activeTags.Clear();
+            activeUserTags.Clear();
             currentSceneSourceFilter = "";
             currentAppearanceSourceFilter = "";
             currentPackagePathFilter = "";
