@@ -1403,14 +1403,13 @@ namespace VPB
                     if (holdToLaunchEnabled)
                     {
                         // Avoid gesture conflicts: hold-to-launch uses pointer-down hold, same as drag start.
+                        // Keep user preference (EnableDragDrop) intact; runtime suppression handled by VPBConfig.EffectiveEnableDragDrop.
                         holdToLaunchPrevEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
-                        VPBConfig.Instance.EnableDragDrop = false;
                         VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop = holdToLaunchPrevEnableDragDrop;
                         VPBConfig.Instance.HoldToLaunchEnabled = true;
                     }
                     else
                     {
-                        VPBConfig.Instance.EnableDragDrop = holdToLaunchPrevEnableDragDrop;
                         VPBConfig.Instance.HoldToLaunchEnabled = false;
                     }
                     VPBConfig.Instance.Save(false);

@@ -10,7 +10,7 @@ namespace VPB
     /// Hold-to-apply timer that triggers the panel's apply/launch logic after a delay.
     /// Requires the user to actively hold the pointer button/trigger down (similar to starting a drag).
     /// </summary>
-    public class HoldToApplyOnHover : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
+    public class HoldToApplyOnHover : MonoBehaviour, IPointerEnterHandler, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
     {
         public GalleryPanel panel;
         public FileEntry file;
@@ -22,12 +22,33 @@ namespace VPB
         private Image _fill;
         private Text _text;
 
-        public void OnPointerDown(PointerEventData eventData)
+        private static bool IsVR()
+        {
+            try { return UnityEngine.XR.XRSettings.enabled; }
+            catch { return false; }
+        }
+
+        private void TryStartHold()
         {
             if (panel == null || file == null) return;
             if (!panel.HoldToLaunchEnabled) return;
             if (_co != null) return;
             _co = StartCoroutine(HoldRoutine());
+        }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            // Hold-to-launch is described as "hover-hold" in VR; starting on hover makes it work
+            // with VR laser pointers that don't issue pointer-down events for hover.
+            if (!IsVR()) return;
+            TryStartHold();
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            // Desktop: require active press/hold (prevents accidental trigger while scrolling).
+            if (IsVR() || eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            TryStartHold();
         }
 
         public void OnPointerUp(PointerEventData eventData)

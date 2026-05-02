@@ -62,18 +62,7 @@ namespace VPB
                 {
                     springScrollButtonEnabled = VPBConfig.Instance.SpringScrollButtonEnabled;
                     holdToLaunchEnabled = VPBConfig.Instance.HoldToLaunchEnabled;
-
-                    // If hold-to-launch is enabled, force drag-drop off to avoid conflicts, remembering prior state.
-                    if (holdToLaunchEnabled)
-                    {
-                        holdToLaunchPrevEnableDragDrop = VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop;
-                        if (VPBConfig.Instance.EnableDragDrop)
-                        {
-                            VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
-                            VPBConfig.Instance.EnableDragDrop = false;
-                            VPBConfig.Instance.Save(false);
-                        }
-                    }
+                    holdToLaunchPrevEnableDragDrop = VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop;
                 }
             }
             catch { }

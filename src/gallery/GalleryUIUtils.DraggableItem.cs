@@ -130,7 +130,7 @@ namespace VPB
         private static float EffectiveDragHoldSeconds()
         {
             var c = VPBConfig.Instance;
-            if (c == null || !c.EnableDragDrop || !c.RequireDragHoldBeforeMove) return 0f;
+            if (c == null || !c.EffectiveEnableDragDrop || !c.RequireDragHoldBeforeMove) return 0f;
             return Mathf.Max(0f, c.DragHoldThreshold);
         }
 
@@ -138,7 +138,7 @@ namespace VPB
         {
             get
             {
-                if (VPBConfig.Instance != null && !VPBConfig.Instance.EnableDragDrop) return false;
+                if (VPBConfig.Instance != null && !VPBConfig.Instance.EffectiveEnableDragDrop) return false;
                 float threshold = EffectiveDragHoldSeconds();
                 if (threshold <= 0f) return false;
                 return _pointerDownTime >= 0f && (Time.unscaledTime - _pointerDownTime >= threshold);
@@ -150,7 +150,7 @@ namespace VPB
             bool isVR = false;
             try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
             if (!isVR && eventData.button != PointerEventData.InputButton.Left) return;
-            if (VPBConfig.Instance != null && !VPBConfig.Instance.EnableDragDrop) return;
+            if (VPBConfig.Instance != null && !VPBConfig.Instance.EffectiveEnableDragDrop) return;
             float threshold = EffectiveDragHoldSeconds();
             if (Time.unscaledTime - _pointerDownTime < threshold) return;
 

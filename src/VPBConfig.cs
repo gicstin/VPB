@@ -197,6 +197,14 @@ namespace VPB
         }
         /// <summary>Gallery item drag-and-drop to atoms/scene. Off by default (VR jitter / accidental drags); enable in Settings → Interaction.</summary>
         public bool EnableDragDrop = false;
+        /// <summary>
+        /// Effective drag-and-drop state at runtime.
+        /// Hold-to-launch uses same pointer-down gesture as drag start, so it suppresses drag even if user preference is enabled.
+        /// </summary>
+        public bool EffectiveEnableDragDrop
+        {
+            get { return EnableDragDrop && !HoldToLaunchEnabled; }
+        }
         /// <summary>When false (default), drag starts immediately once drag-and-drop is on (legacy). When true, <see cref="DragHoldThreshold"/> is enforced.</summary>
         public bool RequireDragHoldBeforeMove = false;
         public float DragHoldThreshold = 0.5f;
@@ -628,6 +636,15 @@ namespace VPB
                             }
                         }
                     }
+
+                    // Migration: older builds forced EnableDragDrop off when HoldToLaunchEnabled was on, and persisted that forced-off value.
+                    // Restore user intent (EnableDragDrop) from HoldToLaunchPrevEnableDragDrop while keeping effective suppression via EffectiveEnableDragDrop.
+                    try
+                    {
+                        if (HoldToLaunchEnabled && !EnableDragDrop && HoldToLaunchPrevEnableDragDrop)
+                            EnableDragDrop = true;
+                    }
+                    catch { }
 
                     try
                     {
