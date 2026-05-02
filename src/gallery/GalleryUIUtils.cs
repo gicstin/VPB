@@ -905,6 +905,12 @@ namespace VPB
         /// <summary>Standard translucent-black backdrop applied to every icon button.</summary>
         public static readonly Color IconButtonBackdrop = new Color(0f, 0f, 0f, 0.5f);
 
+        /// <summary>Recolor passed to <see cref="LoadIconSprite"/> for gallery left/right rail icon PNGs (glyph pixels only).</summary>
+        public static readonly Color SideRailIconGlyphTint = Color.white;
+
+        /// <summary>Neutral glyph tint for top/bottom bar icon PNGs (glyph pixels only).</summary>
+        public static readonly Color BarIconGlyphTint = Color.white;
+
         /// <summary>
         /// Adds an icon Image child to <paramref name="buttonGO"/>, hides its text label, and sets
         /// the button's background to <paramref name="backdropOverride"/> (or <see cref="IconButtonBackdrop"/>

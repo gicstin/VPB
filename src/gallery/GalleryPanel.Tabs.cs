@@ -1737,12 +1737,12 @@ namespace VPB
                 }
 
                 int appliedVisibleCount = visibleApplied.Count;
-                int selTot = selectedFiles != null ? selectedFiles.Count : 0;
                 for (int vi = 0; vi < visibleApplied.Count; vi++)
                 {
                     UserTagSideTabEntry ae = visibleApplied[vi];
                     bool isSel = userTagAppliedRemoveSelection.Contains(ae.Name);
-                    string labelA = selTot > 1 ? (ae.Name + " (" + ae.Count + ")") : ae.Name;
+                    // Always show per-selection hit count (e.g. "(1)" for one package in ALL VAR); selTot>1 alone hid it.
+                    string labelA = ae.Name + " (" + ae.Count + ")";
                     string tagFocusSnap = ae.Name;
                     int viCapture = vi;
                     CreateTabButton(container.transform, labelA, isSel ? utAppAccent : new Color(0.25f, 0.25f, 0.25f, 1f), isSel, () =>

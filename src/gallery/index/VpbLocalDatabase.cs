@@ -62,7 +62,7 @@ namespace VPB
         /// <summary>High bit: row has <see cref="ClothingAttrPacked"/> from index rebuild (fast clothing subfilter path).</summary>
         internal const int ClothingAttrPresentFlag = unchecked((int)0x80000000);
 
-        private const int SchemaVersion = 10;
+        private const int SchemaVersion = 11;
 
         private static readonly object s_Sync = new object();
         private static volatile bool s_RebuildScheduled;
@@ -283,6 +283,7 @@ namespace VPB
         {
             conn.ExecUtf8("PRAGMA journal_mode=WAL;");
             conn.ExecUtf8("PRAGMA synchronous=NORMAL;");
+            conn.ExecUtf8("PRAGMA foreign_keys=ON;");
             conn.ExecUtf8(
                 "CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);" +
                 "CREATE TABLE IF NOT EXISTS pkg (uid TEXT PRIMARY KEY, creator TEXT, wtime INTEGER, psize INTEGER);" +
@@ -305,15 +306,76 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_iu_last ON item_usage(last_used);" +
                 "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);" +
                 "CREATE TABLE IF NOT EXISTS gallery_user_tag (tag_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);" +
-                "CREATE TABLE IF NOT EXISTS gallery_item_user_tag (category TEXT NOT NULL, pkg_uid TEXT NOT NULL, internal_path TEXT NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY(category, pkg_uid, internal_path, tag_id));" +
+                "CREATE TABLE IF NOT EXISTS gallery_item_user_tag (category TEXT NOT NULL, pkg_uid TEXT NOT NULL, internal_path TEXT NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY(category, pkg_uid, internal_path, tag_id), FOREIGN KEY(tag_id) REFERENCES gallery_user_tag(tag_id) ON DELETE CASCADE);" +
                 "CREATE INDEX IF NOT EXISTS idx_giut_tag ON gallery_item_user_tag(tag_id);" +
-                "CREATE INDEX IF NOT EXISTS idx_giut_lookup ON gallery_item_user_tag(category, pkg_uid, internal_path);");
+                "CREATE INDEX IF NOT EXISTS idx_giut_pkg_path ON gallery_item_user_tag(pkg_uid, internal_path);");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN var_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN list_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN pctime TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN cloth_attr TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
+            TryEnsureGalleryItemUserTagSchemaV11(conn);
             BumpMetaSchemaVersionAfterUserTagTables(conn);
+        }
+
+        /// <summary>
+        /// v11: FK on <c>gallery_item_user_tag.tag_id</c>, index for ALL‑VAR <c>(pkg_uid, internal_path)</c>, drop redundant <c>idx_giut_lookup</c>.
+        /// Rebuilds link table when existing DB predates FK (SQLite cannot ALTER ADD FK).
+        /// </summary>
+        private static void TryEnsureGalleryItemUserTagSchemaV11(VpbSqlite3.Connection conn)
+        {
+            if (conn == null) return;
+            try
+            {
+                string tblSql;
+                using (var st = conn.Prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='gallery_item_user_tag'"))
+                {
+                    if (st.Step() != VpbSqlite3.SqliteRow) return;
+                    tblSql = st.ColumnText(0) ?? "";
+                }
+                if (string.IsNullOrEmpty(tblSql)) return;
+
+                bool hasFk = tblSql.IndexOf("FOREIGN KEY", StringComparison.OrdinalIgnoreCase) >= 0
+                    && tblSql.IndexOf("gallery_user_tag", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!hasFk)
+                {
+                    conn.ExecUtf8("PRAGMA foreign_keys=OFF;");
+                    conn.ExecUtf8("BEGIN;");
+                    try
+                    {
+                        conn.ExecUtf8("DROP TABLE IF EXISTS gallery_item_user_tag__v11;");
+                        conn.ExecUtf8(
+                            "CREATE TABLE gallery_item_user_tag__v11 (" +
+                            "category TEXT NOT NULL, pkg_uid TEXT NOT NULL, internal_path TEXT NOT NULL, tag_id INTEGER NOT NULL, " +
+                            "PRIMARY KEY(category, pkg_uid, internal_path, tag_id), " +
+                            "FOREIGN KEY(tag_id) REFERENCES gallery_user_tag(tag_id) ON DELETE CASCADE);");
+                        conn.ExecUtf8(
+                            "INSERT INTO gallery_item_user_tag__v11(category, pkg_uid, internal_path, tag_id) " +
+                            "SELECT category, pkg_uid, internal_path, tag_id FROM gallery_item_user_tag " +
+                            "WHERE tag_id IN (SELECT tag_id FROM gallery_user_tag);");
+                        conn.ExecUtf8("DROP TABLE gallery_item_user_tag;");
+                        conn.ExecUtf8("ALTER TABLE gallery_item_user_tag__v11 RENAME TO gallery_item_user_tag;");
+                        conn.ExecUtf8("COMMIT;");
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                    finally
+                    {
+                        try { conn.ExecUtf8("PRAGMA foreign_keys=ON;"); } catch { }
+                    }
+                }
+
+                conn.ExecUtf8("DROP INDEX IF EXISTS idx_giut_lookup;");
+                conn.ExecUtf8("CREATE INDEX IF NOT EXISTS idx_giut_tag ON gallery_item_user_tag(tag_id);");
+                conn.ExecUtf8("CREATE INDEX IF NOT EXISTS idx_giut_pkg_path ON gallery_item_user_tag(pkg_uid, internal_path);");
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] VpbLocalDatabase: gallery_item_user_tag v11 migration failed: " + ex.Message); } catch { }
+            }
         }
 
         internal const int GalleryUserTagNameMaxLength = 30;

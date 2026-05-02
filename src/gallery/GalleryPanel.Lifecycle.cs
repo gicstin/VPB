@@ -54,8 +54,8 @@ namespace VPB
             Color historyBackdrop = ColorHistoryAccent;
             if (rightHistoryBtnImage != null) rightHistoryBtnImage.color = historyBackdrop;
             if (leftHistoryBtnImage != null) leftHistoryBtnImage.color = historyBackdrop;
-            if (rightHistoryBtnIconImage != null) rightHistoryBtnIconImage.color = Color.white;
-            if (leftHistoryBtnIconImage != null) leftHistoryBtnIconImage.color = Color.white;
+            if (rightHistoryBtnIconImage != null) rightHistoryBtnIconImage.color = UI.SideRailIconGlyphTint;
+            if (leftHistoryBtnIconImage != null) leftHistoryBtnIconImage.color = UI.SideRailIconGlyphTint;
         }
 
         private void UpdateClearButtonPosition(bool isRight, ContentType type)

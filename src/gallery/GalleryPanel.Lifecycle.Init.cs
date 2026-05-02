@@ -303,8 +303,8 @@ namespace VPB
             AddTooltip(fileSortDirBtn, "gallery.tooltip.sort_toggle_dir", "Toggle sort direction (↑/↓)");
 
             // Sort direction icon — load both sprites; initial sprite set by UpdateSortButtonText after state is read
-            fileSortDirAscSprite = UI.LoadIconSprite("vpb_icons/sort_asc.png", new Color(0.78f, 0.78f, 0.78f, 1f));
-            fileSortDirDescSprite = UI.LoadIconSprite("vpb_icons/sort_desc.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            fileSortDirAscSprite = UI.LoadIconSprite("vpb_icons/sort_asc.png", UI.BarIconGlyphTint);
+            fileSortDirDescSprite = UI.LoadIconSprite("vpb_icons/sort_desc.png", UI.BarIconGlyphTint);
             if (fileSortDirAscSprite != null || fileSortDirDescSprite != null)
             {
                 Sprite initial = fileSortDirAscSprite ?? fileSortDirDescSprite;
@@ -322,8 +322,8 @@ namespace VPB
             ratingSortToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
             ratingSortToggleBtnText = ratingSortToggleBtn.GetComponentInChildren<Text>();
             ratingSortToggleBtnText.color = Color.white;
-            ratingStarNormalSprite = UI.LoadIconSprite("vpb_icons/star.png",     new Color(0.78f, 0.78f, 0.78f, 1f));
-            ratingStarOffSprite    = UI.LoadIconSprite("vpb_icons/star_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            ratingStarNormalSprite = UI.LoadIconSprite("vpb_icons/star.png",     UI.BarIconGlyphTint);
+            ratingStarOffSprite    = UI.LoadIconSprite("vpb_icons/star_off.png", UI.BarIconGlyphTint);
             {
                 Sprite initial = ratingStarNormalSprite ?? ratingStarOffSprite;
                 if (initial != null)
@@ -359,7 +359,7 @@ namespace VPB
             titleBarRefreshBtnText = refreshBtn.GetComponentInChildren<Text>();
             VPBUiFont.ApplyTo(titleBarRefreshBtnText);
             AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
-            { var s = UI.LoadIconSprite("vpb_icons/refresh.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(refreshBtn, s); }
+            { var s = UI.LoadIconSprite("vpb_icons/refresh.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(refreshBtn, s); }
 
             // Settings (title bar, left of filter presets; side rails no longer host Settings)
             GameObject titleBarSettingsBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.title.settings_abbrev", "S"), 16, 0, 0, AnchorPresets.middleCenter, () => {
@@ -369,7 +369,7 @@ namespace VPB
             titleBarSettingsBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             titleBarSettingsBtnText = titleBarSettingsBtn.GetComponentInChildren<Text>();
             titleBarSettingsBtnText.color = Color.white;
-            { var s = UI.LoadIconSprite("vpb_icons/settings.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(titleBarSettingsBtn, s); }
+            { var s = UI.LoadIconSprite("vpb_icons/settings.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(titleBarSettingsBtn, s); }
             RectTransform titleBarSettingsRT = titleBarSettingsBtn.GetComponent<RectTransform>();
             titleBarSettingsRT.anchorMin = new Vector2(0.5f, 0.5f);
             titleBarSettingsRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -392,7 +392,7 @@ namespace VPB
             qfToggleRT.anchoredPosition = new Vector2(-184, 0);
             VPBUiFont.ApplyTo(quickFiltersToggleBtnText);
             {
-                var s = UI.LoadIconSprite("vpb_icons/filter.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                var s = UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint);
                 if (s != null)
                 {
                     UI.AddIconToButton(qfToggleBtn, s);
@@ -421,7 +421,7 @@ namespace VPB
                 float tabAreaWidth = 220f;
 
                 {
-                    Color iconTint = new Color(0.78f, 0.78f, 0.78f, 1f);
+                    Color iconTint = UI.BarIconGlyphTint;
                     sceneSourceSortModeSprites = new Sprite[]
                     {
                         UI.LoadIconSprite("vpb_icons/sort_name_asc.png", iconTint),
@@ -1069,7 +1069,7 @@ namespace VPB
                 float startY = 320f;
 
                 {
-                    Color sideTint = new Color(0.78f, 0.78f, 0.78f, 1f);
+                    Color sideTint = UI.SideRailIconGlyphTint;
                     galleryFloatSprite = UI.LoadIconSprite("vpb_icons/gallery_float.png", sideTint);
                     galleryFixedSprite = UI.LoadIconSprite("vpb_icons/gallery_fixed.png", sideTint);
                     galleryFollowOnSprite = UI.LoadIconSprite("vpb_icons/gallery_follow_on.png", sideTint);
@@ -1081,8 +1081,8 @@ namespace VPB
                     galleryPathSprite = UI.LoadIconSprite("vpb_icons/folder.png", sideTint);
                     galleryHistorySprite = UI.LoadIconSprite("vpb_icons/history.png", sideTint);
                     galleryCreatorOffSprite = UI.LoadIconSprite("vpb_icons/gallery_creator_off.png", sideTint);
-                    targetOnSprite  = UI.LoadIconSprite("vpb_icons/target_on.png",  new Color(1f, 1f, 1f, 1f));
-                    targetOffSprite = UI.LoadIconSprite("vpb_icons/target_off.png", new Color(0.65f, 0.65f, 0.65f, 1f));
+                    targetOnSprite  = UI.LoadIconSprite("vpb_icons/target_on.png",  UI.SideRailIconGlyphTint);
+                    targetOffSprite = UI.LoadIconSprite("vpb_icons/target_off.png", UI.SideRailIconGlyphTint);
                     galleryApplySprite = UI.LoadIconSprite("vpb_icons/gallery_apply.png", sideTint);
                     galleryApplyOneClickSprite = UI.LoadIconSprite("vpb_icons/gallery_apply_1click.png", sideTint);
                     galleryApplyTwoClickSprite = UI.LoadIconSprite("vpb_icons/gallery_apply_2click.png", sideTint);
@@ -1233,7 +1233,7 @@ namespace VPB
                     float utW = sideIconBtn;
                     float utH = sideIconBtn;
                     Sprite utSpr = null;
-                    try { utSpr = UI.LoadIconSprite("vpb_icons/tags.png", Color.white); } catch { }
+                    try { utSpr = UI.LoadIconSprite("vpb_icons/tags.png", UI.SideRailIconGlyphTint); } catch { }
                     GameObject rightUserTagsBtn = UI.CreateUIButton(rightSideContainer, utW, utH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () =>
                     {
                         if (isFixedLocally) ToggleLeft(ContentType.UserTags);
@@ -1741,7 +1741,7 @@ namespace VPB
                     float utW = sideIconBtn;
                     float utH = sideIconBtn;
                     Sprite utSprL = null;
-                    try { utSprL = UI.LoadIconSprite("vpb_icons/tags.png", Color.white); } catch { }
+                    try { utSprL = UI.LoadIconSprite("vpb_icons/tags.png", UI.SideRailIconGlyphTint); } catch { }
                     GameObject leftUserTagsBtn = UI.CreateUIButton(leftSideContainer, utW, utH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.UserTags));
                     leftUserTagsSideBtn = leftUserTagsBtn;
                     Image utImgL = leftUserTagsBtn.GetComponent<Image>();
@@ -2144,14 +2144,14 @@ namespace VPB
                         // Icon: scroll.png
                         try
                         {
-                            Sprite icon = UI.LoadIconSprite("vpb_icons/scroll.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+                            Sprite icon = UI.LoadIconSprite("vpb_icons/scroll.png", UI.SideRailIconGlyphTint);
                             if (icon != null)
                             {
                                 GameObject iconGO = new GameObject("Icon");
                                 iconGO.transform.SetParent(springBtn.transform, false);
                                 Image img = iconGO.AddComponent<Image>();
                                 img.sprite = icon;
-                                img.color = Color.white;
+                                img.color = UI.SideRailIconGlyphTint;
                                 img.preserveAspect = true;
                                 img.raycastTarget = false;
 
@@ -2253,7 +2253,7 @@ namespace VPB
             minRT.anchoredPosition = new Vector2(-60f, 0f);
             minimizeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(minimizeBtn);
-            { var s = UI.LoadIconSprite("vpb_icons/minimize.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(minimizeBtn, s); }
+            { var s = UI.LoadIconSprite("vpb_icons/minimize.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(minimizeBtn, s); }
 
             // Close button (title bar icon row) - rendered last to be on top
             GameObject closeBtn = UI.CreateUIButton(titleBarGO, 40, 40, "X", 30, 0, 0, AnchorPresets.middleCenter, () => {
@@ -2266,7 +2266,7 @@ namespace VPB
             closeRT.anchoredPosition = new Vector2(-10f, 0f);
             closeBtn.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.25f, 1f);
             AddHoverDelegate(closeBtn);
-            { var s = UI.LoadIconSprite("vpb_icons/close.png", new Color(0.78f, 0.78f, 0.78f, 1f)); if (s != null) UI.AddIconToButton(closeBtn, s); }
+            { var s = UI.LoadIconSprite("vpb_icons/close.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s); }
 
             // Register inner pane button scale actions (close/minimize)
             { var rt = minRT; var t = minimizeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-60f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(30 * s); }); }
