@@ -452,6 +452,16 @@ namespace VPB
                     rst.pivot = new Vector2(0.5f, 1f);
                     rst.sizeDelta = Vector2.zero;
                     rightUserTagsAvailStickyGO.transform.SetAsLastSibling();
+
+                    rightUserTagsAvailFooterGO = new GameObject("VPB_UserTagsAvailFooter");
+                    rightUserTagsAvailFooterGO.transform.SetParent(rightTabScrollGO.transform, false);
+                    rightUserTagsAvailFooterGO.SetActive(false);
+                    RectTransform rft = rightUserTagsAvailFooterGO.AddComponent<RectTransform>();
+                    rft.anchorMin = new Vector2(0f, 0f);
+                    rft.anchorMax = new Vector2(1f, 0f);
+                    rft.pivot = new Vector2(0.5f, 0f);
+                    rft.sizeDelta = Vector2.zero;
+                    rightUserTagsAvailFooterGO.transform.SetAsLastSibling();
                 }
 
                 // 1b. Right Sub Tab Area (For Tags split view)
@@ -765,6 +775,16 @@ namespace VPB
                     lst.pivot = new Vector2(0.5f, 1f);
                     lst.sizeDelta = Vector2.zero;
                     leftUserTagsAvailStickyGO.transform.SetAsLastSibling();
+
+                    leftUserTagsAvailFooterGO = new GameObject("VPB_UserTagsAvailFooter");
+                    leftUserTagsAvailFooterGO.transform.SetParent(leftTabScrollGO.transform, false);
+                    leftUserTagsAvailFooterGO.SetActive(false);
+                    RectTransform lft = leftUserTagsAvailFooterGO.AddComponent<RectTransform>();
+                    lft.anchorMin = new Vector2(0f, 0f);
+                    lft.anchorMax = new Vector2(1f, 0f);
+                    lft.pivot = new Vector2(0.5f, 0f);
+                    lft.sizeDelta = Vector2.zero;
+                    leftUserTagsAvailFooterGO.transform.SetAsLastSibling();
                 }
 
                 // 2b. Left Sub Tab Area (For Tags split view)

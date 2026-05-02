@@ -37,6 +37,8 @@ namespace VPB
         // Cache for package list thumbnails: package UID -> internal image path (within the package).
         // Keeps package preview lookups cheap while scrolling.
         private readonly Dictionary<string, string> _packagePreviewInternalPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Avoid repeated expensive resolve attempts when a package cannot be resolved from SQLite rows (e.g. bad hint during search).
+        private readonly HashSet<string> _packagePreviewResolveFailed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private static bool IsImagePath(string path)
         {
@@ -270,17 +272,74 @@ namespace VPB
                     catch { }
                 }
             }
-            else if (file is PackageListEntry ple && ple.Package != null)
+            else if (file is PackageListEntry ple)
             {
                 // For package list rows, pick an internal image (jpg/png) inside the .var.
                 // IMPORTANT: do not request thumbnails from the .var file itself; that can trigger package
                 // ensure-install paths and fails on some setups. Use an internal image path instead.
-                string chosen = GetOrChoosePackagePreviewInternalPath(ple.Package);
-                if (!string.IsNullOrEmpty(chosen))
-                    imgPath = ple.Package.Path + ":/" + chosen.Replace('\\', '/');
+                VarPackage pkg = null;
+                try { pkg = ple.Package; } catch { pkg = null; }
+                if (pkg == null)
+                {
+                    // SQLite fast-path ALL VAR rows often defer package resolve; thumbnail still needs a live VarPackage
+                    // to locate internal preview image. Resolve by UID without forcing install.
+                    try
+                    {
+                        string uid = ple.GetPackageUidForGalleryUserTags();
+                        if (!string.IsNullOrEmpty(uid))
+                        {
+                            if (_packagePreviewResolveFailed.Contains(uid))
+                            {
+                                ClearThumbnailTarget(target);
+                                return;
+                            }
+                            // Prefer exact GetPackage(uid) semantics; fallback to dependency lookup.
+                            try { pkg = FileManager.GetPackage(uid, ensureInstalled: false); } catch { pkg = null; }
+                            if (pkg == null)
+                            {
+                                try { pkg = FileManager.GetPackageForDependency(uid, false); } catch { pkg = null; }
+                            }
+                            if (pkg == null) _packagePreviewResolveFailed.Add(uid);
+                        }
+                    }
+                    catch { pkg = null; }
+                }
+
+                if (pkg != null)
+                {
+                    string chosen = GetOrChoosePackagePreviewInternalPath(pkg);
+                    if (!string.IsNullOrEmpty(chosen) && !string.IsNullOrEmpty(pkg.Path))
+                        imgPath = pkg.Path + ":/" + chosen.Replace('\\', '/');
+                }
             }
-            else if (file is VarFileEntry vfe && vfe.Package != null)
+            else if (file is VarFileEntry vfe)
             {
+                // Avoid resolving packages while scrolling search results (can stall/crash).
+                // Prefer deriving package path from vfe.Path (indexed) and use sister-image rule only.
+                string pkgPath = null;
+                try
+                {
+                    string p = vfe.Path ?? "";
+                    int split = p.IndexOf(":/", StringComparison.Ordinal);
+                    if (split > 0) pkgPath = p.Substring(0, split);
+                }
+                catch { pkgPath = null; }
+                if (string.IsNullOrEmpty(pkgPath))
+                {
+                    // If already resolved elsewhere, allow richer fallback.
+                    try
+                    {
+                        var pkg2 = vfe.Package;
+                        if (pkg2 != null && !string.IsNullOrEmpty(pkg2.Path)) pkgPath = pkg2.Path;
+                    }
+                    catch { pkgPath = null; }
+                }
+                if (string.IsNullOrEmpty(pkgPath))
+                {
+                    ClearThumbnailTarget(target);
+                    return;
+                }
+
                 // First try per-item sister file: same internal path but .jpg/.png extension.
                 // This gives each clothing variation its own thumbnail instead of sharing the
                 // package-wide preview image.
@@ -290,8 +349,8 @@ namespace VPB
                     ? internalNoExt
                     : internalDir.Replace('\\', '/') + "/" + internalNoExt;
 
-                string sisterJpg = vfe.Package.Path + ":/" + baseInternal + ".jpg";
-                string sisterPng = vfe.Package.Path + ":/" + baseInternal + ".png";
+                string sisterJpg = pkgPath + ":/" + baseInternal + ".jpg";
+                string sisterPng = pkgPath + ":/" + baseInternal + ".png";
 
                 if (FileManager.FileExists(sisterJpg))
                     imgPath = sisterJpg;
@@ -299,10 +358,8 @@ namespace VPB
                     imgPath = sisterPng;
                 else
                 {
-                    // Fall back to the package-wide preview image
-                    string chosen = GetOrChoosePackagePreviewInternalPath(vfe.Package);
-                    if (!string.IsNullOrEmpty(chosen))
-                        imgPath = vfe.Package.Path + ":/" + chosen.Replace('\\', '/');
+                    // Package-wide preview requires package resolve; skip to keep scroll cheap/stable.
+                    // If caller already resolved package, they will hit the PackageListEntry path for package rows.
                 }
             }
             else
@@ -370,6 +427,16 @@ namespace VPB
                     CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(bind.CurrentTexture);
                     bind.CurrentTexture = null;
                 }
+
+                // New binding: immediately blank old texture so pooled rows never "flash" stale previews
+                // while async load resolves (notably visible in ALL VAR package list).
+                try
+                {
+                    target.texture = null;
+                    if (target.material != null) target.material.mainTexture = null;
+                    target.color = new Color(0, 0, 0, 0);
+                }
+                catch { }
             }
 
             // 1. Memory Cache

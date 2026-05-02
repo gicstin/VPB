@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -53,9 +54,10 @@ namespace VPB
             if (fe == null) return false;
 
             VarFileEntry vfe = fe as VarFileEntry;
-            if (vfe != null && vfe.Package != null)
+            if (vfe != null)
             {
-                pkgUid = vfe.Package.Uid ?? "";
+                // Gallery fast-path rows (ALL VAR, etc.) often defer package resolve; badge check must not depend on Package != null.
+                pkgUid = vfe.GetRowPackageUid() ?? "";
                 internalPath = vfe.InternalPath ?? "";
                 return !string.IsNullOrEmpty(pkgUid) && !string.IsNullOrEmpty(internalPath);
             }
@@ -97,8 +99,18 @@ namespace VPB
         {
             if (file == null) return false;
             if (!TryGetGalleryRowKeysForUserTags(file, out string pkgUid, out string internalPath)) return false;
-            string cat = currentCategoryTitle;
+            string cat = currentCategoryTitle ?? "";
+            if (string.IsNullOrEmpty(cat) && titleText != null) cat = titleText.text ?? "";
             if (string.IsNullOrEmpty(cat)) return false;
+            // ALL VAR: package row is meta.json, but inherit mode can tag only child items.
+            // Show badge when either package meta row tagged OR any child inside package tagged.
+            if (VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat)
+                && string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(pkgUid))
+            {
+                if (VpbLocalDatabase.TryHasAnyGalleryUserTagsForRow(cat, pkgUid, internalPath)) return true;
+                return VpbLocalDatabase.TryHasAnyGalleryUserTagsForPackageAnyPath(pkgUid);
+            }
             return VpbLocalDatabase.TryHasAnyGalleryUserTagsForRow(cat, pkgUid, internalPath);
         }
 
@@ -154,6 +166,7 @@ namespace VPB
             if (titleText != null && string.IsNullOrEmpty(cat)) cat = titleText.text ?? "";
             if (string.IsNullOrEmpty(cat)) return;
 
+            bool allVar = VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat);
             var uniqueRows = new List<KeyValuePair<string, string>>(selectedFiles.Count);
             var seenRow = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int nSel = selectedFiles.Count;
@@ -162,6 +175,26 @@ namespace VPB
                 FileEntry fe = selectedFiles[i];
                 string pkg, ip;
                 if (!TryGetGalleryRowKeysForUserTags(fe, out pkg, out ip)) continue;
+
+                // ALL VAR + inherit mode: package row (meta.json) can have no direct tag rows;
+                // tags may exist only on child internal paths. Expand selection to child rows.
+                if (allVar && _userTagInheritVarToChildren && !string.IsNullOrEmpty(pkg))
+                {
+                    var catMem = new List<KeyValuePair<string, string>>(256);
+                    if (VpbLocalDatabase.TryReadCatMemRowsForPackage(pkg, catMem) && catMem.Count > 0)
+                    {
+                        for (int ci = 0; ci < catMem.Count; ci++)
+                        {
+                            string childIp = catMem[ci].Value ?? "";
+                            if (string.IsNullOrEmpty(childIp)) continue;
+                            string rk2 = pkg + "\n" + childIp;
+                            if (!seenRow.Add(rk2)) continue;
+                            uniqueRows.Add(new KeyValuePair<string, string>(pkg, childIp));
+                        }
+                        continue;
+                    }
+                }
+
                 string rk = pkg + "\n" + ip;
                 if (!seenRow.Add(rk)) continue;
                 uniqueRows.Add(new KeyValuePair<string, string>(pkg, ip));
@@ -184,6 +217,15 @@ namespace VPB
             // LayoutElement preferred 34*s is short when font is ~19*u; keep viewport/shrink in sync.
             float titleBand = Mathf.Max(34f * s, fs * 1.22f);
             return padTop + titleBand + 7f * s + 48f * s + padBottom;
+        }
+
+        private static float UserTagsAvailFooterHeightPx()
+        {
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            // Match EnsureUserTagInheritVarToChildrenButtonInFooter row height + padding.
+            float rowH = Mathf.Max(28f, 34f * s);
+            float pad = Mathf.RoundToInt(4f * s);
+            return rowH + pad * 2;
         }
 
         private static float UserTagsAppliedStickyHeightPx()
@@ -210,6 +252,7 @@ namespace VPB
             Vector2 defMin = isLeft ? _leftTabViewportDefOffsetMin : _rightTabViewportDefOffsetMin;
             Vector2 defMax = isLeft ? _leftTabViewportDefOffsetMax : _rightTabViewportDefOffsetMax;
             GameObject sticky = isLeft ? leftUserTagsAvailStickyGO : rightUserTagsAvailStickyGO;
+            GameObject footer = isLeft ? leftUserTagsAvailFooterGO : rightUserTagsAvailFooterGO;
             if (vp == null || sticky == null || tabScroll == null) return;
 
             vp.offsetMin = defMin;
@@ -218,6 +261,7 @@ namespace VPB
             if (ac != ContentType.UserTags || !tabScroll.activeSelf)
             {
                 sticky.SetActive(false);
+                if (footer != null) footer.SetActive(false);
                 return;
             }
 
@@ -231,6 +275,38 @@ namespace VPB
             srt.offsetMax = new Vector2(defMax.x, 0f);
             vp.offsetMin = defMin;
             vp.offsetMax = new Vector2(defMax.x, defMax.y - h);
+
+            // Footer: Inherit Tags toggle only for ALL VAR, pinned to bottom of Available half.
+            if (footer != null)
+            {
+                bool showFooter = false;
+                try
+                {
+                    string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+                    showFooter = VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat);
+                }
+                catch { showFooter = false; }
+
+                if (!showFooter)
+                {
+                    footer.SetActive(false);
+                }
+                else
+                {
+                    float fh = UserTagsAvailFooterHeightPx();
+                    footer.SetActive(true);
+                    RectTransform frt = footer.GetComponent<RectTransform>();
+                    frt.anchorMin = new Vector2(0f, 0f);
+                    frt.anchorMax = new Vector2(1f, 0f);
+                    frt.pivot = new Vector2(0.5f, 0f);
+                    frt.offsetMin = new Vector2(defMin.x, 0f);
+                    frt.offsetMax = new Vector2(defMax.x, fh);
+                    vp.offsetMin = new Vector2(defMin.x, defMin.y + fh);
+
+                    EnsureUserTagInheritVarToChildrenButtonInFooter(footer.transform);
+                }
+            }
+
             try
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(srt);
@@ -239,6 +315,11 @@ namespace VPB
                     RectTransform bulkRt = sticky.transform.GetChild(0) as RectTransform;
                     if (bulkRt != null)
                         LayoutRebuilder.ForceRebuildLayoutImmediate(bulkRt);
+                }
+                if (footer != null && footer.activeSelf)
+                {
+                    RectTransform frt = footer.GetComponent<RectTransform>();
+                    if (frt != null) LayoutRebuilder.ForceRebuildLayoutImmediate(frt);
                 }
             }
             catch { }
@@ -444,6 +525,63 @@ namespace VPB
             stripGo.transform.SetAsLastSibling();
         }
 
+        private void EnsureUserTagApplyDropOverlay(Transform container)
+        {
+            if (container == null) return;
+            const string overlayName = "VPB_UserTagApplyDropOverlay";
+
+            Transform existing = container.Find(overlayName);
+            GameObject go;
+            if (existing == null)
+            {
+                go = new GameObject(overlayName);
+                go.transform.SetParent(container, false);
+
+                var rt = go.AddComponent<RectTransform>();
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.offsetMin = Vector2.zero;
+                rt.offsetMax = Vector2.zero;
+
+                // Keep out of VerticalLayoutGroup sizing.
+                LayoutElement le = go.AddComponent<LayoutElement>();
+                le.ignoreLayout = true;
+
+                Image img = go.AddComponent<Image>();
+                img.color = new Color(1f, 1f, 1f, 0.0f);
+                img.raycastTarget = true;
+
+                // Only participate in raycasts while a tag-drag session active.
+                var gate = go.AddComponent<UserTagDropRaycastGate>();
+                gate.Image = img;
+
+                UserTagApplyDropZone dz = go.AddComponent<UserTagApplyDropZone>();
+                dz.Panel = this;
+            }
+            else
+            {
+                go = existing.gameObject;
+                LayoutElement le = go.GetComponent<LayoutElement>();
+                if (le == null) le = go.AddComponent<LayoutElement>();
+                le.ignoreLayout = true;
+
+                Image img = go.GetComponent<Image>();
+                if (img == null) img = go.AddComponent<Image>();
+                img.raycastTarget = true;
+
+                var gate = go.GetComponent<UserTagDropRaycastGate>();
+                if (gate == null) gate = go.AddComponent<UserTagDropRaycastGate>();
+                gate.Image = img;
+
+                UserTagApplyDropZone dz = go.GetComponent<UserTagApplyDropZone>();
+                if (dz == null) dz = go.AddComponent<UserTagApplyDropZone>();
+                dz.Panel = this;
+            }
+
+            go.transform.SetAsLastSibling();
+        }
+
         internal void UserTagPickDragBeginPayload(string primaryTag, List<string> tagsOut)
         {
             if (tagsOut == null) return;
@@ -590,30 +728,140 @@ namespace VPB
             }
 
             string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
-            int touched = 0;
+            if (!string.IsNullOrEmpty(cat)
+                && VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat)
+                && _userTagInheritVarToChildren)
+            {
+                StartCoroutine(ApplyTagsToSelectedPackagesAllVarInheritCoroutine(new List<string>(tags), remove));
+                return;
+            }
+            StartCoroutine(ApplyTagsToSelectedPackagesBulkCoroutine(new List<string>(tags), remove));
+        }
+
+        private IEnumerator ApplyTagsToSelectedPackagesBulkCoroutine(List<string> tags, bool remove)
+        {
+            if (tags == null || tags.Count == 0) yield break;
+            if (selectedFiles == null || selectedFiles.Count == 0) yield break;
+
+            string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            if (string.IsNullOrEmpty(cat)) yield break;
+
+            var rows = new List<VpbLocalDatabase.GalleryUserTagRowKey>(selectedFiles.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < selectedFiles.Count; i++)
             {
                 FileEntry fe = selectedFiles[i];
-                string pkg, ip;
-                if (!TryGetGalleryRowKeysForUserTags(fe, out pkg, out ip)) continue;
-                if (remove)
+                if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
+                if (string.IsNullOrEmpty(pkg)) continue;
+                string rk = (pkg ?? "") + "\n" + (ip ?? "");
+                if (!seen.Add(rk)) continue;
+                rows.Add(new VpbLocalDatabase.GalleryUserTagRowKey { Category = cat ?? "", PkgUid = pkg ?? "", InternalPath = ip ?? "" });
+            }
+            if (rows.Count == 0) yield break;
+
+            int[] done = new int[1];
+            int[] touchedOut = new int[1];
+            int[] ok = new int[1];
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
                 {
-                    int _d;
-                    if (VpbLocalDatabase.TryRemoveGalleryUserTagsFromRow(cat, pkg, ip, tags, out _d))
-                        touched++;
+                    int touched;
+                    bool success;
+                    if (remove)
+                        success = VpbLocalDatabase.TryRemoveGalleryUserTagsFromManyRows(rows, tags, out touched);
+                    else
+                        success = VpbLocalDatabase.TryAssignGalleryUserTagsToManyRows(rows, tags, out touched);
+                    touchedOut[0] = touched;
+                    ok[0] = success ? 1 : 0;
                 }
-                else
-                {
-                    int ins;
-                    if (VpbLocalDatabase.TryAssignGalleryUserTagsToRow(cat, pkg, ip, tags, out ins))
-                        touched++;
-                }
+                catch { ok[0] = 0; touchedOut[0] = 0; }
+                finally { System.Threading.Interlocked.Exchange(ref done[0], 1); }
+            });
+
+            while (System.Threading.Interlocked.CompareExchange(ref done[0], 0, 0) == 0)
+                yield return null;
+
+            if (ok[0] == 0)
+            {
+                ShowTemporaryStatus(VPBTranslation.T("gallery.usertags.db_fail", "Update failed (database)."), 2.2f);
+                yield break;
             }
 
             InvalidateTags();
             userTagsCached = false;
             RefreshFilesThenUpdateTabs(true);
-            ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.done_count", "Updated {0} item(s)."), touched), 2f);
+            ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.done_count", "Updated {0} item(s)."), touchedOut[0]), 2f);
+        }
+
+        private IEnumerator ApplyTagsToSelectedPackagesAllVarInheritCoroutine(List<string> tags, bool remove)
+        {
+            // Background DB work to avoid freezing UI when a package has many indexed rows.
+            if (tags == null || tags.Count == 0) yield break;
+            if (selectedFiles == null || selectedFiles.Count == 0) yield break;
+            string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            if (string.IsNullOrEmpty(cat) || !VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat)) yield break;
+
+            var pkgUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry fe = selectedFiles[i];
+                if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out _)) continue;
+                if (!string.IsNullOrEmpty(pkg)) pkgUids.Add(pkg);
+            }
+            if (pkgUids.Count == 0) yield break;
+
+            var rows = new List<VpbLocalDatabase.GalleryUserTagRowKey>(4096);
+            foreach (var pu in pkgUids)
+            {
+                var catMem = new List<KeyValuePair<string, string>>(256);
+                if (!VpbLocalDatabase.TryReadCatMemRowsForPackage(pu, catMem)) continue;
+                for (int i = 0; i < catMem.Count; i++)
+                {
+                    var kv = catMem[i];
+                    rows.Add(new VpbLocalDatabase.GalleryUserTagRowKey
+                    {
+                        Category = kv.Key ?? "",
+                        PkgUid = pu ?? "",
+                        InternalPath = kv.Value ?? ""
+                    });
+                }
+            }
+            if (rows.Count == 0) yield break;
+
+            int[] done = new int[1];
+            int[] touchedOut = new int[1];
+            int[] ok = new int[1];
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    int touched;
+                    bool success;
+                    if (remove)
+                        success = VpbLocalDatabase.TryRemoveGalleryUserTagsFromManyRows(rows, tags, out touched);
+                    else
+                        success = VpbLocalDatabase.TryAssignGalleryUserTagsToManyRows(rows, tags, out touched);
+                    touchedOut[0] = touched;
+                    ok[0] = success ? 1 : 0;
+                }
+                catch { ok[0] = 0; touchedOut[0] = 0; }
+                finally { System.Threading.Interlocked.Exchange(ref done[0], 1); }
+            });
+
+            while (System.Threading.Interlocked.CompareExchange(ref done[0], 0, 0) == 0)
+                yield return null;
+
+            if (ok[0] == 0)
+            {
+                ShowTemporaryStatus(VPBTranslation.T("gallery.usertags.db_fail", "Update failed (database)."), 2.2f);
+                yield break;
+            }
+
+            InvalidateTags();
+            userTagsCached = false;
+            RefreshFilesThenUpdateTabs(true);
+            ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.done_count", "Updated {0} item(s)."), touchedOut[0]), 2.2f);
         }
 
         private void EnsureUserTagSideTabBulkBlock(Transform scrollTabContainer, bool isLeft)
@@ -635,6 +883,13 @@ namespace VPB
             if (existingBulkV3 != null)
             {
                 EnsureUserTagAvailFilterBtnInBulkBlock(existingBulkV3);
+                // Toggle row moved to pinned footer; remove any legacy copy.
+                try
+                {
+                    Transform legacyInherit = existingBulkV3.Find("VPB_UserTagInheritVarToggleRow_v1");
+                    if (legacyInherit != null) UnityEngine.Object.Destroy(legacyInherit.gameObject);
+                }
+                catch { }
                 return;
             }
 
@@ -733,6 +988,184 @@ namespace VPB
             else { rightUserTagAvailTitleText = titleTxt; rightUserTagApplyBtnText = applyTxt; }
 
             SyncUserTagFilterModeToggleVisualSticky(root.transform);
+        }
+
+        private void EnsureUserTagInheritVarToChildrenButtonInFooter(Transform footerRoot)
+        {
+            if (footerRoot == null) return;
+
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float u = s * 1.38f;
+            int font = Mathf.Max(12, Mathf.RoundToInt(14f * u));
+
+            Transform existing = footerRoot.Find("VPB_UserTagInheritVarToggleRow_v1");
+            GameObject rowGo;
+            if (existing != null)
+            {
+                rowGo = existing.gameObject;
+                rowGo.SetActive(true);
+            }
+            else
+            {
+                rowGo = new GameObject("VPB_UserTagInheritVarToggleRow_v1");
+                rowGo.transform.SetParent(footerRoot, false);
+                RectTransform rrt = rowGo.AddComponent<RectTransform>();
+                rrt.anchorMin = new Vector2(0f, 0f);
+                rrt.anchorMax = new Vector2(1f, 1f);
+                rrt.pivot = new Vector2(0.5f, 0.5f);
+                float pad = Mathf.RoundToInt(4f * s);
+                rrt.offsetMin = new Vector2(pad, pad);
+                rrt.offsetMax = new Vector2(-pad, -pad);
+                LayoutElement le = rowGo.AddComponent<LayoutElement>();
+                le.minHeight = Mathf.Max(28f, 34f * s);
+                le.preferredHeight = Mathf.Max(28f, 34f * s);
+                le.flexibleWidth = 1f;
+
+                string tip = VPBTranslation.T(
+                    "gallery.usertags.inherit_tags_tip",
+                    "ALL VAR only.\n\nWhen on, applying/removing user tags on selected VAR package(s) will also apply/remove those tags on every indexed child item inside that VAR.\n\nUse carefully: may touch many items.");
+
+                string labelOn = VPBTranslation.T("gallery.usertags.inherit_on", "Inherit ON");
+                GameObject btnGo = UI.CreateUIButton(rowGo, 0f, le.preferredHeight, labelOn, font, 0f, 0f, AnchorPresets.stretchAll, OnUserTagInheritVarToChildrenBtnClicked);
+                btnGo.name = "VPB_UserTagInheritVarToChildrenBtn";
+                LayoutElement ble = btnGo.GetComponent<LayoutElement>();
+                if (ble == null) ble = btnGo.AddComponent<LayoutElement>();
+                ble.flexibleWidth = 1f;
+                ble.minWidth = Mathf.Max(120f * s, 0f);
+
+                WireUserTagInheritVarToChildrenBtnTooltip(btnGo);
+            }
+
+            // Ensure no row backdrop (avoid "gray box"). Button provides all visuals.
+            try
+            {
+                Image bgExisting = rowGo.GetComponent<Image>();
+                if (bgExisting != null) UnityEngine.Object.Destroy(bgExisting);
+            }
+            catch { }
+
+            Transform bGo = rowGo.transform.Find("VPB_UserTagInheritVarToChildrenBtn");
+            if (bGo != null)
+            {
+                Button b = bGo.GetComponent<Button>();
+                if (b != null)
+                {
+                    b.onClick.RemoveListener(OnUserTagInheritVarToChildrenBtnClicked);
+                    b.onClick.AddListener(OnUserTagInheritVarToChildrenBtnClicked);
+                }
+                WireUserTagInheritVarToChildrenBtnTooltip(bGo.gameObject);
+
+                // Always fill row fully (no empty gray margins from older layout).
+                RectTransform brt = bGo as RectTransform;
+                if (brt != null)
+                {
+                    brt.anchorMin = Vector2.zero;
+                    brt.anchorMax = Vector2.one;
+                    brt.pivot = new Vector2(0.5f, 0.5f);
+                    brt.anchoredPosition = Vector2.zero;
+                    brt.sizeDelta = Vector2.zero;
+                }
+                LayoutElement ble2 = bGo.GetComponent<LayoutElement>();
+                if (ble2 == null) ble2 = bGo.gameObject.AddComponent<LayoutElement>();
+                ble2.flexibleWidth = 1f;
+
+                SyncUserTagInheritVarToChildrenBtnVisual(bGo.gameObject);
+            }
+        }
+
+        private string BuildUserTagInheritVarToChildrenTip()
+        {
+            string header = VPBTranslation.T("gallery.usertags.inherit_tip_header", "ALL VAR only.");
+            string action = _userTagInheritVarToChildren
+                ? VPBTranslation.T("gallery.usertags.inherit_tip_click_off", "Click: set Inherit OFF.")
+                : VPBTranslation.T("gallery.usertags.inherit_tip_click_on", "Click: set Inherit ON.");
+            string body = VPBTranslation.T(
+                "gallery.usertags.inherit_tip_body",
+                "When Inherit ON, applying/removing user tags on selected VAR package(s) also applies/removes those tags on every indexed child item inside that VAR.\n\nUse carefully: may touch many items.");
+            return header + "\n" + action + "\n\n" + body;
+        }
+
+        private void WireUserTagInheritVarToChildrenBtnTooltip(GameObject btnGo)
+        {
+            if (btnGo == null) return;
+            var del = btnGo.GetComponent<UIHoverDelegate>();
+            if (del == null) del = btnGo.AddComponent<UIHoverDelegate>();
+
+            // Replace any older tooltip handler with dynamic one (state-aware).
+            del.OnHoverChange = (enter) =>
+            {
+                string tip = BuildUserTagInheritVarToChildrenTip();
+                if (enter)
+                {
+                    if (temporaryStatusCoroutine != null)
+                    {
+                        StopCoroutine(temporaryStatusCoroutine);
+                        temporaryStatusCoroutine = null;
+                    }
+                    temporaryStatusMsg = tip;
+                    temporaryStatusOwner = btnGo;
+                }
+                else if (temporaryStatusOwner == btnGo)
+                {
+                    temporaryStatusMsg = null;
+                    temporaryStatusOwner = null;
+                }
+            };
+        }
+
+        private void SyncUserTagInheritVarToChildrenBtnVisual(GameObject btnGo)
+        {
+            if (btnGo == null) return;
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            Image img = btnGo.GetComponent<Image>();
+            if (img != null)
+            {
+                // Strong, readable state colors.
+                img.color = _userTagInheritVarToChildren
+                    ? new Color(0.20f, 0.50f, 0.25f, 1f)   // ON: green
+                    : new Color(0.22f, 0.28f, 0.36f, 1f);  // OFF: cool gray
+            }
+
+            Text t = btnGo.GetComponentInChildren<Text>();
+            if (t != null)
+            {
+                t.color = Color.white;
+                t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                t.resizeTextForBestFit = false;
+                t.text = _userTagInheritVarToChildren
+                    ? VPBTranslation.T("gallery.usertags.inherit_on", "Inherit ON")
+                    : VPBTranslation.T("gallery.usertags.inherit_off", "Inherit OFF");
+                t.alignment = TextAnchor.MiddleCenter;
+                // Slight extra padding via text margins not available; keep size readable via font scaling already applied.
+                t.fontSize = Mathf.Max(12, Mathf.RoundToInt(14f * (s * 1.38f)));
+            }
+        }
+
+        private void OnUserTagInheritVarToChildrenBtnClicked()
+        {
+            _userTagInheritVarToChildren = !_userTagInheritVarToChildren;
+            try
+            {
+                string t = currentCategoryTitle ?? (titleText != null ? titleText.text : null) ?? "";
+                string p = currentPath ?? "";
+                if (!string.IsNullOrEmpty(t) || !string.IsNullOrEmpty(p))
+                    SaveCurrentCategoryFilterState(t, p);
+            }
+            catch { }
+
+            // Update both sides if footer visible on either.
+            try
+            {
+                Transform l = leftUserTagsAvailFooterGO != null ? leftUserTagsAvailFooterGO.transform.Find("VPB_UserTagInheritVarToggleRow_v1/VPB_UserTagInheritVarToChildrenBtn") : null;
+                if (l != null) SyncUserTagInheritVarToChildrenBtnVisual(l.gameObject);
+            }
+            catch { }
+            try
+            {
+                Transform r = rightUserTagsAvailFooterGO != null ? rightUserTagsAvailFooterGO.transform.Find("VPB_UserTagInheritVarToggleRow_v1/VPB_UserTagInheritVarToChildrenBtn") : null;
+                if (r != null) SyncUserTagInheritVarToChildrenBtnVisual(r.gameObject);
+            }
+            catch { }
         }
 
         /// <summary>Ensures square Filter button exists in <see cref="BulkBtnRow"/> (Edit, Filter, Apply); removes legacy full-width filter row.</summary>
@@ -1895,11 +2328,20 @@ namespace VPB
         }
     }
 
-    internal sealed class UserTagPickDragSource : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+    internal sealed class UserTagPickDragSource : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler, IPointerUpHandler
     {
         public GalleryPanel Panel;
         public string PrimaryTag;
         private CanvasGroup _cg;
+        private bool _pressed;
+        private bool _dragging;
+        private Vector2 _pressPos;
+        private float _pressTime;
+        private GameObject _ghost;
+        private Text _ghostText;
+        private RectTransform _ghostRT;
+        private Canvas _rootCanvas;
+        private readonly List<RaycastResult> _raycastHits = new List<RaycastResult>(16);
 
         private void Awake()
         {
@@ -1907,27 +2349,203 @@ namespace VPB
             if (_cg == null) _cg = gameObject.AddComponent<CanvasGroup>();
         }
 
-        public void OnBeginDrag(PointerEventData eventData)
+        public void OnPointerDown(PointerEventData eventData)
         {
             if (Panel == null) return;
-            var list = new List<string>();
-            Panel.UserTagPickDragBeginPayload(PrimaryTag, list);
-            if (list.Count == 0) return;
-            UserTagDragSession.PendingTags = list;
-            _cg.alpha = 0.65f;
-            _cg.blocksRaycasts = false;
+            if (eventData == null) return;
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+            _pressed = true;
+            _dragging = false;
+            _pressPos = eventData.position;
+            _pressTime = Time.unscaledTime;
         }
 
-        public void OnDrag(PointerEventData eventData) { }
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            _pressed = false;
+            if (_dragging)
+                EndManualDrag(eventData);
+        }
+
+        private void Update()
+        {
+            if (Panel == null) return;
+
+            if (_dragging)
+            {
+                UpdateGhostPosition();
+                // Mouse-up may not route to source once we disable raycasts.
+                if (Input.GetMouseButtonUp(0))
+                    EndManualDrag(null);
+                return;
+            }
+
+            if (!_pressed) return;
+
+            // Start manual drag once pointer moved enough. Works even when ScrollRect eats drag events.
+            Vector2 cur = Input.mousePosition;
+            float dist = (cur - _pressPos).magnitude;
+            if (dist < 10f) return;
+            BeginManualDrag();
+        }
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            // Keep Unity path (desktop). Manual path handles ScrollRect conflicts.
+            if (Panel == null) return;
+            BeginManualDrag();
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (_dragging) UpdateGhostPosition();
+        }
 
         public void OnEndDrag(PointerEventData eventData)
         {
+            if (_dragging)
+                EndManualDrag(eventData);
+        }
+
+        private void BeginManualDrag()
+        {
+            if (Panel == null) return;
+            if (_dragging) return;
+
+            var list = new List<string>();
+            Panel.UserTagPickDragBeginPayload(PrimaryTag, list);
+            if (list.Count == 0) return;
+
+            UserTagDragSession.PendingTags = list;
+            _dragging = true;
+
+            if (_cg != null)
+            {
+                _cg.alpha = 0.65f;
+                _cg.blocksRaycasts = false;
+            }
+
+            CreateGhostLabel(list);
+            UpdateGhostPosition();
+        }
+
+        private void EndManualDrag(PointerEventData eventData)
+        {
+            TryDropToApplyZone(eventData);
+            CleanupDragVisuals();
+        }
+
+        private void TryDropToApplyZone(PointerEventData eventData)
+        {
+            if (Panel == null) return;
+            List<string> tags = UserTagDragSession.PendingTags;
+            if (tags == null || tags.Count == 0) return;
+
+            EventSystem es = EventSystem.current;
+            if (es == null)
+            {
+                Panel.UserTagApplyDroppedTags(tags);
+                return;
+            }
+
+            var ped = eventData ?? new PointerEventData(es);
+            ped.position = (eventData != null) ? eventData.position : (Vector2)Input.mousePosition;
+            _raycastHits.Clear();
+            es.RaycastAll(ped, _raycastHits);
+            for (int i = 0; i < _raycastHits.Count; i++)
+            {
+                GameObject go = _raycastHits[i].gameObject;
+                if (go == null) continue;
+                UserTagApplyDropZone dz = go.GetComponentInParent<UserTagApplyDropZone>();
+                if (dz != null && dz.Panel == Panel)
+                {
+                    Panel.UserTagApplyDroppedTags(tags);
+                    break;
+                }
+            }
+
+            // Fallback: drop anywhere inside this panel's canvas applies.
+            try
+            {
+                if (Panel.canvas != null)
+                {
+                    for (int i = 0; i < _raycastHits.Count; i++)
+                    {
+                        GameObject go = _raycastHits[i].gameObject;
+                        if (go == null) continue;
+                        if (go.transform.IsChildOf(Panel.canvas.transform))
+                        {
+                            Panel.UserTagApplyDroppedTags(tags);
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void CleanupDragVisuals()
+        {
+            _pressed = false;
+            _dragging = false;
             if (_cg != null)
             {
                 _cg.alpha = 1f;
                 _cg.blocksRaycasts = true;
             }
+            if (_ghost != null) Destroy(_ghost);
+            _ghost = null;
+            _ghostText = null;
+            _ghostRT = null;
+            _rootCanvas = null;
             UserTagDragSession.Clear();
+        }
+
+        private void CreateGhostLabel(List<string> tags)
+        {
+            Canvas root = null;
+            try { root = GetComponentInParent<Canvas>(); } catch { }
+            if (root == null && Panel != null) root = Panel.canvas;
+            if (root == null) return;
+            _rootCanvas = root;
+
+            _ghost = new GameObject("VPB_UserTagDragGhost");
+            _ghost.layer = root.gameObject.layer;
+            _ghostRT = _ghost.AddComponent<RectTransform>();
+            _ghostRT.SetParent(root.transform, false);
+            _ghostRT.anchorMin = new Vector2(0f, 0f);
+            _ghostRT.anchorMax = new Vector2(0f, 0f);
+            _ghostRT.pivot = new Vector2(0f, 0f);
+            _ghostRT.sizeDelta = new Vector2(240f, 34f);
+
+            Image bg = _ghost.AddComponent<Image>();
+            bg.color = new Color(0.15f, 0.15f, 0.18f, 0.85f);
+            bg.raycastTarget = false;
+
+            GameObject tgo = new GameObject("Text");
+            tgo.transform.SetParent(_ghost.transform, false);
+            RectTransform trt = tgo.AddComponent<RectTransform>();
+            trt.anchorMin = Vector2.zero;
+            trt.anchorMax = Vector2.one;
+            trt.offsetMin = new Vector2(10f, 6f);
+            trt.offsetMax = new Vector2(-10f, -6f);
+
+            _ghostText = tgo.AddComponent<Text>();
+            _ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            _ghostText.fontSize = 16;
+            _ghostText.color = new Color(0.95f, 0.95f, 0.97f, 1f);
+            _ghostText.alignment = TextAnchor.MiddleLeft;
+            _ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _ghostText.verticalOverflow = VerticalWrapMode.Truncate;
+            _ghostText.text = tags.Count == 1 ? ("Tag: " + tags[0]) : ("Tags: " + tags.Count);
+        }
+
+        private void UpdateGhostPosition()
+        {
+            if (_ghostRT == null) return;
+            Vector2 pos = Input.mousePosition;
+            _ghostRT.position = new Vector3(pos.x + 14f, pos.y + 14f, 0f);
+            _ghostRT.SetAsLastSibling();
         }
     }
 
@@ -1942,6 +2560,30 @@ namespace VPB
             if (tags == null || tags.Count == 0) return;
             Panel.UserTagApplyDroppedTags(tags);
             UserTagDragSession.Clear();
+        }
+    }
+
+    internal sealed class UserTagDropRaycastGate : MonoBehaviour, ICanvasRaycastFilter, IPointerEnterHandler, IPointerExitHandler
+    {
+        public Image Image;
+        private const float HoverAlpha = 0.05f;
+
+        public bool IsRaycastLocationValid(Vector2 sp, Camera eventCamera)
+        {
+            return UserTagDragSession.PendingTags != null && UserTagDragSession.PendingTags.Count > 0;
+        }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (Image == null) return;
+            if (UserTagDragSession.PendingTags == null || UserTagDragSession.PendingTags.Count == 0) return;
+            Image.color = new Color(1f, 1f, 1f, HoverAlpha);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            if (Image == null) return;
+            Image.color = new Color(1f, 1f, 1f, 0.0f);
         }
     }
 }

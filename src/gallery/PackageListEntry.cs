@@ -85,10 +85,10 @@ namespace VPB
             if (_packageStore != null || _deferredPackageUid == null) return;
             string uid = _deferredPackageUid;
             string hint = _deferredVarPathHint ?? "";
-            _deferredPackageUid = null;
             VarPackage p;
             if (FileManager.TryResolveVarPackageForIndexedGalleryRow(uid, hint, out p))
             {
+                _deferredPackageUid = null;
                 _packageStore = p;
                 RefreshPathsFromPackage();
                 Exists = true;

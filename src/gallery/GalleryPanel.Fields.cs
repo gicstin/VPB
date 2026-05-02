@@ -199,6 +199,8 @@ namespace VPB
         private Vector2 _rightSubTabViewportDefOffsetMax;
         private GameObject leftUserTagsAvailStickyGO;
         private GameObject rightUserTagsAvailStickyGO;
+        private GameObject leftUserTagsAvailFooterGO;
+        private GameObject rightUserTagsAvailFooterGO;
         private GameObject leftUserTagsAppliedStickyGO;
         private GameObject rightUserTagsAppliedStickyGO;
         private Text leftUserTagAvailTitleText;
@@ -466,6 +468,8 @@ namespace VPB
         private readonly HashSet<string> activeUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>When true, selected user tags narrow main grid/list (SQLite EXISTS); when false, picks only affect Apply.</summary>
         private bool _userTagAvailFilterMode;
+        /// <summary>ALL VAR only: when true, applying/removing user tags on package row also touches all indexed child items in that VAR.</summary>
+        private bool _userTagInheritVarToChildren;
         /// <summary>Set during refresh drain when SQLite category query already constrained rows by gallery user tags.</summary>
         private bool _refreshSqliteBulkIncludedUserTagGridFilter;
         /// <summary>

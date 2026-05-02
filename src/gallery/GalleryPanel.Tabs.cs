@@ -1754,6 +1754,7 @@ namespace VPB
                 SyncUserTagAppliedTitleCount(appliedVisibleCount, isLeft);
                 SyncUserTagsAppliedToolbarDropZones(container.transform);
                 EnsureUserTagApplyDropCatchStrip(container.transform);
+                EnsureUserTagApplyDropOverlay(container.transform);
             }
             else if (contentType == ContentType.History)
             {
@@ -3564,7 +3565,8 @@ namespace VPB
             
             // Image
             Image img = btnGO.GetComponent<Image>();
-            bool isSelected = (!string.IsNullOrEmpty(file.Path) && selectedFilePaths.Contains(file.Path));
+            string selKey = GetSelectionIdentityKey(file, false);
+            bool isSelected = (!string.IsNullOrEmpty(selKey) && selectedFilePaths.Contains(selKey));
             
             Outline outline = btnGO.GetComponent<Outline>();
             UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
@@ -3628,20 +3630,36 @@ namespace VPB
             // Restore baseline hover tracking for this row.
             AddHoverDelegate(btnGO);
 
-            // Validate file properties
-            if (string.IsNullOrEmpty(file.Name) || string.IsNullOrEmpty(file.Path))
+            // Identity key (Path preferred; fall back to Uid). Needed because some rows (e.g. ALL VAR package list)
+            // can arrive from SQLite without a resolved/installed var path hint.
+            string idKey = GetSelectionIdentityKey(file, false);
+            if (string.IsNullOrEmpty(file.Name) && string.IsNullOrEmpty(idKey))
             {
-                LogUtil.LogError($"[VPB] BindFileButton: Invalid entry - Name={file.Name}, Path={file.Path}");
+                LogUtil.LogError($"[VPB] BindFileButton: Invalid entry - Name={file.Name}, Path={file.Path}, Uid={file.Uid}");
+                // Still clear thumbnail so pooled rows don't show stale previews
+                try
+                {
+                    Transform thumbTrBad = btnGO.transform.Find("Thumbnail");
+                    if (thumbTrBad == null) thumbTrBad = btnGO.transform.Find("ThumbContainer/Thumbnail");
+                    if (thumbTrBad != null)
+                    {
+                        RawImage ri = thumbTrBad.GetComponent<RawImage>();
+                        if (ri != null) LoadThumbnail(file, ri);
+                    }
+                }
+                catch { }
                 return;
             }
 
-            btnGO.name = "FileButton_" + file.Name;
+            btnGO.name = "FileButton_" + (file.Name ?? idKey ?? "Unknown");
 
             // Update mapping
             Image img = btnGO.GetComponent<Image>();
             if (img != null)
             {
-                fileButtonImages[file.Path] = img;
+                // Map by identity key so empty Path rows don't collide
+                if (!string.IsNullOrEmpty(idKey))
+                    fileButtonImages[idKey] = img;
             }
 
             // Color missing entries red

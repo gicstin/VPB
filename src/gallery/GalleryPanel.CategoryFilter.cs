@@ -20,6 +20,7 @@ namespace VPB
             s.Tags = new List<string>(activeTags);
             s.UserTags = new List<string>(activeUserTags);
             s.UserTagAvailFilterMode = _userTagAvailFilterMode ? 1 : 0;
+            s.UserTagInheritVarToChildren = _userTagInheritVarToChildren ? 1 : 0;
             s.SceneSourceFilter = currentSceneSourceFilter ?? "";
             s.AppearanceSourceFilter = currentAppearanceSourceFilter ?? "";
             s.PackagePathFilter = currentPackagePathFilter ?? "";
@@ -100,6 +101,7 @@ namespace VPB
                     if (!string.IsNullOrEmpty(n)) activeUserTags.Add(n);
                 }
             _userTagAvailFilterMode = state.UserTagAvailFilterMode != 0;
+            _userTagInheritVarToChildren = state.UserTagInheritVarToChildren != 0;
 
             currentSceneSourceFilter = state.SceneSourceFilter ?? "";
             currentAppearanceSourceFilter = state.AppearanceSourceFilter ?? "";
@@ -130,6 +132,7 @@ namespace VPB
             activeTags.Clear();
             activeUserTags.Clear();
             _userTagAvailFilterMode = false;
+            _userTagInheritVarToChildren = false;
             currentSceneSourceFilter = "";
             currentAppearanceSourceFilter = "";
             currentPackagePathFilter = "";
