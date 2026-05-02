@@ -987,6 +987,30 @@ namespace VPB
                     rowsUt.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
             }
             string filterUt = userTagFilter ?? "";
+
+            const int CreateRowCountSentinel = int.MinValue;
+
+            // "Create Tag" synthetic top row when user typed text in search box.
+            // Uses Count sentinel so BindUserTagVirtButton can render different UI/behavior.
+            if (!string.IsNullOrEmpty(filterUt))
+            {
+                string normCandidate = VpbLocalDatabase.NormalizeGalleryUserTagName(filterUt);
+                if (!string.IsNullOrEmpty(normCandidate))
+                {
+                    bool alreadyExists = false;
+                    for (int i = 0; i < rowsUt.Count; i++)
+                    {
+                        if (string.Equals(rowsUt[i].Name, normCandidate, StringComparison.OrdinalIgnoreCase))
+                        {
+                            alreadyExists = true;
+                            break;
+                        }
+                    }
+                    if (!alreadyExists)
+                        _userTagVirtView.Add(new UserTagSideTabEntry { Name = normCandidate, Count = CreateRowCountSentinel });
+                }
+            }
+
             for (int ui = 0; ui < rowsUt.Count; ui++)
             {
                 UserTagSideTabEntry ut = rowsUt[ui];
@@ -1082,10 +1106,17 @@ namespace VPB
         private void BindUserTagVirtButton(GameObject btnGO, UserTagSideTabEntry ut, Color utAccent, string pickTooltip)
         {
             if (btnGO == null) return;
+            const int CreateRowCountSentinel = int.MinValue;
+            const string CreateLabelKey = "gallery.usertags.create_from_search";
+            const string CreateTipKey = "gallery.usertags.create_from_search_tip";
+
             string tagSnap = ut.Name ?? "";
-            bool isSel = !string.IsNullOrEmpty(tagSnap) && activeUserTags.Contains(tagSnap);
-            Color btnColor = isSel ? utAccent : new Color(0.25f, 0.25f, 0.25f, 1f);
-            string labelUt = tagSnap + " (" + ut.Count + ")";
+            bool isCreateRow = ut.Count == CreateRowCountSentinel;
+            bool isSel = !isCreateRow && !string.IsNullOrEmpty(tagSnap) && activeUserTags.Contains(tagSnap);
+            Color btnColor = isCreateRow ? new Color(0.25f, 0.45f, 0.28f, 1f) : (isSel ? utAccent : new Color(0.25f, 0.25f, 0.25f, 1f));
+            string labelUt = isCreateRow
+                ? (VPBTranslation.T(CreateLabelKey, "Create Tag") + ": " + tagSnap)
+                : (tagSnap + " (" + ut.Count + ")");
 
             Button btnComp = btnGO.GetComponent<Button>();
             if (btnComp != null)
@@ -1093,10 +1124,22 @@ namespace VPB
                 btnComp.onClick.RemoveAllListeners();
                 btnComp.onClick.AddListener(() =>
                 {
-                    if (activeUserTags.Contains(tagSnap)) activeUserTags.Remove(tagSnap);
-                    else activeUserTags.Add(tagSnap);
                     try
                     {
+                        if (isCreateRow)
+                        {
+                            if (VpbLocalDatabase.TryEnsureGalleryUserTagInVocabulary(tagSnap, out string norm) && !string.IsNullOrEmpty(norm))
+                            {
+                                activeUserTags.Add(norm);
+                                userTagsCached = false;
+                            }
+                        }
+                        else
+                        {
+                            if (activeUserTags.Contains(tagSnap)) activeUserTags.Remove(tagSnap);
+                            else activeUserTags.Add(tagSnap);
+                        }
+
                         if (_userTagAvailFilterMode)
                             RefreshFiles(true, false, false, null);
                         UpdateTabs();
@@ -1139,20 +1182,29 @@ namespace VPB
             if (txt != null)
             {
                 bool tr = !string.Equals(txt.text, labelUt, StringComparison.Ordinal);
-                if (tr && !string.IsNullOrEmpty(pickTooltip))
-                    AddTooltipPlain(btnGO, labelUt + "\n\n" + pickTooltip);
+                string tip = isCreateRow
+                    ? VPBTranslation.T(CreateTipKey, "Create new tag from search text (adds to database, selects tag).")
+                    : pickTooltip;
+                if (tr && !string.IsNullOrEmpty(tip))
+                    AddTooltipPlain(btnGO, labelUt + "\n\n" + tip);
                 else if (tr)
                     AddTooltipPlain(btnGO, labelUt);
-                else if (!string.IsNullOrEmpty(pickTooltip))
-                    AddTooltipPlain(btnGO, pickTooltip);
+                else if (!string.IsNullOrEmpty(tip))
+                    AddTooltipPlain(btnGO, tip);
             }
-            else if (!string.IsNullOrEmpty(pickTooltip))
-                AddTooltipPlain(btnGO, pickTooltip);
+            else
+            {
+                string tip = isCreateRow
+                    ? VPBTranslation.T(CreateTipKey, "Create new tag from search text (adds to database, selects tag).")
+                    : pickTooltip;
+                if (!string.IsNullOrEmpty(tip))
+                    AddTooltipPlain(btnGO, tip);
+            }
 
             UserTagPickDragSource dr = btnGO.GetComponent<UserTagPickDragSource>();
             if (dr == null) dr = btnGO.AddComponent<UserTagPickDragSource>();
             dr.Panel = this;
-            dr.PrimaryTag = tagSnap;
+            dr.PrimaryTag = isCreateRow ? "" : tagSnap;
         }
 
         private void UpdateUserTagVirtualVisible(bool isLeft, Color utAccent, Transform tabContainer)

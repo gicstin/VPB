@@ -1954,21 +1954,22 @@ namespace VPB
             bool hasAnyPkg = anyPkgInstalled || anyPkgNotInstalled;
             if (tboxUnloadBtn != null)   SetTboxButtonEnabledVisual(tboxUnloadBtn, hasAnyPkg && anyPkgInstalled);
 
-            // Hub button: only for a single selected package row (.var uid resolvable).
-            bool showOpenHub = false;
+            // Hub button: show when selection exists; enable only for single selected package row (.var uid resolvable).
+            bool showOpenHubBtn = selectedFiles != null && selectedFiles.Count > 0;
+            bool canOpenHub = false;
             if (selectedFiles != null && selectedFiles.Count == 1 && tboxOpenHubBtn != null)
             {
                 try
                 {
                     var uid = TryGetPackageUidForEntry(selectedFiles[0]);
-                    showOpenHub = !string.IsNullOrEmpty(uid);
+                    canOpenHub = !string.IsNullOrEmpty(uid);
                 }
-                catch { showOpenHub = false; }
+                catch { canOpenHub = false; }
             }
             if (tboxOpenHubBtn != null)
             {
-                tboxOpenHubBtn.SetActive(showOpenHub);
-                SetTboxButtonEnabledVisual(tboxOpenHubBtn, showOpenHub);
+                tboxOpenHubBtn.SetActive(showOpenHubBtn);
+                SetTboxButtonEnabledVisual(tboxOpenHubBtn, canOpenHub);
             }
 
             show(tboxRemoveHistoryBtn, historyBrowse);
