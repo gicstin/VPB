@@ -10,6 +10,8 @@ namespace VPB
         public string Creator = "";
         public List<string> Tags = new List<string>();
         public List<string> UserTags = new List<string>();
+        /// <summary>1 when Available pane Filter Mode is on (grid narrows by picked tags).</summary>
+        public int UserTagAvailFilterMode = 0;
         public string SceneSourceFilter = "";
         public string AppearanceSourceFilter = "";
         public string PackagePathFilter = "";
@@ -39,6 +41,7 @@ namespace VPB
             if (UserTags != null)
                 foreach (var t in UserTags) utArr.Add(t);
             node["utags"] = utArr;
+            node["utfm"].AsInt = UserTagAvailFilterMode;
 
             if (FileSortState != null)
             {
@@ -78,6 +81,8 @@ namespace VPB
                 if (utArr != null)
                     foreach (JSONNode t in utArr)
                         if (!string.IsNullOrEmpty(t)) s.UserTags.Add(t);
+
+                s.UserTagAvailFilterMode = node["utfm"] != null ? node["utfm"].AsInt : 0;
 
                 var sortNode = node["sort"];
                 if (sortNode != null && sortNode.Count > 0)

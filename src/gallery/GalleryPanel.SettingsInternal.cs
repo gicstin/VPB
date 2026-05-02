@@ -11,8 +11,7 @@ namespace VPB
         {
             Toggle,
             Slider,
-            Cycle,
-            Action
+            Cycle
         }
 
         private sealed class InternalSettingDefinition
@@ -37,8 +36,6 @@ namespace VPB
             public string[] Options;
             public Func<string> GetString;
             public Action<string> SetString;
-
-            public Action Action;
         }
 
         private sealed class InternalSettingRowEntry : VirtualFileEntry
@@ -606,9 +603,6 @@ namespace VPB
                         def.SetFloat(v);
                     }
                     break;
-                case InternalSettingControlType.Action:
-                    if (def.Action != null) def.Action();
-                    break;
             }
         }
 
@@ -725,15 +719,6 @@ namespace VPB
                 string display = (cur ?? "").ToUpperInvariant();
                 CreateMiniButton(controls.transform, display, 150f, new Color(0.25f, 0.5f, 0.8f, 1f), () => {
                     def.SetString(NextOf(cur, def.Options));
-                    RefreshInternalSettingsListRows(true);
-                });
-                return;
-            }
-
-            if (def.ControlType == InternalSettingControlType.Action && def.Action != null)
-            {
-                CreateMiniButton(controls.transform, def.Label ?? "Run", 120f, new Color(0.35f, 0.35f, 0.35f, 1f), () => {
-                    def.Action();
                     RefreshInternalSettingsListRows(true);
                 });
                 return;

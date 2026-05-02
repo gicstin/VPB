@@ -213,8 +213,7 @@ namespace VPB
             // Category side list should only "filter down" by creator selection.
             // If tags are active but no creator selected, keep counts global so categories don't disappear.
             var tagFilterForCategoryCounts = !string.IsNullOrEmpty(currentCreator) ? activeTags : null;
-            var userTagFilterForCategoryCounts = !string.IsNullOrEmpty(currentCreator) ? activeUserTags : null;
-            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, tagFilterForCategoryCounts, currentPackagePathFilter, userTagFilterForCategoryCounts))
+            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, tagFilterForCategoryCounts, currentPackagePathFilter, null))
             {
                 // SQL path succeeded.
             }
@@ -476,7 +475,7 @@ namespace VPB
                     }
                 }
             }
-            else if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle, currentPackagePathFilter, activeUserTags))
+            else if (!VpbLocalDatabase.TryReadCreatorFileCounts(counts, currentExtension, currentPaths, currentPath, activeTags, currentCategoryTitle, currentPackagePathFilter, null))
             {
                 string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
                 HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -652,7 +651,7 @@ namespace VPB
                 activeTags,
                 currentCategoryTitle,
                 currentCreator,
-                activeUserTags);
+                null);
 
             // SQL path is VAR-backed; include loose files from current loaded list so Custom/Saves are represented.
             // If SQL is unavailable/stale, include VAR rows too from current loaded list.
@@ -677,6 +676,7 @@ namespace VPB
             if (!VpbLocalDatabase.TryReadAllGalleryUserTagNames(allNames))
             {
                 userTagsCached = true;
+                unchecked { userTagSideTabDataRevision++; }
                 return;
             }
 
@@ -693,6 +693,7 @@ namespace VPB
                 cachedUserTagSideTab.Add(new UserTagSideTabEntry { Name = name, Count = c });
             }
             userTagsCached = true;
+            unchecked { userTagSideTabDataRevision++; }
         }
 
         public void InvalidateTags()

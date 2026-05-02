@@ -111,6 +111,13 @@ namespace VPB
             return null;
         }
 
+        /// <summary>Package UID for <c>gallery_item_user_tag</c>; valid before lazy <see cref="Package"/> resolve (ALL VAR / varpkg list).</summary>
+        public string GetPackageUidForGalleryUserTags()
+        {
+            if (_packageStore != null) return _packageStore.Uid ?? "";
+            return _deferredPackageUid ?? "";
+        }
+
         public override bool IsAutoInstall()
         {
             var p = Package;

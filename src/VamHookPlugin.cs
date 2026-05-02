@@ -1597,7 +1597,7 @@ namespace VPB
                 EnsureQuickMenuGridArrays();
 
                 // Load quick menu icons
-                Color tint = new Color(0.92f, 0.92f, 0.92f, 1f);
+                Color tint = Color.white;
                 m_QmIconCreate   = UI.LoadIconSprite("vpb_icons/gallery_clone.png", tint);
                 m_QmIconEyeOn    = UI.LoadIconSprite("vpb_icons/eye.png", tint);
                 m_QmIconEyeOff   = UI.LoadIconSprite("vpb_icons/eye_off.png", tint);

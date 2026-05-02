@@ -1005,14 +1005,14 @@ namespace VPB
             footerBackBtn = UI.CreateUIButton(centerSection, 40, 40, "", 18, 0, 0, AnchorPresets.middleCenter, NavigateBack);
             footerBackBtn.name = "BackButton";
             footerBackBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.6f, 0.9f);
-            { var s = UI.LoadIconSprite("vpb_icons/arrow_left.png", new Color(0.92f, 0.92f, 0.92f, 1f)); if (s != null) UI.AddIconToButton(footerBackBtn, s); }
+            { var s = UI.LoadIconSprite("vpb_icons/arrow_left.png", Color.white); if (s != null) UI.AddIconToButton(footerBackBtn, s); }
             footerBackBtn.SetActive(false);
 
             // Clear Filter Button — icon-only, clears all filter levels
             footerClearFilterBtn = UI.CreateUIButton(centerSection, 40, 40, "", 18, 0, 0, AnchorPresets.middleCenter, ClearPackageFilter);
             footerClearFilterBtn.name = "ClearFilterButton";
             footerClearFilterBtn.GetComponent<Image>().color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
-            { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", new Color(0.92f, 0.92f, 0.92f, 1f)); if (s != null) UI.AddIconToButton(footerClearFilterBtn, s); }
+            { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", Color.white); if (s != null) UI.AddIconToButton(footerClearFilterBtn, s); }
             footerClearFilterBtn.SetActive(false);
 
             paginationNextBtn = UI.CreateUIButton(centerSection, 40, 40, ">", 20, 0, 0, AnchorPresets.middleCenter, NextPage);
@@ -1040,8 +1040,8 @@ namespace VPB
             // VaM Menu Gate (show gallery only when VaM menu is visible) — placed left of Select All
             footerMenuGateBtn = UI.CreateUIButton(rightSection, 40, 40, "M", 20, 0, 0, AnchorPresets.middleCenter, ToggleVamMenuGateMode);
             footerMenuGateBtnImage = footerMenuGateBtn.GetComponent<Image>();
-            footerMenuGateOffSprite = UI.LoadIconSprite("vpb_icons/visibility_independent.png", new Color(0.92f, 0.92f, 0.92f, 1f));
-            footerMenuGateOnSprite  = UI.LoadIconSprite("vpb_icons/visibility_linked.png",      new Color(0.92f, 0.92f, 0.92f, 1f));
+            footerMenuGateOffSprite = UI.LoadIconSprite("vpb_icons/visibility_independent.png", Color.white);
+            footerMenuGateOnSprite  = UI.LoadIconSprite("vpb_icons/visibility_linked.png",      Color.white);
             { Sprite init = footerMenuGateOffSprite ?? footerMenuGateOnSprite; if (init != null) { UI.AddIconToButton(footerMenuGateBtn, init); footerMenuGateIconImage = footerMenuGateBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerMenuGateBtn, "gallery.tooltip.vam_menu_gate", "Show only when VaM menu is visible");
 

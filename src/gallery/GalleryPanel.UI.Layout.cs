@@ -224,6 +224,15 @@ namespace VPB
             UpdateFooterLayoutState();
 
             try { RefreshHoverPreviewLayoutImmediate(); } catch { }
+
+            // Layout rebuild / hover refresh can reset ScrollRect viewports after SyncGalleryMainAreaBottomEdge;
+            // sticky chrome must win last so Available / Applied toolbars stay visible in Tags mode.
+            try
+            {
+                if (leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags)
+                    ApplyUserTagsStickyScrollChrome(tabTopOffset);
+            }
+            catch { }
         }
 
         /// <summary>Distance from panel bottom to the top edge of the bottom chrome (pagination + info/tbox bar).</summary>
@@ -251,7 +260,8 @@ namespace VPB
         private static bool IsUpperStackedSideTabPane(RectTransform rt)
         {
             if (rt == null) return false;
-            return rt.anchorMax.y >= 0.92f && rt.anchorMin.y >= 0.25f;
+            // Top stack in split column: UserTags (0.5/1), category/tags (0.5/1), hub right (0.7/1), etc.
+            return rt.anchorMax.y >= 0.85f && rt.anchorMin.y >= 0.4f;
         }
 
         private static float SceneSourceSortBarBreadth(float s) => 35f * s;
@@ -351,6 +361,8 @@ namespace VPB
                 RectTransform rt = rightSubClearBtn.GetComponent<RectTransform>();
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, tabBottomInset);
             }
+
+            try { ApplyUserTagsStickyScrollChrome(tabTopOffset); } catch { }
         }
 
         private void UpdateButtonState(Text btnText, bool isRight, ContentType type)
@@ -447,6 +459,7 @@ namespace VPB
             }
             // Layout / tab scroll chrome: rely on VPBConfig.ConfigChanged (UpdateLayout then
             // RefreshSideTabAreasForConfigChange — no side-tab list rebuild) when callers TriggerChange.
+            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
         }
 
         public void ApplySideButtonScale()
@@ -998,8 +1011,8 @@ namespace VPB
                 new SideButtonLayoutEntry(idxClone, 0, 0), // Clone
                 new SideButtonLayoutEntry(idxFollow, 0, 0), // Follow
 
-                new SideButtonLayoutEntry(idxCategory, 0, 2), // Category
-                new SideButtonLayoutEntry(idxUserTags, 0, 0), // Tags (UserTags)
+                new SideButtonLayoutEntry(idxUserTags, 0, 2), // Tags (UserTags) — above Category
+                new SideButtonLayoutEntry(idxCategory, 0, 0), // Category
                 new SideButtonLayoutEntry(idxCreatorClear, 0, 0), // Clear Creator
                 new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
                 new SideButtonLayoutEntry(idxPath, 0, 0), // Path

@@ -446,6 +446,24 @@ namespace VPB
                     vlg.padding = new RectOffset(5, 5, 0, 0);
                     innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
                 }
+                {
+                    Transform vp = rightTabScrollGO.transform.Find("Viewport");
+                    _rightTabViewportRT = vp != null ? vp.GetComponent<RectTransform>() : null;
+                    if (_rightTabViewportRT != null)
+                    {
+                        _rightTabViewportDefOffsetMin = _rightTabViewportRT.offsetMin;
+                        _rightTabViewportDefOffsetMax = _rightTabViewportRT.offsetMax;
+                    }
+                    rightUserTagsAvailStickyGO = new GameObject("VPB_UserTagsAvailSticky");
+                    rightUserTagsAvailStickyGO.transform.SetParent(rightTabScrollGO.transform, false);
+                    rightUserTagsAvailStickyGO.SetActive(false);
+                    RectTransform rst = rightUserTagsAvailStickyGO.AddComponent<RectTransform>();
+                    rst.anchorMin = new Vector2(0f, 1f);
+                    rst.anchorMax = new Vector2(1f, 1f);
+                    rst.pivot = new Vector2(0.5f, 1f);
+                    rst.sizeDelta = Vector2.zero;
+                    rightUserTagsAvailStickyGO.transform.SetAsLastSibling();
+                }
 
                 // 1b. Right Sub Tab Area (For Tags split view)
                 rightSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchRight, tabAreaWidth, 0, Vector2.zero, 15f, 0f, false);
@@ -463,6 +481,24 @@ namespace VPB
                     innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
                 }
                 rightSubTabScrollGO.SetActive(false); // Hidden by default
+                {
+                    Transform vp = rightSubTabScrollGO.transform.Find("Viewport");
+                    _rightSubTabViewportRT = vp != null ? vp.GetComponent<RectTransform>() : null;
+                    if (_rightSubTabViewportRT != null)
+                    {
+                        _rightSubTabViewportDefOffsetMin = _rightSubTabViewportRT.offsetMin;
+                        _rightSubTabViewportDefOffsetMax = _rightSubTabViewportRT.offsetMax;
+                    }
+                    rightUserTagsAppliedStickyGO = new GameObject("VPB_UserTagsAppliedSticky");
+                    rightUserTagsAppliedStickyGO.transform.SetParent(rightSubTabScrollGO.transform, false);
+                    rightUserTagsAppliedStickyGO.SetActive(false);
+                    RectTransform rap = rightUserTagsAppliedStickyGO.AddComponent<RectTransform>();
+                    rap.anchorMin = new Vector2(0f, 1f);
+                    rap.anchorMax = new Vector2(1f, 1f);
+                    rap.pivot = new Vector2(0.5f, 1f);
+                    rap.sizeDelta = Vector2.zero;
+                    rightUserTagsAppliedStickyGO.transform.SetAsLastSibling();
+                }
 
                 // Right Sub Sort Button (tags split: same 35² icon cycle as upper row)
                 {
@@ -661,7 +697,10 @@ namespace VPB
                     }
                     else if (rightActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
-                        UpdateTabs();
+                        activeUserTags.Clear();
+                        userTagsCached = false;
+                        if (_userTagAvailFilterMode) { try { RefreshFiles(true); } catch { } }
+                        try { UpdateTabs(); } catch { }
                     }
                     else if (rightActiveContent == ContentType.Path) {
                         currentPackagePathFilter = "";
@@ -720,6 +759,24 @@ namespace VPB
                     innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
                 }
                 leftTabScrollGO.SetActive(false); // Hidden by default
+                {
+                    Transform vp = leftTabScrollGO.transform.Find("Viewport");
+                    _leftTabViewportRT = vp != null ? vp.GetComponent<RectTransform>() : null;
+                    if (_leftTabViewportRT != null)
+                    {
+                        _leftTabViewportDefOffsetMin = _leftTabViewportRT.offsetMin;
+                        _leftTabViewportDefOffsetMax = _leftTabViewportRT.offsetMax;
+                    }
+                    leftUserTagsAvailStickyGO = new GameObject("VPB_UserTagsAvailSticky");
+                    leftUserTagsAvailStickyGO.transform.SetParent(leftTabScrollGO.transform, false);
+                    leftUserTagsAvailStickyGO.SetActive(false);
+                    RectTransform lst = leftUserTagsAvailStickyGO.AddComponent<RectTransform>();
+                    lst.anchorMin = new Vector2(0f, 1f);
+                    lst.anchorMax = new Vector2(1f, 1f);
+                    lst.pivot = new Vector2(0.5f, 1f);
+                    lst.sizeDelta = Vector2.zero;
+                    leftUserTagsAvailStickyGO.transform.SetAsLastSibling();
+                }
 
                 // 2b. Left Sub Tab Area (For Tags split view)
                 leftSubTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchLeft, tabAreaWidth, 0, Vector2.zero, 15f, 0f, false);
@@ -737,6 +794,24 @@ namespace VPB
                     innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
                 }
                 leftSubTabScrollGO.SetActive(false); // Hidden by default
+                {
+                    Transform vp = leftSubTabScrollGO.transform.Find("Viewport");
+                    _leftSubTabViewportRT = vp != null ? vp.GetComponent<RectTransform>() : null;
+                    if (_leftSubTabViewportRT != null)
+                    {
+                        _leftSubTabViewportDefOffsetMin = _leftSubTabViewportRT.offsetMin;
+                        _leftSubTabViewportDefOffsetMax = _leftSubTabViewportRT.offsetMax;
+                    }
+                    leftUserTagsAppliedStickyGO = new GameObject("VPB_UserTagsAppliedSticky");
+                    leftUserTagsAppliedStickyGO.transform.SetParent(leftSubTabScrollGO.transform, false);
+                    leftUserTagsAppliedStickyGO.SetActive(false);
+                    RectTransform lap = leftUserTagsAppliedStickyGO.AddComponent<RectTransform>();
+                    lap.anchorMin = new Vector2(0f, 1f);
+                    lap.anchorMax = new Vector2(1f, 1f);
+                    lap.pivot = new Vector2(0.5f, 1f);
+                    lap.sizeDelta = Vector2.zero;
+                    leftUserTagsAppliedStickyGO.transform.SetAsLastSibling();
+                }
 
                 // Left Sub Sort Button (tags split: same 35² icon cycle as upper row)
                 {
@@ -920,7 +995,10 @@ namespace VPB
                     }
                     else if (leftActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
-                        UpdateTabs();
+                        activeUserTags.Clear();
+                        userTagsCached = false;
+                        if (_userTagAvailFilterMode) { try { RefreshFiles(true); } catch { } }
+                        try { UpdateTabs(); } catch { }
                     }
                     else if (leftActiveContent == ContentType.Path) {
                         currentPackagePathFilter = "";
@@ -981,7 +1059,7 @@ namespace VPB
                 catch { }
 
                 // Right Toggle Buttons
-                int btnFontSize = 20;
+                int btnFontSize = 16;
                 float btnWidth = 120;
                 float btnHeight = 50;
                 const float sideIconBtn = 50f;
@@ -1118,11 +1196,11 @@ namespace VPB
                 rightSideButtons.Add(rightCloneBtn.GetComponent<RectTransform>());
                 AddTooltip(rightCloneBtn, "gallery.tooltip.clone_pane", "Clone this gallery pane.");
 
-                // Category (Red)
+                // Category (Red) — below Tags
                 {
                     float cW = galleryCategorySprite != null ? sideIconBtn : btnWidth;
                     float cH = galleryCategorySprite != null ? sideIconBtn : btnHeight;
-                    GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, cW, cH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => {
+                    GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, cW, cH, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => {
                         if (isFixedLocally) ToggleLeft(ContentType.Category); else ToggleRight(ContentType.Category);
                     });
                     rightCategoryBtnImage = rightCatBtn.GetComponent<Image>();
@@ -1149,14 +1227,14 @@ namespace VPB
                     AddTooltip(rightCatBtn, "gallery.tooltip.category_list", "Open category list.");
                 }
 
-                // User-defined tags (SQLite) — directly under Category
+                // User-defined tags (SQLite) — above Category
                 {
                     Color colorUserTagRail = new Color(0.14f, 0.42f, 0.48f, 1f);
                     float utW = sideIconBtn;
                     float utH = sideIconBtn;
                     Sprite utSpr = null;
                     try { utSpr = UI.LoadIconSprite("vpb_icons/tags.png", Color.white); } catch { }
-                    GameObject rightUserTagsBtn = UI.CreateUIButton(rightSideContainer, utW, utH, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () =>
+                    GameObject rightUserTagsBtn = UI.CreateUIButton(rightSideContainer, utW, utH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () =>
                     {
                         if (isFixedLocally) ToggleLeft(ContentType.UserTags);
                         else ToggleRight(ContentType.UserTags);
@@ -1628,11 +1706,11 @@ namespace VPB
                 leftSideButtons.Add(leftCloneBtn.GetComponent<RectTransform>());
                 AddTooltip(leftCloneBtn, "gallery.tooltip.clone_pane", "Clone this gallery pane.");
 
-                // Category (Red)
+                // Category (Red) — below Tags
                 {
                     float cW = galleryCategorySprite != null ? sideIconBtn : btnWidth;
                     float cH = galleryCategorySprite != null ? sideIconBtn : btnHeight;
-                    GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, cW, cH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
+                    GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, cW, cH, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
                     leftCategoryBtnImage = leftCatBtn.GetComponent<Image>();
                     leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>(true);
                     if (galleryCategorySprite != null)
@@ -1657,14 +1735,14 @@ namespace VPB
                     AddTooltip(leftCatBtn, "gallery.tooltip.category_list", "Open category list.");
                 }
 
-                // User-defined tags (SQLite) — directly under Category
+                // User-defined tags (SQLite) — above Category
                 {
                     Color colorUserTagRailL = new Color(0.14f, 0.42f, 0.48f, 1f);
                     float utW = sideIconBtn;
                     float utH = sideIconBtn;
                     Sprite utSprL = null;
                     try { utSprL = UI.LoadIconSprite("vpb_icons/tags.png", Color.white); } catch { }
-                    GameObject leftUserTagsBtn = UI.CreateUIButton(leftSideContainer, utW, utH, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.UserTags));
+                    GameObject leftUserTagsBtn = UI.CreateUIButton(leftSideContainer, utW, utH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.UserTags));
                     leftUserTagsSideBtn = leftUserTagsBtn;
                     Image utImgL = leftUserTagsBtn.GetComponent<Image>();
                     Text utTxtL = leftUserTagsBtn.GetComponentInChildren<Text>(true);

@@ -47,7 +47,7 @@ namespace VPB
         internal static string BuildTagToItemsYaml(IDictionary<string, List<string>> tagToItems)
         {
             var sb = new StringBuilder(4096);
-            sb.AppendLine("# VPB user tags — tag → items. Item line = category<TAB>pkg_uid<TAB>internal_path");
+            sb.AppendLine("# VPB user tags — tag → items. Item line = category<TAB>pkg_uid<TAB>internal_path. Tag with no items = unassigned (vocabulary only).");
             sb.AppendLine("vpb_user_tags_format: tag_to_items");
             sb.AppendLine("version: 1");
             sb.AppendLine(TagFirstRoot + ":");

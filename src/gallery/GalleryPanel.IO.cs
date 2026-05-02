@@ -1565,18 +1565,26 @@ namespace VPB
                 if (!tagMatch) return false;
             }
 
-            if (!_suppressGalleryUserTagSqlInPassesFilters && activeUserTags != null && activeUserTags.Count > 0 && activeContentType != ContentType.History)
+            // Gallery SQLite user tags (Available Filter Mode). VAR rows from SQLite bulk query already match tags;
+            // loose Custom/Saves files merged afterward must still be checked (same keys as gallery_item_user_tag).
+            if (_userTagAvailFilterMode && activeUserTags != null && activeUserTags.Count > 0
+                && activeContentType == ContentType.Category && VpbSqlite3.IsAvailable)
             {
-                string catUt = currentCategoryTitle ?? "";
-                if (titleText != null && string.IsNullOrEmpty(catUt)) catUt = titleText.text ?? "";
-                if (string.IsNullOrEmpty(catUt)) return false;
                 VarFileEntry vfeUt = entry as VarFileEntry;
-                if (vfeUt == null || vfeUt.Package == null) return false;
-                string puid = vfeUt.Package.Uid;
-                string ipt = vfeUt.InternalPath ?? "";
-                if (string.IsNullOrEmpty(puid) || string.IsNullOrEmpty(ipt)) return false;
-                if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(catUt, puid, ipt, activeUserTags))
-                    return false;
+                bool bulkSqlAlreadyFilteredVar =
+                    (_refreshSqliteBulkIncludedUserTagGridFilter || System.Threading.Thread.VolatileRead(ref _refreshWorkerFallbackUserTagPrefilterFlag) != 0)
+                    && vfeUt != null
+                    && vfeUt.Package != null;
+
+                if (!bulkSqlAlreadyFilteredVar)
+                {
+                    string catUt = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+                    if (string.IsNullOrEmpty(catUt)) return false;
+                    string pkgK, ipK;
+                    if (!TryGetGalleryRowKeysForUserTags(entry, out pkgK, out ipK)) return false;
+                    if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(catUt, pkgK, ipK, activeUserTags))
+                        return false;
+                }
             }
 
             return true;
@@ -1598,7 +1606,7 @@ namespace VPB
             }
         }
 
-        public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false, bool isRetry = false)
+        public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false, bool isRetry = false, string refreshDebugSource = null)
         {
             // Clear any active dependency filter when refreshing
             ClearPackageFilter();
@@ -1659,6 +1667,7 @@ namespace VPB
                 _refreshHistoryLightCo = null;
             }
             _boundCategoryNavSessionForCurrentRefresh = _categoryTypeNavStopwatch != null ? _categoryTypeNavTargetSession : 0;
+            _refreshFilesDebugSource = refreshDebugSource;
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
 
@@ -1921,6 +1930,18 @@ namespace VPB
                     for (int i = 0; i < arr.Count; i++)
                     {
                         sb.Append(arr[i] ?? "");
+                        sb.Append('\u001F');
+                    }
+                }
+                sb.Append('\u001E');
+                sb.Append(_userTagAvailFilterMode ? '1' : '0').Append('\u001E');
+                if (_userTagAvailFilterMode && activeUserTags != null && activeUserTags.Count > 0)
+                {
+                    var uarr = new List<string>(activeUserTags);
+                    uarr.Sort(StringComparer.Ordinal);
+                    for (int i = 0; i < uarr.Count; i++)
+                    {
+                        sb.Append(uarr[i] ?? "");
                         sb.Append('\u001F');
                     }
                 }
@@ -2329,6 +2350,8 @@ namespace VPB
         {
             int navSessionForThisRun = _boundCategoryNavSessionForCurrentRefresh;
             var swDeep = LogGalleryRefreshDeepTiming ? System.Diagnostics.Stopwatch.StartNew() : null;
+            long syncCpuBeforeFirstYieldMs = 0;
+            long stallUntilRoutineResumeMs = -1;
             long deepAfterFirstYieldMs = -1;
             long deepAfterDrainMs = -1;
             long deepAfterSysFilesMs = -1;
@@ -2340,14 +2363,21 @@ namespace VPB
             int deepSysFilesAdded = 0;
             bool deepSysCacheHit = false;
 
-            yield return null; // Allow UI to render first
+            if (swDeep != null) syncCpuBeforeFirstYieldMs = swDeep.ElapsedMilliseconds;
+            yield return null; // Allow UI to render first — next MoveNext may wait while same click handler runs UpdateTabs() etc.
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_after_first_yield");
-            if (swDeep != null) deepAfterFirstYieldMs = swDeep.ElapsedMilliseconds;
+            if (swDeep != null)
+            {
+                deepAfterFirstYieldMs = swDeep.ElapsedMilliseconds;
+                stallUntilRoutineResumeMs = deepAfterFirstYieldMs - syncCpuBeforeFirstYieldMs;
+            }
 
             // Reset pose facet counts for this refresh
             posePeopleFacetCountSingle = 0;
             posePeopleFacetCountDual = 0;
-            
+            _refreshSqliteBulkIncludedUserTagGridFilter = false;
+            System.Threading.Interlocked.Exchange(ref _refreshWorkerFallbackUserTagPrefilterFlag, 0);
+
             // currentLoadingGroupId was already rotated synchronously in RefreshFiles()
             // before this coroutine started; no need to rotate again here.
 
@@ -2663,7 +2693,6 @@ namespace VPB
                 object candidateQueueLock = new object();
                 int workerDoneFlag = 0;
                 List<FileEntry> sqliteBulkList = null;
-                int[] categorySqliteUserTagsInQuery = new int[1];
 
                 string snapKeyProbeMain;
                 bool canFileListSnapKeyMain = TryBuildFileListSnapshotCacheKey(out snapKeyProbeMain);
@@ -2686,13 +2715,19 @@ namespace VPB
 
                 VpbLocalDatabase.GalleryCategoryQueryStats catQueryStats = new VpbLocalDatabase.GalleryCategoryQueryStats();
 
+                bool userTagGridFilterModeSnap = _userTagAvailFilterMode;
+                HashSet<string> userTagNamesForGridSqlSnap = null;
+                if (userTagGridFilterModeSnap && activeUserTags != null && activeUserTags.Count > 0)
+                    userTagNamesForGridSqlSnap = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
+                int[] refreshDrainUtSqlFilterApplied = { 0 };
+
                 ThreadPool.QueueUserWorkItem((state) =>
                 {
                     var swWorker = System.Diagnostics.Stopwatch.StartNew();
+                    bool useSqliteIndex = false;
                     try
                     {
                         List<VpbLocalDatabase.Row> idxRows = new List<VpbLocalDatabase.Row>();
-                        bool useSqliteIndex;
                         List<string> pathExclusions = null;
                         if (VpbSqlite3.IsAvailable
                             && activeContentSnap == ContentType.History
@@ -2745,10 +2780,8 @@ namespace VPB
                                 nameTerms: nameTerms,
                                 pathExclusions: pathExclusions,
                                 activeTags: activeTags,
-                                activeUserTags: activeUserTags,
+                                activeUserTags: userTagNamesForGridSqlSnap,
                                 sortState: fileListSortSnapForWorker);
-                            if (useSqliteIndex && activeUserTags != null && activeUserTags.Count > 0)
-                                categorySqliteUserTagsInQuery[0] = 1;
                             }
                         }
                         else
@@ -2890,6 +2923,19 @@ namespace VPB
                             }
                             else
                             {
+                                HashSet<string> utCatMemKeyHits = null;
+                                if (activeContentSnap == ContentType.Category
+                                    && userTagGridFilterModeSnap && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0
+                                    && !string.IsNullOrEmpty(titleForIndexMain) && VpbSqlite3.IsAvailable)
+                                {
+                                    var utBuilt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                                    if (VpbLocalDatabase.TryBuildCatMemRowKeysMatchingAllUserTags(titleForIndexMain, userTagNamesForGridSqlSnap, utBuilt))
+                                    {
+                                        utCatMemKeyHits = utBuilt;
+                                        System.Threading.Interlocked.Exchange(ref _refreshWorkerFallbackUserTagPrefilterFlag, 1);
+                                    }
+                                }
+
                                 bool wantsPackageListOnly = false;
                                 try
                                 {
@@ -2924,6 +2970,11 @@ namespace VPB
                                                     {
                                                         var row = new PackageListEntry(r.PackageUid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid);
                                                         if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row)) continue;
+                                                        if (utCatMemKeyHits != null)
+                                                        {
+                                                            string utk = VpbLocalDatabase.FormatCatMemRowLookupKey(r.PackageUid, "meta.json");
+                                                            if (!utCatMemKeyHits.Contains(utk)) continue;
+                                                        }
                                                         lock (candidateQueueLock) { candidateQueue.Enqueue(row); }
                                                     }
                                                     catch
@@ -2954,6 +3005,11 @@ namespace VPB
                                             if (hasNameFilter)
                                             {
                                                 if (!MatchesAllTermsInEither(pkg.Path ?? "", pkg.Uid ?? "", nameTerms)) continue;
+                                            }
+                                            if (utCatMemKeyHits != null)
+                                            {
+                                                string utk = VpbLocalDatabase.FormatCatMemRowLookupKey(pkg.Uid, "meta.json");
+                                                if (!utCatMemKeyHits.Contains(utk)) continue;
                                             }
                                             lock (candidateQueueLock) { candidateQueue.Enqueue(new PackageListEntry(pkg)); }
                                         }
@@ -3024,6 +3080,12 @@ namespace VPB
                                         if (!MatchesAllTermsInEither(pkg != null ? pkg.Path : "", internalPath, nameTerms)) continue;
                                     }
 
+                                    if (utCatMemKeyHits != null)
+                                    {
+                                        string utk = VpbLocalDatabase.FormatCatMemRowLookupKey(pkg != null ? pkg.Uid : "", internalPath);
+                                        if (!utCatMemKeyHits.Contains(utk)) continue;
+                                    }
+
                                     DateTime entryTime = pkg != null ? pkg.LastWriteTime : DateTime.MinValue;
                                     long entrySize = pkg != null ? pkg.Size : 0;
                                     lock (candidateQueueLock)
@@ -3037,6 +3099,13 @@ namespace VPB
                     }
                     finally
                     {
+                        try
+                        {
+                            if (useSqliteIndex && activeContentSnap == ContentType.Category
+                                && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
+                                refreshDrainUtSqlFilterApplied[0] = 1;
+                        }
+                        catch { }
                         swWorker.Stop();
                         Interlocked.Exchange(ref workerDoneFlag, 1);
                     }
@@ -3086,6 +3155,7 @@ namespace VPB
                         List<FileEntry> bulk = sqliteBulkList;
                         sqliteBulkList = null;
                         sqliteBulkConsumed = true;
+                        _refreshSqliteBulkIncludedUserTagGridFilter = refreshDrainUtSqlFilterApplied[0] != 0;
                         if (activeContentSnap == ContentType.History)
                             SyncHistoryBrowseFailureFlagsFromStats(activeContentSnap, catQueryStats, nameTerms);
                         long bulkBudgetMs = maxMsPerFrame;
@@ -3094,47 +3164,39 @@ namespace VPB
                         else if (bc >= 8000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 120L);
                         else if (bc >= 3000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 80L);
 
-                        _suppressGalleryUserTagSqlInPassesFilters = categorySqliteUserTagsInQuery[0] != 0;
-                        try
+                        if (RefreshFilesRoutineCanFastAppendSqliteBulkList(wantsPoseCounts) && bulk.Count > 0)
                         {
-                                if (RefreshFilesRoutineCanFastAppendSqliteBulkList(wantsPoseCounts) && bulk.Count > 0)
+                            if (localLoadingGroupId != currentLoadingGroupId)
+                            {
+                                HideLoadingOverlay();
+                                refreshCoroutine = null;
+                                CompletePaneLoadTimingIfPending("(refresh superseded)");
+                                yield break;
+                            }
+                            int needCap = files.Count + bulk.Count;
+                            if (files.Capacity < needCap)
+                                files.Capacity = needCap;
+                            files.AddRange(bulk);
+                        }
+                        else
+                        {
+                            for (int bi = 0; bi < bulk.Count; bi++)
+                            {
+                                if (localLoadingGroupId != currentLoadingGroupId)
                                 {
-                                    if (localLoadingGroupId != currentLoadingGroupId)
-                                    {
-                                        HideLoadingOverlay();
-                                        refreshCoroutine = null;
-                                        CompletePaneLoadTimingIfPending("(refresh superseded)");
-                                        yield break;
-                                    }
-                                    int needCap = files.Count + bulk.Count;
-                                    if (files.Capacity < needCap)
-                                        files.Capacity = needCap;
-                                    files.AddRange(bulk);
+                                    HideLoadingOverlay();
+                                    refreshCoroutine = null;
+                                    CompletePaneLoadTimingIfPending("(refresh superseded)");
+                                    yield break;
                                 }
-                                else
-                                {
-                                    for (int bi = 0; bi < bulk.Count; bi++)
-                                    {
-                                        if (localLoadingGroupId != currentLoadingGroupId)
-                                        {
-                                            HideLoadingOverlay();
-                                            refreshCoroutine = null;
-                                            CompletePaneLoadTimingIfPending("(refresh superseded)");
-                                            yield break;
-                                        }
 
                                 if (RefreshFilesRoutineDrainProcessAndShouldYield(bulk[bi], files, ref yieldWatch, bulkBudgetMs, localLoadingGroupId, wantsPoseCounts, true))
-                                        {
-                                            yield return null;
-                                            yieldWatch.Reset();
-                                            yieldWatch.Start();
-                                        }
-                                    }
+                                {
+                                    yield return null;
+                                    yieldWatch.Reset();
+                                    yieldWatch.Start();
                                 }
-                        }
-                        finally
-                        {
-                            _suppressGalleryUserTagSqlInPassesFilters = false;
+                            }
                         }
 
                         hadWork = true;
@@ -3526,7 +3588,10 @@ namespace VPB
                 {
                     LogUtil.Log("[VPB.Gallery.DeepTiming] RefreshFilesRoutine pre-UpdateLayout"
                         + " | t=" + swDeep.ElapsedMilliseconds + "ms"
+                        + " | syncCpuBeforeFirstYield=" + syncCpuBeforeFirstYieldMs + "ms"
+                        + " | stallUntilRoutineResume=" + stallUntilRoutineResumeMs + "ms"
                         + " | afterFirstYield=" + deepAfterFirstYieldMs + "ms"
+                        + " | refreshSrc=" + (_refreshFilesDebugSource ?? "")
                         + " | afterDrain=" + deepAfterDrainMs + "ms"
                         + " | drainWall=" + refreshDrainWallMs + "ms"
                         + " | afterSysFiles=" + deepAfterSysFilesMs + "ms"
@@ -3574,6 +3639,7 @@ namespace VPB
                     LogUtil.Log("[VPB.Gallery.DeepTiming] RefreshFilesRoutine DONE"
                         + " | total=" + swDeep.ElapsedMilliseconds + "ms"
                         + " | updateLayoutAt=" + deepUpdateLayoutMs + "ms"
+                        + " | refreshSrc=" + (_refreshFilesDebugSource ?? "")
                         + " | title='" + (currentCategoryTitle ?? "") + "'"
                         + " | path='" + (currentPath ?? "") + "'"
                         + " | files=" + (files != null ? files.Count : 0));

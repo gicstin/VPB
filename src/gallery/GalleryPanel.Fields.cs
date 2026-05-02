@@ -63,6 +63,9 @@ namespace VPB
         public static bool LogGalleryRefreshDeepTiming = false;
 #endif
 
+        /// <summary>Optional label from last <see cref="GalleryPanel.RefreshFiles"/>; copied into <c>[VPB.Gallery.DeepTiming]</c> lines.</summary>
+        private string _refreshFilesDebugSource;
+
         /// <summary>Deferred phase1/phase2 side-tab work after the grid is shown; stopped when a new <see cref="GalleryPanel.RefreshFiles"/> supersedes it.</summary>
         private Coroutine _deferredGallerySideTabsCoroutine;
         /// <summary>Sliced tag/facet scan started from <see cref="GalleryPanel.UpdateTabs"/> (e.g. clothing subfilter) so we never block the main thread like <c>CacheTagCounts()</c>.</summary>
@@ -182,6 +185,28 @@ namespace VPB
         private GameObject leftSubTabContainerGO; // NEW: For split view
         private GameObject rightTabContainerGO;
         private GameObject rightSubTabContainerGO; // NEW: For split view
+        private RectTransform _leftTabViewportRT;
+        private RectTransform _rightTabViewportRT;
+        private RectTransform _leftSubTabViewportRT;
+        private RectTransform _rightSubTabViewportRT;
+        private Vector2 _leftTabViewportDefOffsetMin;
+        private Vector2 _leftTabViewportDefOffsetMax;
+        private Vector2 _rightTabViewportDefOffsetMin;
+        private Vector2 _rightTabViewportDefOffsetMax;
+        private Vector2 _leftSubTabViewportDefOffsetMin;
+        private Vector2 _leftSubTabViewportDefOffsetMax;
+        private Vector2 _rightSubTabViewportDefOffsetMin;
+        private Vector2 _rightSubTabViewportDefOffsetMax;
+        private GameObject leftUserTagsAvailStickyGO;
+        private GameObject rightUserTagsAvailStickyGO;
+        private GameObject leftUserTagsAppliedStickyGO;
+        private GameObject rightUserTagsAppliedStickyGO;
+        private Text leftUserTagAvailTitleText;
+        private Text rightUserTagAvailTitleText;
+        private Text leftUserTagApplyBtnText;
+        private Text rightUserTagApplyBtnText;
+        private Text leftUserTagAppliedTitleText;
+        private Text rightUserTagAppliedTitleText;
         private RectTransform contentScrollRT;
         
         // Buttons
@@ -399,8 +424,10 @@ namespace VPB
         private string userTagFilter = "";
         /// <summary>Lower split pane when <see cref="ContentType.UserTags"/> — filters tags applied to current selection.</summary>
         private string userTagAppliedFilter = "";
-        /// <summary>Selected row in applied-tags list for <see cref="GalleryPanel.RemoveFocusedAppliedUserTagFromSelection"/>.</summary>
-        private string userTagAppliedRemoveFocus = null;
+        /// <summary>Selected applied-tag rows for remove / multi-select (CTRL toggle, SHIFT range); see <see cref="GalleryPanel.RemoveFocusedAppliedUserTagFromSelection"/>.</summary>
+        private readonly HashSet<string> userTagAppliedRemoveSelection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Range anchor for SHIFT+click in applied-tags list (visible order).</summary>
+        private string userTagAppliedRemoveAnchor = null;
         private readonly List<UserTagSideTabEntry> cachedAppliedUserTagsSelection = new List<UserTagSideTabEntry>(32);
         private string currentSceneSourceFilter = ""; // NEW
         private string currentAppearanceSourceFilter = "";
@@ -435,11 +462,34 @@ namespace VPB
         // Tagging
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Checked tags in Available pick list. When <see cref="_userTagAvailFilterMode"/> is off: staging for Apply. When on: SQL/exists grid filter for category browse.</summary>
         private readonly HashSet<string> activeUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>SQLite category query already enforced <see cref="activeUserTags"/>; skip redundant per-row SQL in <see cref="GalleryPanel.PassesFilters"/>.</summary>
-        private bool _suppressGalleryUserTagSqlInPassesFilters;
+        /// <summary>When true, selected user tags narrow main grid/list (SQLite EXISTS); when false, picks only affect Apply.</summary>
+        private bool _userTagAvailFilterMode;
+        /// <summary>Set during refresh drain when SQLite category query already constrained rows by gallery user tags.</summary>
+        private bool _refreshSqliteBulkIncludedUserTagGridFilter;
+        /// <summary>
+        /// Package-scan fallback pre-filtered VAR rows using <see cref="VpbLocalDatabase.TryBuildCatMemRowKeysMatchingAllUserTags"/> on worker
+        /// (SQLite category query unavailable). Stored as int for .NET 3.5 (no System.Threading.Volatile).
+        /// </summary>
+        private int _refreshWorkerFallbackUserTagPrefilterFlag;
         private bool userTagsCached = false;
+        /// <summary>Bumped when <see cref="GalleryPanel.CacheUserTagsSideTab"/> finishes rebuilding SQLite-backed rows.</summary>
+        private int userTagSideTabDataRevision = 0;
         private List<UserTagSideTabEntry> cachedUserTagSideTab = new List<UserTagSideTabEntry>(64);
+
+        /// <summary>Filtered/sorted view for virtualized User Tags pick list (same role as <see cref="_creatorVirtView"/>).</summary>
+        private readonly List<UserTagSideTabEntry> _userTagVirtView = new List<UserTagSideTabEntry>(256);
+        private string _userTagVirtViewSig = null;
+        private readonly List<GameObject> _leftUserTagVirtButtons = new List<GameObject>(32);
+        private readonly List<GameObject> _rightUserTagVirtButtons = new List<GameObject>(32);
+        private ScrollRect _leftUserTagVirtScroll;
+        private ScrollRect _rightUserTagVirtScroll;
+        private bool _leftUserTagVirtHooked;
+        private bool _rightUserTagVirtHooked;
+
+        /// <summary>Pick-list selection tint for virtualized User Tags rows.</summary>
+        private static readonly Color UserTagPickListAccent = new Color(0.45f, 0.38f, 0.55f, 1f);
 
         /// <summary>Dim overlay on gallery pane + centered panel for <see cref="GalleryPanel.ShowUserTagListEditor"/>.</summary>
         private GameObject _userTagEditorRoot;
@@ -890,9 +940,6 @@ namespace VPB
         private float pendingHistoryRemoveConfirmUntilRealtime = 0f;
         private List<VpbLocalDatabase.ItemUsageSnapshot> pendingHistoryUndoSnapshots = null;
         private float pendingHistoryUndoUntilRealtime = 0f;
-        private readonly Dictionary<GalleryHistoryFilterMode, int> historyModeCounts = new Dictionary<GalleryHistoryFilterMode, int>();
-        private float historyModeCountsLastFetchRealtime = -1000f;
-
         private List<FileEntry> lastFilteredFiles = new List<FileEntry>();
 
         /// <summary>Refuse select-all (toolbar and Ctrl+A) when the filtered gallery has more than this many items.</summary>

@@ -15,7 +15,6 @@ namespace VPB
         private Text tboxLabel;
         private Text tboxHintLabel;
         private GameObject tboxCopyPkgNamesBtn;
-        private GameObject tboxUserTagsBtn;
         private GameObject tboxDeleteBtn;
         private GameObject tboxRemoveHistoryBtn;
         private GameObject tboxCleanupBtn;
@@ -161,7 +160,6 @@ namespace VPB
             one(tboxJsonParserBenchBtn);
             one(tboxOpenHubBtn);
             one(tboxCopyPkgNamesBtn);
-            one(tboxUserTagsBtn);
             one(tboxSceneImportBtn);
             one(tboxSelectAllBtn);
             one(tboxClearSelectionBtn);
@@ -206,7 +204,6 @@ namespace VPB
             d(tboxJsonParserBenchBtn);
             d(tboxOpenHubBtn);
             d(tboxCopyPkgNamesBtn);
-            d(tboxUserTagsBtn);
             d(tboxSceneImportBtn);
             d(tboxSelectAllBtn);
             d(tboxClearSelectionBtn);
@@ -325,7 +322,6 @@ namespace VPB
                 if (vis(tboxJsonParserBenchBtn)) ltr.Add(tboxJsonParserBenchBtn);
                 if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
                 if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
-                if (vis(tboxUserTagsBtn)) ltr.Add(tboxUserTagsBtn);
                 if (vis(tboxSceneImportBtn)) ltr.Add(tboxSceneImportBtn);
                 if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
                 if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
@@ -491,7 +487,7 @@ namespace VPB
             tboxLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             tboxLabel.fontSize = tboxCollapsedFont;
             tboxLabel.fontStyle = FontStyle.Bold;
-            tboxLabel.color = new Color(0.92f, 0.92f, 0.92f, 1f);
+            tboxLabel.color = Color.white;
             tboxLabel.alignment = TextAnchor.MiddleCenter;
             tboxLabel.raycastTarget = false;
             var labelShadow = labelTextGO.AddComponent<Shadow>();
@@ -652,14 +648,14 @@ namespace VPB
             tboxFilterBackBtn = UI.CreateUIButton(tboxFilterModeRowGO, 80, 40, VPBTranslation.T("gallery.tbox.filter_back", "Back"), 16, 0, 0, AnchorPresets.stretchAll, NavigateBack);
             tboxFilterBackBtn.name = "TboxFilterBackBtn";
             tboxFilterBackBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.6f, 0.9f);
-            { var s = UI.LoadIconSprite("vpb_icons/arrow_left.png", new Color(0.92f, 0.92f, 0.92f, 1f)); if (s != null) UI.AddIconToButton(tboxFilterBackBtn, s, padding: 6f); }
+            { var s = UI.LoadIconSprite("vpb_icons/arrow_left.png", Color.white); if (s != null) UI.AddIconToButton(tboxFilterBackBtn, s, padding: 6f); }
             AddTooltip(tboxFilterBackBtn, "gallery.tooltip.filter_back", VPBTranslation.T("gallery.tooltip.filter_back", "Back"));
 
             // Clear Filter Button
             tboxFilterClearBtn = UI.CreateUIButton(tboxFilterModeRowGO, 80, 40, VPBTranslation.T("gallery.tbox.filter_clear", "Clear"), 16, 0, 0, AnchorPresets.stretchAll, ClearPackageFilter);
             tboxFilterClearBtn.name = "TboxFilterClearBtn";
             tboxFilterClearBtn.GetComponent<Image>().color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
-            { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", new Color(0.92f, 0.92f, 0.92f, 1f)); if (s != null) UI.AddIconToButton(tboxFilterClearBtn, s, padding: 6f); }
+            { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", Color.white); if (s != null) UI.AddIconToButton(tboxFilterClearBtn, s, padding: 6f); }
             AddTooltip(tboxFilterClearBtn, "gallery.tooltip.filter_clear", VPBTranslation.T("gallery.tooltip.filter_clear", "Clear Filter"));
 
             const int tboxActionBtnFont = 16;
@@ -686,24 +682,9 @@ namespace VPB
             TboxConfigureActionButtonFlex(tboxCopyPkgNamesBtn, innerRowH, innerRowH, innerRowH); // square icon button
             WireCopyNamesTooltip(tboxCopyPkgNamesBtn);
 
-            tboxUserTagsBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.user_tags", "Tags"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                OpenUserTagsSidePanelFromToolbox
-            );
-            tboxUserTagsBtn.name = "Tbox_UserTags";
-            TboxConfigureActionButtonFlex(tboxUserTagsBtn, innerRowH, 112f, innerRowH);
-            AddTooltip(tboxUserTagsBtn, "gallery.tooltip.tbox_user_tags", "Open Tags side panel.");
             try
             {
-                var tagSpr = UI.LoadIconSprite("vpb_icons/tag.png", new Color(0.92f, 0.92f, 0.92f, 1f));
-                if (tagSpr != null) UI.AddIconToButton(tboxUserTagsBtn, tagSpr, padding: 6f);
-            }
-            catch { }
-            try
-            {
-                tboxClipboardListSprite  = UI.LoadIconSprite("vpb_icons/clipboard_list.png",  new Color(0.92f, 0.92f, 0.92f, 1f));
+                tboxClipboardListSprite  = UI.LoadIconSprite("vpb_icons/clipboard_list.png",  Color.white);
                 tboxClipboardCheckSprite = UI.LoadIconSprite("vpb_icons/clipboard_check.png", new Color(1f, 1f, 1f, 1f));
                 if (tboxClipboardListSprite != null)
                 {
@@ -726,7 +707,7 @@ namespace VPB
             AddTooltipPlain(tboxSettingsCancelBtn, VPBTranslation.T("settings.tbox.cancel.tip", "Discard changes and exit Settings"));
             try
             {
-                var closeSpr = UI.LoadIconSprite("vpb_icons/close.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var closeSpr = UI.LoadIconSprite("vpb_icons/close.png", Color.white);
                 if (closeSpr != null) UI.AddIconToButton(tboxSettingsCancelBtn, closeSpr, padding: 6f);
             }
             catch { }
@@ -744,7 +725,7 @@ namespace VPB
             AddTooltipPlain(tboxSettingsSaveBtn, VPBTranslation.T("settings.tbox.save.tip", "Save changes and exit Settings"));
             try
             {
-                var saveSpr = gallerySaveSprite ?? UI.LoadIconSprite("vpb_icons/gallery_save.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var saveSpr = gallerySaveSprite ?? UI.LoadIconSprite("vpb_icons/gallery_save.png", Color.white);
                 if (saveSpr != null) UI.AddIconToButton(tboxSettingsSaveBtn, saveSpr, padding: 6f);
             }
             catch { }
@@ -761,7 +742,7 @@ namespace VPB
             AddTooltip(tboxCacheTexturesBtn, "gallery.tooltip.tbox_cache_textures", "Build VPB texture cache for selected .var packages (includes dependency packages). Hold Ctrl to rewrite existing zstd cache files. Hold Ctrl+Shift to purge the cache for selected items.");
             try
             {
-                var cacheTextureIcon = UI.LoadIconSprite("vpb_icons/cache_texture.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var cacheTextureIcon = UI.LoadIconSprite("vpb_icons/cache_texture.png", Color.white);
                 if (cacheTextureIcon != null) UI.AddIconToButton(tboxCacheTexturesBtn, cacheTextureIcon, padding: 6f);
                 else
                 {
@@ -787,7 +768,7 @@ namespace VPB
             );
             try
             {
-                var parserIcon = UI.LoadIconSprite("vpb_icons/fps.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var parserIcon = UI.LoadIconSprite("vpb_icons/fps.png", Color.white);
                 if (parserIcon != null) UI.AddIconToButton(tboxJsonParserBenchBtn, parserIcon, padding: 6f);
                 else
                 {
@@ -815,7 +796,7 @@ namespace VPB
             AddTooltip(tboxOpenHubBtn, "gallery.tooltip.tbox_open_hub", "Open this item in Hub");
             try
             {
-                var hubIcon = UI.LoadIconSprite("vpb_icons/hub.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var hubIcon = UI.LoadIconSprite("vpb_icons/hub.png", Color.white);
                 if (hubIcon != null) UI.AddIconToButton(tboxOpenHubBtn, hubIcon, padding: 6f);
                 else
                 {
@@ -837,7 +818,7 @@ namespace VPB
             AddTooltip(tboxLoadDepsBtn, "gallery.tooltip.tbox_load_deps", "Copy selected packages and their dependencies from AllPackages to AddonPackages (respects Settings → load deps with package)");
             try
             {
-                var loadDepsIcon = UI.LoadIconSprite("vpb_icons/load_deps.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var loadDepsIcon = UI.LoadIconSprite("vpb_icons/load_deps.png", Color.white);
                 if (loadDepsIcon != null) UI.AddIconToButton(tboxLoadDepsBtn, loadDepsIcon, padding: 6f);
                 else
                 {
@@ -858,7 +839,7 @@ namespace VPB
             AddTooltip(tboxUnloadBtn, "gallery.tooltip.tbox_unload", "Move selected installed .var files from AddonPackages back to AllPackages");
             try
             {
-                var unloadIcon = UI.LoadIconSprite("vpb_icons/unload.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var unloadIcon = UI.LoadIconSprite("vpb_icons/unload.png", Color.white);
                 if (unloadIcon != null) UI.AddIconToButton(tboxUnloadBtn, unloadIcon, padding: 6f);
                 else
                 {
@@ -879,7 +860,7 @@ namespace VPB
             AddTooltip(tboxLoadBtn, "gallery.tooltip.tbox_load", "Copy selected .var from AllPackages to AddonPackages (this package only, no dependencies)");
             try
             {
-                var loadIcon = UI.LoadIconSprite("vpb_icons/load.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var loadIcon = UI.LoadIconSprite("vpb_icons/load.png", Color.white);
                 if (loadIcon != null) UI.AddIconToButton(tboxLoadBtn, loadIcon, padding: 6f);
                 else
                 {
@@ -900,7 +881,7 @@ namespace VPB
             AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes");
             try
             {
-                var delIcon = UI.LoadIconSprite("vpb_icons/delete.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var delIcon = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
                 if (delIcon != null)
                     UI.AddIconToButton(tboxDeleteBtn, delIcon, padding: 6f, backdropOverride: new Color(0.35f, 0.15f, 0.15f, 1f));
                 else
@@ -979,13 +960,24 @@ namespace VPB
 
             tboxCleanupBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup", "Cleanup"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxOpenCleanupView
             );
             tboxCleanupBtn.name = "Tbox_Cleanup";
-            TboxConfigureActionButtonFlex(tboxCleanupBtn, 78f, 92f, innerRowH);
+            TboxConfigureActionButtonFlex(tboxCleanupBtn, innerRowH, innerRowH, innerRowH); // square icon button
             AddTooltip(tboxCleanupBtn, "gallery.tooltip.tbox_cleanup", "Scan globally for duplicate, old, and damaged packages/local files.");
+            try
+            {
+                var cleanupIcon = UI.LoadIconSprite("vpb_icons/cleanup.png", Color.white);
+                if (cleanupIcon != null) UI.AddIconToButton(tboxCleanupBtn, cleanupIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxCleanupBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.cleanup", "Cleanup");
+                }
+            }
+            catch { }
 
             tboxCleanupApplyBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -1089,7 +1081,7 @@ namespace VPB
             AddTooltip(tboxCleanupAddExcludeBtn, "gallery.tooltip.tbox_cleanup_add_exclude", "Add selected cleanup packages to the cleanup exclude list.");
             try
             {
-                var addExcludeIcon = UI.LoadIconSprite("vpb_icons/list_add.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var addExcludeIcon = UI.LoadIconSprite("vpb_icons/list_add.png", Color.white);
                 if (addExcludeIcon != null) UI.AddIconToButton(tboxCleanupAddExcludeBtn, addExcludeIcon, padding: 6f);
             }
             catch { }
@@ -1105,7 +1097,7 @@ namespace VPB
             AddTooltip(tboxCleanupRemoveExcludeBtn, "gallery.tooltip.tbox_cleanup_remove_exclude", "Remove selected cleanup packages from the cleanup exclude list.");
             try
             {
-                var removeExcludeIcon = UI.LoadIconSprite("vpb_icons/list_remove.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var removeExcludeIcon = UI.LoadIconSprite("vpb_icons/list_remove.png", Color.white);
                 if (removeExcludeIcon != null) UI.AddIconToButton(tboxCleanupRemoveExcludeBtn, removeExcludeIcon, padding: 6f);
             }
             catch { }
@@ -1133,7 +1125,7 @@ namespace VPB
             AddTooltip(tboxAutoInstallBtn, "gallery.tooltip.tbox_autoinstall", "Flag selected packages for auto-install and auto-load. When scan whitelist is enabled, this also adds a persistent per-package startup-scan whitelist override. Packages in AllPackages are copied to AddonPackages on the next VaM start (not immediately).");
             try
             {
-                var autoLoadIcon = UI.LoadIconSprite("vpb_icons/auto.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var autoLoadIcon = UI.LoadIconSprite("vpb_icons/auto.png", Color.white);
                 if (autoLoadIcon != null) UI.AddIconToButton(tboxAutoInstallBtn, autoLoadIcon, padding: 6f);
                 else
                 {
@@ -1155,7 +1147,7 @@ namespace VPB
             try
             {
                 // Hide = show_hidden ON
-                var hideIcon = UI.LoadIconSprite("vpb_icons/show_hidden.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var hideIcon = UI.LoadIconSprite("vpb_icons/show_hidden.png", Color.white);
                 if (hideIcon != null)
                     UI.AddIconToButton(tboxHideBtn, hideIcon, padding: 6f);
                 else
@@ -1178,7 +1170,7 @@ namespace VPB
             try
             {
                 // Unhide = show_hidden OFF
-                var unhideIcon = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var unhideIcon = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", Color.white);
                 if (unhideIcon != null)
                     UI.AddIconToButton(tboxUnhideBtn, unhideIcon, padding: 6f);
                 else
@@ -1201,7 +1193,7 @@ namespace VPB
                 "Temporarily allow selected packages in VaM startup scan whitelist for this session only. This does not save to scan_whitelist.json and resets on VaM restart.");
             try
             {
-                var temporaryIcon = UI.LoadIconSprite("vpb_icons/temporary.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var temporaryIcon = UI.LoadIconSprite("vpb_icons/temporary.png", Color.white);
                 if (temporaryIcon != null)
                     UI.AddIconToButton(tboxScanWhitelistTemporaryBtn, temporaryIcon, padding: 6f);
                 else
@@ -1245,7 +1237,7 @@ namespace VPB
             AddTooltip(tboxDisableAutoInstallBtn, "gallery.tooltip.tbox_no_autoinstall", "Clear auto-install and VPB auto-load for selected packages. When scan whitelist is enabled, this also removes the persistent per-package startup-scan whitelist override.");
             try
             {
-                var autoLoadOffIcon = UI.LoadIconSprite("vpb_icons/auto_off.png", new Color(0.92f, 0.92f, 0.92f, 1f));
+                var autoLoadOffIcon = UI.LoadIconSprite("vpb_icons/auto_off.png", Color.white);
                 if (autoLoadOffIcon != null) UI.AddIconToButton(tboxDisableAutoInstallBtn, autoLoadOffIcon, padding: 6f);
                 else
                 {
@@ -1726,7 +1718,6 @@ namespace VPB
                 show(tboxJsonParserBenchBtn, false);
                 show(tboxOpenHubBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
-                show(tboxUserTagsBtn, false);
                 show(tboxSceneImportBtn, false);
                 show(tboxDeleteBtn, false);
                 show(tboxRemoveHistoryBtn, false);
@@ -1985,23 +1976,6 @@ namespace VPB
                 SetTboxButtonEnabledVisual(
                     tboxRemoveHistoryBtn,
                     historyBrowse && selectedFiles != null && selectedFiles.Count > 0);
-
-            bool showUt = !isSettings && !isCleanup && !IsHubMode && activeContentType == ContentType.Category
-                && selectedFiles != null && selectedFiles.Count > 0;
-            show(tboxUserTagsBtn, showUt);
-            if (tboxUserTagsBtn != null)
-            {
-                bool anyVar = false;
-                if (showUt && selectedFiles != null)
-                {
-                    for (int ti = 0; ti < selectedFiles.Count; ti++)
-                    {
-                        string _p, _i;
-                        if (TryGetVarCatMemForUserTags(selectedFiles[ti], out _p, out _i)) { anyVar = true; break; }
-                    }
-                }
-                SetTboxButtonEnabledVisual(tboxUserTagsBtn, showUt && anyVar);
-            }
 
             RefreshTboxFlexButtonLayout();
         }
