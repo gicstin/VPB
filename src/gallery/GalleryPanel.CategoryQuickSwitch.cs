@@ -33,7 +33,7 @@ namespace VPB
             _categoryQuickChromeRootRT = cqRootRT;
 
             var hitImg = cqRoot.AddComponent<Image>();
-            hitImg.color = new Color(0.14f, 0.14f, 0.16f, 1f);
+            hitImg.color = UI.PopupRowBackdrop;
             hitImg.raycastTarget = true;
 
             var hlg = cqRoot.AddComponent<HorizontalLayoutGroup>();
@@ -60,7 +60,7 @@ namespace VPB
             glyphT.text = "\u25bc";
             glyphT.fontSize = 26;
             glyphT.fontStyle = FontStyle.Bold;
-            glyphT.color = new Color(1f, 1f, 1f, 0.95f);
+            glyphT.color = UI.PopupText;
             glyphT.alignment = TextAnchor.MiddleCenter;
             glyphT.raycastTarget = false;
             var glyphLe = glyphGO.AddComponent<LayoutElement>();
@@ -116,8 +116,26 @@ namespace VPB
 
             _categoryQuickMenuOuterRT = outerRT;
             var outerImg = _categoryQuickMenuOuterGO.AddComponent<Image>();
-            outerImg.color = new Color(0.11f, 0.11f, 0.13f, 1f);
+            outerImg.color = UI.PopupBackdrop;
             outerImg.raycastTarget = true;
+
+            // Force consistent render order + visibility across Unity/VaM builds.
+            try
+            {
+                var menuCanvas = _categoryQuickMenuOuterGO.AddComponent<Canvas>();
+                menuCanvas.overrideSorting = true;
+                menuCanvas.sortingOrder = 1000;
+            }
+            catch { }
+            try
+            {
+                var cg = _categoryQuickMenuOuterGO.AddComponent<CanvasGroup>();
+                cg.ignoreParentGroups = true;
+                cg.alpha = 1f;
+                cg.interactable = true;
+                cg.blocksRaycasts = true;
+            }
+            catch { }
 
             _categoryQuickMenuScrollGO = UI.CreateVScrollableContent(
                 _categoryQuickMenuOuterGO,
@@ -513,7 +531,7 @@ namespace VPB
             rowLe.minHeight = 36;
 
             var bg = row.AddComponent<Image>();
-            bg.color = isActive ? new Color(0.18f, 0.22f, 0.28f, 1f) : new Color(0.14f, 0.14f, 0.16f, 1f);
+            bg.color = isActive ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
 
             var btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
@@ -529,7 +547,7 @@ namespace VPB
             VPBUiFont.ApplyTo(numT);
             numT.fontSize = 17;
             numT.fontStyle = FontStyle.Bold;
-            numT.color = new Color(0.65f, 0.66f, 0.7f, 1f);
+            numT.color = UI.PopupMutedText;
             numT.alignment = TextAnchor.MiddleLeft;
             numT.text = numPrefix;
             var numLe = numGO.AddComponent<LayoutElement>();
@@ -541,7 +559,7 @@ namespace VPB
             var nameT = nameGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(nameT);
             nameT.fontSize = 17;
-            nameT.color = Color.white;
+            nameT.color = UI.PopupText;
             nameT.alignment = TextAnchor.MiddleLeft;
             nameT.text = cat.name ?? "";
             var nameLe = nameGO.AddComponent<LayoutElement>();

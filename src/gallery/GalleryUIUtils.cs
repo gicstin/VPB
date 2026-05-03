@@ -16,6 +16,15 @@ namespace VPB
     public static class UI
     {
         private static float _lastLoadSceneStartTime = -9999f;
+
+        // ── Universal chrome colors (avoid build-dependent invisibility) ──
+        // Some builds end up with popups behind other chrome / groups; keep colors high-contrast,
+        // but still translucent so underlying UI reads through.
+        public static readonly Color PopupBackdrop = new Color(0.12f, 0.12f, 0.14f, 0.72f);
+        public static readonly Color PopupRowBackdrop = new Color(0.16f, 0.16f, 0.18f, 0.60f);
+        public static readonly Color PopupRowActiveBackdrop = new Color(0.22f, 0.26f, 0.32f, 0.78f);
+        public static readonly Color PopupText = new Color(1f, 1f, 1f, 1f);
+        public static readonly Color PopupMutedText = new Color(0.72f, 0.74f, 0.78f, 1f);
         
         private static List<string> BuildSceneLoadUidAllowList(FileEntry entry, List<string> movedUids)
         {
