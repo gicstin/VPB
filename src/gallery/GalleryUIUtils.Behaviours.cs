@@ -720,7 +720,8 @@ namespace VPB
             if (isAdaptive) _needsLayoutUpdate = true;
         }
 
-        private void RecalculateLayout()
+        /// <param name="deferFinalRefresh">When true, updates dimensions and content height only — caller must end with <see cref="Refresh"/> or <see cref="SetItemCountAtScroll"/> / <see cref="SetItemCount"/> without defer.</param>
+        private void RecalculateLayout(bool deferFinalRefresh = false)
         {
             if (content == null) return;
             
@@ -777,13 +778,15 @@ namespace VPB
             preserveCenterItemIndex = -1;
 
             UpdateContentHeight();
+            if (deferFinalRefresh) return;
+
             Refresh();
 
             if (centerIdx >= 0)
                 ScrollToCenterItem(centerIdx);
         }
 
-        public void SetAdaptiveConfig(bool adaptive, float minSize, int fixedCols, bool fixedHeight)
+        public void SetAdaptiveConfig(bool adaptive, float minSize, int fixedCols, bool fixedHeight, bool deferRefresh = false)
         {
             isAdaptive = adaptive;
             minCellSize = minSize;
@@ -792,10 +795,10 @@ namespace VPB
             
             // Force immediate recalculation
             lastRectWidth = -1f; 
-            RecalculateLayout();
+            RecalculateLayout(deferFinalRefresh: deferRefresh);
         }
 
-        public void SetGridConfig(float width, float height, float spaceX, float spaceY, int columns)
+        public void SetGridConfig(float width, float height, float spaceX, float spaceY, int columns, bool deferRefresh = false)
         {
             itemWidth = width;
             itemHeight = height;
@@ -809,14 +812,14 @@ namespace VPB
             
             lastRectWidth = -1f; // Force recalculation to sync width
             if (itemsCount > 0) UpdateContentHeight();
-            Refresh();
+            if (!deferRefresh) Refresh();
         }
 
-        public void SetItemCount(int count)
+        public void SetItemCount(int count, bool deferRefresh = false)
         {
             itemsCount = count;
             UpdateContentHeight();
-            Refresh();
+            if (!deferRefresh) Refresh();
         }
 
         /// <summary>

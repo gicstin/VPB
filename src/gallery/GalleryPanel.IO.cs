@@ -2311,13 +2311,13 @@ namespace VPB
                 if (layoutMode == GalleryLayoutMode.List)
                 {
                     recyclingGrid.fixedColumns = 1;
-                    recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
-                    recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true);
+                    recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1, deferRefresh: true);
+                    recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                 }
                 else
                 {
-                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, GridColumnCount);
-                    recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false);
+                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, GridColumnCount, deferRefresh: true);
+                    recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false, deferRefresh: true);
                 }
 
                 if (savedCenterItemIndex >= 0)
@@ -2349,6 +2349,59 @@ namespace VPB
             try { UpdateSelectionContextMenu(); } catch { }
 
             _refreshHistoryLightCo = null;
+        }
+
+        /// <summary>Apply creator/category side-tab caches built during refresh (worker or shared snapshot). Does not run unless loading session still matches.</summary>
+        private void ApplyEarlyMetaRefreshResults(
+            string metaBuildGroupId,
+            bool earlyBuildCreators,
+            bool earlyBuildCats,
+            string sideMetaCacheKey,
+            bool allowStoreSharedSideMeta,
+            List<CreatorCacheEntry> earlyNewCreators,
+            Dictionary<string, int> earlyNewCatCounts)
+        {
+            if (metaBuildGroupId != currentLoadingGroupId) return;
+            try
+            {
+                if (earlyBuildCreators)
+                {
+                    cachedCreators = earlyNewCreators ?? new List<CreatorCacheEntry>();
+                    creatorsCached = true;
+                    unchecked { creatorSideTabDataRevision++; }
+                }
+                if (earlyBuildCats)
+                {
+                    if (earlyNewCatCounts != null)
+                    {
+                        categoryCounts.Clear();
+                        foreach (var kv in earlyNewCatCounts) categoryCounts[kv.Key] = kv.Value;
+                    }
+                    categoriesCached = true;
+                    unchecked { categorySideTabDataRevision++; }
+                }
+                if (allowStoreSharedSideMeta && sideMetaCacheKey != null && earlyBuildCreators && earlyBuildCats
+                    && earlyNewCreators != null && earlyNewCatCounts != null)
+                    StoreSharedSideMetaIfRoom(sideMetaCacheKey, earlyNewCreators, earlyNewCatCounts);
+            }
+            catch { }
+        }
+
+        private IEnumerator DestroyLegacyActiveButtonsBudgetCo(List<GameObject> pending)
+        {
+            const int perFrame = 48;
+            int i = 0;
+            int n = pending != null ? pending.Count : 0;
+            while (i < n)
+            {
+                int end = Mathf.Min(i + perFrame, n);
+                for (; i < end; i++)
+                {
+                    GameObject go = pending[i];
+                    if (go != null) Destroy(go);
+                }
+                yield return null;
+            }
         }
 
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
@@ -2411,16 +2464,16 @@ namespace VPB
                 {
                     if (layoutMode == GalleryLayoutMode.List)
                     {
-                        recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
-                        recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true);
+                        recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1, deferRefresh: true);
+                        recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                     }
                     else
                     {
                         // Grid mode
-                        recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, GridColumnCount);
-                        recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false);
+                        recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, GridColumnCount, deferRefresh: true);
+                        recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false, deferRefresh: true);
                     }
-                    recyclingGrid.SetItemCount(0); // Clear initially
+                    recyclingGrid.SetItemCount(0); // Clear initially — single Refresh after deferred config
                 }
             }
             
@@ -3478,9 +3531,9 @@ namespace VPB
             lastFilteredFiles.Clear();
             lastFilteredFiles.AddRange(files);
             
-            // Promote to class member for RecyclingGridView
+            // Promote to class member for RecyclingGridView — one copy pass from lastFilteredFiles (same snapshot as files)
             currentFilteredFiles.Clear();
-            currentFilteredFiles.AddRange(files);
+            currentFilteredFiles.AddRange(lastFilteredFiles);
             // If no name filter was active, the next SetNameFilter call can use currentFilteredFiles
             // as a trustworthy unfiltered base for in-memory search.
             if (nameFilterTerms == null || nameFilterTerms.Length == 0)
@@ -3520,13 +3573,13 @@ namespace VPB
                 {
                     // List/Table mode: ALWAYS 1 column; +/- controls row height/thumb size.
                     recyclingGrid.fixedColumns = 1;
-                    recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
-                    recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true);
+                    recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1, deferRefresh: true);
+                    recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                 }
                 else
                 {
-                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, cols);
-                    recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false);
+                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, cols, deferRefresh: true);
+                    recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false, deferRefresh: true);
                 }
                 // Set item count and pre-position scroll so the first UpdateVisibleItems
                 // binds the correct viewport items, not items at the top.
@@ -3545,43 +3598,38 @@ namespace VPB
             }
             if (swDeep != null) deepAfterGridBindMs = swDeep.ElapsedMilliseconds;
 
-            // We still need to clear activeButtons if they were used outside recycling grid,
-            // but RecyclingGridView manages its own pool now.
-            foreach (var btn in activeButtons)
+            // Legacy nav/file buttons (non-recycling): destroy in slices so main thread yields between batches (VaM stays responsive).
+            int legacyBtnCount = activeButtons.Count;
+            if (legacyBtnCount > 0)
             {
-                if (btn != null) Destroy(btn);
+                var pendingDestroy = new List<GameObject>(legacyBtnCount);
+                pendingDestroy.AddRange(activeButtons);
+                activeButtons.Clear();
+                StartCoroutine(DestroyLegacyActiveButtonsBudgetCo(pendingDestroy));
             }
-            activeButtons.Clear();
+            else
+                activeButtons.Clear();
             fileButtonImages.Clear();
 
             UpdatePaginationText();
 
             if (earlyMetaNeeded)
             {
-                if (!skipEarlyMetaThread)
-                    while (!earlyMetaBuildDone) yield return null;
-
-                if (metaBuildGroupId == currentLoadingGroupId)
+                if (skipEarlyMetaThread)
                 {
-                    if (earlyBuildCreators)
+                    ApplyEarlyMetaRefreshResults(metaBuildGroupId, earlyBuildCreators, earlyBuildCats, sideMetaCacheKey, false,
+                        earlyNewCreators, earlyNewCatCounts);
+                }
+                else
+                {
+                    IEnumerator CoApplyEarlyMetaWhenReady()
                     {
-                        cachedCreators = earlyNewCreators ?? new List<CreatorCacheEntry>();
-                        creatorsCached = true;
-                        unchecked { creatorSideTabDataRevision++; }
+                        while (!earlyMetaBuildDone) yield return null;
+                        ApplyEarlyMetaRefreshResults(metaBuildGroupId, earlyBuildCreators, earlyBuildCats, sideMetaCacheKey, true,
+                            earlyNewCreators, earlyNewCatCounts);
+                        try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
                     }
-                    if (earlyBuildCats)
-                    {
-                        if (earlyNewCatCounts != null)
-                        {
-                            categoryCounts.Clear();
-                            foreach (var kv in earlyNewCatCounts) categoryCounts[kv.Key] = kv.Value;
-                        }
-                        categoriesCached = true;
-                        unchecked { categorySideTabDataRevision++; }
-                    }
-                    if (!skipEarlyMetaThread && sideMetaCacheKey != null && earlyBuildCreators && earlyBuildCats
-                        && earlyNewCreators != null && earlyNewCatCounts != null)
-                        StoreSharedSideMetaIfRoom(sideMetaCacheKey, earlyNewCreators, earlyNewCatCounts);
+                    StartCoroutine(CoApplyEarlyMetaWhenReady());
                 }
             }
             if (swDeep != null) deepAfterEarlyMetaWaitMs = swDeep.ElapsedMilliseconds;
@@ -3612,7 +3660,9 @@ namespace VPB
                 }
                 catch { }
             }
-            UpdateLayout();
+            // Worker thread builds creator/category counts during refresh — skip redundant main-thread VAR scans here (still allow user-tag cache).
+            bool suppressSyncCreatorCategoryCaches = earlyMetaNeeded && !skipEarlyMetaThread;
+            UpdateLayout(!suppressSyncCreatorCategoryCaches, true);
             if (swDeep != null) deepUpdateLayoutMs = swDeep.ElapsedMilliseconds;
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_after_UpdateLayout");
             // Layout rebuild can clamp ScrollRect and undo the position we just set.

@@ -17,12 +17,18 @@ namespace VPB
 {
         public void UpdateLayout()
         {
-            UpdateLayout(true);
+            UpdateLayout(true, true);
         }
 
-        /// <param name="allowSynchronousCatalogCaches">When false, skips main-thread scans of all VARs for creator/category tab counts.
-        /// <see cref="GalleryPanel.RefreshFilesRoutine"/> builds the same data on a worker thread during a pending full refresh.</param>
-        public void UpdateLayout(bool allowSynchronousCatalogCaches)
+        /// <summary>When false, skips all synchronous side-tab cache fills (legacy single flag).</summary>
+        public void UpdateLayout(bool allowAllSynchronousCaches)
+        {
+            UpdateLayout(allowAllSynchronousCaches, allowAllSynchronousCaches);
+        }
+
+        /// <param name="allowSynchronousCreatorCategoryCaches">When false, skips main-thread creator/category scans (worker or <see cref="GalleryPanel.RefreshFilesRoutine"/> overlap).</param>
+        /// <param name="allowSynchronousUserTagsSideTabCache">When false, skips synchronous user-tag side tab scan.</param>
+        public void UpdateLayout(bool allowSynchronousCreatorCategoryCaches, bool allowSynchronousUserTagsSideTabCache)
         {
             float paneScale = VPBConfig.Instance.CurrentInnerPaneScale;
             if (backgroundBoxGO != null)
@@ -30,12 +36,13 @@ namespace VPB
                 LayoutRebuilder.ForceRebuildLayoutImmediate(backgroundBoxGO.GetComponent<RectTransform>());
             }
             Canvas.ForceUpdateCanvases();
-            if (allowSynchronousCatalogCaches)
+            if (allowSynchronousCreatorCategoryCaches)
             {
                 if (!creatorsCached) CacheCreators();
                 if (!categoriesCached) CacheCategoryCounts();
-                if (!userTagsCached) CacheUserTagsSideTab();
             }
+            if (allowSynchronousUserTagsSideTabCache && !userTagsCached)
+                CacheUserTagsSideTab();
 
             if (contentScrollRT == null) return;
 
