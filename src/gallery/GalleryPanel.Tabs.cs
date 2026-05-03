@@ -4250,7 +4250,13 @@ namespace VPB
                     if (t != null)
                     {
                         // Use 2-digit year (e.g. 25-09-15 instead of 2025-09-15).
-                        try { t.text = file.LastWriteTime.ToString("yy-MM-dd"); }
+                        try
+                        {
+                            DateTime dt = file.LastWriteTime;
+                            // Hide invalid ZIP/DOS default timestamps like 1979-12-31.
+                            if (dt.Year < 1980) t.text = "Unknown";
+                            else t.text = dt.ToString("yy-MM-dd");
+                        }
                         catch { t.text = ""; }
                     }
                 }

@@ -2183,6 +2183,13 @@ namespace VPB
                         // Track + apply default ON/OFF state (footer toggle updates this too).
                         springScrollButtonGO = springBtn;
                         springScrollButtonGO.SetActive(springScrollButtonEnabled);
+
+                        try
+                        {
+                            EnsureScrollbarJumpButtonsExist();
+                            LayoutScrollbarJumpButtons();
+                        }
+                        catch { }
                     }
                 }
             }

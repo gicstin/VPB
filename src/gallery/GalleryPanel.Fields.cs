@@ -812,8 +812,6 @@ namespace VPB
         private GameObject gridSizePlusBtn;
         private GameObject footerScrollTopBtn;
         private GameObject footerScrollBottomBtn;
-        private GameObject footerGridScrollExpandBtn;
-        private bool footerGridScrollExpanded = false;
         private GameObject footerSpringScrollToggleBtn;
         private Image footerSpringScrollToggleBtnImage;
         private Image footerSpringScrollToggleIconImage;

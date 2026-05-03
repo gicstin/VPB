@@ -346,6 +346,7 @@
     <Compile Include="src\gallery\CacheCleanupManager.cs" />
     <Compile Include="src\gallery\index\VpbSqlite3.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryUserTags.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />

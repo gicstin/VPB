@@ -1045,25 +1045,24 @@ namespace VPB
             { Sprite init = footerMenuGateOffSprite ?? footerMenuGateOnSprite; if (init != null) { UI.AddIconToButton(footerMenuGateBtn, init); footerMenuGateIconImage = footerMenuGateBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerMenuGateBtn, "gallery.tooltip.vam_menu_gate", "Show only when VaM menu is visible");
 
+            footerShowHiddenPackagesBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleGalleryShowHiddenPackages);
+            footerShowHiddenPackagesBtnImage = footerShowHiddenPackagesBtn.GetComponent<Image>();
+            footerShowHiddenPackagesBtnText = footerShowHiddenPackagesBtn.GetComponentInChildren<Text>();
+            footerShowHiddenPackagesBtn.name = "Footer_ShowHiddenPackages";
+            footerShowHiddenOffSprite = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", UI.BarIconGlyphTint);
+            footerShowHiddenOnSprite  = UI.LoadIconSprite("vpb_icons/show_hidden.png",     UI.BarIconGlyphTint);
+            { Sprite init = footerShowHiddenOffSprite ?? footerShowHiddenOnSprite; if (init != null) { UI.AddIconToButton(footerShowHiddenPackagesBtn, init); footerShowHiddenIconImage = footerShowHiddenPackagesBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+
             gridSizeMinusBtn = UI.CreateUIButton(rightSection, 40, 40, "-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
             { var s = UI.LoadIconSprite("vpb_icons/zoom_out.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(gridSizeMinusBtn, s); }
             gridSizePlusBtn = UI.CreateUIButton(rightSection, 40, 40, "+", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(-1));
             { var s = UI.LoadIconSprite("vpb_icons/zoom_in.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(gridSizePlusBtn, s); }
-            footerScrollTopBtn = UI.CreateUIButton(rightSection, 40, 40, "↑", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToTop);
-            { var s = UI.LoadIconSprite("vpb_icons/scroll_top.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollTopBtn, s); }
-            footerScrollBottomBtn = UI.CreateUIButton(rightSection, 40, 40, "↓", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToBottom);
-            { var s = UI.LoadIconSprite("vpb_icons/scroll_bottom.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollBottomBtn, s); }
 
             // Toggle big spring-scroll drag button (floating panes only; default ON)
             footerSpringScrollToggleBtn = UI.CreateUIButton(rightSection, 40, 40, "S", 20, 0, 0, AnchorPresets.middleCenter, ToggleSpringScrollButton);
             footerSpringScrollToggleBtnImage = footerSpringScrollToggleBtn.GetComponent<Image>();
             { var s = UI.LoadIconSprite("vpb_icons/scroll.png", UI.BarIconGlyphTint); if (s != null) { UI.AddIconToButton(footerSpringScrollToggleBtn, s); footerSpringScrollToggleIconImage = footerSpringScrollToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerSpringScrollToggleBtn, "gallery.tooltip.spring_scroll_toggle", "Toggle spring scroll drag button (floating)");
-
-            // Expand button to show grid and scroll controls
-            footerGridScrollExpandBtn = UI.CreateUIButton(rightSection, 40, 40, "▼", 18, 0, 0, AnchorPresets.middleCenter, ToggleFooterGridScrollExpanded);
-            { var s = UI.LoadIconSprite("vpb_icons/expand_left.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerGridScrollExpandBtn, s); }
-            AddTooltip(footerGridScrollExpandBtn, "gallery.tooltip.footer_expand", "Show grid and scroll controls");
 
             // Toggle hold-to-launch/apply (hover-hold over an item for 2s)
             footerHoldToLaunchToggleBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleHoldToLaunch);
@@ -1096,14 +1095,6 @@ namespace VPB
             footerHeightFixedSprite = UI.LoadIconSprite("vpb_icons/height_fixed.png", UI.BarIconGlyphTint);
             { Sprite init = footerHeightFixedSprite ?? footerHeightFreeSprite; if (init != null) { UI.AddIconToButton(footerHeightBtn, init); footerHeightIconImage = footerHeightBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
-            footerShowHiddenPackagesBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleGalleryShowHiddenPackages);
-            footerShowHiddenPackagesBtnImage = footerShowHiddenPackagesBtn.GetComponent<Image>();
-            footerShowHiddenPackagesBtnText = footerShowHiddenPackagesBtn.GetComponentInChildren<Text>();
-            footerShowHiddenPackagesBtn.name = "Footer_ShowHiddenPackages";
-            footerShowHiddenOffSprite = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", UI.BarIconGlyphTint);
-            footerShowHiddenOnSprite  = UI.LoadIconSprite("vpb_icons/show_hidden.png",     UI.BarIconGlyphTint);
-            { Sprite init = footerShowHiddenOffSprite ?? footerShowHiddenOnSprite; if (init != null) { UI.AddIconToButton(footerShowHiddenPackagesBtn, init); footerShowHiddenIconImage = footerShowHiddenPackagesBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
-
             footerAutoHideBtn = UI.CreateUIButton(rightSection, 40, 40, "A", 20, 0, 0, AnchorPresets.middleCenter, ToggleAutoHideMode);
             footerAutoHideBtnImage = footerAutoHideBtn.GetComponent<Image>();
             footerAutoHideBtnText = footerAutoHideBtn.GetComponentInChildren<Text>();
@@ -1131,10 +1122,6 @@ namespace VPB
             AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease Columns");
             AddHoverDelegate(gridSizePlusBtn);
             AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase Columns");
-            AddHoverDelegate(footerScrollTopBtn);
-            AddTooltip(footerScrollTopBtn, "gallery.tooltip.scroll_top", "Jump to top of list");
-            AddHoverDelegate(footerScrollBottomBtn);
-            AddTooltip(footerScrollBottomBtn, "gallery.tooltip.scroll_bottom", "Jump to bottom of list");
             AddHoverDelegate(footerSpringScrollToggleBtn);
             AddHoverDelegate(footerMenuGateBtn);
             AddHoverDelegate(footerHoldToLaunchToggleBtn);
@@ -1184,25 +1171,21 @@ namespace VPB
                 footerFollowAngleBtn, footerFollowDistanceBtn, footerFollowHeightBtn,
                 paginationFirstBtn, paginationPrev10Btn, paginationPrevBtn,
                 paginationNextBtn, paginationNext10Btn, paginationLastBtn,
+                footerMenuGateBtn, footerShowHiddenPackagesBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
-                footerScrollTopBtn, footerScrollBottomBtn,
                 footerSpringScrollToggleBtn,
-                footerMenuGateBtn,
-                footerGridScrollExpandBtn,
                 footerHoldToLaunchToggleBtn,
-                footerLayoutBtn, footerHeightBtn, footerShowHiddenPackagesBtn, footerAutoHideBtn,
+                footerLayoutBtn, footerHeightBtn, footerAutoHideBtn,
             };
             var footerBtnFonts = new int[] {
                 20, 20, 20,
                 18, 18, 20,
                 20, 18, 18,
+                20, 20,
                 24, 24,
-                22, 22,
                 20,
                 20,
-                18,
-                20,
-                20, 20, 20, 20,
+                20, 20, 20,
             };
             for (int i = 0; i < footerBtnGOs.Length; i++)
             {
@@ -1212,9 +1195,10 @@ namespace VPB
                 innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(f*s); });
             }
 
+            innerPaneScaleActions.Add(s => { try { LayoutScrollbarJumpButtons(s); } catch { } });
+
             UpdateSpringScrollButtonToggleUI();
             UpdateHoldToLaunchToggleUI();
-            UpdateFooterGridScrollVisibility();
 
             // Scale the back button
             {
@@ -1324,19 +1308,85 @@ namespace VPB
             UpdateSpringScrollButtonToggleUI();
         }
 
-        private void ToggleFooterGridScrollExpanded()
+        private void EnsureScrollbarJumpButtonsExist()
         {
-            footerGridScrollExpanded = !footerGridScrollExpanded;
-            UpdateFooterGridScrollVisibility();
+            if (footerScrollTopBtn != null) return;
+            if (scrollRect == null) return;
+            Transform sb = null;
+            try { sb = scrollRect.gameObject != null ? scrollRect.gameObject.transform.Find("Scrollbar") : null; }
+            catch { sb = null; }
+            if (sb == null) return;
+
+            footerScrollTopBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "↑", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToTop);
+            footerScrollTopBtn.name = "ScrollbarScrollTop";
+            { var s = UI.LoadIconSprite("vpb_icons/scroll_top.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollTopBtn, s); }
+            footerScrollBottomBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "↓", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToBottom);
+            footerScrollBottomBtn.name = "ScrollbarScrollBottom";
+            { var s = UI.LoadIconSprite("vpb_icons/scroll_bottom.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollBottomBtn, s); }
+
+            AddHoverDelegate(footerScrollTopBtn);
+            AddTooltip(footerScrollTopBtn, "gallery.tooltip.scroll_top", "Jump to top of list");
+            AddHoverDelegate(footerScrollBottomBtn);
+            AddTooltip(footerScrollBottomBtn, "gallery.tooltip.scroll_bottom", "Jump to bottom of list");
         }
 
-        private void UpdateFooterGridScrollVisibility()
+        private static void SyncScrollbarJumpButtonCollider(GameObject go)
         {
-            if (gridSizeMinusBtn != null) gridSizeMinusBtn.SetActive(footerGridScrollExpanded);
-            if (gridSizePlusBtn != null) gridSizePlusBtn.SetActive(footerGridScrollExpanded);
-            if (footerScrollTopBtn != null) footerScrollTopBtn.SetActive(footerGridScrollExpanded);
-            if (footerScrollBottomBtn != null) footerScrollBottomBtn.SetActive(footerGridScrollExpanded);
-            if (footerSpringScrollToggleBtn != null) footerSpringScrollToggleBtn.SetActive(footerGridScrollExpanded);
+            if (go == null) return;
+            var rt = go.GetComponent<RectTransform>();
+            var bc = go.GetComponent<BoxCollider>();
+            if (bc == null) bc = go.AddComponent<BoxCollider>();
+            if (rt == null) return;
+            Vector2 d = rt.sizeDelta;
+            bc.size = new Vector3(d.x, d.y, bc.size.z > 0.1f ? bc.size.z : 20f);
+            bc.center = Vector3.zero;
+        }
+
+        /// <summary>Place jump top / spring drag / jump bottom in a vertical stack on the scrollbar.</summary>
+        private void LayoutScrollbarJumpButtons(float? innerPaneScaleOverride = null)
+        {
+            if (footerScrollTopBtn == null || footerScrollBottomBtn == null || springScrollButtonGO == null) return;
+
+            float paneS = innerPaneScaleOverride ?? (VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+
+            float springW = isFixedLocally ? 50f : 100f;
+            float springH = springW * 1.618f;
+            var ssrt = springScrollButtonGO.GetComponent<RectTransform>();
+            if (ssrt != null)
+            {
+                springH = ssrt.sizeDelta.y;
+                springW = ssrt.sizeDelta.x;
+            }
+
+            float btnSz = Mathf.Round(Mathf.Clamp(40f * paneS, 24f, 56f));
+            btnSz = Mathf.Min(btnSz, springW * 0.85f);
+
+            const float gap = 6f;
+            float dy = springH * 0.5f + gap + btnSz * 0.5f;
+
+            var topRt = footerScrollTopBtn.GetComponent<RectTransform>();
+            var botRt = footerScrollBottomBtn.GetComponent<RectTransform>();
+            if (topRt == null || botRt == null) return;
+
+            topRt.anchorMin = topRt.anchorMax = botRt.anchorMin = botRt.anchorMax = new Vector2(0.5f, 0.5f);
+            topRt.pivot = botRt.pivot = new Vector2(0.5f, 0.5f);
+            topRt.sizeDelta = botRt.sizeDelta = new Vector2(btnSz, btnSz);
+            topRt.anchoredPosition = new Vector2(0f, dy);
+            botRt.anchoredPosition = new Vector2(0f, -dy);
+
+            int fs = Mathf.RoundToInt(22f * paneS);
+            foreach (var go in new[] { footerScrollTopBtn, footerScrollBottomBtn })
+            {
+                var tx = go.GetComponentInChildren<Text>(true);
+                if (tx != null && tx.gameObject.activeSelf) tx.fontSize = fs;
+            }
+
+            SyncScrollbarJumpButtonCollider(footerScrollTopBtn);
+            SyncScrollbarJumpButtonCollider(footerScrollBottomBtn);
+
+            int si = springScrollButtonGO.transform.GetSiblingIndex();
+            footerScrollTopBtn.transform.SetSiblingIndex(si);
+            footerScrollBottomBtn.transform.SetSiblingIndex(si + 2);
         }
 
         private void EnsureSpringScrollButtonExists()
@@ -1391,6 +1441,13 @@ namespace VPB
             catch { }
 
             springScrollButtonGO = springBtn;
+
+            try
+            {
+                EnsureScrollbarJumpButtonsExist();
+                LayoutScrollbarJumpButtons();
+            }
+            catch { }
         }
 
         private void ToggleHoldToLaunch()
@@ -1499,6 +1556,7 @@ namespace VPB
                     var ssb = springScrollButtonGO.GetComponent<SpringScrollButton>();
                     if (ssb != null) ssb.SetSize(w, h);
                 }
+                LayoutScrollbarJumpButtons();
             }
             catch { }
         }
@@ -1594,7 +1652,16 @@ namespace VPB
             if (hoverPreviewRT == null) return;
             if (hoverPreviewGO != null)
             {
-                bool shouldBeVisible = CanShowHoverPreviewForLayout(layoutMode) && (hoverPreviewFile != null || hoverPreviewDummyActive);
+                bool layoutAllows = CanShowHoverPreviewForLayout(layoutMode);
+                bool settingsDummyTune = false;
+                try
+                {
+                    settingsDummyTune = internalSettingsSessionActive && hoverPreviewDummyActive && VPBConfig.Instance != null
+                        && !string.Equals(VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode), "Off", StringComparison.OrdinalIgnoreCase);
+                }
+                catch { }
+
+                bool shouldBeVisible = (layoutAllows || settingsDummyTune) && (hoverPreviewFile != null || hoverPreviewDummyActive);
                 if (!shouldBeVisible)
                 {
                     hoverPreviewGO.SetActive(false);

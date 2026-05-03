@@ -331,7 +331,15 @@ namespace VPB
             try
             {
                 if (vfe.Package != null)
+                {
+                    try
+                    {
+                        long ib = vfe.Package.InternalCreationTimeBinary;
+                        if (ib != long.MinValue) return DateTime.FromBinary(ib);
+                    }
+                    catch { }
                     return vfe.Package.CreationTime;
+                }
             }
             catch { }
             return DateTime.MinValue;
@@ -344,9 +352,25 @@ namespace VPB
             try
             {
                 if (file is VarFileEntry vfe && vfe.Package != null)
+                {
+                    try
+                    {
+                        long ib = vfe.Package.InternalCreationTimeBinary;
+                        if (ib != long.MinValue) return DateTime.FromBinary(ib);
+                    }
+                    catch { }
                     return vfe.Package.CreationTime;
+                }
                 if (file is PackageListEntry ple && ple.Package != null)
+                {
+                    try
+                    {
+                        long ib = ple.Package.InternalCreationTimeBinary;
+                        if (ib != long.MinValue) return DateTime.FromBinary(ib);
+                    }
+                    catch { }
                     return ple.Package.CreationTime;
+                }
                 string p = file.Path;
                 if (string.IsNullOrEmpty(p) || p.StartsWith("[MISSING]", StringComparison.OrdinalIgnoreCase))
                     return DateTime.MinValue;

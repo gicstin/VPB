@@ -814,6 +814,10 @@ namespace VPB
             var result = new List<FileEntry>();
             if (uids == null || uids.Count == 0) return result;
 
+            // Defensive: callers sometimes hand us a set built from mixed sources; avoid double-adds
+            // if enumeration includes duplicates due to comparer mismatches or intermediate list reuse.
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             // Prefer SQLite package rows when available to avoid per-UID package resolution.
             var pkgRows = new List<VpbLocalDatabase.PackageRow>();
             bool gotSql = false;
@@ -835,6 +839,7 @@ namespace VPB
             foreach (var uid in uids)
             {
                 if (string.IsNullOrEmpty(uid)) continue;
+                if (!seen.Add(uid)) continue;
 
                 if (byUid != null && byUid.TryGetValue(uid, out var r))
                 {

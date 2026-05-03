@@ -580,6 +580,25 @@ namespace VPB
             return rows;
         }
 
+        /// <summary>Show semi-transparent hover preview frame while adjusting hover settings (sliders update live).</summary>
+        private void NotifyInternalSettingsHoverPreviewChanged()
+        {
+            if (!internalSettingsSessionActive || VPBConfig.Instance == null)
+            {
+                try { SetHoverPreviewDummyActive(false); } catch { }
+                return;
+            }
+            string m = VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode);
+            if (string.Equals(m, "Off", StringComparison.OrdinalIgnoreCase))
+            {
+                SetHoverPreviewDummyActive(false);
+                RefreshHoverPreviewLayoutImmediate();
+                return;
+            }
+            SetHoverPreviewDummyActive(true);
+            RefreshHoverPreviewLayoutImmediate();
+        }
+
         private void ApplyInternalSettingDefinition(InternalSettingDefinition def, bool secondary)
         {
             if (def == null) return;
@@ -613,6 +632,8 @@ namespace VPB
             InternalSettingDefinition def = GetInternalSettingDefinition(row.RowKey);
             if (def == null) return false;
             ApplyInternalSettingDefinition(def, secondary);
+            if (string.Equals(row.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                NotifyInternalSettingsHoverPreviewChanged();
 
             RefreshInternalSettingsListRows(true);
             return true;
@@ -719,6 +740,8 @@ namespace VPB
                 string display = (cur ?? "").ToUpperInvariant();
                 CreateMiniButton(controls.transform, display, 150f, new Color(0.25f, 0.5f, 0.8f, 1f), () => {
                     def.SetString(NextOf(cur, def.Options));
+                    if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                        NotifyInternalSettingsHoverPreviewChanged();
                     RefreshInternalSettingsListRows(true);
                 });
                 return;
@@ -806,6 +829,8 @@ namespace VPB
                 {
                     input.text = v.ToString("F" + Math.Max(0, def.Decimals));
                     def.SetFloat(v);
+                    if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                        NotifyInternalSettingsHoverPreviewChanged();
                 });
                 input.onEndEdit.AddListener(s =>
                 {
@@ -819,6 +844,8 @@ namespace VPB
                     slider.value = parsed;
                     def.SetFloat(parsed);
                     input.text = parsed.ToString("F" + Math.Max(0, def.Decimals));
+                    if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                        NotifyInternalSettingsHoverPreviewChanged();
                 });
                 return;
             }
@@ -840,6 +867,7 @@ namespace VPB
             internalSettingsBackup = CreateInternalSettingsSnapshot();
             try { VPBConfig.Instance.Save(false); } catch { }
             VPBConfig.Instance.TriggerChange();
+            try { SetHoverPreviewDummyActive(false); } catch { }
             internalSettingsSessionActive = false;
             internalSettingsBackup = null;
         }
@@ -870,6 +898,7 @@ namespace VPB
         private void CancelInternalSettingsSession()
         {
             if (!internalSettingsSessionActive || internalSettingsBackup == null) return;
+            try { SetHoverPreviewDummyActive(false); } catch { }
             var b = internalSettingsBackup;
             VPBConfig.Instance.EnableGalleryFade = b.EnableGalleryFade;
             VPBConfig.Instance.EnableGalleryTranslucency = b.EnableGalleryTranslucency;
