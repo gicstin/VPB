@@ -410,7 +410,9 @@ namespace VPB
 					}
 					else if (FileManager.FileExists(imgPath))
 					{
-						bool loadedFromGalleryCache = false;
+						// Must assign QueuedImage.loadedFromGalleryCache (field); a local bool used to shadow this
+						// and left res.loadedFromGalleryCache false — breaks skip logic + duplicate disk cache jobs.
+						loadedFromGalleryCache = false;
 						if (isThumbnail && !skipCache && !thumbnailUnityDecodeOnly)
 						{
                             long lastWriteTime = 0;
@@ -436,8 +438,20 @@ namespace VPB
 								int w, h;
 								TextureFormat fmt;
 								byte[] data;
+                                try
+                                {
+                                    LogUtil.LogTextureTrace("IMGQ_THUMB_LOOKUP:" + imgPath,
+                                        "[VPB IMGQ] thumb cache lookup. path=" + imgPath + " tj=" + turboJpegScaleDenom + " foundTime=" + foundTime + " t=" + lastWriteTime);
+                                }
+                                catch { }
 								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, lastWriteTime, out data, out w, out h, out fmt, turboJpegScaleDenom))
 								{
+                                    try
+                                    {
+                                        LogUtil.LogTextureTrace("IMGQ_THUMB_HIT:" + imgPath,
+                                            "[VPB IMGQ] thumb cache HIT. path=" + imgPath + " " + w + "x" + h + " fmt=" + fmt + " tj=" + turboJpegScaleDenom);
+                                    }
+                                    catch { }
 									raw = data;
 									width = w;
 									height = h;
@@ -447,6 +461,15 @@ namespace VPB
 									loadedFromCache = true;
 									loadedFromDownscaledCache = false;
 								}
+                                else
+                                {
+                                    try
+                                    {
+                                        LogUtil.LogTextureTrace("IMGQ_THUMB_MISS:" + imgPath,
+                                            "[VPB IMGQ] thumb cache MISS. path=" + imgPath + " tj=" + turboJpegScaleDenom);
+                                    }
+                                    catch { }
+                                }
 							}
 						}
 
@@ -517,6 +540,12 @@ namespace VPB
 							{
 								try
 								{
+                                    try
+                                    {
+                                        LogUtil.LogTextureTrace("IMGQ_OPEN:" + imgPath,
+                                            "[VPB IMGQ] open stream. path=" + imgPath + " isThumb=" + isThumbnail + " unityOnly=" + thumbnailUnityDecodeOnly);
+                                    }
+                                    catch { }
 									// Load image from a var package
 									using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
 									{
@@ -578,9 +607,21 @@ namespace VPB
 					if (useTurboJpeg)
 					{
 						int turboDenom = (!isThumbnail || turboJpegScaleDenom <= 1) ? 1 : TurboJpegNative.NormalizeScaleDenom(turboJpegScaleDenom);
+                        try
+                        {
+                            LogUtil.LogTextureTrace("IMGQ_TJ_ATTEMPT:" + imgPath,
+                                "[VPB IMGQ] TurboJPEG attempt. path=" + imgPath + " jpeg=" + isJpeg + " denom=" + turboDenom + " rawLen=" + rawLength);
+                        }
+                        catch { }
 						bool turboOk = TurboJpegNative.TryDecodeJpegToTexture2D(raw, rawLength, turboDenom, out turboTex, out turboErr);
 						if (turboOk)
 						{
+                            try
+                            {
+                                LogUtil.LogTextureTrace("IMGQ_TJ_OK:" + imgPath,
+                                    "[VPB IMGQ] TurboJPEG OK. path=" + imgPath + " " + turboTex.width + "x" + turboTex.height + " fmt=" + turboTex.format + " name=" + turboTex.name);
+                            }
+                            catch { }
 							TurboJpegStats.NoteFirstTurboSuccess();
 							ByteArrayPool.Return(raw);
 							raw = null;
@@ -594,6 +635,12 @@ namespace VPB
 							preprocessed = false;
 							return;
 						}
+                        try
+                        {
+                            LogUtil.LogTextureTrace("IMGQ_TJ_FAIL:" + imgPath,
+                                "[VPB IMGQ] TurboJPEG FAIL. path=" + imgPath + " err=" + (turboErr ?? ""));
+                        }
+                        catch { }
 					}
 
 					Texture2D tempTex = new Texture2D(2, 2);
@@ -608,6 +655,12 @@ namespace VPB
 
 					if (loadImageOk)
 					{
+                        try
+                        {
+                            LogUtil.LogTextureTrace("IMGQ_UNITY_OK:" + imgPath,
+                                "[VPB IMGQ] Unity LoadImage OK. path=" + imgPath + " " + tempTex.width + "x" + tempTex.height + " fmt=" + tempTex.format + " jpeg=" + isJpeg + " tjWanted=" + useTurboJpeg);
+                        }
+                        catch { }
 						int origWidth = tempTex.width;
 						int origHeight = tempTex.height;
                         int targetWidth = origWidth;
@@ -708,6 +761,12 @@ namespace VPB
 					}
                     else
                     {
+                        try
+                        {
+                            LogUtil.LogTextureTrace("IMGQ_UNITY_FAIL:" + imgPath,
+                                "[VPB IMGQ] Unity LoadImage FAIL. path=" + imgPath + " rawLen=" + rawLength + " jpeg=" + isJpeg + " tjWanted=" + useTurboJpeg);
+                        }
+                        catch { }
                         hadError = true;
                         errorText = "LoadImage failed";
                     }
@@ -873,7 +932,10 @@ namespace VPB
                 else if (decodedFromFastPath)
                 {
 					bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
-                    tex.Apply(createMipMaps, !canCompress && !isSimTexture);
+					// Thumbnails (TurboJPEG RGB24): keep CPU copy readable — non-readable breaks Blit/ReadPixels
+					// in gallery disk-cache pipeline and some UI paths; full-size loads keep original policy.
+					bool makeNoLongerReadable = !isThumbnail && !canCompress && !isSimTexture;
+                    tex.Apply(createMipMaps, makeNoLongerReadable);
                     if (canCompress && tex.format != TextureFormat.DXT1 && tex.format != TextureFormat.DXT5)
                     {
                         try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
@@ -1060,7 +1122,11 @@ namespace VPB
         protected int runningTasks;
         protected const int MaxConcurrentTasks = 16;
         protected int runningThumbnailTasks;
-        protected const int MaxConcurrentThumbnailTasks = 4;
+        protected const int MaxConcurrentThumbnailTasks = 10;
+        /// <summary>When queued image count exceeds this, drop stale thumbnail requests (see <see cref="PruneThumbnailQueueOverBudget"/>).</summary>
+        /// <remarks>Large grids (many cols × buffer rows) enqueue 150+ thumbs per scroll; cap must stay below that burst or prune never runs (imgQ stalls ~500+).</remarks>
+        private const int ThumbnailQueueSoftCap = 280;
+        private const int ThumbnailQueuePruneTarget = 220;
 
 		protected Dictionary<string, Texture2D> thumbnailCache;
 		private const int ThumbnailCacheMaxItems = 512;
@@ -1081,6 +1147,21 @@ namespace VPB
                 {
                     return pendingThumbnailCallbacks != null ? pendingThumbnailCallbacks.Count : 0;
                 }
+            }
+        }
+
+        /// <summary>One-line snapshot for gallery scroll / stall diagnostics (main thread).</summary>
+        public string GetLoaderDebugSnapshot()
+        {
+            try
+            {
+                int q = (queuedImages != null) ? queuedImages.Count : -1;
+                int d = (dispatchedImages != null) ? dispatchedImages.Count : -1;
+                return "imgQ=" + q + " disp=" + d + " runT=" + runningTasks + " runTh=" + runningThumbnailTasks + " pendThCb=" + PendingThumbnailCount;
+            }
+            catch (Exception ex)
+            {
+                return "imgQ=EX:" + ex.GetType().Name;
             }
         }
 
@@ -1396,6 +1477,47 @@ namespace VPB
 			}
 		}
 
+		/// <summary>
+		/// Fast scroll can enqueue thousands of unique VAR paths; only <see cref="MaxConcurrentThumbnailTasks"/> decode at once.
+		/// Remove lowest-urgency queued thumbnails (highest <see cref="QueuedImage.priority"/>), notify callbacks with cancel, return pooled QI.
+		/// Never prunes <c>priority &lt; 0</c> (force-reload / skipCache lane).
+		/// </summary>
+		private void PruneThumbnailQueueOverBudget()
+		{
+			if (queuedImages == null || queuedImages.data == null) return;
+			if (queuedImages.Count <= ThumbnailQueueSoftCap) return;
+			int[] floors = new[] { 56, 48, 40, 32, 24, 16, 8, 0 };
+			int guard = 0;
+			foreach (int floor in floors)
+			{
+				while (queuedImages.Count > ThumbnailQueuePruneTarget && guard++ < 500)
+				{
+					QueuedImage worst = null;
+					int worstP = int.MinValue;
+					List<QueuedImage> data = queuedImages.data;
+					int n = data.Count;
+					for (int i = 0; i < n; i++)
+					{
+						QueuedImage q = data[i];
+						if (q == null || !q.isThumbnail || q.working || q.processed || q.cancel) continue;
+						if (q.priority < 0) continue;
+						if (q.priority < floor) continue;
+						if (q.priority > worstP)
+						{
+							worstP = q.priority;
+							worst = q;
+						}
+					}
+					if (worst == null) break;
+					worst.cancel = true;
+					queuedImages.Remove(worst);
+					DispatchPendingThumbnailCallbacks(worst);
+					pool.Return(worst);
+				}
+				if (queuedImages.Count <= ThumbnailQueuePruneTarget) return;
+			}
+		}
+
 		protected List<QueuedImage> dispatchedImages = new List<QueuedImage>();
 
 		public void CancelGroup(string groupId)
@@ -1438,6 +1560,7 @@ namespace VPB
 			if (qi == null) return;
             // LogUtil.Log("[VPB-Debug] QueueThumbnail: " + qi.imgPath);
 			qi.isThumbnail = true;
+			PruneThumbnailQueueOverBudget();
 			if (!string.IsNullOrEmpty(qi.imgPath))
 			{
 				lock (pendingThumbnailLock)
@@ -1448,37 +1571,38 @@ namespace VPB
 					if (pendingThumbnailCallbacks.TryGetValue(pendingKey, out list))
 					{
 						if (qi.callback != null) list.Add(qi.callback);
-                        
-                        // Promote the existing request to top of queue
-                        // Find it in queuedImages
-                        if (queuedImages != null && queuedImages.data != null)
-                        {
-                            QueuedImage existing = null;
-                            for (int i = 0; i < queuedImages.data.Count; i++)
-                            {
-                                QueuedImage cand = queuedImages.data[i];
-                                if (cand.imgPath == qi.imgPath && cand.turboJpegScaleDenom == qi.turboJpegScaleDenom)
-                                {
-                                    existing = cand;
-                                    break;
-                                }
-                            }
-
-                            if (existing != null)
-                            {
-                                queuedImages.Remove(existing);
-                                existing.insertionIndex = ++_insertionOrderCounter;
-                                queuedImages.Enqueue(existing);
-                            }
-                        }
-
-						pool.Return(qi);
-						return;
+						QueuedImage existing = null;
+						if (queuedImages != null && queuedImages.data != null)
+						{
+							for (int i = 0; i < queuedImages.data.Count; i++)
+							{
+								QueuedImage cand = queuedImages.data[i];
+								if (cand.imgPath == qi.imgPath && cand.turboJpegScaleDenom == qi.turboJpegScaleDenom)
+								{
+									existing = cand;
+									break;
+								}
+							}
+						}
+						if (existing != null)
+						{
+							queuedImages.Remove(existing);
+							existing.insertionIndex = ++_insertionOrderCounter;
+							queuedImages.Enqueue(existing);
+							pool.Return(qi);
+							return;
+						}
+						// Dict had pendingKey but no queue row (stale) — keep merged callbacks, own decode with this qi.
+						pendingThumbnailCallbacks[pendingKey] = list;
+						qi.callback = (res) => { DispatchPendingThumbnailCallbacks(res); };
 					}
-					list = new List<ImageLoaderCallback>(4);
-					if (qi.callback != null) list.Add(qi.callback);
-					pendingThumbnailCallbacks[pendingKey] = list;
-					qi.callback = (res) => { DispatchPendingThumbnailCallbacks(res); };
+					else
+					{
+						list = new List<ImageLoaderCallback>(4);
+						if (qi.callback != null) list.Add(qi.callback);
+						pendingThumbnailCallbacks[pendingKey] = list;
+						qi.callback = (res) => { DispatchPendingThumbnailCallbacks(res); };
+					}
 				}
 			}
 			if (queuedImages != null)
@@ -1536,13 +1660,7 @@ namespace VPB
                     if (value.cancel)
                     {
                         if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
-                        {
-                            lock (pendingThumbnailLock)
-                            {
-                                if (pendingThumbnailCallbacks != null)
-                                    pendingThumbnailCallbacks.Remove(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly));
-                            }
-                        }
+                            DispatchPendingThumbnailCallbacks(value);
                         pool.Return(value);
                         continue;
                     }
@@ -1604,6 +1722,11 @@ namespace VPB
                 if (queuedImages.Peek().cancel)
                 {
                     QueuedImage qi = queuedImages.Dequeue();
+                    if (qi.isThumbnail && !string.IsNullOrEmpty(qi.imgPath))
+                    {
+                        qi.cancel = true;
+                        DispatchPendingThumbnailCallbacks(qi);
+                    }
                     pool.Return(qi);
                 }
                 else
@@ -1651,6 +1774,11 @@ namespace VPB
 				{
                     QueuedImage qi = queuedImages.Peek();
 					queuedImages.Dequeue();
+                    if (qi.isThumbnail && !string.IsNullOrEmpty(qi.imgPath))
+                    {
+                        qi.cancel = true;
+                        DispatchPendingThumbnailCallbacks(qi);
+                    }
                     pool.Return(qi);
 				}
 			}
@@ -1743,6 +1871,7 @@ namespace VPB
 
 		protected void Update()
 		{
+			PruneThumbnailQueueOverBudget();
 			PostProcessImageQueue();
             
             // Dispatch pending dispatched items (web requests that just finished)

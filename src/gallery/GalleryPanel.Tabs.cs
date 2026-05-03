@@ -378,7 +378,14 @@ namespace VPB
             if (txt != null)
             {
                 txt.text = label;
-                txt.fontSize = Mathf.RoundToInt(18 * s);
+                // Unity UI Text.fontSize is int and clamps visually at tiny sizes; keep readable floor,
+                // then use localScale to continue shrinking below that floor.
+                const int baseFont = 18;
+                const int minFont = 10;
+                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
+                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                txt.transform.localScale = new Vector3(extra, extra, 1f);
                 txt.color = Color.white;
             }
 
@@ -671,7 +678,12 @@ namespace VPB
             Text txt = btnGO.GetComponentInChildren<Text>();
             if (txt != null)
             {
-                txt.fontSize = Mathf.RoundToInt(18 * s);
+                const int baseFont = 18;
+                const int minFont = 10;
+                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
+                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                txt.transform.localScale = new Vector3(extra, extra, 1f);
                 txt.color = Color.white;
                 txt.horizontalOverflow = HorizontalWrapMode.Overflow;
                 txt.verticalOverflow = VerticalWrapMode.Truncate;
@@ -1108,7 +1120,14 @@ namespace VPB
             float insetR = Mathf.Max(0f, labelInsetRight);
 
             Text txt = btnGO.GetComponentInChildren<Text>();
-            txt.fontSize = Mathf.RoundToInt(18 * s);
+            {
+                const int baseFont = 18;
+                const int minFont = 10;
+                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
+                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                txt.transform.localScale = new Vector3(extra, extra, 1f);
+            }
             txt.color = Color.white;
             txt.alignment = labelAnchor;
             txt.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -2392,6 +2411,20 @@ namespace VPB
                     hp.panel = this;
                     hp.file = file;
                     thumbImg.raycastTarget = true;
+                    // RawImage steals raycasts; forward to row root handler (UIDraggableItem + slop live on btnGO).
+                    try
+                    {
+                        var staleThumbLu = thumbTr.gameObject.GetComponent<UIFileEntryLeftReleaseSelect>();
+                        if (staleThumbLu != null) UnityEngine.Object.Destroy(staleThumbLu);
+                        var rootLu = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                        if (rootLu != null)
+                        {
+                            var fwd = thumbTr.gameObject.GetComponent<GalleryThumbPointerForwarder>();
+                            if (fwd == null) fwd = thumbTr.gameObject.AddComponent<GalleryThumbPointerForwarder>();
+                            fwd.Target = rootLu;
+                        }
+                    }
+                    catch { }
                 }
             }
 

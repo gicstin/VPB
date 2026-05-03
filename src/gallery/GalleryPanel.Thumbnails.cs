@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -42,14 +41,204 @@ namespace VPB
         // Cache for package list thumbnails: package UID -> internal image path (within the package).
         // Keeps package preview lookups cheap while scrolling.
         private readonly Dictionary<string, string> _packagePreviewInternalPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        // Avoid repeated expensive resolve attempts when a package cannot be resolved from SQLite rows (e.g. bad hint during search).
-        private readonly HashSet<string> _packagePreviewResolveFailed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private static bool IsImagePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
             string p = path.ToLowerInvariant();
-            return p.EndsWith(".jpg") || p.EndsWith(".png");
+            return p.EndsWith(".jpg") || p.EndsWith(".jpeg") || p.EndsWith(".png");
+        }
+
+        /// <summary>SQLite / ALL VAR rows often use relative var paths; <see cref="FileManager.GetPackage"/> expects package UID.</summary>
+        private static string CanonicalVarPackageUidFromPathOrHint(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return null;
+            string s = raw.Trim().Replace('\\', '/');
+            if (s.Length == 0) return null;
+            if (s.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) s = s.Substring("AddonPackages/".Length);
+            else if (s.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) s = s.Substring("AllPackages/".Length);
+            int slash = s.LastIndexOf('/');
+            if (slash >= 0 && slash < s.Length - 1) s = s.Substring(slash + 1);
+            if (s.EndsWith(".var", StringComparison.OrdinalIgnoreCase)) s = s.Substring(0, s.Length - 4);
+            else if (s.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) s = s.Substring(0, s.Length - 4);
+            return string.IsNullOrEmpty(s) ? null : s;
+        }
+
+        private static void AppendUniquePackageLookupKey(List<string> keys, string hint)
+        {
+            if (keys == null || string.IsNullOrEmpty(hint)) return;
+            string a = hint.Trim();
+            if (a.Length == 0) return;
+            string b = CanonicalVarPackageUidFromPathOrHint(a);
+            string[] two = new string[] { a, b };
+            for (int ti = 0; ti < two.Length; ti++)
+            {
+                string cand = two[ti];
+                if (string.IsNullOrEmpty(cand)) continue;
+                bool dup = false;
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    if (string.Equals(keys[i], cand, StringComparison.OrdinalIgnoreCase)) { dup = true; break; }
+                }
+                if (!dup) keys.Add(cand);
+            }
+        }
+
+        private static VarPackage TryResolveVarPackageForPackageListEntry(PackageListEntry ple)
+        {
+            if (ple == null) return null;
+            VarPackage pkg = null;
+            try { pkg = ple.Package; } catch { pkg = null; }
+            if (pkg != null) return pkg;
+
+            List<string> keys = new List<string>(4);
+            try { AppendUniquePackageLookupKey(keys, ple.GetPackageUidForGalleryUserTags()); } catch { }
+            try { AppendUniquePackageLookupKey(keys, ple.Path); } catch { }
+            try { AppendUniquePackageLookupKey(keys, ple.Uid); } catch { }
+
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string k = keys[i];
+                if (string.IsNullOrEmpty(k)) continue;
+                try { pkg = FileManager.GetPackage(k, ensureInstalled: false); } catch { pkg = null; }
+                if (pkg != null) return pkg;
+                try { pkg = FileManager.GetPackageForDependency(k, false); } catch { pkg = null; }
+                if (pkg != null) return pkg;
+            }
+            return null;
+        }
+
+        /// <returns>Best non-image sibling extension priority for this basename group (lower = better).</returns>
+        private static int SisterExtRank(string extWithDotLower)
+        {
+            if (string.IsNullOrEmpty(extWithDotLower)) return 50;
+            if (extWithDotLower == ".vam") return 0;
+            if (extWithDotLower == ".vac") return 1;
+            if (extWithDotLower == ".json") return 2;
+            if (extWithDotLower == ".vap") return 3;
+            if (extWithDotLower == ".vab") return 4;
+            if (extWithDotLower == ".cs") return 20;
+            if (extWithDotLower == ".dll") return 20;
+            return 15;
+        }
+
+        private static bool IsNonImageSiblingExt(string extWithDotLower)
+        {
+            if (string.IsNullOrEmpty(extWithDotLower)) return false;
+            return extWithDotLower != ".jpg" && extWithDotLower != ".jpeg" && extWithDotLower != ".png";
+        }
+
+        private struct VarInternalMember
+        {
+            public string FullPathNorm;
+            public string ExtLower;
+            public bool IsImage;
+        }
+
+        /// <summary>
+        /// Package-row preview: scan var index for <c>foo.jpg</c> + same-folder non-image sibling <c>foo.*</c> (e.g. <c>foo.vam</c>). No filesystem walk.
+        /// </summary>
+        private static string PickPackagePreviewInternalPathFromFileList(List<string> names)
+        {
+            if (names == null || names.Count == 0) return null;
+
+            var groups = new Dictionary<string, List<VarInternalMember>>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < names.Count; i++)
+            {
+                string n = names[i];
+                if (string.IsNullOrEmpty(n)) continue;
+                string norm = n.Replace('\\', '/');
+                try
+                {
+                    string dir = Path.GetDirectoryName(norm);
+                    if (!string.IsNullOrEmpty(dir)) dir = dir.Replace('\\', '/');
+                    else dir = "";
+
+                    string leaf = Path.GetFileName(norm);
+                    if (string.IsNullOrEmpty(leaf)) continue;
+                    string baseNo = Path.GetFileNameWithoutExtension(leaf);
+                    if (string.IsNullOrEmpty(baseNo)) continue;
+                    string ext = Path.GetExtension(leaf).ToLowerInvariant();
+                    if (string.IsNullOrEmpty(ext)) continue;
+                    bool isImg = ext == ".jpg" || ext == ".jpeg" || ext == ".png";
+                    string key = dir + "|" + baseNo;
+                    List<VarInternalMember> list;
+                    if (!groups.TryGetValue(key, out list) || list == null)
+                    {
+                        list = new List<VarInternalMember>(2);
+                        groups[key] = list;
+                    }
+                    VarInternalMember vm;
+                    vm.FullPathNorm = norm;
+                    vm.ExtLower = ext;
+                    vm.IsImage = isImg;
+                    list.Add(vm);
+                }
+                catch { }
+            }
+
+            string bestImg = null;
+            int bestScore = int.MaxValue;
+            string tieBreak = null;
+
+            foreach (KeyValuePair<string, List<VarInternalMember>> kvp in groups)
+            {
+                List<VarInternalMember> list = kvp.Value;
+                if (list == null || list.Count < 2) continue;
+
+                bool hasNonImage = false;
+                int bestSisterRank = int.MaxValue;
+                for (int j = 0; j < list.Count; j++)
+                {
+                    VarInternalMember m = list[j];
+                    if (!m.IsImage && IsNonImageSiblingExt(m.ExtLower))
+                    {
+                        hasNonImage = true;
+                        int r = SisterExtRank(m.ExtLower);
+                        if (r < bestSisterRank) bestSisterRank = r;
+                    }
+                }
+                if (!hasNonImage || bestSisterRank >= int.MaxValue) continue;
+
+                for (int j = 0; j < list.Count; j++)
+                {
+                    VarInternalMember m = list[j];
+                    if (!m.IsImage || !IsImagePath(m.FullPathNorm)) continue;
+                    string imgPath = m.FullPathNorm;
+                    int score = bestSisterRank * 10000 + imgPath.Length;
+                    if (score < bestScore || (score == bestScore && (tieBreak == null || string.CompareOrdinal(imgPath, tieBreak) < 0)))
+                    {
+                        bestScore = score;
+                        bestImg = imgPath;
+                        tieBreak = imgPath;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(bestImg)) return bestImg;
+
+            // Legacy: preview-ish names first, then first image.
+            string chosenLegacy = null;
+            for (int i = 0; i < names.Count; i++)
+            {
+                string n = names[i];
+                if (!IsImagePath(n)) continue;
+                string ln = n.ToLowerInvariant();
+                if (ln.Contains("preview") || ln.Contains("thumbnail") || ln.Contains("thumb") || ln.Contains("screenshot"))
+                {
+                    chosenLegacy = n;
+                    break;
+                }
+            }
+            if (chosenLegacy == null)
+            {
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string n = names[i];
+                    if (IsImagePath(n)) return n;
+                }
+            }
+            return chosenLegacy;
         }
 
         private string GetOrChoosePackagePreviewInternalPath(VarPackage pkg)
@@ -64,30 +253,8 @@ namespace VPB
                 List<string> names; List<long> ticks; List<long> sizes;
                 if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) return null;
 
-                string chosen = null;
-
-                // Prefer preview-ish names.
-                for (int i = 0; i < names.Count; i++)
-                {
-                    string n = names[i];
-                    if (!IsImagePath(n)) continue;
-                    string ln = n.ToLowerInvariant();
-                    if (ln.Contains("preview") || ln.Contains("thumbnail") || ln.Contains("thumb") || ln.Contains("screenshot"))
-                    {
-                        chosen = n;
-                        break;
-                    }
-                }
-
-                // Fallback: first image found.
-                if (chosen == null)
-                {
-                    for (int i = 0; i < names.Count; i++)
-                    {
-                        string n = names[i];
-                        if (IsImagePath(n)) { chosen = n; break; }
-                    }
-                }
+                // Sister rule (foo.jpg ↔ foo.vam / any non-image) then legacy preview-name / first-image.
+                string chosen = PickPackagePreviewInternalPathFromFileList(names);
 
                 if (!string.IsNullOrEmpty(uid))
                 {
@@ -110,6 +277,8 @@ namespace VPB
             public Texture2D Texture;
             public long LastWriteTime;
             public string GroupId;
+            /// <summary>Matches <see cref="CustomImageLoaderThreaded.QueuedImage.turboJpegScaleDenom"/> for disk cache key <c>|tjN</c>.</summary>
+            public int TurboJpegScaleDenom;
         }
 
         private IEnumerator ProcessThumbnailCacheQueue()
@@ -151,7 +320,7 @@ namespace VPB
                     if (string.IsNullOrEmpty(job.Path) || job.Texture == null) { yield return null; continue; }
                     if (!string.IsNullOrEmpty(job.GroupId) && job.GroupId != currentLoadingGroupId) { yield return null; continue; }
 
-                    yield return StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(job.Path, job.Texture, job.LastWriteTime));
+                    yield return StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(job.Path, job.Texture, job.LastWriteTime, job.TurboJpegScaleDenom));
                     _thumbCacheSaved++;
 
                     // Pause at least 2 frames between saves so ReadPixels/flush don't stack up
@@ -166,10 +335,10 @@ namespace VPB
             }
         }
 
-        private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId)
+        private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId, int turboJpegScaleDenom)
         {
             if (pendingThumbnailCacheJobs == null) pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
-            pendingThumbnailCacheJobs.Enqueue(new ThumbnailCacheJob { Path = path, Texture = tex, LastWriteTime = lastWriteTime, GroupId = groupId });
+            pendingThumbnailCacheJobs.Enqueue(new ThumbnailCacheJob { Path = path, Texture = tex, LastWriteTime = lastWriteTime, GroupId = groupId, TurboJpegScaleDenom = turboJpegScaleDenom });
             _thumbCacheTotalEnqueued++;
             _thumbCacheFinishTime = -1f;
             ShowThumbnailCacheProgress();
@@ -279,41 +448,12 @@ namespace VPB
             }
             else if (file is PackageListEntry ple)
             {
-                // For package list rows, pick an internal image (jpg/png) inside the .var.
-                // IMPORTANT: do not request thumbnails from the .var file itself; that can trigger package
-                // ensure-install paths and fails on some setups. Use an internal image path instead.
-                VarPackage pkg = null;
-                try { pkg = ple.Package; } catch { pkg = null; }
-                if (pkg == null)
-                {
-                    // SQLite fast-path ALL VAR rows often defer package resolve; thumbnail still needs a live VarPackage
-                    // to locate internal preview image. Resolve by UID without forcing install.
-                    try
-                    {
-                        string uid = ple.GetPackageUidForGalleryUserTags();
-                        if (!string.IsNullOrEmpty(uid))
-                        {
-                            if (_packagePreviewResolveFailed.Contains(uid))
-                            {
-                                ClearThumbnailTarget(target);
-                                return;
-                            }
-                            // Prefer exact GetPackage(uid) semantics; fallback to dependency lookup.
-                            try { pkg = FileManager.GetPackage(uid, ensureInstalled: false); } catch { pkg = null; }
-                            if (pkg == null)
-                            {
-                                try { pkg = FileManager.GetPackageForDependency(uid, false); } catch { pkg = null; }
-                            }
-                            if (pkg == null) _packagePreviewResolveFailed.Add(uid);
-                        }
-                    }
-                    catch { pkg = null; }
-                }
-
-                if (pkg != null)
+                // Package list row: resolve VarPackage then pick internal preview (sister JPG/PNG + non-image sibling, etc.).
+                VarPackage pkg = TryResolveVarPackageForPackageListEntry(ple);
+                if (pkg != null && !string.IsNullOrEmpty(pkg.Path))
                 {
                     string chosen = GetOrChoosePackagePreviewInternalPath(pkg);
-                    if (!string.IsNullOrEmpty(chosen) && !string.IsNullOrEmpty(pkg.Path))
+                    if (!string.IsNullOrEmpty(chosen))
                         imgPath = pkg.Path + ":/" + chosen.Replace('\\', '/');
                 }
             }
@@ -398,9 +538,26 @@ namespace VPB
             // previous binding/texture so recycled list rows don't show stale thumbnails.
             if (string.IsNullOrEmpty(imgPath))
             {
+                try
+                {
+                    LogUtil.LogTextureTrace("THUMB_NO_PATH:" + (file != null ? file.Path : "null"),
+                        "[VPB THUMB] resolve imgPath failed. fileType=" + (file != null ? file.GetType().Name : "null") + " filePath=" + (file != null ? file.Path : "null"));
+                }
+                catch { }
                 ClearThumbnailTarget(target);
                 return;
             }
+
+            try
+            {
+                LogUtil.LogTextureTrace("THUMB_REQ:" + imgPath,
+                    "[VPB THUMB] request. fileType=" + (file != null ? file.GetType().Name : "null") +
+                    " filePath=" + (file != null ? file.Path : "null") +
+                    " imgPath=" + imgPath +
+                    " isPkgPath=" + (GalleryThumbnailCache.Instance != null && GalleryThumbnailCache.Instance.IsPackagePath(imgPath)) +
+                    " unityOnly=" + thumbnailUnityDecodeOnly);
+            }
+            catch { }
 
             // Debug Log
             // LogUtil.Log($"[VPB] LoadThumbnail requested for {file.Name} (GroupId: {currentLoadingGroupId})");
@@ -511,7 +668,7 @@ namespace VPB
                     }
 
                     if (!res.loadedFromGalleryCache && capturedGroupId == currentLoadingGroupId)
-                        EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, capturedGroupId);
+                        EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, capturedGroupId, res.turboJpegScaleDenom);
                     return;
                 }
 

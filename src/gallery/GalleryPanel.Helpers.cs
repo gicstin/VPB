@@ -54,6 +54,21 @@ namespace VPB
     /// so <see cref="Button.onClick"/> drops taps that moved past the drag threshold; right-click uses
     /// <see cref="IPointerClickHandler"/> and does not fight the scroll view the same way.
     /// </summary>
+    /// <summary>
+    /// Thumbnail <see cref="RawImage"/> sits above row root and steals raycasts. Forward <see cref="IPointerUpHandler"/>
+    /// to root <see cref="UIFileEntryLeftReleaseSelect"/> so <see cref="UIDraggableItem"/> / hold-to-launch / slop logic
+    /// runs on correct GameObject (duplicate <c>UIFileEntryLeftReleaseSelect</c> on thumb used <c>GetComponent</c> on wrong transform).
+    /// </summary>
+    internal sealed class GalleryThumbPointerForwarder : MonoBehaviour, IPointerUpHandler
+    {
+        public UIFileEntryLeftReleaseSelect Target;
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (Target != null) Target.OnPointerUp(eventData);
+        }
+    }
+
     public sealed class UIFileEntryLeftReleaseSelect : MonoBehaviour, IPointerUpHandler
     {
         public GalleryPanel Panel;

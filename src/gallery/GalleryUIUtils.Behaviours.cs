@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -607,6 +606,15 @@ namespace VPB
         }
     }
 
+    /// <summary>
+    /// Run after <see cref="ScrollbarSync.LateUpdate"/> (default order). Uses
+    /// <see cref="ScrollRect.verticalNormalizedPosition"/> for row window (same mapping as
+    /// <see cref="ScrollToCenterItem"/>). Do not call <see cref="Canvas.ForceUpdateCanvases"/> on scroll —
+    /// it re-enters layout and breaks ScrollRect + decoupled scrollbar after first drag.
+    /// One <see cref="Canvas.willRenderCanvases"/> flush per burst re-binds after layout. Cache busted on every
+    /// <see cref="ScrollRect.onValueChanged"/> so LateUpdate never skips a pass on stale (start,end).
+    /// </summary>
+    [DefaultExecutionOrder(50)]
     public class RecyclingGridView : MonoBehaviour
     {
         private ScrollRect _scrollRect;
@@ -667,17 +675,47 @@ namespace VPB
         private bool _needsVisibleUpdate = false;
         private bool _needsLayoutUpdate = true; // Start with true to ensure initial layout
 
-        /// <summary>
-        /// Last visible index range passed to recycle/bind — avoids redoing O(n) recycle scans
-        /// every frame while the scroll offset moves inside the same rows (common during drag).
-        /// </summary>
+        /// <summary>Last committed visible index range (for diagnostics only).</summary>
         private int _lastVisibleStartIndex = -1;
         private int _lastVisibleEndIndex = -1;
+
+        private bool _pendingScrollRenderFlush;
 
         private void InvalidateVisibleRangeCache()
         {
             _lastVisibleStartIndex = -1;
             _lastVisibleEndIndex = -1;
+        }
+
+        /// <summary>Top of visible band in content space — derived from norm (authoritative when <see cref="ScrollbarSync"/> drives ScrollRect).</summary>
+        private float GetContentScrollTopYForVisibility()
+        {
+            if (viewport == null || content == null) return 0f;
+            if (_scrollRect == null) return Mathf.Max(0f, content.anchoredPosition.y);
+
+            float vh = viewport.rect.height;
+            if (vh <= 0.01f) vh = 800f;
+            float ch = Mathf.Max(content.rect.height, content.sizeDelta.y);
+            float maxScrollY = Mathf.Max(0f, ch - vh);
+            if (maxScrollY <= 0.01f) return 0f;
+            float norm = Mathf.Clamp01(_scrollRect.verticalNormalizedPosition);
+            return Mathf.Clamp((1f - norm) * maxScrollY, 0f, maxScrollY);
+        }
+
+        private void ScrollFlushBeforeRender()
+        {
+            Canvas.willRenderCanvases -= ScrollFlushBeforeRender;
+            _pendingScrollRenderFlush = false;
+            if (!isActiveAndEnabled || itemsCount == 0 || viewport == null || content == null) return;
+            InvalidateVisibleRangeCache();
+            UpdateVisibleItems('W');
+        }
+
+        private void QueueScrollFlushAfterLayout()
+        {
+            if (_pendingScrollRenderFlush) return;
+            _pendingScrollRenderFlush = true;
+            Canvas.willRenderCanvases += ScrollFlushBeforeRender;
         }
 
         private void Awake()
@@ -727,15 +765,27 @@ namespace VPB
                 RecalculateLayout();
             }
 
-            if (_needsVisibleUpdate)
-            {
-                _needsVisibleUpdate = false;
-                UpdateVisibleItems();
-            }
+            // Visibility refresh is deferred to LateUpdate: ScrollRect + manual ScrollbarSync apply
+            // content.anchoredPosition after our Update runs; scrollbar jumps could leave stale scroll offset
+            // here so start/end indices match old viewport → no recycle/bind → thumbnails never enqueue.
+        }
+
+        private void LateUpdate()
+        {
+            if (!_needsVisibleUpdate) return;
+            _needsVisibleUpdate = false;
+            UpdateVisibleItems('L');
+        }
+
+        private void OnDisable()
+        {
+            Canvas.willRenderCanvases -= ScrollFlushBeforeRender;
+            _pendingScrollRenderFlush = false;
         }
 
         private void OnDestroy()
         {
+            Canvas.willRenderCanvases -= ScrollFlushBeforeRender;
             if (_scrollRect != null) _scrollRect.onValueChanged.RemoveListener(OnScroll);
         }
 
@@ -889,7 +939,7 @@ namespace VPB
         public void Refresh()
         {
             RecycleAll();
-            UpdateVisibleItems();
+            UpdateVisibleItems('R');
         }
 
         /// <summary>Returns the index of the item whose row is closest to the viewport center.</summary>
@@ -898,7 +948,8 @@ namespace VPB
             if (content == null || viewport == null || itemsCount == 0) return 0;
             float effectiveItemHeight = itemHeight + spacingY;
             if (effectiveItemHeight <= 0.1f) return 0;
-            float centerY = content.anchoredPosition.y + viewport.rect.height * 0.5f;
+            float scrollTop = GetContentScrollTopYForVisibility();
+            float centerY = scrollTop + viewport.rect.height * 0.5f;
             int centerRow = Mathf.FloorToInt(centerY / effectiveItemHeight);
             centerRow = Mathf.Clamp(centerRow, 0, Mathf.Max(0, rowCount - 1));
             return Mathf.Clamp(centerRow * colCount, 0, itemsCount - 1);
@@ -913,35 +964,40 @@ namespace VPB
             int row = index / Mathf.Max(1, colCount);
             float rowCenterY = row * effectiveItemHeight + spacingY + itemHeight * 0.5f;
             float targetScrollY = rowCenterY - viewport.rect.height * 0.5f;
-            float maxScrollY = content.sizeDelta.y - viewport.rect.height;
-            targetScrollY = Mathf.Clamp(targetScrollY, 0f, Mathf.Max(0f, maxScrollY));
+            float vh = viewport.rect.height;
+            float ch = Mathf.Max(content.rect.height, content.sizeDelta.y);
+            float maxScrollY = Mathf.Max(0f, ch - vh);
+            targetScrollY = Mathf.Clamp(targetScrollY, 0f, maxScrollY);
             if (_scrollRect != null)
                 _scrollRect.verticalNormalizedPosition = maxScrollY > 0f
                     ? 1f - targetScrollY / maxScrollY
                     : 1f;
-            UpdateVisibleItems();
+            UpdateVisibleItems('C');
         }
 
         /// <summary>Jump scroll to the first row (Unity: vertical normalized 1 = top).</summary>
         public void ScrollToTopImmediate()
         {
             if (_scrollRect != null) _scrollRect.verticalNormalizedPosition = 1f;
-            UpdateVisibleItems();
+            UpdateVisibleItems('T');
         }
 
         /// <summary>Jump scroll to the last row (Unity: vertical normalized 0 = bottom).</summary>
         public void ScrollToBottomImmediate()
         {
             if (_scrollRect != null) _scrollRect.verticalNormalizedPosition = 0f;
-            UpdateVisibleItems();
+            UpdateVisibleItems('B');
         }
 
         private void OnScroll(Vector2 pos)
         {
+            // Bust cache on every ScrollRect delta so LateUpdate cannot no-op on stale (start,end) before willRender runs.
+            InvalidateVisibleRangeCache();
             _needsVisibleUpdate = true;
+            QueueScrollFlushAfterLayout();
         }
 
-        private void UpdateVisibleItems()
+        private void UpdateVisibleItems(char reason = '?')
         {
             if (itemsCount == 0 || viewport == null || content == null)
             {
@@ -956,7 +1012,7 @@ namespace VPB
             float viewHeight = viewport.rect.height;
             if (viewHeight <= 0) viewHeight = 800f;
 
-            float startY = content.anchoredPosition.y;
+            float startY = GetContentScrollTopYForVisibility();
             float endY = startY + viewHeight;
 
             // 2-row buffer above and below so thumbnails begin loading before items enter view.
@@ -971,14 +1027,6 @@ namespace VPB
 
             int startIndex = startRow * colCount;
             int endIndex = Mathf.Min(itemsCount - 1, (endRow * colCount) + colCount - 1);
-
-            // Same window as last frame: no recycle/bind work (dominant cost during smooth scroll).
-            // Still refresh center index so future binds use an up-to-date priority hint when rows change.
-            if (_lastVisibleStartIndex == startIndex && _lastVisibleEndIndex == endIndex && activeItems.Count > 0)
-            {
-                CachedCenterItemIndex = GetCenterItemIndex();
-                return;
-            }
 
             // Cache center index once for the entire bind pass so onBindItem callbacks
             // don't recompute it (and access viewport.rect) for every single item.
@@ -1016,8 +1064,27 @@ namespace VPB
                 }
             }
 
+            int idxMin = int.MaxValue;
+            int idxMax = int.MinValue;
+            for (int ai = 0; ai < activeItems.Count; ai++)
+            {
+                RecyclingGridItem it = activeItems[ai];
+                if (it == null) continue;
+                if (it.index < idxMin) idxMin = it.index;
+                if (it.index > idxMax) idxMax = it.index;
+            }
+
+            bool setMismatch = _activeIndexSet.Count != activeItems.Count;
+            bool outOfBand = activeItems.Count > 0 && (idxMin < startIndex || idxMax > endIndex);
+
             _lastVisibleStartIndex = startIndex;
             _lastVisibleEndIndex = endIndex;
+
+            if (setMismatch || outOfBand)
+            {
+                string idxSpan = (activeItems.Count == 0 || idxMin == int.MaxValue) ? "na..na" : (idxMin + ".." + idxMax);
+                LogUtil.LogWarning("[VPB RGVScroll] UVI_INTEGRITY_FAIL reason=" + reason + " pred=" + startIndex + ".." + endIndex + " idxAct=" + idxSpan);
+            }
         }
 
         private void PositionItem(RectTransform item, int index)
@@ -1167,14 +1234,14 @@ namespace VPB
             _isPointerDown = false;
         }
 
-        public void OnPointerDown(PointerEventData eventData) 
-        { 
-            _isPointerDown = true; 
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            _isPointerDown = true;
         }
 
-        public void OnPointerUp(PointerEventData eventData) 
-        { 
-            _isPointerDown = false; 
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            _isPointerDown = false;
             // Final sync on release to ensure alignment
             if (scrollRect != null && scrollbar != null)
             {

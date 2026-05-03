@@ -969,7 +969,19 @@ namespace VPB
             textRT.sizeDelta = new Vector2(200, 40);
             {
                 var rt = textRT;
-                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(200f * s, 40f * s); if (paginationText) paginationText.fontSize = Mathf.RoundToInt(18 * s); });
+                innerPaneScaleActions.Add(s =>
+                {
+                    if (rt) rt.sizeDelta = new Vector2(200f * s, 40f * s);
+                    if (paginationText)
+                    {
+                        const int baseFont = 18;
+                        const int minFont = 10;
+                        float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                        paginationText.fontSize = Mathf.RoundToInt(baseFont * fontScale);
+                        float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                        paginationText.transform.localScale = new Vector3(extra, extra, 1f);
+                    }
+                });
             }
 
             // Filter Mode Label (shown in filter mode, left of clear button)
@@ -1161,10 +1173,14 @@ namespace VPB
                     if (rRT != null) rRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (rndRT != null) rndRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (hRT != null) hRT.sizeDelta = new Vector2(40f * s, 40f * s);
-                    if (uT != null) uT.fontSize = Mathf.RoundToInt(14 * s);
-                    if (rT != null) rT.fontSize = Mathf.RoundToInt(14 * s);
-                    if (rndT != null) rndT.fontSize = Mathf.RoundToInt(14 * s);
-                    if (hT != null) hT.fontSize = Mathf.RoundToInt(14 * s);
+                    const int baseFont = 14;
+                    const int minFont = 9;
+                    float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                    float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                    if (uT != null) { uT.fontSize = Mathf.RoundToInt(baseFont * fontScale); uT.transform.localScale = new Vector3(extra, extra, 1f); }
+                    if (rT != null) { rT.fontSize = Mathf.RoundToInt(baseFont * fontScale); rT.transform.localScale = new Vector3(extra, extra, 1f); }
+                    if (rndT != null) { rndT.fontSize = Mathf.RoundToInt(baseFont * fontScale); rndT.transform.localScale = new Vector3(extra, extra, 1f); }
+                    if (hT != null) { hT.fontSize = Mathf.RoundToInt(baseFont * fontScale); hT.transform.localScale = new Vector3(extra, extra, 1f); }
                 });
             }
             var footerBtnGOs = new GameObject[] {
@@ -1192,7 +1208,19 @@ namespace VPB
                 var rt = footerBtnGOs[i] != null ? footerBtnGOs[i].GetComponent<RectTransform>() : null;
                 var t = footerBtnGOs[i] != null ? footerBtnGOs[i].GetComponentInChildren<Text>() : null;
                 int f = footerBtnFonts[i];
-                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(40f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(f*s); });
+                innerPaneScaleActions.Add(s =>
+                {
+                    if (rt) rt.sizeDelta = new Vector2(40f * s, 40f * s);
+                    if (t)
+                    {
+                        int baseFont = f;
+                        int minFont = Mathf.Max(8, Mathf.RoundToInt(f * 0.6f));
+                        float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                        t.fontSize = Mathf.RoundToInt(baseFont * fontScale);
+                        float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                        t.transform.localScale = new Vector3(extra, extra, 1f);
+                    }
+                });
             }
 
             innerPaneScaleActions.Add(s => { try { LayoutScrollbarJumpButtons(s); } catch { } });
@@ -1215,7 +1243,19 @@ namespace VPB
             {
                 var t = footerFilterModeText;
                 var rt = t != null ? t.GetComponent<RectTransform>() : null;
-                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(180f*s, 40f*s); if (t) t.fontSize = Mathf.RoundToInt(22*s); });
+                innerPaneScaleActions.Add(s =>
+                {
+                    if (rt) rt.sizeDelta = new Vector2(180f * s, 40f * s);
+                    if (t)
+                    {
+                        const int baseFont = 22;
+                        const int minFont = 12;
+                        float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                        t.fontSize = Mathf.RoundToInt(baseFont * fontScale);
+                        float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                        t.transform.localScale = new Vector3(extra, extra, 1f);
+                    }
+                });
             }
             // Scale the spacer
             {
@@ -2811,7 +2851,11 @@ namespace VPB
                 try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, settingsFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
             else if (hadSettingsPanel && !hasSettingsPanel)
                 try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
-            
+
+            // Ensure settings list view active before layout pass so first click opens list immediately.
+            if (type == ContentType.Settings)
+                SyncInternalSettingsListView();
+
             UpdateLayout();
             UpdateTabs();
 
@@ -2827,9 +2871,6 @@ namespace VPB
                     RefreshHistoryBrowsePreferLight(true);
                 }
             }
-
-            if (type == ContentType.Settings)
-                SyncInternalSettingsListView();
 
             if (timeCategoryCreatorSwitch)
                 EndSideTabCategoryCreatorTiming();
@@ -2880,7 +2921,11 @@ namespace VPB
                 try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, settingsFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
             else if (hadSettingsPanel && !hasSettingsPanel)
                 try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
-            
+
+            // Ensure settings list view active before layout pass so first click opens list immediately.
+            if (type == ContentType.Settings)
+                SyncInternalSettingsListView();
+
             UpdateLayout();
             UpdateTabs();
 
@@ -2896,9 +2941,6 @@ namespace VPB
                     RefreshHistoryBrowsePreferLight(true);
                 }
             }
-
-            if (type == ContentType.Settings)
-                SyncInternalSettingsListView();
 
             if (timeCategoryCreatorSwitch)
                 EndSideTabCategoryCreatorTiming();

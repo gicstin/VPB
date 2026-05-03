@@ -1894,39 +1894,96 @@ namespace VPB
 		}
 
 		/// <summary>
+		/// Canonical <c>Author.Name.version</c> from gallery index fields. Index sometimes stores full
+		/// <c>AddonPackages/Author.Name.version.var</c> in <paramref name="storedPackageUid"/>; <c>packagesByUid</c> keys never use that form.
+		/// Prefer filename from <paramref name="lastKnownVarPath"/> when present.
+		/// </summary>
+		private static string CanonicalPackageUidFromIndexedRow(string storedPackageUid, string lastKnownVarPath)
+		{
+			string fromPath = null;
+			if (!string.IsNullOrEmpty(lastKnownVarPath))
+			{
+				try
+				{
+					string fn = Path.GetFileName(lastKnownVarPath.TrimEnd('/', '\\'));
+					if (!string.IsNullOrEmpty(fn) && fn.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+						fromPath = fn.Substring(0, fn.Length - 4);
+				}
+				catch { }
+			}
+			if (!string.IsNullOrEmpty(fromPath))
+				return fromPath;
+
+			if (string.IsNullOrEmpty(storedPackageUid))
+				return null;
+
+			string s = storedPackageUid.Trim().Replace('\\', '/');
+			try
+			{
+				if (s.IndexOf('/') >= 0)
+					s = Path.GetFileName(s.TrimEnd('/', '\\'));
+			}
+			catch { }
+
+			if (string.IsNullOrEmpty(s))
+				return null;
+
+			if (s.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+				s = s.Substring(0, s.Length - 4);
+			else if (s.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+				s = s.Substring(0, s.Length - 4);
+
+			return string.IsNullOrEmpty(s) ? null : s;
+		}
+
+		/// <summary>
 		/// Resolve a <see cref="VarPackage"/> for an indexed gallery row without assuming the on-disk path is still correct:
 		/// prefer <c>packagesByUid</c>, then last-known path from the index, then <c>AddonPackages/</c> / <c>AllPackages/</c> by .var file name.
 		/// </summary>
 		public static bool TryResolveVarPackageForIndexedGalleryRow(string packageUid, string lastKnownVarPath, out VarPackage pkg)
 		{
 			pkg = null;
-			if (string.IsNullOrEmpty(packageUid)) return false;
+			string uidKey = CanonicalPackageUidFromIndexedRow(packageUid, lastKnownVarPath);
+			if (string.IsNullOrEmpty(uidKey)) return false;
 
 			lock (packagesLock)
 			{
-				if (packagesByUid != null && packagesByUid.TryGetValue(packageUid, out pkg) && pkg != null)
+				if (packagesByUid != null && packagesByUid.TryGetValue(uidKey, out pkg) && pkg != null)
 					return true;
 			}
 
 			if (!string.IsNullOrEmpty(lastKnownVarPath))
 			{
 				pkg = GetPackage(lastKnownVarPath, false);
-				if (pkg != null && string.Equals(pkg.Uid, packageUid, StringComparison.OrdinalIgnoreCase))
+				if (pkg != null && string.Equals(pkg.Uid, uidKey, StringComparison.OrdinalIgnoreCase))
 					return true;
 				pkg = null;
 			}
 
-			string fn = string.IsNullOrEmpty(lastKnownVarPath) ? null : Path.GetFileName(lastKnownVarPath.TrimEnd('/'));
+			string fn = string.IsNullOrEmpty(lastKnownVarPath) ? null : Path.GetFileName(lastKnownVarPath.TrimEnd('/', '\\'));
 			if (!string.IsNullOrEmpty(fn) && fn.IndexOf('.') >= 0)
 			{
 				pkg = GetPackage("AddonPackages/" + fn, false);
-				if (pkg != null && string.Equals(pkg.Uid, packageUid, StringComparison.OrdinalIgnoreCase))
+				if (pkg != null && string.Equals(pkg.Uid, uidKey, StringComparison.OrdinalIgnoreCase))
 					return true;
 				pkg = null;
 				pkg = GetPackage("AllPackages/" + fn, false);
-				if (pkg != null && string.Equals(pkg.Uid, packageUid, StringComparison.OrdinalIgnoreCase))
+				if (pkg != null && string.Equals(pkg.Uid, uidKey, StringComparison.OrdinalIgnoreCase))
 					return true;
 				pkg = null;
+			}
+
+			// Legacy: stored UID column is a full path — try direct path resolve.
+			if (!string.IsNullOrEmpty(packageUid))
+			{
+				string p = packageUid.Replace('\\', '/').Trim();
+				if (p.IndexOf('/') >= 0 || p.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+				{
+					pkg = GetPackage(p, false);
+					if (pkg != null && string.Equals(pkg.Uid, uidKey, StringComparison.OrdinalIgnoreCase))
+						return true;
+					pkg = null;
+				}
 			}
 
 			return false;

@@ -541,7 +541,11 @@ namespace VPB
             float scale = VPBConfig.Instance.CurrentSideButtonScale;
             float w = 120f * scale;
             float h = 50f * scale;
-            int fontSize = Mathf.RoundToInt(20f * scale);
+            const int baseFont = 20;
+            const int minFont = 11;
+            float fontScale = Mathf.Clamp(scale, (float)minFont / (float)baseFont, 100f);
+            int fontSize = Mathf.RoundToInt(baseFont * fontScale);
+            float extra = (fontScale > 0f) ? (scale / fontScale) : 1f;
             float containerW = 130f * scale;
             float containerOffset = 140f * scale;
 
@@ -553,7 +557,7 @@ namespace VPB
                 bool square = UsesSquareChromeSideButton(rt, rightSideButtons);
                 rt.sizeDelta = new Vector2(square ? squareW : w, h);
                 var t = rt.GetComponentInChildren<Text>(true);
-                if (t != null) t.fontSize = fontSize;
+                if (t != null) { t.fontSize = fontSize; t.transform.localScale = new Vector3(extra, extra, 1f); }
             }
             for (int i = 0; i < leftSideButtons.Count; i++)
             {
@@ -562,7 +566,7 @@ namespace VPB
                 bool square = UsesSquareChromeSideButton(rt, leftSideButtons);
                 rt.sizeDelta = new Vector2(square ? squareW : w, h);
                 var t = rt.GetComponentInChildren<Text>(true);
-                if (t != null) t.fontSize = fontSize;
+                if (t != null) { t.fontSize = fontSize; t.transform.localScale = new Vector3(extra, extra, 1f); }
             }
 
             if (rightSideContainer != null)

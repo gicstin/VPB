@@ -111,10 +111,10 @@ namespace VPB
 
         public static float BenchmarkStartTime = 0f;
 
-        public void SetLayoutMode(GalleryLayoutMode mode, bool persistConfig = true)
+        public void SetLayoutMode(GalleryLayoutMode mode, bool persistConfig = true, bool keepInternalSettingsMode = false)
         {
             // Any explicit middle-layout switch must leave internal settings mode.
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            if (!keepInternalSettingsMode && (IsSettingsPanelOpen() || settingsListViewActive))
                 ExitInternalSettingsMode(false);
             if (layoutMode == mode) return;
             

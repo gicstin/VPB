@@ -13,6 +13,12 @@ namespace VPB
         private const string CACHE_MAGIC = "VPBCACHE";
         private const int CACHE_HEADER_SIZE = 20;
 
+        /// <summary>If <c>gallery_thumbnails.bin</c> exceeds this on open, file is deleted and rebuilt empty (full scan + huge dict OOM/hang).</summary>
+        private const long MaxThumbnailCacheFileBytes = 6L * 1024 * 1024 * 1024;
+
+        /// <summary>Stop scanning and truncate tail after this many index rows (RAM bound for path strings + dict).</summary>
+        private const int MaxThumbnailIndexEntries = 900000;
+
         private static GalleryThumbnailCache _instance;
         private static readonly object instanceLock = new object();
 
@@ -121,6 +127,24 @@ namespace VPB
                 fileStream = new FileStream(cacheFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, 65536, FileOptions.RandomAccess);
                 writer = new BinaryWriter(fileStream);
                 reader = new BinaryReader(fileStream);
+
+                long len = fileStream.Length;
+                if (len > MaxThumbnailCacheFileBytes)
+                {
+                    Debug.LogWarning("GalleryThumbnailCache: Cache file is " + len + " bytes (limit " + MaxThumbnailCacheFileBytes + "). Deleting to avoid startup hang/OOM. Path: " + cacheFilePath);
+                    CloseInternal();
+                    try
+                    {
+                        File.Delete(cacheFilePath);
+                    }
+                    catch (Exception dex)
+                    {
+                        Debug.LogError("GalleryThumbnailCache: Failed to delete oversized cache: " + dex.Message);
+                    }
+                    fileStream = new FileStream(cacheFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, 65536, FileOptions.RandomAccess);
+                    writer = new BinaryWriter(fileStream);
+                    reader = new BinaryReader(fileStream);
+                }
 
                 BuildIndex();
             }
@@ -249,6 +273,11 @@ namespace VPB
                     };
 
                     index[path] = entry;
+                    if (index.Count >= MaxThumbnailIndexEntries)
+                    {
+                        Debug.LogWarning("GalleryThumbnailCache: Index entry cap " + MaxThumbnailIndexEntries + " reached while scanning V1 cache; truncating remainder of file.");
+                        break;
+                    }
                 }
             }
             catch (Exception ex)
@@ -320,6 +349,11 @@ namespace VPB
                     };
 
                     index[path] = entry;
+                    if (index.Count >= MaxThumbnailIndexEntries)
+                    {
+                        Debug.LogWarning("GalleryThumbnailCache: Index entry cap " + MaxThumbnailIndexEntries + " reached while scanning V2 cache; truncating remainder of file.");
+                        break;
+                    }
                 }
             }
             catch (Exception ex)
@@ -331,7 +365,7 @@ namespace VPB
             {
                 try
                 {
-                    Debug.LogWarning("GalleryThumbnailCache: Truncating corrupt cache file from " + fileStream.Length + " to " + lastValidPos);
+                    Debug.LogWarning("GalleryThumbnailCache: Truncating cache file from " + fileStream.Length + " to " + lastValidPos);
                     fileStream.SetLength(lastValidPos);
                 }
                 catch(Exception ex)
@@ -627,7 +661,7 @@ namespace VPB
             }
         }
 
-        public System.Collections.IEnumerator GenerateAndSaveThumbnailRoutine(string path, Texture2D sourceTex, long lastWriteTime)
+        public System.Collections.IEnumerator GenerateAndSaveThumbnailRoutine(string path, Texture2D sourceTex, long lastWriteTime, int turboJpegScaleDenom = 1)
         {
             yield return null;
 
@@ -669,7 +703,8 @@ namespace VPB
 
             if (bytes != null)
             {
-                SaveThumbnail(path, bytes, bytes.Length, w, h, format, lastWriteTime);
+                int td = turboJpegScaleDenom <= 1 ? 1 : TurboJpegNative.NormalizeScaleDenom(turboJpegScaleDenom);
+                SaveThumbnail(path, bytes, bytes.Length, w, h, format, lastWriteTime, td);
             }
         }
 

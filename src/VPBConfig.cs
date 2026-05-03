@@ -10,6 +10,16 @@ namespace VPB
 {
     public class VPBConfig
     {
+        public const float MinUiScale = 0.72f;
+        public const float MaxUiScale = 1.5f;
+
+        private static float ClampUiScale(float v)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v) || v <= 0f) return 1f;
+            if (v < MinUiScale) return MinUiScale;
+            if (v > MaxUiScale) return MaxUiScale;
+            return v;
+        }
         private static VPBConfig _instance;
         private static string s_LastLoggedSavedGalleryCategory;
         private static string s_LastLoggedLoadedGalleryCategory;
@@ -326,9 +336,19 @@ namespace VPB
         public float SideButtonScale = 1.0f;
         public float SideButtonScaleVR = 1.0f;
         public float SideButtonScaleDesktop = 0.8f;
-        public float InnerPaneScaleVR = 1.0f;
-        public float InnerPaneScaleDesktop = 0.8f;
-        public float CurrentSideButtonScale => IsVR ? SideButtonScaleVR : SideButtonScaleDesktop;
+        private float _innerPaneScaleVR = 1.0f;
+        private float _innerPaneScaleDesktop = 0.8f;
+        public float InnerPaneScaleVR
+        {
+            get { return ClampUiScale(_innerPaneScaleVR); }
+            set { _innerPaneScaleVR = ClampUiScale(value); }
+        }
+        public float InnerPaneScaleDesktop
+        {
+            get { return ClampUiScale(_innerPaneScaleDesktop); }
+            set { _innerPaneScaleDesktop = ClampUiScale(value); }
+        }
+        public float CurrentSideButtonScale => ClampUiScale(IsVR ? SideButtonScaleVR : SideButtonScaleDesktop);
         public float CurrentInnerPaneScale => IsVR ? InnerPaneScaleVR : InnerPaneScaleDesktop;
         public float InnerPaneScale
         {
@@ -336,9 +356,9 @@ namespace VPB
             set
             {
                 if (IsVR)
-                    InnerPaneScaleVR = value;
+                    InnerPaneScaleVR = ClampUiScale(value);
                 else
-                    InnerPaneScaleDesktop = value;
+                    InnerPaneScaleDesktop = ClampUiScale(value);
             }
         }
 
@@ -687,6 +707,29 @@ namespace VPB
                     {
                         if (HoldToLaunchEnabled && !EnableDragDrop && HoldToLaunchPrevEnableDragDrop)
                             EnableDragDrop = true;
+                    }
+                    catch { }
+
+                    // Migration/validation: clamp saved UI scales into supported range.
+                    // Older builds allowed smaller/larger values; keep configs stable by rewriting once.
+                    try
+                    {
+                        bool changed = false;
+                        float sbs = ClampUiScale(SideButtonScale);
+                        float sbsVr = ClampUiScale(SideButtonScaleVR);
+                        float sbsDesk = ClampUiScale(SideButtonScaleDesktop);
+                        float ipsVr = ClampUiScale(InnerPaneScaleVR);
+                        float ipsDesk = ClampUiScale(InnerPaneScaleDesktop);
+                        if (Mathf.Abs(SideButtonScale - sbs) > 0.0001f) { SideButtonScale = sbs; changed = true; }
+                        if (Mathf.Abs(SideButtonScaleVR - sbsVr) > 0.0001f) { SideButtonScaleVR = sbsVr; changed = true; }
+                        if (Mathf.Abs(SideButtonScaleDesktop - sbsDesk) > 0.0001f) { SideButtonScaleDesktop = sbsDesk; changed = true; }
+                        if (Mathf.Abs(InnerPaneScaleVR - ipsVr) > 0.0001f) { InnerPaneScaleVR = ipsVr; changed = true; }
+                        if (Mathf.Abs(InnerPaneScaleDesktop - ipsDesk) > 0.0001f) { InnerPaneScaleDesktop = ipsDesk; changed = true; }
+                        if (changed)
+                        {
+                            // Persist without notifying listeners; load-time UI will read clamped values.
+                            Save(false, true);
+                        }
                     }
                     catch { }
 

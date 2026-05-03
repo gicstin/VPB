@@ -233,16 +233,16 @@ namespace VPB
                 Key = "visuals.innerScaleVr", GroupKey = "visuals", Label = VPBTranslation.T("settings.inner_pane_scale_vr", "Inner Pane Scale (VR)"),
                 Tooltip = VPBTranslation.T("settings.tip.inner_pane_scale_vr", "Scales all UI elements inside the gallery pane in VR mode. 1.0 = default size."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.InnerPaneScaleVR,
-                SetFloat = v => { VPBConfig.Instance.InnerPaneScaleVR = v; VPBConfig.Instance.TriggerChange(); },
-                Min = 0.5f, Max = 2.0f, Step = 0.1f, Decimals = 1,
+                SetFloat = v => { VPBConfig.Instance.InnerPaneScaleVR = Mathf.Clamp(v, VPBConfig.MinUiScale, VPBConfig.MaxUiScale); VPBConfig.Instance.TriggerChange(); },
+                Min = VPBConfig.MinUiScale, Max = VPBConfig.MaxUiScale, Step = 0.1f, Decimals = 1,
                 RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.IsVR
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.innerScaleDesktop", GroupKey = "visuals", Label = VPBTranslation.T("settings.inner_pane_scale_desktop", "Inner Pane Scale (Desktop)"),
                 Tooltip = VPBTranslation.T("settings.tip.inner_pane_scale_desktop", "Scales all UI elements inside the gallery pane in Desktop mode. 1.0 = default size."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.InnerPaneScaleDesktop,
-                SetFloat = v => { VPBConfig.Instance.InnerPaneScaleDesktop = v; VPBConfig.Instance.TriggerChange(); },
-                Min = 0.5f, Max = 2.0f, Step = 0.1f, Decimals = 1,
+                SetFloat = v => { VPBConfig.Instance.InnerPaneScaleDesktop = Mathf.Clamp(v, VPBConfig.MinUiScale, VPBConfig.MaxUiScale); VPBConfig.Instance.TriggerChange(); },
+                Min = VPBConfig.MinUiScale, Max = VPBConfig.MaxUiScale, Step = 0.1f, Decimals = 1,
                 RowVisible = () => VPBConfig.Instance != null && !VPBConfig.Instance.IsVR
             });
             defs.Add(new InternalSettingDefinition {
@@ -662,7 +662,7 @@ namespace VPB
             internalSettingsListRowHeightSession = 80f;
 
             if (layoutMode != GalleryLayoutMode.List)
-                SetLayoutMode(GalleryLayoutMode.List, false);
+                SetLayoutMode(GalleryLayoutMode.List, false, true);
             // SetLayoutMode no-ops when already List — must reapply session min row height for settings.
             try
             {
