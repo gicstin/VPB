@@ -41,6 +41,8 @@ namespace VPB
         private FileStream fileStream;
         private BinaryWriter writer;
         private BinaryReader reader;
+        /// <summary>Serializes all <see cref="fileStream"/> seek/read/write — <see cref="FileStream"/> is not thread-safe; concurrent <c>TryGetThumbnail</c> read locks previously caused cross-thread position races and stalls.</summary>
+        private readonly object fileIoLock = new object();
         private ReaderWriterLockSlim cacheLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
         private int cacheFormatVersion = 0;
 
@@ -124,37 +126,43 @@ namespace VPB
         {
             try
             {
-                fileStream = new FileStream(cacheFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, 65536, FileOptions.RandomAccess);
-                writer = new BinaryWriter(fileStream);
-                reader = new BinaryReader(fileStream);
-
-                long len = fileStream.Length;
-                if (len > MaxThumbnailCacheFileBytes)
+                lock (fileIoLock)
                 {
-                    Debug.LogWarning("GalleryThumbnailCache: Cache file is " + len + " bytes (limit " + MaxThumbnailCacheFileBytes + "). Deleting to avoid startup hang/OOM. Path: " + cacheFilePath);
-                    CloseInternal();
-                    try
-                    {
-                        File.Delete(cacheFilePath);
-                    }
-                    catch (Exception dex)
-                    {
-                        Debug.LogError("GalleryThumbnailCache: Failed to delete oversized cache: " + dex.Message);
-                    }
                     fileStream = new FileStream(cacheFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, 65536, FileOptions.RandomAccess);
                     writer = new BinaryWriter(fileStream);
                     reader = new BinaryReader(fileStream);
-                }
 
-                BuildIndex();
+                    long len = fileStream.Length;
+                    if (len > MaxThumbnailCacheFileBytes)
+                    {
+                        Debug.LogWarning("GalleryThumbnailCache: Cache file is " + len + " bytes (limit " + MaxThumbnailCacheFileBytes + "). Deleting to avoid startup hang/OOM. Path: " + cacheFilePath);
+                        CloseInternal();
+                        try
+                        {
+                            File.Delete(cacheFilePath);
+                        }
+                        catch (Exception dex)
+                        {
+                            Debug.LogError("GalleryThumbnailCache: Failed to delete oversized cache: " + dex.Message);
+                        }
+                        fileStream = new FileStream(cacheFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read, 65536, FileOptions.RandomAccess);
+                        writer = new BinaryWriter(fileStream);
+                        reader = new BinaryReader(fileStream);
+                    }
+
+                    BuildIndex();
+                }
             }
             catch (Exception ex)
             {
                 Debug.LogError("GalleryThumbnailCache: Failed to initialize cache: " + ex.Message);
-                if (fileStream != null) fileStream.Dispose();
-                fileStream = null;
-                writer = null;
-                reader = null;
+                lock (fileIoLock)
+                {
+                    if (fileStream != null) fileStream.Dispose();
+                    fileStream = null;
+                    writer = null;
+                    reader = null;
+                }
             }
         }
 
@@ -399,9 +407,13 @@ namespace VPB
 
                     try
                     {
-                        fileStream.Position = entry.Offset;
-                        byte[] data = new byte[entry.Length];
-                        fileStream.Read(data, 0, entry.Length);
+                        byte[] data;
+                        lock (fileIoLock)
+                        {
+                            fileStream.Position = entry.Offset;
+                            data = new byte[entry.Length];
+                            fileStream.Read(data, 0, entry.Length);
+                        }
 
                         uint crc32 = CalculateCRC32(data, 0, entry.Length);
 
@@ -511,55 +523,58 @@ namespace VPB
             try
             {
                 if (fileStream == null) return false;
-                if (index.TryGetValue(key, out CacheEntry entry))
+                if (!index.TryGetValue(key, out CacheEntry entry) || entry.LastWriteTime != fileLastWriteTime)
+                    return false;
+                if (entry.Width <= 0 || entry.Height <= 0)
+                    return false;
+
+                try
                 {
-                    if (entry.LastWriteTime == fileLastWriteTime)
+                    lock (fileIoLock)
                     {
-                        try
+                        if (fileStream == null)
                         {
-                            if (entry.Width <= 0 || entry.Height <= 0)
-                            {
-                                return false;
-                            }
-
-                            fileStream.Position = entry.Offset;
-                            data = ByteArrayPool.Rent(entry.Length);
-                            int bytesRead = fileStream.Read(data, 0, entry.Length);
-
-                            if (bytesRead != entry.Length)
-                            {
-                                ByteArrayPool.Return(data);
-                                data = null;
-                                Debug.LogError("GalleryThumbnailCache: Incomplete read for " + key);
-                                return false;
-                            }
-
-                            if (entry.DataCRC32 != 0)
-                            {
-                                uint calculatedCrc = CalculateCRC32(data, 0, entry.Length);
-                                if (calculatedCrc != entry.DataCRC32)
-                                {
-                                    ByteArrayPool.Return(data);
-                                    data = null;
-                                    Debug.LogError("GalleryThumbnailCache: CRC mismatch for " + key + " (expected " + entry.DataCRC32 + ", got " + calculatedCrc + ")");
-                                    return false;
-                                }
-                            }
-
-                            width = entry.Width;
-                            height = entry.Height;
-                            format = (TextureFormat)entry.Format;
-                            return true;
+                            data = null;
+                            return false;
                         }
-                        catch (Exception ex)
+
+                        fileStream.Position = entry.Offset;
+                        data = ByteArrayPool.Rent(entry.Length);
+                        int bytesRead = fileStream.Read(data, 0, entry.Length);
+
+                        if (bytesRead != entry.Length)
                         {
-                            Debug.LogError("GalleryThumbnailCache: Error reading thumbnail: " + ex.Message);
-                            if (data != null)
-                            {
-                                ByteArrayPool.Return(data);
-                                data = null;
-                            }
+                            ByteArrayPool.Return(data);
+                            data = null;
+                            Debug.LogError("GalleryThumbnailCache: Incomplete read for " + key);
+                            return false;
                         }
+                    }
+
+                    if (entry.DataCRC32 != 0)
+                    {
+                        uint calculatedCrc = CalculateCRC32(data, 0, entry.Length);
+                        if (calculatedCrc != entry.DataCRC32)
+                        {
+                            ByteArrayPool.Return(data);
+                            data = null;
+                            Debug.LogError("GalleryThumbnailCache: CRC mismatch for " + key + " (expected " + entry.DataCRC32 + ", got " + calculatedCrc + ")");
+                            return false;
+                        }
+                    }
+
+                    width = entry.Width;
+                    height = entry.Height;
+                    format = (TextureFormat)entry.Format;
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("GalleryThumbnailCache: Error reading thumbnail: " + ex.Message);
+                    if (data != null)
+                    {
+                        ByteArrayPool.Return(data);
+                        data = null;
                     }
                 }
             }
@@ -587,44 +602,49 @@ namespace VPB
             }
 
             string key = GetThumbnailCacheKey(path, turboJpegScaleDenom);
+            byte[] pathBytes = Encoding.UTF8.GetBytes(key);
+            uint crc32 = CalculateCRC32(data, 0, dataLength);
 
             cacheLock.EnterWriteLock();
             try
             {
                 long writeStartPos = 0;
+                long dataOffset = 0;
                 try
                 {
                     if (fileStream == null) return;
                     if (savingDisabled) return;
-                    if (cacheFormatVersion == 0)
+                    lock (fileIoLock)
                     {
-                        cacheFormatVersion = CACHE_VERSION;
-                        fileStream.Seek(0, SeekOrigin.Begin);
-                        byte[] magicBytes = Encoding.ASCII.GetBytes(CACHE_MAGIC);
-                        writer.Write(magicBytes);
-                        writer.Write(CACHE_VERSION);
-                        writer.Write(new byte[8]);
+                        if (cacheFormatVersion == 0)
+                        {
+                            cacheFormatVersion = CACHE_VERSION;
+                            fileStream.Seek(0, SeekOrigin.Begin);
+                            byte[] magicBytes = Encoding.ASCII.GetBytes(CACHE_MAGIC);
+                            writer.Write(magicBytes);
+                            writer.Write(CACHE_VERSION);
+                            writer.Write(new byte[8]);
+                            writer.Flush();
+                            fileStream.Flush();
+                        }
+
+                        writeStartPos = fileStream.Seek(0, SeekOrigin.End);
+
+                        writer.Write(pathBytes.Length);
+                        writer.Write(pathBytes);
+                        writer.Write(lastWriteTime);
+                        writer.Write(width);
+                        writer.Write(height);
+                        writer.Write((int)format);
+                        writer.Write(dataLength);
+                        writer.Write(crc32);
+                        writer.Write((ushort)0);
+
+                        dataOffset = fileStream.Position;
+                        writer.Write(data, 0, dataLength);
                         writer.Flush();
+                        fileStream.Flush();
                     }
-
-                    writeStartPos = fileStream.Seek(0, SeekOrigin.End);
-
-                    byte[] pathBytes = Encoding.UTF8.GetBytes(key);
-                    uint crc32 = CalculateCRC32(data, 0, dataLength);
-
-                    writer.Write(pathBytes.Length);
-                    writer.Write(pathBytes);
-                    writer.Write(lastWriteTime);
-                    writer.Write(width);
-                    writer.Write(height);
-                    writer.Write((int)format);
-                    writer.Write(dataLength);
-                    writer.Write(crc32);
-                    writer.Write((ushort)0);
-
-                    long dataOffset = fileStream.Position;
-                    writer.Write(data, 0, dataLength);
-                    writer.Flush();
 
                     CacheEntry entry = new CacheEntry
                     {
@@ -641,7 +661,10 @@ namespace VPB
                 }
                 catch (Exception ex)
                 {
-                    try { fileStream?.SetLength(writeStartPos); } catch { }
+                    lock (fileIoLock)
+                    {
+                        try { fileStream?.SetLength(writeStartPos); } catch { }
+                    }
 
                     bool isDiskFull = ex is IOException && ex.Message.Contains("112");
                     if (isDiskFull)
@@ -817,10 +840,14 @@ namespace VPB
 
                             try
                             {
-                                fileStream.Position = entry.Offset;
-                                byte[] data = new byte[entry.Length];
-                                int bytesRead = fileStream.Read(data, 0, entry.Length);
-                                if (bytesRead != entry.Length) continue;
+                                byte[] data;
+                                lock (fileIoLock)
+                                {
+                                    fileStream.Position = entry.Offset;
+                                    data = new byte[entry.Length];
+                                    int bytesRead = fileStream.Read(data, 0, entry.Length);
+                                    if (bytesRead != entry.Length) continue;
+                                }
 
                                 uint crc32 = CalculateCRC32(data, 0, entry.Length);
 
@@ -891,9 +918,12 @@ namespace VPB
 
         private void CloseInternal()
         {
-            if (writer != null) { writer.Close(); writer = null; }
-            if (reader != null) { reader.Close(); reader = null; }
-            if (fileStream != null) { fileStream.Dispose(); fileStream = null; }
+            lock (fileIoLock)
+            {
+                if (writer != null) { writer.Close(); writer = null; }
+                if (reader != null) { reader.Close(); reader = null; }
+                if (fileStream != null) { fileStream.Dispose(); fileStream = null; }
+            }
         }
 
         ~GalleryThumbnailCache()
