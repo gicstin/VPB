@@ -49,11 +49,47 @@ namespace VPB
         }
     }
 
+    /// <summary>
+    /// Left selection on <see cref="IPointerUpHandler"/> with tap slop: ScrollRect only steals <b>left</b> drags,
+    /// so <see cref="Button.onClick"/> drops taps that moved past the drag threshold; right-click uses
+    /// <see cref="IPointerClickHandler"/> and does not fight the scroll view the same way.
+    /// </summary>
+    public sealed class UIFileEntryLeftReleaseSelect : MonoBehaviour, IPointerUpHandler
+    {
+        public GalleryPanel Panel;
+        public FileEntry File;
+        private const float TapSlopPixels = 22f;
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            if (Panel == null || File == null) return;
+            var dragItem = GetComponent<UIDraggableItem>();
+            if (dragItem != null && dragItem.IsLongPress) return;
+            if (Panel.HoldToLaunchEnabled && dragItem != null && dragItem.LastPointerDownUnscaledTime >= 0f)
+            {
+                float holdSec = 1f;
+                try
+                {
+                    if (VPBConfig.Instance != null)
+                        holdSec = Mathf.Clamp(VPBConfig.Instance.HoldToLaunchHoldSeconds, 0.2f, 1f);
+                }
+                catch { }
+                if (Time.unscaledTime - dragItem.LastPointerDownUnscaledTime >= holdSec - 0.001f)
+                    return;
+            }
+            Vector2 delta = (Vector2)eventData.position - eventData.pressPosition;
+            if (delta.sqrMagnitude > TapSlopPixels * TapSlopPixels) return;
+            Panel.OnFileClick(File);
+        }
+    }
+
     public class RatingHandler : MonoBehaviour
     {
         private FileEntry entry;
         private string uid;
         private Text starIconText;
+        private Image starIconImage;
         private GameObject selectorGO;
         private CanvasGroup selectorCG;
         private int currentRating = 0;
@@ -149,10 +185,25 @@ namespace VPB
             UpdateDisplay();
         }
 
+        public void BindStarIcon(Image iconImage)
+        {
+            starIconImage = iconImage;
+            UpdateDisplay();
+        }
+
+        public void SetDisplayOnly(int rating)
+        {
+            currentRating = Mathf.Clamp(rating, 0, 5);
+            UpdateDisplay();
+        }
+
         private void UpdateDisplay()
         {
+            Color c = RatingColors[Mathf.Clamp(currentRating, 0, 5)];
             if (starIconText != null)
-                starIconText.color = RatingColors[Mathf.Clamp(currentRating, 0, 5)];
+                starIconText.color = c;
+            if (starIconImage != null)
+                starIconImage.color = c;
 
             if (optionImages == null) return;
             for (int i = 0; i < optionImages.Length && i < 6; i++)

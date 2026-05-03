@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Diagnostics;
 using System.Collections.Generic;
+using UnityEngine.Events;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -244,6 +245,8 @@ namespace VPB
         private string historyTabFilter = "";
 
         private string settingsFilter = "";
+        /// <summary>While true, main side-rail search <see cref="InputField.onValueChanged"/> handlers ignore events (programmatic text assignment / layout).</summary>
+        private bool _suppressMainSideSearchValueChanged;
         private string currentSettingsGroup = "all";
         private bool settingsListViewActive = false;
         private bool internalSettingsSessionActive = false;
@@ -595,7 +598,12 @@ namespace VPB
 
         private InputField leftSearchInput;
         private InputField rightSearchInput;
+        /// <summary>Delegate instance registered on side search <see cref="InputField.onValueChanged"/>; <c>UpdateLayout</c> removes it when assigning text so listeners do not run (stops settings filter clearing on refresh).</summary>
+        private UnityAction<string> _leftMainSideSearchOnValueChanged;
+        private UnityAction<string> _rightMainSideSearchOnValueChanged;
         private InputField titleSearchInput;
+        private UnityAction<string> _titleBarSearchOnValueChanged;
+        private bool _suppressTitleBarSearchValueChanged;
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
         private List<GameObject> tboxPersonAtomBtns = new List<GameObject>();

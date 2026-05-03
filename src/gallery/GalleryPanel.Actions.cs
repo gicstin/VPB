@@ -1000,7 +1000,7 @@ namespace VPB
             }
         }
 
-        private void OnFileClick(FileEntry file)
+        internal void OnFileClick(FileEntry file)
         {
             if (file == null) return;
 
@@ -1319,6 +1319,7 @@ namespace VPB
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
+            try { if (tboxGridRateHandler != null) tboxGridRateHandler.CloseSelector(); } catch { }
             try { RefreshAppliedUserTagsPaneAfterSelectionChange(); } catch { }
         }
 

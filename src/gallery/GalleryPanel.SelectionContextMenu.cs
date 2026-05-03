@@ -46,6 +46,10 @@ namespace VPB
         private GameObject tboxSceneImportBtn;
         private GameObject tboxSelectAllBtn;
         private GameObject tboxClearSelectionBtn;
+        private GameObject tboxGridRateBtn;
+        private Image tboxGridRateIconImage;
+        private RatingHandler tboxGridRateHandler;
+        private GameObject tboxGridRateSelectorGO;
         private GameObject tboxSettingsSaveBtn;
         private GameObject tboxSettingsCancelBtn;
 
@@ -163,6 +167,7 @@ namespace VPB
             one(tboxSceneImportBtn);
             one(tboxSelectAllBtn);
             one(tboxClearSelectionBtn);
+            one(tboxGridRateBtn);
         }
 
         private void TboxDetachAllActionButtonsForLayout()
@@ -207,6 +212,7 @@ namespace VPB
             d(tboxSceneImportBtn);
             d(tboxSelectAllBtn);
             d(tboxClearSelectionBtn);
+            d(tboxGridRateBtn);
             foreach (var go in tboxPersonAtomBtns) { if (go != null) go.transform.SetParent(p, false); }
         }
 
@@ -322,6 +328,7 @@ namespace VPB
                 if (vis(tboxJsonParserBenchBtn)) ltr.Add(tboxJsonParserBenchBtn);
                 if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
                 if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
+                if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
                 if (vis(tboxSceneImportBtn)) ltr.Add(tboxSceneImportBtn);
                 if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
                 if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
@@ -693,6 +700,98 @@ namespace VPB
                 }
             }
             catch { }
+
+            // Grid layout: rate selected package(s) in one action (list view keeps per-row ★ control).
+            {
+                Color gridRateBackdrop = new Color(0.34f, 0.27f, 0.14f, 0.96f);
+                tboxGridRateBtn = UI.CreateUIButton(
+                    tboxBtnRow0GO, 0, 0,
+                    "", tboxActionBtnFont,
+                    0, 0, AnchorPresets.stretchAll,
+                    null
+                );
+                tboxGridRateBtn.name = "Tbox_GridRate";
+                TboxConfigureActionButtonFlex(tboxGridRateBtn, innerRowH, innerRowH, innerRowH);
+                AddTooltip(tboxGridRateBtn, "gallery.tooltip.tbox_grid_rate", "Rate selected packages (0–5 applies to all selected items).");
+                try
+                {
+                    var starSpr = UI.LoadIconSprite("vpb_icons/star.png", Color.white);
+                    if (starSpr != null)
+                    {
+                        UI.AddIconToButton(tboxGridRateBtn, starSpr, padding: 6f, backdropOverride: gridRateBackdrop);
+                        tboxGridRateIconImage = tboxGridRateBtn.transform.Find("Icon")?.GetComponent<Image>();
+                    }
+                }
+                catch { }
+
+                tboxGridRateSelectorGO = new GameObject("TboxGridRatingSelector");
+                tboxGridRateSelectorGO.transform.SetParent(tboxGridRateBtn.transform, false);
+                RectTransform selectorRT = tboxGridRateSelectorGO.AddComponent<RectTransform>();
+                // Anchor top-right of star button, pivot bottom-right of panel so the grid opens **upward**
+                // into toolbox rows — not downward over gallery (was stealing clicks on bottom grid cells).
+                selectorRT.anchorMin = new Vector2(1f, 1f);
+                selectorRT.anchorMax = new Vector2(1f, 1f);
+                selectorRT.pivot = new Vector2(1f, 0f);
+                selectorRT.sizeDelta = new Vector2(80, 114);
+                selectorRT.anchoredPosition = new Vector2(-2f, 0f);
+
+                CanvasGroup selectorCg = tboxGridRateSelectorGO.AddComponent<CanvasGroup>();
+                selectorCg.alpha = 0f;
+                selectorCg.interactable = false;
+                selectorCg.blocksRaycasts = false;
+
+                Image selectorBgImg = tboxGridRateSelectorGO.AddComponent<Image>();
+                selectorBgImg.color = new Color(0.05f, 0.05f, 0.05f, 0.96f);
+
+                GridLayoutGroup selectorGrid = tboxGridRateSelectorGO.AddComponent<GridLayoutGroup>();
+                selectorGrid.cellSize = new Vector2(38, 36);
+                selectorGrid.spacing = new Vector2(2, 2);
+                selectorGrid.padding = new RectOffset(1, 1, 1, 1);
+                selectorGrid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+                selectorGrid.constraintCount = 2;
+                selectorGrid.childAlignment = TextAnchor.UpperLeft;
+
+                tboxGridRateHandler = tboxGridRateBtn.AddComponent<RatingHandler>();
+                Image[] grOptImages = new Image[6];
+                Text[] grOptTexts = new Text[6];
+                GameObject[] grOptBorders = new GameObject[6];
+                for (int ri = 0; ri <= 5; ri++)
+                {
+                    int ratingValue = ri;
+                    string label = ri == 0 ? "X" : ri.ToString();
+                    GameObject optBtnGO = UI.CreateUIButton(tboxGridRateSelectorGO, 38, 36, label, 22, 0, 0, AnchorPresets.middleCenter,
+                        () => TboxApplyGridRatingToSelection(ratingValue));
+                    optBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
+                    grOptImages[ri] = optBtnGO.GetComponent<Image>();
+                    grOptImages[ri].color = RatingHandler.RatingColors[ri];
+                    grOptTexts[ri] = optBtnGO.GetComponentInChildren<Text>();
+                    grOptTexts[ri].color = ri == 0 ? Color.red : Color.black;
+
+                    GameObject borderGO = new GameObject("SelectionBorder");
+                    borderGO.transform.SetParent(optBtnGO.transform, false);
+                    borderGO.transform.SetSiblingIndex(0);
+                    RectTransform borderRT = borderGO.AddComponent<RectTransform>();
+                    borderRT.anchorMin = Vector2.zero;
+                    borderRT.anchorMax = Vector2.one;
+                    borderRT.offsetMin = Vector2.zero;
+                    borderRT.offsetMax = Vector2.zero;
+                    AddBorderEdge(borderGO, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, 3));
+                    AddBorderEdge(borderGO, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 3));
+                    AddBorderEdge(borderGO, new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(3, 0));
+                    AddBorderEdge(borderGO, new Vector2(1, 0), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(3, 0));
+                    borderGO.SetActive(false);
+                    grOptBorders[ri] = borderGO;
+                }
+                tboxGridRateHandler.SetOptionRefs(grOptImages, grOptTexts, grOptBorders);
+
+                Button gridRateMainBtn = tboxGridRateBtn.GetComponent<Button>();
+                gridRateMainBtn.onClick.AddListener(() =>
+                {
+                    if (tboxGridRateHandler != null) tboxGridRateHandler.ToggleSelector();
+                });
+
+                tboxGridRateBtn.SetActive(false);
+            }
 
             // Settings mode: replace normal toolbox actions with Save/Cancel row.
             tboxSettingsCancelBtn = UI.CreateUIButton(
@@ -1724,6 +1823,7 @@ namespace VPB
                 show(tboxSelectAllBtn, false);
                 show(tboxClearSelectionBtn, false);
 
+                try { RefreshTboxGridRateControlState(); } catch { }
                 try { RefreshTboxFlexButtonLayout(); } catch { }
                 return;
             }
@@ -1795,6 +1895,7 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxJsonParserBenchBtn, false);
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, false);
 
+                try { RefreshTboxGridRateControlState(); } catch { }
                 RefreshTboxFlexButtonLayout();
                 return;
             }
@@ -1978,7 +2079,84 @@ namespace VPB
                     tboxRemoveHistoryBtn,
                     historyBrowse && selectedFiles != null && selectedFiles.Count > 0);
 
+            try { RefreshTboxGridRateControlState(); } catch { }
             RefreshTboxFlexButtonLayout();
+        }
+
+        private void TboxAfterGridRateChanged()
+        {
+            try { RefreshVisibleGridVisualsOnly(); } catch { }
+        }
+
+        private void TboxApplyGridRatingToSelection(int ratingValue)
+        {
+            if (tboxGridRateHandler == null || selectedFiles == null || selectedFiles.Count == 0) return;
+            ratingValue = Mathf.Clamp(ratingValue, 0, 5);
+            int applied = 0;
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry f = selectedFiles[i];
+                if (f == null) continue;
+                if (string.IsNullOrEmpty(TryGetPackageUidForEntry(f))) continue;
+                try
+                {
+                    RatingsManager.Instance.SetRating(f, ratingValue);
+                    applied++;
+                }
+                catch { }
+            }
+            if (applied == 0) return;
+            tboxGridRateHandler.SetDisplayOnly(ratingValue);
+            tboxGridRateHandler.CloseSelector();
+            TboxAfterGridRateChanged();
+        }
+
+        private static int TboxConsensusRatingDisplay(List<FileEntry> eligible)
+        {
+            if (eligible == null || eligible.Count == 0) return 0;
+            int r0 = int.MinValue;
+            for (int i = 0; i < eligible.Count; i++)
+            {
+                int r = 0;
+                try { r = RatingsManager.Instance.GetRating(eligible[i]); }
+                catch { r = 0; }
+                if (r0 == int.MinValue) r0 = r;
+                else if (r0 != r) return 0;
+            }
+            return Mathf.Clamp(r0 == int.MinValue ? 0 : r0, 0, 5);
+        }
+
+        private void RefreshTboxGridRateControlState()
+        {
+            if (tboxGridRateBtn == null || tboxGridRateHandler == null) return;
+            var eligible = new List<FileEntry>();
+            if (selectedFiles != null && selectedFiles.Count > 0)
+            {
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    FileEntry f = selectedFiles[i];
+                    if (f == null) continue;
+                    if (!string.IsNullOrEmpty(TryGetPackageUidForEntry(f)))
+                        eligible.Add(f);
+                }
+            }
+            bool allow =
+                layoutMode == GalleryLayoutMode.Grid
+                && !cleanupModeActive
+                && !IsSettingsPanelOpen()
+                && eligible.Count >= 1;
+            if (!allow)
+            {
+                if (tboxGridRateBtn.activeSelf) tboxGridRateBtn.SetActive(false);
+                try { tboxGridRateHandler.CloseSelector(); } catch { }
+                return;
+            }
+            if (!tboxGridRateBtn.activeSelf) tboxGridRateBtn.SetActive(true);
+            Text txt = tboxGridRateBtn.GetComponentInChildren<Text>(true);
+            tboxGridRateHandler.Init(eligible[0], txt, tboxGridRateSelectorGO);
+            tboxGridRateHandler.SetDisplayOnly(TboxConsensusRatingDisplay(eligible));
+            if (tboxGridRateIconImage != null)
+                tboxGridRateHandler.BindStarIcon(tboxGridRateIconImage);
         }
 
         private void TboxRemoveSelectedFromHistory()

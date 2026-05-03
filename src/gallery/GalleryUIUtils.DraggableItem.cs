@@ -25,6 +25,8 @@ namespace VPB
         
         private bool isDraggingItem = false;
         private float _pointerDownTime = -1f;
+        /// <summary>Time from <see cref="OnPointerDown"/> (unscaled); for tap vs hold heuristics on same row.</summary>
+        public float LastPointerDownUnscaledTime => _pointerDownTime;
         private GameObject ghostObject;
         private Image ghostBorder;
         private Text ghostText; // Added text component
@@ -40,6 +42,31 @@ namespace VPB
         // 8c — drag overlay: blocks pointer events on side panels while dragging
         private GameObject _dragOverlay;
         public static bool IsDragging = false;
+
+        private ScrollRect _galleryScrollRectPassthrough;
+
+        /// <summary>True after we forwarded begin-drag to ScrollRect — item drag may still start once hold time + movement qualify.</summary>
+        private bool _galleryPassthroughScrollUntilItemDrag;
+
+        /// <summary>
+        /// Screen pixels from press before a gallery row counts as intentional drag-drop (not a slow tap / micro-jitter).
+        /// Unity fires <see cref="OnBeginDrag"/> near ~5–10px; below this we keep forwarding scroll until movement grows.
+        /// </summary>
+        private const float GalleryMinScreenPixelsForItemDrag = 22f;
+
+        private ScrollRect ResolveGalleryScrollRectForPassthrough()
+        {
+            if (_galleryScrollRectPassthrough == null)
+                _galleryScrollRectPassthrough = GetComponentInParent<ScrollRect>();
+            return _galleryScrollRectPassthrough;
+        }
+
+        private static void ForwardPointerEventToScrollRect<T>(ScrollRect sr, PointerEventData d, ExecuteEvents.EventFunction<T> fn)
+            where T : IEventSystemHandler
+        {
+            if (sr == null || d == null) return;
+            ExecuteEvents.Execute(sr.gameObject, d, fn);
+        }
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
         private static string _lastAppearanceClothingMode = "keep";
@@ -123,7 +150,10 @@ namespace VPB
             bool isVR = false;
             try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
             if (isVR || eventData.button == PointerEventData.InputButton.Left)
+            {
+                _galleryPassthroughScrollUntilItemDrag = false;
                 _pointerDownTime = Time.unscaledTime;
+            }
         }
 
         /// <summary>Hold delay in seconds; 0 when drag is off, hold requirement is off, or threshold is 0.</summary>
@@ -150,10 +180,35 @@ namespace VPB
             bool isVR = false;
             try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
             if (!isVR && eventData.button != PointerEventData.InputButton.Left) return;
-            if (VPBConfig.Instance != null && !VPBConfig.Instance.EffectiveEnableDragDrop) return;
+            if (VPBConfig.Instance != null && !VPBConfig.Instance.EffectiveEnableDragDrop)
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
+                return;
+            }
             float threshold = EffectiveDragHoldSeconds();
-            if (Time.unscaledTime - _pointerDownTime < threshold) return;
+            float held = Time.unscaledTime - _pointerDownTime;
+            Vector2 deltaPress = (Vector2)eventData.position - eventData.pressPosition;
+            float minSq = GalleryMinScreenPixelsForItemDrag * GalleryMinScreenPixelsForItemDrag;
 
+            if (held < threshold)
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
+                _galleryPassthroughScrollUntilItemDrag = true;
+                return;
+            }
+            // Hold time satisfied but movement still small — do not arm item drag yet (slow click / jitter).
+            if (deltaPress.sqrMagnitude < minSq)
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
+                _galleryPassthroughScrollUntilItemDrag = true;
+                return;
+            }
+
+            StartGalleryItemDragFromPointer(eventData);
+        }
+
+        private void StartGalleryItemDragFromPointer(PointerEventData eventData)
+        {
             _isDualPose = null;
             _dualPoseNode = null;
             dragCam = eventData.pressEventCamera;
@@ -172,6 +227,7 @@ namespace VPB
             if (Panel != null) Panel.SetStatus(msg);
             
             UpdateGhost(eventData, atom, dist);
+            _galleryPassthroughScrollUntilItemDrag = false;
         }
 
         // 8c — full-screen transparent overlay that absorbs pointer events to side panels during drag
@@ -219,6 +275,21 @@ namespace VPB
                      Panel.SetStatus(msg);
                 }
             }
+            else if (VPBConfig.Instance != null && VPBConfig.Instance.EffectiveEnableDragDrop && _galleryPassthroughScrollUntilItemDrag)
+            {
+                float threshold = EffectiveDragHoldSeconds();
+                float held = Time.unscaledTime - _pointerDownTime;
+                Vector2 deltaPress = (Vector2)eventData.position - eventData.pressPosition;
+                float minSq = GalleryMinScreenPixelsForItemDrag * GalleryMinScreenPixelsForItemDrag;
+                if (held >= threshold && deltaPress.sqrMagnitude >= minSq)
+                    StartGalleryItemDragFromPointer(eventData);
+                else
+                    ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.dragHandler);
+            }
+            else
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.dragHandler);
+            }
         }
 
         private void Update()
@@ -230,6 +301,7 @@ namespace VPB
         private void CancelDrag()
         {
             isDraggingItem = false;
+            _galleryPassthroughScrollUntilItemDrag = false;
             DestroyGhost();
             DestroyGroundIndicator();
             dragCam = null;
@@ -379,10 +451,17 @@ namespace VPB
                 }
                 dragCam = null;
             }
+            else
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.endDragHandler);
+                _galleryPassthroughScrollUntilItemDrag = false;
+            }
         }
 
         public void OnDisable()
         {
+            _galleryScrollRectPassthrough = null;
+            _galleryPassthroughScrollUntilItemDrag = false;
             if (isDraggingItem)
             {
                 DestroyGhost();

@@ -171,11 +171,18 @@ namespace VPB
                 }
             }
             catch { }
+
+            try
+            {
+                RefreshTboxGridRateControlState();
+                RefreshTboxFlexButtonLayout();
+            }
+            catch { }
         }
 
         /// <summary>
         /// Re-applies grid config height and rebinds all visible cells.
-        /// Call after GalleryGridLabelsEnabled or GalleryGridLabelFontSize changes.
+        /// Call after grid label settings or column count changes (label strip height depends on visibility).
         /// </summary>
         public void RebuildGridLayout()
         {

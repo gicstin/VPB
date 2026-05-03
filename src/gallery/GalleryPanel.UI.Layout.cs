@@ -15,6 +15,60 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
 {
+        private void SetTitleSearchInputTextWithoutNotify(InputField input, string text, UnityAction<string> handler)
+        {
+            if (input == null) return;
+            string t = text ?? "";
+            if (input.text == t) return;
+            _suppressTitleBarSearchValueChanged = true;
+            try
+            {
+                if (handler != null)
+                {
+                    input.onValueChanged.RemoveListener(handler);
+                    input.text = t;
+                    input.onValueChanged.AddListener(handler);
+                }
+                else input.text = t;
+            }
+            finally
+            {
+                _suppressTitleBarSearchValueChanged = false;
+            }
+        }
+
+        /// <summary>Keeps title bar search aligned: package name filter in browse mode, settings row filter while settings side is open.</summary>
+        private void SyncTitleSearchInputWithActiveMode()
+        {
+            if (titleSearchInput == null || _titleBarSearchOnValueChanged == null) return;
+            if (IsSettingsPanelOpen())
+                SetTitleSearchInputTextWithoutNotify(titleSearchInput, CanonicalSettingsSideSearchText(), _titleBarSearchOnValueChanged);
+            else
+                SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged);
+        }
+
+        private void SetSideSearchInputTextWithoutNotify(InputField input, string text, UnityAction<string> handler)
+        {
+            if (input == null) return;
+            string t = text ?? "";
+            if (input.text == t) return;
+            _suppressMainSideSearchValueChanged = true;
+            try
+            {
+                if (handler != null)
+                {
+                    input.onValueChanged.RemoveListener(handler);
+                    input.text = t;
+                    input.onValueChanged.AddListener(handler);
+                }
+                else input.text = t;
+            }
+            finally
+            {
+                _suppressMainSideSearchValueChanged = false;
+            }
+        }
+
         public void UpdateLayout()
         {
             UpdateLayout(true, true);
@@ -71,6 +125,7 @@ namespace VPB
                         }
                     }
                 }
+                try { SyncTitleSearchInputWithActiveMode(); } catch { }
             }
             catch { }
 
@@ -102,13 +157,13 @@ namespace VPB
                     else if (type == ContentType.UserTags) target = userTagFilter;
                     else if (type == ContentType.Path) target = pathFilter;
                     else if (type == ContentType.History) target = historyTabFilter;
-                    else if (type == ContentType.Settings) target = settingsFilter;
+                    else if (type == ContentType.Settings) target = CanonicalSettingsSideSearchText();
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
                     else target = ""; // Status filter?
 
-                    if (leftSearchInput.text != target) leftSearchInput.text = target;
+                    SetSideSearchInputTextWithoutNotify(leftSearchInput, target, _leftMainSideSearchOnValueChanged);
                     
                     if (leftSearchInput.placeholder is Text ph)
                     {
@@ -150,13 +205,13 @@ namespace VPB
                     else if (type == ContentType.UserTags) target = userTagFilter;
                     else if (type == ContentType.Path) target = pathFilter;
                     else if (type == ContentType.History) target = historyTabFilter;
-                    else if (type == ContentType.Settings) target = settingsFilter;
+                    else if (type == ContentType.Settings) target = CanonicalSettingsSideSearchText();
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
                     else target = "";
 
-                    if (rightSearchInput.text != target) rightSearchInput.text = target;
+                    SetSideSearchInputTextWithoutNotify(rightSearchInput, target, _rightMainSideSearchOnValueChanged);
 
                     if (rightSearchInput.placeholder is Text ph)
                     {

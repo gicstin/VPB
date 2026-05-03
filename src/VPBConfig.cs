@@ -231,6 +231,8 @@ namespace VPB
         public bool GalleryGridLabelsEnabled = true;
         /// <summary>Font size (pixels) for the always-on grid label strip.</summary>
         public float GalleryGridLabelFontSize = 18f;
+        /// <summary>When true with always-on labels, hide label strip at 11–12 columns (highest grid density).</summary>
+        public bool GalleryGridLabelsAutoHideAtHighDensity = false;
         /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
         public bool GalleryTboxToolbarPinned = false;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
@@ -361,6 +363,15 @@ namespace VPB
         {
             return HiddenCategories != null && HiddenCategories.Contains(name);
         }
+
+        /// <summary>True when always-on grid label strip should render (respects auto-hide at highest two column counts).</summary>
+        public bool GalleryGridLabelsStripVisible()
+        {
+            if (!GalleryGridLabelsEnabled) return false;
+            if (GalleryGridLabelsAutoHideAtHighDensity && GridColumnCount >= 11) return false;
+            return true;
+        }
+
         public bool IsLoadingScene { get; private set; }
 
         private bool? _isDevMode;
@@ -465,6 +476,7 @@ namespace VPB
             GalleryDefaultRightSidePanel = "None";
             GalleryGridLabelsEnabled = true;
             GalleryGridLabelFontSize = 18f;
+            GalleryGridLabelsAutoHideAtHighDensity = false;
             GalleryTboxToolbarPinned = false;
             UiLocale = "";
             SpringScrollButtonEnabled = true;
@@ -568,6 +580,7 @@ namespace VPB
                         if (node["GalleryListHoverPreviewOffsetY"] != null) GalleryListHoverPreviewOffsetY = Mathf.Clamp(node["GalleryListHoverPreviewOffsetY"].AsFloat, -2000f, 2000f);
                         if (node["GalleryGridLabelsEnabled"] != null) GalleryGridLabelsEnabled = node["GalleryGridLabelsEnabled"].AsBool;
                         if (node["GalleryGridLabelFontSize"] != null) GalleryGridLabelFontSize = Mathf.Clamp(node["GalleryGridLabelFontSize"].AsFloat, 8f, 40f);
+                        if (node["GalleryGridLabelsAutoHideAtHighDensity"] != null) GalleryGridLabelsAutoHideAtHighDensity = node["GalleryGridLabelsAutoHideAtHighDensity"].AsBool;
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
@@ -760,6 +773,7 @@ namespace VPB
                 node["GalleryListHoverPreviewOffsetY"].AsFloat = GalleryListHoverPreviewOffsetY;
                 node["GalleryGridLabelsEnabled"].AsBool = GalleryGridLabelsEnabled;
                 node["GalleryGridLabelFontSize"].AsFloat = GalleryGridLabelFontSize;
+                node["GalleryGridLabelsAutoHideAtHighDensity"].AsBool = GalleryGridLabelsAutoHideAtHighDensity;
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;

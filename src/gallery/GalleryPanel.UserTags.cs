@@ -456,7 +456,7 @@ namespace VPB
             Sprite delSpr = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
             GameObject delBtn = UI.CreateSideTabSquareIconButton(titleRow, delSz, delSpr, RemoveFocusedAppliedUserTagFromSelection, new Color(0.5f, 0.22f, 0.22f, 1f), 6f * s);
             delBtn.name = "RemoveAppliedIconBtn";
-            AddTooltipPlain(delBtn, VPBTranslation.T("gallery.usertags.remove_applied_tooltip", "Remove selected tag(s) from selection. Select rows below first (Ctrl+click toggle, Shift+click range)."));
+            AddTooltipPlain(delBtn, VPBTranslation.T("gallery.usertags.remove_applied_tooltip", "Remove selected tag(s) from selection. Select rows below first (Ctrl+click toggle, Shift+click range). Or drag tag row(s) onto this button."));
 
             if (isLeft) leftUserTagAppliedTitleText = titleTxt;
             else rightUserTagAppliedTitleText = titleTxt;
@@ -487,6 +487,18 @@ namespace VPB
             UserTagApplyDropZone dz = rootGo.GetComponent<UserTagApplyDropZone>();
             if (dz == null) dz = rootGo.AddComponent<UserTagApplyDropZone>();
             dz.Panel = this;
+
+            Transform titleRow = tb.Find("AppliedTitleRow");
+            if (titleRow != null)
+            {
+                Transform delT = titleRow.Find("RemoveAppliedIconBtn");
+                if (delT != null)
+                {
+                    UserTagRemoveDropZone rdz = delT.gameObject.GetComponent<UserTagRemoveDropZone>();
+                    if (rdz == null) rdz = delT.gameObject.AddComponent<UserTagRemoveDropZone>();
+                    rdz.Panel = this;
+                }
+            }
         }
 
         private void EnsureUserTagApplyDropCatchStrip(Transform container)
@@ -601,6 +613,29 @@ namespace VPB
         {
             if (tags == null || tags.Count == 0) return;
             ApplyTagsToSelectedPackages(new List<string>(tags), remove: false);
+        }
+
+        internal void UserTagAppliedDragBeginPayload(string primaryTag, List<string> tagsOut)
+        {
+            if (tagsOut == null) return;
+            tagsOut.Clear();
+            if (string.IsNullOrEmpty(primaryTag)) return;
+            if (userTagAppliedRemoveSelection != null && userTagAppliedRemoveSelection.Count > 0
+                && userTagAppliedRemoveSelection.Contains(primaryTag))
+            {
+                foreach (string t in userTagAppliedRemoveSelection)
+                    tagsOut.Add(t);
+            }
+            else
+                tagsOut.Add(primaryTag);
+        }
+
+        internal void UserTagRemoveDroppedTags(List<string> tags)
+        {
+            if (tags == null || tags.Count == 0) return;
+            ApplyTagsToSelectedPackages(new List<string>(tags), remove: true);
+            userTagAppliedRemoveSelection.Clear();
+            userTagAppliedRemoveAnchor = null;
         }
 
         private void PruneUserTagAppliedRemoveSelectionToCache()
@@ -739,6 +774,90 @@ namespace VPB
             StartCoroutine(ApplyTagsToSelectedPackagesBulkCoroutine(new List<string>(tags), remove));
         }
 
+        private static void RemoveFileEntriesFromLists(List<FileEntry> list, HashSet<FileEntry> removeRefs)
+        {
+            if (list == null || removeRefs == null || removeRefs.Count == 0) return;
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                if (removeRefs.Contains(list[i]))
+                    list.RemoveAt(i);
+            }
+        }
+
+        /// <summary>
+        /// After SQLite tag remove while Available filter mode narrows grid: drop visible rows that no longer match AND tag filter (skip full <see cref="RefreshFiles"/>).
+        /// </summary>
+        private bool TryPruneVisibleGridAfterUserTagRemove(List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
+        {
+            if (updatedRows == null || updatedRows.Count == 0) return false;
+            if (!_userTagAvailFilterMode || activeUserTags == null || activeUserTags.Count == 0)
+                return false;
+            if (activeContentType != ContentType.Category || !VpbSqlite3.IsAvailable)
+                return false;
+            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0)
+                return false;
+
+            string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+            if (string.IsNullOrEmpty(cat)) return false;
+
+            var updatedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < updatedRows.Count; i++)
+            {
+                var r = updatedRows[i];
+                updatedKeys.Add((r.PkgUid ?? "") + "\n" + (r.InternalPath ?? ""));
+            }
+
+            var removeRefs = new HashSet<FileEntry>();
+            for (int i = 0; i < currentFilteredFiles.Count; i++)
+            {
+                FileEntry fe = currentFilteredFiles[i];
+                if (fe == null) continue;
+                if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
+                string k = (pkg ?? "") + "\n" + (ip ?? "");
+                if (!updatedKeys.Contains(k)) continue;
+                if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(cat, pkg, ip, activeUserTags))
+                    removeRefs.Add(fe);
+            }
+
+            if (removeRefs.Count == 0) return false;
+
+            RemoveFileEntriesFromLists(currentFilteredFiles, removeRefs);
+            RemoveFileEntriesFromLists(lastFilteredFiles, removeRefs);
+            RemoveFileEntriesFromLists(topSearchBaseFiles, removeRefs);
+            RemoveFileEntriesFromLists(filterSearchBaseFiles, removeRefs);
+            RemoveFileEntriesFromLists(selectedFiles, removeRefs);
+            return true;
+        }
+
+        private void RefreshUiAfterUserTagMutate(bool remove, List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
+        {
+            InvalidateTags();
+            userTagsCached = false;
+
+            bool filterModeRemove = remove
+                && _userTagAvailFilterMode
+                && activeUserTags != null && activeUserTags.Count > 0
+                && activeContentType == ContentType.Category
+                && VpbSqlite3.IsAvailable;
+
+            if (filterModeRemove)
+            {
+                if (TryPruneVisibleGridAfterUserTagRemove(updatedRows))
+                {
+                    if (recyclingGrid != null)
+                    {
+                        recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                        recyclingGrid.Refresh();
+                    }
+                    try { UpdatePaginationText(); } catch { }
+                }
+                try { RefreshSelectionVisuals(); } catch { }
+                try { UpdateTabs(); } catch { }
+            }
+            else
+                RefreshFilesThenUpdateTabs(true);
+        }
+
         private IEnumerator ApplyTagsToSelectedPackagesBulkCoroutine(List<string> tags, bool remove)
         {
             if (tags == null || tags.Count == 0) yield break;
@@ -789,9 +908,7 @@ namespace VPB
                 yield break;
             }
 
-            InvalidateTags();
-            userTagsCached = false;
-            RefreshFilesThenUpdateTabs(true);
+            RefreshUiAfterUserTagMutate(remove, rows);
             ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.done_count", "Updated {0} item(s)."), touchedOut[0]), 2f);
         }
 
@@ -859,9 +976,7 @@ namespace VPB
                 yield break;
             }
 
-            InvalidateTags();
-            userTagsCached = false;
-            RefreshFilesThenUpdateTabs(true);
+            RefreshUiAfterUserTagMutate(remove, rows);
             ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.done_count", "Updated {0} item(s)."), touchedOut[0]), 2.2f);
         }
 
@@ -2564,10 +2679,13 @@ namespace VPB
     internal static class UserTagDragSession
     {
         public static List<string> PendingTags;
+        /// <summary>True when dragging from Applied rows — apply drop zones must ignore <see cref="IDropHandler.OnDrop"/>.</summary>
+        public static bool PendingIsAppliedRowRemove;
 
         public static void Clear()
         {
             PendingTags = null;
+            PendingIsAppliedRowRemove = false;
         }
     }
 
@@ -2575,6 +2693,8 @@ namespace VPB
     {
         public GalleryPanel Panel;
         public string PrimaryTag;
+        /// <summary>When true, drag originates from Applied list — drop targets remove control only (not apply zones).</summary>
+        public bool IsAppliedRowDrag;
         private CanvasGroup _cg;
         private bool _pressed;
         private bool _dragging;
@@ -2656,10 +2776,14 @@ namespace VPB
             if (_dragging) return;
 
             var list = new List<string>();
-            Panel.UserTagPickDragBeginPayload(PrimaryTag, list);
+            if (IsAppliedRowDrag)
+                Panel.UserTagAppliedDragBeginPayload(PrimaryTag, list);
+            else
+                Panel.UserTagPickDragBeginPayload(PrimaryTag, list);
             if (list.Count == 0) return;
 
             UserTagDragSession.PendingTags = list;
+            UserTagDragSession.PendingIsAppliedRowRemove = IsAppliedRowDrag;
             _dragging = true;
 
             if (_cg != null)
@@ -2674,8 +2798,37 @@ namespace VPB
 
         private void EndManualDrag(PointerEventData eventData)
         {
-            TryDropToApplyZone(eventData);
+            if (IsAppliedRowDrag)
+                TryDropToRemoveZone(eventData);
+            else
+                TryDropToApplyZone(eventData);
             CleanupDragVisuals();
+        }
+
+        private void TryDropToRemoveZone(PointerEventData eventData)
+        {
+            if (Panel == null) return;
+            List<string> tags = UserTagDragSession.PendingTags;
+            if (tags == null || tags.Count == 0) return;
+
+            EventSystem es = EventSystem.current;
+            if (es == null) return;
+
+            var ped = eventData ?? new PointerEventData(es);
+            ped.position = (eventData != null) ? eventData.position : (Vector2)Input.mousePosition;
+            _raycastHits.Clear();
+            es.RaycastAll(ped, _raycastHits);
+            for (int i = 0; i < _raycastHits.Count; i++)
+            {
+                GameObject go = _raycastHits[i].gameObject;
+                if (go == null) continue;
+                UserTagRemoveDropZone dz = go.GetComponentInParent<UserTagRemoveDropZone>();
+                if (dz != null && dz.Panel == Panel)
+                {
+                    Panel.UserTagRemoveDroppedTags(tags);
+                    break;
+                }
+            }
         }
 
         private void TryDropToApplyZone(PointerEventData eventData)
@@ -2799,9 +2952,24 @@ namespace VPB
         public void OnDrop(PointerEventData eventData)
         {
             if (Panel == null) return;
+            if (UserTagDragSession.PendingIsAppliedRowRemove) return;
             List<string> tags = UserTagDragSession.PendingTags;
             if (tags == null || tags.Count == 0) return;
             Panel.UserTagApplyDroppedTags(tags);
+            UserTagDragSession.Clear();
+        }
+    }
+
+    internal sealed class UserTagRemoveDropZone : MonoBehaviour, IDropHandler
+    {
+        public GalleryPanel Panel;
+
+        public void OnDrop(PointerEventData eventData)
+        {
+            if (Panel == null) return;
+            List<string> tags = UserTagDragSession.PendingTags;
+            if (tags == null || tags.Count == 0) return;
+            Panel.UserTagRemoveDroppedTags(tags);
             UserTagDragSession.Clear();
         }
     }

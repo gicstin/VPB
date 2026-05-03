@@ -91,6 +91,7 @@ namespace VPB
             public float GalleryListHoverPreviewOffsetX;
             public float GalleryListHoverPreviewOffsetY;
             public bool GalleryGridLabelsEnabled;
+            public bool GalleryGridLabelsAutoHideAtHighDensity;
             public float GalleryGridLabelFontSize;
             public bool GalleryOnlyWhenVamMenuVisible;
             public bool GalleryAnchorToVamMenu;
@@ -438,6 +439,13 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryGridLabelsEnabled = v; RebuildGridLayout(); }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "grid.autoHideHighDensity", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_labels_auto_hide_high_density", "Hide labels at max grid density"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_labels_auto_hide_high_density", "When grid is at 11 or 12 columns (minus pressed to limit), hide label strips."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity,
+                SetBool = v => { VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity = v; RebuildGridLayout(); },
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsEnabled
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "grid.font", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_label_font_size", "Label font size"),
                 Tooltip = VPBTranslation.T("settings.tip.grid_label_font_size", "Grid label strip font size."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryGridLabelFontSize,
@@ -538,6 +546,7 @@ namespace VPB
                 GalleryListHoverPreviewOffsetX = VPBConfig.Instance.GalleryListHoverPreviewOffsetX,
                 GalleryListHoverPreviewOffsetY = VPBConfig.Instance.GalleryListHoverPreviewOffsetY,
                 GalleryGridLabelsEnabled = VPBConfig.Instance.GalleryGridLabelsEnabled,
+                GalleryGridLabelsAutoHideAtHighDensity = VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity,
                 GalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
                 GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
@@ -563,6 +572,29 @@ namespace VPB
             return leftActiveContent == ContentType.Settings || rightActiveContent == ContentType.Settings;
         }
 
+        /// <summary>Merges backing <see cref="settingsFilter"/>, title bar search (primary UX while settings list is open), and side-rail search.</summary>
+        private string CanonicalSettingsSideSearchText()
+        {
+            if (!IsSettingsPanelOpen())
+                return settingsFilter ?? "";
+
+            string fromVar = (settingsFilter ?? "").Trim();
+            string fromTitle = titleSearchInput != null ? (titleSearchInput.text ?? "").Trim() : "";
+            InputField sideBox = null;
+            if (leftActiveContent == ContentType.Settings) sideBox = leftSearchInput;
+            else if (rightActiveContent == ContentType.Settings) sideBox = rightSearchInput;
+            string fromSide = sideBox != null ? (sideBox.text ?? "").Trim() : "";
+
+            if (fromTitle.Length > 0 && fromVar.Length > 0 && fromSide.Length > 0) return settingsFilter ?? "";
+            if (fromVar.Length > 0 && fromTitle.Length > 0) return settingsFilter ?? "";
+            if (fromVar.Length > 0 && fromSide.Length > 0) return settingsFilter ?? "";
+            if (fromTitle.Length > 0 && fromSide.Length > 0) return titleSearchInput.text ?? "";
+            if (fromVar.Length > 0) return settingsFilter ?? "";
+            if (fromTitle.Length > 0) return titleSearchInput.text ?? "";
+            if (fromSide.Length > 0) return sideBox.text ?? "";
+            return "";
+        }
+
         /// <summary>Closes Settings side tab(s) and syncs internal session — use when navigating to Tags so Save→Tags never leaves Settings open on other rail.</summary>
         private void ForceCloseSettingsSidePanels()
         {
@@ -570,6 +602,7 @@ namespace VPB
                 return;
             if (leftActiveContent == ContentType.Settings) leftActiveContent = null;
             if (rightActiveContent == ContentType.Settings) rightActiveContent = null;
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
             SyncInternalSettingsListView();
             try { RefreshTboxConditionalActionButtons(); } catch { }
         }
@@ -601,6 +634,13 @@ namespace VPB
         private void RefreshInternalSettingsListRows(bool keepScroll = false)
         {
             if (!IsSettingsPanelOpen()) return;
+            try
+            {
+                string c = CanonicalSettingsSideSearchText();
+                if (!string.IsNullOrEmpty((c ?? "").Trim()))
+                    settingsFilter = c;
+            }
+            catch { }
             settingsListViewActive = true;
             EnsureInternalSettingsSession();
 
@@ -643,7 +683,7 @@ namespace VPB
 
         private List<FileEntry> BuildInternalSettingsRows()
         {
-            string f = (settingsFilter ?? "").Trim();
+            string f = (CanonicalSettingsSideSearchText() ?? "").Trim();
             var rows = new List<FileEntry>(64);
 
             bool GroupAllowed(string group) =>
@@ -1024,6 +1064,7 @@ namespace VPB
             VPBConfig.Instance.GalleryListHoverPreviewOffsetX = b.GalleryListHoverPreviewOffsetX;
             VPBConfig.Instance.GalleryListHoverPreviewOffsetY = b.GalleryListHoverPreviewOffsetY;
             VPBConfig.Instance.GalleryGridLabelsEnabled = b.GalleryGridLabelsEnabled;
+            VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity = b.GalleryGridLabelsAutoHideAtHighDensity;
             VPBConfig.Instance.GalleryGridLabelFontSize = b.GalleryGridLabelFontSize;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;

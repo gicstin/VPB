@@ -233,9 +233,18 @@ namespace VPB
 
             SetupLanguageSwitcher(titleBarGO);
 
-            titleSearchInput = CreateSearchInput(titleBarGO, 240f, (val) => {
+            _titleBarSearchOnValueChanged = (val) => {
+                if (_suppressTitleBarSearchValueChanged) return;
+                if (IsSettingsPanelOpen())
+                {
+                    settingsFilter = val ?? "";
+                    try { UpdateTabs(); } catch { }
+                    try { RefreshInternalSettingsListRows(true); } catch { }
+                    return;
+                }
                 SetNameFilter(val);
-            });
+            };
+            titleSearchInput = CreateSearchInput(titleBarGO, 240f, _titleBarSearchOnValueChanged);
             RectTransform titleSearchRT = titleSearchInput.GetComponent<RectTransform>();
             titleSearchRT.anchorMin = new Vector2(0.5f, 0.5f);
             titleSearchRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -671,7 +680,8 @@ namespace VPB
                 rightRefreshButton.onClick.AddListener(() => { UserRequestedPackageRefresh(); });
                 AddTooltip(rightRefreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
 
-                rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
+                _rightMainSideSearchOnValueChanged = (val) => {
+                    if (_suppressMainSideSearchValueChanged) return;
                     if (rightActiveContent == ContentType.Category) categoryFilter = val;
                     else if (rightActiveContent == ContentType.Creator) creatorFilter = val;
                     else if (rightActiveContent == ContentType.UserTags) userTagFilter = val;
@@ -685,7 +695,8 @@ namespace VPB
                     UpdateTabs();
                     if (rightActiveContent == ContentType.Settings)
                         try { RefreshInternalSettingsListRows(true); } catch { }
-                }, () => {
+                };
+                rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, _rightMainSideSearchOnValueChanged, () => {
                     if (rightActiveContent == ContentType.Creator) {
                         currentCreator = "";
                         categoriesCached = false;
@@ -979,7 +990,8 @@ namespace VPB
                     });
                 }
 
-                leftSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, (val) => {
+                _leftMainSideSearchOnValueChanged = (val) => {
+                    if (_suppressMainSideSearchValueChanged) return;
                     if (leftActiveContent == ContentType.Category) categoryFilter = val;
                     else if (leftActiveContent == ContentType.Creator) creatorFilter = val;
                     else if (leftActiveContent == ContentType.UserTags) userTagFilter = val;
@@ -993,7 +1005,8 @@ namespace VPB
                     UpdateTabs();
                     if (leftActiveContent == ContentType.Settings)
                         try { RefreshInternalSettingsListRows(true); } catch { }
-                }, () => {
+                };
+                leftSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, _leftMainSideSearchOnValueChanged, () => {
                     if (leftActiveContent == ContentType.Creator) {
                         currentCreator = "";
                         categoriesCached = false;
@@ -2119,6 +2132,7 @@ namespace VPB
             {
                 scrollRect.onValueChanged.AddListener((v) => { 
                     lastScrollTime = Time.unscaledTime;
+                    try { if (tboxGridRateHandler != null) tboxGridRateHandler.CloseSelector(); } catch { }
                     // LogUtil.Log("Scroll changed: " + v.y);
                 });
             }

@@ -1800,7 +1800,7 @@ namespace VPB
                     CreateTabButton(container.transform, labelA, isSel ? utAppAccent : new Color(0.25f, 0.25f, 0.25f, 1f), isSel, () =>
                     {
                         OnAppliedUserTagRowClicked(viCapture, visibleApplied, tagFocusSnap);
-                    }, trackedButtons);
+                    }, trackedButtons, null, null, tagFocusSnap);
                 }
 
                 SyncUserTagAppliedTitleCount(appliedVisibleCount, isLeft);
@@ -1841,12 +1841,12 @@ namespace VPB
             {
                 Color groupActive = new Color(0.35f, 0.35f, 0.65f, 1f);
                 Color groupInactive = new Color(0.18f, 0.18f, 0.18f, 1f);
-                string filterNow = (settingsFilter ?? "").Trim();
+                string filterNow = (CanonicalSettingsSideSearchText() ?? "").Trim();
                 bool MatchFilter(string label) =>
                     string.IsNullOrEmpty(filterNow) || (label ?? "").IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) >= 0;
                 void AddGroupRow(string key, string label)
                 {
-                    if (!MatchFilter(label)) return;
+                    if (!string.Equals(key, "all", StringComparison.OrdinalIgnoreCase) && !MatchFilter(label)) return;
                     bool isActive = string.Equals(currentSettingsGroup, key, StringComparison.OrdinalIgnoreCase);
                     CreateTabButton(container.transform, label, isActive ? groupActive : groupInactive, isActive, () =>
                     {
@@ -2760,7 +2760,7 @@ namespace VPB
             return ell;
         }
 
-        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null)
+        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null, string userTagAppliedDragPrimary = null)
         {
             GameObject btnGO = GetTabButton(parent);
             if (btnGO == null)
@@ -2835,6 +2835,23 @@ namespace VPB
                 tipFinal = label;
             if (!string.IsNullOrEmpty(tipFinal))
                 AddTooltipPlain(btnGO, tipFinal);
+
+            if (!string.IsNullOrEmpty(userTagAppliedDragPrimary))
+            {
+                UserTagPickDragSource pickSrc = btnGO.GetComponent<UserTagPickDragSource>();
+                if (pickSrc == null) pickSrc = btnGO.AddComponent<UserTagPickDragSource>();
+                pickSrc.Panel = this;
+                pickSrc.PrimaryTag = userTagAppliedDragPrimary;
+                pickSrc.IsAppliedRowDrag = true;
+            }
+            else
+            {
+                UserTagPickDragSource pickSrc = btnGO.GetComponent<UserTagPickDragSource>();
+                if (pickSrc != null && pickSrc.IsAppliedRowDrag)
+                    UnityEngine.Object.Destroy(pickSrc);
+                else if (pickSrc != null)
+                    pickSrc.IsAppliedRowDrag = false;
+            }
 
             if (targetList != null) targetList.Add(btnGO);
         }
@@ -3056,7 +3073,7 @@ namespace VPB
 
         private static float GetGridLabelFraction()
         {
-            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridLabelsEnabled) return 0f;
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridLabelsStripVisible()) return 0f;
             float L = GetGridLabelUnits();
             return L / (100f + L);
         }
@@ -3065,7 +3082,7 @@ namespace VPB
         {
             if (layoutMode == GalleryLayoutMode.Grid
                 && VPBConfig.Instance != null
-                && VPBConfig.Instance.GalleryGridLabelsEnabled)
+                && VPBConfig.Instance.GalleryGridLabelsStripVisible())
                 return 100f + GetGridLabelUnits();
             return 100f;
         }
@@ -3259,7 +3276,7 @@ namespace VPB
             listVLG.childControlWidth = true;
             listVLG.childForceExpandHeight = false;
             listVLG.childForceExpandWidth = true;
-            listVLG.spacing = 2f;
+            listVLG.spacing = 0f;
             listVLG.padding = new RectOffset(5, 5, 5, 5);
 
             // Name
@@ -3276,7 +3293,7 @@ namespace VPB
             listNameText.raycastTarget = false;
             LayoutElement listNameLE = listNameGO.AddComponent<LayoutElement>();
             listNameLE.flexibleWidth = 1;
-            listNameLE.minHeight = 36;
+            listNameLE.minHeight = 32;
 
             // Details Row
             GameObject detailsRowGO = new GameObject("Details");
@@ -3291,7 +3308,7 @@ namespace VPB
             detailsHLG.padding = new RectOffset(0, 0, 0, 0);
             LayoutElement detailsLE = detailsRowGO.AddComponent<LayoutElement>();
             detailsLE.flexibleWidth = 1;
-            detailsLE.minHeight = 28;
+            detailsLE.minHeight = 24;
 
             // Helper to create detail text
             GameObject CreateDetailText(string name, string placeholder, float width)
@@ -3319,6 +3336,29 @@ namespace VPB
             CreateDetailText("Deps", "D:", 80);
             CreateDetailText("Missing", "M:", 80);
             CreateDetailText("Dependents", "Dn:", 80);
+
+            // List mode: badge strip below Size/Date row (horizontal layout; not over thumbnail)
+            GameObject listBadgesGO = new GameObject("ListBadges");
+            listBadgesGO.transform.SetParent(listRowGO.transform, false);
+            RectTransform listBadgesRT = listBadgesGO.AddComponent<RectTransform>();
+            listBadgesRT.anchorMin = new Vector2(0f, 0f);
+            listBadgesRT.anchorMax = new Vector2(1f, 0f);
+            listBadgesRT.pivot = new Vector2(0.5f, 0f);
+            listBadgesRT.anchoredPosition = Vector2.zero;
+            listBadgesRT.sizeDelta = new Vector2(0f, 32f);
+            HorizontalLayoutGroup listBadgesHLG = listBadgesGO.AddComponent<HorizontalLayoutGroup>();
+            listBadgesHLG.childAlignment = TextAnchor.MiddleLeft;
+            listBadgesHLG.spacing = 4f;
+            listBadgesHLG.childControlWidth = true;
+            listBadgesHLG.childControlHeight = true;
+            listBadgesHLG.childForceExpandWidth = false;
+            listBadgesHLG.childForceExpandHeight = false;
+            listBadgesHLG.padding = new RectOffset(0, 0, 0, 0);
+            LayoutElement listBadgesLE = listBadgesGO.AddComponent<LayoutElement>();
+            listBadgesLE.flexibleWidth = 1f;
+            listBadgesLE.minHeight = 32f;
+            listBadgesLE.preferredHeight = 32f;
+            listBadgesLE.flexibleHeight = 0f;
 
             // Rating (Top-right corner)
             GameObject ratingGO = new GameObject("Rating");
@@ -3429,6 +3469,11 @@ namespace VPB
             aiBadgeTextRT.anchorMax = Vector2.one;
             aiBadgeTextRT.sizeDelta = Vector2.zero;
             aiBadgeTextRT.anchoredPosition = Vector2.zero;
+            LayoutElement aiBadgeLE = aiBadgeGO.AddComponent<LayoutElement>();
+            aiBadgeLE.preferredWidth = 32f;
+            aiBadgeLE.preferredHeight = 32f;
+            aiBadgeLE.minWidth = 32f;
+            aiBadgeLE.minHeight = 32f;
             aiBadgeGO.SetActive(false);
 
             // Hidden package badge (top-left, to the right of AutoInstall "A")
@@ -3458,6 +3503,11 @@ namespace VPB
             hideBadgeTextRT.anchorMax = Vector2.one;
             hideBadgeTextRT.sizeDelta = Vector2.zero;
             hideBadgeTextRT.anchoredPosition = Vector2.zero;
+            LayoutElement hideBadgeLE = hideBadgeGO.AddComponent<LayoutElement>();
+            hideBadgeLE.preferredWidth = 32f;
+            hideBadgeLE.preferredHeight = 32f;
+            hideBadgeLE.minWidth = 32f;
+            hideBadgeLE.minHeight = 32f;
             hideBadgeGO.SetActive(false);
 
             // Scan-whitelist excluded badge (top-left, to the right of Hide "H")
@@ -3488,6 +3538,11 @@ namespace VPB
             scanExBadgeTextRT.anchorMax = Vector2.one;
             scanExBadgeTextRT.sizeDelta = Vector2.zero;
             scanExBadgeTextRT.anchoredPosition = Vector2.zero;
+            LayoutElement scanExBadgeLE = scanExBadgeGO.AddComponent<LayoutElement>();
+            scanExBadgeLE.preferredWidth = 32f;
+            scanExBadgeLE.preferredHeight = 32f;
+            scanExBadgeLE.minWidth = 32f;
+            scanExBadgeLE.minHeight = 32f;
             scanExBadgeGO.SetActive(false);
 
             // User tags badge (top-left; slot order via ApplyDynamicTopLeftBadgeLayout)
@@ -3517,6 +3572,11 @@ namespace VPB
             userTagsBadgeTextRT.anchorMax = Vector2.one;
             userTagsBadgeTextRT.sizeDelta = Vector2.zero;
             userTagsBadgeTextRT.anchoredPosition = Vector2.zero;
+            LayoutElement userTagsBadgeLE = userTagsBadgeGO.AddComponent<LayoutElement>();
+            userTagsBadgeLE.preferredWidth = 32f;
+            userTagsBadgeLE.preferredHeight = 32f;
+            userTagsBadgeLE.minWidth = 32f;
+            userTagsBadgeLE.minHeight = 32f;
             userTagsBadgeGO.SetActive(false);
 
             // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
@@ -3571,34 +3631,67 @@ namespace VPB
             );
         }
 
+        private static Transform FindGalleryBadgeTransform(Transform btnRoot, string badgeName)
+        {
+            if (btnRoot == null || string.IsNullOrEmpty(badgeName)) return null;
+            Transform t = btnRoot.Find(badgeName);
+            if (t != null) return t;
+            return btnRoot.Find("ListRow/ListBadges/" + badgeName);
+        }
+
+        private static void ApplyListRowBadgeSlot(RectTransform badgeRT)
+        {
+            if (badgeRT == null) return;
+            badgeRT.anchorMin = new Vector2(0f, 0.5f);
+            badgeRT.anchorMax = new Vector2(0f, 0.5f);
+            badgeRT.pivot = new Vector2(0f, 0.5f);
+            badgeRT.sizeDelta = new Vector2(32f, 32f);
+            badgeRT.anchoredPosition = Vector2.zero;
+        }
+
+        private void EnsureGalleryBadgeParentForLayoutMode(GameObject btnGO, bool listMode)
+        {
+            if (btnGO == null) return;
+            Transform listBadges = btnGO.transform.Find("ListRow/ListBadges");
+            if (listBadges == null) return;
+
+            string[] names = { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge" };
+            Transform targetParent = listMode ? listBadges : btnGO.transform;
+
+            foreach (string n in names)
+            {
+                Transform tr = FindGalleryBadgeTransform(btnGO.transform, n);
+                if (tr != null) tr.SetParent(targetParent, false);
+            }
+
+            if (listMode)
+            {
+                for (int i = 0; i < names.Length; i++)
+                {
+                    Transform tr = listBadges.Find(names[i]);
+                    if (tr != null) tr.SetSiblingIndex(i);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < names.Length; i++)
+                {
+                    Transform tr = btnGO.transform.Find(names[i]);
+                    if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, i);
+                }
+            }
+        }
+
+        /// <summary>List mode: badges live in ListRow/ListBadges (below Details). Params kept for call-site stability.</summary>
         private void ApplyDynamicTopLeftBadgeLayout(GameObject btnGO, bool showAutoInstall, bool showHide, bool showWhitelistExcluded, bool showUserTags)
         {
             if (btnGO == null) return;
 
-            int slotIndex = 0;
-
-            if (showAutoInstall)
+            string[] names = { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge" };
+            foreach (string n in names)
             {
-                Transform tr = btnGO.transform.Find("AutoInstallBadge");
-                if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, slotIndex++);
-            }
-
-            if (showHide)
-            {
-                Transform tr = btnGO.transform.Find("HidePackageBadge");
-                if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, slotIndex++);
-            }
-
-            if (showWhitelistExcluded)
-            {
-                Transform tr = btnGO.transform.Find("ScanExcludedBadge");
-                if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, slotIndex++);
-            }
-
-            if (showUserTags)
-            {
-                Transform tr = btnGO.transform.Find("UserTagsBadge");
-                if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, slotIndex++);
+                Transform tr = FindGalleryBadgeTransform(btnGO.transform, n);
+                if (tr != null) ApplyListRowBadgeSlot(tr as RectTransform);
             }
         }
 
@@ -3727,15 +3820,13 @@ namespace VPB
             Button btn = btnGO.GetComponent<Button>();
             if (btn != null)
             {
-                // Optimization: Avoid RemoveAllListeners if we can simply swap the target
-                // But Unity Events are tricky. Ideally we'd have a single listener that checks a field on the button.
-                // For now, keep it safe but cleaner.
                 btn.onClick.RemoveAllListeners();
-                btn.onClick.AddListener(() => {
-                    var dragItem = btnGO.GetComponent<UIDraggableItem>();
-                    if (dragItem != null && dragItem.IsLongPress) return;
-                    OnFileClick(file);
-                });
+                // Left: IPointerUp + slop (see UIFileEntryLeftReleaseSelect) — ScrollRect eats Button.onClick when
+                // pointer moved enough to count as scroll drag; right-click path unaffected.
+                var leftUp = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                if (leftUp == null) leftUp = btnGO.AddComponent<UIFileEntryLeftReleaseSelect>();
+                leftUp.Panel = this;
+                leftUp.File = file;
             }
 
             // Right Click
@@ -3781,7 +3872,8 @@ namespace VPB
 
                 void HideChild(string p)
                 {
-                    Transform tr = btnGO.transform.Find(p);
+                    Transform tr = FindGalleryBadgeTransform(btnGO.transform, p);
+                    if (tr == null) tr = btnGO.transform.Find(p);
                     if (tr != null) tr.gameObject.SetActive(false);
                 }
 
@@ -3824,6 +3916,8 @@ namespace VPB
                 }
             }
 
+            EnsureGalleryBadgeParentForLayoutMode(btnGO, isListMode);
+
             // List Row + Rating selector visibility (List/Table mode)
             Transform listRowTr = btnGO.transform.Find("ListRow");
             if (listRowTr != null)
@@ -3851,9 +3945,18 @@ namespace VPB
             Transform selectorTr = btnGO.transform.Find("RatingSelector");
             if (selectorTr != null)
             {
-                selectorTr.gameObject.SetActive(true);
-                RatingHandler rh = btnGO.GetComponent<RatingHandler>();
-                if (rh != null) rh.CloseSelector();
+                if (isListMode)
+                {
+                    selectorTr.gameObject.SetActive(true);
+                    RatingHandler rhSel = btnGO.GetComponent<RatingHandler>();
+                    if (rhSel != null) rhSel.CloseSelector();
+                }
+                else
+                {
+                    RatingHandler rhSel = btnGO.GetComponent<RatingHandler>();
+                    if (rhSel != null) rhSel.CloseSelector();
+                    selectorTr.gameObject.SetActive(false);
+                }
             }
 
             // Card Container (Hidden in List mode, Visible in Grid mode? No, Card is for VerticalCard mode which is removed or mapped to Grid if we had it)
@@ -3895,7 +3998,7 @@ namespace VPB
                 }
                 else
                 {
-                    bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsEnabled;
+                    bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible();
                     float labelFrac = showGridLabels ? GetGridLabelFraction() : 0f;
 
                     thumbRT.anchorMin = new Vector2(0f, labelFrac);
@@ -3994,44 +4097,49 @@ namespace VPB
                 }
             }
 
-            // Rating always visible — grid uses it as a compact favorite toggle
+            // List: star + badge strip. Grid: thumbnail + GridLabel only (badges/star hidden — fewer canvases per cell).
             Transform ratingTr = btnGO.transform.Find("Rating");
-            if (ratingTr != null)
+            if (isListMode)
             {
-                ratingTr.gameObject.SetActive(true);
-            }
+                if (ratingTr != null)
+                    ratingTr.gameObject.SetActive(true);
 
-            // AutoInstall Badge — show blue "A" for packages flagged as AutoInstall
-            bool showAutoInstallBadge = file.IsAutoInstall();
-            Transform aiBadgeTr = btnGO.transform.Find("AutoInstallBadge");
-            if (aiBadgeTr != null)
+                bool showAutoInstallBadge = file.IsAutoInstall();
+                Transform aiBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "AutoInstallBadge");
+                if (aiBadgeTr != null)
+                    aiBadgeTr.gameObject.SetActive(showAutoInstallBadge);
+
+                bool showHideBadge = PackageHidePrefs.IsGalleryHideBadgeVisible(file);
+                Transform hideBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "HidePackageBadge");
+                if (hideBadgeTr != null)
+                    hideBadgeTr.gameObject.SetActive(showHideBadge);
+
+                bool showScanExcludedBadge = ScanWhitelistManager.IsScanExcludedBadgeVisible(file);
+                Transform scanExBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
+                if (scanExBadgeTr != null)
+                    scanExBadgeTr.gameObject.SetActive(showScanExcludedBadge);
+
+                bool showUserTagsBadge = IsGalleryUserTagBadgeVisible(file);
+                Transform userTagsBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "UserTagsBadge");
+                if (userTagsBadgeTr != null)
+                    userTagsBadgeTr.gameObject.SetActive(showUserTagsBadge);
+
+                ApplyDynamicTopLeftBadgeLayout(btnGO, showAutoInstallBadge, showHideBadge, showScanExcludedBadge, showUserTagsBadge);
+            }
+            else
             {
-                aiBadgeTr.gameObject.SetActive(showAutoInstallBadge);
-            }
+                if (ratingTr != null)
+                    ratingTr.gameObject.SetActive(false);
 
-            bool showHideBadge = PackageHidePrefs.IsGalleryHideBadgeVisible(file);
-            Transform hideBadgeTr = btnGO.transform.Find("HidePackageBadge");
-            if (hideBadgeTr != null)
-            {
-                hideBadgeTr.gameObject.SetActive(showHideBadge);
+                Transform tAi = FindGalleryBadgeTransform(btnGO.transform, "AutoInstallBadge");
+                if (tAi != null) tAi.gameObject.SetActive(false);
+                Transform tH = FindGalleryBadgeTransform(btnGO.transform, "HidePackageBadge");
+                if (tH != null) tH.gameObject.SetActive(false);
+                Transform tW = FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
+                if (tW != null) tW.gameObject.SetActive(false);
+                Transform tT = FindGalleryBadgeTransform(btnGO.transform, "UserTagsBadge");
+                if (tT != null) tT.gameObject.SetActive(false);
             }
-
-            // Scan-Excluded Badge: show "W" when package is in AddonPackages/ but excluded from VaM's whitelist scan
-            bool showScanExcludedBadge = ScanWhitelistManager.IsScanExcludedBadgeVisible(file);
-            Transform scanExBadgeTr = btnGO.transform.Find("ScanExcludedBadge");
-            if (scanExBadgeTr != null)
-            {
-                scanExBadgeTr.gameObject.SetActive(showScanExcludedBadge);
-            }
-
-            bool showUserTagsBadge = IsGalleryUserTagBadgeVisible(file);
-            Transform userTagsBadgeTr = btnGO.transform.Find("UserTagsBadge");
-            if (userTagsBadgeTr != null)
-            {
-                userTagsBadgeTr.gameObject.SetActive(showUserTagsBadge);
-            }
-
-            ApplyDynamicTopLeftBadgeLayout(btnGO, showAutoInstallBadge, showHideBadge, showScanExcludedBadge, showUserTagsBadge);
 
             // List Row Bind
             if (isListMode)

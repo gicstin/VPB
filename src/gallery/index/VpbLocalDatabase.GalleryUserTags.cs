@@ -181,21 +181,7 @@ namespace VPB
             if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
             if (string.IsNullOrEmpty(categoryTitle)) return false;
 
-            long scanBin = DateTime.MinValue.Ticks;
-            try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
-
-            string catSig = null;
-            long readyScan = long.MinValue;
-            lock (s_Sync)
-            {
-                readyScan = s_ReadyScanBinary;
-                catSig = s_ReadyCategoriesSig;
-            }
-            if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
-            {
-                AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
-                return false;
-            }
+            // Do not gate on s_ReadyScanBinary / category rebuild: vocabulary query has no such gate; mismatch left every count at 0 while names still loaded.
 
             string normalizedPackagePathFilter = "";
             bool hasPackagePathFilter = false;
@@ -205,28 +191,49 @@ namespace VPB
                 hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
             }
             bool hasCreator = !string.IsNullOrEmpty(creatorFilter);
+            bool allVarPseudo = IsGalleryAllVarPseudoCategory(categoryTitle);
+            // ALL VAR + pkg path: same rule as TryReadCategoryMemberCounts — path filter only with creator.
+            bool pathFilterBind = allVarPseudo ? (hasCreator && hasPackagePathFilter) : hasPackagePathFilter;
 
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
-                    var sb = new StringBuilder(512);
-                    sb.Append("SELECT gt.name, COUNT(*) FROM gallery_item_user_tag gut");
-                    sb.Append(" INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id");
-                    sb.Append(" INNER JOIN cat_mem m ON m.category=gut.category AND m.pkg_uid=gut.pkg_uid AND m.internal_path=gut.internal_path");
+                    EnsureSchema(conn);
+                    var sb = new StringBuilder(800);
+                    // Path normalize: cat_mem / gut rows may differ by '\' vs '/' only.
+                    const string PathNorm = "lower(replace(ifnull(__COL__,''),char(92),'/'))";
+                    string pathEqMemGut = PathNorm.Replace("__COL__", "m.internal_path") + "=" + PathNorm.Replace("__COL__", "gut.internal_path");
+                    // ALL VAR: cat_mem has no "ALL VAR" rows; gut.category holds real browse category (Appearance, …).
+                    // Join cat_mem on pkg+path only; DISTINCT avoids double count when same item appears under multiple categories.
+                    if (allVarPseudo)
+                    {
+                        sb.Append("SELECT gt.name, COUNT(DISTINCT gut.pkg_uid || char(31) || lower(replace(ifnull(gut.internal_path,''),char(92),'/')) ) FROM gallery_item_user_tag gut");
+                        sb.Append(" INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id");
+                        sb.Append(" INNER JOIN cat_mem m ON m.pkg_uid=gut.pkg_uid AND ").Append(pathEqMemGut);
+                    }
+                    else
+                    {
+                        sb.Append("SELECT gt.name, COUNT(*) FROM gallery_item_user_tag gut");
+                        sb.Append(" INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id");
+                        sb.Append(" INNER JOIN cat_mem m ON m.category=gut.category AND m.pkg_uid=gut.pkg_uid AND ").Append(pathEqMemGut);
+                    }
                     sb.Append(" INNER JOIN pkg p ON p.uid=m.pkg_uid");
-                    sb.Append(" WHERE gut.category=?");
+                    sb.Append(" WHERE 1=1");
+                    if (!allVarPseudo)
+                        sb.Append(" AND gut.category=?");
                     if (hasCreator) sb.Append(" AND p.creator=?");
-                    if (hasPackagePathFilter)
+                    if (pathFilterBind)
                         sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     sb.Append(" GROUP BY gt.name");
 
                     using (var stmt = conn.Prepare(sb.ToString()))
                     {
                         int bind = 1;
-                        stmt.BindText(bind++, categoryTitle);
+                        if (!allVarPseudo)
+                            stmt.BindText(bind++, categoryTitle);
                         if (hasCreator) stmt.BindText(bind++, creatorFilter);
-                        if (hasPackagePathFilter)
+                        if (pathFilterBind)
                             stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
 
                         int step;
@@ -236,6 +243,32 @@ namespace VPB
                             int n;
                             if (!int.TryParse(stmt.ColumnText(1), out n)) n = (int)stmt.ColumnInt64(1);
                             if (!string.IsNullOrEmpty(name)) countsOut[name] = n;
+                        }
+                    }
+
+                    // Loose Custom/Saves use pkg_uid __local__; cat_mem is VAR-only so INNER JOIN above drops them.
+                    // Skip when browsing ALL VAR pseudo-category (grid is VAR-centric; loose rows use real browse categories).
+                    if (!allVarPseudo)
+                    {
+                        var sbLoose = new StringBuilder(220);
+                        sbLoose.Append("SELECT gt.name, COUNT(*) FROM gallery_item_user_tag gut INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id WHERE gut.pkg_uid=? AND gut.category=?");
+                        sbLoose.Append(" GROUP BY gt.name");
+                        using (var stLoose = conn.Prepare(sbLoose.ToString()))
+                        {
+                            int b = 1;
+                            stLoose.BindText(b++, GalleryUserTagLoosePkgUid);
+                            stLoose.BindText(b++, categoryTitle);
+                            int stepL;
+                            while ((stepL = stLoose.Step()) == VpbSqlite3.SqliteRow)
+                            {
+                                string name = stLoose.ColumnText(0) ?? "";
+                                int n;
+                                if (!int.TryParse(stLoose.ColumnText(1), out n)) n = (int)stLoose.ColumnInt64(1);
+                                if (string.IsNullOrEmpty(name)) continue;
+                                int prev;
+                                countsOut.TryGetValue(name, out prev);
+                                countsOut[name] = prev + n;
+                            }
                         }
                     }
                 }

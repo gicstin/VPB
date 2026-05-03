@@ -2733,6 +2733,7 @@ namespace VPB
                     // No need to RefreshFiles, rgv handles column changes via its Update/RecalculateLayout
                 }
             }
+            RebuildGridLayout();
         }
 
         private void ScrollGalleryToTop()
@@ -2768,6 +2769,7 @@ namespace VPB
 
         private void ToggleRight(ContentType type)
         {
+            bool hadSettingsPanel = IsSettingsPanelOpen();
             if (type == ContentType.UserTags)
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
@@ -2802,6 +2804,12 @@ namespace VPB
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             if (!hasHistorySide && hadHistorySide && titleText != null)
                 titleText.text = currentCategoryTitle;
+
+            bool hasSettingsPanel = IsSettingsPanelOpen();
+            if (!hadSettingsPanel && hasSettingsPanel)
+                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, settingsFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
+            else if (hadSettingsPanel && !hasSettingsPanel)
+                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
             
             UpdateLayout();
             UpdateTabs();
@@ -2828,6 +2836,7 @@ namespace VPB
 
         private void ToggleLeft(ContentType type)
         {
+            bool hadSettingsPanel = IsSettingsPanelOpen();
             if (type == ContentType.UserTags)
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
@@ -2862,6 +2871,12 @@ namespace VPB
             bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             if (!hasHistorySide && hadHistorySide && titleText != null)
                 titleText.text = currentCategoryTitle;
+
+            bool hasSettingsPanel = IsSettingsPanelOpen();
+            if (!hadSettingsPanel && hasSettingsPanel)
+                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, settingsFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
+            else if (hadSettingsPanel && !hasSettingsPanel)
+                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
             
             UpdateLayout();
             UpdateTabs();
