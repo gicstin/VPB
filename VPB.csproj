@@ -377,6 +377,13 @@
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.Sorting.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Helpers.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Layout.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Core.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Tags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.UserTags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Remove.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Misc.cs" />
     <Compile Include="src\gallery\GalleryPanel.Thumbnails.cs" />
     <Compile Include="src\gallery\GalleryPanel.I18n.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.cs" />
