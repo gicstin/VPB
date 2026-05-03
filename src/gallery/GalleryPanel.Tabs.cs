@@ -3962,7 +3962,7 @@ namespace VPB
             UIHoverReveal hover = btnGO.GetComponent<UIHoverReveal>();
             if (hover != null) hover.file = file;
 
-            // Hold-to-launch/apply (VR): hover-hold timer overlay.
+            // Hold-to-launch/apply: pointer must stay pressed; duration from VPBConfig.HoldToLaunchHoldSeconds.
             // Kept always attached for pooling; enabled/disabled by panel toggle at runtime.
             try
             {
@@ -3970,7 +3970,6 @@ namespace VPB
                 if (h == null) h = btnGO.AddComponent<HoldToApplyOnHover>();
                 h.panel = this;
                 h.file = file;
-                h.holdSeconds = 1.0f;
             }
             catch { }
 

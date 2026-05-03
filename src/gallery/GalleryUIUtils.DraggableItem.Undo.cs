@@ -1014,6 +1014,10 @@ namespace VPB
         {
             if (entry == null || string.IsNullOrEmpty(entry.Path)) return ItemType.Other;
             string p = entry.Path.Replace('\\', '/');
+            // .var display paths: "AddonPackages/pkg.var:/Custom/Atom/..." — prefix checks need internal path only
+            int varSep = p.IndexOf(":/", StringComparison.Ordinal);
+            if (varSep >= 0 && varSep + 2 < p.Length)
+                p = p.Substring(varSep + 2);
             bool isVap = p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase);
             bool isJson = p.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
             bool isVam = p.EndsWith(".vam", StringComparison.OrdinalIgnoreCase);

@@ -8,25 +8,28 @@ namespace VPB
 {
     /// <summary>
     /// Hold-to-apply timer that triggers the panel's apply/launch logic after a delay.
-    /// Requires the user to actively hold the pointer button/trigger down (similar to starting a drag).
+    /// Requires pointer button/trigger held down (same as drag); duration from <see cref="VPBConfig.HoldToLaunchHoldSeconds"/>.
     /// </summary>
-    public class HoldToApplyOnHover : MonoBehaviour, IPointerEnterHandler, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
+    public class HoldToApplyOnHover : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
     {
         public GalleryPanel panel;
         public FileEntry file;
 
-        public float holdSeconds = 2.0f;
+        private static float ResolveHoldSeconds()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    return Mathf.Clamp(VPBConfig.Instance.HoldToLaunchHoldSeconds, 0.2f, 1f);
+            }
+            catch { }
+            return 1f;
+        }
 
         private Coroutine _co;
         private GameObject _overlay;
         private Image _fill;
         private Text _text;
-
-        private static bool IsVR()
-        {
-            try { return UnityEngine.XR.XRSettings.enabled; }
-            catch { return false; }
-        }
 
         private void TryStartHold()
         {
@@ -36,18 +39,9 @@ namespace VPB
             _co = StartCoroutine(HoldRoutine());
         }
 
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            // Hold-to-launch is described as "hover-hold" in VR; starting on hover makes it work
-            // with VR laser pointers that don't issue pointer-down events for hover.
-            if (!IsVR()) return;
-            TryStartHold();
-        }
-
         public void OnPointerDown(PointerEventData eventData)
         {
-            // Desktop: require active press/hold (prevents accidental trigger while scrolling).
-            if (IsVR() || eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
             TryStartHold();
         }
 
@@ -86,6 +80,7 @@ namespace VPB
         {
             EnsureOverlay();
 
+            float holdSeconds = ResolveHoldSeconds();
             float start = Time.unscaledTime;
             float end = start + Mathf.Max(0.05f, holdSeconds);
             while (Time.unscaledTime < end)
@@ -161,7 +156,7 @@ namespace VPB
             _text.alignment = TextAnchor.MiddleCenter;
             _text.color = Color.white;
             _text.raycastTarget = false;
-            _text.text = holdSeconds.ToString("0.0");
+            _text.text = ResolveHoldSeconds().ToString("0.0");
         }
     }
 }

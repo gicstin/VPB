@@ -390,10 +390,14 @@ namespace VPB
             
             p.SetCategories(original.categories);
             
-            // Sync state
+            // Sync state (clone duplicates gallery browse context; do not copy Settings side-tab — original uses internal session/list state clone never synced)
             p.SetFilters(original.GetCurrentPath(), original.GetCurrentExtension(), original.GetCurrentCreator());
-            p.SetLeftActiveContent(original.GetLeftActiveContent());
-            p.SetRightActiveContent(original.GetRightActiveContent());
+            ContentType? cloneLeft = original.GetLeftActiveContent();
+            ContentType? cloneRight = original.GetRightActiveContent();
+            if (cloneLeft == ContentType.Settings) cloneLeft = null;
+            if (cloneRight == ContentType.Settings) cloneRight = null;
+            p.SetLeftActiveContent(cloneLeft);
+            p.SetRightActiveContent(cloneRight);
             p.SetFollowMode(original.GetFollowMode());
             
             // Sync size

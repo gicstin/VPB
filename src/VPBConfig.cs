@@ -245,6 +245,8 @@ namespace VPB
         public bool HoldToLaunchEnabled = false;
         /// <summary>When HoldToLaunch is enabled, drag&drop is forced off; this stores the prior setting for restore.</summary>
         public bool HoldToLaunchPrevEnableDragDrop = false;
+        /// <summary>Seconds pointer must stay pressed on item before hold-to-launch fires (when HoldToLaunch is on).</summary>
+        public float HoldToLaunchHoldSeconds = 1f;
 
         // Quick Menu assignable buttons (persistent, forward-compatible via string IDs)
         public int QuickMenuButtonsVersion = 1;
@@ -468,6 +470,7 @@ namespace VPB
             SpringScrollButtonEnabled = true;
             HoldToLaunchEnabled = false;
             HoldToLaunchPrevEnableDragDrop = false;
+            HoldToLaunchHoldSeconds = 1f;
             QuickMenuButtonsVersion = 1;
             QuickMenuButtonsCurrentPage = 0;
             QuickMenuButtonsPages = null;
@@ -533,7 +536,7 @@ namespace VPB
                             AppearanceClothingApplyMode = node["KeepClothingWhenApplyingAppearance"].AsBool ? "keep" : "replace";
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["DragHoldThreshold"] != null)
-                            DragHoldThreshold = Mathf.Clamp(node["DragHoldThreshold"].AsFloat, 0f, 3f);
+                            DragHoldThreshold = Mathf.Clamp(node["DragHoldThreshold"].AsFloat, 0f, 1f);
                         if (node["RequireDragHoldBeforeMove"] != null)
                             RequireDragHoldBeforeMove = node["RequireDragHoldBeforeMove"].AsBool;
                         if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
@@ -588,6 +591,8 @@ namespace VPB
                         if (node["SpringScrollButtonEnabled"] != null) SpringScrollButtonEnabled = node["SpringScrollButtonEnabled"].AsBool;
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["HoldToLaunchPrevEnableDragDrop"] != null) HoldToLaunchPrevEnableDragDrop = node["HoldToLaunchPrevEnableDragDrop"].AsBool;
+                        if (node["HoldToLaunchHoldSeconds"] != null)
+                            HoldToLaunchHoldSeconds = Mathf.Clamp(node["HoldToLaunchHoldSeconds"].AsFloat, 0.2f, 1f);
                         // Quick Menu buttons (pages)
                         try
                         {
@@ -731,7 +736,7 @@ namespace VPB
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["RequireDragHoldBeforeMove"].AsBool = RequireDragHoldBeforeMove;
-                node["DragHoldThreshold"].AsFloat = DragHoldThreshold;
+                node["DragHoldThreshold"].AsFloat = Mathf.Clamp(DragHoldThreshold, 0f, 1f);
                 node["ApplyMode"] = ApplyMode;
                 node["LastGalleryCategory"] = LastGalleryCategory;
                 node["InitialGalleryCategory"] = InitialGalleryCategory;
@@ -772,6 +777,7 @@ namespace VPB
                 node["SpringScrollButtonEnabled"].AsBool = SpringScrollButtonEnabled;
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["HoldToLaunchPrevEnableDragDrop"].AsBool = HoldToLaunchPrevEnableDragDrop;
+                node["HoldToLaunchHoldSeconds"].AsFloat = Mathf.Clamp(HoldToLaunchHoldSeconds, 0.2f, 1f);
                 node["UiLocale"] = UiLocale ?? "en";
                 node["HiddenCategories"] = string.Join(",", new List<string>(HiddenCategories ?? new HashSet<string>()).ToArray());
                 // Quick Menu buttons (pages)

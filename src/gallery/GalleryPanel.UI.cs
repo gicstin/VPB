@@ -1064,7 +1064,7 @@ namespace VPB
             { var s = UI.LoadIconSprite("vpb_icons/scroll.png", UI.BarIconGlyphTint); if (s != null) { UI.AddIconToButton(footerSpringScrollToggleBtn, s); footerSpringScrollToggleIconImage = footerSpringScrollToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerSpringScrollToggleBtn, "gallery.tooltip.spring_scroll_toggle", "Toggle spring scroll drag button (floating)");
 
-            // Toggle hold-to-launch/apply (hover-hold over an item for 2s)
+            // Toggle hold-to-launch/apply (hold trigger/button on item; duration in Settings)
             footerHoldToLaunchToggleBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleHoldToLaunch);
             footerHoldToLaunchToggleBtnImage = footerHoldToLaunchToggleBtn.GetComponent<Image>();
             footerHoldToLaunchOnSprite  = UI.LoadIconSprite("vpb_icons/hold.png",     UI.BarIconGlyphTint);
@@ -1079,7 +1079,7 @@ namespace VPB
                     footerHoldToLaunchToggleIconImage = footerHoldToLaunchToggleBtn.transform.Find("Icon")?.GetComponent<Image>();
                 }
             }
-            AddTooltip(footerHoldToLaunchToggleBtn, "gallery.tooltip.hold_to_launch_toggle", "Hold over an item for 1s to apply/launch");
+            AddTooltip(footerHoldToLaunchToggleBtn, "gallery.tooltip.hold_to_launch_toggle", "Hold trigger/button on item to apply/launch (see Settings for duration)");
 
             footerLayoutBtn = UI.CreateUIButton(rightSection, 40, 40, "▤", 20, 0, 0, AnchorPresets.middleCenter, ToggleLayoutMode);
             footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
@@ -1475,6 +1475,7 @@ namespace VPB
             catch { }
             UpdateHoldToLaunchToggleUI();
             try { UpdateApplyModeButtonState(); } catch { }
+            try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
         }
 
         private void UpdateHoldToLaunchToggleUI()
@@ -1895,7 +1896,12 @@ namespace VPB
             {
                 var del = footerLayoutBtn.GetComponent<UIHoverDelegate>();
                 if (del != null) del.OnHoverChange = null;
-                string modeText = (layoutMode == GalleryLayoutMode.List) ? "Toggle Grid Layout Mode" : "Toggle List Layout Mode";
+                bool blockGridWhileSettings = IsSettingsPanelOpen() || settingsListViewActive;
+                var b = footerLayoutBtn.GetComponent<Button>();
+                if (b != null) b.interactable = !blockGridWhileSettings;
+                string modeText = blockGridWhileSettings
+                    ? "Grid layout unavailable while Settings is open"
+                    : ((layoutMode == GalleryLayoutMode.List) ? "Toggle Grid Layout Mode" : "Toggle List Layout Mode");
                 AddTooltipPlain(footerLayoutBtn, modeText);
             }
         }
