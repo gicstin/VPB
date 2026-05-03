@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
@@ -1285,6 +1286,9 @@ namespace VPB
             if (_userTagEditorNewTagInput != null) _userTagEditorNewTagInput.text = "";
             if (_userTagEditorMergeModalGo != null) _userTagEditorMergeModalGo.SetActive(false);
             if (_userTagEditorMergeModalInput != null) _userTagEditorMergeModalInput.text = "";
+            if (_userTagEditorRenameModalGo != null) _userTagEditorRenameModalGo.SetActive(false);
+            if (_userTagEditorRenameModalInput != null) _userTagEditorRenameModalInput.text = "";
+            _userTagEditorRenameSourcePrefix = null;
             UserTagEditorSyncSortIcon();
             RebuildUserTagEditorRows();
             _userTagEditorRoot.SetActive(true);
@@ -1311,6 +1315,10 @@ namespace VPB
                 _userTagEditorMergeModalGo = null;
                 _userTagEditorMergeModalTitleText = null;
                 _userTagEditorMergeModalInput = null;
+                _userTagEditorRenameModalGo = null;
+                _userTagEditorRenameModalTitleText = null;
+                _userTagEditorRenameModalInput = null;
+                _userTagEditorRenameSourcePrefix = null;
             }
             if (_userTagEditorRoot != null && _userTagEditorRoot.transform.Find("UserTagEditorPanel/TitleRow/TagsDbTitle") == null)
             {
@@ -1324,6 +1332,10 @@ namespace VPB
                 _userTagEditorMergeModalGo = null;
                 _userTagEditorMergeModalTitleText = null;
                 _userTagEditorMergeModalInput = null;
+                _userTagEditorRenameModalGo = null;
+                _userTagEditorRenameModalTitleText = null;
+                _userTagEditorRenameModalInput = null;
+                _userTagEditorRenameSourcePrefix = null;
             }
             if (_userTagEditorRoot != null) return;
             if (backgroundBoxGO == null) return;
@@ -1597,6 +1609,10 @@ namespace VPB
             AddTooltipPlain(removeSelBtn, VPBTranslation.T("gallery.usertags.editor_remove_selected_tip", "Delete selected tag(s) from the database for all items (cannot undo)."));
             GameObject mergeBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprMerge, UserTagEditorOpenMergeDialog, mergeCol, 10f * s);
             AddTooltipPlain(mergeBtn, VPBTranslation.T("gallery.usertags.editor_merge_tip", "Merge selected tags into one name (opens confirmation)."));
+            Color renameCol = new Color(0.26f, 0.34f, 0.46f, 1f);
+            Sprite sprRename = UI.LoadIconSprite("vpb_icons/rename.png", Color.white);
+            GameObject renameBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprRename, UserTagEditorOpenRenameDialog, renameCol, 10f * s);
+            AddTooltipPlain(renameBtn, VPBTranslation.T("gallery.usertags.editor_rename_tip", "Rename the selected tag (opens dialog)."));
             GameObject impBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprImp, UserTagEditorBeginImportYaml, ioImpCol, 10f * s);
             AddTooltipPlain(impBtn, VPBTranslation.T("gallery.usertags.editor_import_tip", "Import tag assignments from a YAML file (tag→items or item→tags)."));
             GameObject expBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprExp, UserTagEditorBeginExportYaml, ioExpCol, 10f * s);
@@ -1714,6 +1730,109 @@ namespace VPB
             mmOL.minHeight = 38f * s;
 
             _userTagEditorMergeModalGo.transform.SetAsLastSibling();
+
+            _userTagEditorRenameModalGo = new GameObject("UserTagEditorRenameModal");
+            _userTagEditorRenameModalGo.transform.SetParent(dim.transform, false);
+            RectTransform rmRootRt = _userTagEditorRenameModalGo.AddComponent<RectTransform>();
+            rmRootRt.anchorMin = Vector2.zero;
+            rmRootRt.anchorMax = Vector2.one;
+            rmRootRt.sizeDelta = Vector2.zero;
+            Image rmDim = _userTagEditorRenameModalGo.AddComponent<Image>();
+            rmDim.color = new Color(0f, 0f, 0f, 0.5f);
+            rmDim.raycastTarget = true;
+            _userTagEditorRenameModalGo.SetActive(false);
+
+            GameObject rmPanel = new GameObject("RenameDialogPanel");
+            rmPanel.transform.SetParent(_userTagEditorRenameModalGo.transform, false);
+            RectTransform rmPanelRt = rmPanel.AddComponent<RectTransform>();
+            rmPanelRt.anchorMin = rmPanelRt.anchorMax = new Vector2(0.5f, 0.5f);
+            rmPanelRt.pivot = new Vector2(0.5f, 0.5f);
+            rmPanelRt.sizeDelta = new Vector2(420f * s, 200f * s);
+            Image rmPbg = rmPanel.AddComponent<Image>();
+            rmPbg.color = new Color(0.14f, 0.14f, 0.17f, 1f);
+            rmPbg.raycastTarget = true;
+            VerticalLayoutGroup rmV = rmPanel.AddComponent<VerticalLayoutGroup>();
+            rmV.padding = new RectOffset(Mathf.RoundToInt(14 * s), Mathf.RoundToInt(14 * s), Mathf.RoundToInt(12 * s), Mathf.RoundToInt(12 * s));
+            rmV.spacing = 10f * s;
+            rmV.childControlWidth = true;
+            rmV.childControlHeight = true;
+            rmV.childForceExpandWidth = true;
+
+            GameObject rmTitleGo = new GameObject("RenameTitle");
+            rmTitleGo.transform.SetParent(rmPanel.transform, false);
+            _userTagEditorRenameModalTitleText = rmTitleGo.AddComponent<Text>();
+            _userTagEditorRenameModalTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            _userTagEditorRenameModalTitleText.fontSize = Mathf.Max(13, Mathf.RoundToInt(15f * u));
+            _userTagEditorRenameModalTitleText.fontStyle = FontStyle.Bold;
+            _userTagEditorRenameModalTitleText.color = Color.white;
+            _userTagEditorRenameModalTitleText.text = VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_idle", "Rename to…");
+            LayoutElement rmTle = rmTitleGo.AddComponent<LayoutElement>();
+            rmTle.minHeight = 24f * s;
+            rmTle.flexibleWidth = 1f;
+
+            GameObject rmInGo = new GameObject("RenameDialogInput");
+            rmInGo.transform.SetParent(rmPanel.transform, false);
+            Image rmIBg = rmInGo.AddComponent<Image>();
+            rmIBg.color = new Color(0.07f, 0.07f, 0.09f, 1f);
+            LayoutElement rmILe = rmInGo.AddComponent<LayoutElement>();
+            rmILe.flexibleWidth = 1f;
+            rmILe.minHeight = 36f * s;
+            GameObject rmTa = new GameObject("TextArea");
+            rmTa.transform.SetParent(rmInGo.transform, false);
+            RectTransform rmTaRt = rmTa.AddComponent<RectTransform>();
+            rmTaRt.anchorMin = Vector2.zero;
+            rmTaRt.anchorMax = Vector2.one;
+            rmTaRt.offsetMin = new Vector2(8f * s, 4f * s);
+            rmTaRt.offsetMax = new Vector2(-8f * s, -4f * s);
+            GameObject rmPh = new GameObject("Placeholder");
+            rmPh.transform.SetParent(rmTa.transform, false);
+            Text rmPhT = rmPh.AddComponent<Text>();
+            rmPhT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            rmPhT.fontSize = bodyFont;
+            rmPhT.color = new Color(0.42f, 0.42f, 0.45f, 1f);
+            rmPhT.text = VPBTranslation.T("gallery.usertags.editor_rename_ph", "New tag name…");
+            RectTransform rmPhRt = rmPh.GetComponent<RectTransform>();
+            rmPhRt.anchorMin = Vector2.zero;
+            rmPhRt.anchorMax = Vector2.one;
+            rmPhRt.sizeDelta = Vector2.zero;
+            GameObject rmTx = new GameObject("Text");
+            rmTx.transform.SetParent(rmTa.transform, false);
+            Text rmTxT = rmTx.AddComponent<Text>();
+            rmTxT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            rmTxT.fontSize = bodyFont;
+            rmTxT.color = Color.white;
+            RectTransform rmTxRt = rmTx.GetComponent<RectTransform>();
+            rmTxRt.anchorMin = Vector2.zero;
+            rmTxRt.anchorMax = Vector2.one;
+            rmTxRt.sizeDelta = Vector2.zero;
+            _userTagEditorRenameModalInput = rmInGo.AddComponent<InputField>();
+            _userTagEditorRenameModalInput.textComponent = rmTxT;
+            _userTagEditorRenameModalInput.placeholder = rmPhT;
+            _userTagEditorRenameModalInput.lineType = InputField.LineType.SingleLine;
+
+            GameObject rmBtnRow = new GameObject("RenameDialogButtons");
+            rmBtnRow.transform.SetParent(rmPanel.transform, false);
+            HorizontalLayoutGroup rmBH = rmBtnRow.AddComponent<HorizontalLayoutGroup>();
+            rmBH.spacing = 8f * s;
+            rmBH.childAlignment = TextAnchor.MiddleCenter;
+            rmBH.childForceExpandWidth = true;
+            LayoutElement rmBRle = rmBtnRow.AddComponent<LayoutElement>();
+            rmBRle.minHeight = 40f * s;
+            rmBRle.flexibleWidth = 1f;
+
+            GameObject rmCancel = UI.CreateUIButton(rmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_cancel", "Cancel"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorCloseRenameDialog);
+            rmCancel.GetComponent<Image>().color = new Color(0.32f, 0.32f, 0.36f, 1f);
+            LayoutElement rmCL = rmCancel.AddComponent<LayoutElement>();
+            rmCL.flexibleWidth = 1f;
+            rmCL.minHeight = 38f * s;
+
+            GameObject rmOk = UI.CreateUIButton(rmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_rename_confirm", "Rename"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorConfirmRenameFromDialog);
+            rmOk.GetComponent<Image>().color = new Color(0.22f, 0.42f, 0.58f, 1f);
+            LayoutElement rmOL = rmOk.AddComponent<LayoutElement>();
+            rmOL.flexibleWidth = 1f;
+            rmOL.minHeight = 38f * s;
+
+            _userTagEditorRenameModalGo.transform.SetAsLastSibling();
 
             SetLayerRecursive(dim, backgroundBoxGO.layer);
 
@@ -1946,6 +2065,130 @@ namespace VPB
             RebuildUserTagEditorRows();
             ShowTemporaryStatus(
                 string.Format(VPBTranslation.T("gallery.usertags.editor_merge_done", "Merged into «{0}». Updated {1} item-tag link(s)."), normTarget, nTouch),
+                2.5f);
+        }
+
+        private void UserTagEditorOpenRenameDialog()
+        {
+            var tags = CollectUserTagEditorCheckedTags();
+            if (tags.Count != 1)
+            {
+                ShowTemporaryStatus(
+                    VPBTranslation.T("gallery.usertags.editor_rename_pick_one", "Select exactly one tag row to rename (click)."),
+                    2f);
+                return;
+            }
+            _userTagEditorRenameSourcePrefix = tags[0];
+            if (_userTagEditorRenameModalTitleText != null)
+            {
+                _userTagEditorRenameModalTitleText.text = string.Format(
+                    VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_fmt", "Rename «{0}» to…"),
+                    tags[0]);
+            }
+            if (_userTagEditorRenameModalInput != null) _userTagEditorRenameModalInput.text = "";
+            if (_userTagEditorRenameModalGo != null)
+            {
+                _userTagEditorRenameModalGo.SetActive(true);
+                _userTagEditorRenameModalGo.transform.SetAsLastSibling();
+            }
+        }
+
+        private void UserTagEditorCloseRenameDialog()
+        {
+            if (_userTagEditorRenameModalGo != null) _userTagEditorRenameModalGo.SetActive(false);
+        }
+
+        private void UserTagEditorRemapActiveUserTagsAfterRename(string normPrefix, string normNew)
+        {
+            if (activeUserTags == null || activeUserTags.Count == 0) return;
+            if (string.IsNullOrEmpty(normPrefix)) return;
+            var actSnap = new List<string>(activeUserTags);
+            for (int ai = 0; ai < actSnap.Count; ai++)
+            {
+                string a = actSnap[ai];
+                string na = VpbLocalDatabase.NormalizeGalleryUserTagName(a);
+                if (string.IsNullOrEmpty(na)) continue;
+                if (string.Equals(na, normPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    activeUserTags.Remove(a);
+                    if (!string.IsNullOrEmpty(normNew))
+                        activeUserTags.Add(normNew);
+                    continue;
+                }
+                if (na.Length > normPrefix.Length
+                    && na.StartsWith(normPrefix, StringComparison.OrdinalIgnoreCase)
+                    && na[normPrefix.Length] == ' ')
+                {
+                    string mapped = normNew + na.Substring(normPrefix.Length);
+                    if (!string.IsNullOrEmpty(VpbLocalDatabase.NormalizeGalleryUserTagName(mapped)))
+                    {
+                        activeUserTags.Remove(a);
+                        activeUserTags.Add(mapped);
+                    }
+                }
+            }
+        }
+
+        private void UserTagEditorConfirmRenameFromDialog()
+        {
+            if (string.IsNullOrEmpty(_userTagEditorRenameSourcePrefix))
+            {
+                UserTagEditorCloseRenameDialog();
+                return;
+            }
+            string rawTarget = _userTagEditorRenameModalInput != null ? _userTagEditorRenameModalInput.text : "";
+            if (!VpbLocalDatabase.TryPreviewGalleryUserTagRenameMergeConflict(_userTagEditorRenameSourcePrefix, rawTarget, out _, out bool wouldMerge))
+            {
+                ShowTemporaryStatus(
+                    VPBTranslation.T(
+                        "gallery.usertags.editor_rename_invalid",
+                        "Enter valid new name (1–30 chars: letters, digits, spaces, - _). Renamed tags must stay valid length."),
+                    2.5f);
+                return;
+            }
+            if (wouldMerge)
+            {
+                DisplayConfirm(
+                    VPBTranslation.T("gallery.usertags.editor_rename_merge_confirm_title", "Name already in use"),
+                    VPBTranslation.T(
+                        "gallery.usertags.editor_rename_merge_confirm_msg",
+                        "One or more destination names already exist. Merge item assignments into those existing tags?"),
+                    UserTagEditorExecuteRenameConfirmed);
+                return;
+            }
+            UserTagEditorExecuteRenameConfirmed();
+        }
+
+        private void UserTagEditorExecuteRenameConfirmed()
+        {
+            if (string.IsNullOrEmpty(_userTagEditorRenameSourcePrefix))
+            {
+                UserTagEditorCloseRenameDialog();
+                return;
+            }
+            string rawTarget = _userTagEditorRenameModalInput != null ? _userTagEditorRenameModalInput.text : "";
+            string normPref = VpbLocalDatabase.NormalizeGalleryUserTagName(_userTagEditorRenameSourcePrefix);
+            if (!VpbLocalDatabase.TryRenameGalleryUserTagPrefixWithChildren(_userTagEditorRenameSourcePrefix, rawTarget, out string normTarget, out int nTouch))
+            {
+                ShowTemporaryStatus(
+                    VPBTranslation.T(
+                        "gallery.usertags.editor_rename_invalid",
+                        "Enter valid new name (1–30 chars: letters, digits, spaces, - _). Renamed tags must stay valid length."),
+                    2.5f);
+                return;
+            }
+            UserTagEditorCloseRenameDialog();
+            _userTagEditorRowSelection.Clear();
+            _userTagEditorAnchorTag = null;
+            if (_userTagEditorRenameModalInput != null) _userTagEditorRenameModalInput.text = "";
+            _userTagEditorRenameSourcePrefix = null;
+            UserTagEditorRemapActiveUserTagsAfterRename(normPref, normTarget);
+            InvalidateTags();
+            userTagsCached = false;
+            try { RefreshFilesThenUpdateTabs(true); } catch { }
+            RebuildUserTagEditorRows();
+            ShowTemporaryStatus(
+                string.Format(VPBTranslation.T("gallery.usertags.editor_rename_done", "Renamed to «{0}». Updated {1} item-tag link(s)."), normTarget, nTouch),
                 2.5f);
         }
 

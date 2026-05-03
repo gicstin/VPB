@@ -688,13 +688,37 @@ namespace VPB
 
         private void Update()
         {
-            // Robust check: catch initial width or config changes
+            // Adaptive relayout must not run on tiny viewport width noise: RecalculateLayout() ends in
+            // Refresh() -> RecycleAll(), which drops the visible-range cache and re-binds every cell
+            // — main cause of grid scroll jitter when rect.width fluctuates 1–2px per frame.
             RectTransform rt = GetComponent<RectTransform>();
             float usableWidth = viewport != null ? viewport.rect.width : (rt != null ? rt.rect.width : 0);
-            
-            if (isAdaptive && (Mathf.Abs(usableWidth - lastRectWidth) > 1.0f || fixedColumns != lastFixedColumns))
+
+            if (isAdaptive)
             {
-                _needsLayoutUpdate = true;
+                bool layoutDirty = false;
+                if (fixedColumns != lastFixedColumns)
+                    layoutDirty = true;
+                else if (fixedColumns > 0)
+                {
+                    int cols = Mathf.Max(1, fixedColumns);
+                    float inner = usableWidth - (cols - 1) * spacingX;
+                    if (inner > 0.01f)
+                    {
+                        float newCellW = inner / cols;
+                        if (Mathf.Abs(newCellW - itemWidth) > 0.5f)
+                            layoutDirty = true;
+                    }
+                    else if (Mathf.Abs(usableWidth - lastRectWidth) > 4f)
+                        layoutDirty = true;
+                }
+                else if (Mathf.Abs(usableWidth - lastRectWidth) > 4f)
+                {
+                    layoutDirty = true;
+                }
+
+                if (layoutDirty)
+                    _needsLayoutUpdate = true;
             }
 
             if (_needsLayoutUpdate)

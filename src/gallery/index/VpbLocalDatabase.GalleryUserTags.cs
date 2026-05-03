@@ -1202,5 +1202,195 @@ namespace VPB
                 return false;
             }
         }
+
+        /// <summary>Shared prefix-rename target list: exact <paramref name="normPrefix"/> row plus rows named <c>normPrefix + " " + …</c>.</summary>
+        private static bool TryBuildGalleryUserTagRenameTargets(string normPrefix, string normalizedNewOut, out List<KeyValuePair<long, string>> targetsOut)
+        {
+            targetsOut = null;
+            if (string.IsNullOrEmpty(normPrefix) || string.IsNullOrEmpty(normalizedNewOut)) return false;
+
+            var rows = new List<KeyValuePair<long, string>>(64);
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    string likePat = normPrefix + " %";
+                    using (var sel = conn.Prepare("SELECT tag_id, name FROM gallery_user_tag WHERE name=? OR name LIKE ?"))
+                    {
+                        sel.BindText(1, normPrefix);
+                        sel.BindText(2, likePat);
+                        while (sel.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            long tid = sel.ColumnInt64(0);
+                            string nm = sel.ColumnText(1) ?? "";
+                            if (!string.IsNullOrEmpty(nm))
+                                rows.Add(new KeyValuePair<long, string>(tid, nm));
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (rows.Count == 0) return false;
+
+            var targets = new List<KeyValuePair<long, string>>(rows.Count);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                string nm = rows[i].Value;
+                string newName;
+                if (string.Equals(nm, normPrefix, StringComparison.OrdinalIgnoreCase))
+                    newName = normalizedNewOut;
+                else if (nm.Length > normPrefix.Length
+                    && nm.StartsWith(normPrefix, StringComparison.OrdinalIgnoreCase)
+                    && nm[normPrefix.Length] == ' ')
+                    newName = normalizedNewOut + nm.Substring(normPrefix.Length);
+                else
+                    continue;
+
+                string check = NormalizeGalleryUserTagName(newName);
+                if (string.IsNullOrEmpty(check))
+                    return false;
+                targets.Add(new KeyValuePair<long, string>(rows[i].Key, check));
+            }
+
+            if (targets.Count == 0) return false;
+            targetsOut = targets;
+            return true;
+        }
+
+        /// <summary>
+        /// True if some rename target name already exists on another <c>tag_id</c> (assignments would merge into that row).
+        /// </summary>
+        internal static bool TryPreviewGalleryUserTagRenameMergeConflict(string rawPrefixName, string rawNewName, out string normalizedNewOut, out bool wouldMergeIntoExistingTag)
+        {
+            normalizedNewOut = "";
+            wouldMergeIntoExistingTag = false;
+            if (!VpbSqlite3.IsAvailable) return false;
+            string normPrefix = NormalizeGalleryUserTagName(rawPrefixName);
+            normalizedNewOut = NormalizeGalleryUserTagName(rawNewName);
+            if (string.IsNullOrEmpty(normPrefix) || string.IsNullOrEmpty(normalizedNewOut)) return false;
+            if (string.Equals(normPrefix, normalizedNewOut, StringComparison.OrdinalIgnoreCase)) return false;
+
+            if (!TryBuildGalleryUserTagRenameTargets(normPrefix, normalizedNewOut, out List<KeyValuePair<long, string>> targets))
+                return false;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var selName = conn.Prepare("SELECT tag_id FROM gallery_user_tag WHERE name=?"))
+                    {
+                        for (int i = 0; i < targets.Count; i++)
+                        {
+                            long sourceTid = targets[i].Key;
+                            string destName = targets[i].Value;
+                            selName.BindText(1, destName);
+                            if (selName.Step() != VpbSqlite3.SqliteRow)
+                                continue;
+                            long existingTid = selName.ColumnInt64(0);
+                            if (existingTid != sourceTid)
+                                wouldMergeIntoExistingTag = true;
+                            selName.Reset();
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Renames <paramref name="rawPrefixName"/> to <paramref name="rawNewName"/> and renames every tag whose name is
+        /// <c>prefix + " " + …</c> so the same prefix is replaced (space-separated “child” tag names in vocabulary).
+        /// </summary>
+        internal static bool TryRenameGalleryUserTagPrefixWithChildren(string rawPrefixName, string rawNewName, out string normalizedNewOut, out int itemAssignmentsUpdated)
+        {
+            normalizedNewOut = "";
+            itemAssignmentsUpdated = 0;
+            if (!VpbSqlite3.IsAvailable) return false;
+            string normPrefix = NormalizeGalleryUserTagName(rawPrefixName);
+            normalizedNewOut = NormalizeGalleryUserTagName(rawNewName);
+            if (string.IsNullOrEmpty(normPrefix) || string.IsNullOrEmpty(normalizedNewOut)) return false;
+            if (string.Equals(normPrefix, normalizedNewOut, StringComparison.OrdinalIgnoreCase)) return false;
+
+            if (!TryBuildGalleryUserTagRenameTargets(normPrefix, normalizedNewOut, out List<KeyValuePair<long, string>> targets))
+                return false;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN;");
+                    try
+                    {
+                        for (int i = 0; i < targets.Count; i++)
+                        {
+                            long sourceTid = targets[i].Key;
+                            string destName = targets[i].Value;
+                            long targetTid = TryGetOrCreateGalleryUserTagId(conn, destName);
+                            if (targetTid < 0)
+                            {
+                                conn.ExecUtf8("ROLLBACK;");
+                                itemAssignmentsUpdated = 0;
+                                return false;
+                            }
+                            if (sourceTid == targetTid)
+                                continue;
+
+                            using (var cnt = conn.Prepare("SELECT COUNT(*) FROM gallery_item_user_tag WHERE tag_id=?"))
+                            {
+                                cnt.BindInt64(1, sourceTid);
+                                if (cnt.Step() == VpbSqlite3.SqliteRow)
+                                    itemAssignmentsUpdated += (int)cnt.ColumnInt64(0);
+                            }
+
+                            using (var ins = conn.Prepare(
+                                "INSERT OR IGNORE INTO gallery_item_user_tag(category, pkg_uid, internal_path, tag_id) " +
+                                "SELECT category, pkg_uid, internal_path, ? FROM gallery_item_user_tag WHERE tag_id=?"))
+                            {
+                                ins.BindInt64(1, targetTid);
+                                ins.BindInt64(2, sourceTid);
+                                ins.Step();
+                            }
+
+                            using (var delIt = conn.Prepare("DELETE FROM gallery_item_user_tag WHERE tag_id=?"))
+                            {
+                                delIt.BindInt64(1, sourceTid);
+                                delIt.Step();
+                            }
+
+                            using (var delTag = conn.Prepare("DELETE FROM gallery_user_tag WHERE tag_id=?"))
+                            {
+                                delTag.BindInt64(1, sourceTid);
+                                delTag.Step();
+                            }
+                        }
+
+                        conn.ExecUtf8("COMMIT;");
+                        return true;
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
+            catch
+            {
+                itemAssignmentsUpdated = 0;
+                return false;
+            }
+        }
     }
 }

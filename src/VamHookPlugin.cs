@@ -1031,6 +1031,47 @@ namespace VPB
             }
         }
         static bool m_Show = true; // Made static so it can be toggled via external message calls.
+
+        /// <summary>Bare-key bindings (no Ctrl/Shift/Alt) must not fire while a text field has focus.</summary>
+        private static bool ShouldSuppressBareKeyHotkey(KeyUtil ku)
+        {
+            if (ku == null) return false;
+            if (ku.supportKeys != null && ku.supportKeys.Count > 0) return false;
+            return IsTypingInTextInput();
+        }
+
+        private static bool IsTypingInTextInput()
+        {
+            try
+            {
+                var es = EventSystem.current;
+                if (es != null && es.currentSelectedGameObject != null
+                    && es.currentSelectedGameObject.GetComponent<InputField>() != null)
+                    return true;
+            }
+            catch { }
+
+            // IMGUI TextField focus: not in all Unity reference assemblies; probe at runtime.
+            try
+            {
+                var t = typeof(GUIUtility);
+                const BindingFlags bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+                var p = t.GetProperty("editingTextField", bf);
+                if (p != null)
+                {
+                    if (p.GetValue(null, null) is bool pb && pb) return true;
+                }
+                else
+                {
+                    var f = t.GetField("editingTextField", bf);
+                    if (f != null && f.GetValue(null) is bool fb && fb) return true;
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
         void Update()
         {
             VamOnDemandLoader.DrainMainThreadQueue();
@@ -1111,19 +1152,19 @@ namespace VPB
                 }
             }
 
-            if (UIKey.TestKeyDown())
+            if (UIKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(UIKey))
             {
                 m_Show = !m_Show;
             }
-            if (ClearConsoleKey != null && ClearConsoleKey.TestKeyDown())
+            if (ClearConsoleKey != null && ClearConsoleKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(ClearConsoleKey))
             {
                 TryClearConsole();
             }
-            if (BoneViewKey != null && BoneViewKey.TestKeyDown())
+            if (BoneViewKey != null && BoneViewKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(BoneViewKey))
             {
                 BoneViewMode.Toggle();
             }
-            if (ToggleFixedGalleryKey != null && ToggleFixedGalleryKey.TestKeyDown())
+            if (ToggleFixedGalleryKey != null && ToggleFixedGalleryKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(ToggleFixedGalleryKey))
             {
                 if (Gallery.singleton != null)
                 {
@@ -1146,11 +1187,11 @@ namespace VPB
             // Hotkeys
             if (m_Inited)
             {
-                if (CreateGalleryKey.TestKeyDown())
+                if (CreateGalleryKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(CreateGalleryKey))
                 {
                     OpenCreateGallery();
                 }
-                if (GalleryKey.TestKeyDown())
+                if (GalleryKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(GalleryKey))
                 {
                     if (Gallery.singleton != null && Gallery.singleton.IsVisible)
                         Gallery.singleton.Hide();
@@ -1161,7 +1202,7 @@ namespace VPB
 
             if (m_Inited && IsFileManagerInited)
             {
-                if (HubKey.TestKeyDown())
+                if (HubKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(HubKey))
                 {
                     OpenHubBrowse();
                 }

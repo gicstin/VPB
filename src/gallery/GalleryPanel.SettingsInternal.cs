@@ -550,6 +550,7 @@ namespace VPB
         private void EnsureInternalSettingsSession()
         {
             if (internalSettingsSessionActive) return;
+            internalSettingsListRowHeightSession = 80f;
             internalSettingsPreSessionLayoutMode = layoutMode;
             internalSettingsPreSessionScrollNormalized = (scrollRect != null) ? scrollRect.verticalNormalizedPosition : 1f;
             internalSettingsHadPreSessionViewState = true;
@@ -605,6 +606,21 @@ namespace VPB
 
             if (layoutMode != GalleryLayoutMode.List)
                 SetLayoutMode(GalleryLayoutMode.List, false);
+            // SetLayoutMode no-ops when already List — must reapply session min row height for settings.
+            try
+            {
+                if (contentGO != null && layoutMode == GalleryLayoutMode.List)
+                {
+                    var rgv = contentGO.GetComponent<RecyclingGridView>();
+                    if (rgv != null)
+                    {
+                        rgv.fixedColumns = 1;
+                        rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1);
+                        rgv.SetAdaptiveConfig(true, 0f, 1, true);
+                    }
+                }
+            }
+            catch { }
 
             if (titleText != null)
                 titleText.text = VPBTranslation.T("settings.title", "Settings");

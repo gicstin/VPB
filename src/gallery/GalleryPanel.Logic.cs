@@ -157,7 +157,7 @@ namespace VPB
 
                         if (layoutMode == GalleryLayoutMode.List)
                         {
-                            rgv.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1);
+                            rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1);
                             rgv.SetAdaptiveConfig(true, 0f, 1, true);
                         }
                         else

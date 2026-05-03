@@ -2667,6 +2667,25 @@ namespace VPB
             RecyclingGridView rgvState = null;
             if (contentGO != null) rgvState = contentGO.GetComponent<RecyclingGridView>();
 
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+            {
+                float step = 15f;
+                internalSettingsListRowHeightSession = Mathf.Clamp(
+                    internalSettingsListRowHeightSession - (delta * step), 80f, 400f);
+                if (contentGO != null)
+                {
+                    RecyclingGridView rgv = rgvState != null ? rgvState : contentGO.GetComponent<RecyclingGridView>();
+                    if (rgv != null)
+                    {
+                        rgv.fixedColumns = 1;
+                        rgv.SetGridConfig(100f, internalSettingsListRowHeightSession, 5f, 5f, 1);
+                        rgv.SetAdaptiveConfig(true, 0f, 1, true);
+                        rgv.Refresh();
+                    }
+                }
+                return;
+            }
+
             bool isListLike = (layoutMode == GalleryLayoutMode.List);
             if (!isListLike && rgvState != null)
             {

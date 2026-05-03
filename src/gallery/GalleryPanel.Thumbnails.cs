@@ -449,7 +449,7 @@ namespace VPB
             // 1. Memory Cache (tier: optional full-res for hover; else TurboJPEG scale from grid columns)
             int thumbTd = turboJpegThumbnailDenom > 0
                 ? TurboJpegNative.NormalizeScaleDenom(turboJpegThumbnailDenom)
-                : TurboJpegNative.ScaleDenomFromGridColumns(GridColumnCount);
+                : TurboJpegNative.ScaleDenomFromGridColumns(EffectiveGridColumnsForThumbDecode());
             Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath, thumbTd, thumbnailUnityDecodeOnly);
             if (tex != null)
             {

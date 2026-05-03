@@ -251,6 +251,8 @@ namespace VPB
         private bool internalSettingsHadPreSessionViewState = false;
         private GalleryLayoutMode internalSettingsPreSessionLayoutMode = GalleryLayoutMode.Grid;
         private float internalSettingsPreSessionScrollNormalized = 1f;
+        /// <summary>Isolated list zoom while internal Settings panel open; does not persist to <see cref="ListRowHeight"/>.</summary>
+        private float internalSettingsListRowHeightSession = 100f;
 
         private Text rightReplaceBtnText;
         private Image rightReplaceBtnImage;
@@ -505,6 +507,11 @@ namespace VPB
         private GameObject _userTagEditorMergeModalGo;
         private Text _userTagEditorMergeModalTitleText;
         private InputField _userTagEditorMergeModalInput;
+        private GameObject _userTagEditorRenameModalGo;
+        private Text _userTagEditorRenameModalTitleText;
+        private InputField _userTagEditorRenameModalInput;
+        /// <summary>Display name of row used as rename prefix (also updates tags starting with prefix + space).</summary>
+        private string _userTagEditorRenameSourcePrefix;
         /// <summary>0=name asc, 1=name desc, 2=count desc, 3=count asc.</summary>
         private int _userTagEditorSortMode;
         private readonly HashSet<string> _userTagEditorRowSelection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -844,7 +851,23 @@ namespace VPB
         }
         private int gridColumnCount = 4; // Legacy field for local caching during scroll if needed
 
-        private float listThumbSize => ListRowHeight;
+        /// <summary>Row height for RecyclingGridView / list rows; settings UI uses session zoom only.</summary>
+        private float EffectiveListRowHeightForGallery()
+        {
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+                return internalSettingsListRowHeightSession;
+            return ListRowHeight;
+        }
+
+        /// <summary>Thumb decode density: settings list acts as single-column (widest) regardless of saved grid columns.</summary>
+        private int EffectiveGridColumnsForThumbDecode()
+        {
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+                return 1;
+            return GridColumnCount;
+        }
+
+        private float listThumbSize => EffectiveListRowHeightForGallery();
         public float ListRowHeight
         {
             get { return VPBConfig.Instance != null ? VPBConfig.Instance.ListRowHeight : 100f; }

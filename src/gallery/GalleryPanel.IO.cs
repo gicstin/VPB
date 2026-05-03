@@ -2311,7 +2311,7 @@ namespace VPB
                 if (layoutMode == GalleryLayoutMode.List)
                 {
                     recyclingGrid.fixedColumns = 1;
-                    recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1, deferRefresh: true);
+                    recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
                     recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                 }
                 else
@@ -2464,7 +2464,7 @@ namespace VPB
                 {
                     if (layoutMode == GalleryLayoutMode.List)
                     {
-                        recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1, deferRefresh: true);
+                        recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
                         recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                     }
                     else
@@ -3573,7 +3573,7 @@ namespace VPB
                 {
                     // List/Table mode: ALWAYS 1 column; +/- controls row height/thumb size.
                     recyclingGrid.fixedColumns = 1;
-                    recyclingGrid.SetGridConfig(100f, ListRowHeight, 5f, 5f, 1, deferRefresh: true);
+                    recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
                     recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                 }
                 else
