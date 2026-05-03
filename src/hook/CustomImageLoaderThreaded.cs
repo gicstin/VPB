@@ -404,7 +404,7 @@ namespace VPB
 					else if (FileManager.FileExists(imgPath))
 					{
 						bool loadedFromGalleryCache = false;
-						if (isThumbnail)
+						if (isThumbnail && !skipCache)
 						{
                             long lastWriteTime = 0;
                             bool foundTime = false;

@@ -12,6 +12,8 @@ namespace VPB
     {
         public string ExpectedTag;
         public Texture2D CurrentTexture;
+        /// <summary>Decode retries for this binding (resets when ExpectedTag changes or load succeeds).</summary>
+        public int ThumbRetryCount;
 
         private void OnDisable()
         {
@@ -34,6 +36,9 @@ namespace VPB
 
     public partial class GalleryPanel
     {
+        private const int MaxThumbnailDecodeRetries = 3;
+        private const float ThumbnailHangWatchDelaySec = 0.35f;
+
         // Cache for package list thumbnails: package UID -> internal image path (within the package).
         // Keeps package preview lookups cheap while scrolling.
         private readonly Dictionary<string, string> _packagePreviewInternalPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -420,6 +425,8 @@ namespace VPB
                     return;
                 }
 
+                if (bind.ExpectedTag != expectedTag)
+                    bind.ThumbRetryCount = 0;
                 bind.ExpectedTag = expectedTag;
 
                 if (bind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
@@ -454,29 +461,33 @@ namespace VPB
                 return;
             }
 
-            // 3. Request Load
+            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: true);
+        }
+
+        private void QueueThumbnailDecode(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, bool skipCache, bool scheduleHangWatchdog)
+        {
+            if (CustomImageLoaderThreaded.singleton == null || target == null) return;
+
             CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
             qi.imgPath = imgPath;
             qi.isThumbnail = true;
             qi.compress = false;
-            qi.priority = _nextThumbPriority;
+            qi.skipCache = skipCache;
+            qi.priority = skipCache ? Mathf.Min(-2, _nextThumbPriority - 30) : _nextThumbPriority;
             qi.groupId = currentLoadingGroupId;
-            qi.callback = (res) => {
-                if (res != null && res.tex != null)
+            qi.callback = (res) =>
+            {
+                if (res != null && res.tex != null && !res.cancel)
                 {
-                    ThumbnailBindingTag cbBind = null;
-                    if (target != null) cbBind = target.GetComponent<ThumbnailBindingTag>();
+                    ThumbnailBindingTag cbBind = target.GetComponent<ThumbnailBindingTag>();
                     if (cbBind != null && cbBind.ExpectedTag == expectedTag)
                     {
                         if (cbBind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
-                        {
                             CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(cbBind.CurrentTexture);
-                        }
                         cbBind.CurrentTexture = res.tex;
+                        cbBind.ThumbRetryCount = 0;
                         if (CustomImageLoaderThreaded.singleton != null)
-                        {
                             CustomImageLoaderThreaded.singleton.RegisterThumbnailUse(res.tex);
-                        }
                         target.texture = res.tex;
                         target.color = Color.white;
                         UpdateAspectRatio(target, res.tex);
@@ -484,13 +495,9 @@ namespace VPB
 
                     long imgTime = 0;
                     if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
-                    {
                         imgTime = 0;
-                    }
                     else if (imgPath == file.Path)
-                    {
                         imgTime = file.LastWriteTime.ToFileTime();
-                    }
                     else
                     {
                         FileEntry fe = FileManager.GetFileEntry(imgPath);
@@ -499,12 +506,58 @@ namespace VPB
                     }
 
                     if (!res.loadedFromGalleryCache && capturedGroupId == currentLoadingGroupId)
-                    {
                         EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, capturedGroupId);
-                    }
+                    return;
                 }
+
+                if (res != null && res.cancel) return;
+                ThumbnailBindingTag failBind = target.GetComponent<ThumbnailBindingTag>();
+                if (failBind == null || failBind.ExpectedTag != expectedTag) return;
+                if (capturedGroupId != currentLoadingGroupId) return;
+                RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId);
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
+            if (scheduleHangWatchdog)
+                StartCoroutine(ThumbnailHangWatchdogCo(file, target, imgPath, expectedTag, capturedGroupId));
+        }
+
+        private void RequestThumbnailRetryAfterFailure(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId)
+        {
+            if (target == null) return;
+            ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
+            if (b == null || b.ExpectedTag != expectedTag) return;
+            if (b.ThumbRetryCount >= MaxThumbnailDecodeRetries) return;
+            b.ThumbRetryCount++;
+            StartCoroutine(ThumbnailRetryAfterDelayCo(file, target, imgPath, expectedTag, capturedGroupId));
+        }
+
+        private IEnumerator ThumbnailRetryAfterDelayCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId)
+        {
+            yield return new WaitForSecondsRealtime(0.02f);
+            if (target == null) yield break;
+            ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
+            if (b == null || b.ExpectedTag != expectedTag) yield break;
+            if (capturedGroupId != currentLoadingGroupId) yield break;
+            if (target.texture != null)
+            {
+                if (b.ThumbRetryCount > 0) b.ThumbRetryCount--;
+                yield break;
+            }
+            if (CustomImageLoaderThreaded.singleton == null) yield break;
+            CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath);
+            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: true, scheduleHangWatchdog: false);
+        }
+
+        private IEnumerator ThumbnailHangWatchdogCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId)
+        {
+            yield return new WaitForSecondsRealtime(ThumbnailHangWatchDelaySec);
+            if (target == null) yield break;
+            ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
+            if (b == null || b.ExpectedTag != expectedTag) yield break;
+            if (capturedGroupId != currentLoadingGroupId) yield break;
+            if (target.texture != null) yield break;
+            if (b.ThumbRetryCount > 0) yield break;
+            RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId);
         }
 
         private static void ClearThumbnailTarget(RawImage target)
