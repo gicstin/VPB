@@ -113,7 +113,9 @@ namespace VPB
 
         public void SetLayoutMode(GalleryLayoutMode mode, bool persistConfig = true)
         {
-            if (mode == GalleryLayoutMode.Grid && (IsSettingsPanelOpen() || settingsListViewActive)) return;
+            // Any explicit middle-layout switch must leave internal settings mode.
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+                ExitInternalSettingsMode(false);
             if (layoutMode == mode) return;
             
             if (mode == GalleryLayoutMode.List)

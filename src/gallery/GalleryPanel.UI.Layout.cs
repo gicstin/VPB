@@ -102,30 +102,8 @@ namespace VPB
 
             try
             {
-                if (titleSearchInput != null)
-                {
-                    RectTransform bgRT = backgroundBoxGO != null ? backgroundBoxGO.GetComponent<RectTransform>() : null;
-                    RectTransform searchRT = titleSearchInput.GetComponent<RectTransform>();
-                    if (bgRT != null && searchRT != null)
-                    {
-                        float w = bgRT.rect.width;
-
-                        // Keep some safety space for the left title area and the right-side FPS display,
-                        // plus buttons to the right of search.
-                        float reservedLeft = 320f * paneScale;
-                        float reservedRight = 240f * paneScale;
-                        float reservedButtonsRightOfSearch = 190f * paneScale;
-
-                        float available = w - reservedLeft - reservedRight - reservedButtonsRightOfSearch;
-                        float target = Mathf.Clamp(available, 100f * paneScale, 240f * paneScale);
-
-                        if (Mathf.Abs(searchRT.sizeDelta.x - target) > 0.5f)
-                        {
-                            searchRT.sizeDelta = new Vector2(target, searchRT.sizeDelta.y);
-                        }
-                    }
-                }
                 try { SyncTitleSearchInputWithActiveMode(); } catch { }
+                try { ApplyTitleBarResponsiveLayout(paneScale); } catch { }
             }
             catch { }
 
@@ -235,7 +213,8 @@ namespace VPB
             }
             
             float topOffset = -65f * paneScale;
-            float tabTopOffset = TabScrollTopOffset(); // clears fixed sort/search row (pos -55, height 35*s)
+            float tabTopOffset = TabScrollTopOffset(); // clears sort/search row aligned with grid top (65*s)
+            ApplySideTabFilterRowVerticalLayout(paneScale);
 
             // Footer first: main grid/tab insets use the top of this stack (grows when tbox expands).
             if (paginationRT != null)
@@ -295,6 +274,37 @@ namespace VPB
                     ApplyUserTagsStickyScrollChrome(tabTopOffset);
             }
             catch { }
+        }
+
+        /// <summary>Places side-pane sort/refresh/search row so top edge matches <see cref="contentScrollRT"/> top (not title bar).</summary>
+        private void ApplySideTabFilterRowVerticalLayout(float paneScale)
+        {
+            float y = -65f * paneScale;
+            if (leftSearchInput != null)
+            {
+                RectTransform rt = leftSearchInput.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
+            if (rightSearchInput != null)
+            {
+                RectTransform rt = rightSearchInput.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
+            if (leftSortBtn != null)
+            {
+                RectTransform rt = leftSortBtn.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
+            if (rightSortBtn != null)
+            {
+                RectTransform rt = rightSortBtn.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
+            if (rightRefreshBtn != null)
+            {
+                RectTransform rt = rightRefreshBtn.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
         }
 
         /// <summary>Distance from panel bottom to the top edge of the bottom chrome (pagination + info/tbox bar).</summary>
@@ -519,6 +529,8 @@ namespace VPB
             {
                 try { action(s); } catch { }
             }
+            try { ApplySideTabFilterRowVerticalLayout(s); } catch { }
+            try { ApplyTitleBarResponsiveLayout(s); } catch { }
             // Layout / tab scroll chrome: rely on VPBConfig.ConfigChanged (UpdateLayout then
             // RefreshSideTabAreasForConfigChange — no side-tab list rebuild) when callers TriggerChange.
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }

@@ -11,7 +11,8 @@ namespace VPB
         {
             Toggle,
             Slider,
-            Cycle
+            Cycle,
+            TextArea
         }
 
         private sealed class InternalSettingDefinition
@@ -95,6 +96,8 @@ namespace VPB
             public float GalleryGridLabelFontSize;
             public bool GalleryOnlyWhenVamMenuVisible;
             public bool GalleryAnchorToVamMenu;
+            public string GalleryCategoryQuickOrder;
+            public string GalleryCategoryQuickSwitchHidden;
             public HashSet<string> HiddenCategories;
         }
 
@@ -469,6 +472,16 @@ namespace VPB
                 RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.IsVR
             });
 
+            defs.Add(new InternalSettingDefinition {
+                Key = "quick.categoryEditor",
+                GroupKey = "quick",
+                Label = VPBTranslation.T("settings.category_quick.editor.title", "Edit header category dropdown"),
+                Tooltip = VPBTranslation.T("settings.tip.category_quick.editor", "Edit header dropdown order + hidden list."),
+                ControlType = InternalSettingControlType.TextArea,
+                GetString = () => "",
+                SetString = v => { }
+            });
+
             var categoryVisibilityNames = BuildCategoryVisibilityNames();
             for (int i = 0; i < categoryVisibilityNames.Count; i++)
             {
@@ -550,6 +563,8 @@ namespace VPB
                 GalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
                 GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
+                GalleryCategoryQuickOrder = VPBConfig.Instance.GalleryCategoryQuickOrder ?? "",
+                GalleryCategoryQuickSwitchHidden = VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "",
                 HiddenCategories = VPBConfig.Instance.HiddenCategories != null
                     ? new HashSet<string>(VPBConfig.Instance.HiddenCategories, StringComparer.OrdinalIgnoreCase)
                     : new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -643,6 +658,8 @@ namespace VPB
             catch { }
             settingsListViewActive = true;
             EnsureInternalSettingsSession();
+            // Settings list view: always minimum row height (no +/- scaling).
+            internalSettingsListRowHeightSession = 80f;
 
             if (layoutMode != GalleryLayoutMode.List)
                 SetLayoutMode(GalleryLayoutMode.List, false);
@@ -656,7 +673,7 @@ namespace VPB
                     {
                         rgv.fixedColumns = 1;
                         rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1);
-                        rgv.SetAdaptiveConfig(true, 0f, 1, true);
+                        rgv.SetAdaptiveConfig(false, 0f, 1, true);
                     }
                 }
             }
@@ -754,6 +771,8 @@ namespace VPB
                         def.SetFloat(v);
                     }
                     break;
+                case InternalSettingControlType.TextArea:
+                    break;
             }
         }
 
@@ -763,6 +782,7 @@ namespace VPB
             if (row == null) return false;
             InternalSettingDefinition def = GetInternalSettingDefinition(row.RowKey);
             if (def == null) return false;
+            if (def.ControlType == InternalSettingControlType.TextArea) return false;
             ApplyInternalSettingDefinition(def, secondary);
             if (string.Equals(row.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                 NotifyInternalSettingsHoverPreviewChanged();
@@ -981,6 +1001,86 @@ namespace VPB
                 });
                 return;
             }
+
+            if (def.ControlType == InternalSettingControlType.TextArea && def.GetString != null && def.SetString != null)
+            {
+                if (string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
+                {
+                    cle.minHeight = 40f;
+                    GameObject btnRow = new GameObject("SettingsTextAreaButtons");
+                    btnRow.transform.SetParent(controls.transform, false);
+                    HorizontalLayoutGroup bh = btnRow.AddComponent<HorizontalLayoutGroup>();
+                    bh.childAlignment = TextAnchor.MiddleRight;
+                    bh.spacing = 6f;
+                    bh.childControlWidth = true;
+                    bh.childControlHeight = true;
+                    bh.childForceExpandWidth = false;
+                    bh.childForceExpandHeight = false;
+                    LayoutElement ble = btnRow.AddComponent<LayoutElement>();
+                    ble.minHeight = 32f;
+
+                    CreateMiniButton(btnRow.transform, "EDIT…", 96f, new Color(0.25f, 0.5f, 0.8f, 1f), () =>
+                    {
+                        ShowCategoryQuickEditor();
+                    });
+                    return;
+                }
+
+                cle.minHeight = 96f;
+                GameObject taHost = new GameObject("SettingsTextAreaHost");
+                taHost.transform.SetParent(controls.transform, false);
+                LayoutElement tle = taHost.AddComponent<LayoutElement>();
+                tle.flexibleWidth = 1f;
+                tle.preferredWidth = 320f;
+                tle.minWidth = 120f;
+                tle.preferredHeight = 72f;
+                tle.minHeight = 72f;
+
+                Image taBg = taHost.AddComponent<Image>();
+                taBg.color = new Color(0.16f, 0.16f, 0.18f, 1f);
+                taBg.raycastTarget = true;
+                InputField inf = taHost.AddComponent<InputField>();
+                inf.lineType = InputField.LineType.MultiLineNewline;
+                inf.targetGraphic = taBg;
+                inf.interactable = true;
+                inf.navigation = new Navigation { mode = Navigation.Mode.None };
+                ColorBlock cb = inf.colors;
+                cb.normalColor = Color.white;
+                cb.highlightedColor = new Color(0.96f, 0.96f, 0.98f, 1f);
+                cb.pressedColor = new Color(0.9f, 0.9f, 0.92f, 1f);
+                cb.disabledColor = new Color(0.85f, 0.85f, 0.88f, 0.55f);
+                cb.colorMultiplier = 1f;
+                cb.fadeDuration = 0f;
+                inf.colors = cb;
+
+                GameObject textGo = new GameObject("Text");
+                textGo.transform.SetParent(taHost.transform, false);
+                Text taTxt = textGo.AddComponent<Text>();
+                taTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                taTxt.fontSize = 16;
+                taTxt.color = new Color(0.95f, 0.95f, 0.97f, 1f);
+                taTxt.alignment = TextAnchor.UpperLeft;
+                taTxt.supportRichText = false;
+                taTxt.raycastTarget = true;
+                try { VPBUiFont.ApplyTo(taTxt); } catch { }
+                RectTransform taTxtRt = textGo.GetComponent<RectTransform>();
+                taTxtRt.anchorMin = Vector2.zero;
+                taTxtRt.anchorMax = Vector2.one;
+                taTxtRt.offsetMin = new Vector2(6, 6);
+                taTxtRt.offsetMax = new Vector2(-6, -6);
+                inf.textComponent = taTxt;
+                inf.text = def.GetString() ?? "";
+
+                inf.onValueChanged.AddListener(s => def.SetString(s ?? ""));
+                inf.onEndEdit.AddListener(s =>
+                {
+                    def.SetString(s ?? "");
+                    if (VPBConfig.Instance != null)
+                        VPBConfig.Instance.TriggerChange();
+                });
+
+                return;
+            }
         }
 
         internal bool ConfigureInternalSettingsRowUI(GameObject btnGO, FileEntry file)
@@ -1068,6 +1168,8 @@ namespace VPB
             VPBConfig.Instance.GalleryGridLabelFontSize = b.GalleryGridLabelFontSize;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
+            VPBConfig.Instance.GalleryCategoryQuickOrder = b.GalleryCategoryQuickOrder ?? "";
+            VPBConfig.Instance.GalleryCategoryQuickSwitchHidden = b.GalleryCategoryQuickSwitchHidden ?? "";
             VPBConfig.Instance.HiddenCategories = b.HiddenCategories != null
                 ? new HashSet<string>(b.HiddenCategories, StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);

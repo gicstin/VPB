@@ -350,6 +350,20 @@ namespace VPB
             }
         }
 
+        public float UiScale
+        {
+            get
+            {
+                try
+                {
+                    if (Settings.Instance != null && Settings.Instance.UIScale != null)
+                        return Settings.Instance.UIScale.Value;
+                }
+                catch { }
+                return 1f;
+            }
+        }
+
         /// <summary>UI language id: en, zh_cn, etc. Matches vpb_translations/&lt;id&gt;.json. Empty string means auto-detect on first run.</summary>
         public string UiLocale = "";
         /// <summary>Category names hidden from the Categories tab list.</summary>
@@ -363,6 +377,12 @@ namespace VPB
         {
             return HiddenCategories != null && HiddenCategories.Contains(name);
         }
+
+        /// <summary>Comma, semicolon, or newline-separated category names: order for quick header menu and number keys 1–9, 0. Empty = built-in default (ALL VAR, Scenes, Appearance, …).</summary>
+        public string GalleryCategoryQuickOrder = "";
+
+        /// <summary>Comma-separated category names excluded from quick header menu and number keys only (side category list unchanged).</summary>
+        public string GalleryCategoryQuickSwitchHidden = "";
 
         /// <summary>True when always-on grid label strip should render (respects auto-hide at highest two column counts).</summary>
         public bool GalleryGridLabelsStripVisible()
@@ -488,6 +508,8 @@ namespace VPB
             QuickMenuButtonsPages = null;
             QuickMenuEditSlotIdx = 12;
             QuickMenuPageToggleSlotIdx = 15;
+            GalleryCategoryQuickOrder = "";
+            GalleryCategoryQuickSwitchHidden = "";
 
             try
             {
@@ -653,6 +675,10 @@ namespace VPB
                                 if (!string.IsNullOrEmpty(t)) HiddenCategories.Add(t);
                             }
                         }
+                        if (node["GalleryCategoryQuickOrder"] != null)
+                            GalleryCategoryQuickOrder = node["GalleryCategoryQuickOrder"].Value ?? "";
+                        if (node["GalleryCategoryQuickSwitchHidden"] != null)
+                            GalleryCategoryQuickSwitchHidden = node["GalleryCategoryQuickSwitchHidden"].Value ?? "";
                     }
 
                     // Migration: older builds forced EnableDragDrop off when HoldToLaunchEnabled was on, and persisted that forced-off value.
@@ -794,6 +820,8 @@ namespace VPB
                 node["HoldToLaunchHoldSeconds"].AsFloat = Mathf.Clamp(HoldToLaunchHoldSeconds, 0.2f, 1f);
                 node["UiLocale"] = UiLocale ?? "en";
                 node["HiddenCategories"] = string.Join(",", new List<string>(HiddenCategories ?? new HashSet<string>()).ToArray());
+                node["GalleryCategoryQuickOrder"] = GalleryCategoryQuickOrder ?? "";
+                node["GalleryCategoryQuickSwitchHidden"] = GalleryCategoryQuickSwitchHidden ?? "";
                 // Quick Menu buttons (pages)
                 try
                 {

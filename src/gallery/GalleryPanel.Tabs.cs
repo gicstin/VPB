@@ -77,11 +77,12 @@ namespace VPB
 
         private float SideTabBottomMargin => GalleryMainAreaBottomInset() + 8f;
         private float SideTabDefaultBottomOffset => GalleryMainAreaBottomInset() + 8f;
-        // Top inset for main tab scroll: clears the sort button + search row (anchored at y=-55, height=35*scale)
+        // Top inset for main tab scroll: clears sort + search row (same top as contentScrollRT: 65*s, row height 35*s, gap 5*s)
         private float TabScrollTopOffset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
-            return -(55f + 35f * s + 5f);
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float rowTop = 65f * s;
+            return -(rowTop + 35f * s + 5f * s);
         }
 
         /// <summary>Header/footer/side chrome without recreating category/creator/tag tab buttons when <see cref="VPBConfig.Save(bool,bool)"/> used <c>preferLightGalleryTabChromeOnly: true</c>.</summary>
@@ -94,6 +95,8 @@ namespace VPB
                 if (showTitle)
                     titleText.text = currentCategoryTitle;
             }
+            SyncCategoryQuickSwitchChrome();
+            try { ApplyTitleBarResponsiveLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f); } catch { }
             UpdateSideContextActions();
             
             // Lightweight refresh must still keep split sub-pane lists alive (Hair/Clothing tags, SceneSource, etc.).
@@ -181,6 +184,8 @@ namespace VPB
                     else titleText.text = currentCategoryTitle;
                 }
             }
+
+            SyncCategoryQuickSwitchChrome();
 
             UpdateSideContextActions();
 
@@ -1844,6 +1849,7 @@ namespace VPB
                 string filterNow = (CanonicalSettingsSideSearchText() ?? "").Trim();
                 bool MatchFilter(string label) =>
                     string.IsNullOrEmpty(filterNow) || (label ?? "").IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) >= 0;
+                float groupTabScale = (VPBConfig.Instance != null) ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
                 void AddGroupRow(string key, string label)
                 {
                     if (!string.Equals(key, "all", StringComparison.OrdinalIgnoreCase) && !MatchFilter(label)) return;
@@ -1853,7 +1859,7 @@ namespace VPB
                         currentSettingsGroup = key;
                         UpdateTabs();
                         RefreshInternalSettingsListRows(true);
-                    }, trackedButtons);
+                    }, trackedButtons, null, null, null, TextAnchor.MiddleLeft, 10f * groupTabScale, 8f * groupTabScale);
                 }
 
                 AddGroupRow("all", VPBTranslation.T("settings.group.all", "All"));
@@ -1865,6 +1871,7 @@ namespace VPB
                 AddGroupRow("categories", VPBTranslation.T("settings.header.category_visibility", "Category Visibility"));
                 AddGroupRow("hover", VPBTranslation.T("settings.header.hover_preview", "Hover preview"));
                 AddGroupRow("grid", VPBTranslation.T("settings.header.grid_labels", "Grid Labels"));
+                AddGroupRow("quick", VPBTranslation.T("settings.group.category_quick", "Header category menu"));
                 AddGroupRow("vr", VPBTranslation.T("settings.header.vr_integration", "VR & Game Integration"));
             }
             else if (contentType == ContentType.Ratings)
@@ -2760,7 +2767,7 @@ namespace VPB
             return ell;
         }
 
-        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null, string userTagAppliedDragPrimary = null)
+        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null, string userTagAppliedDragPrimary = null, TextAnchor labelAnchor = TextAnchor.MiddleCenter, float labelInsetLeft = 0f, float labelInsetRight = 0f)
         {
             GameObject btnGO = GetTabButton(parent);
             if (btnGO == null)
@@ -2794,11 +2801,13 @@ namespace VPB
             img.color = color;
 
             float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float insetL = Mathf.Max(0f, labelInsetLeft);
+            float insetR = Mathf.Max(0f, labelInsetRight);
 
             Text txt = btnGO.GetComponentInChildren<Text>();
             txt.fontSize = Mathf.RoundToInt(18 * s);
             txt.color = Color.white;
-            txt.alignment = TextAnchor.MiddleCenter;
+            txt.alignment = labelAnchor;
             txt.horizontalOverflow = HorizontalWrapMode.Overflow;
             txt.verticalOverflow = VerticalWrapMode.Truncate;
             txt.resizeTextForBestFit = false;
@@ -2808,8 +2817,8 @@ namespace VPB
             {
                 txtRT.anchorMin = Vector2.zero;
                 txtRT.anchorMax = Vector2.one;
-                txtRT.offsetMin = Vector2.zero;
-                txtRT.offsetMax = Vector2.zero;
+                txtRT.offsetMin = new Vector2(insetL, 0f);
+                txtRT.offsetMax = new Vector2(-insetR, 0f);
             }
 
             // Ensure LayoutElement
@@ -2823,7 +2832,7 @@ namespace VPB
 
             RectTransform btnRt = btnGO.GetComponent<RectTransform>();
             float pad = 10f * s;
-            float inner = (btnRt != null ? btnRt.rect.width : 0f) - pad;
+            float inner = (btnRt != null ? btnRt.rect.width : 0f) - pad - insetL - insetR;
             if (inner <= 2f) inner = 125f * s;
             string shown = EllipsizeTextPreferredWidth(txt, label, inner);
             txt.text = shown;
@@ -3798,6 +3807,16 @@ namespace VPB
 
             btnGO.name = "FileButton_" + (file.Name ?? idKey ?? "Unknown");
 
+            // Recycled row defaults (TextArea settings rows disable root raycast — restore before rebind)
+            {
+                Button rb0 = btnGO.GetComponent<Button>();
+                if (rb0 != null) rb0.interactable = true;
+                Image ri0 = btnGO.GetComponent<Image>();
+                if (ri0 != null) ri0.raycastTarget = true;
+                var lu0 = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                if (lu0 != null) lu0.enabled = true;
+            }
+
             // Update mapping
             Image img = btnGO.GetComponent<Image>();
             if (img != null)
@@ -3869,6 +3888,22 @@ namespace VPB
                 }
 
                 ConfigureInternalSettingsRowUI(btnGO, file);
+
+                InternalSettingRowEntry iseRow = file as InternalSettingRowEntry;
+                InternalSettingDefinition iseDef = iseRow != null ? GetInternalSettingDefinition(iseRow.RowKey) : null;
+                bool textAreaSettingsRow = iseDef != null && iseDef.ControlType == InternalSettingControlType.TextArea;
+                if (textAreaSettingsRow)
+                {
+                    Button rootBt = btnGO.GetComponent<Button>();
+                    if (rootBt != null)
+                    {
+                        rootBt.onClick.RemoveAllListeners();
+                        rootBt.interactable = false;
+                    }
+                    if (img != null) img.raycastTarget = false;
+                    var leftUpTa = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                    if (leftUpTa != null) leftUpTa.enabled = false;
+                }
 
                 void HideChild(string p)
                 {

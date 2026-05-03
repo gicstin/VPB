@@ -316,6 +316,10 @@ namespace VPB
             if (needsInit) Init();
             LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
+            // Switching middle content (category/page) must leave internal settings mode.
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+                ExitInternalSettingsMode(false);
+
             bool registeredBefore = _registeredWithSuperController;
             EnsureCanvasRegisteredWithSuperController();
 

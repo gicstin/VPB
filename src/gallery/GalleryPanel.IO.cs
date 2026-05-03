@@ -1657,6 +1657,11 @@ namespace VPB
                 try { StopCoroutine(_sideTabsTagCountSliceCo); } catch { }
                 _sideTabsTagCountSliceCo = null;
             }
+            if (_earlyMetaApplyCoroutine != null)
+            {
+                try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }
+                _earlyMetaApplyCoroutine = null;
+            }
             // Rotate the group ID here (synchronously) so that any in-flight thumbnail callbacks
             // from the old category fail the capturedGroupId == currentLoadingGroupId guard and
             // don't pollute the new session. The coroutine's yield-return-null would be too late.
@@ -1717,6 +1722,11 @@ namespace VPB
             {
                 StopCoroutine(refreshCoroutine);
                 refreshCoroutine = null;
+            }
+            if (_earlyMetaApplyCoroutine != null)
+            {
+                try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }
+                _earlyMetaApplyCoroutine = null;
             }
 
             // ── Scroll anchor ─────────────────────────────────────────────────────────────
@@ -2138,6 +2148,11 @@ namespace VPB
             {
                 try { StopCoroutine(refreshCoroutine); } catch { }
                 refreshCoroutine = null;
+            }
+            if (_earlyMetaApplyCoroutine != null)
+            {
+                try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }
+                _earlyMetaApplyCoroutine = null;
             }
             if (_refreshHistoryLightCo != null)
             {
@@ -3627,9 +3642,11 @@ namespace VPB
                         while (!earlyMetaBuildDone) yield return null;
                         ApplyEarlyMetaRefreshResults(metaBuildGroupId, earlyBuildCreators, earlyBuildCats, sideMetaCacheKey, true,
                             earlyNewCreators, earlyNewCatCounts);
+                        // ApplyEarlyMetaRefreshResults no-ops if refresh was superseded; do not run full side-tab rebuild on stale session.
+                        if (metaBuildGroupId != currentLoadingGroupId) yield break;
                         try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
                     }
-                    StartCoroutine(CoApplyEarlyMetaWhenReady());
+                    _earlyMetaApplyCoroutine = StartCoroutine(CoApplyEarlyMetaWhenReady());
                 }
             }
             if (swDeep != null) deepAfterEarlyMetaWaitMs = swDeep.ElapsedMilliseconds;

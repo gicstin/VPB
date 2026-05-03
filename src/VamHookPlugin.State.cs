@@ -19,6 +19,8 @@ namespace VPB
             public bool EnableUiTransparencyDraft;
             public float UiTransparencyValueDraft;
             public string Error;
+            public string GalleryCategoryQuickOrderDraft;
+            public string GalleryCategoryQuickSwitchHiddenDraft;
         }
 
         private class QuickMenuPositionState
@@ -63,6 +65,8 @@ namespace VPB
         private bool m_SettingsEnableUiTransparencyDraft { get => m_SettingsDraft.EnableUiTransparencyDraft; set => m_SettingsDraft.EnableUiTransparencyDraft = value; }
         private float m_SettingsUiTransparencyValueDraft { get => m_SettingsDraft.UiTransparencyValueDraft; set => m_SettingsDraft.UiTransparencyValueDraft = value; }
         private string m_SettingsError { get => m_SettingsDraft.Error; set => m_SettingsDraft.Error = value; }
+        private string m_SettingsGalleryCategoryQuickOrderDraft { get => m_SettingsDraft.GalleryCategoryQuickOrderDraft; set => m_SettingsDraft.GalleryCategoryQuickOrderDraft = value; }
+        private string m_SettingsGalleryCategoryQuickSwitchHiddenDraft { get => m_SettingsDraft.GalleryCategoryQuickSwitchHiddenDraft; set => m_SettingsDraft.GalleryCategoryQuickSwitchHiddenDraft = value; }
 
         private bool m_ShowQuickMenuPosWindow { get => m_QuickMenuPos.ShowWindow; set => m_QuickMenuPos.ShowWindow = value; }
         private Rect m_QuickMenuPosWindowRect { get => m_QuickMenuPos.WindowRect; set => m_QuickMenuPos.WindowRect = value; }

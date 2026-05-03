@@ -69,6 +69,8 @@ namespace VPB
 
         /// <summary>Deferred phase1/phase2 side-tab work after the grid is shown; stopped when a new <see cref="GalleryPanel.RefreshFiles"/> supersedes it.</summary>
         private Coroutine _deferredGallerySideTabsCoroutine;
+        /// <summary><see cref="GalleryPanel.IO.RefreshFilesRoutine"/> spawn; parent refresh stop does not cancel nested IEnumerator — stop explicitly on supersede.</summary>
+        private Coroutine _earlyMetaApplyCoroutine;
         /// <summary>Sliced tag/facet scan started from <see cref="GalleryPanel.UpdateTabs"/> (e.g. clothing subfilter) so we never block the main thread like <c>CacheTagCounts()</c>.</summary>
         private Coroutine _sideTabsTagCountSliceCo;
 
@@ -82,6 +84,16 @@ namespace VPB
         private float _thumbCacheFinishTime = -1f;
         private Text titleText;
         private Text fpsText;
+
+        private GameObject _categoryQuickChromeRootGO;
+        private RectTransform _categoryQuickChromeRootRT;
+        private RectTransform _categoryQuickMenuOuterRT;
+        private GameObject _categoryQuickBlockerGO;
+        private GameObject _categoryQuickMenuOuterGO;
+        private GameObject _categoryQuickMenuScrollGO;
+        private GameObject _categoryQuickMenuContentGO;
+        private bool _categoryQuickMenuOpen;
+        private Coroutine _categoryQuickApplyCoroutine;
 
         public List<Gallery.Category> categories = new List<Gallery.Category>();
         private Dictionary<string, string> packageCategoryLabelCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -604,6 +616,12 @@ namespace VPB
         private InputField titleSearchInput;
         private UnityAction<string> _titleBarSearchOnValueChanged;
         private bool _suppressTitleBarSearchValueChanged;
+        private GameObject _titleSearchCompactGO;
+        private RectTransform _titleSearchCompactRT;
+        private GameObject _titleSearchPopupRootGO;
+        private RectTransform _titleSearchPopupPanelRT;
+        private InputField _titleSearchPopupField;
+        private bool _titleSearchPopupOpen;
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
         private List<GameObject> tboxPersonAtomBtns = new List<GameObject>();
@@ -732,6 +750,12 @@ namespace VPB
         private bool offsetsInitialized = false;
         
         private Text titleBarSettingsBtnText;
+        private RectTransform _titleBarSettingsBtnRT;
+        private RectTransform _titleBarQfToggleBtnRT;
+        private RectTransform _titleBarFileSortTypeBtnRT;
+        private RectTransform _titleBarFileSortDirBtnRT;
+        private RectTransform _titleBarRatingSortToggleBtnRT;
+        private RectTransform _titleBarRefreshBtnRT;
         private Text rightCloneBtnText;
         private Text leftCloneBtnText;
 

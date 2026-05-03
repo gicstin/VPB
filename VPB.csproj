@@ -359,6 +359,9 @@
     <Compile Include="src\gallery\GalleryPanel.UserTags.cs" />
     <Compile Include="src\gallery\GalleryUserTagYamlBrain.cs" />
     <Compile Include="src\gallery\GalleryPanel.CategoryFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CategoryQuickSwitch.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CategoryQuickSwitchEditor.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleSearchResponsive.cs" />
     <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />

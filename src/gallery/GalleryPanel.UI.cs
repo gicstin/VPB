@@ -2505,6 +2505,7 @@ namespace VPB
             UpdateDesktopModeButton();
             try { UpdateSpringScrollButtonToggleUI(); } catch { }
             UpdateLayout();
+            try { SyncCategoryQuickSwitchChrome(); } catch { }
         }
 
         public void SetFixedLocally(bool fixedMode)
@@ -2523,6 +2524,7 @@ namespace VPB
             try { UpdateSpringScrollButtonToggleUI(); } catch { }
             UpdateSideButtonsVisibility();
             UpdateLayout();
+            try { SyncCategoryQuickSwitchChrome(); } catch { }
         }
 
         public bool IsCollapsed => isCollapsed;
@@ -2669,9 +2671,6 @@ namespace VPB
 
             if (IsSettingsPanelOpen() || settingsListViewActive)
             {
-                float step = 15f;
-                internalSettingsListRowHeightSession = Mathf.Clamp(
-                    internalSettingsListRowHeightSession - (delta * step), 80f, 400f);
                 if (contentGO != null)
                 {
                     RecyclingGridView rgv = rgvState != null ? rgvState : contentGO.GetComponent<RecyclingGridView>();
@@ -2679,7 +2678,7 @@ namespace VPB
                     {
                         rgv.fixedColumns = 1;
                         rgv.SetGridConfig(100f, internalSettingsListRowHeightSession, 5f, 5f, 1);
-                        rgv.SetAdaptiveConfig(true, 0f, 1, true);
+                        rgv.SetAdaptiveConfig(false, 0f, 1, true);
                         rgv.Refresh();
                     }
                 }
@@ -2770,6 +2769,8 @@ namespace VPB
         private void ToggleRight(ContentType type)
         {
             bool hadSettingsPanel = IsSettingsPanelOpen();
+            if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
+                ExitInternalSettingsMode(false);
             if (type == ContentType.UserTags)
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
@@ -2837,6 +2838,8 @@ namespace VPB
         private void ToggleLeft(ContentType type)
         {
             bool hadSettingsPanel = IsSettingsPanelOpen();
+            if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
+                ExitInternalSettingsMode(false);
             if (type == ContentType.UserTags)
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;

@@ -1188,6 +1188,9 @@ namespace VPB
             var openSw = Stopwatch.StartNew();
             try
             {
+                if (IsSettingsPanelOpen() || settingsListViewActive)
+                    ExitInternalSettingsMode(false);
+
                 cleanupModeActive = true;
                 cleanupFilterMode = 0;
                 LogUtil.LogWarning("[VPB] Cleanup(list) open: starting scan...");

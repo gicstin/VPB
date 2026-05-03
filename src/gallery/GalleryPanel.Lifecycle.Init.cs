@@ -216,6 +216,9 @@ namespace VPB
             titleRT.pivot = new Vector2(0, 0.5f);
             titleRT.anchoredPosition = new Vector2(60, 10);
             titleRT.sizeDelta = new Vector2(300, 40);
+            titleText.raycastTarget = false;
+
+            SetupCategoryQuickSwitch(titleBarGO, backgroundBoxGO, titleGO);
 
             GameObject fpsGO = new GameObject("FPS");
             fpsGO.transform.SetParent(titleBarGO.transform, false);
@@ -251,6 +254,7 @@ namespace VPB
             titleSearchRT.pivot = new Vector2(0.5f, 0.5f);
             titleSearchRT.anchoredPosition = new Vector2(-40, 0);
             titleSearchRT.sizeDelta = new Vector2(240, 40);
+            SetupTitleSearchCompactControl(titleBarGO);
 
             // File Sort Type Button
             GameObject fileSortTypeBtn = UI.CreateUIButton(titleBarGO, 35, 40, VPBTranslation.T("gallery.sort.az", "Az"), 16, 0, 0, AnchorPresets.middleCenter, null);
@@ -261,6 +265,7 @@ namespace VPB
             fileSortTypeRT.anchorMax = new Vector2(0.5f, 0.5f);
             fileSortTypeRT.pivot = new Vector2(0.5f, 0.5f);
             fileSortTypeRT.anchoredPosition = new Vector2(108, 0); // To the right of search
+            _titleBarFileSortTypeBtnRT = fileSortTypeRT;
 
             fileSortTypeText = fileSortTypeBtn.GetComponentInChildren<Text>();
 
@@ -292,6 +297,7 @@ namespace VPB
             fileSortDirRT.anchorMax = new Vector2(0.5f, 0.5f);
             fileSortDirRT.pivot = new Vector2(0.5f, 0.5f);
             fileSortDirRT.anchoredPosition = new Vector2(151, 0); // To the right of type button
+            _titleBarFileSortDirBtnRT = fileSortDirRT;
 
             fileSortDirText = fileSortDirBtn.GetComponentInChildren<Text>();
 
@@ -335,6 +341,7 @@ namespace VPB
             ratingSortToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
             ratingSortToggleRT.pivot = new Vector2(0.5f, 0.5f);
             ratingSortToggleRT.anchoredPosition = new Vector2(197, 0);
+            _titleBarRatingSortToggleBtnRT = ratingSortToggleRT;
             Button ratingSortToggleButton = ratingSortToggleBtn.GetComponent<Button>();
             ratingSortToggleButton.onClick.RemoveAllListeners();
             ratingSortToggleButton.onClick.AddListener(ToggleRatingSort);
@@ -350,6 +357,7 @@ namespace VPB
             refreshRT.anchorMax = new Vector2(0.5f, 0.5f);
             refreshRT.pivot = new Vector2(0.5f, 0.5f);
             refreshRT.anchoredPosition = new Vector2(245, 0); // adjusted for narrower width
+            _titleBarRefreshBtnRT = refreshRT;
 
             Button refreshButton = refreshBtn.GetComponent<Button>();
             refreshButton.onClick.RemoveAllListeners();
@@ -374,6 +382,7 @@ namespace VPB
             titleBarSettingsRT.pivot = new Vector2(0.5f, 0.5f);
             // Left of P: 40×40 Settings, 6px gap, 40×40 P, 4px gap, then main search (center -40, width 240) → Settings center -230
             titleBarSettingsRT.anchoredPosition = new Vector2(-230, 0);
+            _titleBarSettingsBtnRT = titleBarSettingsRT;
             VPBUiFont.ApplyTo(titleBarSettingsBtnText);
             AddTooltip(titleBarSettingsBtn, "gallery.tooltip.open_settings", "Settings");
 
@@ -388,6 +397,7 @@ namespace VPB
             qfToggleRT.pivot = new Vector2(0.5f, 0.5f);
             // Immediately left of search: search left = -40 - 120 = -160; 4px gap; P half-width 20 → center -184
             qfToggleRT.anchoredPosition = new Vector2(-184, 0);
+            _titleBarQfToggleBtnRT = qfToggleRT;
             VPBUiFont.ApplyTo(quickFiltersToggleBtnText);
             {
                 var s = UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint);
@@ -649,7 +659,7 @@ namespace VPB
                     rsRT.anchorMin = new Vector2(1, 1);
                     rsRT.anchorMax = new Vector2(1, 1);
                     rsRT.pivot = new Vector2(1, 1);
-                    rsRT.anchoredPosition = new Vector2(-190, -55);
+                    rsRT.anchoredPosition = new Vector2(-190, -65);
                     rsRT.sizeDelta = new Vector2(35f, 35f);
                     { var rt = rsRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
                     Button rightSortButton = rightSortBtn.GetComponent<Button>();
@@ -671,7 +681,7 @@ namespace VPB
                 rrRT.anchorMin = new Vector2(1, 1);
                 rrRT.anchorMax = new Vector2(1, 1);
                 rrRT.pivot = new Vector2(1, 1);
-                rrRT.anchoredPosition = new Vector2(-145, -55); // Between Sort and Search
+                rrRT.anchoredPosition = new Vector2(-145, -65); // Between Sort and Search
 
                 rightRefreshBtnText = rightRefreshBtn.GetComponentInChildren<Text>();
                 { var rt = rrRT; var t = rightRefreshBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(18*s); }); }
@@ -750,7 +760,7 @@ namespace VPB
                 rSearchRT.anchorMin = new Vector2(1, 1);
                 rSearchRT.anchorMax = new Vector2(1, 1);
                 rSearchRT.pivot = new Vector2(1, 1);
-                rSearchRT.anchoredPosition = new Vector2(-10, -55);
+                rSearchRT.anchoredPosition = new Vector2(-10, -65);
                 { var rt = rSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
 
                 // 2. Left Tab Area
@@ -976,7 +986,7 @@ namespace VPB
                     lsRT.anchorMin = new Vector2(0, 1);
                     lsRT.anchorMax = new Vector2(0, 1);
                     lsRT.pivot = new Vector2(0, 1);
-                    lsRT.anchoredPosition = new Vector2(10, -55);
+                    lsRT.anchoredPosition = new Vector2(10, -65);
                     lsRT.sizeDelta = new Vector2(35f, 35f);
                     { var rt = lsRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
                     Button leftSortButton = leftSortBtn.GetComponent<Button>();
@@ -1060,7 +1070,7 @@ namespace VPB
                 lSearchRT.anchorMin = new Vector2(0, 1);
                 lSearchRT.anchorMax = new Vector2(0, 1);
                 lSearchRT.pivot = new Vector2(0, 1);
-                lSearchRT.anchoredPosition = new Vector2(50, -55);
+                lSearchRT.anchoredPosition = new Vector2(50, -65);
                 { var rt = lSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
 
                 // Right Button Container

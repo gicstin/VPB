@@ -33,6 +33,8 @@ namespace VPB
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
             m_SettingsUiTransparencyValueDraft = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
             m_SettingsIsDevModeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.IsDevMode : false;
+            m_SettingsGalleryCategoryQuickOrderDraft = (VPBConfig.Instance != null) ? (VPBConfig.Instance.GalleryCategoryQuickOrder ?? "") : "";
+            m_SettingsGalleryCategoryQuickSwitchHiddenDraft = (VPBConfig.Instance != null) ? (VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "") : "";
             m_SettingsError = null;
         }
 
@@ -119,9 +121,23 @@ namespace VPB
                         changed = true;
                     }
 
+                    string qo = m_SettingsGalleryCategoryQuickOrderDraft ?? "";
+                    if (!string.Equals(VPBConfig.Instance.GalleryCategoryQuickOrder ?? "", qo, StringComparison.Ordinal))
+                    {
+                        VPBConfig.Instance.GalleryCategoryQuickOrder = qo;
+                        changed = true;
+                    }
+
+                    string qh = m_SettingsGalleryCategoryQuickSwitchHiddenDraft ?? "";
+                    if (!string.Equals(VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "", qh, StringComparison.Ordinal))
+                    {
+                        VPBConfig.Instance.GalleryCategoryQuickSwitchHidden = qh;
+                        changed = true;
+                    }
+
                     if (changed)
                     {
-                        VPBConfig.Instance.Save();
+                        VPBConfig.Instance.Save(false, true);
                     }
                 }
                 UIKey = parsed;
@@ -321,6 +337,16 @@ namespace VPB
             {
                 OpenQuickMenuPositionWindow();
             }
+
+            GUILayout.Space(8);
+            GUILayout.Label(VPBTranslation.T("hook.settings.gallery_quick_order", "Quick category order (number keys 1–9, 0)"), m_StyleHeader);
+            GUILayout.Label(VPBTranslation.T("hook.settings.gallery_quick_order.hint", "One name per line or comma-separated. Matches gallery category names. Empty order = default (ALL VAR, Scenes, Appearance, \u2026). Use Skin \u2192 Person Skin if needed."), m_StyleInfoCardTextWrapped);
+            m_SettingsGalleryCategoryQuickOrderDraft = GUILayout.TextArea(m_SettingsGalleryCategoryQuickOrderDraft ?? "", GUILayout.MinHeight(72));
+
+            GUILayout.Space(6);
+            GUILayout.Label(VPBTranslation.T("hook.settings.gallery_quick_hidden", "Hide from quick menu only"), m_StyleHeader);
+            GUILayout.Label(VPBTranslation.T("hook.settings.gallery_quick_hidden.hint", "Listed categories stay in the side category list but are removed from the header quick menu and number keys."), m_StyleInfoCardTextWrapped);
+            m_SettingsGalleryCategoryQuickSwitchHiddenDraft = GUILayout.TextArea(m_SettingsGalleryCategoryQuickSwitchHiddenDraft ?? "", GUILayout.MinHeight(56));
 
             GUILayout.Space(10);
 

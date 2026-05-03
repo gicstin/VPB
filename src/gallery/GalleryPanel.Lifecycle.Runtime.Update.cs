@@ -457,6 +457,14 @@ namespace VPB
                 }
             }
 
+            if (_categoryQuickChromeRootGO != null && _categoryQuickChromeRootGO.activeSelf)
+                ApplyCategoryQuickChromeLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+
+            if (IsVisible && titleSearchInput != null)
+            {
+                try { ApplyTitleBarResponsiveLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f); } catch { }
+            }
+
             // Pointer Dot Logic
             if (pointerDotGO != null)
             {
@@ -494,8 +502,24 @@ namespace VPB
         {
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
             {
-                if (EventSystem.current.currentSelectedGameObject.GetComponent<InputField>() != null) return;
+                var sel = EventSystem.current.currentSelectedGameObject;
+                if (sel.GetComponent<InputField>() != null) return;
             }
+
+            if (Input.GetKeyDown(KeyCode.Escape) && _titleSearchPopupOpen)
+            {
+                CloseTitleSearchPopup();
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Escape) && _categoryQuickMenuOpen)
+            {
+                SetCategoryQuickMenuVisible(false);
+                return;
+            }
+
+            if (IsVisible && TryConsumeCategoryQuickNumberKey())
+                return;
 
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);

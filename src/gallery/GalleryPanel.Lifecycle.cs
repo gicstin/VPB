@@ -144,6 +144,7 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged += UpdateLayout;
             VPBConfig.Instance.ConfigChanged += RefreshSideTabAreasForConfigChange;
             VPBConfig.Instance.ConfigChanged += ApplyVamMenuGateVisibility;
+            VPBConfig.Instance.ConfigChanged += RefreshCategoryQuickSwitchOnConfigChanged;
         }
 
         private void UnsubscribeGalleryPanelFromVpBConfigChanged()
@@ -157,10 +158,17 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged -= UpdateLayout;
             VPBConfig.Instance.ConfigChanged -= RefreshSideTabAreasForConfigChange;
             VPBConfig.Instance.ConfigChanged -= ApplyVamMenuGateVisibility;
+            VPBConfig.Instance.ConfigChanged -= RefreshCategoryQuickSwitchOnConfigChanged;
         }
 
         void OnDestroy()
         {
+            if (_categoryQuickApplyCoroutine != null)
+            {
+                try { StopCoroutine(_categoryQuickApplyCoroutine); } catch { }
+                _categoryQuickApplyCoroutine = null;
+            }
+
             // Re-enable saving on teardown so the cache isn't left permanently paused.
             if (GalleryThumbnailCache.Instance != null)
                 GalleryThumbnailCache.Instance.SavingPaused = false;

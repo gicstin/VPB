@@ -461,7 +461,8 @@ namespace VPB
             bool isRight = false;
             try { isRight = anchorButtonRT != null && anchorButtonRT.anchorMin.x > 0.5f; } catch { isRight = false; }
             float gapY = 6f;
-            Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f, -55f);
+            float sc = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f, -65f * sc);
             Vector2 btnSize = anchorButtonRT != null ? anchorButtonRT.sizeDelta : new Vector2(35f, 35f);
 
             sidePaneSortMenuPanelRT.anchorMin = sidePaneSortMenuPanelRT.anchorMax = (anchorButtonRT != null ? anchorButtonRT.anchorMin : new Vector2(0f, 1f));
