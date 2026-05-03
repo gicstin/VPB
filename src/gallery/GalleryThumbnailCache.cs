@@ -456,10 +456,18 @@ namespace VPB
             return normalizedPath;
         }
 
-        public bool TryGetThumbnail(string path, long fileLastWriteTime, out byte[] data, out int width, out int height, out TextureFormat format)
+        /// <summary>Disk index key; optional <c>|tjN</c> suffix separates TurboJPEG scaled thumbnail tiers (N = 2, 4, 8).</summary>
+        public string GetThumbnailCacheKey(string path, int turboJpegScaleDenom = 1)
+        {
+            string k = GetCacheKey(path);
+            if (turboJpegScaleDenom <= 1) return k;
+            return k + "|tj" + turboJpegScaleDenom;
+        }
+
+        public bool TryGetThumbnail(string path, long fileLastWriteTime, out byte[] data, out int width, out int height, out TextureFormat format, int turboJpegScaleDenom = 1)
         {
             if (IsPackagePath(path)) fileLastWriteTime = 0;
-            string key = GetCacheKey(path);
+            string key = GetThumbnailCacheKey(path, turboJpegScaleDenom);
             data = null;
             width = 0;
             height = 0;
@@ -528,7 +536,7 @@ namespace VPB
             return false;
         }
 
-        public void SaveThumbnail(string path, byte[] data, int dataLength, int width, int height, TextureFormat format, long lastWriteTime)
+        public void SaveThumbnail(string path, byte[] data, int dataLength, int width, int height, TextureFormat format, long lastWriteTime, int turboJpegScaleDenom = 1)
         {
             // Checked before acquiring any lock so background threads pay zero cost
             // when the gallery is actively scrolling or loading thumbnails.
@@ -544,7 +552,7 @@ namespace VPB
                 return;
             }
 
-            string key = GetCacheKey(path);
+            string key = GetThumbnailCacheKey(path, turboJpegScaleDenom);
 
             cacheLock.EnterWriteLock();
             try

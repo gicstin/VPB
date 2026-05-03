@@ -80,6 +80,10 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/turbojpeg.dll",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/I18N.CJK.dll",
         "IsDirectory":  false
     },

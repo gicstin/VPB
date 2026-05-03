@@ -237,6 +237,8 @@
   "settings.tip.plugin_gallery_grid_thumbnails": "開啟時，Custom/Scripts 下的 .cs/.cslist/.dll 與同名的 .jpg 或 .png（姊妹圖）會在網格中顯示預覽。關閉時網格不顯示外掛圖；選取項目並展開底部資訊列仍可檢視姊妹圖（若有）。",
   "settings.gallery_list_legacy_names": "圖庫清單傳統名稱",
   "settings.tip.gallery_list_legacy_names": "關閉（預設）：清單中對套件內項目顯示 作者.套件名.版本（無 .var）。開啟：與以前一樣在列中顯示檔案或項目名。",
+  "settings.turbo_jpeg_enabled": "JPEG 使用 TurboJPEG（libjpeg-turbo）",
+  "settings.tip.turbo_jpeg_enabled": "開啟時，JPEG 透過 libjpeg-turbo（將 turbojpeg.dll 放在 BepInEx/plugins）解碼。網格縮圖以縮放整數倍解碼以提速並降低記憶體。懸停大圖預覽一律使用 Unity 全解析度解碼（不使用 TurboJPEG）。PNG 及其他格式不變。切換後請重新整理圖庫。",
   "settings.hide_category.plugins": "隱藏：外掛",
   "settings.header.developer": "開發者",
   "settings.developer_mode": "開發者模式",

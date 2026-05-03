@@ -384,6 +384,20 @@ namespace VPB
                     VPBConfig.Instance.TriggerChange();
                 }
             });
+            defs.Add(new InternalSettingDefinition {
+                Key = "lists.turboJpegEnabled", GroupKey = "lists", Label = VPBTranslation.T("settings.turbo_jpeg_enabled", "TurboJPEG for JPEG images"),
+                Tooltip = VPBTranslation.T("settings.tip.turbo_jpeg_enabled", "When ON, JPEGs decode with libjpeg-turbo (turbojpeg.dll in BepInEx/plugins). Grid thumbnails use scaled integer decode (faster, less memory). Hover preview always uses full-resolution Unity decode, not TurboJPEG. PNG and non-JPEG formats unchanged. Refresh gallery after toggling."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => Settings.Instance != null && Settings.Instance.TurboJpegEnabled != null && Settings.Instance.TurboJpegEnabled.Value,
+                SetBool = v => {
+                    if (Settings.Instance != null && Settings.Instance.TurboJpegEnabled != null)
+                    {
+                        Settings.Instance.TurboJpegEnabled.Value = v;
+                        Settings.SaveConfig();
+                    }
+                    try { TurboJpegNative.ResetSessionGiveUp(); } catch { }
+                }
+            });
 
             defs.Add(new InternalSettingDefinition {
                 Key = "hover.mode", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_mode", "Hover preview"),

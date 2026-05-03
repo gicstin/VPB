@@ -1619,9 +1619,9 @@ namespace VPB
             UpdateHoverPreviewLayout();
             hoverPreviewGO.SetActive(true);
 
-            // Use the same thumbnail resolution logic, but ignore grid-only plugin hiding.
+            // Full-res decode/cache tier for hover; grid-only plugin thumb hiding still off via gridThumbnailContext.
             hoverPreviewImage.color = Color.white;
-            LoadThumbnail(file, hoverPreviewImage, gridThumbnailContext: false);
+            LoadThumbnail(file, hoverPreviewImage, gridThumbnailContext: false, turboJpegThumbnailDenom: 1, thumbnailUnityDecodeOnly: true);
         }
 
         public void HideHoverPreview(FileEntry file)

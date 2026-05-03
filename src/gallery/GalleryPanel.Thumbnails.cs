@@ -175,7 +175,7 @@ namespace VPB
             ShowThumbnailCacheProgress();
         }
 
-        private void LoadThumbnail(FileEntry file, RawImage target, bool gridThumbnailContext = true)
+        private void LoadThumbnail(FileEntry file, RawImage target, bool gridThumbnailContext = true, int turboJpegThumbnailDenom = 0, bool thumbnailUnityDecodeOnly = false)
         {
             if (file is MissingPackageListEntry)
             {
@@ -195,7 +195,7 @@ namespace VPB
 
             try
             {
-                LoadThumbnailInternal(file, target, gridThumbnailContext);
+                LoadThumbnailInternal(file, target, gridThumbnailContext, turboJpegThumbnailDenom, thumbnailUnityDecodeOnly);
             }
             catch (Exception ex)
             {
@@ -213,7 +213,7 @@ namespace VPB
             return lower.EndsWith(".cs") || lower.EndsWith(".cslist") || lower.EndsWith(".dll");
         }
 
-        private void LoadThumbnailInternal(FileEntry file, RawImage target, bool gridThumbnailContext)
+        private void LoadThumbnailInternal(FileEntry file, RawImage target, bool gridThumbnailContext, int turboJpegThumbnailDenom, bool thumbnailUnityDecodeOnly)
         {
             // Virtual/missing entries are handled before reaching here
             if (file is VirtualFileEntry || file is MissingPackageListEntry)
@@ -446,8 +446,11 @@ namespace VPB
                 catch { }
             }
 
-            // 1. Memory Cache
-            Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath);
+            // 1. Memory Cache (tier: optional full-res for hover; else TurboJPEG scale from grid columns)
+            int thumbTd = turboJpegThumbnailDenom > 0
+                ? TurboJpegNative.NormalizeScaleDenom(turboJpegThumbnailDenom)
+                : TurboJpegNative.ScaleDenomFromGridColumns(GridColumnCount);
+            Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath, thumbTd, thumbnailUnityDecodeOnly);
             if (tex != null)
             {
                 if (bind != null)
@@ -461,16 +464,18 @@ namespace VPB
                 return;
             }
 
-            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: true);
+            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: true, turboJpegScaleDenom: thumbTd, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
         }
 
-        private void QueueThumbnailDecode(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, bool skipCache, bool scheduleHangWatchdog)
+        private void QueueThumbnailDecode(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, bool skipCache, bool scheduleHangWatchdog, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
         {
             if (CustomImageLoaderThreaded.singleton == null || target == null) return;
 
             CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
             qi.imgPath = imgPath;
             qi.isThumbnail = true;
+            qi.turboJpegScaleDenom = turboJpegScaleDenom;
+            qi.thumbnailUnityDecodeOnly = thumbnailUnityDecodeOnly;
             qi.compress = false;
             qi.skipCache = skipCache;
             qi.priority = skipCache ? Mathf.Min(-2, _nextThumbPriority - 30) : _nextThumbPriority;
@@ -514,24 +519,24 @@ namespace VPB
                 ThumbnailBindingTag failBind = target.GetComponent<ThumbnailBindingTag>();
                 if (failBind == null || failBind.ExpectedTag != expectedTag) return;
                 if (capturedGroupId != currentLoadingGroupId) return;
-                RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId);
+                RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
             if (scheduleHangWatchdog)
-                StartCoroutine(ThumbnailHangWatchdogCo(file, target, imgPath, expectedTag, capturedGroupId));
+                StartCoroutine(ThumbnailHangWatchdogCo(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly));
         }
 
-        private void RequestThumbnailRetryAfterFailure(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId)
+        private void RequestThumbnailRetryAfterFailure(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
         {
             if (target == null) return;
             ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
             if (b == null || b.ExpectedTag != expectedTag) return;
             if (b.ThumbRetryCount >= MaxThumbnailDecodeRetries) return;
             b.ThumbRetryCount++;
-            StartCoroutine(ThumbnailRetryAfterDelayCo(file, target, imgPath, expectedTag, capturedGroupId));
+            StartCoroutine(ThumbnailRetryAfterDelayCo(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly));
         }
 
-        private IEnumerator ThumbnailRetryAfterDelayCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId)
+        private IEnumerator ThumbnailRetryAfterDelayCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
         {
             yield return new WaitForSecondsRealtime(0.02f);
             if (target == null) yield break;
@@ -544,11 +549,11 @@ namespace VPB
                 yield break;
             }
             if (CustomImageLoaderThreaded.singleton == null) yield break;
-            CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath);
-            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: true, scheduleHangWatchdog: false);
+            CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
+            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: true, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
         }
 
-        private IEnumerator ThumbnailHangWatchdogCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId)
+        private IEnumerator ThumbnailHangWatchdogCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
         {
             yield return new WaitForSecondsRealtime(ThumbnailHangWatchDelaySec);
             if (target == null) yield break;
@@ -557,7 +562,7 @@ namespace VPB
             if (capturedGroupId != currentLoadingGroupId) yield break;
             if (target.texture != null) yield break;
             if (b.ThumbRetryCount > 0) yield break;
-            RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId);
+            RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
         }
 
         private static void ClearThumbnailTarget(RawImage target)

@@ -237,6 +237,8 @@
   "settings.tip.plugin_gallery_grid_thumbnails": "켜면 Custom/Scripts 아래 .cs/.cslist/.dll 과 같은 이름의 .jpg 또는 .png(형제 이미지)가 그리드에 표시됩니다. 끄면 그리드에는 표시하지 않고, 항목을 선택해 하단 정보 바를 펼치면 형제 이미지가 있을 때 미리보기가 가능합니다.",
   "settings.gallery_list_legacy_names": "갤러리 목록 기존 이름 표시",
   "settings.tip.gallery_list_legacy_names": "끔(기본): 목록에서 패키지 항목에 제작자.패키지명.버전(.var 없음)을 표시합니다. 켬: 이전처럼 파일/항목 이름을 행에 표시합니다.",
+  "settings.turbo_jpeg_enabled": "JPEG에 TurboJPEG(libjpeg-turbo) 사용",
+  "settings.tip.turbo_jpeg_enabled": "켜면 JPEG는 libjpeg-turbo(turbojpeg.dll을 BepInEx/plugins에 두세요)로 디코딩합니다. 그리드 썸네일은 정수 배율 축소 디코딩으로 빠르게 하고 메모리를 줄입니다. 호버 미리보기는 항상 Unity 전체 해상도 디코딩(TurboJPEG 미사용). PNG 등 비JPEG 형식은 변경 없음. 변경 후 갤러리를 새로 고침하세요.",
   "settings.hide_category.plugins": "숨기기: 플러그인",
   "settings.header.developer": "개발자",
   "settings.developer_mode": "개발자 모드",

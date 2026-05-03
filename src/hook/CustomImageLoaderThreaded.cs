@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -28,7 +29,9 @@ namespace VPB
                 linear = false;
                 processed = false;
                 preprocessed = false;
-                decodedFromFastPath = false;
+				decodedFromFastPath = false;
+                turboJpegScaleDenom = 1;
+                thumbnailUnityDecodeOnly = false;
                 loadedFromGalleryCache = false;
                 loadedFromCache = false;
                 cancel = false;
@@ -86,7 +89,11 @@ namespace VPB
 			public bool processed;
 
 			public bool preprocessed;
-			public volatile bool working;
+            public volatile bool working;
+			/// <summary>TurboJPEG decode denominator (1,2,4,8) from gallery grid columns; non-thumbs ignore.</summary>
+			public int turboJpegScaleDenom = 1;
+			/// <summary>When true (hover preview), skip TurboJPEG and gallery pixel cache; decode JPEG via Unity <see cref="Texture2D.LoadImage"/>; separate RAM cache tier.</summary>
+			public bool thumbnailUnityDecodeOnly;
 			public bool loadedFromGalleryCache;
 			public bool loadedFromCache;
 			public bool loadedFromDownscaledCache;
@@ -404,7 +411,7 @@ namespace VPB
 					else if (FileManager.FileExists(imgPath))
 					{
 						bool loadedFromGalleryCache = false;
-						if (isThumbnail && !skipCache)
+						if (isThumbnail && !skipCache && !thumbnailUnityDecodeOnly)
 						{
                             long lastWriteTime = 0;
                             bool foundTime = false;
@@ -429,7 +436,7 @@ namespace VPB
 								int w, h;
 								TextureFormat fmt;
 								byte[] data;
-								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, lastWriteTime, out data, out w, out h, out fmt))
+								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, lastWriteTime, out data, out w, out h, out fmt, turboJpegScaleDenom))
 								{
 									raw = data;
 									width = w;
@@ -555,6 +562,40 @@ namespace VPB
 
 				try
 				{
+					bool isJpeg = TurboJpegNative.LooksLikeJpeg(raw, rawLength);
+					bool useTurboJpeg = false;
+					try
+					{
+						var st = Settings.Instance;
+						useTurboJpeg = st != null && st.TurboJpegEnabled != null && st.TurboJpegEnabled.Value
+							&& TurboJpegNative.ShouldAttemptTurboDecode() && isJpeg;
+					}
+					catch { useTurboJpeg = false; }
+					if (isThumbnail && thumbnailUnityDecodeOnly) useTurboJpeg = false;
+
+					Texture2D turboTex = null;
+					string turboErr = null;
+					if (useTurboJpeg)
+					{
+						int turboDenom = (!isThumbnail || turboJpegScaleDenom <= 1) ? 1 : TurboJpegNative.NormalizeScaleDenom(turboJpegScaleDenom);
+						bool turboOk = TurboJpegNative.TryDecodeJpegToTexture2D(raw, rawLength, turboDenom, out turboTex, out turboErr);
+						if (turboOk)
+						{
+							TurboJpegStats.NoteFirstTurboSuccess();
+							ByteArrayPool.Return(raw);
+							raw = null;
+							rawLength = 0;
+							needsDecoding = false;
+							tex = turboTex;
+							width = turboTex.width;
+							height = turboTex.height;
+							textureFormat = turboTex.format;
+							decodedFromFastPath = true;
+							preprocessed = false;
+							return;
+						}
+					}
+
 					Texture2D tempTex = new Texture2D(2, 2);
 					byte[] dataToLoad = raw;
 					if (raw.Length != rawLength)
@@ -562,8 +603,10 @@ namespace VPB
 						dataToLoad = new byte[rawLength];
 						Buffer.BlockCopy(raw, 0, dataToLoad, 0, rawLength);
 					}
-					
-					if (tempTex.LoadImage(dataToLoad))
+
+					bool loadImageOk = tempTex.LoadImage(dataToLoad);
+
+					if (loadImageOk)
 					{
 						int origWidth = tempTex.width;
 						int origHeight = tempTex.height;
@@ -904,7 +947,7 @@ namespace VPB
                                      if (tex.width <= 512 && tex.height <= 512)
                                      {
                                          byte[] rawTextureData2 = tex.GetRawTextureData();
-                                         GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, lastWriteTime);
+                                         GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, lastWriteTime, turboJpegScaleDenom);
                                          savedToGalleryCache = true;
                                          loadedFromGalleryCache = true;
                                      }
@@ -995,6 +1038,15 @@ namespace VPB
         public QueuedImage GetQI()
         {
             return pool.Get();
+        }
+
+        /// <summary>In-RAM thumbnail LRU key; matches disk <see cref="GalleryThumbnailCache.GetThumbnailCacheKey"/> tier suffix; <c>|uj</c> = Unity-only decode (hover preview).</summary>
+        public static string ThumbnailMemoryCacheKey(string path, int turboJpegScaleDenom, bool unityDecodeOnly = false)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            string k = turboJpegScaleDenom <= 1 ? path : path + "|tj" + turboJpegScaleDenom;
+            if (unityDecodeOnly) return k + "|uj";
+            return k;
         }
 
 		public static VPB.CustomImageLoaderThreaded singleton;
@@ -1196,13 +1248,14 @@ namespace VPB
 			return thumbnailUseCount.TryGetValue(tex, out c) && c > 0;
 		}
 
-		public void ClearCacheThumbnail(string imgPath)
+		public void ClearCacheThumbnail(string imgPath, int turboJpegScaleDenom = 1, bool unityDecodeOnly = false)
 		{
+			string key = ThumbnailMemoryCacheKey(imgPath, turboJpegScaleDenom, unityDecodeOnly);
 			Texture2D value;
-			if (thumbnailCache != null && thumbnailCache.TryGetValue(imgPath, out value))
+			if (thumbnailCache != null && thumbnailCache.TryGetValue(key, out value))
 			{
-				thumbnailCache.Remove(imgPath);
-				RemoveThumbnailCacheLru(imgPath);
+				thumbnailCache.Remove(key);
+				RemoveThumbnailCacheLru(key);
 				if (value != null)
 				{
 					if (IsThumbnailInUse(value))
@@ -1227,33 +1280,34 @@ namespace VPB
 			}
 		}
 
-		public Texture2D GetCachedThumbnail(string path)
+		public Texture2D GetCachedThumbnail(string path, int turboJpegScaleDenom = 1, bool unityDecodeOnly = false)
 		{
+			string key = ThumbnailMemoryCacheKey(path, turboJpegScaleDenom, unityDecodeOnly);
 			Texture2D value;
-			if (thumbnailCache != null && thumbnailCache.TryGetValue(path, out value))
+			if (thumbnailCache != null && thumbnailCache.TryGetValue(key, out value))
 			{
 				if (value == null)
 				{
-					thumbnailCache.Remove(path);
-					RemoveThumbnailCacheLru(path);
+					thumbnailCache.Remove(key);
+					RemoveThumbnailCacheLru(key);
 					return null;
 				}
-				TouchThumbnailCacheLru(path);
+				TouchThumbnailCacheLru(key);
 				return value;
 			}
 			return null;
 		}
 
-		public void AddCachedThumbnail(string path, Texture2D tex)
+		public void AddCachedThumbnail(string path, Texture2D tex, int turboJpegScaleDenom = 1, bool unityDecodeOnly = false)
 		{
-			CacheThumbnail(path, tex);
+			CacheThumbnail(ThumbnailMemoryCacheKey(path, turboJpegScaleDenom, unityDecodeOnly), tex);
 		}
 
-		private void CacheThumbnail(string path, Texture2D tex)
+		private void CacheThumbnail(string cacheKey, Texture2D tex)
 		{
-			if (thumbnailCache == null || string.IsNullOrEmpty(path) || tex == null) return;
-			if (!thumbnailCache.ContainsKey(path)) thumbnailCache.Add(path, tex);
-			TouchThumbnailCacheLru(path);
+			if (thumbnailCache == null || string.IsNullOrEmpty(cacheKey) || tex == null) return;
+			if (!thumbnailCache.ContainsKey(cacheKey)) thumbnailCache.Add(cacheKey, tex);
+			TouchThumbnailCacheLru(cacheKey);
 			EnforceThumbnailCacheLimit();
 		}
 
@@ -1318,12 +1372,13 @@ namespace VPB
 		private void DispatchPendingThumbnailCallbacks(QueuedImage res)
 		{
 			if (res == null || string.IsNullOrEmpty(res.imgPath)) return;
+			string pendingKey = ThumbnailMemoryCacheKey(res.imgPath, res.turboJpegScaleDenom, res.thumbnailUnityDecodeOnly);
 			List<ImageLoaderCallback> callbacks = null;
 			lock (pendingThumbnailLock)
 			{
-				if (pendingThumbnailCallbacks != null && pendingThumbnailCallbacks.TryGetValue(res.imgPath, out callbacks))
+				if (pendingThumbnailCallbacks != null && pendingThumbnailCallbacks.TryGetValue(pendingKey, out callbacks))
 				{
-					pendingThumbnailCallbacks.Remove(res.imgPath);
+					pendingThumbnailCallbacks.Remove(pendingKey);
 				}
 			}
 			if (callbacks == null) return;
@@ -1389,7 +1444,8 @@ namespace VPB
 				{
 					if (pendingThumbnailCallbacks == null) pendingThumbnailCallbacks = new Dictionary<string, List<ImageLoaderCallback>>();
 					List<ImageLoaderCallback> list;
-					if (pendingThumbnailCallbacks.TryGetValue(qi.imgPath, out list))
+					string pendingKey = ThumbnailMemoryCacheKey(qi.imgPath, qi.turboJpegScaleDenom, qi.thumbnailUnityDecodeOnly);
+					if (pendingThumbnailCallbacks.TryGetValue(pendingKey, out list))
 					{
 						if (qi.callback != null) list.Add(qi.callback);
                         
@@ -1400,9 +1456,10 @@ namespace VPB
                             QueuedImage existing = null;
                             for (int i = 0; i < queuedImages.data.Count; i++)
                             {
-                                if (queuedImages.data[i].imgPath == qi.imgPath)
+                                QueuedImage cand = queuedImages.data[i];
+                                if (cand.imgPath == qi.imgPath && cand.turboJpegScaleDenom == qi.turboJpegScaleDenom)
                                 {
-                                    existing = queuedImages.data[i];
+                                    existing = cand;
                                     break;
                                 }
                             }
@@ -1420,7 +1477,7 @@ namespace VPB
 					}
 					list = new List<ImageLoaderCallback>(4);
 					if (qi.callback != null) list.Add(qi.callback);
-					pendingThumbnailCallbacks[qi.imgPath] = list;
+					pendingThumbnailCallbacks[pendingKey] = list;
 					qi.callback = (res) => { DispatchPendingThumbnailCallbacks(res); };
 				}
 			}
@@ -1482,7 +1539,8 @@ namespace VPB
                         {
                             lock (pendingThumbnailLock)
                             {
-                                if (pendingThumbnailCallbacks != null) pendingThumbnailCallbacks.Remove(value.imgPath);
+                                if (pendingThumbnailCallbacks != null)
+                                    pendingThumbnailCallbacks.Remove(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly));
                             }
                         }
                         pool.Return(value);
@@ -1523,7 +1581,7 @@ namespace VPB
                     {
                         if (value.isThumbnail)
                         {
-                            if (value.tex != null) CacheThumbnail(value.imgPath, value.tex);
+                            if (value.tex != null) CacheThumbnail(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly), value.tex);
                         }
                         else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
                         {
@@ -1615,7 +1673,7 @@ namespace VPB
 				Texture2D value2;
 				if (value.isThumbnail)
 				{
-					Texture2D cached = GetCachedThumbnail(value.imgPath);
+					Texture2D cached = GetCachedThumbnail(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly);
 					if (cached != null) UseCachedTex(value, cached);
 				}
 				else if (textureCache != null && textureCache.TryGetValue(value.cacheSignature, out value2))

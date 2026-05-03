@@ -46,6 +46,10 @@
     <Content Include="lib\sqlite-native\sqlite3.dll">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Content>
+    <!-- libjpeg-turbo TurboJPEG API; optional dev override in lib — PostBuild also syncs from vam_patch when lib absent. -->
+    <Content Include="lib\turbojpeg\turbojpeg.dll">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="0Harmony20">
@@ -286,6 +290,8 @@
     <Compile Include="src\hook\NativeTextureOnDemandCache.cs" />
     <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
+    <Compile Include="src\hook\TurboJpegNative.cs" />
+    <Compile Include="src\hook\TurboJpegStats.cs" />
     <Compile Include="src\hook\HubImageLoaderThreaded.cs" />
     <Compile Include="src\hook\HubPixelPackingJobs.cs" />
     <Compile Include="src\hook\CustomAssetLoader.cs" />
@@ -499,6 +505,18 @@ if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
 copy /Y "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" "$(VaMPath)\BepInEx\plugins\sqlite3.dll"
 if not exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins" mkdir "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins"
 copy /Y "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\sqlite3.dll"
+)
+if exist "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" (
+if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
+copy /Y "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" "$(VaMPath)\BepInEx\plugins\turbojpeg.dll"
+if not exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins" mkdir "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins"
+copy /Y "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\turbojpeg.dll"
+)
+if not exist "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" (
+if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\turbojpeg.dll" (
+if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
+if not exist "$(VaMPath)\BepInEx\plugins\turbojpeg.dll" copy /Y "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\turbojpeg.dll" "$(VaMPath)\BepInEx\plugins\turbojpeg.dll"
+)
 )
 if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations\" (
 robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations" "$(VaMPath)\BepInEx\plugins\vpb_translations" /E /NFL /NDL /NJH /NJS /NC /NS /NP

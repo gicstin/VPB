@@ -79,6 +79,8 @@ namespace VPB
 
         public ConfigEntry<bool> LogImageQueueEvents;
         public ConfigEntry<bool> LogVerboseUi;
+        /// <summary>When true, JPEG decode uses libjpeg-turbo (<c>turbojpeg.dll</c>) when present under BepInEx/plugins.</summary>
+        public ConfigEntry<bool> TurboJpegEnabled;
         /// <summary>When true, logs every VPB.cfg Save/Load/TriggerChange with millisecond timings. When false, only logs if a step is unusually slow.</summary>
         public ConfigEntry<bool> LogConfigPerf;
         public ConfigEntry<bool> EnableUiTransparency;
@@ -138,6 +140,28 @@ namespace VPB
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 0, "0=off, 1=summary only, 2=verbose per-texture trace.");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");
             LogVerboseUi = config.Bind<bool>("Logging", "LogVerboseUi", false, "Log verbose UI lifecycle messages (can be noisy).");
+            bool turboJpegDefault = true;
+            try
+            {
+                var newDef = new ConfigDefinition("Optimze", "TurboJpegEnabled");
+                if (config.TryGetEntry<bool>(newDef, out var neb)) turboJpegDefault = neb.Value;
+                else
+                {
+                    var oldDef = new ConfigDefinition("Optimze", "TestTurboJpegDecode");
+                    if (config.TryGetEntry<bool>(oldDef, out var oeb)) turboJpegDefault = oeb.Value;
+                }
+            }
+            catch { }
+            TurboJpegEnabled = config.Bind<bool>("Optimze", "TurboJpegEnabled", turboJpegDefault,
+                "JPEG decode via libjpeg-turbo (turbojpeg.dll in BepInEx/plugins) when installed. Grid thumbnails use scaled decode; hover preview uses Unity full decode. PNG unchanged.");
+            try
+            {
+                TurboJpegEnabled.SettingChanged += (sender, args) =>
+                {
+                    try { TurboJpegNative.ResetSessionGiveUp(); } catch { }
+                };
+            }
+            catch { }
             LogConfigPerf = config.Bind<bool>("Logging", "LogConfigPerf", false, "Log VPB.cfg Save timing and each ConfigChanged subscriber. Set false after troubleshooting.");
 
             LogStartupDetails = config.Bind<bool>("Logging", "LogStartupDetails", false, "Log additional startup/patch/initialization details (can be noisy). Enable when troubleshooting.");

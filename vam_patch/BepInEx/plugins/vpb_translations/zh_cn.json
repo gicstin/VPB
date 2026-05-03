@@ -237,6 +237,8 @@
   "settings.tip.plugin_gallery_grid_thumbnails": "开启时，Custom/Scripts 下的 .cs/.cslist/.dll 与同名的 .jpg 或 .png（姊妹图）会在网格中显示预览。关闭时网格不显示插件图；选中条目并展开底部信息条仍可查看姊妹图（若有）。",
   "settings.gallery_list_legacy_names": "图库列表传统名称",
   "settings.tip.gallery_list_legacy_names": "关闭（默认）：列表中对包内条目显示 作者.包名.版本（无 .var）。开启：与以前一样在行中显示文件或条目名。",
+  "settings.turbo_jpeg_enabled": "JPEG 使用 TurboJPEG（libjpeg-turbo）",
+  "settings.tip.turbo_jpeg_enabled": "开启时，JPEG 通过 libjpeg-turbo（将 turbojpeg.dll 放在 BepInEx/plugins）解码。网格缩略图按缩放整数倍解码以提速并降低内存。悬停大图预览始终使用 Unity 全分辨率解码（不使用 TurboJPEG）。PNG 及其他格式不变。切换后请刷新图库。",
   "settings.hide_category.plugins": "隐藏：插件",
   "settings.header.developer": "开发者",
   "settings.developer_mode": "开发者模式",
