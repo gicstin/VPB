@@ -222,6 +222,7 @@ namespace VPB
 				var tagRows   = new List<VpbLocalDatabase.GalleryUserTagImportRow>(resourceEntries.Count);
 				var hideUids  = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 				var pkgsByUid = FileManager.PackagesByUid; // snapshot; thread-safe read
+				if (pkgsByUid == null) { result.Error = "FileManager not ready"; return false; }
 
 				foreach (var entry in resourceEntries)
 				{
@@ -377,6 +378,7 @@ namespace VPB
 
 				// Remove hide markers
 				var pkgsByUid = FileManager.PackagesByUid;
+				if (pkgsByUid == null) pkgsByUid = new Dictionary<string, VarPackage>();
 				if (manifest.CreatedHideMarkers != null)
 				{
 					foreach (var entry in manifest.CreatedHideMarkers)
