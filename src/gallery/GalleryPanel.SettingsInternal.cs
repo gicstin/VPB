@@ -521,7 +521,7 @@ namespace VPB
                     GroupKey = "ba_migration",
                     Label = VPBTranslation.T("settings.ba.import", "Import tags from BrowserAssist"),
                     Tooltip = VPBTranslation.T("settings.tip.ba.import",
-                        "Import user tags from BrowserAssist into VPB. Safe to run multiple times — existing tags are preserved."),
+                        "Import user tags from BrowserAssist into VPB. Re-running first undoes any previous BA import, then re-imports fresh. Manually added tags are preserved."),
                     ControlType = InternalSettingControlType.Button,
                     OnAction = () =>
                     {
@@ -1064,7 +1064,6 @@ namespace VPB
                 return;
             }
 
-<<<<<<< HEAD
             if (def.ControlType == InternalSettingControlType.TextArea && def.GetString != null && def.SetString != null)
             {
                 if (string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
