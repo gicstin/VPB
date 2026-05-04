@@ -435,12 +435,8 @@ namespace VPB
             try
             {
                 string jpgPath = Path.ChangeExtension(scenePath, ".jpg");
-                string pngPath = Path.ChangeExtension(scenePath, ".png");
                 if (CustomImageLoaderThreaded.singleton != null)
-                {
                     CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(jpgPath);
-                    CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(pngPath);
-                }
             }
             catch { }
 

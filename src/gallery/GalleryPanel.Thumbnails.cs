@@ -42,11 +42,27 @@ namespace VPB
         // Keeps package preview lookups cheap while scrolling.
         private readonly Dictionary<string, string> _packagePreviewInternalPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Gallery thumbnails / previews: <c>.jpg</c> only (no <c>.png</c> / <c>.jpeg</c> probes).</summary>
         private static bool IsImagePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
-            string p = path.ToLowerInvariant();
-            return p.EndsWith(".jpg") || p.EndsWith(".jpeg") || p.EndsWith(".png");
+            return path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// <c>pkg.var_path</c> should be the .var on disk; if wrong column / bad data yields an internal image path,
+        /// do not use it for <see cref="FileManager.GetPackage"/> or loose-file thumbnail shortcuts (ALL VAR grid).
+        /// </summary>
+        private static bool IndexedVarPathHintLooksUsableForPackageResolve(string p)
+        {
+            if (string.IsNullOrEmpty(p)) return false;
+            string n = p.Trim().Replace('\\', '/');
+            if (n.Length == 0) return false;
+            if (n.IndexOf(":/", StringComparison.Ordinal) >= 0) return true;
+            if (IsImagePath(n)) return false;
+            string nl = n.ToLowerInvariant();
+            if (nl.EndsWith(".png", StringComparison.Ordinal) || nl.EndsWith(".jpeg", StringComparison.Ordinal)) return false;
+            return true;
         }
 
         /// <summary>SQLite / ALL VAR rows often use relative var paths; <see cref="FileManager.GetPackage"/> expects package UID.</summary>
@@ -93,8 +109,17 @@ namespace VPB
 
             List<string> keys = new List<string>(4);
             try { AppendUniquePackageLookupKey(keys, ple.GetPackageUidForGalleryUserTags()); } catch { }
-            try { AppendUniquePackageLookupKey(keys, ple.Path); } catch { }
-            try { AppendUniquePackageLookupKey(keys, ple.Uid); } catch { }
+            string rowPath = null;
+            try { rowPath = ple.Path; } catch { rowPath = null; }
+            if (IndexedVarPathHintLooksUsableForPackageResolve(rowPath))
+                try { AppendUniquePackageLookupKey(keys, rowPath); } catch { }
+            try
+            {
+                string u = ple.Uid;
+                if (!string.IsNullOrEmpty(u) && !string.Equals(u, rowPath, StringComparison.OrdinalIgnoreCase))
+                    AppendUniquePackageLookupKey(keys, u);
+            }
+            catch { }
 
             for (int i = 0; i < keys.Count; i++)
             {
@@ -160,7 +185,7 @@ namespace VPB
                     if (string.IsNullOrEmpty(baseNo)) continue;
                     string ext = Path.GetExtension(leaf).ToLowerInvariant();
                     if (string.IsNullOrEmpty(ext)) continue;
-                    bool isImg = ext == ".jpg" || ext == ".jpeg" || ext == ".png";
+                    bool isImg = ext == ".jpg";
                     string key = dir + "|" + baseNo;
                     List<VarInternalMember> list;
                     if (!groups.TryGetValue(key, out list) || list == null)
@@ -401,8 +426,9 @@ namespace VPB
             }
 
             string imgPath = "";
-            string lowerPath = file.Path.ToLowerInvariant();
-            if (lowerPath.EndsWith(".jpg") || lowerPath.EndsWith(".png"))
+            // Package list rows use Path as indexed var_path hint; never treat that as a loose disk image
+            // (bad/mis-typed DB → wrong branch → FileExists miss → decode retry storm when grid relayouts).
+            if (!(file is PackageListEntry) && IsImagePath(file.Path))
             {
                 imgPath = file.Path;
             }
@@ -428,20 +454,12 @@ namespace VPB
                 }
                 else
                 {
-                    // Local cleanup rows: prefer sidecar image next to source (.json -> .jpg/.png).
+                    // Local cleanup rows: sidecar .jpg next to source (.json -> .jpg).
                     try
                     {
                         string testJpg = Path.ChangeExtension(file.Path, ".jpg");
                         if (File.Exists(testJpg) || FileManager.FileExists(testJpg))
-                        {
                             imgPath = testJpg;
-                        }
-                        else
-                        {
-                            string testPng = Path.ChangeExtension(file.Path, ".png");
-                            if (File.Exists(testPng) || FileManager.FileExists(testPng))
-                                imgPath = testPng;
-                        }
                     }
                     catch { }
                 }
@@ -485,7 +503,7 @@ namespace VPB
                     return;
                 }
 
-                // First try per-item sister file: same internal path but .jpg/.png extension.
+                // First try per-item sister file: same internal path, .jpg only.
                 // This gives each clothing variation its own thumbnail instead of sharing the
                 // package-wide preview image.
                 string internalNoExt = System.IO.Path.GetFileNameWithoutExtension(vfe.InternalPath);
@@ -495,12 +513,9 @@ namespace VPB
                     : internalDir.Replace('\\', '/') + "/" + internalNoExt;
 
                 string sisterJpg = pkgPath + ":/" + baseInternal + ".jpg";
-                string sisterPng = pkgPath + ":/" + baseInternal + ".png";
 
                 if (FileManager.FileExists(sisterJpg))
                     imgPath = sisterJpg;
-                else if (FileManager.FileExists(sisterPng))
-                    imgPath = sisterPng;
                 else
                 {
                     // Package-wide preview requires package resolve; skip to keep scroll cheap/stable.
@@ -509,23 +524,13 @@ namespace VPB
             }
             else
             {
-                // Sister-file rule: same name, .jpg or .png extension
+                // Sister-file rule: same basename, .jpg only
                 // Optimized discovery via archive flattening (FileManager.FileExists)
                 try
                 {
                     string testJpg = Path.ChangeExtension(file.Path, ".jpg");
                     if (FileManager.FileExists(testJpg))
-                    {
                         imgPath = testJpg;
-                    }
-                    else
-                    {
-                        string testPng = Path.ChangeExtension(file.Path, ".png");
-                        if (FileManager.FileExists(testPng))
-                        {
-                            imgPath = testPng;
-                        }
-                    }
                 }
                 catch (ArgumentException)
                 {

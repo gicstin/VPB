@@ -2937,13 +2937,12 @@ namespace VPB
         private string GetThumbnailImgPath()
         {
             if (FileEntry == null) return null;
-            string lowerPath = FileEntry.Path.ToLowerInvariant();
-            if (lowerPath.EndsWith(".jpg") || lowerPath.EndsWith(".png"))
+            if (FileEntry is PackageListEntry) return null;
+            string p = FileEntry.Path ?? "";
+            if (p.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
                 return FileEntry.Path;
             string testJpg = Path.ChangeExtension(FileEntry.Path, ".jpg");
             if (FileManager.FileExists(testJpg)) return testJpg;
-            string testPng = Path.ChangeExtension(FileEntry.Path, ".png");
-            if (FileManager.FileExists(testPng)) return testPng;
             return null;
         }
 
