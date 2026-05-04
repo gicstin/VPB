@@ -37,10 +37,37 @@ namespace VPB
     {
         private const int MaxThumbnailDecodeRetries = 3;
         private const float ThumbnailHangWatchDelaySec = 0.35f;
+        private const float ThumbnailHangWatchMaxDelaySec = 1.50f;
+        private const float ThumbnailHangWatchScrollQuietSec = 0.25f;
+        private const int AllVarThumbQueuePressureThreshold = 80;
+        private const float AllVarThumbDiagMinIntervalSec = 0.75f;
+        private static float _lastAllVarThumbDiagLogRealtime = -999f;
+
+        private static string Trunc(string s, int max)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            if (max < 8) max = 8;
+            if (s.Length <= max) return s;
+            return s.Substring(0, max - 3) + "...";
+        }
+
+        private static void LogAllVarThumbDiagThrottled(string msg)
+        {
+            try
+            {
+                float now = Time.realtimeSinceStartup;
+                if ((now - _lastAllVarThumbDiagLogRealtime) < AllVarThumbDiagMinIntervalSec) return;
+                _lastAllVarThumbDiagLogRealtime = now;
+            }
+            catch { }
+            LogUtil.LogWarning(msg);
+        }
 
         // Cache for package list thumbnails: package UID -> internal image path (within the package).
         // Keeps package preview lookups cheap while scrolling.
         private readonly Dictionary<string, string> _packagePreviewInternalPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Cache for fast ALL VAR sister JPG existence checks: package UID -> set of internal .jpg paths (normalized, no leading "/").
+        private readonly Dictionary<string, HashSet<string>> _packageInternalJpgSetCache = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Gallery thumbnails / previews: <c>.jpg</c> only (no <c>.png</c> / <c>.jpeg</c> probes).</summary>
         private static bool IsImagePath(string path)
@@ -296,6 +323,46 @@ namespace VPB
             }
         }
 
+        private HashSet<string> GetOrBuildPackageInternalJpgSet(VarPackage pkg)
+        {
+            if (pkg == null) return null;
+            try
+            {
+                string uid = pkg.Uid;
+                if (!string.IsNullOrEmpty(uid) && _packageInternalJpgSetCache.TryGetValue(uid, out HashSet<string> cached) && cached != null)
+                    return cached;
+
+                List<string> names; List<long> ticks; List<long> sizes;
+                if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) return null;
+
+                var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string n = names[i];
+                    if (!IsImagePath(n)) continue;
+                    try
+                    {
+                        string norm = n.Replace('\\', '/');
+                        if (norm.StartsWith("/")) norm = norm.Substring(1);
+                        if (norm.Length == 0) continue;
+                        set.Add(norm);
+                    }
+                    catch { }
+                }
+
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    if (_packageInternalJpgSetCache.Count > 4000) _packageInternalJpgSetCache.Clear();
+                    _packageInternalJpgSetCache[uid] = set;
+                }
+                return set;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private struct ThumbnailCacheJob
         {
             public string Path;
@@ -477,8 +544,8 @@ namespace VPB
             }
             else if (file is VarFileEntry vfe)
             {
-                // Avoid resolving packages while scrolling search results (can stall/crash).
-                // Prefer deriving package path from vfe.Path (indexed) and use sister-image rule only.
+                // ALL VAR: prefer cached package file list for sister JPG existence + preview fallback.
+                // Avoid per-item FileManager.FileExists(pkg:/path.jpg) which can thrash VAR archive lookup.
                 string pkgPath = null;
                 try
                 {
@@ -489,18 +556,28 @@ namespace VPB
                 catch { pkgPath = null; }
                 if (string.IsNullOrEmpty(pkgPath))
                 {
-                    // If already resolved elsewhere, allow richer fallback.
-                    try
-                    {
-                        var pkg2 = vfe.Package;
-                        if (pkg2 != null && !string.IsNullOrEmpty(pkg2.Path)) pkgPath = pkg2.Path;
-                    }
-                    catch { pkgPath = null; }
-                }
-                if (string.IsNullOrEmpty(pkgPath))
-                {
                     ClearThumbnailTarget(target);
                     return;
+                }
+
+                bool isAllVar = false;
+                try { isAllVar = string.Equals((CurrentCategoryTitle ?? "").Trim(), "ALL VAR", StringComparison.OrdinalIgnoreCase); } catch { isAllVar = false; }
+
+                VarPackage vPkg = null;
+                if (isAllVar)
+                {
+                    // Try use existing resolved package first, then fallback to UID-from-path resolve.
+                    try { vPkg = vfe.Package; } catch { vPkg = null; }
+                    if (vPkg == null)
+                    {
+                        try
+                        {
+                            string uid = CanonicalVarPackageUidFromPathOrHint(pkgPath);
+                            if (!string.IsNullOrEmpty(uid))
+                                vPkg = FileManager.GetPackage(uid, ensureInstalled: false);
+                        }
+                        catch { vPkg = null; }
+                    }
                 }
 
                 // First try per-item sister file: same internal path, .jpg only.
@@ -512,14 +589,29 @@ namespace VPB
                     ? internalNoExt
                     : internalDir.Replace('\\', '/') + "/" + internalNoExt;
 
-                string sisterJpg = pkgPath + ":/" + baseInternal + ".jpg";
+                string internalSisterJpg = (baseInternal + ".jpg").Replace('\\', '/');
+                if (internalSisterJpg.StartsWith("/")) internalSisterJpg = internalSisterJpg.Substring(1);
 
-                if (FileManager.FileExists(sisterJpg))
-                    imgPath = sisterJpg;
+                if (isAllVar && vPkg != null)
+                {
+                    HashSet<string> jpgSet = GetOrBuildPackageInternalJpgSet(vPkg);
+                    if (jpgSet != null && jpgSet.Contains(internalSisterJpg))
+                    {
+                        imgPath = vPkg.Path + ":/" + internalSisterJpg;
+                    }
+                    else
+                    {
+                        string chosen = GetOrChoosePackagePreviewInternalPath(vPkg);
+                        if (!string.IsNullOrEmpty(chosen))
+                            imgPath = vPkg.Path + ":/" + chosen.Replace('\\', '/');
+                    }
+                }
                 else
                 {
-                    // Package-wide preview requires package resolve; skip to keep scroll cheap/stable.
-                    // If caller already resolved package, they will hit the PackageListEntry path for package rows.
+                    // Non-ALL-VAR path: keep lightweight existence check (may be expensive in ALL VAR bulk).
+                    string sisterJpg = pkgPath + ":/" + internalSisterJpg;
+                    if (FileManager.FileExists(sisterJpg))
+                        imgPath = sisterJpg;
                 }
             }
             else
@@ -681,26 +773,46 @@ namespace VPB
                 ThumbnailBindingTag failBind = target.GetComponent<ThumbnailBindingTag>();
                 if (failBind == null || failBind.ExpectedTag != expectedTag) return;
                 if (capturedGroupId != currentLoadingGroupId) return;
-                RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
+                try
+                {
+                    if (string.Equals((CurrentCategoryTitle ?? "").Trim(), "ALL VAR", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int pendTh = 0;
+                        try { if (CustomImageLoaderThreaded.singleton != null) pendTh = CustomImageLoaderThreaded.singleton.PendingThumbnailCount; } catch { pendTh = 0; }
+                        string ldr = null;
+                        try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
+                        LogAllVarThumbDiagThrottled("[VPB ThumbDiag] cb_fail tagOk=1 cancel=0 skipCacheJob=" + (skipCache ? "1" : "0")
+                            + " rt=" + Time.realtimeSinceStartup.ToString("0.000")
+                            + " pendTh=" + pendTh
+                            + " img=" + Trunc(imgPath, 120)
+                            + " exp=" + Trunc(expectedTag, 80)
+                            + " gid=" + Trunc(capturedGroupId, 24)
+                            + " retry=" + (failBind != null ? failBind.ThumbRetryCount.ToString() : "na")
+                            + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
+                    }
+                }
+                catch { }
+                RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache: true);
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
             if (scheduleHangWatchdog)
                 StartCoroutine(ThumbnailHangWatchdogCo(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly));
         }
 
-        private void RequestThumbnailRetryAfterFailure(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
+        private void RequestThumbnailRetryAfterFailure(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly, bool aggressiveSkipCache)
         {
             if (target == null) return;
             ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
             if (b == null || b.ExpectedTag != expectedTag) return;
             if (b.ThumbRetryCount >= MaxThumbnailDecodeRetries) return;
             b.ThumbRetryCount++;
-            StartCoroutine(ThumbnailRetryAfterDelayCo(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly));
+            StartCoroutine(ThumbnailRetryAfterDelayCo(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache));
         }
 
-        private IEnumerator ThumbnailRetryAfterDelayCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
+        private IEnumerator ThumbnailRetryAfterDelayCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly, bool aggressiveSkipCache)
         {
-            yield return new WaitForSecondsRealtime(0.02f);
+            float delay = aggressiveSkipCache ? 0.02f : 0.10f;
+            yield return new WaitForSecondsRealtime(delay);
             if (target == null) yield break;
             ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
             if (b == null || b.ExpectedTag != expectedTag) yield break;
@@ -711,20 +823,88 @@ namespace VPB
                 yield break;
             }
             if (CustomImageLoaderThreaded.singleton == null) yield break;
-            CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
-            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: true, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
+            if (aggressiveSkipCache)
+            {
+                CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
+                QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: true, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
+            }
+            else
+            {
+                QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
+            }
         }
 
         private IEnumerator ThumbnailHangWatchdogCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
         {
-            yield return new WaitForSecondsRealtime(ThumbnailHangWatchDelaySec);
-            if (target == null) yield break;
-            ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
-            if (b == null || b.ExpectedTag != expectedTag) yield break;
-            if (capturedGroupId != currentLoadingGroupId) yield break;
-            if (target.texture != null) yield break;
-            if (b.ThumbRetryCount > 0) yield break;
-            RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
+            float startRt = Time.realtimeSinceStartup;
+            float wait = ThumbnailHangWatchDelaySec;
+            bool loggedDefer = false;
+            while (true)
+            {
+                yield return new WaitForSecondsRealtime(wait);
+                if (target == null) yield break;
+                ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
+                if (b == null || b.ExpectedTag != expectedTag) yield break;
+                if (capturedGroupId != currentLoadingGroupId) yield break;
+                if (target.texture != null) yield break;
+                if (b.ThumbRetryCount > 0) yield break;
+
+                bool isAllVar = false;
+                try { isAllVar = string.Equals((CurrentCategoryTitle ?? "").Trim(), "ALL VAR", StringComparison.OrdinalIgnoreCase); } catch { isAllVar = false; }
+
+                float now = Time.realtimeSinceStartup;
+                float sinceScroll = now - RecyclingGridView.LastScrollRealtime;
+                float sinceDrag = now - ScrollbarSync.LastScrollbarDragRealtime;
+                bool scrolling = sinceScroll < ThumbnailHangWatchScrollQuietSec || sinceDrag < ThumbnailHangWatchScrollQuietSec;
+
+                int pendTh = 0;
+                try { if (CustomImageLoaderThreaded.singleton != null) pendTh = CustomImageLoaderThreaded.singleton.PendingThumbnailCount; } catch { pendTh = 0; }
+                bool queuePressure = isAllVar && pendTh >= AllVarThumbQueuePressureThreshold;
+
+                if (scrolling || queuePressure)
+                {
+                    if (isAllVar && !loggedDefer)
+                    {
+                        loggedDefer = true;
+                        string ldr = null;
+                        try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
+                        LogAllVarThumbDiagThrottled("[VPB ThumbDiag] watchdog_defer rt=" + now.ToString("0.000")
+                            + " sinceScroll=" + sinceScroll.ToString("0.000")
+                            + " sinceDrag=" + sinceDrag.ToString("0.000")
+                            + " pendTh=" + pendTh
+                            + " img=" + Trunc(imgPath, 120)
+                            + " exp=" + Trunc(expectedTag, 80)
+                            + " gid=" + Trunc(capturedGroupId, 24)
+                            + " retry=" + b.ThumbRetryCount
+                            + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
+                    }
+                    if ((now - startRt) < ThumbnailHangWatchMaxDelaySec)
+                    {
+                        // Still scrolling / backlog high: do not amplify with skip-cache retries.
+                        wait = 0.25f;
+                        continue;
+                    }
+                }
+
+                // Timeout after quiet + low-pressure window: re-queue once, but do not clear cache / skip-cache.
+                if (isAllVar)
+                {
+                    string ldr = null;
+                    try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
+                    LogAllVarThumbDiagThrottled("[VPB ThumbDiag] watchdog_retry rt=" + now.ToString("0.000")
+                        + " waited=" + (now - startRt).ToString("0.000")
+                        + " sinceScroll=" + sinceScroll.ToString("0.000")
+                        + " sinceDrag=" + sinceDrag.ToString("0.000")
+                        + " pendTh=" + pendTh
+                        + " img=" + Trunc(imgPath, 120)
+                        + " exp=" + Trunc(expectedTag, 80)
+                        + " gid=" + Trunc(capturedGroupId, 24)
+                        + " retry=" + b.ThumbRetryCount
+                        + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
+                }
+                RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache: false);
+                yield break;
+            }
         }
 
         private static void ClearThumbnailTarget(RawImage target)

@@ -617,6 +617,9 @@ namespace VPB
     [DefaultExecutionOrder(50)]
     public class RecyclingGridView : MonoBehaviour
     {
+        public static float LastScrollRealtime { get; private set; }
+        public static float LastScrollNormY { get; private set; }
+
         private ScrollRect _scrollRect;
         public ScrollRect scrollRect
         {
@@ -995,6 +998,13 @@ namespace VPB
             InvalidateVisibleRangeCache();
             _needsVisibleUpdate = true;
             QueueScrollFlushAfterLayout();
+
+            try
+            {
+                LastScrollRealtime = Time.realtimeSinceStartup;
+                LastScrollNormY = _scrollRect != null ? _scrollRect.verticalNormalizedPosition : pos.y;
+            }
+            catch { }
         }
 
         private void UpdateVisibleItems(char reason = '?')
@@ -1077,8 +1087,24 @@ namespace VPB
             bool setMismatch = _activeIndexSet.Count != activeItems.Count;
             bool outOfBand = activeItems.Count > 0 && (idxMin < startIndex || idxMax > endIndex);
 
+            int prevStart = _lastVisibleStartIndex;
+            int prevEnd = _lastVisibleEndIndex;
             _lastVisibleStartIndex = startIndex;
             _lastVisibleEndIndex = endIndex;
+
+            if (prevStart != startIndex || prevEnd != endIndex)
+            {
+                float normY = -1f;
+                try { if (_scrollRect != null) normY = _scrollRect.verticalNormalizedPosition; } catch { }
+                string ldr = null;
+                try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
+                LogUtil.LogVerboseUi("[VPB RGVScroll] range reason=" + reason
+                    + " normY=" + normY.ToString("0.000")
+                    + " idx=" + startIndex + ".." + endIndex
+                    + " act=" + activeItems.Count
+                    + " cols=" + colCount + " rows=" + rowCount
+                    + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
+            }
 
             if (setMismatch || outOfBand)
             {
@@ -1155,6 +1181,9 @@ namespace VPB
 
     public class ScrollbarSync : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
+        public static float LastScrollbarDragRealtime { get; private set; }
+        public static float LastScrollbarDragValue { get; private set; }
+
         private ScrollRect _scrollRect;
         public ScrollRect scrollRect
         {
@@ -1197,6 +1226,8 @@ namespace VPB
         private bool _isSyncing = false;
         private BoxCollider _collider;
         private RectTransform _scrollbarRT;
+        private float _lastDragLogRealtime = -999f;
+        private float _lastDragLogValue = -999f;
 
         private void Awake()
         {
@@ -1237,6 +1268,18 @@ namespace VPB
         public void OnPointerDown(PointerEventData eventData)
         {
             _isPointerDown = true;
+            try
+            {
+                LastScrollbarDragRealtime = Time.realtimeSinceStartup;
+                LastScrollbarDragValue = scrollbar != null ? scrollbar.value : -1f;
+            }
+            catch { }
+
+            string ldr = null;
+            try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
+            LogUtil.LogVerboseUi("[VPB Scrollbar] down val=" + (scrollbar != null ? scrollbar.value.ToString("0.000") : "na")
+                + " normY=" + (scrollRect != null ? scrollRect.verticalNormalizedPosition.ToString("0.000") : "na")
+                + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
         }
 
         public void OnPointerUp(PointerEventData eventData)
@@ -1247,6 +1290,12 @@ namespace VPB
             {
                 SyncToScrollRect(scrollbar.value);
             }
+
+            string ldr = null;
+            try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
+            LogUtil.LogVerboseUi("[VPB Scrollbar] up val=" + (scrollbar != null ? scrollbar.value.ToString("0.000") : "na")
+                + " normY=" + (scrollRect != null ? scrollRect.verticalNormalizedPosition.ToString("0.000") : "na")
+                + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
         }
 
         private void Update()
@@ -1292,6 +1341,27 @@ namespace VPB
             finally 
             { 
                 _isSyncing = false; 
+            }
+
+            if (_isPointerDown)
+            {
+                float now = Time.realtimeSinceStartup;
+                if ((now - _lastDragLogRealtime) >= 0.10f || Mathf.Abs(val - _lastDragLogValue) >= 0.02f)
+                {
+                    _lastDragLogRealtime = now;
+                    _lastDragLogValue = val;
+                    try
+                    {
+                        LastScrollbarDragRealtime = now;
+                        LastScrollbarDragValue = val;
+                    }
+                    catch { }
+                    string ldr = null;
+                    try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
+                    LogUtil.LogVerboseUi("[VPB Scrollbar] drag val=" + val.ToString("0.000")
+                        + " normY=" + (scrollRect != null ? scrollRect.verticalNormalizedPosition.ToString("0.000") : "na")
+                        + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
+                }
             }
         }
 
