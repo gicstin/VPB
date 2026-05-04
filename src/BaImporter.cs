@@ -73,9 +73,19 @@ namespace VPB
 			try
 			{
 				string candidate = Path.Combine(Directory.GetCurrentDirectory(), BaRelativeDataDir);
-				if (Directory.Exists(candidate)) { path = candidate; return true; }
+				LogUtil.Log("[VPB BA] TryDetectBaDataDir: checking '" + candidate + "'");
+				if (Directory.Exists(candidate))
+				{
+					path = candidate;
+					LogUtil.Log("[VPB BA] TryDetectBaDataDir: found BA data dir");
+					return true;
+				}
+				LogUtil.Log("[VPB BA] TryDetectBaDataDir: BA data dir not present — BA never run or not installed");
 			}
-			catch { }
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB BA] TryDetectBaDataDir exception: " + ex.Message);
+			}
 			return false;
 		}
 
@@ -101,13 +111,26 @@ namespace VPB
 		{
 			var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			string cfgPath = Path.Combine(baDataDir, BaSettingsFileName);
-			if (!File.Exists(cfgPath)) return result;
+			LogUtil.Log("[VPB BA] ParseAutoHideTags: looking for BASettings.cfg at '" + cfgPath + "'");
+			if (!File.Exists(cfgPath))
+			{
+				LogUtil.Log("[VPB BA] ParseAutoHideTags: BASettings.cfg not found — no auto-hide tags");
+				return result;
+			}
 			try
 			{
 				string json = File.ReadAllText(cfgPath);
 				JSONNode root = JSON.Parse(json);
-				if (root == null) return result;
+				if (root == null)
+				{
+					LogUtil.LogWarning("[VPB BA] ParseAutoHideTags: failed to parse BASettings.cfg JSON");
+					return result;
+				}
 				CollectHiddenTagsRecursive(root, result, depth: 0);
+				if (result.Count > 0)
+					LogUtil.Log("[VPB BA] ParseAutoHideTags: found " + result.Count + " auto-hide tag(s): " + string.Join(", ", new List<string>(result).ToArray()));
+				else
+					LogUtil.Log("[VPB BA] ParseAutoHideTags: no hiddenTags entries found in BASettings.cfg");
 			}
 			catch (Exception ex)
 			{
@@ -149,23 +172,42 @@ namespace VPB
 		{
 			var entries = new List<BaResourceEntry>(256);
 			string userDataDir = Path.Combine(baDataDir, BaUserDataSubfolder);
-			if (!Directory.Exists(userDataDir)) return entries;
+			LogUtil.Log("[VPB BA] ParseUserDataFiles: scanning '" + userDataDir + "'");
+			if (!Directory.Exists(userDataDir))
+			{
+				LogUtil.Log("[VPB BA] ParseUserDataFiles: VARResourcesUserData folder not found — no tags to import");
+				return entries;
+			}
 
 			string[] files;
 			try { files = Directory.GetFiles(userDataDir, "*" + BaUserDataExt, SearchOption.TopDirectoryOnly); }
-			catch { return entries; }
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB BA] ParseUserDataFiles: failed to list .userData files: " + ex.Message);
+				return entries;
+			}
+
+			LogUtil.Log("[VPB BA] ParseUserDataFiles: found " + files.Length + " .userData file(s)");
+			int totalResources = 0, totalTagged = 0;
 
 			foreach (string filePath in files)
 			{
+				string fileName = Path.GetFileName(filePath);
 				try
 				{
 					string json = File.ReadAllText(filePath);
 					JSONNode root = JSON.Parse(json);
 					JSONArray resources = root?["resources"]?.AsArray;
-					if (resources == null) continue;
+					if (resources == null)
+					{
+						LogUtil.Log("[VPB BA] ParseUserDataFiles: " + fileName + " — no 'resources' array, skipping");
+						continue;
+					}
 
+					int fileTagged = 0;
 					foreach (JSONNode res in resources)
 					{
+						totalResources++;
 						string creator = res["creatorName"]?.Value;
 						string pkg     = res["packageName"]?.Value;
 						string ipath   = res["resourceFullFileName"]?.Value;
@@ -179,10 +221,18 @@ namespace VPB
 							foreach (JSONNode tag in tags)
 							{
 								string cat = tag["tagCategory"]?.Value;
-								if (!string.Equals(cat, "userDefined", StringComparison.OrdinalIgnoreCase)) continue;
+								// BA uses "User" for user-defined tags; "Body Region"/"Clothing Type" are BA system tags
+								if (!string.Equals(cat, "User", StringComparison.OrdinalIgnoreCase)) continue;
 								string name = tag["tagName"]?.Value;
 								if (!string.IsNullOrEmpty(name)) userTags.Add(name);
 							}
+						}
+
+						if (userTags.Count > 0)
+						{
+							fileTagged++;
+							totalTagged++;
+							LogUtil.Log("[VPB BA] ParseUserDataFiles: " + creator + "." + pkg + " | '" + ipath + "' | tags=[" + string.Join(", ", userTags.ToArray()) + "]");
 						}
 
 						entries.Add(new BaResourceEntry
@@ -193,12 +243,14 @@ namespace VPB
 							UserDefinedTags = userTags
 						});
 					}
+					LogUtil.Log("[VPB BA] ParseUserDataFiles: " + fileName + " — " + resources.Count + " resources, " + fileTagged + " with user tags");
 				}
 				catch (Exception ex)
 				{
-					LogUtil.LogWarning("[VPB BA] ParseUserDataFiles: skipping " + Path.GetFileName(filePath) + " — " + ex.Message);
+					LogUtil.LogWarning("[VPB BA] ParseUserDataFiles: skipping " + fileName + " — " + ex.Message);
 				}
 			}
+			LogUtil.Log("[VPB BA] ParseUserDataFiles: done | files=" + files.Length + " totalResources=" + totalResources + " withUserTags=" + totalTagged + " totalEntries=" + entries.Count);
 			return entries;
 		}
 
@@ -210,20 +262,31 @@ namespace VPB
 		public static bool RunImport(string baDataDir, out BaMigrationResult result)
 		{
 			result = default;
+			var sw = System.Diagnostics.Stopwatch.StartNew();
+			LogUtil.Log("[VPB BA] RunImport START | baDataDir='" + baDataDir + "'");
 			try
 			{
 				// Step 1 — parse auto-hide tags from BASettings.cfg
 				HashSet<string> autoHideTags = ParseAutoHideTags(baDataDir);
+				LogUtil.Log("[VPB BA] RunImport step1 done | autoHideTags=" + autoHideTags.Count);
 
 				// Step 2 — parse resource→tag assignments
 				List<BaResourceEntry> resourceEntries = ParseUserDataFiles(baDataDir);
+				LogUtil.Log("[VPB BA] RunImport step2 done | resourceEntries=" + resourceEntries.Count);
 
 				// Steps 3–5 — resolve UIDs, collect rows
 				var tagRows   = new List<VpbLocalDatabase.GalleryUserTagImportRow>(resourceEntries.Count);
 				var hideUids  = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 				var pkgsByUid = FileManager.PackagesByUid; // snapshot; thread-safe read
-				if (pkgsByUid == null) { result.Error = "FileManager not ready"; return false; }
+				if (pkgsByUid == null)
+				{
+					LogUtil.LogWarning("[VPB BA] RunImport: FileManager.PackagesByUid is null — not ready");
+					result.Error = "FileManager not ready";
+					return false;
+				}
+				LogUtil.Log("[VPB BA] RunImport step3 start | pkgsByUid=" + pkgsByUid.Count + " entries to resolve=" + resourceEntries.Count);
 
+				int entriesWithTags = 0;
 				foreach (var entry in resourceEntries)
 				{
 					string prefix = entry.CreatorName + "." + entry.PackageName + ".";
@@ -235,7 +298,7 @@ namespace VPB
 						string uid = kvp.Key;
 						anyVersionMatched = true;
 
-						// Auto-hide: if any userDefined tag on this entry is in autoHideTags
+						// Auto-hide: if any user tag on this entry matches a BA auto-hide tag
 						foreach (string t in entry.UserDefinedTags)
 						{
 							if (autoHideTags.Contains(t)) { hideUids.Add(uid); break; }
@@ -244,8 +307,10 @@ namespace VPB
 						// Tags: need a VPB category for the item
 						if (entry.UserDefinedTags.Count > 0)
 						{
+							entriesWithTags++;
 							if (VpbLocalDatabase.TryGetCategoryForItem(uid, entry.InternalPath, out string category))
 							{
+								LogUtil.Log("[VPB BA] RunImport: resolved " + uid + " | path='" + entry.InternalPath + "' | category=" + category + " | tags=[" + string.Join(", ", entry.UserDefinedTags.ToArray()) + "]");
 								tagRows.Add(new VpbLocalDatabase.GalleryUserTagImportRow
 								{
 									Category = category,
@@ -254,28 +319,42 @@ namespace VPB
 									Tags = entry.UserDefinedTags.ToArray()
 								});
 							}
-							else result.ItemsSkipped++;
+							else
+							{
+								LogUtil.Log("[VPB BA] RunImport: SKIPPED (no VPB category) " + uid + " | path='" + entry.InternalPath + "'");
+								result.ItemsSkipped++;
+							}
 						}
 					}
 
 					if (!anyVersionMatched && entry.UserDefinedTags.Count > 0)
+					{
+						LogUtil.Log("[VPB BA] RunImport: SKIPPED (no matching package) " + entry.CreatorName + "." + entry.PackageName + " | path='" + entry.InternalPath + "'");
 						result.ItemsSkipped++;
+					}
 				}
+				LogUtil.Log("[VPB BA] RunImport step3 done | entriesWithTags=" + entriesWithTags + " tagRows=" + tagRows.Count + " hideUids=" + hideUids.Count + " skipped=" + result.ItemsSkipped);
 
 				// Step 4 — write tags to SQLite (merge — preserves existing)
+				LogUtil.Log("[VPB BA] RunImport step4: writing " + tagRows.Count + " tag rows to SQLite");
 				VpbLocalDatabase.BulkMergeGalleryUserTags(tagRows);
 				result.TagRowsImported = tagRows.Count;
 				var taggedPkgs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 				foreach (var r in tagRows) taggedPkgs.Add(r.PkgUid);
 				result.PackagesTagged = taggedPkgs.Count;
+				LogUtil.Log("[VPB BA] RunImport step4 done | tagRows=" + result.TagRowsImported + " pkgsTagged=" + result.PackagesTagged);
 
 				// Step 5 — propagate auto-hide markers
+				LogUtil.Log("[VPB BA] RunImport step5: writing " + hideUids.Count + " hide marker(s)");
 				foreach (string uid in hideUids)
 				{
 					if (pkgsByUid.TryGetValue(uid, out VarPackage pkg))
 					{
 						if (PackageHidePrefs.TryEnsureVpbPackageHidden(pkg))
+						{
 							result.HideMarkersWritten++;
+							LogUtil.Log("[VPB BA] RunImport: hide marker written for " + uid);
+						}
 					}
 					else
 					{
@@ -316,15 +395,15 @@ namespace VPB
 					manifestJson = JsonConvert.SerializeObject(manifest, Formatting.Indented);
 				WriteTextSafe(GetAbsPath(ManifestRelPath), manifestJson);
 
-				LogUtil.Log(string.Format("[VPB BA] Import complete: {0} tag rows, {1} pkgs tagged, {2} hide markers, {3} skipped.",
-					result.TagRowsImported, result.PackagesTagged, result.HideMarkersWritten, result.ItemsSkipped));
+				LogUtil.Log(string.Format("[VPB BA] Import complete in {4}ms: {0} tag rows, {1} pkgs tagged, {2} hide markers, {3} skipped.",
+					result.TagRowsImported, result.PackagesTagged, result.HideMarkersWritten, result.ItemsSkipped, sw.ElapsedMilliseconds));
 
 				result.Success = true;
 				return true;
 			}
 			catch (Exception ex)
 			{
-				LogUtil.LogError("[VPB BA] RunImport failed: " + ex.Message);
+				LogUtil.LogError("[VPB BA] RunImport failed after " + sw.ElapsedMilliseconds + "ms: " + ex.Message);
 				result.Error = ex.Message;
 				return false;
 			}
@@ -353,14 +432,26 @@ namespace VPB
 		{
 			tagsRemoved = hideMarkersRemoved = 0;
 			string manifestPath = GetAbsPath(ManifestRelPath);
-			if (!File.Exists(manifestPath)) return false;
+			LogUtil.Log("[VPB BA] TryResetMigration: looking for manifest at '" + manifestPath + "'");
+			if (!File.Exists(manifestPath))
+			{
+				LogUtil.Log("[VPB BA] TryResetMigration: no manifest found — nothing to reset");
+				return false;
+			}
 			try
 			{
 				string json = File.ReadAllText(manifestPath);
 				BaMigrationManifest manifest;
 				lock (LogUtil.JsonLock)
 					manifest = JsonConvert.DeserializeObject<BaMigrationManifest>(json);
-				if (manifest == null) return false;
+				if (manifest == null)
+				{
+					LogUtil.LogWarning("[VPB BA] TryResetMigration: manifest deserialized to null");
+					return false;
+				}
+				LogUtil.Log("[VPB BA] TryResetMigration: manifest loaded | timestamp=" + manifest.Timestamp +
+					" | importedTags=" + (manifest.ImportedTags?.Count ?? 0) +
+					" | hideMarkers=" + (manifest.CreatedHideMarkers?.Count ?? 0));
 
 				// Remove tags
 				if (manifest.ImportedTags != null)
@@ -370,9 +461,11 @@ namespace VPB
 						if (string.IsNullOrEmpty(entry.Category) || string.IsNullOrEmpty(entry.PkgUid) ||
 							string.IsNullOrEmpty(entry.InternalPath) || entry.Tags == null || entry.Tags.Length == 0)
 							continue;
-						if (VpbLocalDatabase.RemoveGalleryUserTagsForItem(
-								entry.Category, entry.PkgUid, entry.InternalPath, entry.Tags))
-							tagsRemoved++;
+						bool removed = VpbLocalDatabase.RemoveGalleryUserTagsForItem(
+							entry.Category, entry.PkgUid, entry.InternalPath, entry.Tags);
+						LogUtil.Log("[VPB BA] TryResetMigration: tag remove " + (removed ? "OK" : "noop") +
+							" | pkg=" + entry.PkgUid + " | path='" + entry.InternalPath + "' | tags=[" + string.Join(", ", entry.Tags) + "]");
+						if (removed) tagsRemoved++;
 					}
 				}
 
@@ -387,7 +480,14 @@ namespace VPB
 						if (pkgsByUid.TryGetValue(entry.PkgUid, out VarPackage pkg))
 						{
 							if (PackageHidePrefs.TryRemovePackageVarHide(pkg))
+							{
 								hideMarkersRemoved++;
+								LogUtil.Log("[VPB BA] TryResetMigration: hide marker removed for " + entry.PkgUid);
+							}
+							else
+							{
+								LogUtil.Log("[VPB BA] TryResetMigration: hide marker not present for " + entry.PkgUid + " (already removed or never written)");
+							}
 						}
 						else
 						{
@@ -397,8 +497,8 @@ namespace VPB
 				}
 
 				// Delete manifest + log
-				try { File.Delete(manifestPath); } catch { }
-				try { File.Delete(GetAbsPath(LogRelPath)); } catch { }
+				try { File.Delete(manifestPath); LogUtil.Log("[VPB BA] TryResetMigration: deleted manifest"); } catch { }
+				try { File.Delete(GetAbsPath(LogRelPath)); LogUtil.Log("[VPB BA] TryResetMigration: deleted audit log"); } catch { }
 
 				LogUtil.Log(string.Format("[VPB BA] Reset complete: {0} tag entries removed, {1} hide markers removed.",
 					tagsRemoved, hideMarkersRemoved));
