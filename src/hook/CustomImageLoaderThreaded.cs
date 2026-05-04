@@ -1111,7 +1111,67 @@ namespace VPB
             return k;
         }
 
-		public static VPB.CustomImageLoaderThreaded singleton;
+        private static int ClampInt(int v, int lo, int hi)
+        {
+            if (v < lo) return lo;
+            if (v > hi) return hi;
+            return v;
+        }
+
+        private static bool TurboJpegConcurrencyReduction()
+        {
+            try
+            {
+                var st = Settings.Instance;
+                return st != null && st.TurboJpegEnabled != null && st.TurboJpegEnabled.Value && TurboJpegNative.ShouldAttemptTurboDecode();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Auto caps scale with <see cref="Environment.ProcessorCount"/>; TurboJPEG-on uses lower caps. BepInEx <c>MaxLoaderThreads</c>: use 0 for auto.</summary>
+        public static int GetEffectiveMaxLoaderThreads()
+        {
+            try
+            {
+                var st = Settings.Instance;
+                if (st != null && st.MaxLoaderThreads != null && st.MaxLoaderThreads.Value > 0)
+                    return ClampInt(st.MaxLoaderThreads.Value, 1, 64);
+                int p = Environment.ProcessorCount;
+                if (p < 1) p = 1;
+                if (TurboJpegConcurrencyReduction())
+                    return ClampInt(p / 3, 3, 8);
+                return ClampInt(p / 2, 4, 12);
+            }
+            catch
+            {
+                return 12;
+            }
+        }
+
+        /// <summary>BepInEx <c>MaxThumbnailThreads</c>: use 0 for auto.</summary>
+        public static int GetEffectiveMaxThumbnailThreads()
+        {
+            try
+            {
+                var st = Settings.Instance;
+                if (st != null && st.MaxThumbnailThreads != null && st.MaxThumbnailThreads.Value > 0)
+                    return ClampInt(st.MaxThumbnailThreads.Value, 1, 64);
+                int p = Environment.ProcessorCount;
+                if (p < 1) p = 1;
+                if (TurboJpegConcurrencyReduction())
+                    return ClampInt(p / 4, 2, 6);
+                return ClampInt(p / 3, 3, 8);
+            }
+            catch
+            {
+                return 8;
+            }
+        }
+
+        public static VPB.CustomImageLoaderThreaded singleton;
 
 		public GameObject progressHUD;
 
@@ -1120,9 +1180,7 @@ namespace VPB
 		public Text progressText;
 
         protected int runningTasks;
-        protected const int MaxConcurrentTasks = 16;
         protected int runningThumbnailTasks;
-        protected const int MaxConcurrentThumbnailTasks = 10;
         /// <summary>When queued image count exceeds this, drop stale thumbnail requests (see <see cref="PruneThumbnailQueueOverBudget"/>).</summary>
         /// <remarks>Large grids (many cols × buffer rows) enqueue 150+ thumbs per scroll; cap must stay below that burst or prune never runs (imgQ stalls ~500+).</remarks>
         private const int ThumbnailQueueSoftCap = 280;
@@ -1478,7 +1536,7 @@ namespace VPB
 		}
 
 		/// <summary>
-		/// Fast scroll can enqueue thousands of unique VAR paths; only <see cref="MaxConcurrentThumbnailTasks"/> decode at once.
+		/// Fast scroll can enqueue thousands of unique VAR paths; only <see cref="GetEffectiveMaxThumbnailThreads"/> decode at once.
 		/// Remove lowest-urgency queued thumbnails (highest <see cref="QueuedImage.priority"/>), notify callbacks with cancel, return pooled QI.
 		/// Never prunes <c>priority &lt; 0</c> (force-reload / skipCache lane).
 		/// </summary>
@@ -1873,18 +1931,20 @@ namespace VPB
 		{
 			PruneThumbnailQueueOverBudget();
 			PostProcessImageQueue();
+            int maxTasks = GetEffectiveMaxLoaderThreads();
+            int maxThumb = GetEffectiveMaxThumbnailThreads();
             
             // Dispatch pending dispatched items (web requests that just finished)
             for(int i=0; i<dispatchedImages.Count; i++)
             {
-                if (runningTasks >= MaxConcurrentTasks) break;
+                if (runningTasks >= maxTasks) break;
 
                 QueuedImage qi = dispatchedImages[i];
                 if (!qi.working && !qi.processed && !qi.cancel)
                 {
                     // Check conditions
                     if (qi.webRequest != null && !qi.webRequestDone) continue;
-                    if (qi.isThumbnail && runningThumbnailTasks >= MaxConcurrentThumbnailTasks) continue;
+                    if (qi.isThumbnail && runningThumbnailTasks >= maxThumb) continue;
 
                     // Execute
                     StartWorker(qi);
@@ -1896,11 +1956,11 @@ namespace VPB
             // and pipeline stalling.
 			if (queuedImages != null && queuedImages.Count > 0)
 			{
-                while (runningTasks < MaxConcurrentTasks && dispatchedImages.Count < 200 && queuedImages.Count > 0)
+                while (runningTasks < maxTasks && dispatchedImages.Count < 200 && queuedImages.Count > 0)
                 {
                     QueuedImage head = queuedImages.Peek();
                     if (head == null) break;
-                    if (head.isThumbnail && runningThumbnailTasks >= MaxConcurrentThumbnailTasks) break;
+                    if (head.isThumbnail && runningThumbnailTasks >= maxThumb) break;
 
                     // Perform pre-checks (cache, web)
                     PreprocessImageQueue();

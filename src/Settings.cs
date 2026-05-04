@@ -56,6 +56,10 @@ namespace VPB
         public ConfigEntry<bool> DeleteOriginalCacheAfterCompression;
         public ConfigEntry<bool> Downscale8kTo4kBeforeZstdCache;
         public ConfigEntry<int> ThumbnailThreshold;
+        /// <summary>0 = auto from CPU count and TurboJPEG mode; else clamped 1–64.</summary>
+        public ConfigEntry<int> MaxLoaderThreads;
+        /// <summary>0 = auto from CPU count and TurboJPEG mode; else clamped 1–64.</summary>
+        public ConfigEntry<int> MaxThumbnailThreads;
 
         public ConfigEntry<bool> AutoOptimizeCache;
         public ConfigEntry<string> LastGalleryPage;
@@ -127,6 +131,8 @@ namespace VPB
             DeleteOriginalCacheAfterCompression = config.Bind<bool>("Optimze", "DeleteOriginalCacheAfterCompression", true, "Delete original .vamcache files after successful Zstd compression.");
             Downscale8kTo4kBeforeZstdCache = config.Bind<bool>("Optimze", "Downscale8kTo4kBeforeZstdCache", false, "Downscale 8K (8192x8192) textures to 4K before writing Zstd texture cache.");
             ThumbnailThreshold = config.Bind<int>("Optimze", "ThumbnailThreshold", 600, "Resolution threshold (width & height) below which a texture is considered a thumbnail and skipped by VPB optimizations.");
+            MaxLoaderThreads = config.Bind<int>("Optimze", "MaxLoaderThreads", 0, "Concurrent image decode workers (full-res queue). 0 = auto: scales with ProcessorCount; lower cap when TurboJPEG path active.");
+            MaxThumbnailThreads = config.Bind<int>("Optimze", "MaxThumbnailThreads", 0, "Concurrent thumbnail decode workers. 0 = auto: scales with ProcessorCount; lower cap when TurboJPEG path active.");
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 using UnityEngine;
 
 namespace VPB
@@ -280,6 +281,8 @@ namespace VPB
                         NoteFailure(error);
                         return false;
                     }
+
+                    try { Thread.Sleep(0); } catch { }
 
                     byte[] rgb = RgbBytePool.Rent(rgbLen);
                     try
