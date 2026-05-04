@@ -40,28 +40,6 @@ namespace VPB
         private const float ThumbnailHangWatchMaxDelaySec = 1.50f;
         private const float ThumbnailHangWatchScrollQuietSec = 0.25f;
         private const int AllVarThumbQueuePressureThreshold = 80;
-        private const float AllVarThumbDiagMinIntervalSec = 0.75f;
-        private static float _lastAllVarThumbDiagLogRealtime = -999f;
-
-        private static string Trunc(string s, int max)
-        {
-            if (string.IsNullOrEmpty(s)) return s;
-            if (max < 8) max = 8;
-            if (s.Length <= max) return s;
-            return s.Substring(0, max - 3) + "...";
-        }
-
-        private static void LogAllVarThumbDiagThrottled(string msg)
-        {
-            try
-            {
-                float now = Time.realtimeSinceStartup;
-                if ((now - _lastAllVarThumbDiagLogRealtime) < AllVarThumbDiagMinIntervalSec) return;
-                _lastAllVarThumbDiagLogRealtime = now;
-            }
-            catch { }
-            LogUtil.LogWarning(msg);
-        }
 
         // Cache for package list thumbnails: package UID -> internal image path (within the package).
         // Keeps package preview lookups cheap while scrolling.
@@ -635,26 +613,9 @@ namespace VPB
             // previous binding/texture so recycled list rows don't show stale thumbnails.
             if (string.IsNullOrEmpty(imgPath))
             {
-                try
-                {
-                    LogUtil.LogTextureTrace("THUMB_NO_PATH:" + (file != null ? file.Path : "null"),
-                        "[VPB THUMB] resolve imgPath failed. fileType=" + (file != null ? file.GetType().Name : "null") + " filePath=" + (file != null ? file.Path : "null"));
-                }
-                catch { }
                 ClearThumbnailTarget(target);
                 return;
             }
-
-            try
-            {
-                LogUtil.LogTextureTrace("THUMB_REQ:" + imgPath,
-                    "[VPB THUMB] request. fileType=" + (file != null ? file.GetType().Name : "null") +
-                    " filePath=" + (file != null ? file.Path : "null") +
-                    " imgPath=" + imgPath +
-                    " isPkgPath=" + (GalleryThumbnailCache.Instance != null && GalleryThumbnailCache.Instance.IsPackagePath(imgPath)) +
-                    " unityOnly=" + thumbnailUnityDecodeOnly);
-            }
-            catch { }
 
             // Debug Log
             // LogUtil.Log($"[VPB] LoadThumbnail requested for {file.Name} (GroupId: {currentLoadingGroupId})");
@@ -773,25 +734,6 @@ namespace VPB
                 ThumbnailBindingTag failBind = target.GetComponent<ThumbnailBindingTag>();
                 if (failBind == null || failBind.ExpectedTag != expectedTag) return;
                 if (capturedGroupId != currentLoadingGroupId) return;
-                try
-                {
-                    if (string.Equals((CurrentCategoryTitle ?? "").Trim(), "ALL VAR", StringComparison.OrdinalIgnoreCase))
-                    {
-                        int pendTh = 0;
-                        try { if (CustomImageLoaderThreaded.singleton != null) pendTh = CustomImageLoaderThreaded.singleton.PendingThumbnailCount; } catch { pendTh = 0; }
-                        string ldr = null;
-                        try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
-                        LogAllVarThumbDiagThrottled("[VPB ThumbDiag] cb_fail tagOk=1 cancel=0 skipCacheJob=" + (skipCache ? "1" : "0")
-                            + " rt=" + Time.realtimeSinceStartup.ToString("0.000")
-                            + " pendTh=" + pendTh
-                            + " img=" + Trunc(imgPath, 120)
-                            + " exp=" + Trunc(expectedTag, 80)
-                            + " gid=" + Trunc(capturedGroupId, 24)
-                            + " retry=" + (failBind != null ? failBind.ThumbRetryCount.ToString() : "na")
-                            + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
-                    }
-                }
-                catch { }
                 RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache: true);
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
@@ -838,7 +780,6 @@ namespace VPB
         {
             float startRt = Time.realtimeSinceStartup;
             float wait = ThumbnailHangWatchDelaySec;
-            bool loggedDefer = false;
             while (true)
             {
                 yield return new WaitForSecondsRealtime(wait);
@@ -863,21 +804,6 @@ namespace VPB
 
                 if (scrolling || queuePressure)
                 {
-                    if (isAllVar && !loggedDefer)
-                    {
-                        loggedDefer = true;
-                        string ldr = null;
-                        try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
-                        LogAllVarThumbDiagThrottled("[VPB ThumbDiag] watchdog_defer rt=" + now.ToString("0.000")
-                            + " sinceScroll=" + sinceScroll.ToString("0.000")
-                            + " sinceDrag=" + sinceDrag.ToString("0.000")
-                            + " pendTh=" + pendTh
-                            + " img=" + Trunc(imgPath, 120)
-                            + " exp=" + Trunc(expectedTag, 80)
-                            + " gid=" + Trunc(capturedGroupId, 24)
-                            + " retry=" + b.ThumbRetryCount
-                            + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
-                    }
                     if ((now - startRt) < ThumbnailHangWatchMaxDelaySec)
                     {
                         // Still scrolling / backlog high: do not amplify with skip-cache retries.
@@ -887,21 +813,6 @@ namespace VPB
                 }
 
                 // Timeout after quiet + low-pressure window: re-queue once, but do not clear cache / skip-cache.
-                if (isAllVar)
-                {
-                    string ldr = null;
-                    try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
-                    LogAllVarThumbDiagThrottled("[VPB ThumbDiag] watchdog_retry rt=" + now.ToString("0.000")
-                        + " waited=" + (now - startRt).ToString("0.000")
-                        + " sinceScroll=" + sinceScroll.ToString("0.000")
-                        + " sinceDrag=" + sinceDrag.ToString("0.000")
-                        + " pendTh=" + pendTh
-                        + " img=" + Trunc(imgPath, 120)
-                        + " exp=" + Trunc(expectedTag, 80)
-                        + " gid=" + Trunc(capturedGroupId, 24)
-                        + " retry=" + b.ThumbRetryCount
-                        + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
-                }
                 RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache: false);
                 yield break;
             }

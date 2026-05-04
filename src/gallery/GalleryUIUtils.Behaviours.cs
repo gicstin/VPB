@@ -1087,24 +1087,8 @@ namespace VPB
             bool setMismatch = _activeIndexSet.Count != activeItems.Count;
             bool outOfBand = activeItems.Count > 0 && (idxMin < startIndex || idxMax > endIndex);
 
-            int prevStart = _lastVisibleStartIndex;
-            int prevEnd = _lastVisibleEndIndex;
             _lastVisibleStartIndex = startIndex;
             _lastVisibleEndIndex = endIndex;
-
-            if (prevStart != startIndex || prevEnd != endIndex)
-            {
-                float normY = -1f;
-                try { if (_scrollRect != null) normY = _scrollRect.verticalNormalizedPosition; } catch { }
-                string ldr = null;
-                try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
-                LogUtil.LogVerboseUi("[VPB RGVScroll] range reason=" + reason
-                    + " normY=" + normY.ToString("0.000")
-                    + " idx=" + startIndex + ".." + endIndex
-                    + " act=" + activeItems.Count
-                    + " cols=" + colCount + " rows=" + rowCount
-                    + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
-            }
 
             if (setMismatch || outOfBand)
             {
@@ -1275,11 +1259,6 @@ namespace VPB
             }
             catch { }
 
-            string ldr = null;
-            try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
-            LogUtil.LogVerboseUi("[VPB Scrollbar] down val=" + (scrollbar != null ? scrollbar.value.ToString("0.000") : "na")
-                + " normY=" + (scrollRect != null ? scrollRect.verticalNormalizedPosition.ToString("0.000") : "na")
-                + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
         }
 
         public void OnPointerUp(PointerEventData eventData)
@@ -1291,11 +1270,6 @@ namespace VPB
                 SyncToScrollRect(scrollbar.value);
             }
 
-            string ldr = null;
-            try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
-            LogUtil.LogVerboseUi("[VPB Scrollbar] up val=" + (scrollbar != null ? scrollbar.value.ToString("0.000") : "na")
-                + " normY=" + (scrollRect != null ? scrollRect.verticalNormalizedPosition.ToString("0.000") : "na")
-                + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
         }
 
         private void Update()
@@ -1356,11 +1330,6 @@ namespace VPB
                         LastScrollbarDragValue = val;
                     }
                     catch { }
-                    string ldr = null;
-                    try { if (CustomImageLoaderThreaded.singleton != null) ldr = CustomImageLoaderThreaded.singleton.GetLoaderDebugSnapshot(); } catch { ldr = null; }
-                    LogUtil.LogVerboseUi("[VPB Scrollbar] drag val=" + val.ToString("0.000")
-                        + " normY=" + (scrollRect != null ? scrollRect.verticalNormalizedPosition.ToString("0.000") : "na")
-                        + (string.IsNullOrEmpty(ldr) ? "" : (" " + ldr)));
                 }
             }
         }

@@ -338,8 +338,6 @@ namespace VPB
 			{
 				try
 				{
-                    long t0 = 0;
-                    try { t0 = Stopwatch.GetTimestamp(); } catch { t0 = 0; }
                     try { debugStage = 22; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
 					byte[] buffer = new byte[16384];
 					using (MemoryStream ms = new MemoryStream())
@@ -365,20 +363,6 @@ namespace VPB
 						needsDecoding = true;
 					}
                     try { debugStage = 24; debugStageAux = rawLength; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
-                    try
-                    {
-                        if (t0 != 0)
-                        {
-                            double msRead = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
-                            if (msRead >= 250.0)
-                            {
-                                LogUtil.LogWarning("[VPB IMGQ] thumb_stage readStream ms=" + msRead.ToString("0.0")
-                                    + " len=" + rawLength
-                                    + " path=" + imgPath);
-                            }
-                        }
-                    }
-                    catch { }
 				}
 				catch (Exception ex)
 				{
@@ -499,20 +483,8 @@ namespace VPB
 								int w, h;
 								TextureFormat fmt;
 								byte[] data;
-                                try
-                                {
-                                    LogUtil.LogTextureTrace("IMGQ_THUMB_LOOKUP:" + imgPath,
-                                        "[VPB IMGQ] thumb cache lookup. path=" + imgPath + " tj=" + turboJpegScaleDenom + " foundTime=" + foundTime + " t=" + lastWriteTime);
-                                }
-                                catch { }
 								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, lastWriteTime, out data, out w, out h, out fmt, turboJpegScaleDenom))
 								{
-                                    try
-                                    {
-                                        LogUtil.LogTextureTrace("IMGQ_THUMB_HIT:" + imgPath,
-                                            "[VPB IMGQ] thumb cache HIT. path=" + imgPath + " " + w + "x" + h + " fmt=" + fmt + " tj=" + turboJpegScaleDenom);
-                                    }
-                                    catch { }
 									raw = data;
 									width = w;
 									height = h;
@@ -522,15 +494,6 @@ namespace VPB
 									loadedFromCache = true;
 									loadedFromDownscaledCache = false;
 								}
-                                else
-                                {
-                                    try
-                                    {
-                                        LogUtil.LogTextureTrace("IMGQ_THUMB_MISS:" + imgPath,
-                                            "[VPB IMGQ] thumb cache MISS. path=" + imgPath + " tj=" + turboJpegScaleDenom);
-                                    }
-                                    catch { }
-                                }
 							}
 						}
 
@@ -601,15 +564,7 @@ namespace VPB
 							{
 								try
 								{
-                                    try
-                                    {
-                                        LogUtil.LogTextureTrace("IMGQ_OPEN:" + imgPath,
-                                            "[VPB IMGQ] open stream. path=" + imgPath + " isThumb=" + isThumbnail + " unityOnly=" + thumbnailUnityDecodeOnly);
-                                    }
-                                    catch { }
 									// Load image from a var package
-                                    long os0 = 0;
-                                    try { os0 = Stopwatch.GetTimestamp(); } catch { os0 = 0; }
                                     try { debugStage = 20; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
                                     bool isVarPath = false;
                                     try { isVarPath = imgPath != null && imgPath.IndexOf(":/", StringComparison.Ordinal) > 0; } catch { isVarPath = false; }
@@ -626,19 +581,6 @@ namespace VPB
                                         using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
                                         {
                                             try { debugStage = 21; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
-                                            try
-                                            {
-                                                if (os0 != 0)
-                                                {
-                                                    double msOs = (Stopwatch.GetTimestamp() - os0) * 1000.0 / Stopwatch.Frequency;
-                                                    if (isThumbnail && msOs >= 250.0)
-                                                    {
-                                                        LogUtil.LogWarning("[VPB IMGQ] thumb_stage openStream ms=" + msOs.ToString("0.0")
-                                                            + " path=" + imgPath);
-                                                    }
-                                                }
-                                            }
-                                            catch { }
                                             Stream stream = fileEntryStream.Stream;
                                             ProcessFromStream(stream);
                                         }
@@ -682,8 +624,6 @@ namespace VPB
 
 				try
 				{
-                    long t0 = 0;
-                    try { t0 = Stopwatch.GetTimestamp(); } catch { t0 = 0; }
                     try { debugStage = 30; debugStageAux = rawLength; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
 					bool isJpeg = TurboJpegNative.LooksLikeJpeg(raw, rawLength);
 					bool useTurboJpeg = false;
@@ -701,41 +641,11 @@ namespace VPB
 					if (useTurboJpeg)
 					{
 						int turboDenom = (!isThumbnail || turboJpegScaleDenom <= 1) ? 1 : TurboJpegNative.NormalizeScaleDenom(turboJpegScaleDenom);
-                        try
-                        {
-                            LogUtil.LogTextureTrace("IMGQ_TJ_ATTEMPT:" + imgPath,
-                                "[VPB IMGQ] TurboJPEG attempt. path=" + imgPath + " jpeg=" + isJpeg + " denom=" + turboDenom + " rawLen=" + rawLength);
-                        }
-                        catch { }
-                        long tj0 = 0;
-                        try { tj0 = Stopwatch.GetTimestamp(); } catch { tj0 = 0; }
                         try { debugStage = 31; debugStageAux = turboDenom; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
 						bool turboOk = TurboJpegNative.TryDecodeJpegToTexture2D(raw, rawLength, turboDenom, out turboTex, out turboErr);
                         try { debugStage = turboOk ? 32 : 33; debugStageAux = turboDenom; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
-                        try
-                        {
-                            if (tj0 != 0)
-                            {
-                                double msTj = (Stopwatch.GetTimestamp() - tj0) * 1000.0 / Stopwatch.Frequency;
-                                if (isThumbnail && msTj >= 250.0)
-                                {
-                                    LogUtil.LogWarning("[VPB IMGQ] thumb_stage turbojpeg ms=" + msTj.ToString("0.0")
-                                        + " ok=" + (turboOk ? "1" : "0")
-                                        + " denom=" + turboDenom
-                                        + " len=" + rawLength
-                                        + " path=" + imgPath);
-                                }
-                            }
-                        }
-                        catch { }
 						if (turboOk)
 						{
-                            try
-                            {
-                                LogUtil.LogTextureTrace("IMGQ_TJ_OK:" + imgPath,
-                                    "[VPB IMGQ] TurboJPEG OK. path=" + imgPath + " " + turboTex.width + "x" + turboTex.height + " fmt=" + turboTex.format + " name=" + turboTex.name);
-                            }
-                            catch { }
 							TurboJpegStats.NoteFirstTurboSuccess();
 							ByteArrayPool.Return(raw);
 							raw = null;
@@ -749,12 +659,6 @@ namespace VPB
 							preprocessed = false;
 							return;
 						}
-                        try
-                        {
-                            LogUtil.LogTextureTrace("IMGQ_TJ_FAIL:" + imgPath,
-                                "[VPB IMGQ] TurboJPEG FAIL. path=" + imgPath + " err=" + (turboErr ?? ""));
-                        }
-                        catch { }
 					}
 
 					Texture2D tempTex = new Texture2D(2, 2);
@@ -768,32 +672,9 @@ namespace VPB
                     try { debugStage = 34; debugStageAux = rawLength; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
 					bool loadImageOk = tempTex.LoadImage(dataToLoad);
                     try { debugStage = loadImageOk ? 35 : 36; debugStageAux = tempTex != null ? tempTex.width : 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
-                    try
-                    {
-                        if (t0 != 0)
-                        {
-                            double msDec = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
-                            if (isThumbnail && msDec >= 350.0)
-                            {
-                                LogUtil.LogWarning("[VPB IMGQ] thumb_stage decode_total ms=" + msDec.ToString("0.0")
-                                    + " jpeg=" + (isJpeg ? "1" : "0")
-                                    + " tj=" + (useTurboJpeg ? "1" : "0")
-                                    + " ok=" + (loadImageOk ? "1" : "0")
-                                    + " len=" + rawLength
-                                    + " path=" + imgPath);
-                            }
-                        }
-                    }
-                    catch { }
 
 					if (loadImageOk)
 					{
-                        try
-                        {
-                            LogUtil.LogTextureTrace("IMGQ_UNITY_OK:" + imgPath,
-                                "[VPB IMGQ] Unity LoadImage OK. path=" + imgPath + " " + tempTex.width + "x" + tempTex.height + " fmt=" + tempTex.format + " jpeg=" + isJpeg + " tjWanted=" + useTurboJpeg);
-                        }
-                        catch { }
 						int origWidth = tempTex.width;
 						int origHeight = tempTex.height;
                         int targetWidth = origWidth;
@@ -894,12 +775,6 @@ namespace VPB
 					}
                     else
                     {
-                        try
-                        {
-                            LogUtil.LogTextureTrace("IMGQ_UNITY_FAIL:" + imgPath,
-                                "[VPB IMGQ] Unity LoadImage FAIL. path=" + imgPath + " rawLen=" + rawLength + " jpeg=" + isJpeg + " tjWanted=" + useTurboJpeg);
-                        }
-                        catch { }
                         hadError = true;
                         errorText = "LoadImage failed";
                     }
@@ -1388,28 +1263,11 @@ namespace VPB
             if (!IsVarPackageVfsPath(qi.imgPath)) return;
             if (qi.cancel) return;
 
-            try { qi.debugStage = 11; qi.debugStageAux = 0; qi.debugStageRealtime = Time.realtimeSinceStartup; } catch { }
-
-            long os0 = 0;
-            try { os0 = Stopwatch.GetTimestamp(); } catch { os0 = 0; }
+			try { qi.debugStage = 11; qi.debugStageAux = 0; qi.debugStageRealtime = Time.realtimeSinceStartup; } catch { }
 
             using (FileEntryStream fileEntryStream = FileManager.OpenStream(qi.imgPath))
             {
                 try { qi.debugStage = 21; qi.debugStageAux = 0; qi.debugStageRealtime = Time.realtimeSinceStartup; } catch { }
-                try
-                {
-                    if (os0 != 0)
-                    {
-                        double msOs = (Stopwatch.GetTimestamp() - os0) * 1000.0 / Stopwatch.Frequency;
-                        if (msOs >= 250.0)
-                        {
-                            LogUtil.LogWarning("[VPB IMGQ] thumb_stage openStream(ms) ms=" + msOs.ToString("0.0")
-                                + " path=" + qi.imgPath);
-                        }
-                    }
-                }
-                catch { }
-
                 Stream stream = fileEntryStream.Stream;
                 qi.ProcessFromStream(stream);
             }
@@ -1504,21 +1362,6 @@ namespace VPB
                 {
                     return pendingThumbnailCallbacks != null ? pendingThumbnailCallbacks.Count : 0;
                 }
-            }
-        }
-
-        /// <summary>One-line snapshot for gallery scroll / stall diagnostics (main thread).</summary>
-        public string GetLoaderDebugSnapshot()
-        {
-            try
-            {
-                int q = (queuedImages != null) ? queuedImages.Count : -1;
-                int d = (dispatchedImages != null) ? dispatchedImages.Count : -1;
-                return "imgQ=" + q + " disp=" + d + " runT=" + runningTasks + " runTh=" + runningThumbnailTasks + " pendThCb=" + PendingThumbnailCount;
-            }
-            catch (Exception ex)
-            {
-                return "imgQ=EX:" + ex.GetType().Name;
             }
         }
 
@@ -1843,9 +1686,6 @@ namespace VPB
 		{
 			if (queuedImages == null || queuedImages.data == null) return;
 			if (queuedImages.Count <= ThumbnailQueueSoftCap) return;
-			int pruned = 0;
-			int prunedWorstP = int.MinValue;
-			string prunedWorstPath = null;
 			int[] floors = new[] { 56, 48, 40, 32, 24, 16, 8, 0 };
 			int guard = 0;
 			foreach (int floor in floors)
@@ -1871,45 +1711,15 @@ namespace VPB
 					if (worst == null) break;
 					worst.cancel = true;
 					queuedImages.Remove(worst);
-					pruned++;
-					if (worstP > prunedWorstP)
-					{
-						prunedWorstP = worstP;
-						prunedWorstPath = worst.imgPath;
-					}
 					DispatchPendingThumbnailCallbacks(worst);
 					pool.Return(worst);
 				}
 				if (queuedImages.Count <= ThumbnailQueuePruneTarget) return;
 			}
 
-			if (pruned > 0)
-			{
-				try
-				{
-					// Throttle: many prunes during fast scroll; keep one line per ~0.75s.
-					const float minSec = 0.75f;
-					if (_imgqLastPruneLogRealtime < 0f || (Time.realtimeSinceStartup - _imgqLastPruneLogRealtime) >= minSec)
-					{
-						_imgqLastPruneLogRealtime = Time.realtimeSinceStartup;
-						LogUtil.LogWarning("[VPB IMGQ] thumb_prune n=" + pruned
-							+ " qNow=" + (queuedImages != null ? queuedImages.Count : -1)
-							+ " floorWorstP=" + prunedWorstP
-							+ " worst=" + (string.IsNullOrEmpty(prunedWorstPath) ? "na" : prunedWorstPath));
-					}
-				}
-				catch { }
-			}
 		}
 
 		protected List<QueuedImage> dispatchedImages = new List<QueuedImage>();
-		private static float _imgqLastPruneLogRealtime = -1f;
-		private static float _imgqLastThumbCancelLogRealtime = -1f;
-        private static float _imgqLastWorkerQueueFailLogRealtime = -1f;
-        private static int _imgqWorkerQueueFailBurst = 0;
-        private static float _imgqLastDispatchStallLogRealtime = -1f;
-        private static float _imgqLastThumbStuckLogRealtime = -1f;
-        private static float _imgqLastThumbAbortLogRealtime = -1f;
         private const float ThumbnailSoftTimeoutSec = 9.0f;
         private static readonly object _thumbHangLock = new object();
         private static HashSet<string> _thumbHangBlacklist;
@@ -2074,19 +1884,6 @@ namespace VPB
                     {
                         if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
 						{
-							try
-							{
-								const float minSec = 0.75f;
-								if (_imgqLastThumbCancelLogRealtime < 0f || (Time.realtimeSinceStartup - _imgqLastThumbCancelLogRealtime) >= minSec)
-								{
-									_imgqLastThumbCancelLogRealtime = Time.realtimeSinceStartup;
-									LogUtil.LogWarning("[VPB IMGQ] thumb_cancel disp=1 path=" + value.imgPath
-										+ " pri=" + value.priority
-										+ " gid=" + value.groupId
-										+ " " + GetLoaderDebugSnapshot());
-								}
-							}
-							catch { }
                             DispatchPendingThumbnailCallbacks(value);
 						}
                         pool.Return(value);
@@ -2304,45 +2101,6 @@ namespace VPB
             int maxTasks = GetEffectiveMaxLoaderThreads();
             int maxThumb = GetEffectiveMaxThumbnailThreads();
 
-            // Dispatch stall diagnostics: dispatched items present but no workers running.
-            // This typically means ThreadPool saturation or repeated QueueUserWorkItem failures.
-            try
-            {
-                if (dispatchedImages != null && dispatchedImages.Count > 0 && runningTasks <= 0)
-                {
-                    const float minSec = 0.75f;
-                    float now = Time.realtimeSinceStartup;
-                    if (_imgqLastDispatchStallLogRealtime < 0f || (now - _imgqLastDispatchStallLogRealtime) >= minSec)
-                    {
-                        _imgqLastDispatchStallLogRealtime = now;
-                        int dThumb = 0;
-                        int dWork = 0;
-                        int dWebWait = 0;
-                        int dCancel = 0;
-                        int dDone = 0;
-                        for (int i = 0; i < dispatchedImages.Count; i++)
-                        {
-                            var qi = dispatchedImages[i];
-                            if (qi == null) continue;
-                            if (qi.isThumbnail) dThumb++;
-                            if (qi.working) dWork++;
-                            if (qi.cancel) dCancel++;
-                            if (qi.processed) dDone++;
-                            if (qi.webRequest != null && !qi.webRequestDone) dWebWait++;
-                        }
-                        LogUtil.LogWarning("[VPB IMGQ] dispatch_stall disp=" + dispatchedImages.Count
-                            + " dThumb=" + dThumb + " dWork=" + dWork + " dDone=" + dDone + " dCancel=" + dCancel + " dWebWait=" + dWebWait
-                            + " q=" + (queuedImages != null ? queuedImages.Count : -1)
-                            + " maxT=" + maxTasks + " maxTh=" + maxThumb
-                            + " runT=" + runningTasks + " runTh=" + runningThumbnailTasks
-                            + " pendThCb=" + PendingThumbnailCount
-                            + " qFailBurst=" + _imgqWorkerQueueFailBurst);
-                        _imgqWorkerQueueFailBurst = 0;
-                    }
-                }
-            }
-            catch { }
-            
             // Dispatch pending dispatched items (web requests that just finished)
             for(int i=0; i<dispatchedImages.Count; i++)
             {
@@ -2360,11 +2118,10 @@ namespace VPB
                 }
             }
 
-            // Long-running worker diagnostics: thumbnails stuck inside Process()
+            // Thumbnails stuck in Process(): recover slots / blacklist toxic paths.
             try
             {
                 const float stuckSec = 2.0f;
-                const float minSec = 0.75f;
                 float now = Time.realtimeSinceStartup;
                 if (dispatchedImages != null && dispatchedImages.Count > 0)
                 {
@@ -2413,22 +2170,6 @@ namespace VPB
                                 }
                             }
                             catch { }
-
-                            try
-                            {
-                                const float abortLogMinSec = 0.25f;
-                                if (_imgqLastThumbAbortLogRealtime < 0f || (now - _imgqLastThumbAbortLogRealtime) >= abortLogMinSec)
-                                {
-                                    _imgqLastThumbAbortLogRealtime = now;
-                                    LogUtil.LogWarning("[VPB IMGQ] thumb_worker_stall sec=" + age.ToString("0.000")
-                                        + " stg=" + qi.debugStage
-                                        + " pri=" + qi.priority
-                                        + " gid=" + qi.groupId
-                                        + " path=" + qi.imgPath
-                                        + " " + GetLoaderDebugSnapshot());
-                                }
-                            }
-                            catch { }
                             break;
                         }
 
@@ -2461,32 +2202,8 @@ namespace VPB
                                 }
                             }
                             catch { }
-
-                            try
-                            {
-                                const float abortLogMinSec = 0.25f;
-                                if (_imgqLastThumbAbortLogRealtime < 0f || (now - _imgqLastThumbAbortLogRealtime) >= abortLogMinSec)
-                                {
-                                    _imgqLastThumbAbortLogRealtime = now;
-                                    LogUtil.LogWarning("[VPB IMGQ] thumb_timeout sec=" + age.ToString("0.000")
-                                        + " pri=" + qi.priority
-                                        + " gid=" + qi.groupId
-                                        + " stg=" + qi.debugStage + " aux=" + qi.debugStageAux + " stgRt=" + qi.debugStageRealtime.ToString("0.000")
-                                        + " path=" + qi.imgPath
-                                        + " " + GetLoaderDebugSnapshot());
-                                }
-                            }
-                            catch { }
                             break;
                         }
-                        if (_imgqLastThumbStuckLogRealtime >= 0f && (now - _imgqLastThumbStuckLogRealtime) < minSec) break;
-                        _imgqLastThumbStuckLogRealtime = now;
-                        LogUtil.LogWarning("[VPB IMGQ] thumb_stuck sec=" + age.ToString("0.000")
-                            + " pri=" + qi.priority
-                            + " gid=" + qi.groupId
-                            + " stg=" + qi.debugStage + " aux=" + qi.debugStageAux + " stgRt=" + qi.debugStageRealtime.ToString("0.000")
-                            + " path=" + qi.imgPath
-                            + " " + GetLoaderDebugSnapshot());
                         break;
                     }
                 }
@@ -2607,24 +2324,6 @@ namespace VPB
                     head.working = false;
                 }
                 // Note: It remains in dispatchedImages, so Update loop will try to start it again next frame.
-                try
-                {
-                    _imgqWorkerQueueFailBurst++;
-                    const float minSec = 0.75f;
-                    float now = Time.realtimeSinceStartup;
-                    if (_imgqLastWorkerQueueFailLogRealtime < 0f || (now - _imgqLastWorkerQueueFailLogRealtime) >= minSec)
-                    {
-                        _imgqLastWorkerQueueFailLogRealtime = now;
-                        LogUtil.LogWarning("[VPB IMGQ] worker_queue_fail burst=" + _imgqWorkerQueueFailBurst
-                            + " isThumb=" + (head.isThumbnail ? "1" : "0")
-                            + " pri=" + head.priority
-                            + " gid=" + head.groupId
-                            + " path=" + head.imgPath
-                            + " " + GetLoaderDebugSnapshot());
-                        _imgqWorkerQueueFailBurst = 0;
-                    }
-                }
-                catch { }
             }
         }
 
