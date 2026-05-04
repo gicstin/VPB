@@ -68,6 +68,8 @@ namespace VPB
             AddGroupRow("grid", VPBTranslation.T("settings.header.grid_labels", "Grid Labels"));
             AddGroupRow("quick", VPBTranslation.T("settings.group.category_quick", "Header category menu"));
             AddGroupRow("vr", VPBTranslation.T("settings.header.vr_integration", "VR & Game Integration"));
+            if (BaImporter.TryDetectBaDataDir(out _))
+                AddGroupRow("ba_migration", VPBTranslation.T("settings.group.ba_migration", "BrowserAssist Migration"));
         }
 
         private void BuildRatingsTabs(GameObject container, List<GameObject> trackedButtons)

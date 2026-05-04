@@ -306,6 +306,8 @@ namespace VPB
         public string GalleryDefaultLeftSidePanel = "None";
         /// <summary>Which list opens on the right when a gallery pane is created: None, Category, or Creator.</summary>
         public string GalleryDefaultRightSidePanel = "None";
+        /// <summary>When true, BA migration prompt has been dismissed and will not appear again.</summary>
+        public bool BaMigrationPromptDismissed = false;
 
         private static readonly string[] s_GallerySidePanelCanonical = { "None", "Category", "Creator" };
 
@@ -530,6 +532,7 @@ namespace VPB
             QuickMenuPageToggleSlotIdx = 15;
             GalleryCategoryQuickOrder = "";
             GalleryCategoryQuickSwitchHidden = "";
+            BaMigrationPromptDismissed = false;
 
             try
             {
@@ -648,6 +651,7 @@ namespace VPB
                         if (node["HoldToLaunchPrevEnableDragDrop"] != null) HoldToLaunchPrevEnableDragDrop = node["HoldToLaunchPrevEnableDragDrop"].AsBool;
                         if (node["HoldToLaunchHoldSeconds"] != null)
                             HoldToLaunchHoldSeconds = Mathf.Clamp(node["HoldToLaunchHoldSeconds"].AsFloat, 0.2f, 1f);
+                        if (node["BaMigrationPromptDismissed"] != null) BaMigrationPromptDismissed = node["BaMigrationPromptDismissed"].AsBool;
                         // Quick Menu buttons (pages)
                         try
                         {
@@ -861,6 +865,7 @@ namespace VPB
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["HoldToLaunchPrevEnableDragDrop"].AsBool = HoldToLaunchPrevEnableDragDrop;
                 node["HoldToLaunchHoldSeconds"].AsFloat = Mathf.Clamp(HoldToLaunchHoldSeconds, 0.2f, 1f);
+                node["BaMigrationPromptDismissed"].AsBool = BaMigrationPromptDismissed;
                 node["UiLocale"] = UiLocale ?? "en";
                 node["HiddenCategories"] = string.Join(",", new List<string>(HiddenCategories ?? new HashSet<string>()).ToArray());
                 node["GalleryCategoryQuickOrder"] = GalleryCategoryQuickOrder ?? "";

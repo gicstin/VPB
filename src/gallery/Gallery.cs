@@ -179,6 +179,7 @@ namespace VPB
             lastObservedPackageRefreshTime = refreshTime;
 
             _hasHadInitialRefresh = true;
+            try { TryQueueBaMigrationPrompt(); } catch { }
 
             if (!LogUtil.IsStartupReadyLogged())
             {
@@ -709,6 +710,33 @@ namespace VPB
                 if (p == null) continue;
                 try { p.RefreshVisibleGridVisualsOnly(); } catch { }
             }
+        }
+
+        private bool _baMigrationPromptPending;
+
+        private void TryQueueBaMigrationPrompt()
+        {
+            if (VPBConfig.Instance == null || VPBConfig.Instance.BaMigrationPromptDismissed)
+            {
+                LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: skipped (dismissed=" + (VPBConfig.Instance?.BaMigrationPromptDismissed) + ")");
+                return;
+            }
+            if (!BaImporter.TryDetectBaDataDir(out _))
+            {
+                LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: BA data dir not found — prompt suppressed");
+                return;
+            }
+            _baMigrationPromptPending = true;
+            LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: prompt pending — will fire next time gallery panel opens");
+        }
+
+        // Called from GalleryPanel.Show() when a panel becomes visible
+        internal static bool TryConsumeBaMigrationPromptPending()
+        {
+            if (singleton == null || !singleton._baMigrationPromptPending) return false;
+            singleton._baMigrationPromptPending = false;
+            LogUtil.Log("[VPB BA] TryConsumeBaMigrationPromptPending: consuming pending prompt");
+            return true;
         }
     }
 }

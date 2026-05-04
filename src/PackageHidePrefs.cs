@@ -125,6 +125,23 @@ namespace VPB
 			catch { return false; }
 		}
 
+		/// <summary>Builds the absolute path to a VarPackage's .hide sidecar, e.g.
+		/// <c>…/AddonPackagesFilePrefs/&lt;uid&gt;/AddonPackages/author.pkg.1.var.hide</c>.</summary>
+		private static bool TryBuildPackageVarHidePath(VarPackage pkg, out string hidePath)
+		{
+			hidePath = null;
+			if (pkg == null || string.IsNullOrEmpty(pkg.Uid) || string.IsNullOrEmpty(pkg.Path)) return false;
+			try
+			{
+				string prefsDir = GetAddonPackagesFilePrefsDir();
+				if (string.IsNullOrEmpty(prefsDir)) return false;
+				hidePath = Path.Combine(Path.Combine(prefsDir, pkg.Uid),
+					pkg.Path.Replace('/', Path.DirectorySeparatorChar) + ".hide");
+				return true;
+			}
+			catch { return false; }
+		}
+
 		/// <summary>True when this entry has a .hide sidecar (ignores the "show hidden" toggle).</summary>
 		public static bool IsPackageVarHidden(FileEntry entry)
 		{
@@ -251,6 +268,27 @@ namespace VPB
 			catch { return false; }
 		}
 
+		/// <summary>Write .hide sidecar for a package looked up directly from FileManager (no FileEntry wrapper needed).</summary>
+		public static bool TryEnsureVpbPackageHidden(VarPackage pkg)
+		{
+			try
+			{
+				if (!TryBuildPackageVarHidePath(pkg, out string hidePath)) return false;
+				try { File.Delete(hidePath + ".vpb"); } catch { }
+				EnsureHideMarkerCache();
+				string fullHide;
+				try { fullHide = Path.GetFullPath(hidePath); }
+				catch { return false; }
+				if (s_hideMarkerFullPaths != null && s_hideMarkerFullPaths.Contains(fullHide)) return true;
+				string dir = Path.GetDirectoryName(hidePath);
+				if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+				File.WriteAllText(hidePath, string.Empty);
+				try { if (s_hideMarkerFullPaths != null) s_hideMarkerFullPaths.Add(fullHide); } catch { }
+				return true;
+			}
+			catch { return false; }
+		}
+
 		/// <summary>
 		/// Removes the .hide sidecar for this package (and VPB companion) and updates the marker cache.
 		/// </summary>
@@ -273,6 +311,28 @@ namespace VPB
 				{
 					try { File.Delete(hidePath); } catch { return false; }
 				}
+				try { File.Delete(hidePath + ".vpb"); } catch { }
+				try { if (s_hideMarkerFullPaths != null) s_hideMarkerFullPaths.Remove(fullHide); } catch { }
+				return true;
+			}
+			catch { return false; }
+		}
+
+		/// <summary>Remove .hide sidecar for a package looked up directly from FileManager.</summary>
+		public static bool TryRemovePackageVarHide(VarPackage pkg)
+		{
+			try
+			{
+				if (!TryBuildPackageVarHidePath(pkg, out string hidePath)) return false;
+				EnsureHideMarkerCache();
+				string fullHide;
+				try { fullHide = Path.GetFullPath(hidePath); }
+				catch { return false; }
+				bool onDisk = false;
+				try { onDisk = File.Exists(hidePath); } catch { }
+				bool inCache = s_hideMarkerFullPaths != null && s_hideMarkerFullPaths.Contains(fullHide);
+				if (!onDisk && !inCache) return false;
+				if (onDisk) { try { File.Delete(hidePath); } catch { return false; } }
 				try { File.Delete(hidePath + ".vpb"); } catch { }
 				try { if (s_hideMarkerFullPaths != null) s_hideMarkerFullPaths.Remove(fullHide); } catch { }
 				return true;

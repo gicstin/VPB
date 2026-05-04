@@ -12,7 +12,8 @@ namespace VPB
             Toggle,
             Slider,
             Cycle,
-            TextArea
+            TextArea,
+            Button
         }
 
         private sealed class InternalSettingDefinition
@@ -40,6 +41,9 @@ namespace VPB
 
             /// <summary>When non-null and returns false, row omitted from settings list (e.g. slider hidden until parent toggle on).</summary>
             public Func<bool> RowVisible;
+
+            /// <summary>Fired when a Button-type row is clicked (primary or secondary click).</summary>
+            public Action OnAction;
         }
 
         private sealed class InternalSettingRowEntry : VirtualFileEntry
@@ -508,6 +512,61 @@ namespace VPB
                 });
             }
 
+            // BrowserAssist migration section (only shown when BA data dir exists)
+            if (BaImporter.TryDetectBaDataDir(out _))
+            {
+                defs.Add(new InternalSettingDefinition
+                {
+                    Key = "ba.import",
+                    GroupKey = "ba_migration",
+                    Label = VPBTranslation.T("settings.ba.import", "Import tags from BrowserAssist"),
+                    Tooltip = VPBTranslation.T("settings.tip.ba.import",
+                        "Import user tags from BrowserAssist into VPB. Re-running first undoes any previous BA import, then re-imports fresh. Manually added tags are preserved."),
+                    ControlType = InternalSettingControlType.Button,
+                    OnAction = () =>
+                    {
+                        if (!BaImporter.TryDetectBaDataDir(out string baDir))
+                        {
+                            ShowTemporaryStatus(VPBTranslation.T("settings.ba.import.notfound",
+                                "BrowserAssist data not found."), 3f);
+                            return;
+                        }
+                        ShowTemporaryStatus(VPBTranslation.T("settings.ba.import.running", "Importing..."), 60f);
+                        BaImporter.BaMigrationResult r;
+                        BaImporter.RunImport(baDir, out r);
+                        string msg = r.Success
+                            ? string.Format(VPBTranslation.T("settings.ba.import.done",
+                                "Imported {0} tag rows across {1} packages. {2} hide markers. {3} skipped."),
+                                r.TagRowsImported, r.PackagesTagged, r.HideMarkersWritten, r.ItemsSkipped)
+                            : VPBTranslation.T("settings.ba.import.failed", "Import failed — see log.");
+                        ShowTemporaryStatus(msg, 5f);
+                        RefreshInternalSettingsListRows(true);
+                    }
+                });
+
+                if (BaImporter.MigrationManifestExists())
+                {
+                    defs.Add(new InternalSettingDefinition
+                    {
+                        Key = "ba.reset",
+                        GroupKey = "ba_migration",
+                        Label = VPBTranslation.T("settings.ba.reset", "[DEV] Reset BA migration"),
+                        Tooltip = VPBTranslation.T("settings.tip.ba.reset",
+                            "Removes only the tags and hide markers added by the last BA migration. Does not affect manually added tags."),
+                        ControlType = InternalSettingControlType.Button,
+                        OnAction = () =>
+                        {
+                            int tags, hides;
+                            BaImporter.TryResetMigration(out tags, out hides);
+                            ShowTemporaryStatus(string.Format(
+                                VPBTranslation.T("settings.ba.reset.done", "Reset: {0} tag entries removed, {1} hide markers removed."),
+                                tags, hides), 5f);
+                            RefreshInternalSettingsListRows(true);
+                        }
+                    });
+                }
+            }
+
             return defs;
         }
 
@@ -772,6 +831,9 @@ namespace VPB
                     }
                     break;
                 case InternalSettingControlType.TextArea:
+                    break;
+                case InternalSettingControlType.Button:
+                    def.OnAction?.Invoke();
                     break;
             }
         }
@@ -1078,7 +1140,15 @@ namespace VPB
                     if (VPBConfig.Instance != null)
                         VPBConfig.Instance.TriggerChange();
                 });
+                return;
+            }
 
+            if (def.ControlType == InternalSettingControlType.Button && def.OnAction != null)
+            {
+                CreateMiniButton(controls.transform, "CLICK", 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
+                    def.OnAction?.Invoke();
+                    RefreshInternalSettingsListRows(true);
+                });
                 return;
             }
         }
@@ -1184,6 +1254,118 @@ namespace VPB
             VPBConfig.Instance.TriggerChange();
             internalSettingsSessionActive = false;
             internalSettingsBackup = null;
+        }
+
+        /// <summary>
+        /// Shows a one-time BA migration prompt overlay on this panel.
+        /// Called by Gallery after initial FileManager refresh when BA data dir is detected.
+        /// </summary>
+        internal void ShowBaMigrationPrompt()
+        {
+            if (this == null || gameObject == null) return;
+            try
+            {
+                // Outer overlay — dims the gallery panel
+                GameObject overlay = new GameObject("BA_MigrationPrompt");
+                overlay.transform.SetParent(transform, false);
+                RectTransform overlayRt = overlay.AddComponent<RectTransform>();
+                overlayRt.anchorMin = Vector2.zero;
+                overlayRt.anchorMax = Vector2.one;
+                overlayRt.offsetMin = Vector2.zero;
+                overlayRt.offsetMax = Vector2.zero;
+                UnityEngine.UI.Image overlayBg = overlay.AddComponent<UnityEngine.UI.Image>();
+                overlayBg.color = new Color(0f, 0f, 0f, 0.6f);
+                overlay.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+
+                // Dialog box
+                GameObject box = new GameObject("DialogBox");
+                box.transform.SetParent(overlay.transform, false);
+                RectTransform boxRt = box.AddComponent<RectTransform>();
+                boxRt.anchorMin = new Vector2(0.5f, 0.5f);
+                boxRt.anchorMax = new Vector2(0.5f, 0.5f);
+                boxRt.sizeDelta = new Vector2(480f, 220f);
+                boxRt.anchoredPosition = Vector2.zero;
+                UnityEngine.UI.Image boxBg = box.AddComponent<UnityEngine.UI.Image>();
+                boxBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+
+                // Layout for text + buttons
+                UnityEngine.UI.VerticalLayoutGroup vl = box.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
+                vl.padding = new RectOffset(16, 16, 16, 16);
+                vl.spacing = 12f;
+                vl.childAlignment = TextAnchor.UpperCenter;
+                vl.childForceExpandWidth = true;
+                vl.childForceExpandHeight = false;
+
+                // Message text
+                GameObject textGo = new GameObject("Message");
+                textGo.transform.SetParent(box.transform, false);
+                UnityEngine.UI.Text msg = textGo.AddComponent<UnityEngine.UI.Text>();
+                msg.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                msg.fontSize = 16;
+                msg.alignment = TextAnchor.MiddleCenter;
+                msg.color = Color.white;
+                msg.text = VPBTranslation.T("ba.prompt.msg",
+                    "BrowserAssist data detected.\nImport your tags into VPB?\nThis can also be done later in Settings.");
+                UnityEngine.UI.LayoutElement textLe = textGo.AddComponent<UnityEngine.UI.LayoutElement>();
+                textLe.preferredHeight = 80f;
+                textLe.flexibleWidth = 1f;
+
+                // Button row
+                GameObject btnRow = new GameObject("BtnRow");
+                btnRow.transform.SetParent(box.transform, false);
+                UnityEngine.UI.HorizontalLayoutGroup hl = btnRow.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+                hl.spacing = 8f;
+                hl.childForceExpandWidth = false;
+                hl.childForceExpandHeight = false;
+                hl.childAlignment = TextAnchor.MiddleCenter;
+                UnityEngine.UI.LayoutElement rowLe = btnRow.AddComponent<UnityEngine.UI.LayoutElement>();
+                rowLe.preferredHeight = 40f;
+                rowLe.flexibleWidth = 1f;
+
+                Action dismiss = () => { try { UnityEngine.Object.Destroy(overlay); } catch { } };
+
+                // YES button
+                UI.CreateUIButton(btnRow, 140f, 36f, VPBTranslation.T("ba.prompt.yes", "Yes, import now"),
+                    14, 0f, 0f, AnchorPresets.middleCenter, () =>
+                {
+                    dismiss();
+                    VPBConfig.Instance.BaMigrationPromptDismissed = true;
+                    VPBConfig.Instance.Save();
+                    if (BaImporter.TryDetectBaDataDir(out string baDir))
+                    {
+                        BaImporter.BaMigrationResult r;
+                        BaImporter.RunImport(baDir, out r);
+                        string feedback = r.Success
+                            ? string.Format(VPBTranslation.T("ba.prompt.imported",
+                                "Imported {0} tag rows across {1} packages."),
+                                r.TagRowsImported, r.PackagesTagged)
+                            : VPBTranslation.T("ba.prompt.failed", "Import failed — see log.");
+                        ShowTemporaryStatus(feedback, 5f);
+                    }
+                });
+
+                // NO (don't show again) button
+                UI.CreateUIButton(btnRow, 170f, 36f, VPBTranslation.T("ba.prompt.no", "No, don't ask again"),
+                    14, 0f, 0f, AnchorPresets.middleCenter, () =>
+                {
+                    dismiss();
+                    VPBConfig.Instance.BaMigrationPromptDismissed = true;
+                    VPBConfig.Instance.Save();
+                    ShowTemporaryStatus(VPBTranslation.T("ba.prompt.dismissed",
+                        "Dismissed. Import available in Settings."), 4f);
+                });
+
+                // ASK LATER button
+                UI.CreateUIButton(btnRow, 130f, 36f, VPBTranslation.T("ba.prompt.later", "Ask me next time"),
+                    14, 0f, 0f, AnchorPresets.middleCenter, () =>
+                {
+                    dismiss();
+                });
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB BA] ShowBaMigrationPrompt failed: " + ex.Message);
+            }
         }
     }
 }

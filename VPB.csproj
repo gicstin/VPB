@@ -331,6 +331,7 @@
     <Compile Include="src\MessageKit\MessageKitLite.cs" />
     <Compile Include="src\Messager.cs" />
     <Compile Include="src\Settings.cs" />
+    <Compile Include="src\BaImporter.cs" />
     <Compile Include="src\VPBConfig.cs" />
     <Compile Include="src\VPBTranslation.cs" />
     <Compile Include="src\VPBUiFont.cs" />
