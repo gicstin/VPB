@@ -179,6 +179,7 @@ namespace VPB
             lastObservedPackageRefreshTime = refreshTime;
 
             _hasHadInitialRefresh = true;
+            try { TryQueueBaMigrationPrompt(); } catch { }
 
             if (!LogUtil.IsStartupReadyLogged())
             {
@@ -709,6 +710,32 @@ namespace VPB
                 if (p == null) continue;
                 try { p.RefreshVisibleGridVisualsOnly(); } catch { }
             }
+        }
+
+        private void TryQueueBaMigrationPrompt()
+        {
+            if (VPBConfig.Instance == null || VPBConfig.Instance.BaMigrationPromptDismissed) return;
+            if (!BaImporter.TryDetectBaDataDir(out _)) return;
+            StartCoroutine(ShowBaMigrationPromptWhenReady());
+        }
+
+        private System.Collections.IEnumerator ShowBaMigrationPromptWhenReady()
+        {
+            // Wait up to 15 s for a panel to become visible
+            float elapsed = 0f;
+            GalleryPanel target = null;
+            while (elapsed < 15f)
+            {
+                for (int i = 0; i < panels.Count; i++)
+                {
+                    if (panels[i] != null && panels[i].IsVisible) { target = panels[i]; break; }
+                }
+                if (target != null) break;
+                yield return new WaitForSeconds(0.25f);
+                elapsed += 0.25f;
+            }
+            if (target == null) yield break;
+            target.ShowBaMigrationPrompt();
         }
     }
 }
