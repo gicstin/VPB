@@ -12,7 +12,8 @@ namespace VPB
             Toggle,
             Slider,
             Cycle,
-            TextArea
+            TextArea,
+            Button
         }
 
         private sealed class InternalSettingDefinition
@@ -40,6 +41,9 @@ namespace VPB
 
             /// <summary>When non-null and returns false, row omitted from settings list (e.g. slider hidden until parent toggle on).</summary>
             public Func<bool> RowVisible;
+
+            /// <summary>Fired when a Button-type row is clicked (primary or secondary click).</summary>
+            public Action OnAction;
         }
 
         private sealed class InternalSettingRowEntry : VirtualFileEntry
@@ -508,6 +512,61 @@ namespace VPB
                 });
             }
 
+            // BrowserAssist migration section (only shown when BA data dir exists)
+            if (BaImporter.TryDetectBaDataDir(out _))
+            {
+                defs.Add(new InternalSettingDefinition
+                {
+                    Key = "ba.import",
+                    GroupKey = "ba_migration",
+                    Label = VPBTranslation.T("settings.ba.import", "Import tags from BrowserAssist"),
+                    Tooltip = VPBTranslation.T("settings.tip.ba.import",
+                        "Import user tags from BrowserAssist into VPB. Safe to run multiple times — existing tags are preserved."),
+                    ControlType = InternalSettingControlType.Button,
+                    OnAction = () =>
+                    {
+                        if (!BaImporter.TryDetectBaDataDir(out string baDir))
+                        {
+                            ShowTemporaryStatus(VPBTranslation.T("settings.ba.import.notfound",
+                                "BrowserAssist data not found."), 3f);
+                            return;
+                        }
+                        ShowTemporaryStatus(VPBTranslation.T("settings.ba.import.running", "Importing..."), 60f);
+                        BaImporter.BaMigrationResult r;
+                        BaImporter.RunImport(baDir, out r);
+                        string msg = r.Success
+                            ? string.Format(VPBTranslation.T("settings.ba.import.done",
+                                "Imported {0} tag rows across {1} packages. {2} hide markers. {3} skipped."),
+                                r.TagRowsImported, r.PackagesTagged, r.HideMarkersWritten, r.ItemsSkipped)
+                            : VPBTranslation.T("settings.ba.import.failed", "Import failed — see log.");
+                        ShowTemporaryStatus(msg, 5f);
+                        RefreshInternalSettingsListRows(true);
+                    }
+                });
+
+                if (BaImporter.MigrationManifestExists())
+                {
+                    defs.Add(new InternalSettingDefinition
+                    {
+                        Key = "ba.reset",
+                        GroupKey = "ba_migration",
+                        Label = VPBTranslation.T("settings.ba.reset", "[DEV] Reset BA migration"),
+                        Tooltip = VPBTranslation.T("settings.tip.ba.reset",
+                            "Removes only the tags and hide markers added by the last BA migration. Does not affect manually added tags."),
+                        ControlType = InternalSettingControlType.Button,
+                        OnAction = () =>
+                        {
+                            int tags, hides;
+                            BaImporter.TryResetMigration(out tags, out hides);
+                            ShowTemporaryStatus(string.Format(
+                                VPBTranslation.T("settings.ba.reset.done", "Reset: {0} tag entries removed, {1} hide markers removed."),
+                                tags, hides), 5f);
+                            RefreshInternalSettingsListRows(true);
+                        }
+                    });
+                }
+            }
+
             return defs;
         }
 
@@ -773,6 +832,9 @@ namespace VPB
                     break;
                 case InternalSettingControlType.TextArea:
                     break;
+                case InternalSettingControlType.Button:
+                    def.OnAction?.Invoke();
+                    break;
             }
         }
 
@@ -1002,6 +1064,7 @@ namespace VPB
                 return;
             }
 
+<<<<<<< HEAD
             if (def.ControlType == InternalSettingControlType.TextArea && def.GetString != null && def.SetString != null)
             {
                 if (string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
@@ -1078,7 +1141,15 @@ namespace VPB
                     if (VPBConfig.Instance != null)
                         VPBConfig.Instance.TriggerChange();
                 });
+                return;
+            }
 
+            if (def.ControlType == InternalSettingControlType.Button && def.OnAction != null)
+            {
+                CreateMiniButton(controls.transform, "CLICK", 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
+                    def.OnAction?.Invoke();
+                    RefreshInternalSettingsListRows(true);
+                });
                 return;
             }
         }
