@@ -1425,5 +1425,116 @@ namespace VPB
                 return false;
             }
         }
+
+        // --- BA migration helpers ---
+
+        internal struct GalleryUserTagImportRow
+        {
+            public string Category;
+            public string PkgUid;
+            public string InternalPath;
+            public string[] Tags;
+        }
+
+        /// <summary>Retrieves category membership for a single gallery item from cat_mem.</summary>
+        internal static bool TryGetCategoryForItem(string pkgUid, string internalPath, out string category)
+        {
+            category = null;
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(pkgUid) || string.IsNullOrEmpty(internalPath))
+                return false;
+            string ip = internalPath.Replace('\\', '/');
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT category FROM cat_mem WHERE pkg_uid=? AND internal_path=? LIMIT 1"))
+                    {
+                        st.BindText(1, pkgUid);
+                        st.BindText(2, ip);
+                        if (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            category = st.ColumnText(0);
+                            return !string.IsNullOrEmpty(category);
+                        }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>Bulk-insert gallery user tag assignments; ignores duplicates. Respects <see cref="GalleryUserTagMaxPerItem"/> cap.</summary>
+        internal static bool BulkMergeGalleryUserTags(IList<GalleryUserTagImportRow> rows)
+        {
+            if (rows == null || rows.Count == 0) return true;
+            if (!VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN;");
+                    try
+                    {
+                        using (var insIt = conn.Prepare(
+                            "INSERT OR IGNORE INTO gallery_item_user_tag(category, pkg_uid, internal_path, tag_id) VALUES(?,?,?,?)"))
+                        using (var cntRow = conn.Prepare(
+                            "SELECT COUNT(*) FROM gallery_item_user_tag WHERE category=? AND pkg_uid=? AND internal_path=?"))
+                        {
+                            for (int ri = 0; ri < rows.Count; ri++)
+                            {
+                                var row = rows[ri];
+                                if (string.IsNullOrEmpty(row.Category) || string.IsNullOrEmpty(row.PkgUid) ||
+                                    string.IsNullOrEmpty(row.InternalPath) || row.Tags == null || row.Tags.Length == 0)
+                                    continue;
+                                string ip = row.InternalPath.Replace('\\', '/');
+
+                                cntRow.Reset();
+                                cntRow.BindText(1, row.Category);
+                                cntRow.BindText(2, row.PkgUid);
+                                cntRow.BindText(3, ip);
+                                int rowTagCount = 0;
+                                if (cntRow.Step() == VpbSqlite3.SqliteRow)
+                                    rowTagCount = (int)cntRow.ColumnInt64(0);
+
+                                for (int ti = 0; ti < row.Tags.Length; ti++)
+                                {
+                                    string name = NormalizeGalleryUserTagName(row.Tags[ti]);
+                                    if (string.IsNullOrEmpty(name)) continue;
+                                    if (rowTagCount >= GalleryUserTagMaxPerItem) break;
+                                    long tid = TryGetOrCreateGalleryUserTagId(conn, name);
+                                    if (tid < 0) continue;
+                                    insIt.Reset();
+                                    insIt.BindText(1, row.Category);
+                                    insIt.BindText(2, row.PkgUid);
+                                    insIt.BindText(3, ip);
+                                    insIt.BindInt64(4, tid);
+                                    insIt.Step();
+                                    rowTagCount++;
+                                }
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                        return true;
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Remove specific user tags from a gallery item (BA migration reset).</summary>
+        internal static bool RemoveGalleryUserTagsForItem(string category, string pkgUid, string internalPath, IEnumerable<string> tags)
+        {
+            return TryRemoveGalleryUserTagsFromRow(category, pkgUid, internalPath.Replace('\\', '/'), tags, out _);
+        }
     }
 }
