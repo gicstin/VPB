@@ -217,6 +217,8 @@ namespace VPB
         private float m_ExpandedHeight;
         float m_UIScale = 1;
         Rect m_Rect = new Rect(0, 0, 220, 50);
+        private bool m_IsPointerOverHookUI;
+        private bool m_BlockingUnderlyingUGUI;
 
         private const float MinUiScale = 0.6f;
         private const float MaxUiScale = 2.4f;
@@ -1156,6 +1158,8 @@ namespace VPB
             {
                 m_Show = !m_Show;
             }
+
+            UpdateUnderlyingUGUIBlockState();
             if (ClearConsoleKey != null && ClearConsoleKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(ClearConsoleKey))
             {
                 TryClearConsole();
@@ -2267,6 +2271,10 @@ namespace VPB
 
                     m_Rect = GUILayout.Window(0, windowRect, DragWnd, "", m_StyleWindow);
 
+                    Rect mainRect = (m_RealWindowRect.width > 10f) ? m_RealWindowRect : m_Rect;
+                    Rect mainScreenRect = new Rect(mainRect.x * m_UIScale, mainRect.y * m_UIScale, mainRect.width * m_UIScale, mainRect.height * m_UIScale);
+                    bool overAny = mainScreenRect.Contains(screenMousePos);
+
                     if (m_ShowSpaceSaverWindow)
                     {
                         // Block world interaction when mouse is over the Compress Cache window
@@ -2280,6 +2288,7 @@ namespace VPB
                         }
 
                         m_SpaceSaverWindowRect = GUI.Window(999, m_SpaceSaverWindowRect, DrawSpaceSaverWindow, "", m_StyleWindow);
+                        if (screenSpaceRect.Contains(screenMousePos)) overAny = true;
                     }
 
                     if (m_ShowScanWhitelistWindow)
@@ -2294,7 +2303,21 @@ namespace VPB
                         }
 
                         m_ScanWhitelistWindowRect = GUI.Window(1001, m_ScanWhitelistWindowRect, DrawScanWhitelistWindow, "", m_StyleWindow);
+                        if (swScreenRect.Contains(screenMousePos)) overAny = true;
                     }
+
+                    if (m_ShowQuickMenuPosWindow)
+                    {
+                        var qmScreenRect = new Rect(m_QuickMenuPosWindowRect.x * m_UIScale, m_QuickMenuPosWindowRect.y * m_UIScale, m_QuickMenuPosWindowRect.width * m_UIScale, m_QuickMenuPosWindowRect.height * m_UIScale);
+                        if (qmScreenRect.Contains(screenMousePos)) overAny = true;
+                    }
+                    if (m_ShowLangWindow)
+                    {
+                        var langScreenRect = new Rect(m_LangWindowRect.x * m_UIScale, m_LangWindowRect.y * m_UIScale, m_LangWindowRect.width * m_UIScale, m_LangWindowRect.height * m_UIScale);
+                        if (langScreenRect.Contains(screenMousePos)) overAny = true;
+                    }
+
+                    m_IsPointerOverHookUI = overAny;
 
                     // Draw our custom border ON TOP or AROUND the window rect
                     var borderRect = new Rect(m_Rect.x, m_Rect.y, m_Rect.width, m_Rect.height);
@@ -2484,6 +2507,30 @@ namespace VPB
             }
 
             GUI.matrix = pre;
+        }
+
+        private void UpdateUnderlyingUGUIBlockState()
+        {
+            bool shouldBlock = m_Show && m_IsPointerOverHookUI;
+            if (shouldBlock == m_BlockingUnderlyingUGUI)
+                return;
+
+            m_BlockingUnderlyingUGUI = shouldBlock;
+            try
+            {
+                if (Gallery.singleton == null || Gallery.singleton.Panels == null)
+                    return;
+                for (int i = 0; i < Gallery.singleton.Panels.Count; i++)
+                {
+                    var p = Gallery.singleton.Panels[i];
+                    if (p == null || p.canvas == null)
+                        continue;
+                    var gr = p.canvas.GetComponent<UnityEngine.UI.GraphicRaycaster>();
+                    if (gr != null)
+                        gr.enabled = !shouldBlock;
+                }
+            }
+            catch { }
         }
 
         void RestrictUiRect()

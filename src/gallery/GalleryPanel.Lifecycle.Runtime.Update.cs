@@ -10,6 +10,25 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
+        private bool IsPointerInsideGalleryWindowRect()
+        {
+            if (backgroundBoxGO == null) return false;
+            RectTransform rt = backgroundBoxGO.GetComponent<RectTransform>();
+            if (rt == null) return false;
+
+            Camera cam = null;
+            try
+            {
+                // For ScreenSpaceOverlay, camera MUST be null for RectTransformUtility.
+                if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    cam = (canvas.worldCamera != null) ? canvas.worldCamera : Camera.main;
+            }
+            catch { cam = null; }
+
+            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, Input.mousePosition, cam); }
+            catch { return false; }
+        }
+
         private void UpdateFooterPaddingForFloatingResizeHandles(bool isFloating)
         {
             if (footerHLG == null) return;
@@ -146,8 +165,10 @@ namespace VPB
                             isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
 
+                        bool isPointerInsideGalleryWindow = IsPointerInsideGalleryWindowRect();
+
                         // If NOT hovering gallery and NOT hovering side buttons and NOT hovering trigger, collapse after delay
-                        bool isHoveringAny = hoverCount > 0 || isHoveringTrigger || isHoveringTriggerManual || IsSettingsPanelOpen();
+                        bool isHoveringAny = hoverCount > 0 || isPointerInsideGalleryWindow || isHoveringTrigger || isHoveringTriggerManual || IsSettingsPanelOpen();
                         if (!isHoveringAny)
                         {
                             collapseTimer += Time.deltaTime;
@@ -351,7 +372,8 @@ namespace VPB
             // Gallery Translucency Logic
             if (backgroundCanvasGroup != null && VPBConfig.Instance != null)
             {
-                bool isHovered = hoverCount > 0 || isResizing;
+                bool isPointerInsideGalleryWindow = IsPointerInsideGalleryWindowRect();
+                bool isHovered = hoverCount > 0 || isPointerInsideGalleryWindow || isResizing;
                 float targetGalleryAlpha = 1.0f;
                 if (VPBConfig.Instance.EnableGalleryTranslucency && !isHovered)
                 {
@@ -428,6 +450,11 @@ namespace VPB
 
             // Side Buttons Auto-Hide Logic
             bool showSideButtons = hoverCount > 0;
+            if (!showSideButtons)
+            {
+                if (IsPointerInsideGalleryWindowRect())
+                    showSideButtons = true;
+            }
             if (showSideButtons)
             {
                 sideButtonsFadeDelayTimer = 0f;
