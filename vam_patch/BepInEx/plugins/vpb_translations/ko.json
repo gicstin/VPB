@@ -412,5 +412,14 @@
   "gallery.tbox.filter_back": "뒤로",
   "gallery.tbox.filter_clear": "지우기",
   "gallery.tooltip.filter_back": "뒤로",
-  "gallery.tooltip.filter_clear": "필터 지우기"
+  "gallery.tooltip.filter_clear": "필터 지우기",
+
+  "settings.desktop.fixed_auto_hide_seconds": "고정 자동 숨김 지연(초)",
+  "settings.tip.desktop.fixed_auto_hide_seconds": "데스크톱 고정 모드: 커서가 패널 밖에 있을 때 자동 숨김까지 기다리는 시간(초).",
+  "settings.desktop.fixed_default_dock": "고정 도킹 기본값",
+  "settings.tip.desktop.fixed_default_dock": "고정 모드로 전환할 때 사용할 기본 도킹 위치.",
+  "settings.desktop.fixed_enforce_dock": "항상 고정 도킹 위치 강제",
+  "settings.tip.desktop.fixed_enforce_dock": "켜짐: 어떤 앵커 버튼을 눌러도 강제 위치로 도킹.",
+  "settings.desktop.fixed_enforce_dock_side": "강제 도킹 위치",
+  "settings.tip.desktop.fixed_enforce_dock_side": "강제 설정이 켜져 있을 때 사용할 도킹 위치."
 }

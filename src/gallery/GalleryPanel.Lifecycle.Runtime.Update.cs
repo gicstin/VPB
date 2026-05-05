@@ -19,7 +19,22 @@ namespace VPB
             int defaultRight = Mathf.RoundToInt(10f * s);
             // Floating mode has bottom resize handles on both sides; mirror the existing left reservation
             // so the bottom-right handle does not sit over the right-side footer buttons.
-            int desiredRight = isFloating ? footerHLG.padding.left : defaultRight;
+            int desiredRight = defaultRight;
+            if (isFloating) desiredRight = footerHLG.padding.left;
+            else
+            {
+                // Fixed + Left dock uses a bottom-right resize handle; reserve footer right side like floating.
+                try
+                {
+                    if (VPBConfig.Instance != null)
+                    {
+                        string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
+                        if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
+                            desiredRight = footerHLG.padding.left;
+                    }
+                }
+                catch { }
+            }
 
             if (_footerHLGLastRightPadding == desiredRight && footerHLG.padding.right == desiredRight) return;
 
@@ -99,8 +114,13 @@ namespace VPB
                 {
                     UpdateFooterPaddingForFloatingResizeHandles(false);
                     bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
+                    string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
+
                     // Show trigger whenever collapsed (to allow expanding), or when in AH mode expanded (for hover detection)
-                    if (collapseTriggerGO != null) collapseTriggerGO.SetActive(isCollapsed || autoCollapse);
+                    bool showTrigger = isCollapsed || autoCollapse;
+                    if (collapseTriggerGO != null) collapseTriggerGO.SetActive(showTrigger && string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase));
+                    if (collapseTriggerLeftGO != null) collapseTriggerLeftGO.SetActive(showTrigger && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase));
+                    if (collapseTriggerTopGO != null) collapseTriggerTopGO.SetActive(showTrigger && string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase));
 
                     if (isCollapsed)
                     {
@@ -115,9 +135,13 @@ namespace VPB
                         // AH mode: auto-collapse after user stops hovering
                         // Manual hover check for trigger area when it is NOT a raycast target (to avoid blocking scrollbar)
                         bool isHoveringTriggerManual = false;
-                        if (collapseTriggerGO != null)
+                        GameObject activeTrigger = null;
+                        if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) activeTrigger = collapseTriggerLeftGO;
+                        else if (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase)) activeTrigger = collapseTriggerTopGO;
+                        else activeTrigger = collapseTriggerGO;
+                        if (activeTrigger != null)
                         {
-                            RectTransform ctRT = collapseTriggerGO.GetComponent<RectTransform>();
+                            RectTransform ctRT = activeTrigger.GetComponent<RectTransform>();
                             Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null; // Overlay mode uses null cam
                             isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
@@ -127,7 +151,14 @@ namespace VPB
                         if (!isHoveringAny)
                         {
                             collapseTimer += Time.deltaTime;
-                            if (collapseTimer >= 1.0f) // 1 second delay
+                            float delay = 1.0f;
+                            try
+                            {
+                                if (VPBConfig.Instance != null)
+                                    delay = Mathf.Clamp(VPBConfig.Instance.DesktopFixedAutoHideSeconds, 0.1f, 10f);
+                            }
+                            catch { delay = 1.0f; }
+                            if (collapseTimer >= delay)
                             {
                                 SetCollapsed(true);
                             }
@@ -154,17 +185,50 @@ namespace VPB
                     // Always update anchors in Fixed mode to support height toggles and screen resizing
                     RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
                     float leftRatio = VPBConfig.Instance.DesktopCustomWidth;
+                    dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
                     
                     float bottomAnchor = 0f;
-                    if (VPBConfig.Instance.DesktopFixedHeightMode == 1) bottomAnchor = VPBConfig.Instance.DesktopCustomHeight;
+                    if (VPBConfig.Instance.DesktopFixedHeightMode == 1)
+                    {
+                        float raw = VPBConfig.Instance.DesktopCustomHeight;
+                        float clamped = Mathf.Clamp(raw, 0.05f, 0.85f);
+                        bottomAnchor = clamped;
+                        if (Mathf.Abs(raw - clamped) > 0.0001f)
+                        {
+                            VPBConfig.Instance.DesktopCustomHeight = clamped;
+                            try { VPBConfig.Instance.Save(false, true); } catch { }
+                        }
+                    }
 
                     // Show/Hide bottom resize handle based on mode
                     Transform customHandle = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottom");
                     if (customHandle != null)
                     {
-                        bool shouldShow = isFixedLocally;
+                        // Fixed-bottom-left handle: only for Right dock (avoid collisions in Left/Top)
+                        bool shouldShow = isFixedLocally && (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase) || string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase));
                         if (customHandle.gameObject.activeSelf != shouldShow)
                             customHandle.gameObject.SetActive(shouldShow);
+
+                        // Top dock uses this handle for height only (no width change).
+                        try
+                        {
+                            UIAnchorResizer rz = customHandle.GetComponent<UIAnchorResizer>();
+                            if (rz != null)
+                            {
+                                bool top = string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
+                                rz.resizeX = !top;
+                                rz.resizeY = true;
+                            }
+                        }
+                        catch { }
+                    }
+                    Transform customHandleRight = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottomRight");
+                    if (customHandleRight != null)
+                    {
+                        // Fixed-bottom-right handle: only for Left dock
+                        bool shouldShow = isFixedLocally && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase);
+                        if (customHandleRight.gameObject.activeSelf != shouldShow)
+                            customHandleRight.gameObject.SetActive(shouldShow);
                     }
 
                     // Show/Hide generic resize handles based on mode
@@ -187,13 +251,29 @@ namespace VPB
                         if (handleTL.gameObject.activeSelf != shouldShow) handleTL.gameObject.SetActive(shouldShow);
                     }
 
-                    if (bgRT.anchorMin.y != bottomAnchor || bgRT.anchorMin.x != leftRatio)
+                    Vector2 desiredMin, desiredMax;
+                    if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
                     {
-                        bgRT.anchorMin = new Vector2(leftRatio, bottomAnchor);
-                        bgRT.anchorMax = new Vector2(1, 1);
+                        desiredMin = new Vector2(0f, bottomAnchor);
+                        desiredMax = new Vector2(1f - leftRatio, 1f);
+                    }
+                    else if (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase))
+                    {
+                        desiredMin = new Vector2(0f, bottomAnchor);
+                        desiredMax = new Vector2(1f, 1f);
+                    }
+                    else
+                    {
+                        desiredMin = new Vector2(leftRatio, bottomAnchor);
+                        desiredMax = new Vector2(1f, 1f);
+                    }
+
+                    if (bgRT.anchorMin != desiredMin || bgRT.anchorMax != desiredMax)
+                    {
+                        bgRT.anchorMin = desiredMin;
+                        bgRT.anchorMax = desiredMax;
                         bgRT.offsetMin = Vector2.zero;
                         bgRT.offsetMax = Vector2.zero;
-                        bgRT.anchoredPosition = isCollapsed ? new Vector2(bgRT.rect.width, 0) : Vector2.zero;
                         
                         if (collapseTriggerGO != null)
                         {
@@ -211,11 +291,32 @@ namespace VPB
 
                         UpdateSideButtonsVisibility();
                     }
+
+                    // Ensure collapsed offset matches current dock side (dock can change without anchor changes).
+                    if (isCollapsed)
+                    {
+                        Vector2 off;
+                        if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
+                            off = new Vector2(-bgRT.rect.width, 0f);
+                        else if (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase))
+                            off = new Vector2(0f, bgRT.rect.height);
+                        else
+                            off = new Vector2(bgRT.rect.width, 0f);
+                        if (bgRT.anchoredPosition != off) bgRT.anchoredPosition = off;
+                    }
+                    else
+                    {
+                        if (bgRT.anchoredPosition != Vector2.zero) bgRT.anchoredPosition = Vector2.zero;
+                    }
+
+                    // Separate triggers handle chamfer direction; nothing to mirror here.
                 }
                 else
                 {
                     UpdateFooterPaddingForFloatingResizeHandles(true);
                     if (collapseTriggerGO != null) collapseTriggerGO.SetActive(false);
+                    if (collapseTriggerLeftGO != null) collapseTriggerLeftGO.SetActive(false);
+                    if (collapseTriggerTopGO != null) collapseTriggerTopGO.SetActive(false);
                     if (isCollapsed) SetCollapsed(false);
 
                     if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)

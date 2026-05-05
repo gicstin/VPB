@@ -1041,8 +1041,12 @@ namespace VPB
 
         public bool isFixedLocally = false;
         private bool isCollapsed = false;
-        private GameObject collapseTriggerGO;
+        private GameObject collapseTriggerGO; // Right dock
         private Text collapseHandleText;
+        private GameObject collapseTriggerLeftGO;
+        private Text collapseHandleLeftText;
+        private GameObject collapseTriggerTopGO;
+        private Text collapseHandleTopText;
         private float collapseTimer = 0f;
         private bool isHoveringTrigger = false;
         private Camera _cachedCamera;
@@ -1072,6 +1076,13 @@ namespace VPB
         private GameObject footerHeightBtn;
         private Text footerHeightBtnText;
         private Image footerHeightBtnImage;
+
+        private GameObject footerDockBtn;
+        private Image footerDockBtnImage;
+        private Image footerDockIconImage;
+        private Sprite footerDockRightSprite;
+        private Sprite footerDockLeftSprite;
+        private Sprite footerDockTopSprite;
 
         private GameObject footerAutoHideBtn;
         private Text footerAutoHideBtnText;

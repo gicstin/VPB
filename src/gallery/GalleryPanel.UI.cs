@@ -1096,6 +1096,14 @@ namespace VPB
             footerLayoutListSprite = UI.LoadIconSprite("vpb_icons/layout_list.png", UI.BarIconGlyphTint);
             { Sprite init = footerLayoutListSprite ?? footerLayoutGridSprite; if (init != null) { UI.AddIconToButton(footerLayoutBtn, init); footerLayoutIconImage = footerLayoutBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
+            footerDockBtn = UI.CreateUIButton(rightSection, 40, 40, "", 20, 0, 0, AnchorPresets.middleCenter, CycleDesktopFixedDockSide);
+            footerDockBtnImage = footerDockBtn.GetComponent<Image>();
+            footerDockRightSprite = UI.LoadIconSprite("vpb_icons/anchor_right.png", UI.BarIconGlyphTint);
+            footerDockLeftSprite  = UI.LoadIconSprite("vpb_icons/anchor_left.png",  UI.BarIconGlyphTint);
+            footerDockTopSprite   = UI.LoadIconSprite("vpb_icons/anchor_top.png",   UI.BarIconGlyphTint);
+            { Sprite init = footerDockRightSprite ?? footerDockLeftSprite ?? footerDockTopSprite; if (init != null) { UI.AddIconToButton(footerDockBtn, init); footerDockIconImage = footerDockBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+            AddTooltipPlain(footerDockBtn, "Dock side (Left/Right/Top)");
+
             footerHeightBtn = UI.CreateUIButton(rightSection, 40, 40, "↕", 20, 0, 0, AnchorPresets.middleCenter, ToggleFixedHeightMode);
             footerHeightBtnImage = footerHeightBtn.GetComponent<Image>();
             footerHeightBtnText = footerHeightBtn.GetComponentInChildren<Text>();
@@ -1149,6 +1157,7 @@ namespace VPB
             AddHoverDelegate(footerFollowDistanceBtn);
             AddHoverDelegate(footerFollowHeightBtn);
             AddHoverDelegate(footerLayoutBtn);
+            AddHoverDelegate(footerDockBtn);
             AddHoverDelegate(footerHeightBtn);
             AddHoverDelegate(footerShowHiddenPackagesBtn);
             AddHoverDelegate(footerAutoHideBtn);
@@ -2223,12 +2232,30 @@ namespace VPB
             if (footerFollowAngleBtn != null) footerFollowAngleBtn.SetActive(!fixedMode);
             if (footerFollowDistanceBtn != null) footerFollowDistanceBtn.SetActive(!fixedMode);
             if (footerFollowHeightBtn != null) footerFollowHeightBtn.SetActive(!fixedMode);
+            if (footerDockBtn != null) footerDockBtn.SetActive(fixedMode);
             if (footerHeightBtn != null) footerHeightBtn.SetActive(fixedMode);
             if (footerAutoHideBtn != null) footerAutoHideBtn.SetActive(fixedMode);
 
             SyncSideFollowRailButtonsVisibility();
 
             UpdateSideButtonPositions();
+            UpdateFooterDockButtonState();
+        }
+
+        private void UpdateFooterDockButtonState()
+        {
+            if (footerDockIconImage == null || VPBConfig.Instance == null) return;
+            string side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
+            try
+            {
+                if (VPBConfig.Instance.DesktopFixedEnforceDockSide)
+                    side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedEnforcedDockSide);
+            }
+            catch { }
+            Sprite spr = footerDockRightSprite;
+            if (string.Equals(side, "Left", StringComparison.OrdinalIgnoreCase)) spr = footerDockLeftSprite;
+            else if (string.Equals(side, "Top", StringComparison.OrdinalIgnoreCase)) spr = footerDockTopSprite;
+            if (spr != null) footerDockIconImage.sprite = spr;
         }
 
         /// <summary>Camera-follow is only meaningful when the panel is not fixed; hide side-rail follow controls in fixed mode.</summary>
@@ -2506,6 +2533,11 @@ namespace VPB
 
         private void ToggleDesktopMode()
         {
+            ToggleDesktopModeWithDockHint(null);
+        }
+
+        private void ToggleDesktopModeWithDockHint(string dockSideOrNull)
+        {
             if (VPBConfig.Instance == null) return;
 
             bool isVR = false;
@@ -2515,33 +2547,74 @@ namespace VPB
                 if (isFixedLocally) SetFixedLocally(false);
                 return;
             }
-            
-            bool targetFixed = !isFixedLocally;
-            
-            if (targetFixed)
-            {
-                // Only one can be fixed. Revert others.
-                if (Gallery.singleton != null)
-                {
-                    foreach (var p in Gallery.singleton.Panels)
-                    {
-                        if (p != this) p.SetFixedLocally(false);
-                    }
-                }
-                isFixedLocally = true;
-                VPBConfig.Instance.DesktopFixedMode = true;
-            }
-            else
+
+            // Fixed/Floating button must be a pure toggle.
+            // Dock side switching handled by footer dock toggle + settings enforcement, not by which side rail was clicked.
+            if (isFixedLocally)
             {
                 isFixedLocally = false;
                 VPBConfig.Instance.DesktopFixedMode = false;
+                VPBConfig.Instance.Save();
+                UpdateDesktopModeButton();
+                try { UpdateSpringScrollButtonToggleUI(); } catch { }
+                UpdateLayout();
+                try { SyncCategoryQuickSwitchChrome(); } catch { }
+                return;
             }
+
+            string hint = dockSideOrNull;
+            if (!string.IsNullOrEmpty(hint))
+                hint = VPBConfig.NormalizeDesktopFixedDockSide(hint);
+
+            string desiredDock = null;
+            try
+            {
+                if (VPBConfig.Instance.DesktopFixedEnforceDockSide)
+                    desiredDock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedEnforcedDockSide);
+            }
+            catch { desiredDock = null; }
+            if (string.IsNullOrEmpty(desiredDock))
+            {
+                desiredDock = !string.IsNullOrEmpty(hint)
+                    ? hint
+                    : VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDefaultDockSide);
+            }
+
+            // Only one can be fixed. Revert others.
+            if (Gallery.singleton != null)
+            {
+                foreach (var p in Gallery.singleton.Panels)
+                {
+                    if (p != this) p.SetFixedLocally(false);
+                }
+            }
+            isFixedLocally = true;
+            VPBConfig.Instance.DesktopFixedMode = true;
+            VPBConfig.Instance.DesktopFixedDockSide = desiredDock;
             
             VPBConfig.Instance.Save();
             UpdateDesktopModeButton();
             try { UpdateSpringScrollButtonToggleUI(); } catch { }
             UpdateLayout();
             try { SyncCategoryQuickSwitchChrome(); } catch { }
+        }
+
+        private void CycleDesktopFixedDockSide()
+        {
+            if (VPBConfig.Instance == null) return;
+            if (!isFixedLocally) return;
+            bool enforce = false;
+            try { enforce = VPBConfig.Instance.DesktopFixedEnforceDockSide; } catch { enforce = false; }
+            string cur = VPBConfig.NormalizeDesktopFixedDockSide(enforce ? VPBConfig.Instance.DesktopFixedEnforcedDockSide : VPBConfig.Instance.DesktopFixedDockSide);
+            string next = "Right";
+            if (string.Equals(cur, "Right", StringComparison.OrdinalIgnoreCase)) next = "Left";
+            else if (string.Equals(cur, "Left", StringComparison.OrdinalIgnoreCase)) next = "Top";
+            else if (string.Equals(cur, "Top", StringComparison.OrdinalIgnoreCase)) next = "Right";
+            if (enforce) VPBConfig.Instance.DesktopFixedEnforcedDockSide = next;
+            VPBConfig.Instance.DesktopFixedDockSide = next;
+            VPBConfig.Instance.Save(true, true);
+            UpdateFooterDockButtonState();
+            UpdateLayout();
         }
 
         public void SetFixedLocally(bool fixedMode)
@@ -2574,22 +2647,36 @@ namespace VPB
             if (backgroundBoxGO != null)
             {
                 RectTransform rt = backgroundBoxGO.GetComponent<RectTransform>();
-                rt.anchoredPosition = collapsed ? new Vector2(rt.rect.width, 0) : Vector2.zero;
+                Vector2 off = Vector2.zero;
+                if (collapsed && VPBConfig.Instance != null)
+                {
+                    string side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
+                    if (string.Equals(side, "Left", StringComparison.OrdinalIgnoreCase))
+                        off = new Vector2(-rt.rect.width, 0f);
+                    else if (string.Equals(side, "Top", StringComparison.OrdinalIgnoreCase))
+                        off = new Vector2(0f, rt.rect.height);
+                    else
+                        off = new Vector2(rt.rect.width, 0f);
+                }
+                rt.anchoredPosition = collapsed ? off : Vector2.zero;
             }
 
-            if (collapseTriggerGO != null)
+            string dock = VPBConfig.Instance != null ? VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide) : "Right";
+            GameObject activeTrigger = string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) ? collapseTriggerLeftGO
+                : (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase) ? collapseTriggerTopGO : collapseTriggerGO);
+            Text activeText = string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) ? collapseHandleLeftText
+                : (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase) ? collapseHandleTopText : collapseHandleText);
+
+            if (activeTrigger != null)
             {
-                Image img = collapseTriggerGO.GetComponent<Image>();
-                if (img != null) 
+                Image img = activeTrigger.GetComponent<Image>();
+                if (img != null)
                 {
                     img.color = collapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
                     img.raycastTarget = collapsed;
                 }
             }
-            if (collapseHandleText != null)
-            {
-                collapseHandleText.gameObject.SetActive(collapsed);
-            }
+            if (activeText != null) activeText.gameObject.SetActive(collapsed);
             
             UpdateSideButtonsVisibility();
             UpdateLayout();

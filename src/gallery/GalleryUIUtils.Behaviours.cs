@@ -279,6 +279,10 @@ namespace VPB
         public bool deferred = false;
         public bool resizeX = false;
         public bool resizeY = true;
+        /// <summary>When true with <see cref="resizeX"/>, writes X to <see cref="RectTransform.anchorMax"/> instead of anchorMin.</summary>
+        public bool resizeAnchorMaxX = false;
+        /// <summary>When true with <see cref="resizeY"/>, writes Y to <see cref="RectTransform.anchorMax"/> instead of anchorMin.</summary>
+        public bool resizeAnchorMaxY = false;
         public float minAnchorX = 0.05f;
         public float maxAnchorX = 0.95f;
         public float minAnchorY = 0.05f;
@@ -287,7 +291,8 @@ namespace VPB
         public UnityAction<Vector2> onResizedVec2;
         public UnityAction<bool> onResizeStatusChange;
         private Camera dragCam;
-        private Vector2 currentAnchors;
+        private Vector2 currentAnchorsMin;
+        private Vector2 currentAnchorsMax;
 
         public void OnBeginDrag(PointerEventData eventData)
         {
@@ -300,7 +305,11 @@ namespace VPB
             else
                 dragCam = eventData.pressEventCamera ?? Camera.main;
 
-            if (target != null) currentAnchors = target.anchorMin;
+            if (target != null)
+            {
+                currentAnchorsMin = target.anchorMin;
+                currentAnchorsMax = target.anchorMax;
+            }
             if (previewTarget != null) 
             {
                 previewTarget.gameObject.SetActive(true);
@@ -317,9 +326,18 @@ namespace VPB
         {
             if (deferred && target != null)
             {
-                target.anchorMin = currentAnchors;
-                if (onResized != null && resizeY) onResized(currentAnchors.y);
-                if (onResizedVec2 != null) onResizedVec2(currentAnchors);
+                if (resizeX || resizeY)
+                {
+                    if (resizeX && !resizeAnchorMaxX) target.anchorMin = new Vector2(currentAnchorsMin.x, target.anchorMin.y);
+                    if (resizeY && !resizeAnchorMaxY) target.anchorMin = new Vector2(target.anchorMin.x, currentAnchorsMin.y);
+                    if (resizeX && resizeAnchorMaxX) target.anchorMax = new Vector2(currentAnchorsMax.x, target.anchorMax.y);
+                    if (resizeY && resizeAnchorMaxY) target.anchorMax = new Vector2(target.anchorMax.x, currentAnchorsMax.y);
+                }
+
+                if (onResized != null && resizeY)
+                    onResized(resizeAnchorMaxY ? currentAnchorsMax.y : currentAnchorsMin.y);
+                if (onResizedVec2 != null)
+                    onResizedVec2(resizeAnchorMaxX || resizeAnchorMaxY ? currentAnchorsMax : currentAnchorsMin);
             }
 
             if (previewTarget != null) previewTarget.gameObject.SetActive(false);
@@ -334,17 +352,29 @@ namespace VPB
 
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, dragCam, out Vector2 localMouse))
             {
-                Vector2 newAnchors = currentAnchors;
                 bool changed = false;
+                Vector2 newMin = currentAnchorsMin;
+                Vector2 newMax = currentAnchorsMax;
 
                 if (resizeX && parentRect.rect.width > 0)
                 {
                     float ratioX = (localMouse.x - parentRect.rect.xMin) / parentRect.rect.width;
                     ratioX = Mathf.Clamp(ratioX, minAnchorX, maxAnchorX);
-                    if (newAnchors.x != ratioX)
+                    if (resizeAnchorMaxX)
                     {
-                        newAnchors.x = ratioX;
-                        changed = true;
+                        if (newMax.x != ratioX)
+                        {
+                            newMax.x = ratioX;
+                            changed = true;
+                        }
+                    }
+                    else
+                    {
+                        if (newMin.x != ratioX)
+                        {
+                            newMin.x = ratioX;
+                            changed = true;
+                        }
                     }
                 }
 
@@ -352,27 +382,43 @@ namespace VPB
                 {
                     float ratioY = (localMouse.y - parentRect.rect.yMin) / parentRect.rect.height;
                     ratioY = Mathf.Clamp(ratioY, minAnchorY, maxAnchorY);
-                    if (newAnchors.y != ratioY)
+                    if (resizeAnchorMaxY)
                     {
-                        newAnchors.y = ratioY;
-                        changed = true;
+                        if (newMax.y != ratioY)
+                        {
+                            newMax.y = ratioY;
+                            changed = true;
+                        }
+                    }
+                    else
+                    {
+                        if (newMin.y != ratioY)
+                        {
+                            newMin.y = ratioY;
+                            changed = true;
+                        }
                     }
                 }
                 
                 if (changed)
                 {
-                    currentAnchors = newAnchors;
+                    currentAnchorsMin = newMin;
+                    currentAnchorsMax = newMax;
                     
                     if (previewTarget != null)
                     {
-                        previewTarget.anchorMin = newAnchors;
+                        previewTarget.anchorMin = newMin;
+                        previewTarget.anchorMax = newMax;
                     }
 
                     if (!deferred)
                     {
-                        target.anchorMin = newAnchors;
-                        if (onResized != null && resizeY) onResized(newAnchors.y);
-                        if (onResizedVec2 != null) onResizedVec2(newAnchors);
+                        target.anchorMin = newMin;
+                        target.anchorMax = newMax;
+                        if (onResized != null && resizeY)
+                            onResized(resizeAnchorMaxY ? newMax.y : newMin.y);
+                        if (onResizedVec2 != null)
+                            onResizedVec2(resizeAnchorMaxX || resizeAnchorMaxY ? newMax : newMin);
                     }
                 }
             }

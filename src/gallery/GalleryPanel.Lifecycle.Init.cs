@@ -120,9 +120,22 @@ namespace VPB
                 RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
                 float leftRatio = VPBConfig.Instance.DesktopCustomWidth;
                 float bottomAnchor = (VPBConfig.Instance.DesktopFixedHeightMode == 1) ? VPBConfig.Instance.DesktopCustomHeight : 0f;
-
-                bgRT.anchorMin = new Vector2(leftRatio, bottomAnchor);
-                bgRT.anchorMax = new Vector2(1, 1);
+                string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
+                if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
+                {
+                    bgRT.anchorMin = new Vector2(0f, bottomAnchor);
+                    bgRT.anchorMax = new Vector2(1f - leftRatio, 1f);
+                }
+                else if (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase))
+                {
+                    bgRT.anchorMin = new Vector2(0f, bottomAnchor);
+                    bgRT.anchorMax = new Vector2(1f, 1f);
+                }
+                else
+                {
+                    bgRT.anchorMin = new Vector2(leftRatio, bottomAnchor);
+                    bgRT.anchorMax = new Vector2(1f, 1f);
+                }
                 bgRT.offsetMin = Vector2.zero;
                 bgRT.offsetMax = Vector2.zero;
 
@@ -130,48 +143,93 @@ namespace VPB
                 {
                     // Use a safe default width if layout hasn't run yet
                     float w = bgRT.rect.width > 0 ? bgRT.rect.width : 1200f;
-                    bgRT.anchoredPosition = new Vector2(w, 0);
+                    float h = bgRT.rect.height > 0 ? bgRT.rect.height : 800f;
+                    if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
+                        bgRT.anchoredPosition = new Vector2(-w, 0f);
+                    else if (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase))
+                        bgRT.anchoredPosition = new Vector2(0f, h);
+                    else
+                        bgRT.anchoredPosition = new Vector2(w, 0f);
                 }
             }
             
-            // Collapse Trigger Area (Right edge) - 60% height, centered, 60px wide, chamfered corners
-            collapseTriggerGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchRight, 60, 0, Vector2.zero, 100f);
-            RectTransform ctRT = collapseTriggerGO.GetComponent<RectTransform>();
-            ctRT.anchorMin = new Vector2(1, 0.2f);
-            ctRT.anchorMax = new Vector2(1, 0.8f);
-            collapseTriggerGO.name = "FixedModeCollapseTrigger";
-            
-            GameObject ctTextGO = new GameObject("Text");
-            ctTextGO.transform.SetParent(collapseTriggerGO.transform, false);
-            collapseHandleText = ctTextGO.AddComponent<Text>();
-            VPBUiFont.ApplyTo(collapseHandleText);
-            collapseHandleText.text = "<";
-            collapseHandleText.fontSize = 30;
-            collapseHandleText.color = new Color(1, 1, 1, 0.5f);
-            collapseHandleText.alignment = TextAnchor.MiddleCenter;
-            RectTransform ctTextRT = ctTextGO.GetComponent<RectTransform>();
-            ctTextRT.anchorMin = Vector2.zero;
-            ctTextRT.anchorMax = Vector2.one;
-            ctTextRT.sizeDelta = Vector2.zero;
-
-            var ctHover = collapseTriggerGO.AddComponent<UIHoverDelegate>();
-            ctHover.OnHoverChange += (enter) => {
-                isHoveringTrigger = enter;
-            };
-            collapseTriggerGO.SetActive(isFixedLocally); // active in fixed mode; visual state controlled by isCollapsed
-            if (isFixedLocally)
+            void InitCollapseTrigger(GameObject go, out Text outText, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta, string arrowText, ChamferedRect.ChamferSide chamferSide)
             {
-                Image img = collapseTriggerGO.GetComponent<Image>();
-                if (img != null)
+                go.name = name;
+                RectTransform rt = go.GetComponent<RectTransform>();
+                rt.anchorMin = anchorMin;
+                rt.anchorMax = anchorMax;
+                rt.pivot = pivot;
+                rt.anchoredPosition = Vector2.zero;
+                rt.sizeDelta = sizeDelta;
+                var ch = go.GetComponent<ChamferedRect>();
+                if (ch != null) ch.chamferSide = chamferSide;
+
+                GameObject tgo = new GameObject("Text");
+                tgo.transform.SetParent(go.transform, false);
+                Text t = tgo.AddComponent<Text>();
+                VPBUiFont.ApplyTo(t);
+                t.text = arrowText;
+                t.fontSize = 30;
+                t.color = new Color(1, 1, 1, 0.5f);
+                t.alignment = TextAnchor.MiddleCenter;
+                RectTransform trt = tgo.GetComponent<RectTransform>();
+                trt.anchorMin = Vector2.zero;
+                trt.anchorMax = Vector2.one;
+                trt.sizeDelta = Vector2.zero;
+                outText = t;
+
+                var hov = go.AddComponent<UIHoverDelegate>();
+                hov.OnHoverChange += (enter) =>
                 {
-                    img.color = isCollapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
-                    img.raycastTarget = isCollapsed;
-                }
-                if (collapseHandleText != null)
-                {
-                    collapseHandleText.gameObject.SetActive(isCollapsed);
-                }
+                    if (go.activeInHierarchy) isHoveringTrigger = enter;
+                };
             }
+
+            // Collapse Trigger Areas (Right/Left/Top) — separate GOs so chamfer always correct
+            collapseTriggerGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchRight, 60, 0, Vector2.zero, 100f);
+            InitCollapseTrigger(
+                collapseTriggerGO,
+                out collapseHandleText,
+                "FixedModeCollapseTrigger_Right",
+                new Vector2(1f, 0.2f),
+                new Vector2(1f, 0.8f),
+                new Vector2(1f, 0.5f),
+                new Vector2(60f, 0f),
+                "<",
+                ChamferedRect.ChamferSide.Left
+            );
+
+            collapseTriggerLeftGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchLeft, 60, 0, Vector2.zero, 100f);
+            InitCollapseTrigger(
+                collapseTriggerLeftGO,
+                out collapseHandleLeftText,
+                "FixedModeCollapseTrigger_Left",
+                new Vector2(0f, 0.2f),
+                new Vector2(0f, 0.8f),
+                new Vector2(0f, 0.5f),
+                new Vector2(60f, 0f),
+                ">",
+                ChamferedRect.ChamferSide.Right
+            );
+
+            collapseTriggerTopGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.hStretchTop, 0, 60, Vector2.zero, 100f);
+            InitCollapseTrigger(
+                collapseTriggerTopGO,
+                out collapseHandleTopText,
+                "FixedModeCollapseTrigger_Top",
+                new Vector2(0.2f, 1f),
+                new Vector2(0.8f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, 60f),
+                "˅",
+                ChamferedRect.ChamferSide.Bottom
+            );
+
+            // Active in fixed mode; runtime selects which one based on dock side
+            collapseTriggerGO.SetActive(false);
+            if (collapseTriggerLeftGO != null) collapseTriggerLeftGO.SetActive(false);
+            if (collapseTriggerTopGO != null) collapseTriggerTopGO.SetActive(false);
             
             dragger = backgroundBoxGO.AddComponent<UIDraggable>();
             dragger.target = canvasGO.transform;
@@ -1134,7 +1192,7 @@ namespace VPB
                 // Fixed/Floating (Topmost) — square icon; sprite matches next toggle action (see UpdateDesktopModeButton)
                 float deskW = (galleryFloatSprite != null || galleryFixedSprite != null) ? sideIconBtn : btnWidth;
                 float deskH = (galleryFloatSprite != null || galleryFixedSprite != null) ? sideIconBtn : btnHeight;
-                GameObject rightDesktopBtn = UI.CreateUIButton(rightSideContainer, deskW, deskH, " ", 8, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
+                GameObject rightDesktopBtn = UI.CreateUIButton(rightSideContainer, deskW, deskH, " ", 8, 0, startY, AnchorPresets.centre, () => ToggleDesktopModeWithDockHint("Right"));
                 rightDesktopModeBtnImage = rightDesktopBtn.GetComponent<Image>();
                 rightDesktopModeBtnText = rightDesktopBtn.GetComponentInChildren<Text>(true);
                 {
@@ -1648,7 +1706,7 @@ namespace VPB
 
                 // Left Toggle Buttons (same 50×50 icon row as right; sprites already loaded above)
                 // Fixed/Floating (Topmost)
-                GameObject leftDesktopBtn = UI.CreateUIButton(leftSideContainer, deskW, deskH, " ", 8, 0, startY, AnchorPresets.centre, ToggleDesktopMode);
+                GameObject leftDesktopBtn = UI.CreateUIButton(leftSideContainer, deskW, deskH, " ", 8, 0, startY, AnchorPresets.centre, () => ToggleDesktopModeWithDockHint("Left"));
                 leftDesktopModeBtnImage = leftDesktopBtn.GetComponent<Image>();
                 leftDesktopModeBtnText = leftDesktopBtn.GetComponentInChildren<Text>(true);
                 {

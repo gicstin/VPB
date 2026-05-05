@@ -31,21 +31,32 @@ namespace VPB
             if (VPBConfig.Instance == null) return;
             string mode = VPBConfig.Instance.ShowSideButtons;
             bool fixedMode = isFixedLocally;
+            string dock = "Right";
+            try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Right"; }
 
             if (leftSideContainer != null) 
             {
                 if (isCollapsed) leftSideContainer.SetActive(false);
-                else leftSideContainer.SetActive(mode == "Both" || mode == "Left");
+                else if (fixedMode && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
+                    leftSideContainer.SetActive(false);
+                else
+                    leftSideContainer.SetActive(mode == "Both" || mode == "Left");
             }
             
             if (rightSideContainer != null) 
             {
-                if (fixedMode || isCollapsed) rightSideContainer.SetActive(false);
-                else rightSideContainer.SetActive(mode == "Both" || mode == "Right");
+                if (isCollapsed) rightSideContainer.SetActive(false);
+                else if (fixedMode)
+                    rightSideContainer.SetActive(string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) && (mode == "Both" || mode == "Right"));
+                else
+                    rightSideContainer.SetActive(mode == "Both" || mode == "Right");
             }
 
             bool showLeftSide = !isCollapsed && (mode == "Both" || mode == "Left");
-            bool showRightSide = !fixedMode && !isCollapsed && (mode == "Both" || mode == "Right");
+            if (fixedMode && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) showLeftSide = false;
+
+            bool showRightSide = !isCollapsed && (mode == "Both" || mode == "Right");
+            if (fixedMode && !string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) showRightSide = false;
 
             if (leftClearCreatorBtn != null) leftClearCreatorBtn.SetActive(showLeftSide && !string.IsNullOrEmpty(currentCreator));
             if (rightClearCreatorBtn != null) rightClearCreatorBtn.SetActive(showRightSide && !string.IsNullOrEmpty(currentCreator));

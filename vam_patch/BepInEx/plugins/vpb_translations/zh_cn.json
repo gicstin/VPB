@@ -412,5 +412,14 @@
   "gallery.tbox.filter_back": "返回",
   "gallery.tbox.filter_clear": "清除",
   "gallery.tooltip.filter_back": "返回",
-  "gallery.tooltip.filter_clear": "清除筛选"
+  "gallery.tooltip.filter_clear": "清除筛选",
+
+  "settings.desktop.fixed_auto_hide_seconds": "固定自动隐藏延迟（秒）",
+  "settings.tip.desktop.fixed_auto_hide_seconds": "桌面固定模式：鼠标离开面板后，等待多少秒再自动隐藏。",
+  "settings.desktop.fixed_default_dock": "固定停靠默认位置",
+  "settings.tip.desktop.fixed_default_dock": "切换到固定模式时使用的默认停靠方向。",
+  "settings.desktop.fixed_enforce_dock": "始终强制固定停靠方向",
+  "settings.tip.desktop.fixed_enforce_dock": "开启后，无论点击哪个锚点按钮，都使用强制方向。",
+  "settings.desktop.fixed_enforce_dock_side": "强制停靠方向",
+  "settings.tip.desktop.fixed_enforce_dock_side": "启用强制后使用的停靠方向。"
 }

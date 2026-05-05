@@ -144,6 +144,18 @@
         "IsDirectory":  true
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/anchor_left.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/anchor_right.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/anchor_top.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/arrow_left.png",
         "IsDirectory":  false
     },

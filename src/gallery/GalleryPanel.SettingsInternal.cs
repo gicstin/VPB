@@ -348,6 +348,44 @@ namespace VPB
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableAutoFixedGallery,
                 SetBool = v => { VPBConfig.Instance.EnableAutoFixedGallery = v; VPBConfig.Instance.TriggerChange(); }
             });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.fixedAutoHideSeconds", GroupKey = "desktop", Label = VPBTranslation.T("settings.desktop.fixed_auto_hide_seconds", "Fixed auto-hide delay (s)"),
+                Tooltip = VPBTranslation.T("settings.tip.desktop.fixed_auto_hide_seconds", "Seconds cursor must be outside pane before auto-hide collapses (Desktop fixed mode)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.DesktopFixedAutoHideSeconds,
+                SetFloat = v => {
+                    VPBConfig.Instance.DesktopFixedAutoHideSeconds = Mathf.Clamp(v, 0.1f, 10f);
+                    try { VPBConfig.Instance.Save(false, true); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                },
+                Min = 0.1f, Max = 10f, Step = 0.1f, Decimals = 1,
+                RowVisible = () => VPBConfig.Instance != null && !VPBConfig.Instance.IsVR
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.fixedDefaultDock", GroupKey = "desktop", Label = VPBTranslation.T("settings.desktop.fixed_default_dock", "Fixed dock default"),
+                Tooltip = VPBTranslation.T("settings.tip.desktop.fixed_default_dock", "Default dock side when switching to fixed mode."),
+                ControlType = InternalSettingControlType.Cycle, Options = new [] { "Left", "Right", "Top" },
+                GetString = () => VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDefaultDockSide),
+                SetString = v => { VPBConfig.Instance.DesktopFixedDefaultDockSide = VPBConfig.NormalizeDesktopFixedDockSide(v); VPBConfig.Instance.TriggerChange(); }
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.fixedEnforceDockEnabled", GroupKey = "desktop", Label = VPBTranslation.T("settings.desktop.fixed_enforce_dock", "Always enforce fixed dock side"),
+                Tooltip = VPBTranslation.T("settings.tip.desktop.fixed_enforce_dock", "When enabled, dock side ignores which anchor button you click."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.DesktopFixedEnforceDockSide,
+                SetBool = v => { VPBConfig.Instance.DesktopFixedEnforceDockSide = v; VPBConfig.Instance.TriggerChange(); }
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "desktop.fixedEnforceDockSide", GroupKey = "desktop", Label = VPBTranslation.T("settings.desktop.fixed_enforce_dock_side", "Enforced fixed dock side"),
+                Tooltip = VPBTranslation.T("settings.tip.desktop.fixed_enforce_dock_side", "Dock side used while enforcement is enabled."),
+                ControlType = InternalSettingControlType.Cycle, Options = new [] { "Left", "Right", "Top" },
+                GetString = () => VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedEnforcedDockSide),
+                SetString = v => { VPBConfig.Instance.DesktopFixedEnforcedDockSide = VPBConfig.NormalizeDesktopFixedDockSide(v); VPBConfig.Instance.DesktopFixedDockSide = VPBConfig.Instance.DesktopFixedEnforcedDockSide; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedEnforceDockSide
+            });
             defs.Add(new InternalSettingDefinition {
                 Key = "desktop.initialCategory", GroupKey = "desktop", Label = VPBTranslation.T("settings.initial_gallery_category", "Gallery opens on"),
                 Tooltip = VPBTranslation.T("settings.tip.initial_gallery_category", "Which category is shown when gallery opens."),

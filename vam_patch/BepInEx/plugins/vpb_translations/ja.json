@@ -404,5 +404,14 @@
   "gallery.tbox.filter_back": "戻る",
   "gallery.tbox.filter_clear": "クリア",
   "gallery.tooltip.filter_back": "戻る",
-  "gallery.tooltip.filter_clear": "フィルターを解除"
+  "gallery.tooltip.filter_clear": "フィルターを解除",
+
+  "settings.desktop.fixed_auto_hide_seconds": "固定 自動非表示 遅延 (秒)",
+  "settings.tip.desktop.fixed_auto_hide_seconds": "固定モード(デスクトップ)で、カーソルがパネル外に出てから自動非表示になるまでの秒数。",
+  "settings.desktop.fixed_default_dock": "固定 ドック 既定",
+  "settings.tip.desktop.fixed_default_dock": "固定モードに切り替えたときの既定ドック位置。",
+  "settings.desktop.fixed_enforce_dock": "固定 ドック強制",
+  "settings.tip.desktop.fixed_enforce_dock": "有効時、どのアンカーボタンを押してもドック位置を強制します。",
+  "settings.desktop.fixed_enforce_dock_side": "強制 ドック位置",
+  "settings.tip.desktop.fixed_enforce_dock_side": "ドック強制が有効な間に使う位置。"
 }

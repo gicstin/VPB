@@ -325,6 +325,16 @@ namespace VPB
         }
         public bool DesktopFixedMode = false;
         public bool DesktopFixedAutoCollapse = true;
+        /// <summary>Seconds pointer must be outside fixed pane before auto-collapse (when DesktopFixedAutoCollapse is on).</summary>
+        public float DesktopFixedAutoHideSeconds = 1.0f;
+        /// <summary>Desktop fixed gallery dock edge: Right (default), Left, or Top.</summary>
+        public string DesktopFixedDockSide = "Right";
+        /// <summary>Default dock side when entering fixed mode.</summary>
+        public string DesktopFixedDefaultDockSide = "Right";
+        /// <summary>When true, fixed-mode docking always uses <see cref="DesktopFixedEnforcedDockSide"/> regardless of which dock button was clicked.</summary>
+        public bool DesktopFixedEnforceDockSide = false;
+        /// <summary>Dock side used when <see cref="DesktopFixedEnforceDockSide"/> is true.</summary>
+        public string DesktopFixedEnforcedDockSide = "Right";
         public int DesktopFixedHeightMode = 0; // 0: Full, 1: Custom
         public float DesktopCustomHeight = 0.5f;
         public float DesktopCustomWidth = 1.618f / 2.618f;
@@ -505,6 +515,11 @@ namespace VPB
             InitialGalleryCategory = "Scenes";
             DesktopFixedMode = false;
             DesktopFixedAutoCollapse = true;
+            DesktopFixedAutoHideSeconds = 1.0f;
+            DesktopFixedDockSide = "Right";
+            DesktopFixedDefaultDockSide = "Right";
+            DesktopFixedEnforceDockSide = false;
+            DesktopFixedEnforcedDockSide = "Right";
             DesktopFixedHeightMode = 0;
             DesktopCustomHeight = 0.5f;
             DesktopCustomWidth = 1.618f / 2.618f;
@@ -606,6 +621,11 @@ namespace VPB
                             GalleryDefaultRightSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultRightSidePanel"].Value);
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
+                        if (node["DesktopFixedAutoHideSeconds"] != null) DesktopFixedAutoHideSeconds = node["DesktopFixedAutoHideSeconds"].AsFloat;
+                        if (node["DesktopFixedDockSide"] != null) DesktopFixedDockSide = NormalizeDesktopFixedDockSide(node["DesktopFixedDockSide"].Value);
+                        if (node["DesktopFixedDefaultDockSide"] != null) DesktopFixedDefaultDockSide = NormalizeDesktopFixedDockSide(node["DesktopFixedDefaultDockSide"].Value);
+                        if (node["DesktopFixedEnforceDockSide"] != null) DesktopFixedEnforceDockSide = node["DesktopFixedEnforceDockSide"].AsBool;
+                        if (node["DesktopFixedEnforcedDockSide"] != null) DesktopFixedEnforcedDockSide = NormalizeDesktopFixedDockSide(node["DesktopFixedEnforcedDockSide"].Value);
                         if (node["DesktopFixedHeightMode"] != null) DesktopFixedHeightMode = node["DesktopFixedHeightMode"].AsInt;
                         if (node["DesktopCustomHeight"] != null) DesktopCustomHeight = node["DesktopCustomHeight"].AsFloat;
                         if (node["DesktopCustomWidth"] != null) DesktopCustomWidth = node["DesktopCustomWidth"].AsFloat;
@@ -729,6 +749,15 @@ namespace VPB
                         if (Mathf.Abs(SideButtonScaleDesktop - sbsDesk) > 0.0001f) { SideButtonScaleDesktop = sbsDesk; changed = true; }
                         if (Mathf.Abs(InnerPaneScaleVR - ipsVr) > 0.0001f) { InnerPaneScaleVR = ipsVr; changed = true; }
                         if (Mathf.Abs(InnerPaneScaleDesktop - ipsDesk) > 0.0001f) { InnerPaneScaleDesktop = ipsDesk; changed = true; }
+
+                        // Migration/validation: clamp fixed-mode anchors so panel never becomes unusably tiny.
+                        // Prevents "stuck" desktop UI when DesktopCustomHeight/Width are out of range.
+                        float w = ClampDesktopFixedAnchor01(DesktopCustomWidth, 0.05f, 0.85f, 1.618f / 2.618f);
+                        float h = ClampDesktopFixedAnchor01(DesktopCustomHeight, 0.05f, 0.85f, 0.5f);
+                        if (Mathf.Abs(DesktopCustomWidth - w) > 0.0001f) { DesktopCustomWidth = w; changed = true; }
+                        if (Mathf.Abs(DesktopCustomHeight - h) > 0.0001f) { DesktopCustomHeight = h; changed = true; }
+                        float ah = ClampDesktopFixedAnchor01(DesktopFixedAutoHideSeconds, 0.1f, 10f, 1.0f);
+                        if (Mathf.Abs(DesktopFixedAutoHideSeconds - ah) > 0.0001f) { DesktopFixedAutoHideSeconds = ah; changed = true; }
                         if (changed)
                         {
                             // Persist without notifying listeners; load-time UI will read clamped values.
@@ -830,6 +859,11 @@ namespace VPB
                 node["GalleryDefaultRightSidePanel"] = GalleryDefaultRightSidePanel;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
+                node["DesktopFixedAutoHideSeconds"].AsFloat = Mathf.Clamp(DesktopFixedAutoHideSeconds, 0.1f, 10f);
+                node["DesktopFixedDockSide"] = NormalizeDesktopFixedDockSide(DesktopFixedDockSide);
+                node["DesktopFixedDefaultDockSide"] = NormalizeDesktopFixedDockSide(DesktopFixedDefaultDockSide);
+                node["DesktopFixedEnforceDockSide"].AsBool = DesktopFixedEnforceDockSide;
+                node["DesktopFixedEnforcedDockSide"] = NormalizeDesktopFixedDockSide(DesktopFixedEnforcedDockSide);
                 node["DesktopFixedHeightMode"].AsInt = DesktopFixedHeightMode;
                 node["DesktopCustomHeight"].AsFloat = DesktopCustomHeight;
                 node["DesktopCustomWidth"].AsFloat = DesktopCustomWidth;
@@ -982,6 +1016,28 @@ namespace VPB
             if (setting == "Desktop") return !isVR;
 
             return false;
+        }
+
+        private static readonly string[] s_DesktopFixedDockSideCanonical = { "Right", "Left", "Top" };
+
+        public static string NormalizeDesktopFixedDockSide(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "Right";
+            string v = value.Trim();
+            for (int i = 0; i < s_DesktopFixedDockSideCanonical.Length; i++)
+            {
+                if (string.Equals(v, s_DesktopFixedDockSideCanonical[i], StringComparison.OrdinalIgnoreCase))
+                    return s_DesktopFixedDockSideCanonical[i];
+            }
+            return "Right";
+        }
+
+        private static float ClampDesktopFixedAnchor01(float v, float min, float max, float fallback)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v)) return fallback;
+            if (v < min) return min;
+            if (v > max) return max;
+            return v;
         }
     }
 }
