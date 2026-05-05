@@ -87,17 +87,21 @@ namespace VPB
         private bool tboxCopyNamesTooltipHovered = false;
         private string tboxCopyNamesTooltipLast = null;
 
-        // Responsive tbox action buttons: 1–2 rows, flexible widths
+        // Responsive tbox action buttons: 1–3 rows, flexible widths
         private GameObject tboxButtonsFlexRoot;
         private RectTransform tboxButtonsFlexRootRT;
         private GameObject tboxBtnRow0GO;
         private GameObject tboxBtnRow1GO;
+        private GameObject tboxBtnRow2GO;
         private RectTransform tboxBtnRow0RT;
         private RectTransform tboxBtnRow1RT;
+        private RectTransform tboxBtnRow2RT;
         private LayoutElement tboxBtnRow0LE;
         private LayoutElement tboxBtnRow1LE;
+        private LayoutElement tboxBtnRow2LE;
         private HorizontalLayoutGroup tboxBtnRow0HLG;
         private HorizontalLayoutGroup tboxBtnRow1HLG;
+        private HorizontalLayoutGroup tboxBtnRow2HLG;
         private GameObject tboxButtonStash;
         private int tboxButtonLayoutRows = 1;
         private float tboxLastFlexAvailW = -1f;
@@ -240,14 +244,15 @@ namespace VPB
             }
         }
 
-        /// <summary>Wrap tbox actions to two rows when minimum widths no longer fit; stretch button band height.</summary>
+        /// <summary>Wrap tbox actions to up to three rows when widths no longer fit; stretch button band height.</summary>
         private void RefreshTboxFlexButtonLayout()
         {
-            if (tboxButtonsFlexRootRT == null || tboxBtnRow0HLG == null || tboxBtnRow1HLG == null) return;
+            if (tboxButtonsFlexRootRT == null || tboxBtnRow0HLG == null || tboxBtnRow1HLG == null || tboxBtnRow2HLG == null) return;
 
             float innerH = Mathf.Max(34f, tboxInfoRowHeight - 8f);
             if (tboxBtnRow0LE != null) { tboxBtnRow0LE.minHeight = innerH; tboxBtnRow0LE.preferredHeight = innerH; }
             if (tboxBtnRow1LE != null) { tboxBtnRow1LE.minHeight = innerH; tboxBtnRow1LE.preferredHeight = innerH; }
+            if (tboxBtnRow2LE != null) { tboxBtnRow2LE.minHeight = innerH; tboxBtnRow2LE.preferredHeight = innerH; }
             TboxSetAllFlexActionButtonHeights(innerH);
 
             Canvas.ForceUpdateCanvases();
@@ -346,6 +351,7 @@ namespace VPB
 
             List<GameObject> row0rtl = new List<GameObject>();
             List<GameObject> row1rtl = new List<GameObject>();
+            List<GameObject> row2rtl = new List<GameObject>();
 
             if (FitsOneRowMin())
             {
@@ -360,35 +366,45 @@ namespace VPB
                     tboxButtonLayoutRows = 1;
                     row0rtl.AddRange(rtl);
                     row1rtl.Clear();
+                    row2rtl.Clear();
                 }
                 else
                 {
-                float used = 0f;
-                for (int i = 0; i < rtl.Count; i++)
-                {
-                    GameObject go = rtl[i];
-                    if (!TryGetWidths(go, out _, out float pw)) continue;
-                    float need = pw + (row0rtl.Count > 0 ? gap : 0f);
-                    if (used + need <= avail + 1f)
+                    int row = 0;
+                    float used = 0f;
+                    for (int i = 0; i < rtl.Count; i++)
                     {
-                        row0rtl.Add(go);
-                        used += need;
+                        GameObject go = rtl[i];
+                        if (!TryGetWidths(go, out _, out float pw)) continue;
+
+                        List<GameObject> cur = row == 0 ? row0rtl : (row == 1 ? row1rtl : row2rtl);
+                        float need = pw + (cur.Count > 0 ? gap : 0f);
+
+                        if (used + need <= avail + 1f || cur.Count == 0)
+                        {
+                            cur.Add(go);
+                            used += need;
+                        }
+                        else
+                        {
+                            row++;
+                            if (row >= 3)
+                            {
+                                // Hard cap: never hide buttons. Spill into row2 even if it overflows.
+                                row2rtl.Add(go);
+                                continue;
+                            }
+                            used = 0f;
+                            cur = row == 1 ? row1rtl : row2rtl;
+                            cur.Add(go);
+                            used = pw;
+                        }
                     }
-                    else
-                    {
-                        for (int j = i; j < rtl.Count; j++)
-                            row1rtl.Add(rtl[j]);
-                        break;
-                    }
-                }
-                if (row0rtl.Count == 0 && rtl.Count > 0)
-                {
-                    row0rtl.Add(rtl[0]);
-                    row1rtl.Clear();
-                    for (int j = 1; j < rtl.Count; j++)
-                        row1rtl.Add(rtl[j]);
-                }
-                tboxButtonLayoutRows = row1rtl.Count > 0 ? 2 : 1;
+
+                    int rows = 1;
+                    if (row1rtl.Count > 0) rows = 2;
+                    if (row2rtl.Count > 0) rows = 3;
+                    tboxButtonLayoutRows = rows;
                 }
             }
 
@@ -397,15 +413,25 @@ namespace VPB
             {
                 TboxPopulateRowLtr(tboxBtnRow0HLG, ltr);
                 tboxBtnRow1GO.SetActive(false);
+                if (tboxBtnRow2GO != null) tboxBtnRow2GO.SetActive(false);
+            }
+            else if (tboxButtonLayoutRows == 2)
+            {
+                tboxBtnRow1GO.SetActive(true);
+                if (tboxBtnRow2GO != null) tboxBtnRow2GO.SetActive(false);
+                TboxPopulateRowFromRtlPack(tboxBtnRow0HLG, row0rtl);
+                TboxPopulateRowFromRtlPack(tboxBtnRow1HLG, row1rtl);
             }
             else
             {
                 tboxBtnRow1GO.SetActive(true);
+                if (tboxBtnRow2GO != null) tboxBtnRow2GO.SetActive(true);
                 TboxPopulateRowFromRtlPack(tboxBtnRow0HLG, row0rtl);
                 TboxPopulateRowFromRtlPack(tboxBtnRow1HLG, row1rtl);
+                TboxPopulateRowFromRtlPack(tboxBtnRow2HLG, row2rtl);
             }
 
-            float band = tboxInfoRowHeight * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap : 0f);
+            float band = tboxInfoRowHeight * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? (tboxBtnRowGap * (tboxButtonLayoutRows - 1)) : 0f);
             // Add filter row height when active
             if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
                 band += tboxInfoRowHeight + tboxBtnRowGap;
@@ -611,6 +637,26 @@ namespace VPB
             tboxBtnRow1HLG.childControlHeight = true;
             tboxBtnRow1HLG.childForceExpandHeight = true;
             tboxBtnRow1GO.SetActive(false);
+
+            tboxBtnRow2GO = new GameObject("TboxBtnRow2");
+            tboxBtnRow2GO.transform.SetParent(flexGO.transform, false);
+            tboxBtnRow2RT = tboxBtnRow2GO.AddComponent<RectTransform>();
+            tboxBtnRow2RT.anchorMin = Vector2.zero;
+            tboxBtnRow2RT.anchorMax = Vector2.one;
+            tboxBtnRow2RT.sizeDelta = Vector2.zero;
+            tboxBtnRow2LE = tboxBtnRow2GO.AddComponent<LayoutElement>();
+            tboxBtnRow2LE.minHeight = innerRowH;
+            tboxBtnRow2LE.preferredHeight = innerRowH;
+            tboxBtnRow2LE.flexibleWidth = 1f;
+            tboxBtnRow2HLG = tboxBtnRow2GO.AddComponent<HorizontalLayoutGroup>();
+            tboxBtnRow2HLG.spacing = 10f;
+            tboxBtnRow2HLG.padding = new RectOffset(0, 0, 0, 0);
+            tboxBtnRow2HLG.childAlignment = TextAnchor.MiddleRight;
+            tboxBtnRow2HLG.childControlWidth = true;
+            tboxBtnRow2HLG.childForceExpandWidth = false;
+            tboxBtnRow2HLG.childControlHeight = true;
+            tboxBtnRow2HLG.childForceExpandHeight = true;
+            tboxBtnRow2GO.SetActive(false);
 
             // ── Dependency Filter Mode Row ─────────────────────────────────────
             tboxFilterModeRowGO = new GameObject("TboxFilterModeRow");
