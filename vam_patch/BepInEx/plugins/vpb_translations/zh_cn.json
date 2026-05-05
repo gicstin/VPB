@@ -424,5 +424,18 @@
   "settings.desktop.fixed_enforce_dock": "始终强制固定停靠方向",
   "settings.tip.desktop.fixed_enforce_dock": "开启后，无论点击哪个锚点按钮，都使用强制方向。",
   "settings.desktop.fixed_enforce_dock_side": "强制停靠方向",
-  "settings.tip.desktop.fixed_enforce_dock_side": "启用强制后使用的停靠方向。"
+  "settings.tip.desktop.fixed_enforce_dock_side": "启用强制后使用的停靠方向。",
+
+  "settings.grid_spacing_x": "网格间距 X",
+  "settings.tip.grid_spacing_x": "网格预览之间的水平间距（像素）。",
+  "settings.grid_spacing_y": "网格间距 Y",
+  "settings.tip.grid_spacing_y": "网格预览之间的垂直间距（像素）。",
+  "settings.grid_thumb_padding": "缩略图内边距",
+  "settings.tip.grid_thumb_padding": "单元边缘与缩略图之间的间距（像素）。0 = 贴边。",
+  "settings.grid_hover_border_width": "悬停边框宽度",
+  "settings.tip.grid_hover_border_width": "网格预览悬停边框粗细（像素）。",
+  "settings.grid_selected_border_width": "选中边框宽度",
+  "settings.tip.grid_selected_border_width": "网格预览选中边框粗细（像素）。",
+  "settings.grid_border_inward_square": "内向边框（内边距=0）",
+  "settings.tip.grid_border_inward_square": "当内边距为 0（贴边）时，将悬停/选中边框绘制在内部而非外部。"
 }

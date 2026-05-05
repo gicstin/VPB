@@ -243,6 +243,18 @@ namespace VPB
         public float GalleryGridLabelFontSize = 18f;
         /// <summary>When true with always-on labels, hide label strip at 11–12 columns (highest grid density).</summary>
         public bool GalleryGridLabelsAutoHideAtHighDensity = false;
+        /// <summary>Grid: horizontal spacing between thumbnail cells (pixels).</summary>
+        public float GalleryGridSpacingX = 0f;
+        /// <summary>Grid: vertical spacing between thumbnail cells (pixels).</summary>
+        public float GalleryGridSpacingY = 0f;
+        /// <summary>Grid: padding between cell background and thumbnail (pixels). 0 = thumbnail flush to edge.</summary>
+        public float GalleryGridThumbnailPadding = 0f;
+        /// <summary>Grid: hover border width (pixels). Implemented via Outline effectDistance.</summary>
+        public float GalleryGridHoverBorderWidth = 1f;
+        /// <summary>Grid: selected border width (pixels).</summary>
+        public float GalleryGridSelectedBorderWidth = 2f;
+        /// <summary>When true and <see cref="GalleryGridThumbnailPadding"/> is 0, render hover/selection border inward.</summary>
+        public bool GalleryGridBorderInwardWhenSquare = true;
         /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
         public bool GalleryTboxToolbarPinned = false;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
@@ -534,6 +546,12 @@ namespace VPB
             GalleryGridLabelsEnabled = true;
             GalleryGridLabelFontSize = 18f;
             GalleryGridLabelsAutoHideAtHighDensity = false;
+            GalleryGridSpacingX = 0f;
+            GalleryGridSpacingY = 0f;
+            GalleryGridThumbnailPadding = 0f;
+            GalleryGridHoverBorderWidth = 1f;
+            GalleryGridSelectedBorderWidth = 2f;
+            GalleryGridBorderInwardWhenSquare = true;
             GalleryTboxToolbarPinned = false;
             UiLocale = "";
             SpringScrollButtonEnabled = true;
@@ -646,6 +664,12 @@ namespace VPB
                         if (node["GalleryGridLabelsEnabled"] != null) GalleryGridLabelsEnabled = node["GalleryGridLabelsEnabled"].AsBool;
                         if (node["GalleryGridLabelFontSize"] != null) GalleryGridLabelFontSize = Mathf.Clamp(node["GalleryGridLabelFontSize"].AsFloat, 8f, 40f);
                         if (node["GalleryGridLabelsAutoHideAtHighDensity"] != null) GalleryGridLabelsAutoHideAtHighDensity = node["GalleryGridLabelsAutoHideAtHighDensity"].AsBool;
+                        if (node["GalleryGridSpacingX"] != null) GalleryGridSpacingX = Mathf.Clamp(node["GalleryGridSpacingX"].AsFloat, 0f, 80f);
+                        if (node["GalleryGridSpacingY"] != null) GalleryGridSpacingY = Mathf.Clamp(node["GalleryGridSpacingY"].AsFloat, 0f, 80f);
+                        if (node["GalleryGridThumbnailPadding"] != null) GalleryGridThumbnailPadding = Mathf.Clamp(node["GalleryGridThumbnailPadding"].AsFloat, 0f, 40f);
+                        if (node["GalleryGridHoverBorderWidth"] != null) GalleryGridHoverBorderWidth = Mathf.Clamp(node["GalleryGridHoverBorderWidth"].AsFloat, 0f, 20f);
+                        if (node["GalleryGridSelectedBorderWidth"] != null) GalleryGridSelectedBorderWidth = Mathf.Clamp(node["GalleryGridSelectedBorderWidth"].AsFloat, 0f, 30f);
+                        if (node["GalleryGridBorderInwardWhenSquare"] != null) GalleryGridBorderInwardWhenSquare = node["GalleryGridBorderInwardWhenSquare"].AsBool;
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
@@ -881,6 +905,12 @@ namespace VPB
                 node["GalleryGridLabelsEnabled"].AsBool = GalleryGridLabelsEnabled;
                 node["GalleryGridLabelFontSize"].AsFloat = GalleryGridLabelFontSize;
                 node["GalleryGridLabelsAutoHideAtHighDensity"].AsBool = GalleryGridLabelsAutoHideAtHighDensity;
+                node["GalleryGridSpacingX"].AsFloat = Mathf.Clamp(GalleryGridSpacingX, 0f, 80f);
+                node["GalleryGridSpacingY"].AsFloat = Mathf.Clamp(GalleryGridSpacingY, 0f, 80f);
+                node["GalleryGridThumbnailPadding"].AsFloat = Mathf.Clamp(GalleryGridThumbnailPadding, 0f, 40f);
+                node["GalleryGridHoverBorderWidth"].AsFloat = Mathf.Clamp(GalleryGridHoverBorderWidth, 0f, 20f);
+                node["GalleryGridSelectedBorderWidth"].AsFloat = Mathf.Clamp(GalleryGridSelectedBorderWidth, 0f, 30f);
+                node["GalleryGridBorderInwardWhenSquare"].AsBool = GalleryGridBorderInwardWhenSquare;
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;

@@ -98,6 +98,12 @@ namespace VPB
             public bool GalleryGridLabelsEnabled;
             public bool GalleryGridLabelsAutoHideAtHighDensity;
             public float GalleryGridLabelFontSize;
+            public float GalleryGridSpacingX;
+            public float GalleryGridSpacingY;
+            public float GalleryGridThumbnailPadding;
+            public float GalleryGridHoverBorderWidth;
+            public float GalleryGridSelectedBorderWidth;
+            public bool GalleryGridBorderInwardWhenSquare;
             public bool GalleryOnlyWhenVamMenuVisible;
             public bool GalleryAnchorToVamMenu;
             public string GalleryCategoryQuickOrder;
@@ -500,6 +506,48 @@ namespace VPB
             });
 
             defs.Add(new InternalSettingDefinition {
+                Key = "grid.spacingX", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_spacing_x", "Grid spacing X"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_spacing_x", "Horizontal spacing between grid previews (pixels)."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryGridSpacingX,
+                SetFloat = v => { VPBConfig.Instance.GalleryGridSpacingX = v; RebuildGridLayout(); },
+                Min = 0f, Max = 40f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.spacingY", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_spacing_y", "Grid spacing Y"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_spacing_y", "Vertical spacing between grid previews (pixels)."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryGridSpacingY,
+                SetFloat = v => { VPBConfig.Instance.GalleryGridSpacingY = v; RebuildGridLayout(); },
+                Min = 0f, Max = 40f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.thumbPad", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_thumb_padding", "Thumbnail padding"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_thumb_padding", "Padding between cell edge and thumbnail (pixels). 0 = flush to edge."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryGridThumbnailPadding,
+                SetFloat = v => { VPBConfig.Instance.GalleryGridThumbnailPadding = v; RebuildGridLayout(); try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { } },
+                Min = 0f, Max = 12f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.hoverBorder", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_hover_border_width", "Hover border width"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_hover_border_width", "Hover border thickness for grid previews (pixels)."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryGridHoverBorderWidth,
+                SetFloat = v => { VPBConfig.Instance.GalleryGridHoverBorderWidth = v; try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { } },
+                Min = 0f, Max = 10f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.selBorder", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_selected_border_width", "Selected border width"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_selected_border_width", "Selected border thickness for grid previews (pixels)."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryGridSelectedBorderWidth,
+                SetFloat = v => { VPBConfig.Instance.GalleryGridSelectedBorderWidth = v; try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { } },
+                Min = 0f, Max = 14f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.inwardSquare", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_border_inward_square", "Inward border when padding = 0"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_border_inward_square", "When padding is 0 (square/flush), draw hover/selection border inward instead of outward."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridBorderInwardWhenSquare,
+                SetBool = v => { VPBConfig.Instance.GalleryGridBorderInwardWhenSquare = v; try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { } }
+            });
+
+            defs.Add(new InternalSettingDefinition {
                 Key = "vr.menuGate", GroupKey = "vr", Label = VPBTranslation.T("settings.gallery.vam_menu_gate", "Show only when VaM menu is visible"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery.vam_menu_gate", "Hide gallery panes automatically when VaM menu is closed."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
@@ -658,6 +706,12 @@ namespace VPB
                 GalleryGridLabelsEnabled = VPBConfig.Instance.GalleryGridLabelsEnabled,
                 GalleryGridLabelsAutoHideAtHighDensity = VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity,
                 GalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize,
+                GalleryGridSpacingX = VPBConfig.Instance.GalleryGridSpacingX,
+                GalleryGridSpacingY = VPBConfig.Instance.GalleryGridSpacingY,
+                GalleryGridThumbnailPadding = VPBConfig.Instance.GalleryGridThumbnailPadding,
+                GalleryGridHoverBorderWidth = VPBConfig.Instance.GalleryGridHoverBorderWidth,
+                GalleryGridSelectedBorderWidth = VPBConfig.Instance.GalleryGridSelectedBorderWidth,
+                GalleryGridBorderInwardWhenSquare = VPBConfig.Instance.GalleryGridBorderInwardWhenSquare,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
                 GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
                 GalleryCategoryQuickOrder = VPBConfig.Instance.GalleryCategoryQuickOrder ?? "",
@@ -1274,6 +1328,12 @@ namespace VPB
             VPBConfig.Instance.GalleryGridLabelsEnabled = b.GalleryGridLabelsEnabled;
             VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity = b.GalleryGridLabelsAutoHideAtHighDensity;
             VPBConfig.Instance.GalleryGridLabelFontSize = b.GalleryGridLabelFontSize;
+            VPBConfig.Instance.GalleryGridSpacingX = b.GalleryGridSpacingX;
+            VPBConfig.Instance.GalleryGridSpacingY = b.GalleryGridSpacingY;
+            VPBConfig.Instance.GalleryGridThumbnailPadding = b.GalleryGridThumbnailPadding;
+            VPBConfig.Instance.GalleryGridHoverBorderWidth = b.GalleryGridHoverBorderWidth;
+            VPBConfig.Instance.GalleryGridSelectedBorderWidth = b.GalleryGridSelectedBorderWidth;
+            VPBConfig.Instance.GalleryGridBorderInwardWhenSquare = b.GalleryGridBorderInwardWhenSquare;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
             VPBConfig.Instance.GalleryCategoryQuickOrder = b.GalleryCategoryQuickOrder ?? "";

@@ -2331,7 +2331,7 @@ namespace VPB
                 }
                 else
                 {
-                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, GridColumnCount, deferRefresh: true);
+                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), GridColumnCount, deferRefresh: true);
                     recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false, deferRefresh: true);
                 }
 
@@ -2485,7 +2485,7 @@ namespace VPB
                     else
                     {
                         // Grid mode
-                        recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, GridColumnCount, deferRefresh: true);
+                        recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), GridColumnCount, deferRefresh: true);
                         recyclingGrid.SetAdaptiveConfig(true, 200f, GridColumnCount, false, deferRefresh: true);
                     }
                     recyclingGrid.SetItemCount(0); // Clear initially — single Refresh after deferred config
@@ -3593,7 +3593,7 @@ namespace VPB
                 }
                 else
                 {
-                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, cols, deferRefresh: true);
+                    recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols, deferRefresh: true);
                     recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false, deferRefresh: true);
                 }
                 // Set item count and pre-position scroll so the first UpdateVisibleItems

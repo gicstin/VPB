@@ -142,11 +142,32 @@ namespace VPB
             {
                 var menuCanvas = _categoryQuickMenuOuterGO.AddComponent<Canvas>();
                 menuCanvas.overrideSorting = true;
-                menuCanvas.sortingOrder = 1000;
+                // Match parent Canvas render mode/camera so WorldSpace (VR floating) behaves.
+                // Hardcoding ScreenSpaceOverlay can make menu render/raycast wrong in VR.
+                try
+                {
+                    if (canvas != null)
+                    {
+                        menuCanvas.renderMode = canvas.renderMode;
+                        menuCanvas.worldCamera = canvas.worldCamera;
+                        menuCanvas.sortingLayerID = canvas.sortingLayerID;
+                        // Always above main panel, even if parent sortingOrder changes later.
+                        menuCanvas.sortingOrder = canvas.sortingOrder + 10;
+                    }
+                    else
+                    {
+                        menuCanvas.sortingOrder = 1000;
+                    }
+                }
+                catch
+                {
+                    menuCanvas.sortingOrder = 1000;
+                }
 
                 // Child Canvas with overrideSorting needs its own raycaster for reliable clicks.
                 // Without this, rows can render but never receive pointer events on some Unity/VaM builds.
-                _categoryQuickMenuOuterGO.AddComponent<GraphicRaycaster>();
+                var gr = _categoryQuickMenuOuterGO.AddComponent<GraphicRaycaster>();
+                gr.ignoreReversedGraphics = true;
             }
             catch { }
             try

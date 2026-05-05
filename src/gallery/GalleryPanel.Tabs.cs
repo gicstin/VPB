@@ -1501,8 +1501,25 @@ namespace VPB
             thumbRT.anchorMin = Vector2.zero;
             thumbRT.anchorMax = Vector2.one;
             thumbRT.sizeDelta = Vector2.zero;
-            thumbRT.offsetMin = new Vector2(3, 3);
-            thumbRT.offsetMax = new Vector2(-3, -3);
+            float pad = 3f;
+            try { if (VPBConfig.Instance != null) pad = Mathf.Clamp(VPBConfig.Instance.GalleryGridThumbnailPadding, 0f, 40f); } catch { pad = 3f; }
+            thumbRT.offsetMin = new Vector2(pad, pad);
+            thumbRT.offsetMax = new Vector2(-pad, -pad);
+
+            // Grid-mode inward border (4 edge Images inside cell). Used when padding = 0.
+            GameObject gridInnerBorderGO = new GameObject("GridInnerBorder");
+            gridInnerBorderGO.transform.SetParent(btnGO.transform, false);
+            RectTransform gibRT = gridInnerBorderGO.AddComponent<RectTransform>();
+            gibRT.anchorMin = Vector2.zero;
+            gibRT.anchorMax = Vector2.one;
+            gibRT.offsetMin = Vector2.zero;
+            gibRT.offsetMax = Vector2.zero;
+            // child edge names are stable: Top/Bottom/Left/Right
+            AddBorderEdgeNamed(gridInnerBorderGO, "Top",    new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1f), new Vector2(0, 2));
+            AddBorderEdgeNamed(gridInnerBorderGO, "Bottom", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(0, 2));
+            AddBorderEdgeNamed(gridInnerBorderGO, "Left",   new Vector2(0, 0), new Vector2(0, 1), new Vector2(0f, 0.5f), new Vector2(2, 0));
+            AddBorderEdgeNamed(gridInnerBorderGO, "Right",  new Vector2(1, 0), new Vector2(1, 1), new Vector2(1f, 0.5f), new Vector2(2, 0));
+            gridInnerBorderGO.SetActive(false);
 
             GameObject gridLabelGO = new GameObject("GridLabel");
             gridLabelGO.transform.SetParent(btnGO.transform, false);
@@ -1946,6 +1963,34 @@ namespace VPB
             return btnGO;
         }
 
+        private static void AddBorderEdgeNamed(GameObject parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta)
+        {
+            if (parent == null) return;
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent.transform, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+            rt.pivot = pivot;
+            rt.sizeDelta = sizeDelta;
+            rt.anchoredPosition = Vector2.zero;
+            go.AddComponent<UnityEngine.UI.Image>().color = Color.yellow;
+        }
+
+        private static void SetBorderThickness(GameObject borderGO, float thickness)
+        {
+            if (borderGO == null) return;
+            float t = Mathf.Max(0f, thickness);
+            var top = borderGO.transform.Find("Top") as RectTransform;
+            var bottom = borderGO.transform.Find("Bottom") as RectTransform;
+            var left = borderGO.transform.Find("Left") as RectTransform;
+            var right = borderGO.transform.Find("Right") as RectTransform;
+            if (top != null) top.sizeDelta = new Vector2(0, t);
+            if (bottom != null) bottom.sizeDelta = new Vector2(0, t);
+            if (left != null) left.sizeDelta = new Vector2(t, 0);
+            if (right != null) right.sizeDelta = new Vector2(t, 0);
+        }
+
         private const float GalleryBadgeSlotStartX = 6f;
         private const float GalleryBadgeSlotStartY = -6f;
         private const float GalleryBadgeSlotStepX = 36f;
@@ -2071,17 +2116,45 @@ namespace VPB
                 Transform hoverBar2 = btnGO.transform.Find("ListHoverBar");
                 if (hoverBar2 != null) hoverBar2.gameObject.SetActive(false);
 
-                if (outline != null)
-                {
-                    outline.effectColor = Color.yellow;
-                    if (outline.enabled != isSelected) outline.enabled = isSelected;
-                    outline.effectDistance = isSelected ? new Vector2(4f, -4f) : new Vector2(2f, -2f);
+                float hoverW = EffectiveGridHoverBorderWidth();
+                float selW = EffectiveGridSelectedBorderWidth();
+                bool inward = EffectiveGridBorderInward();
+                float w = isSelected ? selW : hoverW;
 
+                // Inward border: use inside-edge GO (Outline only draws reliably outward on some Unity builds)
+                Transform innerBorderTr = btnGO.transform.Find("GridInnerBorder");
+                GameObject innerBorderGO = innerBorderTr != null ? innerBorderTr.gameObject : null;
+                bool useInner = inward && innerBorderGO != null;
+
+                if (useInner)
+                {
+                    if (outline != null) outline.enabled = false;
                     if (hoverBorder != null)
                     {
+                        hoverBorder.hoverBorderGO = innerBorderGO;
                         hoverBorder.isSelected = isSelected;
-                        hoverBorder.borderSize = isSelected ? 4f : 2f;
                     }
+                    SetBorderThickness(innerBorderGO, w);
+                    innerBorderGO.SetActive(isSelected);
+                }
+                else
+                {
+                    if (hoverBorder != null)
+                    {
+                        // Ensure list-mode hover bar does not leak into grid mode.
+                        hoverBorder.hoverBorderGO = null;
+                        hoverBorder.isSelected = isSelected;
+                        hoverBorder.borderSize = w;
+                        hoverBorder.inward = false;
+                        hoverBorder.ApplyBorderSettings();
+                    }
+                    if (outline != null)
+                    {
+                        outline.effectColor = Color.yellow;
+                        if (outline.enabled != isSelected) outline.enabled = isSelected;
+                        outline.effectDistance = new Vector2(w, -w);
+                    }
+                    if (innerBorderGO != null) innerBorderGO.SetActive(false);
                 }
             }
         }
@@ -2362,8 +2435,10 @@ namespace VPB
                     thumbRT.anchorMax = Vector2.one;
                     thumbRT.pivot = new Vector2(0.5f, 0.5f);
                     thumbRT.anchoredPosition = Vector2.zero;
-                    thumbRT.offsetMin = new Vector2(3f, 3f);
-                    thumbRT.offsetMax = new Vector2(-3f, -3f);
+                    float pad = 3f;
+                    try { if (VPBConfig.Instance != null) pad = Mathf.Clamp(VPBConfig.Instance.GalleryGridThumbnailPadding, 0f, 40f); } catch { pad = 3f; }
+                    thumbRT.offsetMin = new Vector2(pad, pad);
+                    thumbRT.offsetMax = new Vector2(-pad, -pad);
                     Transform gridLabelTr = btnGO.transform.Find("GridLabel");
                     if (gridLabelTr != null)
                     {

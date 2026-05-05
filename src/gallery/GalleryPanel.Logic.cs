@@ -15,6 +15,57 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
+        private float EffectiveGridSpacingX()
+        {
+            float v = 10f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryGridSpacingX; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 10f;
+            return Mathf.Clamp(v, 0f, 80f);
+        }
+
+        private float EffectiveGridSpacingY()
+        {
+            float v = 10f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryGridSpacingY; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 10f;
+            return Mathf.Clamp(v, 0f, 80f);
+        }
+
+        private float EffectiveGridThumbnailPadding()
+        {
+            float v = 3f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryGridThumbnailPadding; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 3f;
+            return Mathf.Clamp(v, 0f, 40f);
+        }
+
+        private float EffectiveGridHoverBorderWidth()
+        {
+            float v = 2f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryGridHoverBorderWidth; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 2f;
+            return Mathf.Clamp(v, 0f, 20f);
+        }
+
+        private float EffectiveGridSelectedBorderWidth()
+        {
+            float v = 4f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryGridSelectedBorderWidth; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 4f;
+            return Mathf.Clamp(v, 0f, 30f);
+        }
+
+        private bool EffectiveGridBorderInward()
+        {
+            try
+            {
+                if (VPBConfig.Instance == null) return false;
+                if (!VPBConfig.Instance.GalleryGridBorderInwardWhenSquare) return false;
+                return EffectiveGridThumbnailPadding() <= 0.01f;
+            }
+            catch { return false; }
+        }
+
         /// <summary>
         /// Splits a search query into lowercase terms (whitespace separated), removing empties.
         /// </summary>
@@ -165,7 +216,7 @@ namespace VPB
                         else
                         {
                             int cols = GridColumnCount;
-                            rgv.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, cols);
+                            rgv.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols);
                             rgv.SetAdaptiveConfig(true, 200f, cols, false);
                         }
                         rgv.Refresh();
@@ -195,7 +246,7 @@ namespace VPB
                 var rgv = contentGO.GetComponent<RecyclingGridView>();
                 if (rgv == null) return;
                 int cols = GridColumnCount;
-                rgv.SetGridConfig(100f, GetGridCellConfigHeight(), 10f, 10f, cols);
+                rgv.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols);
                 rgv.SetAdaptiveConfig(true, 200f, cols, false);
                 rgv.Refresh();
             }

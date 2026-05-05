@@ -416,5 +416,18 @@
   "settings.desktop.fixed_enforce_dock": "固定 ドック強制",
   "settings.tip.desktop.fixed_enforce_dock": "有効時、どのアンカーボタンを押してもドック位置を強制します。",
   "settings.desktop.fixed_enforce_dock_side": "強制 ドック位置",
-  "settings.tip.desktop.fixed_enforce_dock_side": "ドック強制が有効な間に使う位置。"
+  "settings.tip.desktop.fixed_enforce_dock_side": "ドック強制が有効な間に使う位置。",
+
+  "settings.grid_spacing_x": "グリッド間隔 X",
+  "settings.tip.grid_spacing_x": "グリッドプレビュー間の横方向スペース（ピクセル）。",
+  "settings.grid_spacing_y": "グリッド間隔 Y",
+  "settings.tip.grid_spacing_y": "グリッドプレビュー間の縦方向スペース（ピクセル）。",
+  "settings.grid_thumb_padding": "サムネイル余白",
+  "settings.tip.grid_thumb_padding": "セル端とサムネイルの余白（ピクセル）。0 = 端まで。",
+  "settings.grid_hover_border_width": "ホバー枠の太さ",
+  "settings.tip.grid_hover_border_width": "グリッドプレビューのホバー枠の太さ（ピクセル）。",
+  "settings.grid_selected_border_width": "選択枠の太さ",
+  "settings.tip.grid_selected_border_width": "グリッドプレビューの選択枠の太さ（ピクセル）。",
+  "settings.grid_border_inward_square": "余白0で内側枠",
+  "settings.tip.grid_border_inward_square": "余白が0（フラッシュ）時、ホバー/選択枠を外側ではなく内側に描画。"
 }

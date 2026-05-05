@@ -430,12 +430,23 @@ namespace VPB
         public Graphic targetGraphic;
         public Color hoverColor = new Color(1f, 1f, 0f, 1f); // Bright yellow visible highlight
         public float borderSize = 2f;
+        /// <summary>When true, border effect is rendered inward (negative outline offset).</summary>
+        public bool inward = false;
         public bool isSelected = false;
         // When set, show/hide this GO on hover instead of using the Outline component.
         // Used in list mode to avoid the Outline filling the entire semi-transparent row.
         public GameObject hoverBorderGO;
 
         private Outline outline;
+
+        public void ApplyBorderSettings()
+        {
+            if (outline == null) return;
+            float s = borderSize;
+            if (s < 0f) s = 0f;
+            outline.effectDistance = inward ? new Vector2(-s, s) : new Vector2(s, -s);
+            outline.effectColor = hoverColor;
+        }
 
         void Awake()
         {
@@ -447,8 +458,7 @@ namespace VPB
                 {
                     outline = targetGraphic.gameObject.AddComponent<Outline>();
                 }
-                outline.effectDistance = new Vector2(borderSize, -borderSize);
-                outline.effectColor = hoverColor;
+                ApplyBorderSettings();
                 outline.enabled = false;
             }
         }
