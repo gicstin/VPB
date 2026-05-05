@@ -28,13 +28,9 @@ namespace VPB
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
             m_SettingsClearConsoleKeyDraft = (Settings.Instance != null && Settings.Instance.ClearConsoleKey != null) ? Settings.Instance.ClearConsoleKey.Value : "";
             m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
-            m_SettingsLoadDependenciesWithPackageDraft = (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null) ? Settings.Instance.LoadDependenciesWithPackage.Value : true;
-            m_SettingsForceLatestDependenciesDraft = (Settings.Instance != null && Settings.Instance.ForceLatestDependencies != null) ? Settings.Instance.ForceLatestDependencies.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
             m_SettingsUiTransparencyValueDraft = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
             m_SettingsIsDevModeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.IsDevMode : false;
-            m_SettingsGalleryCategoryQuickOrderDraft = (VPBConfig.Instance != null) ? (VPBConfig.Instance.GalleryCategoryQuickOrder ?? "") : "";
-            m_SettingsGalleryCategoryQuickSwitchHiddenDraft = (VPBConfig.Instance != null) ? (VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "") : "";
             m_SettingsError = null;
         }
 
@@ -86,17 +82,11 @@ namespace VPB
                 }
                 if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null)
                 {
-                    if (Settings.Instance.LoadDependenciesWithPackage.Value != m_SettingsLoadDependenciesWithPackageDraft)
-                    {
-                        Settings.Instance.LoadDependenciesWithPackage.Value = m_SettingsLoadDependenciesWithPackageDraft;
-                    }
+                    Settings.Instance.LoadDependenciesWithPackage.Value = true;
                 }
                 if (Settings.Instance != null && Settings.Instance.ForceLatestDependencies != null)
                 {
-                    if (Settings.Instance.ForceLatestDependencies.Value != m_SettingsForceLatestDependenciesDraft)
-                    {
-                        Settings.Instance.ForceLatestDependencies.Value = m_SettingsForceLatestDependenciesDraft;
-                    }
+                    Settings.Instance.ForceLatestDependencies.Value = true;
                 }
                 if (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null)
                 {
@@ -118,20 +108,6 @@ namespace VPB
                     if (VPBConfig.Instance.IsDevMode != m_SettingsIsDevModeDraft)
                     {
                         VPBConfig.Instance.IsDevMode = m_SettingsIsDevModeDraft;
-                        changed = true;
-                    }
-
-                    string qo = m_SettingsGalleryCategoryQuickOrderDraft ?? "";
-                    if (!string.Equals(VPBConfig.Instance.GalleryCategoryQuickOrder ?? "", qo, StringComparison.Ordinal))
-                    {
-                        VPBConfig.Instance.GalleryCategoryQuickOrder = qo;
-                        changed = true;
-                    }
-
-                    string qh = m_SettingsGalleryCategoryQuickSwitchHiddenDraft ?? "";
-                    if (!string.Equals(VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "", qh, StringComparison.Ordinal))
-                    {
-                        VPBConfig.Instance.GalleryCategoryQuickSwitchHidden = qh;
                         changed = true;
                     }
 
@@ -274,27 +250,6 @@ namespace VPB
                 GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_2", "Tip: Leave this OFF if you want VaM to respect per-package/per-scene plugin enable state."), m_StyleInfoCardTextWrapped);
             });
 
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsLoadDependenciesWithPackageDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsLoadDependenciesWithPackageDraft = !m_SettingsLoadDependenciesWithPackageDraft;
-            }
-            GUILayout.Label(VPBTranslation.T("hook.settings.load_deps", "Load dependencies when loading a package"));
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsForceLatestDependenciesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsForceLatestDependenciesDraft = !m_SettingsForceLatestDependenciesDraft;
-            }
-            GUILayout.Label(VPBTranslation.T("hook.settings.force_latest", "Force latest dependency versions"));
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button(VPBTranslation.T("hook.settings.whitelist", "Whitelist"), m_StyleButtonSmall, GUILayout.Width(110f), GUILayout.Height(buttonHeight)))
-            {
-                OpenDependencyWhitelistUGUI();
-            }
-            GUILayout.EndHorizontal();
-
             GUILayout.Space(6);
 
             GUILayout.Space(10);
@@ -306,8 +261,15 @@ namespace VPB
             bool swEnabled = ScanWhitelistManager.Instance.IsEnabled;
             if (GUILayout.Button(swEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
             {
-                ScanWhitelistManager.Instance.SetEnabled(!swEnabled);
-                ScanWhitelistManager.Instance.Save();
+                if (swEnabled)
+                {
+                    m_ShowScanWhitelistDisableConfirmWindow = true;
+                }
+                else
+                {
+                    ScanWhitelistManager.Instance.SetEnabled(true);
+                    ScanWhitelistManager.Instance.Save();
+                }
             }
             GUILayout.Label(VPBTranslation.T("hook.settings.scan_whitelist.enable", "Enable VaM scan whitelist (restrict VaM startup scan to whitelisted folders)"));
             GUILayout.EndHorizontal();
@@ -337,16 +299,6 @@ namespace VPB
             {
                 OpenQuickMenuPositionWindow();
             }
-
-            GUILayout.Space(8);
-            GUILayout.Label(VPBTranslation.T("hook.settings.gallery_quick_order", "Quick category order (number keys 1–9, 0)"), m_StyleHeader);
-            GUILayout.Label(VPBTranslation.T("hook.settings.gallery_quick_order.hint", "One name per line or comma-separated. Matches gallery category names. Empty order = default (ALL VAR, Scenes, Appearance, \u2026). Use Skin \u2192 Person Skin if needed."), m_StyleInfoCardTextWrapped);
-            m_SettingsGalleryCategoryQuickOrderDraft = GUILayout.TextArea(m_SettingsGalleryCategoryQuickOrderDraft ?? "", GUILayout.MinHeight(72));
-
-            GUILayout.Space(6);
-            GUILayout.Label(VPBTranslation.T("hook.settings.gallery_quick_hidden", "Hide from quick menu only"), m_StyleHeader);
-            GUILayout.Label(VPBTranslation.T("hook.settings.gallery_quick_hidden.hint", "Listed categories stay in the side category list but are removed from the header quick menu and number keys."), m_StyleInfoCardTextWrapped);
-            m_SettingsGalleryCategoryQuickSwitchHiddenDraft = GUILayout.TextArea(m_SettingsGalleryCategoryQuickSwitchHiddenDraft ?? "", GUILayout.MinHeight(56));
 
             GUILayout.Space(10);
 

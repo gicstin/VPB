@@ -723,6 +723,8 @@ namespace VPB
             var bc = scrollbarGO.AddComponent<BoxCollider>();
             bc.size = new Vector3(width, height > 0 ? height : 800f, 1f);
             bc.center = new Vector3(-width / 2, 0, 0); // Pivot is (1, 0.5)
+            // UI collider must not participate in physics collisions with scene atoms.
+            bc.isTrigger = true;
 
             return scrollbarGO;
         }

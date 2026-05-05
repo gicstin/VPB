@@ -200,6 +200,8 @@ namespace VPB
         private bool m_ShowSpaceSaverWindow;
         private bool m_ShowScanWhitelistWindow;
         private Rect m_ScanWhitelistWindowRect = new Rect(120, 120, 520, 440);
+        private bool m_ShowScanWhitelistDisableConfirmWindow;
+        private Rect m_ScanWhitelistDisableConfirmWindowRect = new Rect(160, 160, 560, 260);
         private Vector2 m_ScanWhitelistScroll;
         private string m_ScanWhitelistNewFolderText = "";
         private string m_ScanWhitelistNewUidText = "";
@@ -777,6 +779,14 @@ namespace VPB
             }
 
             Settings.Init(this.Config);
+            try
+            {
+                if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null)
+                    Settings.Instance.LoadDependenciesWithPackage.Value = true;
+                if (Settings.Instance != null && Settings.Instance.ForceLatestDependencies != null)
+                    Settings.Instance.ForceLatestDependencies.Value = true;
+            }
+            catch { }
             try { QuickMenuMigrateAnchorBaselineOnce(); } catch { }
             try
             {
@@ -2306,6 +2316,22 @@ namespace VPB
                         if (swScreenRect.Contains(screenMousePos)) overAny = true;
                     }
 
+                    if (m_ShowScanWhitelistDisableConfirmWindow)
+                    {
+                        var swcScreenRect = new Rect(m_ScanWhitelistDisableConfirmWindowRect.x * m_UIScale, m_ScanWhitelistDisableConfirmWindowRect.y * m_UIScale, m_ScanWhitelistDisableConfirmWindowRect.width * m_UIScale, m_ScanWhitelistDisableConfirmWindowRect.height * m_UIScale);
+                        if (swcScreenRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)))
+                        {
+                            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+                            {
+                                Input.ResetInputAxes();
+                            }
+                        }
+
+                        m_ScanWhitelistDisableConfirmWindowRect = GUI.Window(1002, m_ScanWhitelistDisableConfirmWindowRect, DrawScanWhitelistDisableConfirmWindow, "", m_StyleWindow);
+                        GUI.BringWindowToFront(1002);
+                        if (swcScreenRect.Contains(screenMousePos)) overAny = true;
+                    }
+
                     if (m_ShowQuickMenuPosWindow)
                     {
                         var qmScreenRect = new Rect(m_QuickMenuPosWindowRect.x * m_UIScale, m_QuickMenuPosWindowRect.y * m_UIScale, m_QuickMenuPosWindowRect.width * m_UIScale, m_QuickMenuPosWindowRect.height * m_UIScale);
@@ -3027,8 +3053,15 @@ namespace VPB
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(swEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
             {
-                ScanWhitelistManager.Instance.SetEnabled(!swEnabled);
-                ScanWhitelistManager.Instance.Save();
+                if (swEnabled)
+                {
+                    m_ShowScanWhitelistDisableConfirmWindow = true;
+                }
+                else
+                {
+                    ScanWhitelistManager.Instance.SetEnabled(true);
+                    ScanWhitelistManager.Instance.Save();
+                }
             }
             GUILayout.Label("Enable scan whitelist");
             GUILayout.EndHorizontal();
@@ -3145,6 +3178,68 @@ namespace VPB
             GUILayout.EndVertical();
 
             // Consume scroll events inside window
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                Event.current.Use();
+            }
+
+            GUI.DragWindow();
+        }
+
+        void DrawScanWhitelistDisableConfirmWindow(int windowID)
+        {
+            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+            {
+                Input.ResetInputAxes();
+            }
+
+            GUILayout.BeginVertical(m_StylePanel);
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.title", "Disable scan whitelist?"), m_StyleHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
+            {
+                m_ShowScanWhitelistDisableConfirmWindow = false;
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(8);
+
+            GUILayout.Label(
+                VPBTranslation.T(
+                    "hook.settings.scan_whitelist.disable_confirm.body",
+                    "Enable VaM scan whitelist to improve startup time. This “hides” most packages from VaM so it won’t rescan them every start.\n\nDisabling will make VaM startup much slower (full rescan)."),
+                m_StyleInfoCardTextWrapped);
+
+            GUILayout.Space(12);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(VPBTranslation.T("hook.cancel", "Cancel"), m_StyleButton, GUILayout.Height(34), GUILayout.ExpandWidth(true)))
+            {
+                m_ShowScanWhitelistDisableConfirmWindow = false;
+            }
+
+            GUILayout.Space(10);
+
+            var prevBg = GUI.backgroundColor;
+            GUI.backgroundColor = new Color(0.8f, 0.4f, 0.4f, 1f);
+            if (GUILayout.Button(VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.disable", "Disable"), m_StyleButton, GUILayout.Height(34), GUILayout.ExpandWidth(true)))
+            {
+                try
+                {
+                    ScanWhitelistManager.Instance.SetEnabled(false);
+                    ScanWhitelistManager.Instance.Save();
+                }
+                catch { }
+                m_ShowScanWhitelistDisableConfirmWindow = false;
+            }
+            GUI.backgroundColor = prevBg;
+
+            GUILayout.EndHorizontal();
+
+            GUILayout.EndVertical();
+
             if (Event.current.type == EventType.ScrollWheel)
             {
                 Event.current.Use();

@@ -1385,6 +1385,8 @@ namespace VPB
             Vector2 d = rt.sizeDelta;
             bc.size = new Vector3(d.x, d.y, bc.size.z > 0.1f ? bc.size.z : 20f);
             bc.center = Vector3.zero;
+            // UI collider must not participate in physics collisions with scene atoms.
+            bc.isTrigger = true;
         }
 
         /// <summary>Place jump top / spring drag / jump bottom in a vertical stack on the scrollbar.</summary>

@@ -202,6 +202,8 @@ namespace VPB
             var bc = go.AddComponent<BoxCollider>();
             bc.size = new Vector3(widthPx, heightPx, 20f);
             bc.center = Vector3.zero;
+            // UI collider must not participate in physics collisions with scene atoms.
+            bc.isTrigger = true;
 
             var s = go.AddComponent<SpringScrollButton>();
             s.scrollRect = targetScrollRect;
@@ -221,7 +223,10 @@ namespace VPB
 
             var bc = GetComponent<BoxCollider>();
             if (bc != null)
+            {
                 bc.size = new Vector3(widthPx, heightPx, bc.size.z > 0.1f ? bc.size.z : 20f);
+                bc.isTrigger = true;
+            }
         }
     }
 }
