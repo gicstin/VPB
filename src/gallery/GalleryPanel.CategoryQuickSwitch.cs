@@ -143,6 +143,10 @@ namespace VPB
                 var menuCanvas = _categoryQuickMenuOuterGO.AddComponent<Canvas>();
                 menuCanvas.overrideSorting = true;
                 menuCanvas.sortingOrder = 1000;
+
+                // Child Canvas with overrideSorting needs its own raycaster for reliable clicks.
+                // Without this, rows can render but never receive pointer events on some Unity/VaM builds.
+                _categoryQuickMenuOuterGO.AddComponent<GraphicRaycaster>();
             }
             catch { }
             try

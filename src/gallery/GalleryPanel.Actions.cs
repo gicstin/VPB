@@ -542,10 +542,6 @@ namespace VPB
             if (refreshCoroutine == null)
                 FinalizeGalleryCategoryTypeNavigationSync("(Show end, no async refresh)");
             LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
-
-            // Fire BA migration prompt the first time the user opens the gallery
-            if (Gallery.TryConsumeBaMigrationPromptPending())
-                try { ShowBaMigrationPrompt(); } catch (Exception ex) { LogUtil.LogWarning("[VPB BA] ShowBaMigrationPrompt call failed: " + ex.Message); }
         }
 
         private Coroutine deferredStartupRefreshCoroutine;

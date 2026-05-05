@@ -625,6 +625,12 @@ namespace VPB
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
         private List<GameObject> tboxPersonAtomBtns = new List<GameObject>();
+        private GameObject tboxTargetMenuRootGO;
+        private GameObject tboxTargetMenuPanelGO;
+        private RectTransform tboxTargetMenuPanelRT;
+        private GameObject tboxTargetDropdownRowGO;
+        private Text tboxTargetDropdownBtnText;
+        private bool tboxTargetMenuOpen;
 
         private enum AppearanceGender
         {

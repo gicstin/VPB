@@ -2855,6 +2855,10 @@ namespace VPB
             UpdateLayout();
             UpdateTabs();
 
+            // BA prompt: only show when user enters Settings page.
+            if (!hadSettingsPanel && IsSettingsPanelOpen())
+                try { TryShowBaMigrationPromptOnSettingsEnter(); } catch { }
+
             if (hadHistorySide != hasHistorySide || (hasHistorySide && type == ContentType.History))
             {
                 if (hasHistorySide)
@@ -2924,6 +2928,10 @@ namespace VPB
 
             UpdateLayout();
             UpdateTabs();
+
+            // BA prompt: only show when user enters Settings page.
+            if (!hadSettingsPanel && IsSettingsPanelOpen())
+                try { TryShowBaMigrationPromptOnSettingsEnter(); } catch { }
 
             if (hadHistorySide != hasHistorySide || (hasHistorySide && type == ContentType.History))
             {

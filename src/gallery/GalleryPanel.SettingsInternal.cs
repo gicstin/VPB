@@ -1265,9 +1265,11 @@ namespace VPB
             if (this == null || gameObject == null) return;
             try
             {
+                if (backgroundBoxGO == null) return;
+
                 // Outer overlay — dims the gallery panel
                 GameObject overlay = new GameObject("BA_MigrationPrompt");
-                overlay.transform.SetParent(transform, false);
+                overlay.transform.SetParent(backgroundBoxGO.transform, false);
                 RectTransform overlayRt = overlay.AddComponent<RectTransform>();
                 overlayRt.anchorMin = Vector2.zero;
                 overlayRt.anchorMax = Vector2.one;
@@ -1276,6 +1278,7 @@ namespace VPB
                 UnityEngine.UI.Image overlayBg = overlay.AddComponent<UnityEngine.UI.Image>();
                 overlayBg.color = new Color(0f, 0f, 0f, 0.6f);
                 overlay.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+                try { SetLayerRecursive(overlay, backgroundBoxGO.layer); } catch { }
 
                 // Dialog box
                 GameObject box = new GameObject("DialogBox");
@@ -1283,7 +1286,7 @@ namespace VPB
                 RectTransform boxRt = box.AddComponent<RectTransform>();
                 boxRt.anchorMin = new Vector2(0.5f, 0.5f);
                 boxRt.anchorMax = new Vector2(0.5f, 0.5f);
-                boxRt.sizeDelta = new Vector2(480f, 220f);
+                boxRt.sizeDelta = new Vector2(560f, 260f);
                 boxRt.anchoredPosition = Vector2.zero;
                 UnityEngine.UI.Image boxBg = box.AddComponent<UnityEngine.UI.Image>();
                 boxBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
@@ -1301,71 +1304,80 @@ namespace VPB
                 textGo.transform.SetParent(box.transform, false);
                 UnityEngine.UI.Text msg = textGo.AddComponent<UnityEngine.UI.Text>();
                 msg.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                msg.fontSize = 16;
+                msg.fontSize = 22;
                 msg.alignment = TextAnchor.MiddleCenter;
                 msg.color = Color.white;
                 msg.text = VPBTranslation.T("ba.prompt.msg",
-                    "BrowserAssist data detected.\nImport your tags into VPB?\nThis can also be done later in Settings.");
+                    "BrowserAssist data detected.\nImport available in Settings.\nOpen Settings → BrowserAssist section.");
                 UnityEngine.UI.LayoutElement textLe = textGo.AddComponent<UnityEngine.UI.LayoutElement>();
-                textLe.preferredHeight = 80f;
+                textLe.preferredHeight = 130f;
                 textLe.flexibleWidth = 1f;
 
                 // Button row
                 GameObject btnRow = new GameObject("BtnRow");
                 btnRow.transform.SetParent(box.transform, false);
-                UnityEngine.UI.HorizontalLayoutGroup hl = btnRow.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
-                hl.spacing = 8f;
-                hl.childForceExpandWidth = false;
-                hl.childForceExpandHeight = false;
-                hl.childAlignment = TextAnchor.MiddleCenter;
                 UnityEngine.UI.LayoutElement rowLe = btnRow.AddComponent<UnityEngine.UI.LayoutElement>();
-                rowLe.preferredHeight = 40f;
+                rowLe.preferredHeight = 48f;
                 rowLe.flexibleWidth = 1f;
 
                 Action dismiss = () => { try { UnityEngine.Object.Destroy(overlay); } catch { } };
 
-                // YES button
-                UI.CreateUIButton(btnRow, 140f, 36f, VPBTranslation.T("ba.prompt.yes", "Yes, import now"),
-                    14, 0f, 0f, AnchorPresets.middleCenter, () =>
+                void SetDismissed()
                 {
-                    dismiss();
-                    VPBConfig.Instance.BaMigrationPromptDismissed = true;
-                    VPBConfig.Instance.Save();
-                    if (BaImporter.TryDetectBaDataDir(out string baDir))
+                    try
                     {
-                        BaImporter.BaMigrationResult r;
-                        BaImporter.RunImport(baDir, out r);
-                        string feedback = r.Success
-                            ? string.Format(VPBTranslation.T("ba.prompt.imported",
-                                "Imported {0} tag rows across {1} packages."),
-                                r.TagRowsImported, r.PackagesTagged)
-                            : VPBTranslation.T("ba.prompt.failed", "Import failed — see log.");
-                        ShowTemporaryStatus(feedback, 5f);
+                        if (VPBConfig.Instance == null) return;
+                        VPBConfig.Instance.BaMigrationPromptDismissed = true;
+                        VPBConfig.Instance.Save();
                     }
-                });
+                    catch { }
+                }
 
-                // NO (don't show again) button
-                UI.CreateUIButton(btnRow, 170f, 36f, VPBTranslation.T("ba.prompt.no", "No, don't ask again"),
-                    14, 0f, 0f, AnchorPresets.middleCenter, () =>
-                {
-                    dismiss();
-                    VPBConfig.Instance.BaMigrationPromptDismissed = true;
-                    VPBConfig.Instance.Save();
-                    ShowTemporaryStatus(VPBTranslation.T("ba.prompt.dismissed",
-                        "Dismissed. Import available in Settings."), 4f);
-                });
+                // TAKE ME THERE button
+                UI.CreateUIButton(btnRow, 240f, 44f, VPBTranslation.T("ba.prompt.take_me_there", "Take me there"),
+                    18, -140f, 0f, AnchorPresets.middleCenter, () =>
+                    {
+                        dismiss();
+                        SetDismissed();
+                        try
+                        {
+                            if (!IsSettingsPanelOpen())
+                            {
+                                // If prompt ever called outside Settings, force Settings open on right by default.
+                                ToggleRight(ContentType.Settings);
+                            }
+                        }
+                        catch { }
+                        try
+                        {
+                            currentSettingsGroup = "ba_migration";
+                            UpdateTabs();
+                            RefreshInternalSettingsListRows(false);
+                        }
+                        catch { }
+                    });
 
-                // ASK LATER button
-                UI.CreateUIButton(btnRow, 130f, 36f, VPBTranslation.T("ba.prompt.later", "Ask me next time"),
-                    14, 0f, 0f, AnchorPresets.middleCenter, () =>
-                {
-                    dismiss();
-                });
+                // OK button
+                UI.CreateUIButton(btnRow, 140f, 44f, VPBTranslation.T("ba.prompt.ok", "OK"),
+                    18, 160f, 0f, AnchorPresets.middleCenter, () =>
+                    {
+                        dismiss();
+                        SetDismissed();
+                    });
             }
             catch (Exception ex)
             {
                 LogUtil.LogWarning("[VPB BA] ShowBaMigrationPrompt failed: " + ex.Message);
             }
+        }
+
+        private void TryShowBaMigrationPromptOnSettingsEnter()
+        {
+            if (!IsSettingsPanelOpen()) return;
+            if (VPBConfig.Instance == null || VPBConfig.Instance.BaMigrationPromptDismissed) return;
+            if (!Gallery.TryConsumeBaMigrationPromptPending()) return;
+            if (!BaImporter.TryDetectBaDataDir(out _)) return;
+            ShowBaMigrationPrompt();
         }
     }
 }

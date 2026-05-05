@@ -2367,6 +2367,34 @@ namespace VPB
         /// </summary>
         private void UpdateTargetDropdownUI()
         {
+            try
+            {
+                // Toolbox dropup label sync
+                if (tboxTargetDropdownBtnText != null)
+                {
+                    string label = "Target";
+                    try
+                    {
+                        int i = targetDropdownValue;
+                        Atom a = (personAtoms != null && i >= 0 && i < personAtoms.Count) ? personAtoms[i] : null;
+                        string uid = (targetDropdownOptions != null && i >= 0 && i < targetDropdownOptions.Count) ? targetDropdownOptions[i] : null;
+                        if (a != null)
+                        {
+                            // GetPersonAtomDisplayLabel lives in SelectionContextMenu partial; safe to call.
+                            label = GetPersonAtomDisplayLabel(a, uid ?? "Unknown");
+                        }
+                    }
+                    catch { }
+                    tboxTargetDropdownBtnText.text = label + "  ▲";
+                }
+
+                // If menu open, rebuild checkmarks.
+                if (tboxTargetMenuOpen)
+                {
+                    try { RebuildTboxTargetMenuOptions(); } catch { }
+                }
+            }
+            catch { }
         }
 
         private void Undo()

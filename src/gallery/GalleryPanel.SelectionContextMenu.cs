@@ -1558,87 +1558,55 @@ namespace VPB
             bool hasReal = personAtoms.Count > 0 && personAtoms[0] != null;
             if (!hasReal)
             {
+                try { CloseTboxTargetMenu(); } catch { }
                 try { RefreshTboxFlexButtonLayout(); } catch { }
                 return;
             }
 
             float innerRowH   = Mathf.Max(34f, tboxInfoRowHeight - 8f);
-            float sScale      = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
-            Sprite renameSpr  = UI.LoadIconSprite("vpb_icons/rename.png",       new Color(0.78f, 0.78f, 0.78f, 1f));
-            Sprite saveSpr    = gallerySaveSprite;
-            Color renameBackdrop = new Color(0.35f, 0.35f, 0.42f, 1f);
-            Color saveBackdrop   = new Color(0.20f, 0.35f, 0.22f, 1f);
-            Color activeColor    = new Color(0.25f, 0.35f, 0.50f, 1f);
-            Color inactiveColor  = new Color(0.18f, 0.18f, 0.20f, 1f);
             Transform stash      = tboxButtonStash.transform;
-            float iconBtnSz      = innerRowH;
-            float iconBtnCount   = (renameSpr != null ? 1 : 0) + (saveSpr != null ? 1 : 0);
-            float iconBtnsW      = iconBtnCount * iconBtnSz + (iconBtnCount > 1 ? (iconBtnCount - 1) * 2f : 0f);
+            Color inactiveColor  = new Color(0.18f, 0.18f, 0.20f, 1f);
 
-            for (int i = 0; i < personAtoms.Count; i++)
+            // Single dropup button row (active person label). Click opens list of all people.
+            tboxTargetDropdownRowGO = new GameObject("TboxTargetDropdownRow");
+            tboxTargetDropdownRowGO.transform.SetParent(stash, false);
+            var rowRT = tboxTargetDropdownRowGO.AddComponent<RectTransform>();
+            rowRT.anchorMin = Vector2.zero; rowRT.anchorMax = Vector2.one;
+            rowRT.pivot = new Vector2(0.5f, 0.5f);
+            rowRT.offsetMin = rowRT.offsetMax = Vector2.zero;
+            var rowHLG = tboxTargetDropdownRowGO.AddComponent<HorizontalLayoutGroup>();
+            rowHLG.spacing = 2f; rowHLG.childAlignment = TextAnchor.MiddleLeft;
+            rowHLG.childControlWidth = true; rowHLG.childForceExpandWidth = true;
+            rowHLG.childControlHeight = true; rowHLG.childForceExpandHeight = true;
+            var rowLE = tboxTargetDropdownRowGO.AddComponent<LayoutElement>();
+            rowLE.minWidth = 140f;
+            rowLE.preferredWidth = 220f;
+            rowLE.flexibleWidth = 1f;
+            rowLE.minHeight = innerRowH; rowLE.preferredHeight = innerRowH; rowLE.flexibleHeight = 1f;
+            tboxPersonAtomBtns.Add(tboxTargetDropdownRowGO);
+
+            string activeLabel = "Target";
+            try
             {
-                Atom atom = personAtoms[i];
-                if (atom == null) continue;
-
-                string uid      = targetDropdownOptions.Count > i ? targetDropdownOptions[i] : "Unknown";
-                string label    = GetPersonAtomDisplayLabel(atom, uid);
-                bool   isActive = (targetDropdownValue == i);
-                int    captured = i;
-
-                // Row GO — stashed initially, placed into flex rows by RefreshTboxFlexButtonLayout
-                var rowGO = new GameObject("TboxPersonAtomRow_" + i);
-                rowGO.transform.SetParent(stash, false);
-                var rowRT = rowGO.AddComponent<RectTransform>();
-                rowRT.anchorMin = Vector2.zero; rowRT.anchorMax = Vector2.one;
-                rowRT.pivot = new Vector2(0.5f, 0.5f);
-                rowRT.offsetMin = rowRT.offsetMax = Vector2.zero;
-                var rowHLG = rowGO.AddComponent<HorizontalLayoutGroup>();
-                rowHLG.spacing = 2f; rowHLG.childAlignment = TextAnchor.MiddleLeft;
-                rowHLG.childControlWidth = true; rowHLG.childForceExpandWidth = false;
-                rowHLG.childControlHeight = true; rowHLG.childForceExpandHeight = true;
-                var rowLE = rowGO.AddComponent<LayoutElement>();
-                rowLE.minWidth = 90f + (iconBtnsW > 0 ? 2f + iconBtnsW : 0f);
-                rowLE.preferredWidth = 160f + (iconBtnsW > 0 ? 2f + iconBtnsW : 0f);
-                rowLE.flexibleWidth = 1f;
-                rowLE.minHeight = innerRowH; rowLE.preferredHeight = innerRowH; rowLE.flexibleHeight = 1f;
-                tboxPersonAtomBtns.Add(rowGO);
-
-                // Main button (sets this atom as target on click)
-                var mainBtn = UI.CreateUIButton(rowGO, 0, 0, label, 14, 0, 0, AnchorPresets.stretchAll,
-                    () => { targetDropdownValue = captured; UpdateTargetDropdownUI(); });
-                mainBtn.name = "PersonAtomBtn_" + label;
-                var mainImg = mainBtn.GetComponent<Image>();
-                if (mainImg != null) mainImg.color = isActive ? activeColor : inactiveColor;
-                var mainLE = mainBtn.GetComponent<LayoutElement>() ?? mainBtn.AddComponent<LayoutElement>();
-                mainLE.flexibleWidth = 1f; mainLE.minHeight = innerRowH;
-                mainLE.preferredHeight = innerRowH; mainLE.flexibleHeight = 1f;
-                var txt = mainBtn.GetComponentInChildren<Text>(true);
-                if (txt != null) txt.gameObject.SetActive(true);
-                string tooltipText = $"Person atom: {atom.uid}\nClick to select as target";
-                AddTooltipPlain(mainBtn, tooltipText);
-
-                // Save appearance preset button
-                if (saveSpr != null)
-                {
-                    Atom capturedAtom = atom;
-                    var saveBtn = UI.CreateSideTabSquareIconButton(
-                        rowGO, iconBtnSz, saveSpr,
-                        () => SavePresetFromStorable(capturedAtom, "AppearancePresets"),
-                        saveBackdrop, Mathf.Max(3f, 4f * sScale));
-                    AddTooltipPlain(saveBtn, VPBTranslation.T("gallery.tbox.save_appearance", "Save appearance preset for this person"));
-                }
-
-                // Rename button
-                if (renameSpr != null)
-                {
-                    Atom capturedAtom = atom;
-                    var renameBtn = UI.CreateSideTabSquareIconButton(
-                        rowGO, iconBtnSz, renameSpr,
-                        () => ShowPersonAtomRenameOverlay(capturedAtom),
-                        renameBackdrop, Mathf.Max(3f, 4f * sScale));
-                    AddTooltipPlain(renameBtn, VPBTranslation.T("gallery.rename.tooltip", "Rename this person"));
-                }
+                int i = targetDropdownValue;
+                Atom a = (i >= 0 && i < personAtoms.Count) ? personAtoms[i] : null;
+                string uid = (targetDropdownOptions.Count > i) ? targetDropdownOptions[i] : null;
+                if (a != null)
+                    activeLabel = GetPersonAtomDisplayLabel(a, uid ?? "Unknown");
             }
+            catch { }
+
+            var btn = UI.CreateUIButton(tboxTargetDropdownRowGO, 0, 0, activeLabel + "  ▲", 14, 0, 0, AnchorPresets.stretchAll,
+                () => { try { ToggleTboxTargetMenu(); } catch { } });
+            btn.name = "TboxTargetDropdownBtn";
+            var img = btn.GetComponent<Image>();
+            if (img != null) img.color = inactiveColor;
+            var le = btn.GetComponent<LayoutElement>() ?? btn.AddComponent<LayoutElement>();
+            le.flexibleWidth = 1f; le.minHeight = innerRowH;
+            le.preferredHeight = innerRowH; le.flexibleHeight = 1f;
+            tboxTargetDropdownBtnText = btn.GetComponentInChildren<Text>(true);
+            if (tboxTargetDropdownBtnText != null) tboxTargetDropdownBtnText.gameObject.SetActive(true);
+            AddTooltipPlain(btn, VPBTranslation.T("gallery.tbox.target_select", "Select active person target"));
 
             try
             {
@@ -1647,6 +1615,217 @@ namespace VPB
                 Canvas.ForceUpdateCanvases();
             }
             catch { }
+        }
+
+        private void EnsureTboxTargetMenuBuilt()
+        {
+            if (tboxTargetMenuRootGO != null || backgroundBoxGO == null) return;
+
+            tboxTargetMenuRootGO = new GameObject("TboxTargetMenu");
+            tboxTargetMenuRootGO.transform.SetParent(backgroundBoxGO.transform, false);
+            RectTransform rootRT = tboxTargetMenuRootGO.AddComponent<RectTransform>();
+            rootRT.anchorMin = Vector2.zero;
+            rootRT.anchorMax = Vector2.one;
+            rootRT.offsetMin = Vector2.zero;
+            rootRT.offsetMax = Vector2.zero;
+
+            GameObject backdropGO = new GameObject("Backdrop");
+            backdropGO.transform.SetParent(tboxTargetMenuRootGO.transform, false);
+            RectTransform backdropRT = backdropGO.AddComponent<RectTransform>();
+            backdropRT.anchorMin = Vector2.zero;
+            backdropRT.anchorMax = Vector2.one;
+            backdropRT.offsetMin = Vector2.zero;
+            backdropRT.offsetMax = Vector2.zero;
+            Image backdropImg = backdropGO.AddComponent<Image>();
+            backdropImg.color = new Color(0f, 0f, 0f, 0.001f);
+            backdropImg.raycastTarget = true;
+            Button backdropBtn = backdropGO.AddComponent<Button>();
+            backdropBtn.transition = Selectable.Transition.None;
+            backdropBtn.onClick.AddListener(CloseTboxTargetMenu);
+
+            tboxTargetMenuPanelGO = new GameObject("Panel");
+            tboxTargetMenuPanelGO.transform.SetParent(tboxTargetMenuRootGO.transform, false);
+            tboxTargetMenuPanelRT = tboxTargetMenuPanelGO.AddComponent<RectTransform>();
+            tboxTargetMenuPanelRT.anchorMin = tboxTargetMenuPanelRT.anchorMax = new Vector2(0.5f, 0.5f);
+            tboxTargetMenuPanelRT.pivot = new Vector2(0f, 0f);
+            tboxTargetMenuPanelRT.anchoredPosition = Vector2.zero;
+            tboxTargetMenuPanelRT.sizeDelta = new Vector2(380f, 50f);
+
+            Image panelImg = tboxTargetMenuPanelGO.AddComponent<Image>();
+            panelImg.color = new Color(0.09f, 0.09f, 0.16f, 0.97f);
+            var outline = tboxTargetMenuPanelGO.AddComponent<Outline>();
+            outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
+            outline.effectDistance = new Vector2(1f, -1f);
+
+            VerticalLayoutGroup vlg = tboxTargetMenuPanelGO.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(6, 6, 6, 6);
+            vlg.spacing = 4;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandHeight = false;
+            vlg.childControlWidth = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childAlignment = TextAnchor.UpperCenter;
+
+            ContentSizeFitter csf = tboxTargetMenuPanelGO.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            tboxTargetMenuRootGO.SetActive(false);
+            tboxTargetMenuOpen = false;
+        }
+
+        private void RebuildTboxTargetMenuOptions()
+        {
+            if (tboxTargetMenuPanelGO == null) return;
+
+            Transform panel = tboxTargetMenuPanelGO.transform;
+            for (int i = panel.childCount - 1; i >= 0; i--)
+                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+
+            float sScale      = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            Sprite renameSpr  = UI.LoadIconSprite("vpb_icons/rename.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            Sprite saveSpr    = gallerySaveSprite;
+            Color renameBackdrop = new Color(0.35f, 0.35f, 0.42f, 1f);
+            Color saveBackdrop   = new Color(0.20f, 0.35f, 0.22f, 1f);
+            float rowH = Mathf.Max(44f, 44f * sScale);
+            int labelFont = Mathf.RoundToInt(Mathf.Max(16f, 16f * sScale));
+
+            int count = personAtoms != null ? personAtoms.Count : 0;
+            for (int i = 0; i < count; i++)
+            {
+                Atom atom = null;
+                try { atom = personAtoms[i]; } catch { atom = null; }
+                if (atom == null) continue;
+
+                string uid = null;
+                try { uid = (targetDropdownOptions.Count > i) ? targetDropdownOptions[i] : null; } catch { uid = null; }
+                string label = GetPersonAtomDisplayLabel(atom, uid ?? "Unknown");
+                bool isCurrent = (i == targetDropdownValue);
+                int captured = i;
+
+                // Row container: select button + (optional) save + rename icons
+                GameObject rowGO = new GameObject("TboxTargetMenuRow_" + i);
+                rowGO.transform.SetParent(tboxTargetMenuPanelGO.transform, false);
+                var rowRT = rowGO.AddComponent<RectTransform>();
+                rowRT.anchorMin = new Vector2(0f, 1f);
+                rowRT.anchorMax = new Vector2(0f, 1f);
+                rowRT.pivot = new Vector2(0f, 1f);
+                rowRT.sizeDelta = new Vector2(0f, rowH);
+
+                var rowImg = rowGO.AddComponent<Image>();
+                rowImg.color = isCurrent ? new Color(0.15f, 0.30f, 0.52f, 1f) : new Color(0.16f, 0.16f, 0.24f, 1f);
+                rowImg.raycastTarget = false; // children handle clicks
+
+                var rowHLG = rowGO.AddComponent<HorizontalLayoutGroup>();
+                rowHLG.padding = new RectOffset(4, 4, 2, 2);
+                rowHLG.spacing = 4f;
+                rowHLG.childControlHeight = true;
+                rowHLG.childControlWidth = true;
+                rowHLG.childForceExpandHeight = true;
+                rowHLG.childForceExpandWidth = false;
+                rowHLG.childAlignment = TextAnchor.MiddleLeft;
+
+                var rowLE = rowGO.AddComponent<LayoutElement>();
+                rowLE.preferredHeight = rowH;
+                rowLE.flexibleWidth = 1f;
+
+                string rowLabel = (isCurrent ? "\u2713  " : "    ") + label;
+                GameObject selectBtn = UI.CreateUIButton(
+                    rowGO, 0, 0, rowLabel, labelFont, 0, 0,
+                    AnchorPresets.stretchAll,
+                    () =>
+                    {
+                        targetDropdownValue = captured;
+                        UpdateTargetDropdownUI();
+                        CloseTboxTargetMenu();
+                    });
+
+                var selectImg = selectBtn.GetComponent<Image>();
+                if (selectImg != null) selectImg.color = new Color(0f, 0f, 0f, 0f);
+                var selectLE = selectBtn.GetComponent<LayoutElement>() ?? selectBtn.AddComponent<LayoutElement>();
+                selectLE.flexibleWidth = 1f;
+                selectLE.preferredHeight = rowH - 4f;
+
+                Text rowT = selectBtn.GetComponentInChildren<Text>(true);
+                if (rowT != null)
+                {
+                    rowT.color = isCurrent ? Color.white : new Color(0.82f, 0.82f, 0.92f, 1f);
+                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
+                    rowT.alignment = TextAnchor.MiddleLeft;
+                    VPBUiFont.ApplyTo(rowT);
+                    // VPBUiFont.ApplyTo may reset size; force our desired dropdown font.
+                    rowT.fontSize = labelFont;
+                }
+
+                float iconSz = Mathf.Min(rowH - 6f, 40f * sScale);
+                if (saveSpr != null)
+                {
+                    Atom capturedAtom = atom;
+                    var saveBtn = UI.CreateSideTabSquareIconButton(
+                        rowGO, iconSz, saveSpr,
+                        () => SavePresetFromStorable(capturedAtom, "AppearancePresets"),
+                        saveBackdrop, Mathf.Max(3f, 4f * sScale));
+                    AddTooltipPlain(saveBtn, VPBTranslation.T("gallery.tbox.save_appearance", "Save appearance preset for this person"));
+                }
+                if (renameSpr != null)
+                {
+                    Atom capturedAtom = atom;
+                    var renameBtn = UI.CreateSideTabSquareIconButton(
+                        rowGO, iconSz, renameSpr,
+                        () => ShowPersonAtomRenameOverlay(capturedAtom),
+                        renameBackdrop, Mathf.Max(3f, 4f * sScale));
+                    AddTooltipPlain(renameBtn, VPBTranslation.T("gallery.rename.tooltip", "Rename this person"));
+                }
+            }
+        }
+
+        private void CloseTboxTargetMenu()
+        {
+            tboxTargetMenuOpen = false;
+            if (tboxTargetMenuRootGO != null) tboxTargetMenuRootGO.SetActive(false);
+        }
+
+        private void ToggleTboxTargetMenu()
+        {
+            EnsureTboxTargetMenuBuilt();
+            if (tboxTargetMenuRootGO == null || tboxTargetMenuPanelRT == null) return;
+
+            if (tboxTargetMenuOpen)
+            {
+                CloseTboxTargetMenu();
+                return;
+            }
+
+            // Position panel directly above dropdown button (always expand up).
+            RectTransform anchorBtnRT = null;
+            try
+            {
+                // Unity version in this project does not support GetComponentInParent<T>(bool includeInactive).
+                // Button is clicked only when active, so standard GetComponentInParent is enough.
+                if (tboxTargetDropdownBtnText != null)
+                    anchorBtnRT = tboxTargetDropdownBtnText.GetComponentInParent<Button>()?.GetComponent<RectTransform>();
+            }
+            catch { anchorBtnRT = null; }
+
+            RectTransform rootRT = backgroundBoxGO != null ? backgroundBoxGO.GetComponent<RectTransform>() : null;
+            if (rootRT != null && anchorBtnRT != null)
+            {
+                try
+                {
+                    Bounds b = RectTransformUtility.CalculateRelativeRectTransformBounds(rootRT, anchorBtnRT);
+                    float gap = 6f;
+                    // Align panel left edge with button left, place panel bottom at button top + gap.
+                    Vector2 p = new Vector2(b.min.x, b.max.y + gap);
+                    tboxTargetMenuPanelRT.anchorMin = tboxTargetMenuPanelRT.anchorMax = new Vector2(0.5f, 0.5f);
+                    tboxTargetMenuPanelRT.pivot = new Vector2(0f, 0f);
+                    tboxTargetMenuPanelRT.anchoredPosition = p;
+                }
+                catch { }
+            }
+
+            RebuildTboxTargetMenuOptions();
+            tboxTargetMenuRootGO.SetActive(true);
+            tboxTargetMenuRootGO.transform.SetAsLastSibling();
+            tboxTargetMenuOpen = true;
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -1834,6 +2013,7 @@ namespace VPB
                 show(tboxFilterBackBtn, false);
                 show(tboxFilterClearBtn, false);
                 for (int i = 0; i < tboxPersonAtomBtns.Count; i++) show(tboxPersonAtomBtns[i], false);
+                try { CloseTboxTargetMenu(); } catch { }
 
                 show(tboxCleanupBtn, false);
                 show(tboxCleanupApplyBtn, false);
@@ -1876,6 +2056,11 @@ namespace VPB
 
             show(tboxSettingsCancelBtn, false);
             show(tboxSettingsSaveBtn, false);
+
+            // Person target dropdown row: keep visible whenever person list exists.
+            bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
+            for (int i = 0; i < tboxPersonAtomBtns.Count; i++) show(tboxPersonAtomBtns[i], hasPersonAtoms);
+            if (!hasPersonAtoms) { try { CloseTboxTargetMenu(); } catch { } }
 
             show(tboxCleanupBtn, !isCleanup);
             show(tboxCleanupApplyBtn, false);
