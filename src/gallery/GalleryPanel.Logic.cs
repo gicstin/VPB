@@ -115,7 +115,7 @@ namespace VPB
         {
             // Any explicit middle-layout switch must leave internal settings mode.
             if (!keepInternalSettingsMode && (IsSettingsPanelOpen() || settingsListViewActive))
-                ExitInternalSettingsMode(false);
+                ExitInternalSettingsMode(true);
             if (layoutMode == mode) return;
             
             if (mode == GalleryLayoutMode.List)

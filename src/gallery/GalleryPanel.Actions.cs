@@ -317,8 +317,9 @@ namespace VPB
             LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
             // Switching middle content (category/page) must leave internal settings mode.
+            // Default behavior: auto-save on exit; only explicit Discard uses cancel path.
             if (IsSettingsPanelOpen() || settingsListViewActive)
-                ExitInternalSettingsMode(false);
+                ExitInternalSettingsMode(true);
 
             bool registeredBefore = _registeredWithSuperController;
             EnsureCanvasRegisteredWithSuperController();

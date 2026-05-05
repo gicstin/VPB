@@ -2806,7 +2806,7 @@ namespace VPB
         {
             bool hadSettingsPanel = IsSettingsPanelOpen();
             if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
-                ExitInternalSettingsMode(false);
+                ExitInternalSettingsMode(true);
             if (type == ContentType.UserTags)
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
@@ -2876,7 +2876,7 @@ namespace VPB
         {
             bool hadSettingsPanel = IsSettingsPanelOpen();
             if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
-                ExitInternalSettingsMode(false);
+                ExitInternalSettingsMode(true);
             if (type == ContentType.UserTags)
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;

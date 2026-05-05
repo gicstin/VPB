@@ -1189,7 +1189,7 @@ namespace VPB
             try
             {
                 if (IsSettingsPanelOpen() || settingsListViewActive)
-                    ExitInternalSettingsMode(false);
+                    ExitInternalSettingsMode(true);
 
                 cleanupModeActive = true;
                 cleanupFilterMode = 0;
