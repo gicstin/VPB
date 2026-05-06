@@ -440,9 +440,6 @@ namespace VPB
             }
             catch { }
 
-            try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-            try { VPB.FileManager.Refresh(); } catch { }
-
             if (_panelsHiddenForSave == null) return;
             for (int i = 0; i < _panelsHiddenForSave.Count; i++)
             {
