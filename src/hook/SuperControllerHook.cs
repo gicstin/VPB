@@ -340,16 +340,7 @@ namespace VPB
 
         private static bool IsPluginsAlwaysEnabledSettingOn()
         {
-            try
-            {
-                return Settings.Instance != null
-                    && Settings.Instance.PluginsAlwaysEnabled != null
-                    && Settings.Instance.PluginsAlwaysEnabled.Value;
-            }
-            catch
-            {
-                return false;
-            }
+            return true;
         }
 
         static Dictionary<string, int> _priorityCache = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -997,7 +988,6 @@ namespace VPB
         public static void PostLoadUserPrefs(MVR.FileManagement.VarPackage __instance)
         {
             if (__instance == null) return;
-            if (!IsPluginsAlwaysEnabledSettingOn()) return;
             try
             {
                 Traverse.Create(__instance).Field("_pluginsAlwaysEnabled").SetValue(true);
@@ -1009,14 +999,14 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.VarPackage), "get_PluginsAlwaysEnabled")]
         public static void PostGetPluginsAlwaysEnabled(ref bool __result)
         {
-            if (IsPluginsAlwaysEnabledSettingOn()) __result = true;
+            __result = true;
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.VarPackage), "get_PluginsAlwaysDisabled")]
         public static void PostGetPluginsAlwaysDisabled(ref bool __result)
         {
-            if (IsPluginsAlwaysEnabledSettingOn()) __result = false;
+            __result = false;
         }
 
         [HarmonyPrefix]

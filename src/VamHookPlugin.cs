@@ -194,7 +194,6 @@ namespace VPB
                 try { Console.Clear(); } catch { }
             }
         }
-        private bool m_ShowPluginsAlwaysEnabledInfo;
         private bool m_ShowGcRefreshInfo;
         private bool m_PendingGc;
         private bool m_ShowSpaceSaverWindow;
@@ -298,7 +297,6 @@ namespace VPB
 
         private void CloseAllInfoCards()
         {
-            m_ShowPluginsAlwaysEnabledInfo = false;
             m_ShowGcRefreshInfo = false;
         }
 

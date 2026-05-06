@@ -50,7 +50,6 @@ namespace VPB
         public ConfigEntry<bool> QuickMenuCreateGalleryEnabled;
         public ConfigEntry<bool> QuickMenuShowHideEnabled;
         public ConfigEntry<bool> QuickMenuCreateGalleryAnchorBaselineMigrated;
-        public ConfigEntry<bool> PluginsAlwaysEnabled;
         public ConfigEntry<bool> EnableZstdCompression;
         public ConfigEntry<int> ZstdCompressionLevel;
         public ConfigEntry<bool> DeleteOriginalCacheAfterCompression;
@@ -124,7 +123,6 @@ namespace VPB
             QuickMenuShowHideEnabled = config.Bind<bool>("UI", "QuickMenuShowHideEnabled", true, "Show the Quick Menu Show/Hide button.");
             // One-time migration: force everyone to the baseline anchor once, then allow custom.
             QuickMenuCreateGalleryAnchorBaselineMigrated = config.Bind<bool>("UI", "QuickMenuCreateGalleryAnchorBaselineMigrated", false, "Internal: set true after Quick Menu anchor baseline migration runs once.");
-            PluginsAlwaysEnabled = config.Bind<bool>("Settings", "PluginsAlwaysEnabled", false, "Plugins will always enabled.");
             EnableZstdCompression = config.Bind<bool>("Optimze", "EnableZstdCompression", true, "Enable Zstd compression for texture cache.");
             
             ZstdCompressionLevel = config.Bind<int>("Optimze", "ZstdCompressionLevel", 5, "Zstd compression level (1-22, higher = better compression but slower).");

@@ -12,7 +12,6 @@ namespace VPB
             public string CreateGalleryKeyDraft;
             public string HubKeyDraft;
             public string ClearConsoleKeyDraft;
-            public bool PluginsAlwaysEnabledDraft;
             public bool IsDevModeDraft;
             public bool EnableUiTransparencyDraft;
             public float UiTransparencyValueDraft;
@@ -54,7 +53,6 @@ namespace VPB
         private string m_SettingsCreateGalleryKeyDraft { get => m_SettingsDraft.CreateGalleryKeyDraft; set => m_SettingsDraft.CreateGalleryKeyDraft = value; }
         private string m_SettingsHubKeyDraft { get => m_SettingsDraft.HubKeyDraft; set => m_SettingsDraft.HubKeyDraft = value; }
         private string m_SettingsClearConsoleKeyDraft { get => m_SettingsDraft.ClearConsoleKeyDraft; set => m_SettingsDraft.ClearConsoleKeyDraft = value; }
-        private bool m_SettingsPluginsAlwaysEnabledDraft { get => m_SettingsDraft.PluginsAlwaysEnabledDraft; set => m_SettingsDraft.PluginsAlwaysEnabledDraft = value; }
         private bool m_SettingsIsDevModeDraft { get => m_SettingsDraft.IsDevModeDraft; set => m_SettingsDraft.IsDevModeDraft = value; }
         private bool m_SettingsEnableUiTransparencyDraft { get => m_SettingsDraft.EnableUiTransparencyDraft; set => m_SettingsDraft.EnableUiTransparencyDraft = value; }
         private float m_SettingsUiTransparencyValueDraft { get => m_SettingsDraft.UiTransparencyValueDraft; set => m_SettingsDraft.UiTransparencyValueDraft = value; }

@@ -27,7 +27,6 @@ namespace VPB
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
             m_SettingsClearConsoleKeyDraft = (Settings.Instance != null && Settings.Instance.ClearConsoleKey != null) ? Settings.Instance.ClearConsoleKey.Value : "";
-            m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
             m_SettingsUiTransparencyValueDraft = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
             m_SettingsIsDevModeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.IsDevMode : false;
@@ -72,13 +71,6 @@ namespace VPB
                 if (Settings.Instance != null && Settings.Instance.ClearConsoleKey != null)
                 {
                     Settings.Instance.ClearConsoleKey.Value = parsedClearConsoleKey.keyPattern;
-                }
-                if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
-                {
-                    if (Settings.Instance.PluginsAlwaysEnabled.Value != m_SettingsPluginsAlwaysEnabledDraft)
-                    {
-                        Settings.Instance.PluginsAlwaysEnabled.Value = m_SettingsPluginsAlwaysEnabledDraft;
-                    }
                 }
                 if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null)
                 {
@@ -228,27 +220,6 @@ namespace VPB
             GUILayout.Label((visibilityValue * 100).ToString("F0") + "%", GUILayout.Width(35));
             GUILayout.EndHorizontal();
             GUILayout.Label(VPBTranslation.T("hook.settings.visibility_hint", "Adjust visibility when idle (100% = Opaque, 0% = Invisible)."));
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsPluginsAlwaysEnabledDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsPluginsAlwaysEnabledDraft = !m_SettingsPluginsAlwaysEnabledDraft;
-            }
-            GUILayout.Label(VPBTranslation.T("hook.settings.plugins_always_enabled", "Plugins always enabled"));
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
-            {
-                ToggleInfoCard(ref m_ShowPluginsAlwaysEnabledInfo);
-            }
-            GUILayout.EndHorizontal();
-
-            DrawInfoCard(ref m_ShowPluginsAlwaysEnabledInfo, VPBTranslation.T("hook.settings.plugins_always_enabled", "Plugins always enabled"), () =>
-            {
-                GUILayout.Space(4);
-                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_1", "When this is ON, plugins are treated as always enabled."), m_StyleInfoCardTextWrapped);
-                GUILayout.Space(2);
-                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_2", "Tip: Leave this OFF if you want VaM to respect per-package/per-scene plugin enable state."), m_StyleInfoCardTextWrapped);
-            });
 
             GUILayout.Space(6);
 
