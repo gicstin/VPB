@@ -138,6 +138,11 @@ namespace VPB
 
         private bool refreshOnNextShow;
         private bool hasLoadedContent = false;
+        // When gallery is unhidden via menu gate (no Show() call), refresh raycaster once.
+        private bool _queuedRaycastRefreshOnVisible;
+        // VR cold boot: avoid enabling canvas/raycaster before World UI ready.
+        private Coroutine _deferredSetVisibleCoroutine;
+        private bool _pendingVisibleAfterStartupReady;
         private Dictionary<string, float> categoryScrollPositions = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         // Tracks category keys that were written during this app session (not just loaded from disk cache).
         private HashSet<string> sessionCategoryScrollKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

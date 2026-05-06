@@ -582,10 +582,138 @@ namespace VPB
         {
             if (canvas == null) return;
 
-            canvas.enabled = visible;
+            bool isVR = false;
+            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
 
+            void setImmediate(bool v)
+            {
+                canvas.enabled = v;
+                var raycaster = canvas.GetComponent<GraphicRaycaster>();
+                if (raycaster != null) raycaster.enabled = v;
+            }
+
+            if (!visible)
+            {
+                _pendingVisibleAfterStartupReady = false;
+                if (_deferredSetVisibleCoroutine != null)
+                {
+                    try { StopCoroutine(_deferredSetVisibleCoroutine); } catch { }
+                    _deferredSetVisibleCoroutine = null;
+                }
+                setImmediate(false);
+                _queuedRaycastRefreshOnVisible = false;
+                return;
+            }
+
+            // VR cold boot: enabling world-space canvas too early can produce “visible but dead” pointer state.
+            // Defer actual enable until World UI ready and menu visible; then do full refresh + raycaster rebuild.
+            if (isVR && Application.isPlaying && !LogUtil.IsStartupReadyLogged())
+            {
+                _pendingVisibleAfterStartupReady = true;
+                if (_deferredSetVisibleCoroutine == null)
+                    _deferredSetVisibleCoroutine = StartCoroutine(DeferredSetVisibleAfterStartupReady());
+                // Keep disabled until ready to avoid stuck non-interactible canvas.
+                setImmediate(false);
+                return;
+            }
+
+            setImmediate(true);
+
+            // Robust cold-boot fix: if first refresh got deferred while menu-gated hidden,
+            // ensure we run (or schedule) initial refresh on any transition to visible.
+            if (visible && Application.isPlaying && !hasLoadedContent && refreshCoroutine == null)
+            {
+                // If no category ever selected (should not happen, but can if created without Show()),
+                // force a first Show() using configured initial category.
+                if (string.IsNullOrEmpty(currentPath) && categories != null && categories.Count > 0)
+                {
+                    try
+                    {
+                        var initial = categories[0];
+                        string categoryToOpen = null;
+                        if (VPBConfig.Instance != null) categoryToOpen = VPBConfig.Instance.ResolveInitialGalleryCategoryName();
+                        if (!string.IsNullOrEmpty(categoryToOpen))
+                        {
+                            for (int i = 0; i < categories.Count; i++)
+                            {
+                                if (string.Equals(categories[i].name, categoryToOpen, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    initial = categories[i];
+                                    break;
+                                }
+                            }
+                        }
+                        Show(initial.name, initial.extension, initial.path);
+                        return;
+                    }
+                    catch { }
+                }
+
+                // If startup not ready yet, schedule deferred refresh (idempotent).
+                if (!LogUtil.IsStartupReadyLogged())
+                {
+                    try { ScheduleInitialRefreshAfterStartupReady(); } catch { }
+                }
+                else
+                {
+                    try { RefreshFiles(false); } catch { }
+                }
+            }
+
+            // Cold-boot VR fix when gallery is shown via menu gate (no Show() call).
+            // VaM VR pointer wiring can lag behind canvas enable; force rebuild next frame + after short delay.
+            if (visible)
+            {
+                if (isVR && Application.isPlaying && !_queuedRaycastRefreshOnVisible)
+                {
+                    _queuedRaycastRefreshOnVisible = true;
+                    try { StartCoroutine(RefreshRaycasterNextFrame()); } catch { }
+                    try { StartCoroutine(RefreshRaycasterAfterDelay(1f)); } catch { }
+                }
+            }
+            else
+            {
+                _queuedRaycastRefreshOnVisible = false;
+            }
+        }
+
+        private IEnumerator DeferredSetVisibleAfterStartupReady()
+        {
+            while (!LogUtil.IsStartupReadyLogged())
+                yield return null;
+
+            _deferredSetVisibleCoroutine = null;
+            if (!_pendingVisibleAfterStartupReady) yield break;
+            _pendingVisibleAfterStartupReady = false;
+            if (canvas == null) yield break;
+
+            // Wait until menu visible too (anchor gate path).
+            while (!IsVamMenuVisible())
+                yield return null;
+
+            canvas.enabled = true;
             var raycaster = canvas.GetComponent<GraphicRaycaster>();
-            if (raycaster != null) raycaster.enabled = visible;
+            if (raycaster != null) raycaster.enabled = true;
+
+            try { EnsureCanvasRegisteredWithSuperController(); } catch { }
+
+            // Force VaM/Unity to rebuild pointer interaction now that UI is ready.
+            try { StartCoroutine(RefreshRaycasterNextFrame()); } catch { }
+            try { StartCoroutine(RefreshRaycasterAfterDelay(1f)); } catch { }
+
+            // Ensure initial content refresh runs once we become visible.
+            if (!hasLoadedContent && refreshCoroutine == null)
+            {
+                if (!LogUtil.IsStartupReadyLogged())
+                {
+                    try { ScheduleInitialRefreshAfterStartupReady(); } catch { }
+                }
+                else
+                {
+                    try { RefreshFiles(false); } catch { }
+                }
+            }
+
         }
 
         private static bool IsVamMenuVisible()
