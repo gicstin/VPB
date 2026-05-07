@@ -179,9 +179,17 @@
   "gallery.tooltip.clone_pane": "克隆此画廊面板",
   "gallery.tooltip.category_list": "打开分类列表",
   "gallery.tooltip.creator_list": "打开作者列表",
+  "gallery.tooltip.user_tags_list": "你的标签（SQLite）。在此筛选；编辑打开标签管理器。",
+  "gallery.tooltip.path_list": "打开资源包和文件路径列表。",
+  "gallery.tooltip.history_list": "打开历史记录与使用过滤器。",
+  "gallery.tooltip.creator_filter": "作者筛选（多选）。左键打开。右键清除。",
   "gallery.tooltip.apply_mode": "切换单击/双击应用",
   "gallery.tooltip.replace_mode": "切换拖放时添加/替换（同一按钮）",
   "gallery.tooltip.save_pane": "保存预设及相关操作",
+  "gallery.tooltip.dock_side": "停靠边（左/右/上）",
+  "gallery.tooltip.autohide_enabled": "自动隐藏（已启用）",
+  "gallery.tooltip.autohide_disabled": "自动隐藏（已禁用）",
+  "gallery.tooltip.package_uid": "包：{0}.var",
   "settings.title": "设置",
   "settings.cancel": "取消",
   "settings.save": "保存",
@@ -259,6 +267,7 @@
   "settings.toggle.off": "关",
   "settings.toggle.on": "开",
   "gallery.save.scene": "场景...",
+  "gallery.save.scene_tooltip": "将当前场景保存到文件。",
   "gallery.save.appearance": "外形预设...",
   "gallery.save.clothing": "服装预设...",
   "gallery.save.hair": "头发预设...",
@@ -438,4 +447,7 @@
   "settings.tip.grid_selected_border_width": "网格预览选中边框粗细（像素）。",
   "settings.grid_border_inward_square": "内向边框（内边距=0）",
   "settings.tip.grid_border_inward_square": "当内边距为 0（贴边）时，将悬停/选中边框绘制在内部而非外部。"
+  ,
+  "settings.category_quick.editor.move_up_tip": "上移",
+  "settings.category_quick.editor.move_down_tip": "下移"
 }

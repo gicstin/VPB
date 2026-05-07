@@ -256,7 +256,7 @@ namespace VPB
                 Sprite upIcon = UI.LoadIconSprite("vpb_icons/up.png", new Color(0.9f, 0.9f, 0.9f, 1f));
                 GameObject up = UI.CreateSideTabSquareIconButton(row, rowH, upIcon, upAct, new Color(0.22f, 0.42f, 0.58f, 1f), 4f * s);
                 if (upIcon == null) AddButtonOverlayGlyph(up, "▲", Mathf.RoundToInt(18f * s));
-                AddTooltipPlain(up, "Move up");
+                AddTooltipPlain(up, VPBTranslation.T("settings.category_quick.editor.move_up_tip", "Move up"));
             }
             if (showDown)
             {
@@ -264,7 +264,7 @@ namespace VPB
                 Sprite dnIcon = UI.LoadIconSprite("vpb_icons/down.png", new Color(0.9f, 0.9f, 0.9f, 1f));
                 GameObject dn = UI.CreateSideTabSquareIconButton(row, rowH, dnIcon, dnAct, new Color(0.22f, 0.42f, 0.58f, 1f), 4f * s);
                 if (dnIcon == null) AddButtonOverlayGlyph(dn, "▼", Mathf.RoundToInt(18f * s));
-                AddTooltipPlain(dn, "Move down");
+                AddTooltipPlain(dn, VPBTranslation.T("settings.category_quick.editor.move_down_tip", "Move down"));
             }
 
             // Toggle hidden/show uses text button (icon set not guaranteed).

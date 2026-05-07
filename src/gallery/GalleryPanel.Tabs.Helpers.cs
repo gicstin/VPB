@@ -44,7 +44,11 @@ namespace VPB
                 if (file is VarFileEntry vfe && vfe.Package != null)
                 {
                     if (legacy)
-                        AddTooltipPlain(nameGO, $"Package: {vfe.Package.Uid}.var");
+                        AddTooltipPlain(
+                            nameGO,
+                            string.Format(
+                                VPBTranslation.T("gallery.tooltip.package_uid", "Package: {0}.var"),
+                                vfe.Package.Uid));
                     else
                     {
                         string hint = string.IsNullOrEmpty(vfe.InternalPath) ? vfe.Name : vfe.InternalPath.Replace('\\', '/');
@@ -54,7 +58,11 @@ namespace VPB
                 else if (file is PackageListEntry ple && ple.Package != null)
                 {
                     if (legacy)
-                        AddTooltipPlain(nameGO, $"Package: {ple.Package.Uid}.var");
+                        AddTooltipPlain(
+                            nameGO,
+                            string.Format(
+                                VPBTranslation.T("gallery.tooltip.package_uid", "Package: {0}.var"),
+                                ple.Package.Uid));
                     else if (!string.IsNullOrEmpty(ple.Path))
                         AddTooltipPlain(nameGO, ple.Path);
                 }

@@ -2529,7 +2529,11 @@ namespace VPB
                     {
                         if (file is VarFileEntry vfe && vfe.Package != null)
                         {
-                            AddTooltipPlain(labelTr.gameObject, $"Package: {vfe.Package.Uid}.var");
+                            AddTooltipPlain(
+                                labelTr.gameObject,
+                                string.Format(
+                                    VPBTranslation.T("gallery.tooltip.package_uid", "Package: {0}.var"),
+                                    vfe.Package.Uid));
                         }
                     }
                     catch { }

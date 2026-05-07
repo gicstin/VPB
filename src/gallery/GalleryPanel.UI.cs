@@ -138,7 +138,7 @@ namespace VPB
             options.Add(new SaveMenuOption
             {
                 Label = VPBTranslation.T("gallery.save.scene", "Scene..."),
-                Tooltip = "Save the current scene to a file.",
+                Tooltip = VPBTranslation.T("gallery.save.scene_tooltip", "Save current scene to file."),
                 Enabled = SuperController.singleton != null,
                 Action = () => SaveSceneFromGallery()
             });
@@ -1114,7 +1114,7 @@ namespace VPB
             footerDockLeftSprite  = UI.LoadIconSprite("vpb_icons/anchor_left.png",  UI.BarIconGlyphTint);
             footerDockTopSprite   = UI.LoadIconSprite("vpb_icons/anchor_top.png",   UI.BarIconGlyphTint);
             { Sprite init = footerDockRightSprite ?? footerDockLeftSprite ?? footerDockTopSprite; if (init != null) { UI.AddIconToButton(footerDockBtn, init); footerDockIconImage = footerDockBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
-            AddTooltipPlain(footerDockBtn, "Dock side (Left/Right/Top)");
+            AddTooltipPlain(footerDockBtn, VPBTranslation.T("gallery.tooltip.dock_side", "Dock side (Left/Right/Top)"));
 
             footerHeightBtn = UI.CreateUIButton(rightSection, 40, 40, "↕", 20, 0, 0, AnchorPresets.middleCenter, ToggleFixedHeightMode);
             footerHeightBtnImage = footerHeightBtn.GetComponent<Image>();
@@ -2187,8 +2187,11 @@ namespace VPB
             {
                 var del = footerAutoHideBtn.GetComponent<UIHoverDelegate>();
                 if (del != null) del.OnHoverChange = null;
-                string modeText = VPBConfig.Instance.DesktopFixedAutoCollapse ? " (Enabled)" : " (Disabled)";
-                AddTooltipPlain(footerAutoHideBtn, "Auto-Hide" + modeText);
+                AddTooltipPlain(
+                    footerAutoHideBtn,
+                    VPBConfig.Instance.DesktopFixedAutoCollapse
+                        ? VPBTranslation.T("gallery.tooltip.autohide_enabled", "Auto-Hide (Enabled)")
+                        : VPBTranslation.T("gallery.tooltip.autohide_disabled", "Auto-Hide (Disabled)"));
             }
         }
 

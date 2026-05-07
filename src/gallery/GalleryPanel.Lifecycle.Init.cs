@@ -449,11 +449,16 @@ namespace VPB
             VPBUiFont.ApplyTo(titleBarSettingsBtnText);
             AddTooltip(titleBarSettingsBtn, "gallery.tooltip.open_settings", "Settings");
 
-            // Filter Presets Button (square, same height as Refresh)
-            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.title.filter_presets", "P"), 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
-            qfToggleBtn.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            // Filter Presets Button (match Creator dropdown chrome)
+            GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 40, 40, " ", 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);
+            qfToggleBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             quickFiltersToggleBtnText = qfToggleBtn.GetComponentInChildren<Text>();
-            quickFiltersToggleBtnText.color = Color.white;
+            if (quickFiltersToggleBtnText != null)
+            {
+                quickFiltersToggleBtnText.text = " ";
+                quickFiltersToggleBtnText.color = Color.white;
+                quickFiltersToggleBtnText.gameObject.SetActive(false);
+            }
             RectTransform qfToggleRT = qfToggleBtn.GetComponent<RectTransform>();
             qfToggleRT.anchorMin = new Vector2(0.5f, 0.5f);
             qfToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -470,6 +475,7 @@ namespace VPB
                     UI.AddIconToButton(qfToggleBtn, s);
                     Transform iconT = qfToggleBtn.transform.Find("Icon");
                     quickFiltersToggleBtnIconImage = iconT != null ? iconT.GetComponent<Image>() : null;
+                    if (quickFiltersToggleBtnIconImage != null) quickFiltersToggleBtnIconImage.color = UI.BarIconGlyphTint;
                 }
             }
             AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets");
