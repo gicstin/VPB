@@ -1594,9 +1594,41 @@ namespace VPB
 
         private IEnumerator RetryRefreshAfterNoCacheDelay()
         {
-            yield return new WaitForSeconds(3f);
+            // No fixed delay. Wait until FileManager scan likely finished, with bounded backoff.
+            float start = Time.realtimeSinceStartup;
+            float nextWait = 0.05f;
+            int polls = 0;
+            while (!Gallery.IsSuppressed() && !IsHubMode)
+            {
+                polls++;
+                bool scanning = false;
+                try { scanning = FileManager.IsScanning; } catch { scanning = false; }
+                if (!scanning) break;
+
+                // Cap total wait so we never "hang" retry forever.
+                float elapsed = Time.realtimeSinceStartup - start;
+                if (elapsed >= 2.5f) break;
+
+                // Backoff up to 0.5s between polls.
+                float wait = Mathf.Clamp(nextWait, 0.02f, 0.5f);
+                nextWait = Mathf.Min(nextWait * 1.7f, 0.5f);
+                yield return new WaitForSecondsRealtime(wait);
+            }
+
             if (!Gallery.IsSuppressed() && !IsHubMode)
             {
+                if (LogGalleryRefreshDeepTiming)
+                {
+                    try
+                    {
+                        float elapsed = Time.realtimeSinceStartup - start;
+                        LogUtil.Log("[VPB.Gallery.DeepTiming] RetryRefreshAfterNoCacheDelay FIRE | waited=" + (elapsed * 1000f).ToString("0") + "ms"
+                            + " | polls=" + polls
+                            + " | FileManager.IsScanning=" + (FileManager.IsScanning ? "1" : "0")
+                            + " | lastPackageRefreshTime=" + FileManager.lastPackageRefreshTime.ToString("o"));
+                    }
+                    catch { }
+                }
                 LogUtil.Log("[VPB] RetryRefreshAfterNoCacheDelay: retrying refresh for packages with missing cache.");
                 // isRetry=true keeps _cacheRetryPending=true so this retry cannot spawn another retry.
                 RefreshFiles(false, false, isRetry: true);
@@ -1981,8 +2013,7 @@ namespace VPB
             if (!string.IsNullOrEmpty(currentSceneSourceFilter)) return false;
             // nameFilterTerms and activeTags are now handled by SQL
             if (wantsPoseCountsLocal || posePeopleFilter != PosePeopleFilter.All) return false;
-            if (FilesSortWantsLoadedOnly()) return false;
-            if (FilesSortWantsUnloadedOnly()) return false;
+            // LoadedOnly/UnloadedOnly is applied in the SQLite query via loadedState.
 
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
             if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -2544,12 +2575,17 @@ namespace VPB
             // Time-based yielding: first full load uses a larger per-frame budget so the list finishes in fewer frames (still yields to avoid long stalls).
             bool isColdGalleryContentLoad = !hasLoadedContent;
             var yieldWatch = new System.Diagnostics.Stopwatch();
-            // Warm loads: allow slightly larger chunks than 10ms to cut yield overhead on huge libraries (still yields often).
-            long maxMsPerFrame = isColdGalleryContentLoad ? 36 : 22;
+            // Prior default (22ms warm) makes refresh frame-rate bound on large libraries (can take 20s+).
+            // Bias toward faster refresh completion; UI still yields, but in larger chunks.
+            long maxMsPerFrame = isColdGalleryContentLoad ? 120 : 120;
 
             yieldWatch.Start();
 
             int[] skippedForNoCache = { 0 };
+            // Sample of package UIDs missing cache, for diagnosing 3s retry loops.
+            // Single worker thread writes; main thread reads after drain completes.
+            string[] skippedForNoCacheSample = new string[3];
+            int skippedForNoCacheSampleCount = 0;
 
             string fileListSnapKey;
             bool canFileListCache = TryBuildFileListSnapshotCacheKey(out fileListSnapKey);
@@ -2798,9 +2834,10 @@ namespace VPB
                     {
                         List<VpbLocalDatabase.Row> idxRows = new List<VpbLocalDatabase.Row>();
                         List<string> pathExclusions = null;
+                        // SQLite index usage must not depend on snapshot-cache key availability.
+                        // Snapshot cache is an optimization; SQLite query is primary fast path.
                         if (VpbSqlite3.IsAvailable
-                            && activeContentSnap == ContentType.History
-                            && canFileListSnapKeyMain)
+                            && activeContentSnap == ContentType.History)
                         {
                             bool hr = VpbLocalDatabase.TryQueryGalleryHistoryRows(
                                 histFilterSnap,
@@ -2812,8 +2849,7 @@ namespace VPB
                             useSqliteIndex = true;
                         }
                         else if (VpbSqlite3.IsAvailable
-                            && activeContentSnap == ContentType.Category
-                            && canFileListSnapKeyMain)
+                            && activeContentSnap == ContentType.Category)
                         {
                             // Pseudo-extension category: package-level listing. Not indexed in SQLite; force non-SQL path.
                             if (string.Equals(extForIndexMain, "varpkg", StringComparison.OrdinalIgnoreCase))
@@ -2859,11 +2895,11 @@ namespace VPB
                             if (!VpbSqlite3.IsAvailable)
                                 catQueryStats.RejectReason = "gate:sqlite_unavailable";
                             else if (activeContentSnap == ContentType.History)
-                                catQueryStats.RejectReason = "gate:history_snapshot_cache_key_failed";
+                                catQueryStats.RejectReason = "gate:history_not_sqlite_indexable";
                             else if (activeContentSnap != ContentType.Category)
                                 catQueryStats.RejectReason = "gate:not_category_content";
                             else
-                                catQueryStats.RejectReason = "gate:snapshot_cache_key_failed";
+                                catQueryStats.RejectReason = "gate:category_not_sqlite_indexable";
                         }
 
                         if (useSqliteIndex)
@@ -3108,6 +3144,10 @@ namespace VPB
                                 if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
                                 {
                                     skippedForNoCache[0]++;
+                                    if (skippedForNoCacheSampleCount < skippedForNoCacheSample.Length)
+                                    {
+                                        try { skippedForNoCacheSample[skippedForNoCacheSampleCount++] = pkg != null ? (pkg.Uid ?? pkg.Path ?? "") : ""; } catch { }
+                                    }
                                     continue;
                                 }
 
@@ -3175,6 +3215,23 @@ namespace VPB
                                 refreshDrainUtSqlFilterApplied[0] = 1;
                         }
                         catch { }
+                        if (LogGalleryRefreshDeepTiming)
+                        {
+                            try
+                            {
+                                long ms = swWorker.ElapsedMilliseconds;
+                                LogUtil.Log("[VPB.Gallery.DeepTiming] RefreshWorker DONE"
+                                    + " | ms=" + ms
+                                    + " | useSql=" + (useSqliteIndex ? "1" : "0")
+                                    + " | sqlMs=" + catQueryStats.SqlElapsedMs
+                                    + " | sqlRows=" + catQueryStats.RowsRead
+                                    + " | reject=" + (catQueryStats.RejectReason ?? "")
+                                    + " | title='" + (titleForIndexMain ?? "") + "'"
+                                    + " | ext='" + (extForIndexMain ?? "") + "'"
+                                    + " | path='" + (currentPath ?? "") + "'");
+                            }
+                            catch { }
+                        }
                         swWorker.Stop();
                         Interlocked.Exchange(ref workerDoneFlag, 1);
                     }
@@ -3249,6 +3306,21 @@ namespace VPB
                         }
                         else
                         {
+                            if (LogGalleryRefreshDeepTiming && bulk.Count >= 5000)
+                            {
+                                try
+                                {
+                                    LogUtil.Log("[VPB.Gallery.DeepTiming] RefreshFilesRoutine bulk slow-path"
+                                        + " | bulk=" + bulk.Count
+                                        + " | ratingToggle=" + (isRatingSortToggleEnabled ? "1" : "0")
+                                        + " | ratingFilter=" + (string.IsNullOrEmpty(currentRatingFilter) ? "0" : "1")
+                                        + " | sizeFilter=" + (string.IsNullOrEmpty(currentSizeFilter) ? "0" : "1")
+                                        + " | sceneSrcFilter=" + (string.IsNullOrEmpty(currentSceneSourceFilter) ? "0" : "1")
+                                        + " | poseFilter=" + ((posePeopleFilter != PosePeopleFilter.All || wantsPoseCounts) ? "1" : "0")
+                                        + " | appearanceFilter=" + ((!string.IsNullOrEmpty(currentAppearanceSourceFilter) || appearanceSubfilter != 0) ? "1" : "0"));
+                                }
+                                catch { }
+                            }
                             for (int bi = 0; bi < bulk.Count; bi++)
                             {
                                 if (localLoadingGroupId != currentLoadingGroupId)
@@ -3734,7 +3806,22 @@ namespace VPB
             // loop where each retry finds uncached packages and spawns yet another retry.
             if (skippedForNoCache[0] > 0 && !Gallery.IsSuppressed() && !_cacheRetryPending)
             {
-                LogUtil.Log($"[VPB] RefreshFilesRoutine: {skippedForNoCache[0]} packages had no cache yet; scheduling one-shot retry in 3s.");
+                if (LogGalleryRefreshDeepTiming)
+                {
+                    try
+                    {
+                        string s0 = skippedForNoCacheSample != null && skippedForNoCacheSample.Length > 0 ? (skippedForNoCacheSample[0] ?? "") : "";
+                        string s1 = skippedForNoCacheSample != null && skippedForNoCacheSample.Length > 1 ? (skippedForNoCacheSample[1] ?? "") : "";
+                        string s2 = skippedForNoCacheSample != null && skippedForNoCacheSample.Length > 2 ? (skippedForNoCacheSample[2] ?? "") : "";
+                        string samp = (s0.Length + s1.Length + s2.Length) == 0 ? "" : (" | sample='" + s0 + (s1.Length > 0 ? ("; " + s1) : "") + (s2.Length > 0 ? ("; " + s2) : "") + "'");
+                        LogUtil.Log("[VPB.Gallery.DeepTiming] RefreshFilesRoutine missing-cache packages=" + skippedForNoCache[0]
+                            + " | FileManager.IsScanning=" + (FileManager.IsScanning ? "1" : "0")
+                            + " | lastPackageRefreshTime=" + FileManager.lastPackageRefreshTime.ToString("o")
+                            + samp);
+                    }
+                    catch { }
+                }
+                LogUtil.Log($"[VPB] RefreshFilesRoutine: {skippedForNoCache[0]} packages had no cache yet; scheduling one-shot retry.");
                 _cacheRetryPending = true;
                 StartCoroutine(RetryRefreshAfterNoCacheDelay());
             }
@@ -3814,11 +3901,20 @@ namespace VPB
             bool ranSlicedTagScan = false;
             if (tagParallelWaiterForThisRefresh != null)
             {
+                System.Diagnostics.Stopwatch waitSw = LogGalleryRefreshDeepTiming ? System.Diagnostics.Stopwatch.StartNew() : null;
                 while (!tagParallelWaiterForThisRefresh.Finished)
                 {
                     if (deferredSubPaneSessionWhenScheduled != _deferredSubPaneSessionId)
                         yield break;
                     yield return null;
+                }
+                if (waitSw != null)
+                {
+                    long ms = waitSw.ElapsedMilliseconds;
+                    if (ms >= 50)
+                    {
+                        try { LogUtil.Log("[VPB.Gallery.DeepTiming] deferred_sideTabs tagParallelWait total=" + ms + "ms | tagParallelRefreshSeq=" + tagParallelRefreshSeq + " | curRefreshSeq=" + GalleryFileRefreshSequence); } catch { }
+                    }
                 }
                 if (deferredSubPaneSessionWhenScheduled != _deferredSubPaneSessionId)
                     yield break;

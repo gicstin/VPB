@@ -108,6 +108,9 @@ namespace VPB
         private static volatile bool s_RebuildRunning;
         private static long s_ReadyScanBinary = long.MinValue;
         private static string s_ReadyCategoriesSig;
+        // Package-inventory signature for the currently "ready" index. Lets us bump ready scan clock
+        // without rebuilding when FileManager.lastPackageRefreshTime advances but package set is unchanged.
+        private static string s_ReadyPkgInvSig;
         private static string s_LastError;
         private static bool s_LoggedSqliteUnavailable;
         private static bool s_LoggedEmptyCategoriesDb;
@@ -1466,6 +1469,7 @@ namespace VPB
                 {
                     s_ReadyCategoriesSig = null;
                     s_ReadyScanBinary = long.MinValue;
+                    s_ReadyPkgInvSig = null;
                     return;
                 }
                 string newSig = BuildCategoriesSignature(g.CloneCategoriesForIndex());
@@ -1480,6 +1484,7 @@ namespace VPB
                 }
                 s_ReadyCategoriesSig = null;
                 s_ReadyScanBinary = long.MinValue;
+                s_ReadyPkgInvSig = null;
             }
         }
 
@@ -1670,6 +1675,7 @@ namespace VPB
                 {
                     s_ReadyScanBinary = scanBin;
                     s_ReadyCategoriesSig = expectSig;
+                    s_ReadyPkgInvSig = liveInv;
                 }
                 ok = true;
                 return true;
@@ -1705,6 +1711,39 @@ namespace VPB
             if (s_RebuildScheduled || s_RebuildRunning) return;
             if (scanBin == 0 || scanBin == long.MinValue) return;
             if (readyScan == scanBin && !string.IsNullOrEmpty(catSig)) return;
+
+            // Avoid expensive rebuild when only scan clock advanced.
+            // If we already have a ready index for same category signature and same package inventory,
+            // bump readyScanBinary to current scanBin and continue without rebuild.
+            if (!string.IsNullOrEmpty(catSig))
+            {
+                string readyInv;
+                lock (s_Sync) { readyInv = s_ReadyPkgInvSig; }
+                if (!string.IsNullOrEmpty(readyInv))
+                {
+                    long invComputeMs;
+                    string liveInv = GetCachedPackageInventorySignatureFromLivePackages(scanBin, out invComputeMs);
+                    if (!string.IsNullOrEmpty(liveInv) && string.Equals(liveInv, readyInv, StringComparison.Ordinal))
+                    {
+                        lock (s_Sync)
+                        {
+                            // Ensure we are still talking about same category signature.
+                            if (!string.IsNullOrEmpty(s_ReadyCategoriesSig) && string.Equals(s_ReadyCategoriesSig, catSig, StringComparison.Ordinal))
+                            {
+                                s_ReadyScanBinary = scanBin;
+                                // keep s_ReadyPkgInvSig as-is
+                            }
+                        }
+                        try
+                        {
+                            if (invComputeMs >= 5)
+                                LogUtil.Log("[VPB.Gallery.Timing] sqlBumpReadyScan inv_ms=" + invComputeMs + " ok=1");
+                        }
+                        catch { }
+                        return;
+                    }
+                }
+            }
             lock (s_Sync)
             {
                 if (s_LastAutoScheduleScanBinary == scanBin) return;
@@ -1728,6 +1767,7 @@ namespace VPB
                 {
                     s_ReadyScanBinary = long.MinValue;
                     s_ReadyCategoriesSig = null;
+                    s_ReadyPkgInvSig = null;
                 }
             }
             finally
@@ -2315,6 +2355,7 @@ namespace VPB
             {
                 s_ReadyScanBinary = scanAtStart;
                 s_ReadyCategoriesSig = catSig;
+                s_ReadyPkgInvSig = invSigForMeta;
             }
 
             string dbPathForLog = GetLocalDatabasePathForDiagnostics();
