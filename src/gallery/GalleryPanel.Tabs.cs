@@ -340,7 +340,7 @@ namespace VPB
         {
             if (btnGO == null) return;
             string cName = creator.Name ?? "";
-            bool isActive = (currentCreator == cName);
+            bool isActive = CreatorFilterContains(cName);
             Color btnColor = isActive ? ColorCreator : ColorInactiveRow;
             string label = cName + " (" + creator.Count + ")";
 
@@ -350,12 +350,8 @@ namespace VPB
                 btnComp.onClick.RemoveAllListeners();
                 btnComp.onClick.AddListener(() =>
                 {
-                    if (currentCreator == cName) currentCreator = "";
-                    else currentCreator = cName;
-                    categoriesCached = false;
-                    pathsCached = false;
-                    tagsCached = false;
-                    RefreshFilesAndTabs();
+                    ToggleCreatorFilter(cName);
+                    OnCreatorFilterChanged(refreshFilesAndTabs: true);
                 });
             }
             UIRightClickDelegate rightClickDelegate = btnGO.GetComponent<UIRightClickDelegate>();
@@ -363,11 +359,8 @@ namespace VPB
             rightClickDelegate.OnRightClick = () =>
             {
                 SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
-                currentCreator = "";
-                categoriesCached = false;
-                pathsCached = false;
-                tagsCached = false;
-                RefreshFilesAndTabs();
+                ClearCreatorFilters();
+                OnCreatorFilterChanged(refreshFilesAndTabs: true);
             };
 
             Image img = btnGO.GetComponent<Image>();

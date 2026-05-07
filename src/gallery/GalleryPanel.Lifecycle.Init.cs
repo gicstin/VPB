@@ -306,6 +306,7 @@ namespace VPB
                 }
                 SetNameFilter(val);
             };
+
             titleSearchInput = CreateSearchInput(titleBarGO, 240f, _titleBarSearchOnValueChanged);
             RectTransform titleSearchRT = titleSearchInput.GetComponent<RectTransform>();
             titleSearchRT.anchorMin = new Vector2(0.5f, 0.5f);
@@ -314,6 +315,9 @@ namespace VPB
             titleSearchRT.anchoredPosition = new Vector2(-40, 0);
             titleSearchRT.sizeDelta = new Vector2(240, 40);
             SetupTitleSearchCompactControl(titleBarGO);
+
+            // Creator filter dropdown button (between Filter Presets and Search)
+            SetupTitleCreatorFilterDropdown(titleBarGO, backgroundBoxGO);
 
             // File Sort Type Button
             GameObject fileSortTypeBtn = UI.CreateUIButton(titleBarGO, 35, 40, VPBTranslation.T("gallery.sort.az", "Az"), 16, 0, 0, AnchorPresets.middleCenter, null);
@@ -439,8 +443,8 @@ namespace VPB
             titleBarSettingsRT.anchorMin = new Vector2(0.5f, 0.5f);
             titleBarSettingsRT.anchorMax = new Vector2(0.5f, 0.5f);
             titleBarSettingsRT.pivot = new Vector2(0.5f, 0.5f);
-            // Left of P: 40×40 Settings, 6px gap, 40×40 P, 4px gap, then main search (center -40, width 240) → Settings center -230
-            titleBarSettingsRT.anchoredPosition = new Vector2(-230, 0);
+            // Keep clear of language button (-276): push Settings further left.
+            titleBarSettingsRT.anchoredPosition = new Vector2(-324, 0);
             _titleBarSettingsBtnRT = titleBarSettingsRT;
             VPBUiFont.ApplyTo(titleBarSettingsBtnText);
             AddTooltip(titleBarSettingsBtn, "gallery.tooltip.open_settings", "Settings");
@@ -454,8 +458,9 @@ namespace VPB
             qfToggleRT.anchorMin = new Vector2(0.5f, 0.5f);
             qfToggleRT.anchorMax = new Vector2(0.5f, 0.5f);
             qfToggleRT.pivot = new Vector2(0.5f, 0.5f);
-            // Immediately left of search: search left = -40 - 120 = -160; 4px gap; P half-width 20 → center -184
-            qfToggleRT.anchoredPosition = new Vector2(-184, 0);
+            // Make room for Creator button between P and search:
+            // search left = -160; 4px gap; Creator 40x40 centered -184; 4px gap; P centered -228
+            qfToggleRT.anchoredPosition = new Vector2(-228, 0);
             _titleBarQfToggleBtnRT = qfToggleRT;
             VPBUiFont.ApplyTo(quickFiltersToggleBtnText);
             {
@@ -479,8 +484,9 @@ namespace VPB
             { var rt = fileSortDirRT; var t = fileSortDirText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(151f * s, 0f); rt.sizeDelta = new Vector2(35f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
             { var rt = ratingSortToggleRT; var t = ratingSortToggleBtnText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(197f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(18 * s); }); }
             { var rt = refreshRT; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(245f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
-            { var rt = titleBarSettingsRT; var t = titleBarSettingsBtnText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-230f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
-            { var rt = qfToggleRT; var t = quickFiltersToggleBtnText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-184f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
+            { var rt = titleBarSettingsRT; var t = titleBarSettingsBtnText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-324f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
+            { var rt = qfToggleRT; var t = quickFiltersToggleBtnText; innerPaneScaleActions.Add(s => { rt.anchoredPosition = new Vector2(-228f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
+            { var go = titleCreatorBtn; innerPaneScaleActions.Add(s => { if (go) { var rt = go.GetComponent<RectTransform>(); rt.anchoredPosition = new Vector2(-184f * s, 0f); rt.sizeDelta = new Vector2(40f * s, 40f * s); } }); }
 
             // Tab Area - Create for all panels so undocked can clone/filter
             if (true)
@@ -767,12 +773,8 @@ namespace VPB
                 };
                 rightSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, _rightMainSideSearchOnValueChanged, () => {
                     if (rightActiveContent == ContentType.Creator) {
-                        currentCreator = "";
-                        categoriesCached = false;
-                        pathsCached = false;
-                        tagsCached = false;
-                            RefreshFiles();
-                        UpdateTabs();
+                        ClearCreatorFilters();
+                        OnCreatorFilterChanged(refreshFilesAndTabs: true);
                     }
                     else if (rightActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
@@ -1077,12 +1079,8 @@ namespace VPB
                 };
                 leftSearchInput = CreateSearchInput(backgroundBoxGO, tabAreaWidth - 45f, _leftMainSideSearchOnValueChanged, () => {
                     if (leftActiveContent == ContentType.Creator) {
-                        currentCreator = "";
-                        categoriesCached = false;
-                        pathsCached = false;
-                        tagsCached = false;
-                            RefreshFiles();
-                        UpdateTabs();
+                        ClearCreatorFilters();
+                        OnCreatorFilterChanged(refreshFilesAndTabs: true);
                     }
                     else if (leftActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
@@ -1354,31 +1352,6 @@ namespace VPB
                 {
                     float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
                     float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
-
-                    // Clear Creator Filter (icon) — beside Creator, after Tags
-                    rightClearCreatorBtn = UI.CreateUIButton(rightSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
-                        currentCreator = "";
-                        categoriesCached = false;
-                        pathsCached = false;
-                        tagsCached = false;
-                        RefreshFiles();
-                        UpdateTabs();
-                        UpdateSideButtonsVisibility();
-                    });
-                    try
-                    {
-                        var img = rightClearCreatorBtn.GetComponent<Image>();
-                        if (img != null) img.color = ColorCreator;
-                        var txt = rightClearCreatorBtn.GetComponentInChildren<Text>(true);
-                        if (txt != null) { txt.text = " "; txt.gameObject.SetActive(false); }
-                        if (galleryCreatorOffSprite != null)
-                            UI.AddIconToButton(rightClearCreatorBtn, galleryCreatorOffSprite, sideIconPad, ColorCreator);
-                    }
-                    catch { }
-                    sideButtonGroups.Add(rightClearCreatorBtn.AddComponent<CanvasGroup>());
-                    rightClearCreatorBtn.SetActive(false);
-                    rightSideButtons.Add(rightClearCreatorBtn.GetComponent<RectTransform>());
-                    AddTooltip(rightClearCreatorBtn, "gallery.tooltip.creator_clear", "Clear creator filter.");
 
                     GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, crW, crH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => {
                         if (isFixedLocally) ToggleLeft(ContentType.Creator); else ToggleRight(ContentType.Creator);
@@ -1858,31 +1831,6 @@ namespace VPB
                 {
                     float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
                     float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
-
-                    // Clear Creator Filter (icon) — beside Creator, after Tags
-                    leftClearCreatorBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 6 - groupGap * 3, AnchorPresets.centre, () => {
-                        currentCreator = "";
-                        categoriesCached = false;
-                        pathsCached = false;
-                        tagsCached = false;
-                        RefreshFiles();
-                        UpdateTabs();
-                        UpdateSideButtonsVisibility();
-                    });
-                    try
-                    {
-                        var img = leftClearCreatorBtn.GetComponent<Image>();
-                        if (img != null) img.color = ColorCreator;
-                        var txt = leftClearCreatorBtn.GetComponentInChildren<Text>(true);
-                        if (txt != null) { txt.text = " "; txt.gameObject.SetActive(false); }
-                        if (galleryCreatorOffSprite != null)
-                            UI.AddIconToButton(leftClearCreatorBtn, galleryCreatorOffSprite, sideIconPad, ColorCreator);
-                    }
-                    catch { }
-                    sideButtonGroups.Add(leftClearCreatorBtn.AddComponent<CanvasGroup>());
-                    leftClearCreatorBtn.SetActive(false);
-                    leftSideButtons.Add(leftClearCreatorBtn.GetComponent<RectTransform>());
-                    AddTooltip(leftClearCreatorBtn, "gallery.tooltip.creator_clear", "Clear creator filter.");
 
                     GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, crW, crH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
                     leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();

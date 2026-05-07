@@ -276,10 +276,7 @@ namespace VPB
             panelRT.sizeDelta = new Vector2(260f, 50f);
 
             Image panelImg = fileSortTypeMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(0.09f, 0.09f, 0.16f, 0.97f);
-            var outline = fileSortTypeMenuPanelGO.AddComponent<Outline>();
-            outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
-            outline.effectDistance = new Vector2(1f, -1f);
+            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
 
             VerticalLayoutGroup vlg = fileSortTypeMenuPanelGO.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(6, 6, 6, 6);
@@ -352,10 +349,7 @@ namespace VPB
             sidePaneSortMenuPanelRT.sizeDelta = new Vector2(240f, 50f);
 
             Image panelImg = sidePaneSortMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(0.09f, 0.09f, 0.16f, 0.97f);
-            var outline = sidePaneSortMenuPanelGO.AddComponent<Outline>();
-            outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
-            outline.effectDistance = new Vector2(1f, -1f);
+            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
 
             VerticalLayoutGroup vlg = sidePaneSortMenuPanelGO.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(6, 6, 6, 6);
@@ -424,14 +418,12 @@ namespace VPB
                     });
 
                 Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent
-                    ? new Color(0.15f, 0.30f, 0.52f, 1f)
-                    : new Color(0.16f, 0.16f, 0.24f, 1f);
+                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
 
                 Text rowT = row.GetComponentInChildren<Text>();
                 if (rowT != null)
                 {
-                    rowT.color = isCurrent ? Color.white : new Color(0.82f, 0.82f, 0.92f, 1f);
+                    rowT.color = UI.PopupText;
                     rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);
@@ -523,14 +515,12 @@ namespace VPB
                     });
 
                 Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent
-                    ? new Color(0.15f, 0.30f, 0.52f, 1f)
-                    : new Color(0.16f, 0.16f, 0.24f, 1f);
+                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
 
                 Text rowT = row.GetComponentInChildren<Text>();
                 if (rowT != null)
                 {
-                    rowT.color = isCurrent ? Color.white : new Color(0.82f, 0.82f, 0.92f, 1f);
+                    rowT.color = UI.PopupText;
                     rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);

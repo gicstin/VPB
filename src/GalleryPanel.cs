@@ -87,6 +87,8 @@ namespace VPB
             currentPath = path;
             currentExtension = extension;
             currentCreator = creator;
+            _currentCreatorSetSrc = null;
+            try { UpdateTitleCreatorButtonVisual(); } catch { }
             creatorsCached = false;
             tagsCached = false;
             categoriesCached = false;

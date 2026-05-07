@@ -421,7 +421,28 @@ namespace VPB
         
         private GameObject leftSubClearBtn; // NEW
         private Text leftSubClearBtnText; // NEW
+        // Creator filter: pipe-separated canonical list (supports multi-select).
+        // Example: "foo|bar". Empty = no filter.
         private string currentCreator = "";
+        private string _currentCreatorSetSrc = null;
+        private readonly HashSet<string> _currentCreatorSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Title bar creator dropdown
+        private GameObject titleCreatorBtn;
+        private Image titleCreatorBtnBackdrop;
+        private Text titleCreatorBtnText;
+        private Image titleCreatorBtnIconImage;
+        private GameObject titleCreatorDropdown;
+        private GameObject titleCreatorDropdownBlocker;
+        private InputField titleCreatorDropdownSearchInput;
+        private string titleCreatorDropdownFilter = "";
+        private ScrollRect _titleCreatorVirtScroll;
+        private RectTransform _titleCreatorVirtContentRT;
+        private GameObject titleCreatorDropdownHolder;
+        private readonly List<CreatorCacheEntry> _titleCreatorVirtView = new List<CreatorCacheEntry>(512);
+        private readonly List<GameObject> _titleCreatorVirtButtons = new List<GameObject>(32);
+        private int _titleCreatorVirtLastFirstIdx = -1;
+        private string _titleCreatorVirtViewSig = null;
         private string currentRatingFilter = "";
         private string currentSizeFilter = "";
         private string categoryFilter = "";
@@ -810,8 +831,6 @@ namespace VPB
         // Side buttons for dynamic positioning
         private List<RectTransform> rightSideButtons = new List<RectTransform>();
         private List<RectTransform> leftSideButtons = new List<RectTransform>();
-        private GameObject leftClearCreatorBtn;
-        private GameObject rightClearCreatorBtn;
         /// <summary>Side-rail Tags (UserTags) buttons — for layout / edge-align.</summary>
         private GameObject leftUserTagsSideBtn;
         private GameObject rightUserTagsSideBtn;

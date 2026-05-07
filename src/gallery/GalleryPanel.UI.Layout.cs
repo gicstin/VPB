@@ -1141,7 +1141,6 @@ namespace VPB
             int idxCreator = -1;
             int idxPath = -1;
             int idxHistory = -1;
-            int idxCreatorClear = -1;
             int idxUserTags = -1;
             int idxTarget = -1;
             int idxApplyMode = -1;
@@ -1175,13 +1174,6 @@ namespace VPB
                     idxFollow = FindIndexByTextRef(rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText);
 
                     idxClone    = FindIndexByTextRef(rightCloneBtnText    != null ? rightCloneBtnText    : leftCloneBtnText);
-
-                    GameObject clearGo = rightClearCreatorBtn != null ? rightClearCreatorBtn : leftClearCreatorBtn;
-                    if (clearGo != null)
-                    {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == clearGo);
-                        if (i >= 0) idxCreatorClear = i;
-                    }
 
                     GameObject utGo = rightUserTagsSideBtn != null ? rightUserTagsSideBtn : leftUserTagsSideBtn;
                     if (utGo != null)
@@ -1235,7 +1227,6 @@ namespace VPB
 
                 new SideButtonLayoutEntry(idxUserTags, 0, 2), // Tags (UserTags) — above Category
                 new SideButtonLayoutEntry(idxCategory, 0, 0), // Category
-                new SideButtonLayoutEntry(idxCreatorClear, 0, 0), // Clear Creator
                 new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
                 new SideButtonLayoutEntry(idxPath, 0, 0), // Path
                 new SideButtonLayoutEntry(idxHistory, 0, 0), // History (directly under Path)
@@ -1841,7 +1832,6 @@ namespace VPB
             if (leftSaveBtnGO != null && go == leftSaveBtnGO) return leftSaveBtnIconImage != null;
             if (isRight)
             {
-                if (galleryCreatorOffSprite != null && rightClearCreatorBtn != null && go == rightClearCreatorBtn) return true;
                 if (rightUserTagsSideBtn != null && go == rightUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && rightCategoryBtnIconImage != null && rightCategoryBtnImage != null && go == rightCategoryBtnImage.gameObject)
                     return true;
@@ -1864,7 +1854,6 @@ namespace VPB
             }
             else
             {
-                if (galleryCreatorOffSprite != null && leftClearCreatorBtn != null && go == leftClearCreatorBtn) return true;
                 if (leftUserTagsSideBtn != null && go == leftUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
                     return true;

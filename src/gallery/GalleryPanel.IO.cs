@@ -714,14 +714,11 @@ namespace VPB
                 if (pkg == null) continue;
 
                 // Respect creator filter if set
-                if (!string.IsNullOrEmpty(currentCreator))
+                try
                 {
-                    try
-                    {
-                        if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
-                    }
-                    catch { continue; }
+                    if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
                 }
+                catch { continue; }
 
                 List<string> names; List<long> ticks; List<long> sizes;
                 try
@@ -1778,8 +1775,7 @@ namespace VPB
                     if (pkg == null) continue;
 
                     // Package-level creator filter
-                    if (!string.IsNullOrEmpty(currentCreator) &&
-                        (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator)) continue;
+                    if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
 
                     List<string> names; List<long> ticks; List<long> sizes;
                     if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) continue;
@@ -3297,7 +3293,7 @@ namespace VPB
 
             if (activeContentType == ContentType.Category)
             {
-                if (string.IsNullOrEmpty(currentCreator))
+                if (!HasCreatorFilter())
                 {
                     // When file list came from GalleryFileListSnapshotCache, it already merged VAR index + loose files for this key.
                     // Re-enumerating Saves/* (SafeGetFiles + PassesFilters per path) duplicates work and can burn 10s+ on large trees with sysAdded=0.

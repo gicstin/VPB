@@ -376,6 +376,8 @@
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.Update.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorFilter.Multi.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleCreatorDropdown.cs" />
     <Compile Include="src\gallery\GalleryPanel.Sorting.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Helpers.cs" />

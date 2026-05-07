@@ -88,6 +88,8 @@ namespace VPB
             if (titleSearchInput != null) titleSearchInput.text = restoredSearch;
 
             currentCreator = state.Creator ?? "";
+            _currentCreatorSetSrc = null;
+            try { UpdateTitleCreatorButtonVisual(); } catch { }
 
             activeTags.Clear();
             if (state.Tags != null)
@@ -128,6 +130,8 @@ namespace VPB
             // Category navigation reset: creator selection is a filter and should not silently carry
             // into unrelated categories (causes side-tab counts like ALL VAR to drop to 0).
             currentCreator = "";
+            _currentCreatorSetSrc = null;
+            try { UpdateTitleCreatorButtonVisual(); } catch { }
 
             activeTags.Clear();
             activeUserTags.Clear();

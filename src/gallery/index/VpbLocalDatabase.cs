@@ -16,6 +16,45 @@ namespace VPB
     /// </summary>
     internal static partial class VpbLocalDatabase
     {
+        private static List<string> SplitCreatorFilterList(string creatorFilter)
+        {
+            var list = new List<string>();
+            string src = creatorFilter ?? "";
+            if (src.Length == 0) return list;
+            string[] parts = src.Split('|');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i] != null ? parts[i].Trim() : "";
+                if (p.Length == 0) continue;
+                list.Add(p);
+            }
+            return list;
+        }
+
+        private static void AppendCreatorFilterSql(StringBuilder sb, string columnSql, List<string> creators)
+        {
+            if (sb == null || creators == null || creators.Count == 0) return;
+            if (creators.Count == 1)
+            {
+                sb.Append(" AND ").Append(columnSql).Append(" = ?");
+                return;
+            }
+            sb.Append(" AND ").Append(columnSql).Append(" IN (");
+            for (int i = 0; i < creators.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append('?');
+            }
+            sb.Append(')');
+        }
+
+        private static void BindCreatorFilterSql(VpbSqlite3.Statement stmt, ref int bind, List<string> creators)
+        {
+            if (stmt == null || creators == null) return;
+            for (int i = 0; i < creators.Count; i++)
+                stmt.BindText(bind++, creators[i] ?? "");
+        }
+
         /// <summary>Optional <c>[VPB.History]</c> trace logs (default off).</summary>
         internal static bool LogHistoryUsageDebug = false;
         /// <summary>Logs every <see cref="TryRecordItemUse"/> (very chatty).</summary>
@@ -2325,7 +2364,8 @@ namespace VPB
                 {
                     if (conn == null) return false;
                     
-                    bool hasCreator = !string.IsNullOrEmpty(creatorFilter);
+                    var creatorList = SplitCreatorFilterList(creatorFilter);
+                    bool hasCreator = creatorList.Count > 0;
                     string normalizedPackagePathFilter = "";
                     bool hasPackagePathFilter = false;
                     if (!string.IsNullOrEmpty(packagePathFilter))
@@ -2341,7 +2381,7 @@ namespace VPB
                     if (hasCreator || hasPackagePathFilter) sb.Append(" INNER JOIN pkg p ON p.uid = m.pkg_uid");
                     
                     sb.Append(" WHERE 1=1");
-                    if (hasCreator) sb.Append(" AND p.creator = ?");
+                    if (hasCreator) AppendCreatorFilterSql(sb, "p.creator", creatorList);
                     if (hasPackagePathFilter)
                         sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     
@@ -2361,7 +2401,7 @@ namespace VPB
                     using (var stmt = conn.Prepare(sb.ToString()))
                     {
                         int bind = 1;
-                        if (hasCreator) stmt.BindText(bind++, creatorFilter);
+                        if (hasCreator) BindCreatorFilterSql(stmt, ref bind, creatorList);
                         if (hasPackagePathFilter)
                             stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
                         if (hasTags)
@@ -2396,14 +2436,14 @@ namespace VPB
                             bool applyPath = hasCreator && hasPackagePathFilter;
                             var sbPkg = new StringBuilder(96);
                             sbPkg.Append("SELECT COUNT(*) FROM pkg p WHERE 1=1");
-                            if (hasCreator) sbPkg.Append(" AND p.creator = ?");
+                            if (hasCreator) AppendCreatorFilterSql(sbPkg, "p.creator", creatorList);
                             if (applyPath)
                                 sbPkg.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
 
                             using (var stPkg = conn.Prepare(sbPkg.ToString()))
                             {
                                 int b2 = 1;
-                                if (hasCreator) stPkg.BindText(b2++, creatorFilter);
+                                if (hasCreator) BindCreatorFilterSql(stPkg, ref b2, creatorList);
                                 if (applyPath) stPkg.BindText(b2++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
                                 if (stPkg.Step() == VpbSqlite3.SqliteRow)
                                 {
@@ -2609,14 +2649,15 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     bool hasTags = activeTags != null && activeTags.Count > 0;
-                    bool hasCreator = !string.IsNullOrEmpty(creatorFilter);
+                    var creatorList = SplitCreatorFilterList(creatorFilter);
+                    bool hasCreator = creatorList.Count > 0;
                     bool hasPathPrefix = (pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix);
 
                     var sb = new StringBuilder();
                     sb.Append("SELECT ifnull(p.var_path,''), COUNT(*) ");
                     sb.Append("FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid ");
                     sb.Append("WHERE m.category = ?");
-                    if (hasCreator) sb.Append(" AND p.creator = ?");
+                    if (hasCreator) AppendCreatorFilterSql(sb, "p.creator", creatorList);
 
                     if (extSet.Count > 0)
                     {
@@ -2668,7 +2709,7 @@ namespace VPB
                     {
                         int bind = 1;
                         stmt.BindText(bind++, categoryTitle);
-                        if (hasCreator) stmt.BindText(bind++, creatorFilter);
+                        if (hasCreator) BindCreatorFilterSql(stmt, ref bind, creatorList);
 
                         if (extSet.Count > 0)
                         {
@@ -2782,18 +2823,21 @@ namespace VPB
                         tagSqlAnd = sb.ToString();
                     }
 
-                    string sql =
-                        "SELECT m.internal_path, m.pkg_uid, ifnull(m.cloth_attr,'0'), m.list_path FROM cat_mem m " +
-                        "INNER JOIN pkg p ON p.uid = m.pkg_uid " +
-                        "WHERE m.category = ? AND ((length(trim(?)) = 0) OR (p.creator = ?))" + clothSqlAnd + tagSqlAnd;
+                    var creatorList = SplitCreatorFilterList(creatorFilter);
+                    bool hasCreator = creatorList.Count > 0;
+                    var sbSql = new StringBuilder(256);
+                    sbSql.Append("SELECT m.internal_path, m.pkg_uid, ifnull(m.cloth_attr,'0'), m.list_path FROM cat_mem m ");
+                    sbSql.Append("INNER JOIN pkg p ON p.uid = m.pkg_uid ");
+                    sbSql.Append("WHERE m.category = ?");
+                    if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
+                    sbSql.Append(clothSqlAnd).Append(tagSqlAnd);
+                    string sql = sbSql.ToString();
 
                     using (var stmt = conn.Prepare(sql))
                     {
                         int bind = 1;
                         stmt.BindText(bind++, categoryTitle);
-                        string cf = creatorFilter ?? "";
-                        stmt.BindText(bind++, cf);
-                        stmt.BindText(bind++, cf);
+                        if (hasCreator) BindCreatorFilterSql(stmt, ref bind, creatorList);
 
                         if (activeTagsList != null)
                         {
@@ -3131,18 +3175,21 @@ namespace VPB
                         }
                     }
 
-                    string sql =
-                        "SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), ifnull(m.cloth_attr,''), " + loadedSelect + " FROM cat_mem m " +
-                        "INNER JOIN pkg p ON p.uid = m.pkg_uid " +
-                        "WHERE m.category = ? AND ((length(trim(?)) = 0) OR (p.creator = ?))" + clothSqlAnd + loadedSqlAnd + nameSqlAnd + exclusionSqlAnd + tagSqlAnd + userTagSqlAnd + orderBy;
+                    var creatorList = SplitCreatorFilterList(creatorFilter);
+                    bool hasCreator = creatorList.Count > 0;
+                    var sbSql = new StringBuilder(512);
+                    sbSql.Append("SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), ifnull(m.cloth_attr,''), ");
+                    sbSql.Append(loadedSelect);
+                    sbSql.Append(" FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE m.category = ?");
+                    if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
+                    sbSql.Append(clothSqlAnd).Append(loadedSqlAnd).Append(nameSqlAnd).Append(exclusionSqlAnd).Append(tagSqlAnd).Append(userTagSqlAnd).Append(orderBy);
+                    string sql = sbSql.ToString();
                     
                     using (var stmt = conn.Prepare(sql))
                     {
                         int bind = 1;
                         stmt.BindText(bind++, categoryTitle);
-                        string cf = creatorFilter ?? "";
-                        stmt.BindText(bind++, cf);
-                        stmt.BindText(bind++, cf);
+                        if (hasCreator) BindCreatorFilterSql(stmt, ref bind, creatorList);
 
                         if (nameTerms != null && nameTerms.Length > 0)
                         {
@@ -3572,7 +3619,8 @@ namespace VPB
                     bool pkgHasLoadedCol = false;
                     try { pkgHasLoadedCol = PkgHasLoadedColumn(conn); } catch { pkgHasLoadedCol = false; }
 
-                    bool hasCreator = !string.IsNullOrEmpty(creatorFilter);
+                    var creatorList = SplitCreatorFilterList(creatorFilter);
+                    bool hasCreator = creatorList.Count > 0;
                     string normalizedPath = "";
                     bool hasPath = false;
                     if (!string.IsNullOrEmpty(packagePathFilter))
@@ -3619,14 +3667,14 @@ namespace VPB
 
                     var sbSql = new StringBuilder(512);
                     sbSql.Append("SELECT p.uid, ifnull(p.var_path,''), p.wtime, p.psize, ifnull(p.ictime, p.pctime), ").Append(loadedSelect).Append(" FROM pkg p WHERE 1=1");
-                    if (hasCreator) sbSql.Append(" AND p.creator = ?");
+                    if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
                     if (hasPath) sbSql.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     sbSql.Append(loadedSqlAnd).Append(nameSqlAnd).Append(orderBy);
 
                     using (var st = conn.Prepare(sbSql.ToString()))
                     {
                         int bind = 1;
-                        if (hasCreator) st.BindText(bind++, creatorFilter);
+                        if (hasCreator) BindCreatorFilterSql(st, ref bind, creatorList);
                         if (hasPath) st.BindText(bind++, EscapeLike(normalizedPath.ToLowerInvariant()) + "/%");
                         if (nameTerms != null && nameTerms.Length > 0)
                         {
@@ -3673,7 +3721,8 @@ namespace VPB
             if (!VpbSqlite3.IsAvailable) return false;
             try
             {
-                bool hasCreator = !string.IsNullOrEmpty(creatorFilter);
+                var creatorList = SplitCreatorFilterList(creatorFilter);
+                bool hasCreator = creatorList.Count > 0;
                 string normalized = "";
                 bool hasPath = false;
                 if (!string.IsNullOrEmpty(packagePathFilter))
@@ -3686,13 +3735,13 @@ namespace VPB
                 {
                     var sb = new StringBuilder(160);
                     sb.Append("SELECT COUNT(*) FROM pkg p WHERE 1=1");
-                    if (hasCreator) sb.Append(" AND p.creator = ?");
+                    if (hasCreator) AppendCreatorFilterSql(sb, "p.creator", creatorList);
                     if (applyPath)
                         sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     using (var st = conn.Prepare(sb.ToString()))
                     {
                         int b = 1;
-                        if (hasCreator) st.BindText(b++, creatorFilter);
+                        if (hasCreator) BindCreatorFilterSql(st, ref b, creatorList);
                         if (applyPath) st.BindText(b++, EscapeLike(normalized.ToLowerInvariant()) + "/%");
                         if (st.Step() != VpbSqlite3.SqliteRow) return false;
                         if (!int.TryParse(st.ColumnText(0), out count)) count = (int)st.ColumnInt64(0);

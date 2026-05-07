@@ -59,9 +59,6 @@ namespace VPB
             bool showRightSide = !isCollapsed && (mode == "Both" || mode == "Right");
             if (fixedMode && !string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) showRightSide = false;
 
-            if (leftClearCreatorBtn != null) leftClearCreatorBtn.SetActive(showLeftSide && !string.IsNullOrEmpty(currentCreator));
-            if (rightClearCreatorBtn != null) rightClearCreatorBtn.SetActive(showRightSide && !string.IsNullOrEmpty(currentCreator));
-
             // Keep History side buttons on the same purple family as active side-tab buttons.
             Color historyBackdrop = ColorHistoryAccent;
             if (rightHistoryBtnImage != null) rightHistoryBtnImage.color = historyBackdrop;
@@ -69,55 +66,6 @@ namespace VPB
             if (rightHistoryBtnIconImage != null) rightHistoryBtnIconImage.color = UI.SideRailIconGlyphTint;
             if (leftHistoryBtnIconImage != null) leftHistoryBtnIconImage.color = UI.SideRailIconGlyphTint;
         }
-
-        private void UpdateClearButtonPosition(bool isRight, ContentType type)
-        {
-            GameObject btn = null;
-            if (type == ContentType.Creator) btn = isRight ? rightClearCreatorBtn : leftClearCreatorBtn;
-            if (btn == null) return;
-
-            // Find the button for this content type
-            RectTransform targetBtnRT = null;
-            
-            // We need to find the specific button rect. 
-            // We store them in sideButtons list but we need to know WHICH one corresponds to the type.
-            // Indices: 0 desk, 1 follow, 2 clone, 3 category, 4 user tags, 5 clear creator, 6 creator, …
-
-            int targetIndex = -1;
-            switch(type)
-            {
-                case ContentType.Creator: targetIndex = 6; break;
-            }
-
-            if (targetIndex >= 0)
-            {
-                List<RectTransform> list = isRight ? rightSideButtons : leftSideButtons;
-                if (targetIndex < list.Count)
-                {
-                    targetBtnRT = list[targetIndex];
-                }
-            }
-
-            if (targetBtnRT != null && targetBtnRT.gameObject.activeInHierarchy)
-            {
-                RectTransform btnRT = btn.GetComponent<RectTransform>();
-                // Clear creator button now lives in the side container, so position it relative to the Creator icon:
-                // always immediately to the LEFT of the creator button (same Y).
-                float gap = 6f;
-                float tw = 0f;
-                float bw = 0f;
-                try { tw = targetBtnRT.rect.width; } catch { tw = targetBtnRT.sizeDelta.x; }
-                try { bw = btnRT.rect.width; } catch { bw = btnRT.sizeDelta.x; }
-                if (tw <= 0f) tw = targetBtnRT.sizeDelta.x;
-                if (bw <= 0f) bw = btnRT.sizeDelta.x;
-
-                // anchoredPosition is at the pivot (typically center), so use half-widths.
-                float targetX = targetBtnRT.anchoredPosition.x - (tw * 0.5f + bw * 0.5f + gap);
-                float targetY = targetBtnRT.anchoredPosition.y;
-                btnRT.anchoredPosition = new Vector2(targetX, targetY);
-            }
-        }
-
 
         private void AddHoverDelegate(GameObject go)
         {

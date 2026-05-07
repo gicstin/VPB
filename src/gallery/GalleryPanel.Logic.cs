@@ -273,7 +273,7 @@ namespace VPB
 
             // Category side list should only "filter down" by creator selection.
             // If tags are active but no creator selected, keep counts global so categories don't disappear.
-            var tagFilterForCategoryCounts = !string.IsNullOrEmpty(currentCreator) ? activeTags : null;
+            var tagFilterForCategoryCounts = HasCreatorFilter() ? activeTags : null;
             if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, tagFilterForCategoryCounts, currentPackagePathFilter, null))
             {
                 // SQL path succeeded.
@@ -307,10 +307,7 @@ namespace VPB
                     {
                         if (pkg == null) continue;
                         // Filter by creator if set
-                        if (!string.IsNullOrEmpty(currentCreator))
-                        {
-                            if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
-                        }
+                        if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
                         if (!string.IsNullOrEmpty(currentPackagePathFilter) &&
                             !GalleryPathFilterMatchesRawPath(pkg.Path, currentPackagePathFilter))
                             continue;
@@ -381,7 +378,7 @@ namespace VPB
                     var c = categories[ci];
                     if (string.IsNullOrEmpty(c.name) || string.IsNullOrEmpty(c.extension)) continue;
                     if (!string.Equals(c.extension, "varpkg", StringComparison.OrdinalIgnoreCase)) continue;
-                    string pkgPathFilterForVarPkg = !string.IsNullOrEmpty(currentCreator) ? currentPackagePathFilter : "";
+                    string pkgPathFilterForVarPkg = HasCreatorFilter() ? currentPackagePathFilter : "";
                     if (VpbLocalDatabase.TryCountVarPackages(currentCreator, pkgPathFilterForVarPkg, applyPathOnlyWhenCreator: true, out int n))
                         categoryCounts[c.name] = n;
                 }
@@ -1031,10 +1028,7 @@ namespace VPB
                 if (pkg.FileEntries == null) continue;
                 
                 // If filtering by creator, respect it
-                if (!string.IsNullOrEmpty(currentCreator))
-                {
-                    if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != currentCreator) continue;
-                }
+                if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
 
                 int count = pkg.FileEntries.Count;
                 for (int i = 0; i < count; i++)
@@ -1339,7 +1333,7 @@ namespace VPB
             // This is intentionally separate from the package loop above.
             if (isClothingTitle)
             {
-                if (string.IsNullOrEmpty(currentCreator))
+                if (!HasCreatorFilter())
                 {
                     List<string> pathsToSearch = new List<string>();
                     if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);

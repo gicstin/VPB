@@ -76,6 +76,8 @@ namespace VPB
 
             // 3. Restore Creator
             currentCreator = entry.Creator ?? "";
+            _currentCreatorSetSrc = null;
+            try { UpdateTitleCreatorButtonVisual(); } catch { }
 
             // 4. Restore Tags
             activeTags.Clear();
