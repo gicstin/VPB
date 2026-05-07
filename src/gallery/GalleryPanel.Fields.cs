@@ -767,6 +767,14 @@ namespace VPB
         private RectTransform _titleBarFileSortDirBtnRT;
         private RectTransform _titleBarRatingSortToggleBtnRT;
         private RectTransform _titleBarRefreshBtnRT;
+        private RectTransform _titleBarFpsRT;
+
+        // Fixed desktop dock "Top": side rail buttons live on footer bar (pagination).
+        private GameObject _footerSideButtonsGroupGO;
+        private RectTransform _footerSideButtonsGroupRT;
+        private RectTransform _footerLeftSectionRT;
+        private RectTransform _footerRightSectionRT;
+        private bool _titleBarSideButtonsReparented;
         private Text rightCloneBtnText;
         private Text leftCloneBtnText;
 

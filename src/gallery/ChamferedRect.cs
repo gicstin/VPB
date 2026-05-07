@@ -15,10 +15,16 @@ namespace VPB
             if (sprite != null) { base.OnPopulateMesh(vh); return; }
             vh.Clear();
             Rect r = rectTransform.rect;
-            float cX = (chamferSide == ChamferSide.Left || chamferSide == ChamferSide.Right)
-                ? Mathf.Min(chamferSize, r.width)
-                : Mathf.Min(chamferSize, r.width * 0.5f);
-            float cY = Mathf.Min(chamferSize, r.height * 0.5f);
+            // Keep chamfer angle consistent: clamp by both "long" and "short" side constraints.
+            // Left/Right chamfers exist on both top+bottom corners => vertical inset limited to half height.
+            // Top/Bottom chamfers exist on both left+right corners => horizontal inset limited to half width.
+            float c;
+            if (chamferSide == ChamferSide.Left || chamferSide == ChamferSide.Right)
+                c = Mathf.Min(chamferSize, r.width, r.height * 0.5f);
+            else
+                c = Mathf.Min(chamferSize, r.height, r.width * 0.5f);
+            float cX = c;
+            float cY = c;
             UIVertex v = UIVertex.simpleVert;
             v.color = color;
             v.uv0 = Vector2.zero;

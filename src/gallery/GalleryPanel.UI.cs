@@ -868,10 +868,25 @@ namespace VPB
             footerHLG.childForceExpandWidth = true;
             _footerHLGLastRightPadding = footerHLG.padding != null ? footerHLG.padding.right : -1;
 
+            // Fixed dock "Top": side rail buttons group (overlays footer, centered in free space).
+            _footerSideButtonsGroupGO = new GameObject("SideButtonsGroup");
+            _footerSideButtonsGroupGO.transform.SetParent(pageContainer.transform, false);
+            _footerSideButtonsGroupRT = _footerSideButtonsGroupGO.AddComponent<RectTransform>();
+            {
+                var le = _footerSideButtonsGroupGO.AddComponent<LayoutElement>();
+                le.ignoreLayout = true;
+            }
+            _footerSideButtonsGroupRT.anchorMin = new Vector2(0.5f, 0.5f);
+            _footerSideButtonsGroupRT.anchorMax = new Vector2(0.5f, 0.5f);
+            _footerSideButtonsGroupRT.pivot = new Vector2(0.5f, 0.5f);
+            _footerSideButtonsGroupRT.anchoredPosition = Vector2.zero;
+            _footerSideButtonsGroupRT.sizeDelta = new Vector2(0f, 40f);
+            _footerSideButtonsGroupGO.SetActive(false);
+
             // --- Left Section (Follow Controls) ---
             GameObject leftSection = new GameObject("LeftSection");
             leftSection.transform.SetParent(pageContainer.transform, false);
-            leftSection.AddComponent<RectTransform>();
+            _footerLeftSectionRT = leftSection.AddComponent<RectTransform>();
             leftSection.AddComponent<LayoutElement>().flexibleWidth = 1;
             
             HorizontalLayoutGroup leftHLG = leftSection.AddComponent<HorizontalLayoutGroup>();
@@ -1027,7 +1042,7 @@ namespace VPB
             // --- Right Section (Utility Controls) ---
             GameObject rightSection = new GameObject("RightSection");
             rightSection.transform.SetParent(pageContainer.transform, false);
-            rightSection.AddComponent<RectTransform>();
+            _footerRightSectionRT = rightSection.AddComponent<RectTransform>();
             rightSection.AddComponent<LayoutElement>().flexibleWidth = 1;
             
             HorizontalLayoutGroup rightHLG = rightSection.AddComponent<HorizontalLayoutGroup>();
@@ -1161,6 +1176,7 @@ namespace VPB
 
             // Register inner pane button scale actions (footer/pagination)
             { var prt = paginationRT; innerPaneScaleActions.Add(s => { if (prt) prt.sizeDelta = new Vector2(0, 40f*s); }); }
+            { var rt = _footerSideButtonsGroupRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(rt.sizeDelta.x, 40f * s); }); }
             {
                 var uRT = footerUndoBtnGO != null ? footerUndoBtnGO.GetComponent<RectTransform>() : null;
                 var rRT = footerRedoBtnGO != null ? footerRedoBtnGO.GetComponent<RectTransform>() : null;

@@ -33,10 +33,11 @@ namespace VPB
             bool fixedMode = isFixedLocally;
             string dock = "Right";
             try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Right"; }
+            bool topDock = fixedMode && string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
 
             if (leftSideContainer != null) 
             {
-                if (isCollapsed) leftSideContainer.SetActive(false);
+                if (isCollapsed || topDock) leftSideContainer.SetActive(false);
                 else if (fixedMode && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
                     leftSideContainer.SetActive(false);
                 else
@@ -45,7 +46,7 @@ namespace VPB
             
             if (rightSideContainer != null) 
             {
-                if (isCollapsed) rightSideContainer.SetActive(false);
+                if (isCollapsed || topDock) rightSideContainer.SetActive(false);
                 else if (fixedMode)
                     rightSideContainer.SetActive(string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) && (mode == "Both" || mode == "Right"));
                 else

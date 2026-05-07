@@ -291,6 +291,7 @@ namespace VPB
             fpsRT.pivot = new Vector2(1, 0.5f);
             fpsRT.anchoredPosition = new Vector2(-110, 0);
             fpsRT.sizeDelta = new Vector2(100, 40);
+            _titleBarFpsRT = fpsRT;
 
             SetupLanguageSwitcher(titleBarGO);
 

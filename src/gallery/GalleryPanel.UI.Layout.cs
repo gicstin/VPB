@@ -104,6 +104,7 @@ namespace VPB
             {
                 try { SyncTitleSearchInputWithActiveMode(); } catch { }
                 try { ApplyTitleBarResponsiveLayout(paneScale); } catch { }
+                try { ApplyTopDockSideButtonsLayout(paneScale); } catch { }
             }
             catch { }
 
@@ -616,6 +617,11 @@ namespace VPB
         public void UpdateSideButtonPositions()
         {
             if (backgroundBoxGO == null) return;
+            if (IsFixedTopDockMode())
+            {
+                ApplyTopDockSideButtonsLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+                return;
+            }
             float scale = VPBConfig.Instance.CurrentSideButtonScale;
             float spacing = 60f * scale;
             float groupGap = VPBConfig.Instance.EnableButtonGaps ? 10f * scale : 0f;
@@ -955,6 +961,144 @@ namespace VPB
                 }
             }
             catch { }
+        }
+
+        private bool IsFixedTopDockMode()
+        {
+            if (!isFixedLocally) return false;
+            if (VPBConfig.Instance == null) return false;
+            string dock = "Right";
+            try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Right"; }
+            return string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ApplyTopDockSideButtonsLayout(float paneScale)
+        {
+            if (_footerSideButtonsGroupRT == null || _footerSideButtonsGroupGO == null) return;
+            if (_footerLeftSectionRT == null || _footerRightSectionRT == null) return;
+            if (paginationRT == null) return;
+            if (leftSideButtons == null || leftSideButtons.Count == 0) return;
+
+            bool active = IsFixedTopDockMode() && !isCollapsed;
+
+            if (!active)
+            {
+                if (_footerSideButtonsGroupGO.activeSelf) _footerSideButtonsGroupGO.SetActive(false);
+                if (_titleBarSideButtonsReparented)
+                {
+                    _titleBarSideButtonsReparented = false;
+                    if (leftSideContainer != null)
+                    {
+                        for (int i = 0; i < leftSideButtons.Count; i++)
+                        {
+                            RectTransform rt = leftSideButtons[i];
+                            if (rt == null) continue;
+                            rt.SetParent(leftSideContainer.transform, worldPositionStays: false);
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Hide side rails in Top dock; buttons move to title bar.
+            if (leftSideContainer != null && leftSideContainer.activeSelf) leftSideContainer.SetActive(false);
+            if (rightSideContainer != null && rightSideContainer.activeSelf) rightSideContainer.SetActive(false);
+
+            if (!_footerSideButtonsGroupGO.activeSelf) _footerSideButtonsGroupGO.SetActive(true);
+
+            if (!_titleBarSideButtonsReparented)
+            {
+                _titleBarSideButtonsReparented = true;
+                for (int i = 0; i < leftSideButtons.Count; i++)
+                {
+                    RectTransform rt = leftSideButtons[i];
+                    if (rt == null) continue;
+                    rt.SetParent(_footerSideButtonsGroupRT, worldPositionStays: false);
+                }
+            }
+
+            float s = paneScale <= 0f ? 1f : paneScale;
+            RectTransform footerRT = paginationRT;
+
+            // Compute free space between left/right footer sections.
+            Bounds bLeft = RectTransformUtility.CalculateRelativeRectTransformBounds(footerRT, _footerLeftSectionRT);
+            Bounds bRight = RectTransformUtility.CalculateRelativeRectTransformBounds(footerRT, _footerRightSectionRT);
+            float gap = 6f * s;
+            float leftEdge = bLeft.max.x + gap;
+            float rightEdge = bRight.min.x - gap;
+            float spaceW = Mathf.Max(0f, rightEdge - leftEdge);
+
+            // Build horizontal row from visible buttons; if overflow, fall back to square-icon buttons only.
+            List<RectTransform> row = new List<RectTransform>(leftSideButtons.Count);
+            for (int i = 0; i < leftSideButtons.Count; i++)
+            {
+                RectTransform rt = leftSideButtons[i];
+                if (rt == null || !rt.gameObject.activeSelf) continue;
+                row.Add(rt);
+            }
+
+            float LayoutRow(List<RectTransform> list, float useGap)
+            {
+                float x = 0f;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    RectTransform rt = list[i];
+                    if (rt == null || !rt.gameObject.activeSelf) continue;
+
+                    float w = 0f;
+                    float h = 0f;
+                    try { w = rt.rect.width; h = rt.rect.height; } catch { w = rt.sizeDelta.x; h = rt.sizeDelta.y; }
+                    if (w <= 1f) w = rt.sizeDelta.x;
+                    if (h <= 1f) h = rt.sizeDelta.y;
+
+                    rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
+                    rt.pivot = new Vector2(0f, 0.5f);
+                    rt.anchoredPosition = new Vector2(x, 0f);
+                    x += w + useGap;
+                }
+                return list.Count > 0 ? Mathf.Max(0f, x - useGap) : 0f;
+            }
+
+            float totalW = LayoutRow(row, gap);
+            if (spaceW > 1f && totalW > spaceW + 0.5f)
+            {
+                row.Clear();
+                for (int i = 0; i < leftSideButtons.Count; i++)
+                {
+                    RectTransform rt = leftSideButtons[i];
+                    if (rt == null || !rt.gameObject.activeSelf) continue;
+                    if (!UsesSquareChromeSideButton(rt, leftSideButtons)) continue;
+                    row.Add(rt);
+                }
+                gap = 4f * s;
+                totalW = LayoutRow(row, gap);
+            }
+
+            // If not all buttons fit, park non-row buttons offscreen (keep active state unchanged).
+            if (row.Count < leftSideButtons.Count)
+            {
+                for (int i = 0; i < leftSideButtons.Count; i++)
+                {
+                    RectTransform rt = leftSideButtons[i];
+                    if (rt == null || !rt.gameObject.activeSelf) continue;
+                    if (row.Contains(rt)) continue;
+                    rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
+                    rt.pivot = new Vector2(0f, 0.5f);
+                    rt.anchoredPosition = new Vector2(-99999f, 0f);
+                }
+            }
+
+            _footerSideButtonsGroupRT.sizeDelta = new Vector2(totalW, 40f * s);
+
+            // Center within available free space.
+            float cx = leftEdge + spaceW * 0.5f;
+            float half = totalW * 0.5f;
+            if (spaceW > 1f)
+            {
+                if (cx - half < leftEdge) cx = leftEdge + half;
+                if (cx + half > rightEdge) cx = rightEdge - half;
+            }
+            _footerSideButtonsGroupRT.anchoredPosition = new Vector2(cx, 0f);
         }
 
         /// <summary>

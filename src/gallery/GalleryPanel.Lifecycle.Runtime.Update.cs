@@ -143,11 +143,21 @@ namespace VPB
 
                     if (isCollapsed)
                     {
-                        // Both AO and AH: expand on hover over trigger
-                        if (isHoveringTrigger)
+                        // Both AO and AH: expand on hover over trigger.
+                        // Pointer can already be inside trigger area when it becomes active (dock switch/collapse);
+                        // use manual rect hit as fallback so Top dock behaves same as Left/Right.
+                        bool isHoveringTriggerManual = false;
+                        GameObject activeTrigger = null;
+                        if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) activeTrigger = collapseTriggerLeftGO;
+                        else if (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase)) activeTrigger = collapseTriggerTopGO;
+                        else activeTrigger = collapseTriggerGO;
+                        if (activeTrigger != null)
                         {
-                            SetCollapsed(false);
+                            RectTransform ctRT = activeTrigger.GetComponent<RectTransform>();
+                            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null; // Overlay mode uses null cam
+                            isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
+                        if (isHoveringTrigger || isHoveringTriggerManual) SetCollapsed(false);
                     }
                     else if (autoCollapse)
                     {
