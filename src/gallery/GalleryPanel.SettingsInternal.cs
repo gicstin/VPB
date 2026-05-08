@@ -1054,14 +1054,30 @@ namespace VPB
             {
                 string cur = def.GetString() ?? "";
                 string display = (cur ?? "").ToUpperInvariant();
-                CreateMiniButton(controls.transform, display, 150f, new Color(0.25f, 0.5f, 0.8f, 1f), () => {
+                GameObject cycleBtn = null;
+                cycleBtn = CreateMiniButton(controls.transform, display, 150f, new Color(0.25f, 0.5f, 0.8f, 1f), () => {
                     // Read current value at click time (avoid stale captured value when row reuses objects).
                     string curNow = def.GetString() ?? "";
-                    def.SetString(NextOf(curNow, def.Options));
+                    string next = NextOf(curNow, def.Options);
+                    def.SetString(next);
+                    try
+                    {
+                        // Update label immediately; pooled list rows can keep old text until rebind.
+                        var t = cycleBtn != null ? cycleBtn.GetComponentInChildren<Text>(true) : null;
+                        if (t != null) t.text = (next ?? "").ToUpperInvariant();
+                    }
+                    catch { }
                     if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                         NotifyInternalSettingsHoverPreviewChanged();
                     RefreshInternalSettingsListRows(true);
                 });
+                try
+                {
+                    // Ensure control row sizes settle immediately (prevents clipping when switching cycle values).
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(detailsTr as RectTransform);
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(listRowTr as RectTransform);
+                }
+                catch { }
                 return;
             }
 
