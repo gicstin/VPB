@@ -71,14 +71,21 @@ namespace VPB
                         AddPersonHeaderRow(container.transform, trackedButtons, target.uid, groupColor);
                     }
 
+                    GameObject removeAllBtnGO = null;
                     CreateTabButton(container.transform, "REMOVE ALL (" + target.uid + ")", allColor, false, () => {
-                        UIDraggableItem dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.GetComponent<UIDraggableItem>();
-                        if (dragger == null) dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.AddComponent<UIDraggableItem>();
+                        // If hover preview active, it sets clothing bools false and caches previous vals.
+                        // Must restore first, otherwise RemoveAllClothing sees 0 active items and hover-out restores clothes.
+                        ClearClothingPreview();
+                        // Prefer side-button host, but fallback to clicked tab button (fix: side host may be null/inactive in some layouts).
+                        GameObject host = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn) ?? removeAllBtnGO;
+                        UIDraggableItem dragger = host != null ? host.GetComponent<UIDraggableItem>() : null;
+                        if (dragger == null && host != null) dragger = host.AddComponent<UIDraggableItem>();
                         if (dragger != null) { dragger.Panel = this; dragger.RemoveAllClothing(target); }
                         UpdateTabs();
                     }, trackedButtons, null, "Remove ALL clothing from " + target.uid);
+                    removeAllBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
 
-                    GameObject btnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
+                    GameObject btnGO = removeAllBtnGO;
                     if (btnGO != null)
                     {
                         UIHoverDelegate del = btnGO.GetComponent<UIHoverDelegate>();
@@ -101,14 +108,16 @@ namespace VPB
                             btnColor = newItemColor;
                         }
 
+                        GameObject itemBtnGO = null;
                         CreateTabButton(container.transform, label, btnColor, false, () => {
                             ClearClothingPreview();
-                            UIDraggableItem dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.GetComponent<UIDraggableItem>();
-                            if (dragger == null) dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.AddComponent<UIDraggableItem>();
+                            GameObject host = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn) ?? itemBtnGO;
+                            UIDraggableItem dragger = host != null ? host.GetComponent<UIDraggableItem>() : null;
+                            if (dragger == null && host != null) dragger = host.AddComponent<UIDraggableItem>();
                             if (dragger != null) { dragger.Panel = this; dragger.RemoveClothingItemByUid(target, uid); }
                             UpdateTabs();
                         }, trackedButtons, null, tooltip);
-                        GameObject itemBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
+                        itemBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
                         if (itemBtnGO != null)
                         {
                             UIHoverDelegate del = itemBtnGO.GetComponent<UIHoverDelegate>();
