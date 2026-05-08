@@ -25,6 +25,7 @@ namespace VPB
             s.AppearanceSourceFilter = currentAppearanceSourceFilter ?? "";
             s.PackagePathFilter = currentPackagePathFilter ?? "";
             s.ClothingSubfilter = (int)clothingSubfilter;
+            s.HairSubfilter = (int)hairSubfilter;
             s.AppearanceSubfilter = (int)appearanceSubfilter;
             s.PosePeopleFilter = (int)posePeopleFilter;
             var sort = GetSortState("Files");
@@ -109,6 +110,7 @@ namespace VPB
             currentAppearanceSourceFilter = state.AppearanceSourceFilter ?? "";
             currentPackagePathFilter = state.PackagePathFilter ?? "";
             clothingSubfilter = (ClothingSubfilter)state.ClothingSubfilter;
+            hairSubfilter = (HairSubfilter)state.HairSubfilter;
             appearanceSubfilter = (AppearanceSubfilter)state.AppearanceSubfilter;
             posePeopleFilter = (PosePeopleFilter)state.PosePeopleFilter;
 
@@ -141,6 +143,7 @@ namespace VPB
             currentAppearanceSourceFilter = "";
             currentPackagePathFilter = "";
             clothingSubfilter = 0;
+            hairSubfilter = 0;
             appearanceSubfilter = 0;
             posePeopleFilter = PosePeopleFilter.All;
         }

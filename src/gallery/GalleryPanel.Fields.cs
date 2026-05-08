@@ -572,6 +572,16 @@ namespace VPB
         }
 
         [Flags]
+        internal enum HairSubfilter
+        {
+            Presets = 1 << 0,
+            Items = 1 << 1,
+            Male = 1 << 2,
+            Female = 1 << 3,
+            Custom = 1 << 4,
+        }
+
+        [Flags]
         internal enum AppearanceSubfilter
         {
             Presets = 1 << 0,
@@ -589,6 +599,7 @@ namespace VPB
         }
 
         private ClothingSubfilter clothingSubfilter = 0;
+        private HairSubfilter hairSubfilter = 0;
 
         private AppearanceSubfilter appearanceSubfilter = 0;
 
@@ -608,6 +619,19 @@ namespace VPB
         private int clothingSubfilterFacetCountMale = 0;
         private int clothingSubfilterFacetCountFemale = 0;
         private int clothingSubfilterFacetCountDecals = 0;
+
+        private int hairSubfilterCountAll = 0;
+        private int hairSubfilterCountPresets = 0;
+        private int hairSubfilterCountCustom = 0;
+        private int hairSubfilterCountItems = 0;
+        private int hairSubfilterCountMale = 0;
+        private int hairSubfilterCountFemale = 0;
+
+        private int hairSubfilterFacetCountPresets = 0;
+        private int hairSubfilterFacetCountCustom = 0;
+        private int hairSubfilterFacetCountItems = 0;
+        private int hairSubfilterFacetCountMale = 0;
+        private int hairSubfilterFacetCountFemale = 0;
 
         private int appearanceSubfilterCountAll = 0;
         private int appearanceSubfilterCountPresets = 0;

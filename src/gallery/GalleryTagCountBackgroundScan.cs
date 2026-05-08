@@ -15,13 +15,16 @@ namespace VPB
         public string CurrentPath;
         public List<string> CurrentPathsCopy;
         public string CurrentCreator;
+        public HashSet<string> ActiveTagsCopy;
         public GalleryPanel.ClothingSubfilter ClothingSubfilterVal;
+        public GalleryPanel.HairSubfilter HairSubfilterVal;
         public GalleryPanel.AppearanceSubfilter AppearanceSubfilterVal;
         public HashSet<string> TagsToCount;
         public HashSet<string> SingleWordTags;
         public List<string> MultiWordTags;
         public string[] ExtensionsSplit;
         public bool IsClothingTitle;
+        public bool IsHairTitle;
         public bool IsAppearanceTitle;
         public bool HasAnyTagsToCount;
     }
@@ -62,6 +65,12 @@ namespace VPB
             public int ClothingSubfilterCountMale;
             public int ClothingSubfilterCountFemale;
             public int ClothingSubfilterCountDecals;
+            public int HairSubfilterCountAll;
+            public int HairSubfilterCountPresets;
+            public int HairSubfilterCountCustom;
+            public int HairSubfilterCountItems;
+            public int HairSubfilterCountMale;
+            public int HairSubfilterCountFemale;
             public int AppearanceSubfilterCountAll;
             public int AppearanceSubfilterCountPresets;
             public int AppearanceSubfilterCountCustom;
@@ -75,6 +84,11 @@ namespace VPB
             public int ClothingSubfilterFacetCountMale;
             public int ClothingSubfilterFacetCountFemale;
             public int ClothingSubfilterFacetCountDecals;
+            public int HairSubfilterFacetCountPresets;
+            public int HairSubfilterFacetCountCustom;
+            public int HairSubfilterFacetCountItems;
+            public int HairSubfilterFacetCountMale;
+            public int HairSubfilterFacetCountFemale;
             public int AppearanceSubfilterFacetCountPresets;
             public int AppearanceSubfilterFacetCountCustom;
             public int AppearanceSubfilterFacetCountMale;
@@ -121,6 +135,7 @@ namespace VPB
 
             GalleryPanel.ClothingSubfilter clothingSubfilter = input.ClothingSubfilterVal;
             GalleryPanel.AppearanceSubfilter appearanceSubfilter = input.AppearanceSubfilterVal;
+            GalleryPanel.HairSubfilter hairSubfilter = input.HairSubfilterVal;
 
             if (input.IsClothingTitle)
             {
@@ -189,6 +204,56 @@ namespace VPB
                     }
                 }
                 else return;
+            }
+
+            if (input.IsHairTitle)
+            {
+                ClothingLoadingUtils.ResourceKind ck;
+                ClothingLoadingUtils.ResourceGender cg;
+                ClothingLoadingUtils.ClassifyClothingHairPath(internalPath, out ck, out cg);
+                if (ck != ClothingLoadingUtils.ResourceKind.Hair) return;
+
+                bool isPresetEntry = ext.Equals("vap", StringComparison.OrdinalIgnoreCase);
+                bool isCustomPreset = false; // VAR rows are never "Custom" (loose files only)
+
+                bool PassesHairSubfilters(GalleryPanel.HairSubfilter f)
+                {
+                    if (f == 0) return !isPresetEntry;
+                    bool wantsPresets = (f & GalleryPanel.HairSubfilter.Presets) != 0;
+                    bool wantsCustom = (f & GalleryPanel.HairSubfilter.Custom) != 0;
+                    if (wantsPresets) { if (!isPresetEntry) return false; }
+                    if (wantsCustom) { if (!isCustomPreset) return false; }
+                    if (!wantsPresets && !wantsCustom) { if (isPresetEntry) return false; }
+                    if ((f & GalleryPanel.HairSubfilter.Items) != 0) { if (isPresetEntry) return false; }
+                    if ((f & GalleryPanel.HairSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male && cg != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+                    if ((f & GalleryPanel.HairSubfilter.Female) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Female && cg != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+                    return true;
+                }
+
+                // Facet counts: how many would be shown if user toggled flag now.
+                if (PassesHairSubfilters(hairSubfilter ^ GalleryPanel.HairSubfilter.Presets)) t.HairSubfilterFacetCountPresets++;
+                if (PassesHairSubfilters(hairSubfilter ^ GalleryPanel.HairSubfilter.Custom)) t.HairSubfilterFacetCountCustom++;
+                if (PassesHairSubfilters(hairSubfilter ^ GalleryPanel.HairSubfilter.Items)) t.HairSubfilterFacetCountItems++;
+                if (PassesHairSubfilters(hairSubfilter ^ GalleryPanel.HairSubfilter.Male)) t.HairSubfilterFacetCountMale++;
+                if (PassesHairSubfilters(hairSubfilter ^ GalleryPanel.HairSubfilter.Female)) t.HairSubfilterFacetCountFemale++;
+
+                t.HairSubfilterCountAll++;
+                if (isPresetEntry) t.HairSubfilterCountPresets++;
+                if (isCustomPreset) t.HairSubfilterCountCustom++;
+                if (!isPresetEntry) t.HairSubfilterCountItems++;
+                if (cg == ClothingLoadingUtils.ResourceGender.Male) t.HairSubfilterCountMale++;
+                else if (cg == ClothingLoadingUtils.ResourceGender.Female) t.HairSubfilterCountFemale++;
+
+                // Apply active subfilters (if any) to tag counting.
+                if (hairSubfilter != 0)
+                {
+                    if (!PassesHairSubfilters(hairSubfilter)) return;
+                }
+                else
+                {
+                    // Default-hide presets when no subfilter active (match UI behavior).
+                    if (isPresetEntry) return;
+                }
             }
 
             if (input.IsAppearanceTitle)
@@ -360,7 +425,9 @@ namespace VPB
             }
 
             GalleryPanel.ClothingSubfilter clothingSubfilter = input.ClothingSubfilterVal;
+            GalleryPanel.HairSubfilter hairSubfilter = input.HairSubfilterVal;
             bool isClothingTitle = input.IsClothingTitle;
+            bool isHairTitle = input.IsHairTitle;
             bool isAppearanceTitle = input.IsAppearanceTitle;
 
             bool varScanFromSql = false;
@@ -368,7 +435,7 @@ namespace VPB
             {
                 string extKey = JoinExtensionsForTagScan(input.ExtensionsSplit);
                 VpbLocalDatabase.TagScanTotals sqlFacets;
-                if (VpbLocalDatabase.TryReadTagCounts(input.Title, extKey, input.CurrentCreator ?? "", input.TagsToCount, tagCounts, out sqlFacets, input.ClothingSubfilterVal, input.AppearanceSubfilterVal, input.TagsToCount)) // Note: input.TagsToCount used as activeTags for filtering
+                if (VpbLocalDatabase.TryReadTagCounts(input.Title, extKey, input.CurrentCreator ?? "", input.TagsToCount, tagCounts, out sqlFacets, input.ClothingSubfilterVal, input.HairSubfilterVal, input.AppearanceSubfilterVal, input.ActiveTagsCopy))
                 {
                     varScanFromSql = true;
                     // Map sqlFacets back to our local totals object
@@ -383,6 +450,12 @@ namespace VPB
                     t.ClothingSubfilterCountMale = sqlFacets.ClothingSubfilterCountMale;
                     t.ClothingSubfilterCountFemale = sqlFacets.ClothingSubfilterCountFemale;
                     t.ClothingSubfilterCountDecals = sqlFacets.ClothingSubfilterCountDecals;
+                    t.HairSubfilterCountAll = sqlFacets.HairSubfilterCountAll;
+                    t.HairSubfilterCountPresets = sqlFacets.HairSubfilterCountPresets;
+                    t.HairSubfilterCountCustom = sqlFacets.HairSubfilterCountCustom;
+                    t.HairSubfilterCountItems = sqlFacets.HairSubfilterCountItems;
+                    t.HairSubfilterCountMale = sqlFacets.HairSubfilterCountMale;
+                    t.HairSubfilterCountFemale = sqlFacets.HairSubfilterCountFemale;
                     t.AppearanceSubfilterCountAll = sqlFacets.AppearanceSubfilterCountAll;
                     t.AppearanceSubfilterCountPresets = sqlFacets.AppearanceSubfilterCountPresets;
                     t.AppearanceSubfilterCountCustom = sqlFacets.AppearanceSubfilterCountCustom;
@@ -396,6 +469,11 @@ namespace VPB
                     t.ClothingSubfilterFacetCountMale = sqlFacets.ClothingSubfilterFacetCountMale;
                     t.ClothingSubfilterFacetCountFemale = sqlFacets.ClothingSubfilterFacetCountFemale;
                     t.ClothingSubfilterFacetCountDecals = sqlFacets.ClothingSubfilterFacetCountDecals;
+                    t.HairSubfilterFacetCountPresets = sqlFacets.HairSubfilterFacetCountPresets;
+                    t.HairSubfilterFacetCountCustom = sqlFacets.HairSubfilterFacetCountCustom;
+                    t.HairSubfilterFacetCountItems = sqlFacets.HairSubfilterFacetCountItems;
+                    t.HairSubfilterFacetCountMale = sqlFacets.HairSubfilterFacetCountMale;
+                    t.HairSubfilterFacetCountFemale = sqlFacets.HairSubfilterFacetCountFemale;
                     t.AppearanceSubfilterFacetCountPresets = sqlFacets.AppearanceSubfilterFacetCountPresets;
                     t.AppearanceSubfilterFacetCountCustom = sqlFacets.AppearanceSubfilterFacetCountCustom;
                     t.AppearanceSubfilterFacetCountMale = sqlFacets.AppearanceSubfilterFacetCountMale;
@@ -598,6 +676,77 @@ namespace VPB
                 }
             }
 
+            if (isHairTitle && string.IsNullOrEmpty(input.CurrentCreator))
+            {
+                List<string> pathsToSearch = new List<string>();
+                if (input.CurrentPathsCopy != null && input.CurrentPathsCopy.Count > 0) pathsToSearch.AddRange(input.CurrentPathsCopy);
+                else if (!string.IsNullOrEmpty(input.CurrentPath) && Directory.Exists(input.CurrentPath)) pathsToSearch.Add(input.CurrentPath);
+
+                for (int pi = 0; pi < pathsToSearch.Count; pi++)
+                {
+                    string searchPath = pathsToSearch[pi];
+                    if (string.IsNullOrEmpty(searchPath) || !Directory.Exists(searchPath)) continue;
+                    for (int ei = 0; ei < input.ExtensionsSplit.Length; ei++)
+                    {
+                        string ext = input.ExtensionsSplit[ei];
+                        if (string.IsNullOrEmpty(ext)) continue;
+                        var sysFileList = new List<string>();
+                        try { FileManager.SafeGetFiles(searchPath, "*." + ext, sysFileList); }
+                        catch { continue; }
+
+                        for (int fi = 0; fi < sysFileList.Count; fi++)
+                        {
+                            if ((fi & 0x3F) == 0 && panel.GalleryFileRefreshSequence != refreshSequence)
+                            {
+                                outcome.Aborted = true;
+                                return outcome;
+                            }
+                            string sysPath = sysFileList[fi] ?? "";
+                            string norm = sysPath.Replace('\\', '/');
+                            bool isPresetEntry = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
+                            bool isCustomPreset =
+                                (norm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
+                                 norm.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase) ||
+                                 norm.IndexOf("/Custom/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 norm.IndexOf("/Saves/", StringComparison.OrdinalIgnoreCase) >= 0);
+
+                            ClothingLoadingUtils.ResourceKind ck;
+                            ClothingLoadingUtils.ResourceGender cg;
+                            ClothingLoadingUtils.ClassifyClothingHairPath(sysPath, out ck, out cg);
+                            if (ck != ClothingLoadingUtils.ResourceKind.Hair) continue;
+
+                            GalleryPanel.HairSubfilter cur = hairSubfilter;
+                            bool PassesHairSubfiltersLoose(GalleryPanel.HairSubfilter f)
+                            {
+                                if (f == 0) return !isPresetEntry;
+                                bool wantsPresets = (f & GalleryPanel.HairSubfilter.Presets) != 0;
+                                bool wantsCustom = (f & GalleryPanel.HairSubfilter.Custom) != 0;
+                                if (wantsPresets) { if (!isPresetEntry) return false; }
+                                if (wantsCustom) { if (!isCustomPreset) return false; }
+                                if (!wantsPresets && !wantsCustom) { if (isPresetEntry) return false; }
+                                if ((f & GalleryPanel.HairSubfilter.Items) != 0) { if (isPresetEntry) return false; }
+                                if ((f & GalleryPanel.HairSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male && cg != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+                                if ((f & GalleryPanel.HairSubfilter.Female) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Female && cg != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+                                return true;
+                            }
+
+                            if (PassesHairSubfiltersLoose(cur ^ GalleryPanel.HairSubfilter.Presets)) t.HairSubfilterFacetCountPresets++;
+                            if (PassesHairSubfiltersLoose(cur ^ GalleryPanel.HairSubfilter.Custom)) t.HairSubfilterFacetCountCustom++;
+                            if (PassesHairSubfiltersLoose(cur ^ GalleryPanel.HairSubfilter.Items)) t.HairSubfilterFacetCountItems++;
+                            if (PassesHairSubfiltersLoose(cur ^ GalleryPanel.HairSubfilter.Male)) t.HairSubfilterFacetCountMale++;
+                            if (PassesHairSubfiltersLoose(cur ^ GalleryPanel.HairSubfilter.Female)) t.HairSubfilterFacetCountFemale++;
+
+                            t.HairSubfilterCountAll++;
+                            if (isPresetEntry) t.HairSubfilterCountPresets++;
+                            if (isCustomPreset) t.HairSubfilterCountCustom++;
+                            if (!isPresetEntry) t.HairSubfilterCountItems++;
+                            if (cg == ClothingLoadingUtils.ResourceGender.Male) t.HairSubfilterCountMale++;
+                            else if (cg == ClothingLoadingUtils.ResourceGender.Female) t.HairSubfilterCountFemale++;
+                        }
+                    }
+                }
+            }
+
             if (isAppearanceTitle)
             {
                 List<string> pathsToSearch = new List<string>();
@@ -723,6 +872,12 @@ namespace VPB
                 ClothingSubfilterCountMale = t.ClothingSubfilterCountMale,
                 ClothingSubfilterCountFemale = t.ClothingSubfilterCountFemale,
                 ClothingSubfilterCountDecals = t.ClothingSubfilterCountDecals,
+                HairSubfilterCountAll = t.HairSubfilterCountAll,
+                HairSubfilterCountPresets = t.HairSubfilterCountPresets,
+                HairSubfilterCountCustom = t.HairSubfilterCountCustom,
+                HairSubfilterCountItems = t.HairSubfilterCountItems,
+                HairSubfilterCountMale = t.HairSubfilterCountMale,
+                HairSubfilterCountFemale = t.HairSubfilterCountFemale,
                 AppearanceSubfilterCountAll = t.AppearanceSubfilterCountAll,
                 AppearanceSubfilterCountPresets = t.AppearanceSubfilterCountPresets,
                 AppearanceSubfilterCountCustom = t.AppearanceSubfilterCountCustom,
@@ -736,6 +891,11 @@ namespace VPB
                 ClothingSubfilterFacetCountMale = t.ClothingSubfilterFacetCountMale,
                 ClothingSubfilterFacetCountFemale = t.ClothingSubfilterFacetCountFemale,
                 ClothingSubfilterFacetCountDecals = t.ClothingSubfilterFacetCountDecals,
+                HairSubfilterFacetCountPresets = t.HairSubfilterFacetCountPresets,
+                HairSubfilterFacetCountCustom = t.HairSubfilterFacetCountCustom,
+                HairSubfilterFacetCountItems = t.HairSubfilterFacetCountItems,
+                HairSubfilterFacetCountMale = t.HairSubfilterFacetCountMale,
+                HairSubfilterFacetCountFemale = t.HairSubfilterFacetCountFemale,
                 AppearanceSubfilterFacetCountPresets = t.AppearanceSubfilterFacetCountPresets,
                 AppearanceSubfilterFacetCountCustom = t.AppearanceSubfilterFacetCountCustom,
                 AppearanceSubfilterFacetCountMale = t.AppearanceSubfilterFacetCountMale,

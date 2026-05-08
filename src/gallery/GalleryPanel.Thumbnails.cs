@@ -40,6 +40,7 @@ namespace VPB
         private const float ThumbnailHangWatchMaxDelaySec = 1.50f;
         private const float ThumbnailHangWatchScrollQuietSec = 0.25f;
         private const int AllVarThumbQueuePressureThreshold = 80;
+        private static readonly Color ThumbnailPlaceholderBackdrop = new Color(0.25f, 0.25f, 0.25f, 0.55f);
 
         // Cache for package list thumbnails: package UID -> internal image path (within the package).
         // Keeps package preview lookups cheap while scrolling.
@@ -656,7 +657,7 @@ namespace VPB
                 {
                     target.texture = null;
                     if (target.material != null) target.material.mainTexture = null;
-                    target.color = new Color(0, 0, 0, 0);
+                    target.color = ThumbnailPlaceholderBackdrop;
                 }
                 catch { }
             }
@@ -836,7 +837,7 @@ namespace VPB
 
                 target.texture = null;
                 if (target.material != null) target.material.mainTexture = null;
-                target.color = new Color(0, 0, 0, 0);
+                target.color = ThumbnailPlaceholderBackdrop;
             }
             catch { }
         }

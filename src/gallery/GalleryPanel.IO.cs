@@ -363,7 +363,7 @@ namespace VPB
         /// <summary>Scene category or already showing package-level rows — use package list for deps/dependents filter.</summary>
         private bool PackageFilterUsesPackageListRows()
         {
-            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
             if (!string.IsNullOrEmpty(title) && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                 return true;
             if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return false;
@@ -1299,7 +1299,14 @@ namespace VPB
 
             bool isDecal = ClothingLoadingUtils.IsDecalLikePath(p);
 
-            if (clothingSubfilter != 0)
+            // Issue #101: when no clothing subfilter is active, default to base items only (.vam)
+            // so the grid does not show duplicate .vam + .vap pairs. Toggling "Presets" or "Custom"
+            // on the side panel re-enables preset visibility.
+            if (clothingSubfilter == 0)
+            {
+                if (isPreset) return false;
+            }
+            else
             {
                 bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
                 bool wantsDecalType = ((clothingSubfilter & ClothingSubfilter.Decals) != 0);
@@ -1320,9 +1327,58 @@ namespace VPB
                 bool wantsCustom = (clothingSubfilter & ClothingSubfilter.Custom) != 0;
                 if (wantsPresets) { if (!isPreset) return false; }
                 if (wantsCustom) { if (!isCustomLoose) return false; }
+                // Default-hide presets unless user explicitly opts in via Presets/Custom toggle.
+                if (!wantsPresets && !wantsCustom) { if (isPreset) return false; }
                 if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
-                if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male) return false; }
-                if ((clothingSubfilter & ClothingSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female) return false; }
+                // If gender unknown, keep visible under either toggle (VaM content often not in gendered folders).
+                if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+                if ((clothingSubfilter & ClothingSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Hair path gate (classify + subfilters) for <see cref="VarFileEntry.Path"/> or loose file path form.
+        /// Mirrors Clothing preset-hiding behavior from Issue #101.
+        /// </summary>
+        internal static bool PassesHairGalleryFiltersForPath(string path, HairSubfilter hairSubfilter, bool isVarPackageEntry)
+        {
+            string p = path ?? "";
+            int lastDot = p.LastIndexOf('.');
+            string ext = (lastDot >= 0 && lastDot < p.Length - 1) ? p.Substring(lastDot + 1) : "";
+            bool isPreset = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
+
+            string norm = p.Replace('\\', '/');
+            bool isCustomLoose = !isVarPackageEntry &&
+                                (norm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
+                                 norm.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase) ||
+                                 norm.IndexOf("/Custom/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 norm.IndexOf("/Saves/", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            ClothingLoadingUtils.ResourceKind k;
+            ClothingLoadingUtils.ResourceGender g;
+            ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
+            if (k != ClothingLoadingUtils.ResourceKind.Hair) return false;
+
+            // Issue #101 parity: when no hair subfilter active, default to base items only (.vam)
+            // so the grid does not show duplicate .vam + .vap pairs.
+            if (hairSubfilter == 0)
+            {
+                if (isPreset) return false;
+            }
+            else
+            {
+                bool wantsPresets = (hairSubfilter & HairSubfilter.Presets) != 0;
+                bool wantsCustom = (hairSubfilter & HairSubfilter.Custom) != 0;
+                if (wantsPresets) { if (!isPreset) return false; }
+                if (wantsCustom) { if (!isCustomLoose) return false; }
+                // Default-hide presets unless user explicitly opts in via Presets/Custom toggle.
+                if (!wantsPresets && !wantsCustom) { if (isPreset) return false; }
+                if ((hairSubfilter & HairSubfilter.Items) != 0) { if (isPreset) return false; }
+                // If gender unknown, keep visible under either toggle.
+                if ((hairSubfilter & HairSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+                if ((hairSubfilter & HairSubfilter.Female) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Female && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
             }
 
             return true;
@@ -1383,12 +1439,27 @@ namespace VPB
             // Clothing subfilter (Gallery left Tags panel)
             // Applies only when browsing Clothing category.
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
-            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+            string cp = currentPath ?? "";
+            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0
+                || cp.IndexOf("/Clothing", StringComparison.OrdinalIgnoreCase) >= 0
+                || cp.IndexOf("\\Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
             if (isClothing && !skipClothingGalleryFilters)
             {
                 string p = entry.Path;
                 bool isVarPackageEntry = (entry is VarFileEntry) || ((entry as SystemFileEntry) != null && ((SystemFileEntry)entry).isVar);
                 if (!PassesClothingGalleryFiltersForPath(p, clothingSubfilter, isVarPackageEntry))
+                    return false;
+            }
+
+            // Hair subfilter (Issue #101 parity with Clothing)
+            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0
+                || cp.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
+                || cp.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isHair)
+            {
+                string p = entry.Path;
+                bool isVarPackageEntry = (entry is VarFileEntry) || ((entry as SystemFileEntry) != null && ((SystemFileEntry)entry).isVar);
+                if (!PassesHairGalleryFiltersForPath(p, hairSubfilter, isVarPackageEntry))
                     return false;
             }
 
@@ -1957,6 +2028,7 @@ namespace VPB
                 sb.Append(title).Append('\u001E');
                 sb.Append((int)posePeopleFilter).Append('\u001E');
                 sb.Append((int)clothingSubfilter).Append('\u001E');
+                sb.Append((int)hairSubfilter).Append('\u001E');
                 sb.Append((int)appearanceSubfilter).Append('\u001E');
                 sb.Append(currentSceneSourceFilter ?? "").Append('\u001E');
                 sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
@@ -2801,7 +2873,7 @@ namespace VPB
 
                 string snapKeyProbeMain;
                 bool canFileListSnapKeyMain = TryBuildFileListSnapshotCacheKey(out snapKeyProbeMain);
-                string titleForIndexMain = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+                string titleForIndexMain = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : ((titleText != null ? titleText.text : "") ?? "");
                 string extForIndexMain = currentExtension ?? "";
                 string creatorForIndexMain = currentCreator ?? "";
                 string packagePathFilterForIndexMain = currentPackagePathFilter ?? "";
@@ -2816,7 +2888,14 @@ namespace VPB
                 ContentType activeContentSnap = activeContentType;
                 GalleryHistoryFilterMode histFilterSnap = galleryHistoryFilterMode;
                 ClothingSubfilter sqliteWorkerClothingSub = clothingSubfilter;
-                bool sqliteDrainSkipClothingGateOnMain = (titleForIndexMain.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0);
+                string pathForIndexMain = currentPath ?? "";
+                bool sqliteDrainSkipClothingGateOnMain = (titleForIndexMain.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
+                    || pathForIndexMain.IndexOf("/Clothing", StringComparison.OrdinalIgnoreCase) >= 0
+                    || pathForIndexMain.IndexOf("\\Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+                HairSubfilter sqliteWorkerHairSub = hairSubfilter;
+                bool sqliteDrainApplyHairGateOnMain = (titleForIndexMain.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+                    || pathForIndexMain.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
+                    || pathForIndexMain.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
 
                 VpbLocalDatabase.GalleryCategoryQueryStats catQueryStats = new VpbLocalDatabase.GalleryCategoryQueryStats();
 
@@ -2973,6 +3052,14 @@ namespace VPB
                                             if (!PassesClothingGalleryFiltersForPath(listPath, sqliteWorkerClothingSub, true))
                                                 continue;
                                         }
+                                    }
+
+                                    if (sqliteDrainApplyHairGateOnMain)
+                                    {
+                                        // Hair is not yet narrowed at SQL level; apply same path/subfilter gate
+                                        // here so default grid does not show duplicate base + preset pairs.
+                                        if (!PassesHairGalleryFiltersForPath(listPath, sqliteWorkerHairSub, true))
+                                            continue;
                                     }
 
                                     DateTime entryTime = DateTime.MinValue;
@@ -3613,7 +3700,7 @@ namespace VPB
             // Cache the filtered list for selection operations (Select All, counts, etc)
             lastFilteredFiles.Clear();
             lastFilteredFiles.AddRange(files);
-            
+
             // Promote to class member for RecyclingGridView — one copy pass from lastFilteredFiles (same snapshot as files)
             currentFilteredFiles.Clear();
             currentFilteredFiles.AddRange(lastFilteredFiles);

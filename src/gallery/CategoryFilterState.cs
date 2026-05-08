@@ -18,6 +18,7 @@ namespace VPB
         public string AppearanceSourceFilter = "";
         public string PackagePathFilter = "";
         public int ClothingSubfilter = 0;
+        public int HairSubfilter = 0;
         public int AppearanceSubfilter = 0;
         public int PosePeopleFilter = 0;
         public SortState FileSortState = null;
@@ -31,6 +32,7 @@ namespace VPB
             node["as"] = AppearanceSourceFilter ?? "";
             node["pp"] = PackagePathFilter ?? "";
             node["csf"].AsInt = ClothingSubfilter;
+            node["hsf"].AsInt = HairSubfilter;
             node["asf"].AsInt = AppearanceSubfilter;
             node["ppf"].AsInt = PosePeopleFilter;
 
@@ -72,6 +74,7 @@ namespace VPB
                 s.AppearanceSourceFilter = node["as"] ?? "";
                 s.PackagePathFilter = node["pp"] ?? "";
                 s.ClothingSubfilter = node["csf"].AsInt;
+                s.HairSubfilter = node["hsf"] != null ? node["hsf"].AsInt : 0;
                 s.AppearanceSubfilter = node["asf"].AsInt;
                 s.PosePeopleFilter = node["ppf"].AsInt;
 

@@ -51,8 +51,24 @@ namespace VPB
         /// <summary>
         /// Screen pixels from press before a gallery row counts as intentional drag-drop (not a slow tap / micro-jitter).
         /// Unity fires <see cref="OnBeginDrag"/> near ~5–10px; below this we keep forwarding scroll until movement grows.
+        /// VR: <see cref="PointerEventData.position"/> vs <see cref="PointerEventData.pressPosition"/> often barely changes for laser + world canvas; gate skipped when XR active.
         /// </summary>
         private const float GalleryMinScreenPixelsForItemDrag = 22f;
+
+        private static bool IsXrPresentationActive()
+        {
+            try { return UnityEngine.XR.XRSettings.enabled; } catch { return false; }
+        }
+
+        /// <summary>Non-VR: require screen-pixel slack past press. VR: rely on Unity begin-drag + optional hold only.</summary>
+        private static bool PressDeltaQualifiesForGalleryItemDrag(PointerEventData eventData)
+        {
+            if (eventData == null) return false;
+            if (IsXrPresentationActive()) return true;
+            Vector2 deltaPress = (Vector2)eventData.position - eventData.pressPosition;
+            float minSq = GalleryMinScreenPixelsForItemDrag * GalleryMinScreenPixelsForItemDrag;
+            return deltaPress.sqrMagnitude >= minSq;
+        }
 
         private ScrollRect ResolveGalleryScrollRectForPassthrough()
         {
@@ -187,8 +203,6 @@ namespace VPB
             }
             float threshold = EffectiveDragHoldSeconds();
             float held = Time.unscaledTime - _pointerDownTime;
-            Vector2 deltaPress = (Vector2)eventData.position - eventData.pressPosition;
-            float minSq = GalleryMinScreenPixelsForItemDrag * GalleryMinScreenPixelsForItemDrag;
 
             if (held < threshold)
             {
@@ -197,7 +211,7 @@ namespace VPB
                 return;
             }
             // Hold time satisfied but movement still small — do not arm item drag yet (slow click / jitter).
-            if (deltaPress.sqrMagnitude < minSq)
+            if (!PressDeltaQualifiesForGalleryItemDrag(eventData))
             {
                 ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
                 _galleryPassthroughScrollUntilItemDrag = true;
@@ -279,9 +293,7 @@ namespace VPB
             {
                 float threshold = EffectiveDragHoldSeconds();
                 float held = Time.unscaledTime - _pointerDownTime;
-                Vector2 deltaPress = (Vector2)eventData.position - eventData.pressPosition;
-                float minSq = GalleryMinScreenPixelsForItemDrag * GalleryMinScreenPixelsForItemDrag;
-                if (held >= threshold && deltaPress.sqrMagnitude >= minSq)
+                if (held >= threshold && PressDeltaQualifiesForGalleryItemDrag(eventData))
                     StartGalleryItemDragFromPointer(eventData);
                 else
                     ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.dragHandler);

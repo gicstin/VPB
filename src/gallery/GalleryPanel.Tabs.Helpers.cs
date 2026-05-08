@@ -120,6 +120,51 @@ namespace VPB
 
         private void RefreshFilesAndTabs()
         {
+            // Issue #101 QoL: when browsing Clothing/Hair with a target Person selected,
+            // auto-apply gender toggle only if user did not already pick Male/Female.
+            try
+            {
+                string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
+                bool isClothing = !string.IsNullOrEmpty(title) && title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isHair = !string.IsNullOrEmpty(title) && title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+                Atom atom = SelectedTargetAtom;
+                if (atom != null && (isClothing || isHair))
+                {
+                    bool atomMale = false;
+                    try
+                    {
+                        JSONStorable geometry = atom.GetStorableByID("geometry");
+                        if (geometry != null)
+                        {
+                            var charChooser = geometry.GetStringChooserJSONParam("character");
+                            if (charChooser != null && !string.IsNullOrEmpty(charChooser.val)
+                                && charChooser.val.StartsWith("Male", StringComparison.OrdinalIgnoreCase))
+                                atomMale = true;
+                        }
+                    }
+                    catch { }
+
+                    if (isClothing)
+                    {
+                        bool hasGender = (clothingSubfilter & (ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0;
+                        if (!hasGender)
+                        {
+                            clothingSubfilter |= atomMale ? ClothingSubfilter.Male : ClothingSubfilter.Female;
+                            tagsCached = false;
+                        }
+                    }
+                    else if (isHair)
+                    {
+                        bool hasGender = (hairSubfilter & (HairSubfilter.Male | HairSubfilter.Female)) != 0;
+                        if (!hasGender)
+                        {
+                            hairSubfilter |= atomMale ? HairSubfilter.Male : HairSubfilter.Female;
+                            tagsCached = false;
+                        }
+                    }
+                }
+            }
+            catch { }
             RefreshFiles();
             UpdateTabs();
         }
@@ -163,6 +208,48 @@ namespace VPB
             return seen.Select(k => new KeyValuePair<string, string>(k.Key, k.Value))
                 .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Issue #101: Clothing/Hair items are gender-locked in VaM (a male item won't load on a female
+        /// Person and vice-versa). When the gallery has a Person target selected, dim items whose
+        /// classified gender does not match the target so the user can see at-a-glance what is unusable.
+        /// </summary>
+        private bool ShouldGreyoutForSelectedAtomGender(FileEntry file)
+        {
+            if (file == null) return false;
+            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            if (string.IsNullOrEmpty(title)) return false;
+            bool isClothingOrHair = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0
+                                 || title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!isClothingOrHair) return false;
+
+            Atom atom = SelectedTargetAtom;
+            if (atom == null) return false;
+
+            string path = file.Path ?? "";
+            ClothingLoadingUtils.ResourceKind k;
+            ClothingLoadingUtils.ResourceGender fileG;
+            ClothingLoadingUtils.ClassifyClothingHairPath(path, out k, out fileG);
+            if (fileG == ClothingLoadingUtils.ResourceGender.Unknown) return false;
+            if (ClothingLoadingUtils.IsDecalLikePath(path)) return false;
+
+            bool atomMale = false;
+            try
+            {
+                JSONStorable geometry = atom.GetStorableByID("geometry");
+                if (geometry != null)
+                {
+                    var charChooser = geometry.GetStringChooserJSONParam("character");
+                    if (charChooser != null && !string.IsNullOrEmpty(charChooser.val)
+                        && charChooser.val.StartsWith("Male", StringComparison.OrdinalIgnoreCase))
+                        atomMale = true;
+                }
+            }
+            catch { return false; }
+
+            bool fileMale = fileG == ClothingLoadingUtils.ResourceGender.Male;
+            return atomMale != fileMale;
         }
     }
 }

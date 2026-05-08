@@ -1356,14 +1356,16 @@ namespace VPB
         /// <summary>Fast clothing subfilter test using <see cref="PackClothingGalleryAttrForVarListPath"/> output (no path parsing).</summary>
         internal static bool ClothingPackedAttrMatchesSubfilter(int packed, GalleryPanel.ClothingSubfilter clothingSubfilter)
         {
-            if (clothingSubfilter == 0) return true;
-
             int kind = packed & 0xF;
             int gender = (packed >> 4) & 0xF;
             bool isPreset = (packed & 0x100) != 0;
             bool isDecal = (packed & 0x200) != 0;
 
             if (kind != (int)ClothingLoadingUtils.ResourceKind.Clothing) return false;
+
+            // Issue #101: default behavior (no flags set) hides .vap presets so the grid does not
+            // show duplicate base + preset pairs. Mirrors GalleryPanel.PassesClothingGalleryFiltersForPath.
+            if (clothingSubfilter == 0) return !isPreset;
 
             const GalleryPanel.ClothingSubfilter Real = GalleryPanel.ClothingSubfilter.RealClothing;
             const GalleryPanel.ClothingSubfilter Dec = GalleryPanel.ClothingSubfilter.Decals;
@@ -1392,9 +1394,41 @@ namespace VPB
             bool wantsCustom = (clothingSubfilter & Cus) != 0;
             if (wantsPresets) { if (!isPreset) return false; }
             if (wantsCustom) return false; // VAR rows: isCustomLoose is always false
+            // Default-hide presets unless Presets/Custom toggle is on.
+            if (!wantsPresets && !wantsCustom) { if (isPreset) return false; }
             if ((clothingSubfilter & Itm) != 0) { if (isPreset) return false; }
-            if ((clothingSubfilter & Mal) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Male) return false; }
-            if ((clothingSubfilter & Fem) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Female) return false; }
+            if ((clothingSubfilter & Mal) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Male && gender != (int)ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+            if ((clothingSubfilter & Fem) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Female && gender != (int)ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+
+            return true;
+        }
+
+        /// <summary>Fast hair subfilter test using <see cref="PackClothingGalleryAttrForVarListPath"/> output (no path parsing).</summary>
+        internal static bool HairPackedAttrMatchesSubfilter(int packed, GalleryPanel.HairSubfilter hairSubfilter)
+        {
+            int kind = packed & 0xF;
+            int gender = (packed >> 4) & 0xF;
+            bool isPreset = (packed & 0x100) != 0;
+
+            if (kind != (int)ClothingLoadingUtils.ResourceKind.Hair) return false;
+
+            // Issue #101 parity: default behavior (no flags set) hides .vap presets.
+            if (hairSubfilter == 0) return !isPreset;
+
+            const GalleryPanel.HairSubfilter Pre = GalleryPanel.HairSubfilter.Presets;
+            const GalleryPanel.HairSubfilter Cus = GalleryPanel.HairSubfilter.Custom;
+            const GalleryPanel.HairSubfilter Itm = GalleryPanel.HairSubfilter.Items;
+            const GalleryPanel.HairSubfilter Mal = GalleryPanel.HairSubfilter.Male;
+            const GalleryPanel.HairSubfilter Fem = GalleryPanel.HairSubfilter.Female;
+
+            bool wantsPresets = (hairSubfilter & Pre) != 0;
+            bool wantsCustom = (hairSubfilter & Cus) != 0;
+            if (wantsPresets) { if (!isPreset) return false; }
+            if (wantsCustom) return false; // VAR rows: isCustomLoose is always false
+            if (!wantsPresets && !wantsCustom) { if (isPreset) return false; }
+            if ((hairSubfilter & Itm) != 0) { if (isPreset) return false; }
+            if ((hairSubfilter & Mal) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Male && gender != (int)ClothingLoadingUtils.ResourceGender.Unknown) return false; }
+            if ((hairSubfilter & Fem) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Female && gender != (int)ClothingLoadingUtils.ResourceGender.Unknown) return false; }
 
             return true;
         }
@@ -1408,7 +1442,6 @@ namespace VPB
             string categoryTitle,
             GalleryPanel.ClothingSubfilter f)
         {
-            if (f == 0) return "";
             if (!string.Equals(categoryTitle, "Clothing", StringComparison.OrdinalIgnoreCase)) return "";
 
             string metaVer = MetaGet(conn, "schema_version");
@@ -1423,12 +1456,24 @@ namespace VPB
             const GalleryPanel.ClothingSubfilter Mal = GalleryPanel.ClothingSubfilter.Male;
             const GalleryPanel.ClothingSubfilter Fem = GalleryPanel.ClothingSubfilter.Female;
 
+            const string c = "CAST(ifnull(m.cloth_attr,'0') AS INTEGER)";
+
+            // Issue #101: with no subfilter active, default-hide .vap presets so the grid does not
+            // show duplicate base + preset pairs. Mirrors GalleryPanel.PassesClothingGalleryFiltersForPath.
+            if (f == 0)
+            {
+                var sb0 = new StringBuilder(96);
+                sb0.Append(" AND (").Append(c).Append(" & 2147483648) <> 0");
+                sb0.Append(" AND (").Append(c).Append(" & 15) = 1");
+                sb0.Append(" AND (").Append(c).Append(" & 256) = 0");
+                return sb0.ToString();
+            }
+
             // VAR rows never satisfy Custom alone (or with Presets, etc.); SQL path is VAR-only here.
             if ((f & Cus) != 0) return " AND (1=0)";
             if (((f & Pre) != 0) && ((f & Itm) != 0)) return " AND (1=0)";
             if (((f & Mal) != 0) && ((f & Fem) != 0)) return " AND (1=0)";
 
-            const string c = "CAST(ifnull(m.cloth_attr,'0') AS INTEGER)";
             var sb = new StringBuilder(384);
             sb.Append(" AND (").Append(c).Append(" & 2147483648) <> 0");
             sb.Append(" AND (").Append(c).Append(" & 15) = 1");
@@ -1448,12 +1493,69 @@ namespace VPB
 
             if ((f & Pre) != 0)
                 sb.Append(" AND (").Append(c).Append(" & 256) <> 0");
+            else if ((f & Cus) == 0)
+                // Default-hide presets unless Presets/Custom toggle is on.
+                sb.Append(" AND (").Append(c).Append(" & 256) = 0");
             if ((f & Itm) != 0)
                 sb.Append(" AND (").Append(c).Append(" & 256) = 0");
             if ((f & Mal) != 0)
-                sb.Append(" AND (((").Append(c).Append(") & 240) / 16) = 2");
+                sb.Append(" AND ( (((").Append(c).Append(") & 240) / 16) = 2 OR (((").Append(c).Append(") & 240) / 16) = 0 )");
             if ((f & Fem) != 0)
-                sb.Append(" AND (((").Append(c).Append(") & 240) / 16) = 1");
+                sb.Append(" AND ( (((").Append(c).Append(") & 240) / 16) = 1 OR (((").Append(c).Append(") & 240) / 16) = 0 )");
+
+            return sb.ToString();
+        }
+
+        /// <summary>Extra <c>AND ...</c> fragment for <see cref="TryReadTagCounts"/> when Hair + subfilter + schema has <c>cloth_attr</c>.</summary>
+        private static string BuildHairSubfilterSqlAnd(
+            VpbSqlite3.Connection conn,
+            string categoryTitle,
+            GalleryPanel.HairSubfilter f)
+        {
+            if (!string.Equals(categoryTitle, "Hair", StringComparison.OrdinalIgnoreCase)) return "";
+
+            string metaVer = MetaGet(conn, "schema_version");
+            int mv;
+            if (string.IsNullOrEmpty(metaVer) || !int.TryParse(metaVer, out mv) || mv < SchemaVersion) return "";
+
+            const GalleryPanel.HairSubfilter Pre = GalleryPanel.HairSubfilter.Presets;
+            const GalleryPanel.HairSubfilter Cus = GalleryPanel.HairSubfilter.Custom;
+            const GalleryPanel.HairSubfilter Itm = GalleryPanel.HairSubfilter.Items;
+            const GalleryPanel.HairSubfilter Mal = GalleryPanel.HairSubfilter.Male;
+            const GalleryPanel.HairSubfilter Fem = GalleryPanel.HairSubfilter.Female;
+
+            const string c = "CAST(ifnull(m.cloth_attr,'0') AS INTEGER)";
+
+            // Note: This SQL fragment is used by TryReadTagCounts (facet counters).
+            // Do NOT default-hide presets when f==0; UI needs correct Presets facet count even when
+            // presets are hidden in file grid by default.
+            if (f == 0)
+            {
+                var sb0 = new StringBuilder(96);
+                sb0.Append(" AND (").Append(c).Append(" & 2147483648) <> 0");
+                sb0.Append(" AND (").Append(c).Append(" & 15) = 2");
+                return sb0.ToString();
+            }
+
+            // VAR rows never satisfy Custom.
+            if ((f & Cus) != 0) return " AND (1=0)";
+            if (((f & Pre) != 0) && ((f & Itm) != 0)) return " AND (1=0)";
+            if (((f & Mal) != 0) && ((f & Fem) != 0)) return " AND (1=0)";
+
+            var sb = new StringBuilder(256);
+            sb.Append(" AND (").Append(c).Append(" & 2147483648) <> 0");
+            sb.Append(" AND (").Append(c).Append(" & 15) = 2");
+
+            if ((f & Pre) != 0)
+                sb.Append(" AND (").Append(c).Append(" & 256) <> 0");
+            else if ((f & Cus) == 0)
+                sb.Append(" AND (").Append(c).Append(" & 256) = 0");
+            if ((f & Itm) != 0)
+                sb.Append(" AND (").Append(c).Append(" & 256) = 0");
+            if ((f & Mal) != 0)
+                sb.Append(" AND ( (((").Append(c).Append(") & 240) / 16) = 2 OR (((").Append(c).Append(") & 240) / 16) = 0 )");
+            if ((f & Fem) != 0)
+                sb.Append(" AND ( (((").Append(c).Append(") & 240) / 16) = 1 OR (((").Append(c).Append(") & 240) / 16) = 0 )");
 
             return sb.ToString();
         }
@@ -2236,7 +2338,8 @@ namespace VPB
                                         listPath = varListPrefix + ip;
 
                                     long clothAttr = 0;
-                                    if (string.Equals(cname, "Clothing", StringComparison.OrdinalIgnoreCase))
+                                    if (string.Equals(cname, "Clothing", StringComparison.OrdinalIgnoreCase)
+                                        || string.Equals(cname, "Hair", StringComparison.OrdinalIgnoreCase))
                                         clothAttr = PackClothingGalleryAttrForVarListPath(listPath);
 
                                     long tMemSql0 = Stopwatch.GetTimestamp();
@@ -2437,6 +2540,10 @@ namespace VPB
                     }
                     AppendSqlActiveUserTagExists(sb, userTagBindNames, activeUserTags, "m");
                     
+                    // Issue #101: top-level Clothing/Hair counts represent BASE items (.vam) only,
+                    // excluding .vap presets (which are also indexed under those categories).
+                    sb.Append(" AND (m.category NOT IN ('Clothing','Hair') OR lower(m.internal_path) LIKE '%.vam')");
+
                     sb.Append(" GROUP BY m.category");
 
                     using (var stmt = conn.Prepare(sb.ToString()))
@@ -2820,6 +2927,7 @@ namespace VPB
             Dictionary<string, int> outTagCounts,
             out TagScanTotals outFacets,
             GalleryPanel.ClothingSubfilter clothingSubfilter = 0,
+            GalleryPanel.HairSubfilter hairSubfilter = 0,
             GalleryPanel.AppearanceSubfilter appearanceSubfilter = 0,
             HashSet<string> activeTags = null)
         {
@@ -2850,6 +2958,7 @@ namespace VPB
                     try { pkgHasLoadedCol = PkgHasLoadedColumn(conn); } catch { pkgHasLoadedCol = false; }
 
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilter);
+                    string hairSqlAnd = BuildHairSubfilterSqlAnd(conn, categoryTitle, hairSubfilter);
                     
                     string tagSqlAnd = "";
                     List<string> activeTagsList = null;
@@ -2871,7 +2980,7 @@ namespace VPB
                     sbSql.Append("INNER JOIN pkg p ON p.uid = m.pkg_uid ");
                     sbSql.Append("WHERE m.category = ?");
                     if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
-                    sbSql.Append(clothSqlAnd).Append(tagSqlAnd);
+                    sbSql.Append(clothSqlAnd).Append(hairSqlAnd).Append(tagSqlAnd);
                     string sql = sbSql.ToString();
 
                     using (var stmt = conn.Prepare(sql))
@@ -2889,6 +2998,7 @@ namespace VPB
                         }
 
                         bool isClothing = string.Equals(categoryTitle, "Clothing", StringComparison.OrdinalIgnoreCase);
+                        bool isHair = string.Equals(categoryTitle, "Hair", StringComparison.OrdinalIgnoreCase);
                         bool isAppearance = string.Equals(categoryTitle, "Appearance", StringComparison.OrdinalIgnoreCase);
 
                         int step;
@@ -2915,6 +3025,14 @@ namespace VPB
                             if (isClothing)
                             {
                                 outFacets.ClothingSubfilterCountAll++;
+                                // Issue #101: subfilter facet counts dropped to 0 when creator filter active.
+                                // Root cause: some indexed rows have clothAttr stored as 0/NULL (missing
+                                // ClothingAttrPresentFlag), so the packed-attr branch is skipped. Fall back
+                                // to per-row classification from internal_path/list_path so facet counts
+                                // are populated regardless of whether cloth_attr was packed at index time.
+                                if ((clothAttr & ClothingAttrPresentFlag) == 0)
+                                    clothAttr = PackClothingGalleryAttrForVarListPath(string.IsNullOrEmpty(listPath) ? internalPath : listPath);
+
                                 if ((clothAttr & ClothingAttrPresentFlag) != 0)
                                 {
                                     int kind = clothAttr & 0xF;
@@ -2945,6 +3063,34 @@ namespace VPB
                                             if (gender == (int)ClothingLoadingUtils.ResourceGender.Male) outFacets.ClothingSubfilterCountMale++;
                                             else if (gender == (int)ClothingLoadingUtils.ResourceGender.Female) outFacets.ClothingSubfilterCountFemale++;
                                         }
+                                    }
+                                }
+                            }
+                            else if (isHair)
+                            {
+                                outFacets.HairSubfilterCountAll++;
+                                if ((clothAttr & ClothingAttrPresentFlag) == 0)
+                                    clothAttr = PackClothingGalleryAttrForVarListPath(string.IsNullOrEmpty(listPath) ? internalPath : listPath);
+
+                                if ((clothAttr & ClothingAttrPresentFlag) != 0)
+                                {
+                                    int kind = clothAttr & 0xF;
+                                    int gender = (clothAttr >> 4) & 0xF;
+                                    bool isPreset = (clothAttr & 0x100) != 0;
+
+                                    if (kind == (int)ClothingLoadingUtils.ResourceKind.Hair)
+                                    {
+                                        if (HairPackedAttrMatchesSubfilter(clothAttr, hairSubfilter ^ GalleryPanel.HairSubfilter.Presets)) outFacets.HairSubfilterFacetCountPresets++;
+                                        if (HairPackedAttrMatchesSubfilter(clothAttr, hairSubfilter ^ GalleryPanel.HairSubfilter.Custom)) outFacets.HairSubfilterFacetCountCustom++;
+                                        if (HairPackedAttrMatchesSubfilter(clothAttr, hairSubfilter ^ GalleryPanel.HairSubfilter.Items)) outFacets.HairSubfilterFacetCountItems++;
+                                        if (HairPackedAttrMatchesSubfilter(clothAttr, hairSubfilter ^ GalleryPanel.HairSubfilter.Male)) outFacets.HairSubfilterFacetCountMale++;
+                                        if (HairPackedAttrMatchesSubfilter(clothAttr, hairSubfilter ^ GalleryPanel.HairSubfilter.Female)) outFacets.HairSubfilterFacetCountFemale++;
+
+                                        if (isPreset) outFacets.HairSubfilterCountPresets++;
+                                        outFacets.HairSubfilterCountCustom = 0;
+                                        if (!isPreset) outFacets.HairSubfilterCountItems++;
+                                        if (gender == (int)ClothingLoadingUtils.ResourceGender.Male) outFacets.HairSubfilterCountMale++;
+                                        else if (gender == (int)ClothingLoadingUtils.ResourceGender.Female) outFacets.HairSubfilterCountFemale++;
                                     }
                                 }
                             }
@@ -3043,6 +3189,12 @@ namespace VPB
             public int ClothingSubfilterCountMale;
             public int ClothingSubfilterCountFemale;
             public int ClothingSubfilterCountDecals;
+            public int HairSubfilterCountAll;
+            public int HairSubfilterCountPresets;
+            public int HairSubfilterCountCustom;
+            public int HairSubfilterCountItems;
+            public int HairSubfilterCountMale;
+            public int HairSubfilterCountFemale;
             public int AppearanceSubfilterCountAll;
             public int AppearanceSubfilterCountPresets;
             public int AppearanceSubfilterCountCustom;
@@ -3056,6 +3208,11 @@ namespace VPB
             public int ClothingSubfilterFacetCountMale;
             public int ClothingSubfilterFacetCountFemale;
             public int ClothingSubfilterFacetCountDecals;
+            public int HairSubfilterFacetCountPresets;
+            public int HairSubfilterFacetCountCustom;
+            public int HairSubfilterFacetCountItems;
+            public int HairSubfilterFacetCountMale;
+            public int HairSubfilterFacetCountFemale;
             public int AppearanceSubfilterFacetCountPresets;
             public int AppearanceSubfilterFacetCountCustom;
             public int AppearanceSubfilterFacetCountMale;

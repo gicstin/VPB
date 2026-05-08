@@ -2472,6 +2472,20 @@ namespace VPB
                     // thumbnail; unconditional clearing causes a visible flash on reopen.
                     LoadThumbnail(file, thumbImg);
 
+                    // Issue #101: grey out clothing/hair items whose gender does not match the
+                    // currently selected Person Atom (VaM refuses to load them anyway).
+                    // Reset color on every rebind so recycled rows never keep a stale tint.
+                    if (thumbImg.texture == null)
+                    {
+                        thumbImg.color = new Color(0.25f, 0.25f, 0.25f, 0.55f);
+                    }
+                    else
+                    {
+                        thumbImg.color = ShouldGreyoutForSelectedAtomGender(file)
+                            ? new Color(0.45f, 0.45f, 0.45f, 0.4f)
+                            : Color.white;
+                    }
+
                     // List-layout hover preview: bind hover handler to the thumbnail only.
                     // (Use the thumbnail rect so the full row doesn't trigger the popup.)
                     var hp = thumbTr.GetComponent<UIHoverPreviewTrigger>();

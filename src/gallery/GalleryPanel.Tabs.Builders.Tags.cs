@@ -22,7 +22,7 @@ namespace VPB
                     Color inactive = ColorInactiveRow;
                     Color active = ColorFacetActiveRow;
 
-                    string[] options = new string[] { "Real Clothing", "Presets", "Custom", "Items", "Male", "Female", "Decals" };
+                    string[] options = new string[] { "Real Clothing", "Presets", "Custom", "Base Clothing", "Male", "Female", "Decals" };
                     for (int gi = 0; gi < options.Length; gi++)
                     {
                         string opt = options[gi];
@@ -30,7 +30,7 @@ namespace VPB
                         if (opt == "Real Clothing") flag = ClothingSubfilter.RealClothing;
                         else if (opt == "Presets") flag = ClothingSubfilter.Presets;
                         else if (opt == "Custom") flag = ClothingSubfilter.Custom;
-                        else if (opt == "Items") flag = ClothingSubfilter.Items;
+                        else if (opt == "Base Clothing") flag = ClothingSubfilter.Items;
                         else if (opt == "Male") flag = ClothingSubfilter.Male;
                         else if (opt == "Female") flag = ClothingSubfilter.Female;
                         else if (opt == "Decals") flag = ClothingSubfilter.Decals;
@@ -42,7 +42,7 @@ namespace VPB
                         if (opt == "Real Clothing") cnt = isActive ? clothingSubfilterCountReal : clothingSubfilterFacetCountReal;
                         else if (opt == "Presets") cnt = isActive ? clothingSubfilterCountPresets : clothingSubfilterFacetCountPresets;
                         else if (opt == "Custom") cnt = isActive ? clothingSubfilterCountCustom : clothingSubfilterFacetCountCustom;
-                        else if (opt == "Items") cnt = isActive ? clothingSubfilterCountItems : clothingSubfilterFacetCountItems;
+                        else if (opt == "Base Clothing") cnt = isActive ? clothingSubfilterCountItems : clothingSubfilterFacetCountItems;
                         else if (opt == "Male") cnt = isActive ? clothingSubfilterCountMale : clothingSubfilterFacetCountMale;
                         else if (opt == "Female") cnt = isActive ? clothingSubfilterCountFemale : clothingSubfilterFacetCountFemale;
                         else if (opt == "Decals") cnt = isActive ? clothingSubfilterCountDecals : clothingSubfilterFacetCountDecals;
@@ -52,8 +52,8 @@ namespace VPB
                         CreateTabButton(container.transform, label, btnColor, isActive, () => {
                             if (flag != 0)
                             {
-                                if ((clothingSubfilter & flag) != 0) clothingSubfilter &= ~flag;
-                                else clothingSubfilter |= flag;
+                                if ((clothingSubfilter & flag) != 0) clothingSubfilter = 0;
+                                else clothingSubfilter = flag;
                             }
                             tagsCached = false;
                             RefreshFilesAndTabs();
@@ -64,6 +64,52 @@ namespace VPB
                 tagsToShow.AddRange(TagFilter.ClothingTypeTags);
                 tagsToShow.AddRange(TagFilter.ClothingRegionTags);
                 tagsToShow.AddRange(TagFilter.ClothingOtherTags);
+            }
+            else if (title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // Hair subfilters (Issue #101 parity with Clothing: hide preset .vap duplicates by default)
+                {
+                    Color inactive = ColorInactiveRow;
+                    Color active = ColorFacetActiveRow;
+
+                    string[] options = new string[] { "Presets", "Custom", "Base Hair", "Male", "Female" };
+                    for (int gi = 0; gi < options.Length; gi++)
+                    {
+                        string opt = options[gi];
+                        HairSubfilter flag = 0;
+                        if (opt == "Presets") flag = HairSubfilter.Presets;
+                        else if (opt == "Custom") flag = HairSubfilter.Custom;
+                        else if (opt == "Base Hair") flag = HairSubfilter.Items;
+                        else if (opt == "Male") flag = HairSubfilter.Male;
+                        else if (opt == "Female") flag = HairSubfilter.Female;
+
+                        bool isActive = (flag != 0) && ((hairSubfilter & flag) != 0);
+                        Color btnColor = isActive ? active : inactive;
+
+                        int cnt = 0;
+                        if (opt == "Presets") cnt = isActive ? hairSubfilterCountPresets : hairSubfilterFacetCountPresets;
+                        else if (opt == "Custom") cnt = isActive ? hairSubfilterCountCustom : hairSubfilterFacetCountCustom;
+                        else if (opt == "Base Hair") cnt = isActive ? hairSubfilterCountItems : hairSubfilterFacetCountItems;
+                        else if (opt == "Male") cnt = isActive ? hairSubfilterCountMale : hairSubfilterFacetCountMale;
+                        else if (opt == "Female") cnt = isActive ? hairSubfilterCountFemale : hairSubfilterFacetCountFemale;
+
+                        string label = opt + " (" + cnt + ")";
+
+                        CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                            if (flag != 0)
+                            {
+                                if ((hairSubfilter & flag) != 0) hairSubfilter = 0;
+                                else hairSubfilter = flag;
+                            }
+                            tagsCached = false;
+                            RefreshFilesAndTabs();
+                        }, trackedButtons);
+                    }
+                }
+
+                tagsToShow.AddRange(TagFilter.HairTypeTags);
+                tagsToShow.AddRange(TagFilter.HairRegionTags);
+                tagsToShow.AddRange(TagFilter.HairOtherTags);
             }
             else if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
             {
@@ -93,8 +139,8 @@ namespace VPB
                         CreateTabButton(container.transform, label, btnColor, isActive, () => {
                             if (flag != 0)
                             {
-                                if ((appearanceSubfilter & flag) != 0) appearanceSubfilter &= ~flag;
-                                else appearanceSubfilter |= flag;
+                                if ((appearanceSubfilter & flag) != 0) appearanceSubfilter = 0;
+                                else appearanceSubfilter = flag;
                             }
                             tagsCached = false;
                             RefreshFilesAndTabs();
@@ -131,9 +177,7 @@ namespace VPB
             }
             else if (title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                tagsToShow.AddRange(TagFilter.HairTypeTags);
-                tagsToShow.AddRange(TagFilter.HairRegionTags);
-                tagsToShow.AddRange(TagFilter.HairOtherTags);
+                // handled above
             }
 
             if (!string.IsNullOrEmpty(tagFilter))

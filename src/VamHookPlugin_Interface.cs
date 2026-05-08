@@ -253,6 +253,9 @@ namespace VPB
                 addCat("Clothing", "vap", "Custom/Atom/Person/Clothing");
                 addCat("Clothing", "vam|vap", "Saves/Person/Clothing");
                 addCat("Hair", "vam|vap", "Custom/Hair");
+                // Include hair presets saved under Person preset folders (Issue #101 hair parity).
+                addCat("Hair", "vap", "Custom/Atom/Person/Hair");
+                addCat("Hair", "vam|vap", "Saves/Person/Hair");
                 addCat("Pose", "json", "Saves/Person"); // Was Person
                 addCat("Appearance", "json|vap", "Saves/Person/appearance");
                 // Clothing/Hair presets are included in the unified Clothing/Hair categories.
@@ -515,12 +518,14 @@ namespace VPB
         public void OpenCategoryClothing()
         {
             SetLastGalleryPage(GalleryPage.CategoryClothing);
-            ShowGallery("Category Clothing", "vam", "Custom/Clothing");
+            // Include .vap so Issue #101 subfilters can split base vs presets.
+            ShowGallery("Category Clothing", "vam|vap", "Custom/Clothing");
         }
         public void OpenCategoryHair()
         {
             SetLastGalleryPage(GalleryPage.CategoryHair);
-            ShowGallery("Category Hair", "vam", "Custom/Hair");
+            // Include .vap so Issue #101 subfilters can split base vs presets.
+            ShowGallery("Category Hair", "vam|vap", "Custom/Hair");
         }
         public void OpenCategoryPose()
         {
