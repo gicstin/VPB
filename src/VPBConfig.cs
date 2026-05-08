@@ -390,7 +390,7 @@ namespace VPB
         {
             get
             {
-                try { return UnityEngine.XR.XRSettings.enabled; } catch { return false; }
+                return XrUtils.IsVrActive();
             }
         }
 

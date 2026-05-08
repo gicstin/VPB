@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityEngine.Events;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -17,8 +18,7 @@ namespace VPB
             // Subscribe to config changes
             if (VPBConfig.Instance != null)
             {
-                bool isVR = false;
-                try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+                bool isVR = XrUtils.IsVrActive();
 
                 isFixedLocally = !isVR && (VPBConfig.Instance.DesktopFixedMode || VPBConfig.Instance.EnableAutoFixedGallery) && (Gallery.singleton == null || Gallery.singleton.PanelCount == 0);
 

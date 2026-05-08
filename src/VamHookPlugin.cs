@@ -1629,8 +1629,7 @@ namespace VPB
                 }
                 GraphicRaycaster gr = canvasObject.AddComponent<GraphicRaycaster>();
 
-                bool isVR = false;
-                try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+                bool isVR = XrUtils.IsVrActive();
 
                 float s = 0.001f;
                 m_QuickMenuCanvas.transform.localScale = new Vector3(s, s, s);

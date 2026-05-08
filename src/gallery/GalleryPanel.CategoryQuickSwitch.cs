@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -211,8 +212,7 @@ namespace VPB
         /// <summary>VR: gallery chrome docked to VaM menu strip (flush left when menu visible).</summary>
         private bool CategoryQuickSwitchUsesAnchoredTitleLayout()
         {
-            bool vr = false;
-            try { vr = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool vr = XrUtils.IsVrActive();
             if (!vr || VPBConfig.Instance == null) return false;
             if (!VPBConfig.Instance.GalleryAnchorToVamMenu) return false;
             if (GetAnchoredInstance() != this) return false;

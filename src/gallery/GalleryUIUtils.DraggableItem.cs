@@ -10,11 +10,19 @@ using UnityEngine.Events;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using SimpleJSON;
+using VPB.src.util;
 
 namespace VPB
 {
     public partial class UIDraggableItem : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
 {
+        private static string GetDragActionVerb(ItemType itemType, bool replaceMode)
+        {
+            if (replaceMode) return "Replacing";
+            if (itemType == ItemType.Pose) return "Applying";
+            return "Adding";
+        }
+
         public FileEntry FileEntry;
         public Hub.GalleryHubItem HubItem;
         public RawImage ThumbnailImage;
@@ -57,7 +65,7 @@ namespace VPB
 
         private static bool IsXrPresentationActive()
         {
-            try { return UnityEngine.XR.XRSettings.enabled; } catch { return false; }
+            return XrUtils.IsVrActive();
         }
 
         /// <summary>Non-VR: require screen-pixel slack past press. VR: rely on Unity begin-drag + optional hold only.</summary>
@@ -163,8 +171,7 @@ namespace VPB
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             if (isVR || eventData.button == PointerEventData.InputButton.Left)
             {
                 _galleryPassthroughScrollUntilItemDrag = false;
@@ -193,8 +200,7 @@ namespace VPB
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             if (!isVR && eventData.button != PointerEventData.InputButton.Left) return;
             if (VPBConfig.Instance != null && !VPBConfig.Instance.EffectiveEnableDragDrop)
             {
@@ -538,7 +544,8 @@ namespace VPB
             }
             else if (atom != null && atom.type == "Person")
             {
-                 string action = (Panel != null && Panel.DragDropReplaceMode) ? "Replacing" : "Adding";
+                 bool replaceMode = (Panel != null && Panel.DragDropReplaceMode);
+                 string action = GetDragActionVerb(itemType, replaceMode);
                  if (itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset)
                  {
                      statusMsg = $"{action} Preset {FileEntry.Name} to {atom.name}";

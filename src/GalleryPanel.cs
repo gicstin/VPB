@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -51,8 +52,7 @@ namespace VPB
             // Floating fallback: only for desktop (non-VR) floating mode.
             // In VR with GalleryAnchorToVamMenu, the panel auto-appears with the VAM menu;
             // opening a filter panel by default is surprising for VR users.
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             bool vrAnchorMode = isVR && VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu;
             if (!isFixedLocally && !vrAnchorMode && !targetL.HasValue && !targetR.HasValue)
                 targetR = ContentType.Category;

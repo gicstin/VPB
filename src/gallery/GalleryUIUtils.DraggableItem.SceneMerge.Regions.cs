@@ -323,7 +323,9 @@ namespace VPB
                 Destroy(ghostObject);
                 ghostObject = null;
                 ghostBorder = null;
+                ghostText = null;
                 ghostRenderer = null;
+                ghostImg = null;
             }
             // 8c — tear down the input-blocking overlay and clear the static drag flag
             DestroyDragOverlay();

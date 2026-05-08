@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -136,8 +137,7 @@ namespace VPB
 
         private static bool QuickMenuIsVrActive()
         {
-            try { return UnityEngine.XR.XRSettings.enabled; }
-            catch { return false; }
+            return XrUtils.IsVrActive();
         }
 
         private Vector2 QuickMenuGetAnchorCenter(bool isVR)

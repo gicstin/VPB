@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityEngine.Events;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -2285,8 +2286,7 @@ namespace VPB
         {
             if (VPBConfig.Instance == null) return;
 
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
 
             bool fixedMode = isFixedLocally;
             string text = fixedMode
@@ -2640,8 +2640,7 @@ namespace VPB
         {
             if (VPBConfig.Instance == null) return;
 
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             if (isVR)
             {
                 if (isFixedLocally) SetFixedLocally(false);
@@ -2721,8 +2720,7 @@ namespace VPB
         {
             if (fixedMode)
             {
-                bool isVR = false;
-                try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+                bool isVR = XrUtils.IsVrActive();
                 if (isVR) fixedMode = false;
             }
 

@@ -278,6 +278,7 @@
     <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\GlobalInfo.cs" />
     <Compile Include="src\util\VPBLogger.cs" />
+    <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\VdsLauncher.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />

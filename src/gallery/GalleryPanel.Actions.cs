@@ -6,6 +6,7 @@ using System.Linq;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -582,8 +583,7 @@ namespace VPB
         {
             if (canvas == null) return;
 
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
 
             void setImmediate(bool v)
             {
@@ -731,8 +731,7 @@ namespace VPB
         private void ApplyVamMenuGateVisibility()
         {
             if (VPBConfig.Instance == null || canvas == null) return;
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             
             // The anchor-based gate only applies to the specific panel that is anchored.
             bool isAnchoredInstance = (GetAnchoredInstance() == this);
@@ -772,8 +771,7 @@ namespace VPB
         {
             if (VPBConfig.Instance == null || canvas == null) return;
             
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             
             if (!isVR) return;
             if (!VPBConfig.Instance.GalleryAnchorToVamMenu) return;

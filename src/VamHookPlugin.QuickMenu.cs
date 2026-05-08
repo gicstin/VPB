@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -25,8 +26,7 @@ namespace VPB
 
         private void OpenQuickMenuPositionWindow()
         {
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             if (isVR)
                 return;
 

@@ -2809,6 +2809,8 @@ namespace VPB
 
              ghostRenderer = null;
              ghostImg = null;
+             ghostText = null;
+             ghostBorder = null;
 
              // 8b — resolve thumbnail texture; fall back to memory cache if async load is still pending
              Texture ghostTex = GetGhostTexture();
@@ -2818,92 +2820,19 @@ namespace VPB
 
              if (fixedMode)
              {
-                 ghostObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                 ghostObject.name = "DragGhost";
-                 ghostObject.layer = 2;
-                 Collider c = null;
-                 try { c = ghostObject.GetComponent<Collider>(); } catch { }
-                 try { if (c != null) Destroy(c); } catch { }
-
-                 try
+                 // Fixed-mode ghost renders in world space.
+                 CreateGhostUi(ghostTex, null, true);
+                 if (ghostObject != null)
                  {
-                     ghostRenderer = ghostObject.GetComponent<Renderer>();
-                     if (ghostRenderer != null)
-                     {
-                         // 8b — use Sprites/Default (always available, unlit, alpha-blended)
-                         Shader ghostShader = Shader.Find("Sprites/Default");
-                         if (ghostShader == null) ghostShader = Shader.Find("Unlit/Transparent");
-                         Material m = new Material(ghostShader);
-                         m.mainTexture = ghostTex;
-                         // hide the quad until we have a real texture to avoid a white flash
-                         m.color = ghostTex != null ? new Color(1f, 1f, 1f, 0.9f) : Color.clear;
-                         ghostRenderer.material = m;
-                         ghostRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                         ghostRenderer.receiveShadows = false;
-                     }
+                     var rt = ghostObject.GetComponent<RectTransform>();
+                     if (rt != null) rt.localScale = new Vector3(0.0022f, 0.0022f, 0.0022f);
                  }
-                 catch { }
-
-                 try { ghostObject.transform.localScale = new Vector3(0.22f, 0.22f, 0.22f); } catch { }
              }
              else
              {
-                 ghostObject = new GameObject("DragGhost");
-
                  Canvas rootCanvas = GetComponentInParent<Canvas>();
                  if (rootCanvas == null && Panel != null) rootCanvas = Panel.canvas;
-
-                 if (rootCanvas != null)
-                 {
-                     ghostObject.transform.SetParent(rootCanvas.transform, false);
-                     ghostObject.layer = rootCanvas.gameObject.layer;
-                     ghostObject.transform.localScale = Vector3.one;
-                 }
-
-                 ghostBorder = ghostObject.AddComponent<Image>();
-                 ghostBorder.raycastTarget = false;
-                 ghostBorder.color = new Color(1, 1, 1, 0.2f);
-
-                 GameObject textGO = new GameObject("ActionText");
-                 textGO.transform.SetParent(ghostObject.transform, false);
-                 ghostText = textGO.AddComponent<Text>();
-                 ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                 ghostText.fontSize = 24;
-                 ghostText.color = Color.white;
-                 ghostText.alignment = TextAnchor.UpperCenter;
-                 ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
-                 ghostText.verticalOverflow = VerticalWrapMode.Overflow;
-
-                 textGO.AddComponent<Outline>().effectColor = Color.black;
-
-                 RectTransform textRT = textGO.GetComponent<RectTransform>();
-                 textRT.anchorMin = new Vector2(0.5f, 0);
-                 textRT.anchorMax = new Vector2(0.5f, 0);
-                 textRT.pivot = new Vector2(0.5f, 1);
-                 textRT.anchoredPosition = new Vector2(0, -10);
-                 textRT.sizeDelta = new Vector2(400, 60);
-
-                 GameObject contentGO = new GameObject("Content");
-                 contentGO.transform.SetParent(ghostObject.transform, false);
-                 contentGO.layer = ghostObject.layer;
-                 RawImage img = contentGO.AddComponent<RawImage>();
-                 img.raycastTarget = false;
-                 // 8b — hide until we have a real texture; coroutine restores color when it arrives
-                 img.color = ghostTex != null ? new Color(1f, 1f, 1f, 0.7f) : Color.clear;
-                 img.texture = ghostTex;
-                 ghostImg = img; // 8b — store for late texture update
-
-                 RectTransform rt = ghostObject.GetComponent<RectTransform>();
-                 if (rt == null) rt = ghostObject.AddComponent<RectTransform>();
-                 rt.sizeDelta = new Vector2(80, 80);
-                 rt.pivot = new Vector2(0.5f, 0.5f);
-
-                 RectTransform contentRT = contentGO.GetComponent<RectTransform>();
-                 if (contentRT == null) contentRT = contentGO.AddComponent<RectTransform>();
-                 contentRT.anchorMin = Vector2.zero;
-                 contentRT.anchorMax = Vector2.one;
-                 contentRT.offsetMin = new Vector2(5, 5);
-                 contentRT.offsetMax = new Vector2(-5, -5);
+                 CreateGhostUi(ghostTex, rootCanvas, false);
              }
 
              // 8b — if texture was unavailable at drag start, poll until ThumbnailImage loads it
@@ -2912,6 +2841,85 @@ namespace VPB
              planeDistance = Vector3.Dot(transform.position - cam.transform.position, cam.transform.forward);
 
              UpdateGhost(eventData, null, planeDistance);
+        }
+
+        private void CreateGhostUi(Texture ghostTex, Canvas parentCanvasOrNull, bool worldSpace)
+        {
+            try
+            {
+                ghostObject = new GameObject("DragGhost");
+
+                if (worldSpace)
+                {
+                    ghostObject.layer = 2;
+                    var wc = ghostObject.AddComponent<Canvas>();
+                    wc.renderMode = RenderMode.WorldSpace;
+                    wc.sortingOrder = 5000;
+                    ghostObject.AddComponent<CanvasRenderer>();
+                }
+                else
+                {
+                    if (parentCanvasOrNull != null)
+                    {
+                        ghostObject.transform.SetParent(parentCanvasOrNull.transform, false);
+                        ghostObject.layer = parentCanvasOrNull.gameObject.layer;
+                        ghostObject.transform.localScale = Vector3.one;
+                    }
+                }
+
+                ghostBorder = ghostObject.AddComponent<Image>();
+                ghostBorder.raycastTarget = false;
+                ghostBorder.color = new Color(1, 1, 1, 0.2f);
+
+                GameObject textGO = new GameObject("ActionText");
+                textGO.transform.SetParent(ghostObject.transform, false);
+                ghostText = textGO.AddComponent<Text>();
+                ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                ghostText.fontSize = 24;
+                ghostText.color = Color.white;
+                ghostText.alignment = TextAnchor.UpperCenter;
+                ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                ghostText.verticalOverflow = VerticalWrapMode.Overflow;
+                textGO.AddComponent<Outline>().effectColor = Color.black;
+
+                RectTransform textRT = textGO.GetComponent<RectTransform>();
+                textRT.anchorMin = new Vector2(0.5f, 0);
+                textRT.anchorMax = new Vector2(0.5f, 0);
+                textRT.pivot = new Vector2(0.5f, 1);
+                textRT.anchoredPosition = new Vector2(0, -10);
+                textRT.sizeDelta = new Vector2(400, 60);
+                // Desktop: keep fontSize high for glyph detail, scale transform down for ~3x smaller label.
+                bool vr = VPB.src.util.XrUtils.IsVrActive();
+                if (!vr) textRT.localScale = new Vector3(0.3333f, 0.3333f, 1f);
+
+                GameObject contentGO = new GameObject("Content");
+                contentGO.transform.SetParent(ghostObject.transform, false);
+                contentGO.layer = ghostObject.layer;
+                RawImage img = contentGO.AddComponent<RawImage>();
+                img.raycastTarget = false;
+                img.color = ghostTex != null ? new Color(1f, 1f, 1f, 0.7f) : Color.clear;
+                img.texture = ghostTex;
+                ghostImg = img;
+
+                RectTransform rt = ghostObject.GetComponent<RectTransform>();
+                if (rt == null) rt = ghostObject.AddComponent<RectTransform>();
+                rt.sizeDelta = new Vector2(80, 80);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+
+                RectTransform contentRT = contentGO.GetComponent<RectTransform>();
+                if (contentRT == null) contentRT = contentGO.AddComponent<RectTransform>();
+                contentRT.anchorMin = Vector2.zero;
+                contentRT.anchorMax = Vector2.one;
+                contentRT.offsetMin = new Vector2(5, 5);
+                contentRT.offsetMax = new Vector2(-5, -5);
+            }
+            catch
+            {
+                ghostObject = null;
+                ghostBorder = null;
+                ghostText = null;
+                ghostImg = null;
+            }
         }
 
         // 8b — returns the best available thumbnail texture at drag start
@@ -3069,14 +3077,15 @@ namespace VPB
                          else typeStr = "Item";
                      }
 
-                     if (Panel != null && Panel.DragDropReplaceMode && (isClothing || isHair))
+                     bool replace = (Panel != null && Panel.DragDropReplaceMode && (isClothing || isHair));
+                     if (replace)
                      {
                          ghostText.text = $"Replacing {typeStr} on\n" + atom.name;
                          ghostText.color = new Color(1f, 0.5f, 0.5f); // Reddish
                      }
                      else
                      {
-                         string action = (itemType == ItemType.Pose) ? "Applying" : "Adding";
+                         string action = GetDragActionVerb(itemType, false);
                          ghostText.text = $"{action} {typeStr} to\n" + atom.name;
                          ghostText.color = new Color(0.5f, 1f, 0.5f); // Greenish
                      }
@@ -3186,8 +3195,7 @@ namespace VPB
              else
              {
                  // In desktop, ensure it's at least 0.4m away so it doesn't fill the screen
-                 bool isVr = UnityEngine.XR.XRSettings.enabled;
-                 if (!isVr)
+                 if (!VPB.src.util.XrUtils.IsVrActive())
                  {
                      finalDist = Mathf.Max(distance, 0.4f);
                  }
