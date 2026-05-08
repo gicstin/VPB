@@ -834,7 +834,8 @@ namespace VPB
                     {
                         rgv.fixedColumns = 1;
                         rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1);
-                        rgv.SetAdaptiveConfig(false, 0f, 1, true);
+                        // Settings list must adapt to viewport width (Top dock/full width resize).
+                        rgv.SetAdaptiveConfig(true, 0f, 1, true);
                     }
                 }
             }
