@@ -405,14 +405,24 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list opens on the left for new panes."),
                 ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator" },
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel),
-                SetString = v => { VPBConfig.Instance.GalleryDefaultLeftSidePanel = v; ApplySidePanelDefaultsFromConfig(); VPBConfig.Instance.TriggerChange(); }
+                SetString = v => {
+                    VPBConfig.Instance.GalleryDefaultLeftSidePanel = v;
+                    // Avoid clobbering the active Settings side tab while user is interacting with Settings UI.
+                    if (!IsSettingsPanelOpen()) ApplySidePanelDefaultsFromConfig();
+                    VPBConfig.Instance.TriggerChange();
+                }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.defaultRight", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_default_right_panel", "Right side list (default)"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list opens on the right for new panes."),
                 ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator" },
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel),
-                SetString = v => { VPBConfig.Instance.GalleryDefaultRightSidePanel = v; ApplySidePanelDefaultsFromConfig(); VPBConfig.Instance.TriggerChange(); }
+                SetString = v => {
+                    VPBConfig.Instance.GalleryDefaultRightSidePanel = v;
+                    // Avoid clobbering the active Settings side tab while user is interacting with Settings UI.
+                    if (!IsSettingsPanelOpen()) ApplySidePanelDefaultsFromConfig();
+                    VPBConfig.Instance.TriggerChange();
+                }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.pluginThumbs", GroupKey = "lists", Label = VPBTranslation.T("settings.plugin_gallery_grid_thumbnails", "Plugin thumbnails in grid"),
@@ -1045,7 +1055,9 @@ namespace VPB
                 string cur = def.GetString() ?? "";
                 string display = (cur ?? "").ToUpperInvariant();
                 CreateMiniButton(controls.transform, display, 150f, new Color(0.25f, 0.5f, 0.8f, 1f), () => {
-                    def.SetString(NextOf(cur, def.Options));
+                    // Read current value at click time (avoid stale captured value when row reuses objects).
+                    string curNow = def.GetString() ?? "";
+                    def.SetString(NextOf(curNow, def.Options));
                     if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                         NotifyInternalSettingsHoverPreviewChanged();
                     RefreshInternalSettingsListRows(true);
@@ -1287,6 +1299,8 @@ namespace VPB
             UpdateLayout();
             UpdateTabs();
             SyncInternalSettingsListView();
+            // Ensure toolbox exits Settings chrome immediately (Delete/etc reappear)
+            try { RefreshTboxConditionalActionButtons(); } catch { }
         }
 
         private void CancelInternalSettingsSession()

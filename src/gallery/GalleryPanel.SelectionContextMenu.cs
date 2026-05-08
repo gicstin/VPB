@@ -2092,6 +2092,13 @@ namespace VPB
             show(tboxCacheTexturesBtn, !isCleanup);
             show(tboxJsonParserBenchBtn, !isCleanup && VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode);
             show(tboxOpenHubBtn, !isCleanup);
+            // Non-settings mode must explicitly re-show buttons hidden by Settings mode.
+            // Otherwise, once Settings hides them, they stay inactive forever.
+            show(tboxCopyPkgNamesBtn, true);
+            show(tboxDeleteBtn, true);
+            show(tboxSceneImportBtn, !isCleanup);
+            show(tboxSelectAllBtn, !isCleanup);
+            show(tboxClearSelectionBtn, !isCleanup);
 
             if (isCleanup)
             {
@@ -2367,7 +2374,10 @@ namespace VPB
                 {
                     FileEntry f = selectedFiles[i];
                     if (f == null) continue;
-                    if (!string.IsNullOrEmpty(TryGetPackageUidForEntry(f)))
+                    // Allow rating for packages and local Custom Scenes (Saves/scene JSON).
+                    // RatingsManager.SetRating(FileEntry, ...) supports both.
+                    if (!string.IsNullOrEmpty(TryGetPackageUidForEntry(f)) ||
+                        LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
                         eligible.Add(f);
                 }
             }
@@ -2384,7 +2394,23 @@ namespace VPB
             }
             if (!tboxGridRateBtn.activeSelf) tboxGridRateBtn.SetActive(true);
             Text txt = tboxGridRateBtn.GetComponentInChildren<Text>(true);
-            tboxGridRateHandler.Init(eligible[0], txt, tboxGridRateSelectorGO);
+            // Use stable synthetic id so selector stays open across recycled FileEntry instances (Custom Scenes in particular).
+            string stableId = null;
+            try { stableId = TryGetPackageUidForEntry(eligible[0]); } catch { stableId = null; }
+            if (string.IsNullOrEmpty(stableId))
+            {
+                try
+                {
+                    if (LocalSceneGallerySupport.TryResolveSavesSceneJson(eligible[0], out string abs, out string rel, false))
+                        stableId = "LOCALSCENE:" + (!string.IsNullOrEmpty(rel) ? rel : abs);
+                }
+                catch { }
+            }
+            if (string.IsNullOrEmpty(stableId))
+            {
+                try { stableId = !string.IsNullOrEmpty(eligible[0].Uid) ? eligible[0].Uid : eligible[0].Path; } catch { stableId = null; }
+            }
+            tboxGridRateHandler.Init(stableId ?? "", txt, tboxGridRateSelectorGO);
             tboxGridRateHandler.SetDisplayOnly(TboxConsensusRatingDisplay(eligible));
             if (tboxGridRateIconImage != null)
                 tboxGridRateHandler.BindStarIcon(tboxGridRateIconImage);

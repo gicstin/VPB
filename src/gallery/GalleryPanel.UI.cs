@@ -3044,6 +3044,10 @@ namespace VPB
             UpdateLayout();
             UpdateTabs();
 
+            // Leaving Settings via re-toggling Settings button or switching side panes must restore toolbox actions.
+            if (hadSettingsPanel && !IsSettingsPanelOpen())
+                try { RefreshTboxConditionalActionButtons(); } catch { }
+
             // BA prompt: only show when user enters Settings page.
             if (!hadSettingsPanel && IsSettingsPanelOpen())
                 try { TryShowBaMigrationPromptOnSettingsEnter(); } catch { }
@@ -3117,6 +3121,10 @@ namespace VPB
 
             UpdateLayout();
             UpdateTabs();
+
+            // Leaving Settings via re-toggling Settings button or switching side panes must restore toolbox actions.
+            if (hadSettingsPanel && !IsSettingsPanelOpen())
+                try { RefreshTboxConditionalActionButtons(); } catch { }
 
             // BA prompt: only show when user enters Settings page.
             if (!hadSettingsPanel && IsSettingsPanelOpen())

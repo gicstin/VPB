@@ -2155,7 +2155,9 @@ namespace VPB
             {
                 scrollRect.onValueChanged.AddListener((v) => { 
                     lastScrollTime = Time.unscaledTime;
-                    try { if (tboxGridRateHandler != null) tboxGridRateHandler.CloseSelector(); } catch { }
+                    // Do not auto-close toolbox rating selector on scroll changes.
+                    // Scroll value can change due to layout rebuilds / content refresh (not user intent),
+                    // which makes the selector unusable in some modes (e.g. Custom Scenes).
                     // LogUtil.Log("Scroll changed: " + v.y);
                 });
             }

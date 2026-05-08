@@ -133,7 +133,8 @@ namespace VPB
             {
                 selectorCG = selectorGO.GetComponent<CanvasGroup>();
                 if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
-                if (!sameUid) SetSelectorVisible(false);
+                // Do not auto-close selector during refresh; refresh can rebind rows and swap FileEntry instances,
+                // which would otherwise close the popup immediately after opening (notably in Custom Scenes).
             }
             
             try { currentRating = RatingsManager.Instance.GetRating(e); }
@@ -152,7 +153,7 @@ namespace VPB
             {
                 selectorCG = selectorGO.GetComponent<CanvasGroup>();
                 if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
-                if (!sameUid) SetSelectorVisible(false);
+                // Do not auto-close selector during refresh; refresh can rebind ids while user is interacting.
             }
 
             try { currentRating = RatingsManager.Instance.GetRating(uid); }

@@ -1452,7 +1452,10 @@ namespace VPB
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
-            try { if (tboxGridRateHandler != null) tboxGridRateHandler.CloseSelector(); } catch { }
+            // Keep toolbox grid-rate selector open during selection visual refresh.
+            // Selector visibility is already managed by RefreshTboxGridRateControlState() (selection count / mode gating)
+            // and by user interaction (ToggleSelector/SetRating). Auto-closing here makes it impossible to use in
+            // some modes where RefreshSelectionVisuals is triggered frequently.
             try { RefreshAppliedUserTagsPaneAfterSelectionChange(); } catch { }
         }
 
