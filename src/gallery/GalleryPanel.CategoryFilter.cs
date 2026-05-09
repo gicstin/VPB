@@ -111,6 +111,8 @@ namespace VPB
             currentPackagePathFilter = state.PackagePathFilter ?? "";
             clothingSubfilter = (ClothingSubfilter)state.ClothingSubfilter;
             hairSubfilter = (HairSubfilter)state.HairSubfilter;
+            _clothingGenderUserOverride = false;
+            _hairGenderUserOverride = false;
             appearanceSubfilter = (AppearanceSubfilter)state.AppearanceSubfilter;
             posePeopleFilter = (PosePeopleFilter)state.PosePeopleFilter;
 
@@ -144,6 +146,8 @@ namespace VPB
             currentPackagePathFilter = "";
             clothingSubfilter = 0;
             hairSubfilter = 0;
+            _clothingGenderUserOverride = false;
+            _hairGenderUserOverride = false;
             appearanceSubfilter = 0;
             posePeopleFilter = PosePeopleFilter.All;
         }

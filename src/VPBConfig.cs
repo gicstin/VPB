@@ -207,6 +207,8 @@ namespace VPB
         }
         /// <summary>Gallery item drag-and-drop to atoms/scene. Off by default (VR jitter / accidental drags); enable in Settings → Interaction.</summary>
         public bool EnableDragDrop = false;
+        /// <summary>When true (default), Clothing/Hair categories auto-apply Male/Female subfilter based on selected target atom gender.</summary>
+        public bool GalleryAutoGenderFilter = true;
         /// <summary>
         /// Effective drag-and-drop state at runtime.
         /// Hold-to-launch uses same pointer-down gesture as drag start, so it suppresses drag even if user preference is enabled.
@@ -520,6 +522,7 @@ namespace VPB
             DragDropReplaceMode = false;
             AppearanceClothingApplyMode = "replace";
             EnableDragDrop = false;
+            GalleryAutoGenderFilter = true;
             RequireDragHoldBeforeMove = false;
             DragHoldThreshold = 0.5f;
             ApplyMode = "DoubleClick";
@@ -625,6 +628,7 @@ namespace VPB
                         else if (node["KeepClothingWhenApplyingAppearance"] != null)
                             AppearanceClothingApplyMode = node["KeepClothingWhenApplyingAppearance"].AsBool ? "keep" : "replace";
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
+                        if (node["GalleryAutoGenderFilter"] != null) GalleryAutoGenderFilter = node["GalleryAutoGenderFilter"].AsBool;
                         if (node["DragHoldThreshold"] != null)
                             DragHoldThreshold = Mathf.Clamp(node["DragHoldThreshold"].AsFloat, 0f, 1f);
                         if (node["RequireDragHoldBeforeMove"] != null)
@@ -874,6 +878,7 @@ namespace VPB
                 node["AppearanceClothingApplyMode"] = AppearanceClothingApplyMode;
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
+                node["GalleryAutoGenderFilter"].AsBool = GalleryAutoGenderFilter;
                 node["RequireDragHoldBeforeMove"].AsBool = RequireDragHoldBeforeMove;
                 node["DragHoldThreshold"].AsFloat = Mathf.Clamp(DragHoldThreshold, 0f, 1f);
                 node["ApplyMode"] = ApplyMode;

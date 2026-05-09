@@ -55,6 +55,11 @@ namespace VPB
                                 if ((clothingSubfilter & flag) != 0) clothingSubfilter = 0;
                                 else clothingSubfilter = flag;
                             }
+                            if (flag == ClothingSubfilter.Male || flag == ClothingSubfilter.Female)
+                            {
+                                _clothingGenderUserOverride = true;
+                                LogUtil.Log("[VPB.Gallery] user override Clothing gender = " + flag);
+                            }
                             tagsCached = false;
                             RefreshFilesAndTabs();
                         }, trackedButtons);
@@ -100,6 +105,11 @@ namespace VPB
                             {
                                 if ((hairSubfilter & flag) != 0) hairSubfilter = 0;
                                 else hairSubfilter = flag;
+                            }
+                            if (flag == HairSubfilter.Male || flag == HairSubfilter.Female)
+                            {
+                                _hairGenderUserOverride = true;
+                                LogUtil.Log("[VPB.Gallery] user override Hair gender = " + flag);
                             }
                             tagsCached = false;
                             RefreshFilesAndTabs();

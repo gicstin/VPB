@@ -422,6 +422,9 @@ namespace VPB
             if (paramsChanged)
                 RestoreCategoryFilterState(title, path);
 
+            // Auto gender subfilter must apply on category change too (before RefreshFiles builds grid).
+            ReconcileAutoGenderForCurrentTarget();
+
             if (Application.isPlaying && canvas.renderMode == RenderMode.WorldSpace)
             {
                 // In VR on startup, Camera.main can be null briefly. Rebind whenever it becomes available.

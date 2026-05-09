@@ -2669,11 +2669,13 @@ namespace VPB
             if (!hasRealPersons)
                 return;
 
+            int prev = targetDropdownValue;
             if (forward)
                 targetDropdownValue = (targetDropdownValue + 1) % targetDropdownOptions.Count;
             else
                 targetDropdownValue = (targetDropdownValue - 1 + targetDropdownOptions.Count) % targetDropdownOptions.Count;
             UpdateTargetDropdownUI();
+            if (prev != targetDropdownValue) OnTargetAtomChanged("cycle");
         }
 
         /// <summary>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -120,53 +121,102 @@ namespace VPB
 
         private void RefreshFilesAndTabs()
         {
-            // Issue #101 QoL: when browsing Clothing/Hair with a target Person selected,
-            // auto-apply gender toggle only if user did not already pick Male/Female.
+            ReconcileAutoGenderForCurrentTarget();
+            RefreshFiles();
+            UpdateTabs();
+        }
+
+        private string GetSelectedTargetGenderLabel()
+        {
             try
             {
+                Atom atom = SelectedTargetAtom;
+                if (atom == null) return "None";
+                if (AtomGenderUtils.IsMale(atom)) return "Male";
+                if (AtomGenderUtils.IsFemale(atom)) return "Female";
+                return "Unknown";
+            }
+            catch { return "Unknown"; }
+        }
+
+        private void ReconcileAutoGenderForCurrentTarget()
+        {
+            try
+            {
+                if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryAutoGenderFilter) return;
                 string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
                 bool isClothing = !string.IsNullOrEmpty(title) && title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
                 bool isHair = !string.IsNullOrEmpty(title) && title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-                Atom atom = SelectedTargetAtom;
-                if (atom != null && (isClothing || isHair))
-                {
-                    bool atomMale = false;
-                    try
-                    {
-                        JSONStorable geometry = atom.GetStorableByID("geometry");
-                        if (geometry != null)
-                        {
-                            var charChooser = geometry.GetStringChooserJSONParam("character");
-                            if (charChooser != null && !string.IsNullOrEmpty(charChooser.val)
-                                && charChooser.val.StartsWith("Male", StringComparison.OrdinalIgnoreCase))
-                                atomMale = true;
-                        }
-                    }
-                    catch { }
+                if (!isClothing && !isHair) return;
 
-                    if (isClothing)
+                string genderLabel = GetSelectedTargetGenderLabel();
+                if (genderLabel != "Male" && genderLabel != "Female") return;
+                bool atomMale = (genderLabel == "Male");
+
+                if (isClothing && !_clothingGenderUserOverride)
+                {
+                    ClothingSubfilter targetFlag = atomMale ? ClothingSubfilter.Male : ClothingSubfilter.Female;
+                    ClothingSubfilter genderBits = clothingSubfilter & (ClothingSubfilter.Male | ClothingSubfilter.Female);
+                    if (genderBits == 0)
                     {
-                        bool hasGender = (clothingSubfilter & (ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0;
-                        if (!hasGender)
-                        {
-                            clothingSubfilter |= atomMale ? ClothingSubfilter.Male : ClothingSubfilter.Female;
-                            tagsCached = false;
-                        }
+                        clothingSubfilter |= targetFlag;
+                        tagsCached = false;
+                        LogUtil.Log("[VPB.Gallery] auto-gender apply: Clothing -> " + targetFlag + " (target=" + genderLabel + ")");
                     }
-                    else if (isHair)
+                    else if (genderBits != targetFlag)
                     {
-                        bool hasGender = (hairSubfilter & (HairSubfilter.Male | HairSubfilter.Female)) != 0;
-                        if (!hasGender)
-                        {
-                            hairSubfilter |= atomMale ? HairSubfilter.Male : HairSubfilter.Female;
-                            tagsCached = false;
-                        }
+                        clothingSubfilter = (clothingSubfilter & ~genderBits) | targetFlag;
+                        tagsCached = false;
+                        LogUtil.Log("[VPB.Gallery] auto-gender swap: Clothing " + genderBits + " -> " + targetFlag + " (target=" + genderLabel + ")");
+                    }
+                }
+                else if (isHair && !_hairGenderUserOverride)
+                {
+                    HairSubfilter targetFlag = atomMale ? HairSubfilter.Male : HairSubfilter.Female;
+                    HairSubfilter genderBits = hairSubfilter & (HairSubfilter.Male | HairSubfilter.Female);
+                    if (genderBits == 0)
+                    {
+                        hairSubfilter |= targetFlag;
+                        tagsCached = false;
+                        LogUtil.Log("[VPB.Gallery] auto-gender apply: Hair -> " + targetFlag + " (target=" + genderLabel + ")");
+                    }
+                    else if (genderBits != targetFlag)
+                    {
+                        hairSubfilter = (hairSubfilter & ~genderBits) | targetFlag;
+                        tagsCached = false;
+                        LogUtil.Log("[VPB.Gallery] auto-gender swap: Hair " + genderBits + " -> " + targetFlag + " (target=" + genderLabel + ")");
                     }
                 }
             }
-            catch { }
-            RefreshFiles();
-            UpdateTabs();
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB.Gallery] ReconcileAutoGenderForCurrentTarget failed: " + ex.Message);
+            }
+        }
+
+        private void OnTargetAtomChanged(string source)
+        {
+            try
+            {
+                string uid = "(none)";
+                try { Atom a = SelectedTargetAtom; if (a != null) uid = a.uid; } catch { }
+                string genderLabel = GetSelectedTargetGenderLabel();
+                LogUtil.Log("[VPB.Gallery] target changed via " + (source ?? "unknown") + " -> uid='" + uid + "' gender=" + genderLabel);
+
+                string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
+                bool isClothing = !string.IsNullOrEmpty(title) && title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isHair = !string.IsNullOrEmpty(title) && title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!isClothing && !isHair)
+                {
+                    LogUtil.Log("[VPB.Gallery] target change ignored for grid (active category '" + title + "' is not Clothing/Hair)");
+                    return;
+                }
+                RefreshFilesAndTabs();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB.Gallery] OnTargetAtomChanged failed: " + ex.Message);
+            }
         }
 
         private void CloseSidePane(bool isLeft)
@@ -208,48 +258,6 @@ namespace VPB
             return seen.Select(k => new KeyValuePair<string, string>(k.Key, k.Value))
                 .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-        }
-
-        /// <summary>
-        /// Issue #101: Clothing/Hair items are gender-locked in VaM (a male item won't load on a female
-        /// Person and vice-versa). When the gallery has a Person target selected, dim items whose
-        /// classified gender does not match the target so the user can see at-a-glance what is unusable.
-        /// </summary>
-        private bool ShouldGreyoutForSelectedAtomGender(FileEntry file)
-        {
-            if (file == null) return false;
-            string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
-            if (string.IsNullOrEmpty(title)) return false;
-            bool isClothingOrHair = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0
-                                 || title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (!isClothingOrHair) return false;
-
-            Atom atom = SelectedTargetAtom;
-            if (atom == null) return false;
-
-            string path = file.Path ?? "";
-            ClothingLoadingUtils.ResourceKind k;
-            ClothingLoadingUtils.ResourceGender fileG;
-            ClothingLoadingUtils.ClassifyClothingHairPath(path, out k, out fileG);
-            if (fileG == ClothingLoadingUtils.ResourceGender.Unknown) return false;
-            if (ClothingLoadingUtils.IsDecalLikePath(path)) return false;
-
-            bool atomMale = false;
-            try
-            {
-                JSONStorable geometry = atom.GetStorableByID("geometry");
-                if (geometry != null)
-                {
-                    var charChooser = geometry.GetStringChooserJSONParam("character");
-                    if (charChooser != null && !string.IsNullOrEmpty(charChooser.val)
-                        && charChooser.val.StartsWith("Male", StringComparison.OrdinalIgnoreCase))
-                        atomMale = true;
-                }
-            }
-            catch { return false; }
-
-            bool fileMale = fileG == ClothingLoadingUtils.ResourceGender.Male;
-            return atomMale != fileMale;
         }
     }
 }

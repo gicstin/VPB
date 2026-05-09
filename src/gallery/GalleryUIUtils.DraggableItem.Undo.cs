@@ -10,6 +10,7 @@ using UnityEngine.Events;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using SimpleJSON;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -994,18 +995,7 @@ namespace VPB
 
         private bool IsAtomMale(Atom atom)
         {
-            if (atom == null) return false;
-            JSONStorable geometry = atom.GetStorableByID("geometry");
-            if (geometry != null)
-            {
-                JSONStorableStringChooser charChooser = geometry.GetStringChooserJSONParam("character");
-                if (charChooser != null)
-                {
-                    string val = charChooser.val;
-                    if (!string.IsNullOrEmpty(val) && val.StartsWith("Male", StringComparison.OrdinalIgnoreCase)) return true;
-                }
-            }
-            return false; 
+            return AtomGenderUtils.IsMale(atom);
         }
 
         private enum ItemType { Clothing, Hair, Pose, Skin, Morphs, Appearance, Animation, BreastPhysics, Plugins, General, ClothingItem, HairItem, ClothingPreset, HairPreset, SubScene, Scene, CUA, Other }

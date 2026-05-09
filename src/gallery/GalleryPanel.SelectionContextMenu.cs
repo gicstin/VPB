@@ -5,6 +5,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -1522,6 +1523,18 @@ namespace VPB
 
         private string GetPersonAtomDisplayLabel(Atom atom, string uid)
         {
+            string gender = "";
+            try
+            {
+                if (atom != null && string.Equals(atom.type, "Person", StringComparison.Ordinal))
+                {
+                    if (AtomGenderUtils.IsFuta(atom)) gender = "[Futa] ";
+                    else if (AtomGenderUtils.IsMale(atom)) gender = "[Male] ";
+                    else if (AtomGenderUtils.IsFemale(atom)) gender = "[Female] ";
+                }
+            }
+            catch { gender = ""; }
+
             try
             {
                 JSONStorable storable = atom?.GetStorableByID("AppearancePresets");
@@ -1533,12 +1546,12 @@ namespace VPB
                     {
                         string presetName = MVR.FileManagementSecure.FileManagerSecure.GetFileName(presetParam.val);
                         if (!string.IsNullOrEmpty(presetName))
-                            return $"{presetName} ({uid})";
+                            return $"{gender}{presetName} ({uid})";
                     }
                 }
             }
             catch { }
-            return uid;
+            return $"{gender}{uid}";
         }
 
         private void RefreshTboxPersonAtomButtons()
@@ -1585,6 +1598,10 @@ namespace VPB
             rowLE.minHeight = innerRowH; rowLE.preferredHeight = innerRowH; rowLE.flexibleHeight = 1f;
             tboxPersonAtomBtns.Add(tboxTargetDropdownRowGO);
 
+            float sScale = 1f;
+            try { if (VPBConfig.Instance != null) sScale = VPBConfig.Instance.InnerPaneScale; } catch { sScale = 1f; }
+            int dropdownFont = Mathf.RoundToInt(Mathf.Max(18f, 18f * sScale));
+
             string activeLabel = "Target";
             try
             {
@@ -1596,7 +1613,7 @@ namespace VPB
             }
             catch { }
 
-            var btn = UI.CreateUIButton(tboxTargetDropdownRowGO, 0, 0, activeLabel + "  ▲", 14, 0, 0, AnchorPresets.stretchAll,
+            var btn = UI.CreateUIButton(tboxTargetDropdownRowGO, 0, 0, activeLabel + "  ▲", dropdownFont, 0, 0, AnchorPresets.stretchAll,
                 () => { try { ToggleTboxTargetMenu(); } catch { } });
             btn.name = "TboxTargetDropdownBtn";
             var img = btn.GetComponent<Image>();
@@ -1606,7 +1623,8 @@ namespace VPB
             le.preferredHeight = innerRowH; le.flexibleHeight = 1f;
             tboxTargetDropdownBtnText = btn.GetComponentInChildren<Text>(true);
             if (tboxTargetDropdownBtnText != null) tboxTargetDropdownBtnText.gameObject.SetActive(true);
-            AddTooltipPlain(btn, VPBTranslation.T("gallery.tbox.target_select", "Select active person target"));
+            AddTooltipPlain(btn, VPBTranslation.T("gallery.tbox.target_select", "Select active person target. Right click: cycle targets"));
+            try { AddRightClickDelegate(btn, () => CycleTarget(true)); } catch { }
 
             try
             {
@@ -1734,9 +1752,11 @@ namespace VPB
                     AnchorPresets.stretchAll,
                     () =>
                     {
+                        bool changed = targetDropdownValue != captured;
                         targetDropdownValue = captured;
                         UpdateTargetDropdownUI();
                         CloseTboxTargetMenu();
+                        if (changed) OnTargetAtomChanged("dropdown");
                     });
 
                 var selectImg = selectBtn.GetComponent<Image>();

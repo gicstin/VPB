@@ -81,6 +81,7 @@ namespace VPB
             public float MovementThreshold;
             public float BringToFrontDistance;
             public bool EnableDragDrop;
+            public bool GalleryAutoGenderFilter;
             public bool RequireDragHoldBeforeMove;
             public float DragHoldThreshold;
             public float HoldToLaunchHoldSeconds;
@@ -316,6 +317,12 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.enable_drag_drop", "Off by default. Turn on to drag items from the gallery onto atoms or the scene."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableDragDrop,
                 SetBool = v => { VPBConfig.Instance.EnableDragDrop = v; }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "interaction.autoGenderFilter", GroupKey = "interaction", Label = VPBTranslation.T("settings.gallery_auto_gender_filter", "Auto gender filter (Hair/Clothing)"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_auto_gender_filter", "When ON, Hair/Clothing categories auto-filter Male/Female items to match selected target atom gender."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryAutoGenderFilter,
+                SetBool = v => { VPBConfig.Instance.GalleryAutoGenderFilter = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.dragHoldEnabled", GroupKey = "interaction", Label = VPBTranslation.T("settings.require_drag_hold", "Require hold before drag"),
@@ -699,6 +706,7 @@ namespace VPB
                 MovementThreshold = VPBConfig.Instance.MovementThreshold,
                 BringToFrontDistance = VPBConfig.Instance.BringToFrontDistance,
                 EnableDragDrop = VPBConfig.Instance.EnableDragDrop,
+                GalleryAutoGenderFilter = VPBConfig.Instance.GalleryAutoGenderFilter,
                 RequireDragHoldBeforeMove = VPBConfig.Instance.RequireDragHoldBeforeMove,
                 DragHoldThreshold = VPBConfig.Instance.DragHoldThreshold,
                 HoldToLaunchHoldSeconds = VPBConfig.Instance.HoldToLaunchHoldSeconds,
@@ -1342,6 +1350,7 @@ namespace VPB
             VPBConfig.Instance.MovementThreshold = b.MovementThreshold;
             VPBConfig.Instance.BringToFrontDistance = b.BringToFrontDistance;
             VPBConfig.Instance.EnableDragDrop = b.EnableDragDrop;
+            VPBConfig.Instance.GalleryAutoGenderFilter = b.GalleryAutoGenderFilter;
             VPBConfig.Instance.RequireDragHoldBeforeMove = b.RequireDragHoldBeforeMove;
             VPBConfig.Instance.DragHoldThreshold = b.DragHoldThreshold;
             VPBConfig.Instance.HoldToLaunchHoldSeconds = b.HoldToLaunchHoldSeconds;

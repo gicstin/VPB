@@ -601,6 +601,9 @@ namespace VPB
         private ClothingSubfilter clothingSubfilter = 0;
         private HairSubfilter hairSubfilter = 0;
 
+        private bool _clothingGenderUserOverride;
+        private bool _hairGenderUserOverride;
+
         private AppearanceSubfilter appearanceSubfilter = 0;
 
         private int clothingSubfilterCountAll = 0;
