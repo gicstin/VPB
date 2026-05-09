@@ -33,7 +33,8 @@ namespace VPB
                 if (count == 0
                     && !isActive
                     && !string.Equals(c.name, "Plugins", StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(c.name, "ALL VAR", StringComparison.OrdinalIgnoreCase))
+                    && !string.Equals(c.name, "ALL VAR", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(c.name, Gallery.EverythingCategoryName, StringComparison.OrdinalIgnoreCase))
                     continue;
                 if (VPBConfig.Instance != null && VPBConfig.Instance.IsHiddenCategory(c.name) && !isActive) continue;
 

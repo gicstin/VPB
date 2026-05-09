@@ -129,7 +129,8 @@ namespace VPB
             int lastDot = internalPath.LastIndexOf('.');
             if (lastDot < 0 || lastDot == internalPath.Length - 1) return;
             string ext = internalPath.Substring(lastDot + 1);
-            if (!targetExts.Contains(ext)) return;
+            if (Gallery.IsEverythingCategoryName(input.Title) && Gallery.IsEverythingExcludedPreviewExtension(ext)) return;
+            if (!Gallery.IsEverythingCategoryName(input.Title) && !targetExts.Contains(ext)) return;
 
             if (!GalleryPanel.RefreshWorkerPathMatches(internalPath, input.CurrentPathsCopy, input.CurrentPath)) return;
 

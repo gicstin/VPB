@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -69,6 +70,32 @@ namespace VPB
             string nl = n.ToLowerInvariant();
             if (nl.EndsWith(".png", StringComparison.Ordinal) || nl.EndsWith(".jpeg", StringComparison.Ordinal)) return false;
             return true;
+        }
+
+        /// <summary>
+        /// Gallery <see cref="VarFileEntry.Path"/>: <c>pkg.var:/internal</c> or bare <c>…/pkg.var</c> (e.g. SQLite <c>meta.json</c> row uses var_path only — no <c>:/</c>).
+        /// </summary>
+        private static bool TryGetVarPackageRootPathFromGalleryPath(string galleryPath, out string pkgRoot)
+        {
+            pkgRoot = null;
+            if (string.IsNullOrEmpty(galleryPath)) return false;
+            try
+            {
+                string p = galleryPath.Trim().Replace('\\', '/');
+                int split = p.IndexOf(":/", StringComparison.Ordinal);
+                if (split > 0)
+                {
+                    pkgRoot = p.Substring(0, split);
+                    return !string.IsNullOrEmpty(pkgRoot);
+                }
+                if (p.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    pkgRoot = p;
+                    return true;
+                }
+            }
+            catch { pkgRoot = null; }
+            return false;
         }
 
         /// <summary>SQLite / ALL VAR rows often use relative var paths; <see cref="FileManager.GetPackage"/> expects package UID.</summary>
@@ -139,24 +166,149 @@ namespace VPB
             return null;
         }
 
-        /// <returns>Best non-image sibling extension priority for this basename group (lower = better).</returns>
-        private static int SisterExtRank(string extWithDotLower)
-        {
-            if (string.IsNullOrEmpty(extWithDotLower)) return 50;
-            if (extWithDotLower == ".vam") return 0;
-            if (extWithDotLower == ".vac") return 1;
-            if (extWithDotLower == ".json") return 2;
-            if (extWithDotLower == ".vap") return 3;
-            if (extWithDotLower == ".vab") return 4;
-            if (extWithDotLower == ".cs") return 20;
-            if (extWithDotLower == ".dll") return 20;
-            return 15;
-        }
-
         private static bool IsNonImageSiblingExt(string extWithDotLower)
         {
             if (string.IsNullOrEmpty(extWithDotLower)) return false;
             return extWithDotLower != ".jpg" && extWithDotLower != ".jpeg" && extWithDotLower != ".png";
+        }
+
+        /// <summary>
+        /// <c>Saves/scene</c> and any nested folder (e.g. <c>Saves/scene/Sharr LOOKS/*.jpg</c>). Uses <see cref="NormalizeVarInternalEntryPath"/>.
+        /// </summary>
+        private static bool IsUnderSavesSceneTree(string pathNormalizedOrRaw)
+        {
+            if (string.IsNullOrEmpty(pathNormalizedOrRaw)) return false;
+            string n = NormalizeVarInternalEntryPath(pathNormalizedOrRaw);
+            if (string.IsNullOrEmpty(n)) return false;
+            return string.Equals(n, "Saves/scene", StringComparison.OrdinalIgnoreCase)
+                || n.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// VAR zip paths: parent via last <c>/</c> only (Unicode, apostrophe, leading spaces in folder names — e.g.
+        /// <c>Custom/Hair/Female/Miki/ C├┤te d'Azur Hair/file.jpg</c>). Avoids Windows <see cref="Path.GetDirectoryName"/> mangling.
+        /// </summary>
+        private static string GetInternalPathParentDirectory(string normSlashPath)
+        {
+            if (string.IsNullOrEmpty(normSlashPath)) return "";
+            string n = NormalizeVarInternalEntryPath(normSlashPath);
+            int li = n.LastIndexOf('/');
+            if (li > 0)
+                return n.Substring(0, li);
+            try
+            {
+                string mixed = n.Replace('/', Path.DirectorySeparatorChar);
+                string d = Path.GetDirectoryName(mixed);
+                if (!string.IsNullOrEmpty(d))
+                    return NormalizeVarInternalEntryPath(d.Replace('\\', '/'));
+            }
+            catch { }
+            return "";
+        }
+
+        /// <summary>File name segment after last <c>/</c> (zip-internal; same rules as <see cref="GetInternalPathParentDirectory"/>).</summary>
+        private static string GetZipInternalLeafFileName(string normSlashPath)
+        {
+            if (string.IsNullOrEmpty(normSlashPath)) return "";
+            string n = NormalizeVarInternalEntryPath(normSlashPath);
+            int li = n.LastIndexOf('/');
+            if (li < 0) return n;
+            if (li >= n.Length - 1) return "";
+            return n.Substring(li + 1);
+        }
+
+        /// <summary>Matches zip/FileEntry paths with <see cref="FileManager"/> (<c>pkg:/</c>) — trim leading slash, unify slashes. (No Unicode NFC: not on .NET 3.5 ref Assemblies.)</summary>
+        private static string NormalizeVarInternalEntryPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            string n = path.Replace('\\', '/').TrimStart('/');
+            for (int guard = 0; guard < 64 && n.IndexOf("//", StringComparison.Ordinal) >= 0; guard++)
+                n = n.Replace("//", "/");
+            return n;
+        }
+
+        /// <summary>Heuristic: UTF-8 bytes were decoded as ISO-8859-1 (common <c>Ã´</c> vs <c>ô</c> in SQLite vs zip).</summary>
+        private static bool LooksLikeUtf8MisreadAsLatin1(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '\uFFFD') return true;
+                if (c == 'Ã' || c == 'Â' || c == 'Ä' || c == 'Å' || c == 'Ð' || c == 'Ñ' || c == 'Ó')
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>Repair UTF-8 bytes misread as legacy 8-bit encoding (per segment only — full paths mix UTF-8 + mojibake).</summary>
+        private static string TryRepairUtf8MisreadAsLatin1(string segmentNoSlashes)
+        {
+            if (string.IsNullOrEmpty(segmentNoSlashes)) return segmentNoSlashes;
+            try
+            {
+                Encoding latin1 = Encoding.GetEncoding("iso-8859-1");
+                byte[] bytes = latin1.GetBytes(segmentNoSlashes);
+                string repaired = Encoding.UTF8.GetString(bytes);
+                if (!string.IsNullOrEmpty(repaired) && repaired.IndexOf('\uFFFD') < 0)
+                    return repaired;
+                Encoding cp1252 = Encoding.GetEncoding(1252);
+                bytes = cp1252.GetBytes(segmentNoSlashes);
+                repaired = Encoding.UTF8.GetString(bytes);
+                if (!string.IsNullOrEmpty(repaired) && repaired.IndexOf('\uFFFD') < 0)
+                    return repaired;
+            }
+            catch { }
+            return segmentNoSlashes;
+        }
+
+        /// <summary>Repair each <c>/</c> segment separately so mixed UTF-8 + mojibake (e.g. <c>d'Azur</c> + <c>CÃ´te</c>) does not corrupt the path.</summary>
+        private static string NormalizeVarInternalPathForThumbKeys(string path)
+        {
+            string n = NormalizeVarInternalEntryPath(path);
+            if (string.IsNullOrEmpty(n)) return n;
+            StringBuilder sb = new StringBuilder(n.Length + 16);
+            int start = 0;
+            for (int i = 0; i <= n.Length; i++)
+            {
+                if (i < n.Length && n[i] != '/')
+                    continue;
+                string seg = n.Substring(start, i - start);
+                if (LooksLikeUtf8MisreadAsLatin1(seg))
+                {
+                    string r = TryRepairUtf8MisreadAsLatin1(seg);
+                    if (!string.IsNullOrEmpty(r) && r.IndexOf('\uFFFD') < 0)
+                        seg = r;
+                }
+                if (sb.Length > 0) sb.Append('/');
+                sb.Append(seg);
+                start = i + 1;
+            }
+            return sb.ToString();
+        }
+
+        private static bool PathsEqualWithUtf8Latin1Alias(string a, string b)
+        {
+            if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            string ac = NormalizeVarInternalPathForThumbKeys(a);
+            string bc = NormalizeVarInternalPathForThumbKeys(b);
+            if (string.Equals(ac, bc, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(ac, b, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(a, bc, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>Returns zip-listed path string to pass to <c>pkg:/</c> (canonical member from set).</summary>
+        private static string FindMatchingInternalJpgPathInSet(HashSet<string> set, string keyNorm)
+        {
+            if (set == null || string.IsNullOrEmpty(keyNorm)) return null;
+            if (set.Contains(keyNorm)) return keyNorm;
+            foreach (string member in set)
+            {
+                if (PathsEqualWithUtf8Latin1Alias(member, keyNorm)) return member;
+            }
+            return null;
         }
 
         private struct VarInternalMember
@@ -167,9 +319,10 @@ namespace VPB
         }
 
         /// <summary>
-        /// Package-row preview: scan var index for <c>foo.jpg</c> + same-folder non-image sibling <c>foo.*</c> (e.g. <c>foo.vam</c>). No filesystem walk.
+        /// Package-row preview: sister pairs (<c>foo.jpg</c> + non-image <c>foo.*</c>) — first match in entry order.
+        /// EVERYTHING mode: prefer pairs under <c>Saves/scene</c>, then other pairs; orphan <c>.jpg</c> prefers <c>Saves/scene</c> path.
         /// </summary>
-        private static string PickPackagePreviewInternalPathFromFileList(List<string> names)
+        private static string PickPackagePreviewInternalPathFromFileList(List<string> names, bool prioritizeSavesSceneForEverything)
         {
             if (names == null || names.Count == 0) return null;
 
@@ -178,14 +331,14 @@ namespace VPB
             {
                 string n = names[i];
                 if (string.IsNullOrEmpty(n)) continue;
-                string norm = n.Replace('\\', '/');
+                string normRaw = NormalizeVarInternalEntryPath(n);
+                if (normRaw.Length == 0) continue;
+                string normKey = NormalizeVarInternalPathForThumbKeys(n);
                 try
                 {
-                    string dir = Path.GetDirectoryName(norm);
-                    if (!string.IsNullOrEmpty(dir)) dir = dir.Replace('\\', '/');
-                    else dir = "";
+                    string dir = GetInternalPathParentDirectory(normKey);
 
-                    string leaf = Path.GetFileName(norm);
+                    string leaf = GetZipInternalLeafFileName(normKey);
                     if (string.IsNullOrEmpty(leaf)) continue;
                     string baseNo = Path.GetFileNameWithoutExtension(leaf);
                     if (string.IsNullOrEmpty(baseNo)) continue;
@@ -200,7 +353,7 @@ namespace VPB
                         groups[key] = list;
                     }
                     VarInternalMember vm;
-                    vm.FullPathNorm = norm;
+                    vm.FullPathNorm = normRaw;
                     vm.ExtLower = ext;
                     vm.IsImage = isImg;
                     list.Add(vm);
@@ -208,68 +361,83 @@ namespace VPB
                 catch { }
             }
 
-            string bestImg = null;
-            int bestScore = int.MaxValue;
-            string tieBreak = null;
-
-            foreach (KeyValuePair<string, List<VarInternalMember>> kvp in groups)
-            {
-                List<VarInternalMember> list = kvp.Value;
-                if (list == null || list.Count < 2) continue;
-
-                bool hasNonImage = false;
-                int bestSisterRank = int.MaxValue;
-                for (int j = 0; j < list.Count; j++)
-                {
-                    VarInternalMember m = list[j];
-                    if (!m.IsImage && IsNonImageSiblingExt(m.ExtLower))
-                    {
-                        hasNonImage = true;
-                        int r = SisterExtRank(m.ExtLower);
-                        if (r < bestSisterRank) bestSisterRank = r;
-                    }
-                }
-                if (!hasNonImage || bestSisterRank >= int.MaxValue) continue;
-
-                for (int j = 0; j < list.Count; j++)
-                {
-                    VarInternalMember m = list[j];
-                    if (!m.IsImage || !IsImagePath(m.FullPathNorm)) continue;
-                    string imgPath = m.FullPathNorm;
-                    int score = bestSisterRank * 10000 + imgPath.Length;
-                    if (score < bestScore || (score == bestScore && (tieBreak == null || string.CompareOrdinal(imgPath, tieBreak) < 0)))
-                    {
-                        bestScore = score;
-                        bestImg = imgPath;
-                        tieBreak = imgPath;
-                    }
-                }
-            }
-
-            if (!string.IsNullOrEmpty(bestImg)) return bestImg;
-
-            // Legacy: preview-ish names first, then first image.
-            string chosenLegacy = null;
-            for (int i = 0; i < names.Count; i++)
-            {
-                string n = names[i];
-                if (!IsImagePath(n)) continue;
-                string ln = n.ToLowerInvariant();
-                if (ln.Contains("preview") || ln.Contains("thumbnail") || ln.Contains("thumb") || ln.Contains("screenshot"))
-                {
-                    chosenLegacy = n;
-                    break;
-                }
-            }
-            if (chosenLegacy == null)
+            string PickFirstSisterJpg(bool savesSceneDirOnly)
             {
                 for (int i = 0; i < names.Count; i++)
                 {
                     string n = names[i];
-                    if (IsImagePath(n)) return n;
+                    if (string.IsNullOrEmpty(n)) continue;
+                    string normRaw = NormalizeVarInternalEntryPath(n);
+                    if (normRaw.Length == 0 || !IsImagePath(normRaw)) continue;
+                    string normKey = NormalizeVarInternalPathForThumbKeys(n);
+                    try
+                    {
+                        string dir = GetInternalPathParentDirectory(normKey);
+
+                        if (savesSceneDirOnly && !IsUnderSavesSceneTree(dir))
+                            continue;
+
+                        string leaf = GetZipInternalLeafFileName(normKey);
+                        if (string.IsNullOrEmpty(leaf)) continue;
+                        string baseNo = Path.GetFileNameWithoutExtension(leaf);
+                        if (string.IsNullOrEmpty(baseNo)) continue;
+                        if (string.IsNullOrEmpty(Path.GetExtension(leaf))) continue;
+                        string key = dir + "|" + baseNo;
+                        if (!groups.TryGetValue(key, out List<VarInternalMember> list) || list == null || list.Count < 2)
+                            continue;
+
+                        bool hasNonImage = false;
+                        for (int j = 0; j < list.Count; j++)
+                        {
+                            VarInternalMember m = list[j];
+                            if (!m.IsImage && IsNonImageSiblingExt(m.ExtLower))
+                            {
+                                hasNonImage = true;
+                                break;
+                            }
+                        }
+                        if (!hasNonImage) continue;
+
+                        return normRaw;
+                    }
+                    catch { }
+                }
+                return null;
+            }
+
+            if (prioritizeSavesSceneForEverything)
+            {
+                string sceneFirst = PickFirstSisterJpg(savesSceneDirOnly: true);
+                if (!string.IsNullOrEmpty(sceneFirst))
+                    return sceneFirst;
+            }
+
+            string anySister = PickFirstSisterJpg(savesSceneDirOnly: false);
+            if (!string.IsNullOrEmpty(anySister))
+                return anySister;
+
+            if (prioritizeSavesSceneForEverything)
+            {
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string n = names[i];
+                    if (string.IsNullOrEmpty(n)) continue;
+                    string normRaw = NormalizeVarInternalEntryPath(n);
+                    if (normRaw.Length > 0 && IsImagePath(normRaw) && IsUnderSavesSceneTree(normRaw))
+                        return normRaw;
                 }
             }
-            return chosenLegacy;
+
+            for (int i = 0; i < names.Count; i++)
+            {
+                string n = names[i];
+                if (string.IsNullOrEmpty(n)) continue;
+                string normRaw = NormalizeVarInternalEntryPath(n);
+                if (normRaw.Length > 0 && IsImagePath(normRaw))
+                    return normRaw;
+            }
+
+            return null;
         }
 
         private string GetOrChoosePackagePreviewInternalPath(VarPackage pkg)
@@ -278,20 +446,25 @@ namespace VPB
             try
             {
                 string uid = pkg.Uid;
-                if (!string.IsNullOrEmpty(uid) && _packagePreviewInternalPathCache.TryGetValue(uid, out string cached))
+                bool prioritizeSavesScene = false;
+                try { prioritizeSavesScene = Gallery.IsEverythingCategoryName((CurrentCategoryTitle ?? "").Trim()); } catch { prioritizeSavesScene = false; }
+
+                string cacheKey = null;
+                if (!string.IsNullOrEmpty(uid))
+                    cacheKey = uid + "\x1F" + (prioritizeSavesScene ? "EV" : "DEF");
+
+                if (!string.IsNullOrEmpty(cacheKey) && _packagePreviewInternalPathCache.TryGetValue(cacheKey, out string cached))
                     return cached;
 
                 List<string> names; List<long> ticks; List<long> sizes;
                 if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) return null;
 
-                // Sister rule (foo.jpg ↔ foo.vam / any non-image) then legacy preview-name / first-image.
-                string chosen = PickPackagePreviewInternalPathFromFileList(names);
+                string chosen = PickPackagePreviewInternalPathFromFileList(names, prioritizeSavesScene);
 
-                if (!string.IsNullOrEmpty(uid))
+                if (!string.IsNullOrEmpty(cacheKey))
                 {
-                    // Cap growth to avoid unbounded memory use.
                     if (_packagePreviewInternalPathCache.Count > 8000) _packagePreviewInternalPathCache.Clear();
-                    _packagePreviewInternalPathCache[uid] = chosen;
+                    _packagePreviewInternalPathCache[cacheKey] = chosen;
                 }
 
                 return chosen;
@@ -321,10 +494,12 @@ namespace VPB
                     if (!IsImagePath(n)) continue;
                     try
                     {
-                        string norm = n.Replace('\\', '/');
-                        if (norm.StartsWith("/")) norm = norm.Substring(1);
-                        if (norm.Length == 0) continue;
-                        set.Add(norm);
+                        string normRaw = NormalizeVarInternalEntryPath(n);
+                        if (normRaw.Length == 0) continue;
+                        set.Add(normRaw);
+                        string canon = NormalizeVarInternalPathForThumbKeys(n);
+                        if (!string.Equals(canon, normRaw, StringComparison.Ordinal))
+                            set.Add(canon);
                     }
                     catch { }
                 }
@@ -523,14 +698,12 @@ namespace VPB
             }
             else if (file is VarFileEntry vfe)
             {
-                // ALL VAR: prefer cached package file list for sister JPG existence + preview fallback.
-                // Avoid per-item FileManager.FileExists(pkg:/path.jpg) which can thrash VAR archive lookup.
+                // Cached package index (jpgSet + package preview pick); FileExists sister only if package unresolved / still empty.
                 string pkgPath = null;
                 try
                 {
-                    string p = vfe.Path ?? "";
-                    int split = p.IndexOf(":/", StringComparison.Ordinal);
-                    if (split > 0) pkgPath = p.Substring(0, split);
+                    if (!TryGetVarPackageRootPathFromGalleryPath(vfe.Path, out pkgPath))
+                        pkgPath = null;
                 }
                 catch { pkgPath = null; }
                 if (string.IsNullOrEmpty(pkgPath))
@@ -539,44 +712,67 @@ namespace VPB
                     return;
                 }
 
-                bool isAllVar = false;
-                try { isAllVar = string.Equals((CurrentCategoryTitle ?? "").Trim(), "ALL VAR", StringComparison.OrdinalIgnoreCase); } catch { isAllVar = false; }
+                string pkgNorm = NormalizeVarInternalEntryPath(pkgPath);
 
                 VarPackage vPkg = null;
-                if (isAllVar)
+                string rowPkgUid = null;
+                try
                 {
-                    // Try use existing resolved package first, then fallback to UID-from-path resolve.
-                    try { vPkg = vfe.Package; } catch { vPkg = null; }
-                    if (vPkg == null)
+                    string u = vfe.Uid ?? "";
+                    int ix = u.IndexOf(":/", StringComparison.Ordinal);
+                    rowPkgUid = ix > 0 ? u.Substring(0, ix) : u;
+                }
+                catch { rowPkgUid = null; }
+                // Indexed resolve (SQLite UID + var_path): matches packagesByPath / filename fallback when bare GetPackage(uid) misses (Unicode paths).
+                if (!string.IsNullOrEmpty(rowPkgUid) && !string.IsNullOrEmpty(pkgNorm))
+                {
+                    try
                     {
-                        try
-                        {
-                            string uid = CanonicalVarPackageUidFromPathOrHint(pkgPath);
-                            if (!string.IsNullOrEmpty(uid))
-                                vPkg = FileManager.GetPackage(uid, ensureInstalled: false);
-                        }
-                        catch { vPkg = null; }
+                        if (FileManager.TryResolveVarPackageForIndexedGalleryRow(rowPkgUid, pkgNorm, out VarPackage pIx))
+                            vPkg = pIx;
                     }
+                    catch { }
+                }
+                if (vPkg == null)
+                {
+                    try { vPkg = vfe.Package; } catch { vPkg = null; }
+                }
+                if (vPkg == null)
+                {
+                    try
+                    {
+                        string uid = CanonicalVarPackageUidFromPathOrHint(pkgPath);
+                        if (!string.IsNullOrEmpty(uid))
+                            vPkg = FileManager.GetPackage(uid, ensureInstalled: false);
+                    }
+                    catch { vPkg = null; }
                 }
 
-                // First try per-item sister file: same internal path, .jpg only.
-                // This gives each clothing variation its own thumbnail instead of sharing the
-                // package-wide preview image.
-                string internalNoExt = System.IO.Path.GetFileNameWithoutExtension(vfe.InternalPath);
-                string internalDir   = System.IO.Path.GetDirectoryName(vfe.InternalPath);
-                string baseInternal  = string.IsNullOrEmpty(internalDir)
+                // Per-row sister: same basename, .jpg only (then package-wide preview if missing).
+                // Use encoding-repaired internal path for folder/file segments so sister path matches zip listing when SQLite has Latin1-mojibake (Ã´ vs ô).
+                string ipKey = NormalizeVarInternalPathForThumbKeys(vfe.InternalPath ?? "");
+                string leafInternal = GetZipInternalLeafFileName(ipKey);
+                string internalNoExt = string.IsNullOrEmpty(leafInternal)
+                    ? ""
+                    : Path.GetFileNameWithoutExtension(leafInternal);
+                string internalDir = GetInternalPathParentDirectory(ipKey);
+                string baseInternal = string.IsNullOrEmpty(internalDir)
                     ? internalNoExt
-                    : internalDir.Replace('\\', '/') + "/" + internalNoExt;
+                    : internalDir + "/" + internalNoExt;
 
                 string internalSisterJpg = (baseInternal + ".jpg").Replace('\\', '/');
                 if (internalSisterJpg.StartsWith("/")) internalSisterJpg = internalSisterJpg.Substring(1);
+                string sisterKeyNorm = NormalizeVarInternalPathForThumbKeys(internalSisterJpg);
 
-                if (isAllVar && vPkg != null)
+                if (vPkg != null)
                 {
                     HashSet<string> jpgSet = GetOrBuildPackageInternalJpgSet(vPkg);
-                    if (jpgSet != null && jpgSet.Contains(internalSisterJpg))
+                    string matchedJpg = null;
+                    if (jpgSet != null && sisterKeyNorm.Length > 0)
+                        matchedJpg = FindMatchingInternalJpgPathInSet(jpgSet, sisterKeyNorm);
+                    if (!string.IsNullOrEmpty(matchedJpg))
                     {
-                        imgPath = vPkg.Path + ":/" + internalSisterJpg;
+                        imgPath = vPkg.Path + ":/" + matchedJpg;
                     }
                     else
                     {
@@ -585,12 +781,18 @@ namespace VPB
                             imgPath = vPkg.Path + ":/" + chosen.Replace('\\', '/');
                     }
                 }
-                else
+
+                if (string.IsNullOrEmpty(imgPath))
                 {
-                    // Non-ALL-VAR path: keep lightweight existence check (may be expensive in ALL VAR bulk).
-                    string sisterJpg = pkgPath + ":/" + internalSisterJpg;
+                    string sisterJpg = pkgNorm + ":/" + internalSisterJpg;
                     if (FileManager.FileExists(sisterJpg))
                         imgPath = sisterJpg;
+                    else if (!string.Equals(sisterKeyNorm, internalSisterJpg, StringComparison.Ordinal))
+                    {
+                        string sisterAlt = pkgNorm + ":/" + sisterKeyNorm;
+                        if (FileManager.FileExists(sisterAlt))
+                            imgPath = sisterAlt;
+                    }
                 }
             }
             else
@@ -791,9 +993,6 @@ namespace VPB
                 if (target.texture != null) yield break;
                 if (b.ThumbRetryCount > 0) yield break;
 
-                bool isAllVar = false;
-                try { isAllVar = string.Equals((CurrentCategoryTitle ?? "").Trim(), "ALL VAR", StringComparison.OrdinalIgnoreCase); } catch { isAllVar = false; }
-
                 float now = Time.realtimeSinceStartup;
                 float sinceScroll = now - RecyclingGridView.LastScrollRealtime;
                 float sinceDrag = now - ScrollbarSync.LastScrollbarDragRealtime;
@@ -801,7 +1000,7 @@ namespace VPB
 
                 int pendTh = 0;
                 try { if (CustomImageLoaderThreaded.singleton != null) pendTh = CustomImageLoaderThreaded.singleton.PendingThumbnailCount; } catch { pendTh = 0; }
-                bool queuePressure = isAllVar && pendTh >= AllVarThumbQueuePressureThreshold;
+                bool queuePressure = pendTh >= AllVarThumbQueuePressureThreshold;
 
                 if (scrolling || queuePressure)
                 {

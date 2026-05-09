@@ -368,6 +368,22 @@ namespace VPB
                 addCat("All", "var", "");
                 // List all .var packages as rows (no internal scan). Uses PackageListEntry rows in gallery.
                 addCat("ALL VAR", "varpkg", "");
+                // Union of all VAR-internal paths (all types) + loose roots below.
+                addCat(Gallery.EverythingCategoryName, Gallery.EverythingExtensionToken, "");
+
+                if (catDict.TryGetValue(Gallery.EverythingCategoryName, out CategoryInfo everythingInfo))
+                {
+                    string[] evLoose = new[]
+                    {
+                        "Saves/scene", "Custom/SubScene", "Custom/Scripts", "Custom/Clothing", "Custom/Hair",
+                        "Saves/Person", "Custom/Assets", "Custom/Atom",
+                    };
+                    for (int ei = 0; ei < evLoose.Length; ei++)
+                    {
+                        if (!everythingInfo.paths.Contains(evLoose[ei]))
+                            everythingInfo.paths.Add(evLoose[ei]);
+                    }
+                }
 
                 // Build list
                 foreach(var kvp in catDict)

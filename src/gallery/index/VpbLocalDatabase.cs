@@ -2329,7 +2329,6 @@ namespace VPB
                                     long tCls0 = Stopwatch.GetTimestamp();
                                     string cname = classifier.Classify(ip);
                                     tCatMemClassify += Stopwatch.GetTimestamp() - tCls0;
-                                    if (string.IsNullOrEmpty(cname)) continue;
 
                                     string listPath;
                                     if (string.Equals(ip, "meta.json", StringComparison.OrdinalIgnoreCase))
@@ -2337,21 +2336,42 @@ namespace VPB
                                     else
                                         listPath = varListPrefix + ip;
 
-                                    long clothAttr = 0;
-                                    if (string.Equals(cname, "Clothing", StringComparison.OrdinalIgnoreCase)
-                                        || string.Equals(cname, "Hair", StringComparison.OrdinalIgnoreCase))
-                                        clothAttr = PackClothingGalleryAttrForVarListPath(listPath);
+                                    if (!string.IsNullOrEmpty(cname))
+                                    {
+                                        long clothAttr = 0;
+                                        if (string.Equals(cname, "Clothing", StringComparison.OrdinalIgnoreCase)
+                                            || string.Equals(cname, "Hair", StringComparison.OrdinalIgnoreCase))
+                                            clothAttr = PackClothingGalleryAttrForVarListPath(listPath);
 
-                                    long tMemSql0 = Stopwatch.GetTimestamp();
-                                    insMem.BindText(1, cname);
-                                    insMem.BindText(2, uid);
-                                    insMem.BindText(3, ip);
-                                    insMem.BindText(4, listPath);
-                                    insMem.BindInt64(5, clothAttr);
-                                    insMem.Step();
-                                    insMem.Reset();
-                                    tCatMemSql += Stopwatch.GetTimestamp() - tMemSql0;
-                                    nCatMemInserted++;
+                                        long tMemSql0 = Stopwatch.GetTimestamp();
+                                        insMem.BindText(1, cname);
+                                        insMem.BindText(2, uid);
+                                        insMem.BindText(3, ip);
+                                        insMem.BindText(4, listPath);
+                                        insMem.BindInt64(5, clothAttr);
+                                        insMem.Step();
+                                        insMem.Reset();
+                                        tCatMemSql += Stopwatch.GetTimestamp() - tMemSql0;
+                                        nCatMemInserted++;
+                                    }
+
+                                    int lastDot = ip.LastIndexOf('.');
+                                    if (lastDot > 0 && lastDot < ip.Length - 1)
+                                    {
+                                        string evExt = ip.Substring(lastDot + 1);
+                                        if (Gallery.IsEverythingExcludedPreviewExtension(evExt)) continue;
+
+                                        long tEv0 = Stopwatch.GetTimestamp();
+                                        insMem.BindText(1, Gallery.EverythingCategoryName);
+                                        insMem.BindText(2, uid);
+                                        insMem.BindText(3, ip);
+                                        insMem.BindText(4, listPath);
+                                        insMem.BindInt64(5, 0);
+                                        insMem.Step();
+                                        insMem.Reset();
+                                        tCatMemSql += Stopwatch.GetTimestamp() - tEv0;
+                                        nCatMemInserted++;
+                                    }
                                 }
                                 tCatMem += Stopwatch.GetTimestamp() - tMem0;
                             }
@@ -2542,7 +2562,8 @@ namespace VPB
                     
                     // Issue #101: top-level Clothing/Hair counts represent BASE items (.vam) only,
                     // excluding .vap presets (which are also indexed under those categories).
-                    sb.Append(" AND (m.category NOT IN ('Clothing','Hair') OR lower(m.internal_path) LIKE '%.vam')");
+                    // EVERYTHING must count all indexed rows for that category (including .vap under Clothing/Hair).
+                    sb.Append(" AND ((m.category NOT IN ('Clothing','Hair') OR lower(m.internal_path) LIKE '%.vam') OR m.category = ?)");
 
                     sb.Append(" GROUP BY m.category");
 
@@ -2561,6 +2582,7 @@ namespace VPB
                         }
                         for (int ui = 0; ui < userTagBindNames.Count; ui++)
                             stmt.BindText(bind++, userTagBindNames[ui]);
+                        stmt.BindText(bind++, Gallery.EverythingCategoryName);
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)

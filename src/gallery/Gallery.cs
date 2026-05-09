@@ -51,6 +51,55 @@ namespace VPB
             public List<string> paths;
         }
 
+        /// <summary>Gallery category that lists every indexed VAR internal path (see <c>cat_mem</c> EVERYTHING rows) plus loose-disk roots.</summary>
+        public const string EverythingCategoryName = "EVERYTHING";
+        /// <summary>Non-file extension token; matches all extensions in refresh / index logic.</summary>
+        public const string EverythingExtensionToken = "vpbeverything";
+
+        /// <summary>Extensions used when enumerating loose files on disk for <see cref="EverythingCategoryName"/> (VAR internals already cover package files).</summary>
+        public static readonly string[] EverythingLooseDiskExtensions = new[]
+        {
+            "json", "vam", "vap", "var",
+            "cs", "cslist", "dll",
+            "assetbundle", "unity3d",
+        };
+
+        public static bool IsEverythingCategoryName(string name)
+        {
+            return string.Equals(name, EverythingCategoryName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsEverythingCategoryExtension(string extensionPipeSeparated)
+        {
+            if (string.IsNullOrEmpty(extensionPipeSeparated)) return false;
+            string[] parts = extensionPipeSeparated.Split('|');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i] != null ? parts[i].Trim() : "";
+                if (string.Equals(p, EverythingExtensionToken, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>Preview textures inside VARs; omitted from EVERYTHING grid/index.</summary>
+        public static bool IsEverythingExcludedPreviewExtension(string extensionNoDot)
+        {
+            if (string.IsNullOrEmpty(extensionNoDot)) return false;
+            return string.Equals(extensionNoDot, "jpg", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extensionNoDot, "jpeg", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extensionNoDot, "png", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Returns <paramref name="splitExtensions"/> or, for EVERYTHING mode, <see cref="EverythingLooseDiskExtensions"/> for SafeGetFiles loops.</summary>
+        public static string[] DiskScanExtensionsOrEverything(string currentExtensionPipe, string[] splitExtensions)
+        {
+            if (IsEverythingCategoryExtension(currentExtensionPipe) && splitExtensions != null && splitExtensions.Length == 1
+                && string.Equals(splitExtensions[0]?.Trim(), EverythingExtensionToken, StringComparison.OrdinalIgnoreCase))
+                return EverythingLooseDiskExtensions;
+            return splitExtensions;
+        }
+
         private List<Category> categories = new List<Category>();
         
         // Panels management

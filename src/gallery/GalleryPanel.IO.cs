@@ -700,7 +700,8 @@ namespace VPB
             // Mirror the category/prefix/extension matching logic used in RefreshFilesRoutine / ApplyPackageDelta,
             // but restrict the package set to the UID list.
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
-            bool hasExt = extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
+            bool hasExt = !Gallery.IsEverythingCategoryExtension(currentExtension)
+                && extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
             string[] nameTerms = nameFilterTerms;
             bool hasNameFilt = nameTerms != null && nameTerms.Length > 0;
 
@@ -745,6 +746,12 @@ namespace VPB
                         for (int e = 0; e < extensions.Length; e++)
                             if (string.Equals(entryExt, extensions[e], StringComparison.OrdinalIgnoreCase)) { extMatch = true; break; }
                         if (!extMatch) continue;
+                    }
+                    else if (Gallery.IsEverythingCategoryExtension(currentExtension))
+                    {
+                        string pe = System.IO.Path.GetExtension(ip);
+                        if (string.IsNullOrEmpty(pe) || pe.Length < 2) continue;
+                        if (Gallery.IsEverythingExcludedPreviewExtension(pe.Substring(1))) continue;
                     }
 
                     // Path prefix filter (normalize slashes so VAR entries like Custom\Scripts\ match Custom/Scripts/)
@@ -1868,7 +1875,8 @@ namespace VPB
                 string[] extensions = string.IsNullOrEmpty(currentExtension)
                     ? new string[0]
                     : currentExtension.Split('|');
-                bool hasExt = extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
+                bool hasExt = !Gallery.IsEverythingCategoryExtension(currentExtension)
+                    && extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
                 string[] nameTerms = nameFilterTerms;
                 bool hasNameFilt = nameTerms != null && nameTerms.Length > 0;
 
@@ -1897,6 +1905,12 @@ namespace VPB
                             for (int e = 0; e < extensions.Length; e++)
                                 if (string.Equals(entryExt, extensions[e], StringComparison.OrdinalIgnoreCase)) { extMatch = true; break; }
                             if (!extMatch) continue;
+                        }
+                        else if (Gallery.IsEverythingCategoryExtension(currentExtension))
+                        {
+                            string pe = System.IO.Path.GetExtension(ip);
+                            if (string.IsNullOrEmpty(pe) || pe.Length < 2) continue;
+                            if (Gallery.IsEverythingExcludedPreviewExtension(pe.Substring(1))) continue;
                         }
 
                         // Path prefix filter (mirrors RefreshFilesRoutine ThreadPool worker logic)
@@ -2937,6 +2951,8 @@ namespace VPB
                             }
                             else
                             {
+                            if (!Gallery.IsEverythingCategoryName(titleForIndexMain))
+                            {
                             if (currentPaths != null && currentPaths.Count > 0)
                             {
                                 for (int i = 0; i < currentPaths.Count; i++)
@@ -2951,6 +2967,7 @@ namespace VPB
                             else if (string.Equals(currentPath, "Saves/Person", StringComparison.OrdinalIgnoreCase))
                             {
                                 pathExclusions = new List<string> { "Saves/Person/appearance" };
+                            }
                             }
 
                             useSqliteIndex = VpbLocalDatabase.TryQueryGalleryCategoryRows(
@@ -2998,6 +3015,14 @@ namespace VPB
 
                                     VpbLocalDatabase.Row r = idxRows[ri];
                                     string internalPath = r.InternalPath;
+
+                                    if (Gallery.IsEverythingCategoryName(titleForIndexMain))
+                                    {
+                                        int ldP = internalPath.LastIndexOf('.');
+                                        if (ldP > 0 && ldP < internalPath.Length - 1
+                                            && Gallery.IsEverythingExcludedPreviewExtension(internalPath.Substring(ldP + 1)))
+                                            continue;
+                                    }
 
                                     if (!RefreshWorkerPathMatches(internalPath, currentPaths, currentPath)) continue;
 
@@ -3246,7 +3271,16 @@ namespace VPB
                                     string checkPath = internalPath;
 
                                     bool extMatch = false;
-                                    if (extensions == null || extensions.Length == 0 || (extensions.Length == 1 && string.IsNullOrEmpty(extensions[0])))
+                                    if (Gallery.IsEverythingCategoryExtension(currentExtension))
+                                    {
+                                        string evExt = Path.GetExtension(checkPath);
+                                        if (!string.IsNullOrEmpty(evExt) && evExt.Length > 1)
+                                        {
+                                            string eNd = evExt.Substring(1);
+                                            extMatch = !Gallery.IsEverythingExcludedPreviewExtension(eNd);
+                                        }
+                                    }
+                                    else if (extensions == null || extensions.Length == 0 || (extensions.Length == 1 && string.IsNullOrEmpty(extensions[0])))
                                     {
                                         extMatch = true;
                                     }
@@ -3556,11 +3590,12 @@ namespace VPB
                         var sysRowsForWrite = new List<VpbLocalDatabase.SystemFileRow>(256);
                         string titleForGeneratedSceneSkip = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                         bool skipVpbGeneratedLocalScenes = titleForGeneratedSceneSkip.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+                    string[] diskExtsForLoose = Gallery.DiskScanExtensionsOrEverything(currentExtension, extensions);
                     foreach (var searchPath in pathsToSearch)
                     {
                         if (!Directory.Exists(searchPath)) continue;
 
-                        foreach (var ext in extensions)
+                        foreach (var ext in diskExtsForLoose)
                         {
                             string[] sysFiles = new string[0];
                             try

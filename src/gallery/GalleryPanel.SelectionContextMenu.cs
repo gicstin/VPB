@@ -2825,17 +2825,31 @@ namespace VPB
             catch { return false; }
         }
 
-        private string GetCopyNamesTooltipText(bool ctrlHeld)
+        private static bool IsShiftHeld()
         {
+            try
+            {
+                return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            }
+            catch { return false; }
+        }
+
+        private string GetCopyNamesTooltipText(bool ctrlHeld, bool shiftHeld)
+        {
+            if (ctrlHeld && shiftHeld)
+                return VPBTranslation.T(
+                    "gallery.tooltip.tbox_copy_names_internalpaths",
+                    "Copy full disk paths down to each selected file's internal .json/.vap to clipboard."
+                );
             if (ctrlHeld)
                 return VPBTranslation.T(
                     "gallery.tooltip.tbox_copy_names_fullpaths",
-                    "Copy full disk paths for selected packages and local scenes to clipboard. Release Ctrl to copy names."
+                    "Copy full disk paths for selected packages and local scenes to clipboard. Add Shift for internal file paths. Release Ctrl to copy names."
                 );
 
             return VPBTranslation.T(
                 "gallery.tooltip.tbox_copy_names",
-                "Copy selected package .var names and local Saves/scene paths to clipboard. Hold Ctrl to copy full paths."
+                "Copy selected package .var names and local Saves/scene paths to clipboard. Hold Ctrl for full paths, Ctrl+Shift for internal file paths."
             );
         }
 
@@ -2867,8 +2881,8 @@ namespace VPB
                         tboxCopyNamesTooltipCo = null;
                     }
 
-                    // Set immediately, then keep it responsive to Ctrl state while hovered.
-                    tboxCopyNamesTooltipLast = GetCopyNamesTooltipText(IsCtrlHeld());
+                    // Set immediately, then keep it responsive to Ctrl/Shift state while hovered.
+                    tboxCopyNamesTooltipLast = GetCopyNamesTooltipText(IsCtrlHeld(), IsShiftHeld());
                     temporaryStatusMsg = tboxCopyNamesTooltipLast;
                     temporaryStatusOwner = tboxCopyPkgNamesBtn;
                     tboxCopyNamesTooltipCo = StartCoroutine(CopyNamesTooltipCoroutine());
@@ -2899,7 +2913,7 @@ namespace VPB
             while (tboxCopyNamesTooltipHovered)
             {
                 string msg = null;
-                try { msg = GetCopyNamesTooltipText(IsCtrlHeld()); } catch { msg = null; }
+                try { msg = GetCopyNamesTooltipText(IsCtrlHeld(), IsShiftHeld()); } catch { msg = null; }
 
                 if (!string.IsNullOrEmpty(msg) && msg != tboxCopyNamesTooltipLast)
                 {
@@ -2932,7 +2946,16 @@ namespace VPB
                     return;
                 }
 
-                bool fullPaths = IsCtrlHeld();
+                bool ctrlHeld = IsCtrlHeld();
+                bool shiftHeld = IsShiftHeld();
+                bool fullPaths = ctrlHeld;
+                bool internalPaths = ctrlHeld && shiftHeld;
+
+                if (internalPaths)
+                {
+                    CopySelectedInternalFilePathsToClipboard();
+                    return;
+                }
 
                 var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
                 var list = new List<string>(uids.Count + 32);
@@ -2990,6 +3013,75 @@ namespace VPB
             catch (Exception ex)
             {
                 LogUtil.LogError("[VPB] CopySelectedPackageNamesToClipboard error: " + ex.Message);
+                ShowTemporaryStatus("Copy failed. See log.", 2f);
+            }
+        }
+
+        // Ctrl+Shift variant: per-selected-file full disk path including the internal
+        // .json/.vap/etc. inside the .var (e.g. "C:\...\AddonPackages\Foo.var:/Custom/.../preset.vap").
+        private void CopySelectedInternalFilePathsToClipboard()
+        {
+            try
+            {
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var list = new List<string>(selectedFiles.Count);
+                var varDiskAbsCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    var f = selectedFiles[i];
+                    if (f == null) continue;
+
+                    string entry = null;
+
+                    if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out string abs, out string _, false))
+                    {
+                        if (!string.IsNullOrEmpty(abs)) entry = abs.Replace('\\', '/');
+                    }
+                    else if (f is VarFileEntry vfe)
+                    {
+                        string uid = TryGetPackageUidForEntry(f);
+                        string varAbs = null;
+                        if (!string.IsNullOrEmpty(uid) && !varDiskAbsCache.TryGetValue(uid, out varAbs))
+                        {
+                            string varDisk = null;
+                            try { varDisk = ResolveVarPathForUid(uid); } catch { varDisk = null; }
+                            if (!string.IsNullOrEmpty(varDisk))
+                            {
+                                try { varAbs = FileManager.GetFullPath(varDisk); } catch { varAbs = varDisk; }
+                            }
+                            varDiskAbsCache[uid] = varAbs;
+                        }
+
+                        string internalPath = vfe.InternalPath ?? "";
+                        if (!string.IsNullOrEmpty(varAbs) && !string.IsNullOrEmpty(internalPath))
+                            entry = varAbs.Replace('\\', '/') + ":/" + internalPath;
+                    }
+                    else if (!string.IsNullOrEmpty(f.Path))
+                    {
+                        try { entry = FileManager.GetFullPath(f.Path); } catch { entry = f.Path; }
+                        if (!string.IsNullOrEmpty(entry)) entry = entry.Replace('\\', '/');
+                    }
+
+                    if (!string.IsNullOrEmpty(entry) && seen.Add(entry))
+                        list.Add(entry);
+                }
+
+                if (list.Count == 0)
+                {
+                    ShowTemporaryStatus("No internal file paths in selection.");
+                    return;
+                }
+                list.Sort(StringComparer.OrdinalIgnoreCase);
+
+                string text = string.Join("\n", list.ToArray());
+                GUIUtility.systemCopyBuffer = text;
+                ShowTemporaryStatus($"Copied {list.Count} internal path(s) to clipboard.", 2f);
+                TryPulseTboxCopyNamesIcon();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] CopySelectedInternalFilePathsToClipboard error: " + ex.Message);
                 ShowTemporaryStatus("Copy failed. See log.", 2f);
             }
         }

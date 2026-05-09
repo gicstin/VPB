@@ -290,6 +290,7 @@ namespace VPB
                     if (string.IsNullOrEmpty(c.extension)) continue;
                     // Skip package-level pseudo-extension categories from file-entry scans
                     if (string.Equals(c.extension, "varpkg", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (Gallery.IsEverythingCategoryExtension(c.extension)) continue;
                     string[] exts = c.extension.Split('|');
                     foreach(string ext in exts)
                     {
@@ -374,6 +375,29 @@ namespace VPB
                                 }
                             }
                         }
+                    }
+
+                    if (categoryCounts.ContainsKey(Gallery.EverythingCategoryName))
+                    {
+                        int ev = 0;
+                        foreach (var pkg in snapshot)
+                        {
+                            if (pkg == null) continue;
+                            if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
+                            if (!string.IsNullOrEmpty(currentPackagePathFilter) &&
+                                !GalleryPathFilterMatchesRawPath(pkg.Path, currentPackagePathFilter))
+                                continue;
+                            if (pkg.FileEntries == null) continue;
+                            for (int ei = 0; ei < pkg.FileEntries.Count; ei++)
+                            {
+                                string internalPath = pkg.FileEntries[ei].InternalPath;
+                                int ld = internalPath.LastIndexOf('.');
+                                if (ld <= 0 || ld >= internalPath.Length - 1) continue;
+                                if (Gallery.IsEverythingExcludedPreviewExtension(internalPath.Substring(ld + 1))) continue;
+                                ev++;
+                            }
+                        }
+                        categoryCounts[Gallery.EverythingCategoryName] = ev;
                     }
                 }
             }
@@ -546,6 +570,7 @@ namespace VPB
                 string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
                 HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var e in extensions) if (!string.IsNullOrEmpty(e)) targetExts.Add(e.Trim());
+                bool everythingExtForCreators = Gallery.IsEverythingCategoryExtension(currentExtension);
 
                 foreach (var pkg in FileManager.PackagesByUid.Values)
                 {
@@ -564,7 +589,8 @@ namespace VPB
                         int lastDot = internalPath.LastIndexOf('.');
                         if (lastDot < 0 || lastDot == internalPath.Length - 1) continue;
                         string ext = internalPath.Substring(lastDot + 1);
-                        if (!targetExts.Contains(ext)) continue;
+                        if (everythingExtForCreators && Gallery.IsEverythingExcludedPreviewExtension(ext)) continue;
+                        if (!everythingExtForCreators && !targetExts.Contains(ext)) continue;
 
                         bool match = false;
                         if (currentPaths != null && currentPaths.Count > 0)
@@ -955,6 +981,7 @@ namespace VPB
             // Build extension set for fast lookup
             HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var e in extensions) if (!string.IsNullOrEmpty(e)) targetExts.Add(e.Trim());
+            bool everythingExtMode = Gallery.IsEverythingCategoryExtension(currentExtension);
 
             // Collect all relevant tags to count
             HashSet<string> tagsToCount = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1096,7 +1123,8 @@ namespace VPB
                     int lastDot = internalPath.LastIndexOf('.');
                     if (lastDot < 0 || lastDot == internalPath.Length - 1) continue;
                     string ext = internalPath.Substring(lastDot + 1);
-                    if (!targetExts.Contains(ext)) continue;
+                    if (everythingExtMode && Gallery.IsEverythingExcludedPreviewExtension(ext)) continue;
+                    if (!everythingExtMode && !targetExts.Contains(ext)) continue;
 
                     // 2. Check path match (Inline IsMatch logic)
                     bool match = false;
