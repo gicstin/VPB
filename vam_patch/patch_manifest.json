@@ -384,6 +384,10 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/import.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/info_square.png",
         "IsDirectory":  false
     },

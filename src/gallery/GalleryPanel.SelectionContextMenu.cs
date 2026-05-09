@@ -106,6 +106,13 @@ namespace VPB
         private GameObject tboxButtonStash;
         private int tboxButtonLayoutRows = 1;
         private float tboxLastFlexAvailW = -1f;
+        private struct TboxBaseWidthSpec
+        {
+            public float minW;
+            public float prefW;
+            public float flexW;
+        }
+        private readonly Dictionary<GameObject, TboxBaseWidthSpec> tboxBaseWidthSpec = new Dictionary<GameObject, TboxBaseWidthSpec>(64);
         private const float tboxBtnRowGap = 4f;
 
         private static void TboxConfigureActionButtonFlex(GameObject go, float minW, float prefW, float innerRowH)
@@ -263,28 +270,30 @@ namespace VPB
 
             const float gap = 10f;
 
-            bool TryGetWidths(GameObject go, out float minW, out float prefW)
+            bool TryGetBaseWidths(GameObject go, out float minW, out float prefW)
             {
                 minW = 56f;
                 prefW = 100f;
                 if (go == null) return false;
                 var le = go.GetComponent<LayoutElement>();
                 if (le == null) return false;
-                minW = le.minWidth;
-                prefW = le.preferredWidth;
+                if (!tboxBaseWidthSpec.TryGetValue(go, out var spec))
+                {
+                    spec.minW = le.minWidth;
+                    spec.prefW = le.preferredWidth;
+                    spec.flexW = le.flexibleWidth;
+                    tboxBaseWidthSpec[go] = spec;
+                }
+                minW = spec.minW;
+                prefW = spec.prefW;
                 return true;
             }
 
-            float RowPrefSum(List<GameObject> row)
+            int Weight(GameObject go)
             {
-                float s = 0f;
-                for (int i = 0; i < row.Count; i++)
-                {
-                    if (!TryGetWidths(row[i], out _, out float pw)) continue;
-                    s += pw;
-                    if (i > 0) s += gap;
-                }
-                return s;
+                // "Target selector" counts as 4 button slots for balanced wrap + width allocation.
+                if (go != null && tboxTargetDropdownRowGO != null && go == tboxTargetDropdownRowGO) return 4;
+                return 1;
             }
 
             bool vis(GameObject go) => go != null && go.activeSelf;
@@ -340,73 +349,159 @@ namespace VPB
                 if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
             }
 
+            // Prefer target selector on last row (acts like "wide control").
+            if (!IsSettingsPanelOpen() && tboxTargetDropdownRowGO != null && ltr.Contains(tboxTargetDropdownRowGO) && ltr.Count > 1)
+            {
+                ltr.Remove(tboxTargetDropdownRowGO);
+                ltr.Add(tboxTargetDropdownRowGO);
+            }
+
             var rtl = new List<GameObject>(ltr.Count);
             for (int i = ltr.Count - 1; i >= 0; i--)
                 rtl.Add(ltr[i]);
 
-            bool FitsOneRowMin()
+            // Restore base widths before measuring/wrapping. Equal-width pass overwrites preferredWidth.
+            for (int i = 0; i < ltr.Count; i++)
             {
-                // Prefer wrapping when preferred widths don't fit; avoids clipping/missing buttons in 1-row mode.
-                return RowPrefSum(rtl) <= avail + 1f;
+                var go = ltr[i];
+                if (go == null) continue;
+                var le = go.GetComponent<LayoutElement>();
+                if (le == null) continue;
+                if (!tboxBaseWidthSpec.TryGetValue(go, out var spec))
+                {
+                    spec.minW = le.minWidth;
+                    spec.prefW = le.preferredWidth;
+                    spec.flexW = le.flexibleWidth;
+                    tboxBaseWidthSpec[go] = spec;
+                }
+                else
+                {
+                    le.preferredWidth = spec.prefW;
+                    le.flexibleWidth = spec.flexW;
+                }
             }
 
             List<GameObject> row0rtl = new List<GameObject>();
             List<GameObject> row1rtl = new List<GameObject>();
             List<GameObject> row2rtl = new List<GameObject>();
 
-            if (FitsOneRowMin())
+            void ApplySlotWidths(List<GameObject> row, int slotCount)
             {
-                tboxButtonLayoutRows = 1;
-                row0rtl.AddRange(rtl);
+                if (row == null || row.Count == 0) return;
+                if (slotCount <= 0) return;
+                float unitW = (avail - gap * (slotCount - 1)) / slotCount;
+                for (int i = 0; i < row.Count; i++)
+                {
+                    GameObject go = row[i];
+                    if (go == null) continue;
+                    var le = go.GetComponent<LayoutElement>();
+                    if (le == null) continue;
+                    if (!TryGetBaseWidths(go, out float minW, out _)) continue;
+
+                    int wSlots = Weight(go);
+                    float w = unitW * wSlots + gap * (wSlots - 1);
+                    w = Mathf.Max(minW, w);
+                    le.preferredWidth = w;
+                    le.flexibleWidth = 0f;
+                }
+            }
+
+            // Weighted slot packing.
+            // Goal: use available width, split slots roughly evenly across rows, with special wide controls (Target) using multiple slots.
+            int totalSlots = 0;
+            float unitMinW = 0f;
+            for (int i = 0; i < rtl.Count; i++)
+            {
+                var go = rtl[i];
+                if (go == null) continue;
+                int w = Weight(go);
+                totalSlots += w;
+                if (TryGetBaseWidths(go, out float mw, out _))
+                    unitMinW = Mathf.Max(unitMinW, mw / Mathf.Max(1, w));
+            }
+            if (unitMinW < 8f) unitMinW = 56f;
+            int maxSlotsPerRow = Mathf.Max(1, Mathf.FloorToInt((avail + gap) / (unitMinW + gap)));
+            int rowsNeed = Mathf.CeilToInt(totalSlots / Mathf.Max(1f, (float)maxSlotsPerRow));
+            if (rowsNeed < 1) rowsNeed = 1;
+            if (rowsNeed > 3) rowsNeed = 3;
+
+            int row0SlotsTarget = totalSlots;
+            int row1SlotsTarget = 0;
+            int row2SlotsTarget = 0;
+            if (rowsNeed == 2)
+            {
+                row0SlotsTarget = Mathf.Min(maxSlotsPerRow, Mathf.CeilToInt(totalSlots / 2f));
+                row1SlotsTarget = totalSlots - row0SlotsTarget;
+            }
+            else if (rowsNeed == 3)
+            {
+                row0SlotsTarget = Mathf.Min(maxSlotsPerRow, Mathf.CeilToInt(totalSlots / 3f));
+                int rem = totalSlots - row0SlotsTarget;
+                row1SlotsTarget = Mathf.Min(maxSlotsPerRow, Mathf.CeilToInt(rem / 2f));
+                row2SlotsTarget = totalSlots - row0SlotsTarget - row1SlotsTarget;
+            }
+
+            int curRow = 0;
+            int usedSlots0 = 0, usedSlots1 = 0, usedSlots2 = 0;
+            for (int i = 0; i < rtl.Count; i++)
+            {
+                var go = rtl[i];
+                if (go == null) continue;
+                int w = Weight(go);
+                if (rowsNeed == 1)
+                {
+                    row0rtl.Add(go);
+                    usedSlots0 += w;
+                    continue;
+                }
+
+                if (curRow == 0)
+                {
+                    if (usedSlots0 + w <= row0SlotsTarget || row0rtl.Count == 0)
+                    {
+                        row0rtl.Add(go);
+                        usedSlots0 += w;
+                        continue;
+                    }
+                    curRow = 1;
+                }
+                if (curRow == 1)
+                {
+                    if (rowsNeed == 2)
+                    {
+                        row1rtl.Add(go);
+                        usedSlots1 += w;
+                        continue;
+                    }
+                    if (usedSlots1 + w <= row1SlotsTarget || row1rtl.Count == 0)
+                    {
+                        row1rtl.Add(go);
+                        usedSlots1 += w;
+                        continue;
+                    }
+                    curRow = 2;
+                }
+                row2rtl.Add(go);
+                usedSlots2 += w;
+            }
+
+            tboxButtonLayoutRows = 1;
+            if (row1rtl.Count > 0) tboxButtonLayoutRows = 2;
+            if (row2rtl.Count > 0) tboxButtonLayoutRows = 3;
+
+            // Apply widths per row based on slot counts actually used in row.
+            if (tboxButtonLayoutRows == 1)
+                ApplySlotWidths(ltr, Mathf.Max(1, usedSlots0));
+            else if (tboxButtonLayoutRows == 2)
+            {
+                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0));
+                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1));
             }
             else
             {
-                if (IsSettingsPanelOpen())
-                {
-                    // Settings mode must stay 1 row (CANCEL/SAVE only).
-                    tboxButtonLayoutRows = 1;
-                    row0rtl.AddRange(rtl);
-                    row1rtl.Clear();
-                    row2rtl.Clear();
-                }
-                else
-                {
-                    int row = 0;
-                    float used = 0f;
-                    for (int i = 0; i < rtl.Count; i++)
-                    {
-                        GameObject go = rtl[i];
-                        if (!TryGetWidths(go, out _, out float pw)) continue;
-
-                        List<GameObject> cur = row == 0 ? row0rtl : (row == 1 ? row1rtl : row2rtl);
-                        float need = pw + (cur.Count > 0 ? gap : 0f);
-
-                        if (used + need <= avail + 1f || cur.Count == 0)
-                        {
-                            cur.Add(go);
-                            used += need;
-                        }
-                        else
-                        {
-                            row++;
-                            if (row >= 3)
-                            {
-                                // Hard cap: never hide buttons. Spill into row2 even if it overflows.
-                                row2rtl.Add(go);
-                                continue;
-                            }
-                            used = 0f;
-                            cur = row == 1 ? row1rtl : row2rtl;
-                            cur.Add(go);
-                            used = pw;
-                        }
-                    }
-
-                    int rows = 1;
-                    if (row1rtl.Count > 0) rows = 2;
-                    if (row2rtl.Count > 0) rows = 3;
-                    tboxButtonLayoutRows = rows;
-                }
+                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0));
+                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1));
+                ApplySlotWidths(row2rtl, Mathf.Max(1, usedSlots2));
             }
 
             TboxDetachAllActionButtonsForLayout();
@@ -718,13 +813,19 @@ namespace VPB
 
             tboxSceneImportBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.scene_import", "Import"), tboxActionBtnFont,
+                "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
                 TboxSceneImportSelectedPackage
             );
             tboxSceneImportBtn.name = "Tbox_SceneImport";
             TboxConfigureActionButtonFlex(tboxSceneImportBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxSceneImportBtn, "gallery.tooltip.scene_import", "Import presets from a scene");
+            try
+            {
+                var s = UI.LoadIconSprite("vpb_icons/import.png", Color.white);
+                if (s != null) UI.AddIconToButton(tboxSceneImportBtn, s, padding: 6f);
+            }
+            catch { }
 
             tboxCopyPkgNamesBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
