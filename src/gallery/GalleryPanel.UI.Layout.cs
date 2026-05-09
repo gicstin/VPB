@@ -1028,71 +1028,82 @@ namespace VPB
             float rightEdge = bRight.min.x - gap;
             float spaceW = Mathf.Max(0f, rightEdge - leftEdge);
 
-            // Build horizontal row from visible buttons; if overflow, fall back to square-icon buttons only.
-            List<RectTransform> row = new List<RectTransform>(leftSideButtons.Count);
+            // Build single row from visible buttons (never remove buttons in Top dock).
+            List<RectTransform> buttons = new List<RectTransform>(leftSideButtons.Count);
             for (int i = 0; i < leftSideButtons.Count; i++)
             {
                 RectTransform rt = leftSideButtons[i];
                 if (rt == null || !rt.gameObject.activeSelf) continue;
-                row.Add(rt);
+                buttons.Add(rt);
             }
 
-            float LayoutRow(List<RectTransform> list, float useGap)
+            float GetWidth(RectTransform rt)
             {
-                float x = 0f;
-                for (int i = 0; i < list.Count; i++)
-                {
-                    RectTransform rt = list[i];
-                    if (rt == null || !rt.gameObject.activeSelf) continue;
-
-                    float w = 0f;
-                    float h = 0f;
-                    try { w = rt.rect.width; h = rt.rect.height; } catch { w = rt.sizeDelta.x; h = rt.sizeDelta.y; }
-                    if (w <= 1f) w = rt.sizeDelta.x;
-                    if (h <= 1f) h = rt.sizeDelta.y;
-
-                    rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
-                    rt.pivot = new Vector2(0f, 0.5f);
-                    rt.anchoredPosition = new Vector2(x, 0f);
-                    x += w + useGap;
-                }
-                return list.Count > 0 ? Mathf.Max(0f, x - useGap) : 0f;
+                if (rt == null) return 0f;
+                float w = 0f;
+                try { w = rt.rect.width; } catch { w = rt.sizeDelta.x; }
+                if (w <= 1f) w = rt.sizeDelta.x;
+                return w;
             }
 
-            float totalW = LayoutRow(row, gap);
-            if (spaceW > 1f && totalW > spaceW + 0.5f)
+            float GetHeight(RectTransform rt)
             {
-                row.Clear();
-                for (int i = 0; i < leftSideButtons.Count; i++)
-                {
-                    RectTransform rt = leftSideButtons[i];
-                    if (rt == null || !rt.gameObject.activeSelf) continue;
-                    if (!UsesSquareChromeSideButton(rt, leftSideButtons)) continue;
-                    row.Add(rt);
-                }
-                gap = 4f * s;
-                totalW = LayoutRow(row, gap);
+                if (rt == null) return 0f;
+                float h = 0f;
+                try { h = rt.rect.height; } catch { h = rt.sizeDelta.y; }
+                if (h <= 1f) h = rt.sizeDelta.y;
+                return h;
             }
 
-            // If not all buttons fit, park non-row buttons offscreen (keep active state unchanged).
-            if (row.Count < leftSideButtons.Count)
+            float rowH = 40f * s;
+            for (int i = 0; i < buttons.Count; i++)
             {
-                for (int i = 0; i < leftSideButtons.Count; i++)
-                {
-                    RectTransform rt = leftSideButtons[i];
-                    if (rt == null || !rt.gameObject.activeSelf) continue;
-                    if (row.Contains(rt)) continue;
-                    rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
-                    rt.pivot = new Vector2(0f, 0.5f);
-                    rt.anchoredPosition = new Vector2(-99999f, 0f);
-                }
+                float h = GetHeight(buttons[i]);
+                if (h > rowH) rowH = h;
             }
 
-            _footerSideButtonsGroupRT.sizeDelta = new Vector2(totalW, 40f * s);
+            // Reset scale before measuring/layout.
+            _footerSideButtonsGroupRT.localScale = Vector3.one;
+
+            float totalW = 0f;
+            for (int i = 0; i < buttons.Count; i++)
+            {
+                float w = GetWidth(buttons[i]);
+                if (i > 0) totalW += gap;
+                totalW += w;
+            }
+
+            float scale = 1f;
+            if (spaceW > 1f && totalW > 1f && totalW > spaceW + 0.5f)
+            {
+                scale = spaceW / totalW;
+                // Clamp: keep usable, but still guarantee single row.
+                if (scale < 0.5f) scale = 0.5f;
+                if (scale > 1f) scale = 1f;
+            }
+            _footerSideButtonsGroupRT.localScale = new Vector3(scale, scale, 1f);
+
+            // Size group in unscaled units so visual width matches available space after scaling.
+            float groupW = totalW;
+            float groupH = rowH;
+            _footerSideButtonsGroupRT.sizeDelta = new Vector2(groupW, groupH);
+
+            // Layout row (unscaled coordinates).
+            float x0 = 0f;
+            for (int i = 0; i < buttons.Count; i++)
+            {
+                RectTransform rt = buttons[i];
+                if (rt == null || !rt.gameObject.activeSelf) continue;
+                float w = GetWidth(rt);
+                rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
+                rt.pivot = new Vector2(0f, 0.5f);
+                rt.anchoredPosition = new Vector2(x0, 0f);
+                x0 += w + gap;
+            }
 
             // Center within available free space.
             float cx = leftEdge + spaceW * 0.5f;
-            float half = totalW * 0.5f;
+            float half = (groupW * scale) * 0.5f;
             if (spaceW > 1f)
             {
                 if (cx - half < leftEdge) cx = leftEdge + half;
