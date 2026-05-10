@@ -612,7 +612,125 @@ namespace VPB
         internal void UserTagApplyDroppedTags(List<string> tags)
         {
             if (tags == null || tags.Count == 0) return;
-            ApplyTagsToSelectedPackages(new List<string>(tags), remove: false);
+            ApplyUserTagsToFileEntries(new List<string>(tags), selectedFiles, remove: false);
+        }
+
+        /// <summary>Drop on gallery row: tag row only unless pointer row is inside current selection — then tag full selection.</summary>
+        internal void UserTagApplyDroppedTagsRespectingGalleryRow(List<string> tags, FileEntry galleryRowHit)
+        {
+            if (tags == null || tags.Count == 0) return;
+            List<string> t = new List<string>(tags);
+
+            if (galleryRowHit == null || galleryRowHit is InternalSettingRowEntry)
+            {
+                ApplyUserTagsToFileEntries(t, selectedFiles, remove: false);
+                return;
+            }
+
+            if (IsGalleryFileEntryInSelection(galleryRowHit)
+                && selectedFiles != null && selectedFiles.Count > 0)
+                ApplyUserTagsToFileEntries(t, selectedFiles, remove: false);
+            else
+                ApplyUserTagsToFileEntries(t, new List<FileEntry> { galleryRowHit }, remove: false);
+        }
+
+        private bool IsGalleryFileEntryInSelection(FileEntry file)
+        {
+            if (file == null || selectedFilePaths == null || selectedFilePaths.Count == 0)
+                return false;
+            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            string key = GetSelectionIdentityKey(file, historyBrowse);
+            return !string.IsNullOrEmpty(key) && selectedFilePaths.Contains(key);
+        }
+
+        internal string BuildUserTagDragDropStatusHint(FileEntry galleryRowHit, List<string> tags)
+        {
+            if (tags == null || tags.Count == 0) return "";
+            string phrase = FormatUserTagPhraseForHover(tags);
+            if (galleryRowHit == null || galleryRowHit is InternalSettingRowEntry)
+                return "";
+
+            if (IsGalleryFileEntryInSelection(galleryRowHit)
+                && selectedFiles != null && selectedFiles.Count > 0)
+            {
+                int n = selectedFiles.Count;
+                if (n > 1)
+                    return string.Format(
+                        VPBTranslation.T("gallery.usertags.drag_hover.tag_selection", "Tag {0} items with {1} tag"),
+                        n, phrase);
+                return string.Format(
+                    VPBTranslation.T("gallery.usertags.drag_hover.tag_one_item", "Tag this item with {0} tag"),
+                    phrase);
+            }
+
+            return string.Format(
+                VPBTranslation.T("gallery.usertags.drag_hover.tag_one_item", "Tag this item with {0} tag"),
+                phrase);
+        }
+
+        private static string FormatUserTagPhraseForHover(List<string> tags)
+        {
+            if (tags == null || tags.Count == 0) return "";
+            if (tags.Count == 1) return "\"" + tags[0] + "\"";
+            if (tags.Count == 2) return "\"" + tags[0] + "\", \"" + tags[1] + "\"";
+            return "\"" + tags[0] + "\" +" + (tags.Count - 1);
+        }
+
+        /// <summary>Shared by tag-drag hover hint and drop: first gallery file row hit (this panel).</summary>
+        internal static bool TryResolveGalleryRowFromRaycastHits(GalleryPanel panel, IList<RaycastResult> hits, out FileEntry file)
+        {
+            file = null;
+            if (panel == null || hits == null) return false;
+            for (int i = 0; i < hits.Count; i++)
+            {
+                GameObject go = hits[i].gameObject;
+                if (go == null) continue;
+                UIFileEntryLeftReleaseSelect lr = go.GetComponentInParent<UIFileEntryLeftReleaseSelect>();
+                if (lr == null || lr.Panel != panel || lr.File == null) continue;
+                if (lr.File is InternalSettingRowEntry) continue;
+                file = lr.File;
+                return true;
+            }
+            return false;
+        }
+
+        private void ApplyUserTagsToFileEntries(List<string> tags, List<FileEntry> targets, bool remove)
+        {
+            if (tags == null || tags.Count == 0)
+            {
+                ShowTemporaryStatus(VPBTranslation.T("gallery.usertags.no_tags", "No tags parsed."), 1.5f);
+                return;
+            }
+
+            List<FileEntry> list = NormalizeUserTagMutationTargets(targets);
+            if (list.Count == 0)
+            {
+                ShowTemporaryStatus(VPBTranslation.T("gallery.usertags.none_selected", "Nothing selected."), 1.5f);
+                return;
+            }
+
+            string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
+            if (!string.IsNullOrEmpty(cat)
+                && VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat)
+                && _userTagInheritVarToChildren)
+            {
+                StartCoroutine(ApplyTagsToSelectedPackagesAllVarInheritCoroutine(new List<string>(tags), remove, list));
+                return;
+            }
+            StartCoroutine(ApplyTagsToSelectedPackagesBulkCoroutine(new List<string>(tags), remove, list));
+        }
+
+        private static List<FileEntry> NormalizeUserTagMutationTargets(List<FileEntry> targets)
+        {
+            var list = new List<FileEntry>();
+            if (targets == null) return list;
+            for (int i = 0; i < targets.Count; i++)
+            {
+                FileEntry fe = targets[i];
+                if (fe == null || fe is InternalSettingRowEntry) continue;
+                list.Add(fe);
+            }
+            return list;
         }
 
         internal void UserTagAppliedDragBeginPayload(string primaryTag, List<string> tagsOut)
@@ -633,7 +751,7 @@ namespace VPB
         internal void UserTagRemoveDroppedTags(List<string> tags)
         {
             if (tags == null || tags.Count == 0) return;
-            ApplyTagsToSelectedPackages(new List<string>(tags), remove: true);
+            ApplyUserTagsToFileEntries(new List<string>(tags), selectedFiles, remove: true);
             userTagAppliedRemoveSelection.Clear();
             userTagAppliedRemoveAnchor = null;
         }
@@ -751,27 +869,7 @@ namespace VPB
 
         private void ApplyTagsToSelectedPackages(List<string> tags, bool remove)
         {
-            if (tags == null || tags.Count == 0)
-            {
-                ShowTemporaryStatus(VPBTranslation.T("gallery.usertags.no_tags", "No tags parsed."), 1.5f);
-                return;
-            }
-
-            if (selectedFiles == null || selectedFiles.Count == 0)
-            {
-                ShowTemporaryStatus(VPBTranslation.T("gallery.usertags.none_selected", "Nothing selected."), 1.5f);
-                return;
-            }
-
-            string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
-            if (!string.IsNullOrEmpty(cat)
-                && VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat)
-                && _userTagInheritVarToChildren)
-            {
-                StartCoroutine(ApplyTagsToSelectedPackagesAllVarInheritCoroutine(new List<string>(tags), remove));
-                return;
-            }
-            StartCoroutine(ApplyTagsToSelectedPackagesBulkCoroutine(new List<string>(tags), remove));
+            ApplyUserTagsToFileEntries(tags, selectedFiles, remove);
         }
 
         private static void RemoveFileEntriesFromLists(List<FileEntry> list, HashSet<FileEntry> removeRefs)
@@ -858,19 +956,19 @@ namespace VPB
                 RefreshFilesThenUpdateTabs(true);
         }
 
-        private IEnumerator ApplyTagsToSelectedPackagesBulkCoroutine(List<string> tags, bool remove)
+        private IEnumerator ApplyTagsToSelectedPackagesBulkCoroutine(List<string> tags, bool remove, List<FileEntry> targets)
         {
             if (tags == null || tags.Count == 0) yield break;
-            if (selectedFiles == null || selectedFiles.Count == 0) yield break;
+            if (targets == null || targets.Count == 0) yield break;
 
             string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
             if (string.IsNullOrEmpty(cat)) yield break;
 
-            var rows = new List<VpbLocalDatabase.GalleryUserTagRowKey>(selectedFiles.Count);
+            var rows = new List<VpbLocalDatabase.GalleryUserTagRowKey>(targets.Count);
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < selectedFiles.Count; i++)
+            for (int i = 0; i < targets.Count; i++)
             {
-                FileEntry fe = selectedFiles[i];
+                FileEntry fe = targets[i];
                 if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
                 if (string.IsNullOrEmpty(pkg)) continue;
                 string rk = (pkg ?? "") + "\n" + (ip ?? "");
@@ -912,18 +1010,18 @@ namespace VPB
             ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.done_count", "Updated {0} item(s)."), touchedOut[0]), 2f);
         }
 
-        private IEnumerator ApplyTagsToSelectedPackagesAllVarInheritCoroutine(List<string> tags, bool remove)
+        private IEnumerator ApplyTagsToSelectedPackagesAllVarInheritCoroutine(List<string> tags, bool remove, List<FileEntry> targets)
         {
             // Background DB work to avoid freezing UI when a package has many indexed rows.
             if (tags == null || tags.Count == 0) yield break;
-            if (selectedFiles == null || selectedFiles.Count == 0) yield break;
+            if (targets == null || targets.Count == 0) yield break;
             string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
             if (string.IsNullOrEmpty(cat) || !VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat)) yield break;
 
             var pkgUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < selectedFiles.Count; i++)
+            for (int i = 0; i < targets.Count; i++)
             {
-                FileEntry fe = selectedFiles[i];
+                FileEntry fe = targets[i];
                 if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out _)) continue;
                 if (!string.IsNullOrEmpty(pkg)) pkgUids.Add(pkg);
             }
@@ -2737,6 +2835,8 @@ namespace VPB
             if (_dragging)
             {
                 UpdateGhostPosition();
+                if (!IsAppliedRowDrag)
+                    RefreshUserTagApplyDragHoverStatus();
                 // Mouse-up may not route to source once we disable raycasts.
                 if (Input.GetMouseButtonUp(0))
                     EndManualDrag(null);
@@ -2856,11 +2956,17 @@ namespace VPB
                 if (dz != null && dz.Panel == Panel)
                 {
                     Panel.UserTagApplyDroppedTags(tags);
-                    break;
+                    return;
                 }
             }
 
-            // Fallback: drop anywhere inside this panel's canvas applies.
+            if (GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry galleryRow))
+            {
+                Panel.UserTagApplyDroppedTagsRespectingGalleryRow(tags, galleryRow);
+                return;
+            }
+
+            // Fallback: drop anywhere inside this panel's canvas applies (selection-targeted).
             try
             {
                 if (Panel.canvas != null)
@@ -2880,10 +2986,32 @@ namespace VPB
             catch { }
         }
 
+        private void RefreshUserTagApplyDragHoverStatus()
+        {
+            if (Panel == null) return;
+            List<string> tags = UserTagDragSession.PendingTags;
+            EventSystem es = EventSystem.current;
+            if (tags == null || tags.Count == 0 || es == null)
+            {
+                Panel.SetStatus("");
+                return;
+            }
+            var ped = new PointerEventData(es) { position = (Vector2)Input.mousePosition };
+            _raycastHits.Clear();
+            es.RaycastAll(ped, _raycastHits);
+            if (!GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry rowHit))
+            {
+                Panel.SetStatus("");
+                return;
+            }
+            Panel.SetStatus(Panel.BuildUserTagDragDropStatusHint(rowHit, tags));
+        }
+
         private void CleanupDragVisuals()
         {
             _pressed = false;
             _dragging = false;
+            try { if (Panel != null && !IsAppliedRowDrag) Panel.SetStatus(""); } catch { }
             if (_cg != null)
             {
                 _cg.alpha = 1f;

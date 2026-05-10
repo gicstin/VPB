@@ -143,9 +143,11 @@ namespace VPB
 
         public void DisplayColorPicker(string title, Color initialColor, UnityAction<Color> onConfirm)
         {
-             // Use the singleton
-             if (UIColorPicker.Instance != null)
-                UIColorPicker.Instance.Show(initialColor, (c) => onConfirm?.Invoke(c));
+            // Full gallery card so dim covers rails + footer; UIColorPicker uses own Canvas sorting to stay above grid.
+            Transform host = backgroundBoxGO != null ? backgroundBoxGO.transform
+                : canvas != null ? canvas.transform : null;
+            if (UIColorPicker.Instance != null)
+                UIColorPicker.Instance.Show(initialColor, c => { if (onConfirm != null) onConfirm.Invoke(c); }, title, host);
         }
 
         public void DisplayTextInput(string title, string initialValue, UnityAction<string> onConfirm)

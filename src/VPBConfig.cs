@@ -217,9 +217,23 @@ namespace VPB
         {
             get { return EnableDragDrop && !HoldToLaunchEnabled; }
         }
-        /// <summary>When false (default), drag starts immediately once drag-and-drop is on (legacy). When true, <see cref="DragHoldThreshold"/> is enforced.</summary>
+        /// <summary>Legacy persisted flag; ignored for behavior when <see cref="EnableDragDrop"/> is on — hold is always required then. Serialized for forward compatibility.</summary>
         public bool RequireDragHoldBeforeMove = false;
+        /// <summary>Minimum seconds before gallery item drag can start when drag-and-drop is on; loaded/saved values are clamped to this floor.</summary>
+        public const float DragHoldThresholdMin = 0.4f;
         public float DragHoldThreshold = 0.5f;
+
+        /// <summary>Clamps persisted UI value for drag hold duration to <see cref="DragHoldThresholdMin"/> … 1.</summary>
+        public static float ClampDragHoldThreshold(float seconds) =>
+            Mathf.Clamp(seconds, DragHoldThresholdMin, 1f);
+
+        /// <summary>Ensures hold-before-drag when drag-and-drop is enabled and threshold meets minimum.</summary>
+        public void NormalizeDragDropHoldSettings()
+        {
+            DragHoldThreshold = ClampDragHoldThreshold(DragHoldThreshold);
+            if (EnableDragDrop)
+                RequireDragHoldBeforeMove = true;
+        }
         public string ApplyMode = "DoubleClick";
         public string LastGalleryCategory = "";
         /// <summary>Category when opening a new gallery pane or at session first open: "Scenes" (default), "Clothing", "Hair", "Pose", "Appearance", "Plugins", or "LastUsed".</summary>
@@ -257,6 +271,29 @@ namespace VPB
         public float GalleryGridSelectedBorderWidth = 2f;
         /// <summary>When true and <see cref="GalleryGridThumbnailPadding"/> is 0, render hover/selection border inward.</summary>
         public bool GalleryGridBorderInwardWhenSquare = true;
+        /// <summary>RGBA 0–1 for grid/list hover and selection border tint (default yellow).</summary>
+        public float GalleryGridBorderColorR = 1f;
+        public float GalleryGridBorderColorG = 1f;
+        public float GalleryGridBorderColorB = 0f;
+        public float GalleryGridBorderColorA = 1f;
+
+        public Color GetGalleryGridBorderColor()
+        {
+            return new Color(
+                Mathf.Clamp01(GalleryGridBorderColorR),
+                Mathf.Clamp01(GalleryGridBorderColorG),
+                Mathf.Clamp01(GalleryGridBorderColorB),
+                Mathf.Clamp01(GalleryGridBorderColorA));
+        }
+
+        public void SetGalleryGridBorderColor(Color c)
+        {
+            GalleryGridBorderColorR = c.r;
+            GalleryGridBorderColorG = c.g;
+            GalleryGridBorderColorB = c.b;
+            GalleryGridBorderColorA = c.a;
+            try { TriggerChange(); } catch { }
+        }
         /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
         public bool GalleryTboxToolbarPinned = false;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
@@ -558,6 +595,10 @@ namespace VPB
             GalleryGridHoverBorderWidth = 1f;
             GalleryGridSelectedBorderWidth = 2f;
             GalleryGridBorderInwardWhenSquare = true;
+            GalleryGridBorderColorR = 1f;
+            GalleryGridBorderColorG = 1f;
+            GalleryGridBorderColorB = 0f;
+            GalleryGridBorderColorA = 1f;
             GalleryTboxToolbarPinned = false;
             UiLocale = "";
             SpringScrollButtonEnabled = true;
@@ -633,7 +674,7 @@ namespace VPB
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["GalleryAutoGenderFilter"] != null) GalleryAutoGenderFilter = node["GalleryAutoGenderFilter"].AsBool;
                         if (node["DragHoldThreshold"] != null)
-                            DragHoldThreshold = Mathf.Clamp(node["DragHoldThreshold"].AsFloat, 0f, 1f);
+                            DragHoldThreshold = ClampDragHoldThreshold(node["DragHoldThreshold"].AsFloat);
                         if (node["RequireDragHoldBeforeMove"] != null)
                             RequireDragHoldBeforeMove = node["RequireDragHoldBeforeMove"].AsBool;
                         if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
@@ -679,6 +720,10 @@ namespace VPB
                         if (node["GalleryGridHoverBorderWidth"] != null) GalleryGridHoverBorderWidth = Mathf.Clamp(node["GalleryGridHoverBorderWidth"].AsFloat, 0f, 20f);
                         if (node["GalleryGridSelectedBorderWidth"] != null) GalleryGridSelectedBorderWidth = Mathf.Clamp(node["GalleryGridSelectedBorderWidth"].AsFloat, 0f, 30f);
                         if (node["GalleryGridBorderInwardWhenSquare"] != null) GalleryGridBorderInwardWhenSquare = node["GalleryGridBorderInwardWhenSquare"].AsBool;
+                        if (node["GalleryGridBorderColorR"] != null) GalleryGridBorderColorR = Mathf.Clamp01(node["GalleryGridBorderColorR"].AsFloat);
+                        if (node["GalleryGridBorderColorG"] != null) GalleryGridBorderColorG = Mathf.Clamp01(node["GalleryGridBorderColorG"].AsFloat);
+                        if (node["GalleryGridBorderColorB"] != null) GalleryGridBorderColorB = Mathf.Clamp01(node["GalleryGridBorderColorB"].AsFloat);
+                        if (node["GalleryGridBorderColorA"] != null) GalleryGridBorderColorA = Mathf.Clamp01(node["GalleryGridBorderColorA"].AsFloat);
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
@@ -764,6 +809,17 @@ namespace VPB
                     {
                         if (HoldToLaunchEnabled && !EnableDragDrop && HoldToLaunchPrevEnableDragDrop)
                             EnableDragDrop = true;
+                    }
+                    catch { }
+
+                    // Migration: drag hold duration floor + hold-before-drag always on when drag-and-drop enabled.
+                    try
+                    {
+                        float prevThr = DragHoldThreshold;
+                        bool prevReq = RequireDragHoldBeforeMove;
+                        NormalizeDragDropHoldSettings();
+                        if (Mathf.Abs(prevThr - DragHoldThreshold) > 0.0001f || prevReq != RequireDragHoldBeforeMove)
+                            Save(false, true);
                     }
                     catch { }
 
@@ -884,8 +940,9 @@ namespace VPB
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["GalleryAutoGenderFilter"].AsBool = GalleryAutoGenderFilter;
+                NormalizeDragDropHoldSettings();
                 node["RequireDragHoldBeforeMove"].AsBool = RequireDragHoldBeforeMove;
-                node["DragHoldThreshold"].AsFloat = Mathf.Clamp(DragHoldThreshold, 0f, 1f);
+                node["DragHoldThreshold"].AsFloat = DragHoldThreshold;
                 node["ApplyMode"] = ApplyMode;
                 node["LastGalleryCategory"] = LastGalleryCategory;
                 node["InitialGalleryCategory"] = InitialGalleryCategory;
@@ -922,6 +979,10 @@ namespace VPB
                 node["GalleryGridHoverBorderWidth"].AsFloat = Mathf.Clamp(GalleryGridHoverBorderWidth, 0f, 20f);
                 node["GalleryGridSelectedBorderWidth"].AsFloat = Mathf.Clamp(GalleryGridSelectedBorderWidth, 0f, 30f);
                 node["GalleryGridBorderInwardWhenSquare"].AsBool = GalleryGridBorderInwardWhenSquare;
+                node["GalleryGridBorderColorR"].AsFloat = Mathf.Clamp01(GalleryGridBorderColorR);
+                node["GalleryGridBorderColorG"].AsFloat = Mathf.Clamp01(GalleryGridBorderColorG);
+                node["GalleryGridBorderColorB"].AsFloat = Mathf.Clamp01(GalleryGridBorderColorB);
+                node["GalleryGridBorderColorA"].AsFloat = Mathf.Clamp01(GalleryGridBorderColorA);
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;

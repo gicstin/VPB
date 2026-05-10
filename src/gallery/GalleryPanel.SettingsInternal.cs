@@ -13,7 +13,8 @@ namespace VPB
             Slider,
             Cycle,
             TextArea,
-            Button
+            Button,
+            ColorRgb,
         }
 
         private sealed class InternalSettingDefinition
@@ -44,6 +45,9 @@ namespace VPB
 
             /// <summary>Fired when a Button-type row is clicked (primary or secondary click).</summary>
             public Action OnAction;
+
+            public Func<Color> GetColor;
+            public Action<Color> SetColor;
         }
 
         private sealed class InternalSettingRowEntry : VirtualFileEntry
@@ -106,6 +110,10 @@ namespace VPB
             public float GalleryGridHoverBorderWidth;
             public float GalleryGridSelectedBorderWidth;
             public bool GalleryGridBorderInwardWhenSquare;
+            public float GalleryGridBorderColorR;
+            public float GalleryGridBorderColorG;
+            public float GalleryGridBorderColorB;
+            public float GalleryGridBorderColorA;
             public bool GalleryOnlyWhenVamMenuVisible;
             public bool GalleryAnchorToVamMenu;
             public string GalleryCategoryQuickOrder;
@@ -317,7 +325,11 @@ namespace VPB
                 Key = "interaction.dragDrop", GroupKey = "interaction", Label = VPBTranslation.T("settings.enable_drag_drop", "Enable Drag & Drop"),
                 Tooltip = VPBTranslation.T("settings.tip.enable_drag_drop", "Off by default. Turn on to drag items from the gallery onto atoms or the scene."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableDragDrop,
-                SetBool = v => { VPBConfig.Instance.EnableDragDrop = v; }
+                SetBool = v =>
+                {
+                    VPBConfig.Instance.EnableDragDrop = v;
+                    VPBConfig.Instance.NormalizeDragDropHoldSettings();
+                }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.autoGenderFilter", GroupKey = "interaction", Label = VPBTranslation.T("settings.gallery_auto_gender_filter", "Auto gender filter (Hair/Clothing)"),
@@ -326,19 +338,12 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryAutoGenderFilter = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "interaction.dragHoldEnabled", GroupKey = "interaction", Label = VPBTranslation.T("settings.require_drag_hold", "Require hold before drag"),
-                Tooltip = VPBTranslation.T("settings.tip.require_drag_hold", "Off = classic behavior. On = pointer must hold still before drag starts."),
-                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.RequireDragHoldBeforeMove,
-                SetBool = v => { VPBConfig.Instance.RequireDragHoldBeforeMove = v; },
-                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.EnableDragDrop
-            });
-            defs.Add(new InternalSettingDefinition {
                 Key = "interaction.dragHoldSec", GroupKey = "interaction", Label = VPBTranslation.T("settings.drag_hold_threshold", "Hold duration (s)"),
-                Tooltip = VPBTranslation.T("settings.tip.drag_hold_threshold", "Only when drag-and-drop and hold-before-drag are on."),
+                Tooltip = VPBTranslation.T("settings.tip.drag_hold_threshold", "When drag-and-drop is on: how long pointer must stay held before drag starts (minimum " + VPBConfig.DragHoldThresholdMin.ToString(System.Globalization.CultureInfo.InvariantCulture) + " s)."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.DragHoldThreshold,
-                SetFloat = v => { VPBConfig.Instance.DragHoldThreshold = Mathf.Clamp(v, 0f, 1f); },
-                Min = 0f, Max = 1f, Step = 0.1f, Decimals = 1,
-                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.EnableDragDrop && VPBConfig.Instance.RequireDragHoldBeforeMove
+                SetFloat = v => { VPBConfig.Instance.DragHoldThreshold = VPBConfig.ClampDragHoldThreshold(v); },
+                Min = VPBConfig.DragHoldThresholdMin, Max = 1f, Step = 0.1f, Decimals = 1,
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.EnableDragDrop
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.holdToLaunchSec", GroupKey = "interaction", Label = VPBTranslation.T("settings.hold_to_launch_seconds", "Hold-to-launch time (s)"),
@@ -562,6 +567,18 @@ namespace VPB
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridBorderInwardWhenSquare,
                 SetBool = v => { VPBConfig.Instance.GalleryGridBorderInwardWhenSquare = v; try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { } }
             });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.borderColor", GroupKey = "grid",
+                Label = VPBTranslation.T("settings.grid_border_color", "Hover / selection border color"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_border_color", "Color for hover and selection borders in grid and list layout."),
+                ControlType = InternalSettingControlType.ColorRgb,
+                GetColor = () => VPBConfig.Instance.GetGalleryGridBorderColor(),
+                SetColor = c =>
+                {
+                    VPBConfig.Instance.SetGalleryGridBorderColor(c);
+                    try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                }
+            });
 
             defs.Add(new InternalSettingDefinition {
                 Key = "vr.menuGate", GroupKey = "vr", Label = VPBTranslation.T("settings.gallery.vam_menu_gate", "Show only when VaM menu is visible"),
@@ -730,6 +747,10 @@ namespace VPB
                 GalleryGridHoverBorderWidth = VPBConfig.Instance.GalleryGridHoverBorderWidth,
                 GalleryGridSelectedBorderWidth = VPBConfig.Instance.GalleryGridSelectedBorderWidth,
                 GalleryGridBorderInwardWhenSquare = VPBConfig.Instance.GalleryGridBorderInwardWhenSquare,
+                GalleryGridBorderColorR = VPBConfig.Instance.GalleryGridBorderColorR,
+                GalleryGridBorderColorG = VPBConfig.Instance.GalleryGridBorderColorG,
+                GalleryGridBorderColorB = VPBConfig.Instance.GalleryGridBorderColorB,
+                GalleryGridBorderColorA = VPBConfig.Instance.GalleryGridBorderColorA,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
                 GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
                 GalleryCategoryQuickOrder = VPBConfig.Instance.GalleryCategoryQuickOrder ?? "",
@@ -946,6 +967,8 @@ namespace VPB
                 case InternalSettingControlType.Button:
                     def.OnAction?.Invoke();
                     break;
+                case InternalSettingControlType.ColorRgb:
+                    break;
             }
         }
 
@@ -956,6 +979,7 @@ namespace VPB
             InternalSettingDefinition def = GetInternalSettingDefinition(row.RowKey);
             if (def == null) return false;
             if (def.ControlType == InternalSettingControlType.TextArea) return false;
+            if (def.ControlType == InternalSettingControlType.ColorRgb) return false;
             ApplyInternalSettingDefinition(def, secondary);
             if (string.Equals(row.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                 NotifyInternalSettingsHoverPreviewChanged();
@@ -1083,6 +1107,44 @@ namespace VPB
                 try
                 {
                     // Ensure control row sizes settle immediately (prevents clipping when switching cycle values).
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(detailsTr as RectTransform);
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(listRowTr as RectTransform);
+                }
+                catch { }
+                return;
+            }
+
+            if (def.ControlType == InternalSettingControlType.ColorRgb && def.GetColor != null && def.SetColor != null)
+            {
+                GameObject swatch = new GameObject("SettingsBorderColorSwatch");
+                swatch.transform.SetParent(controls.transform, false);
+                LayoutElement swle = swatch.AddComponent<LayoutElement>();
+                swle.preferredWidth = 72f;
+                swle.minWidth = 48f;
+                swle.preferredHeight = 28f;
+                swle.minHeight = 28f;
+                swle.flexibleWidth = 0f;
+                Image swImg = swatch.AddComponent<Image>();
+                swImg.color = def.GetColor();
+                swImg.raycastTarget = false;
+
+                CreateMiniButton(
+                    controls.transform,
+                    VPBTranslation.T("settings.grid_border_color.choose", "CHOOSE…"),
+                    120f,
+                    new Color(0.25f, 0.5f, 0.8f, 1f),
+                    () =>
+                    {
+                        Color initial = def.GetColor();
+                        VPBUiPickers.PickColorRgb(this, def.Label, initial, picked =>
+                        {
+                            def.SetColor(picked);
+                            try { swImg.color = def.GetColor(); } catch { }
+                            RefreshInternalSettingsListRows(true);
+                        });
+                    });
+                try
+                {
                     LayoutRebuilder.ForceRebuildLayoutImmediate(detailsTr as RectTransform);
                     LayoutRebuilder.ForceRebuildLayoutImmediate(listRowTr as RectTransform);
                 }
@@ -1375,6 +1437,10 @@ namespace VPB
             VPBConfig.Instance.GalleryGridHoverBorderWidth = b.GalleryGridHoverBorderWidth;
             VPBConfig.Instance.GalleryGridSelectedBorderWidth = b.GalleryGridSelectedBorderWidth;
             VPBConfig.Instance.GalleryGridBorderInwardWhenSquare = b.GalleryGridBorderInwardWhenSquare;
+            VPBConfig.Instance.GalleryGridBorderColorR = b.GalleryGridBorderColorR;
+            VPBConfig.Instance.GalleryGridBorderColorG = b.GalleryGridBorderColorG;
+            VPBConfig.Instance.GalleryGridBorderColorB = b.GalleryGridBorderColorB;
+            VPBConfig.Instance.GalleryGridBorderColorA = b.GalleryGridBorderColorA;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
             VPBConfig.Instance.GalleryCategoryQuickOrder = b.GalleryCategoryQuickOrder ?? "";

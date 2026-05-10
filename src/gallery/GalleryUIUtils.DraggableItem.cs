@@ -179,12 +179,12 @@ namespace VPB
             }
         }
 
-        /// <summary>Hold delay in seconds; 0 when drag is off, hold requirement is off, or threshold is 0.</summary>
+        /// <summary>Hold delay in seconds; 0 when drag-and-drop is off at runtime (<see cref="VPBConfig.EffectiveEnableDragDrop"/>).</summary>
         private static float EffectiveDragHoldSeconds()
         {
             var c = VPBConfig.Instance;
-            if (c == null || !c.EffectiveEnableDragDrop || !c.RequireDragHoldBeforeMove) return 0f;
-            return Mathf.Max(0f, c.DragHoldThreshold);
+            if (c == null || !c.EffectiveEnableDragDrop) return 0f;
+            return c.DragHoldThreshold;
         }
 
         public bool IsLongPress

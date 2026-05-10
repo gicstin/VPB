@@ -433,6 +433,9 @@ namespace VPB
         /// <summary>When true, border effect is rendered inward (negative outline offset).</summary>
         public bool inward = false;
         public bool isSelected = false;
+        /// <summary>List layout: hover uses <see cref="hoverBorderGO"/> only; selection is a separate Graphic.
+        /// Exit always hides hover GO (pool reuse never gets PointerExit). Grid inward border keeps GO when selected.</summary>
+        public bool hoverIndicatorUsesSeparateSelectionVisual = false;
         // When set, show/hide this GO on hover instead of using the Outline component.
         // Used in list mode to avoid the Outline filling the entire semi-transparent row.
         public GameObject hoverBorderGO;
@@ -465,7 +468,12 @@ namespace VPB
 
         void OnEnable()
         {
-            if (hoverBorderGO != null) hoverBorderGO.SetActive(isSelected);
+            if (hoverBorderGO != null)
+            {
+                // List row: never mirror selection on hover bar (yellow bar owns selection).
+                if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
+                else hoverBorderGO.SetActive(isSelected);
+            }
             else if (outline != null) outline.enabled = isSelected;
         }
 
@@ -483,7 +491,11 @@ namespace VPB
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (hoverBorderGO != null) { if (!isSelected) hoverBorderGO.SetActive(false); }
+            if (hoverBorderGO != null)
+            {
+                if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
+                else if (!isSelected) hoverBorderGO.SetActive(false);
+            }
             else if (outline != null && !isSelected) outline.enabled = false;
         }
     }

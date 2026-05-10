@@ -1984,6 +1984,19 @@ namespace VPB
             if (right != null) right.sizeDelta = new Vector2(t, 0);
         }
 
+        /// <summary>Recolors GridInnerBorder edge strips (built with yellow defaults).</summary>
+        private static void SetGalleryInnerBorderEdgeTint(GameObject borderGO, Color tint)
+        {
+            if (borderGO == null) return;
+            for (int i = 0; i < borderGO.transform.childCount; i++)
+            {
+                Transform ch = borderGO.transform.GetChild(i);
+                if (ch == null) continue;
+                var im = ch.GetComponent<Image>();
+                if (im != null) im.color = tint;
+            }
+        }
+
         private const float GalleryBadgeSlotStartX = 6f;
         private const float GalleryBadgeSlotStartY = -6f;
         private const float GalleryBadgeSlotStepX = 36f;
@@ -2081,74 +2094,74 @@ namespace VPB
             Image img = btnGO.GetComponent<Image>();
             string selKey = GetSelectionIdentityKey(file, false);
             bool isSelected = (!string.IsNullOrEmpty(selKey) && selectedFilePaths.Contains(selKey));
-            
-            Outline outline = btnGO.GetComponent<Outline>();
-            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
 
-            if (layoutMode == GalleryLayoutMode.List)
+            bool isListRow = layoutMode == GalleryLayoutMode.List || settingsListViewActive;
+            if (isListRow)
             {
-                // List mode: always dark background. Use ListSelectionBorder (4 edge Images)
-                // for selection highlight — avoids Outline which fills the whole row yellow.
                 bool isMaster = false;
                 try { isMaster = IsFilterActive && IsFilterMasterEntry(file); } catch { isMaster = false; }
                 img.color = isMaster ? new Color(0.1f, 0.25f, 0.45f, 0.55f) : new Color(0f, 0f, 0f, 0.4f);
-                if (outline != null) { outline.effectColor = new Color(0f, 0f, 0f, 0f); outline.enabled = false; }
-                if (hoverBorder != null) hoverBorder.isSelected = isSelected;
-                // selection bar (left accent) is independent of hover bar
-                Transform selBar = btnGO.transform.Find("ListSelectionBar");
-                if (selBar != null) selBar.gameObject.SetActive(isSelected);
+            }
+            else if (isSelected)
+                img.color = new Color(0.7f, 0.7f, 0.2f, 1f);
+            else
+                img.color = Color.gray;
+
+            Transform listHoverNt = btnGO.transform.Find("ListHoverBar");
+            if (listHoverNt != null) listHoverNt.gameObject.SetActive(false);
+            Transform listSelNt = btnGO.transform.Find("ListSelectionBar");
+            if (listSelNt != null) listSelNt.gameObject.SetActive(false);
+
+            float hoverW = EffectiveGridHoverBorderWidth();
+            float selW = EffectiveGridSelectedBorderWidth();
+            float w = isSelected ? selW : hoverW;
+            bool inwardCell = EffectiveGridBorderInwardForGalleryCell();
+            Color borderTint = EffectiveGalleryGridBorderColor();
+
+            Outline outline = btnGO.GetComponent<Outline>();
+            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
+            if (hoverBorder != null)
+            {
+                hoverBorder.enabled = true;
+                hoverBorder.hoverColor = borderTint;
+            }
+            Transform innerBorderTr = btnGO.transform.Find("GridInnerBorder");
+            GameObject innerBorderGO = innerBorderTr != null ? innerBorderTr.gameObject : null;
+            bool useInner = inwardCell && innerBorderGO != null;
+
+            if (useInner)
+            {
+                if (outline != null) outline.enabled = false;
+                if (hoverBorder != null)
+                {
+                    hoverBorder.hoverBorderGO = innerBorderGO;
+                    hoverBorder.hoverIndicatorUsesSeparateSelectionVisual = false;
+                    hoverBorder.isSelected = isSelected;
+                }
+                SetBorderThickness(innerBorderGO, w);
+                SetGalleryInnerBorderEdgeTint(innerBorderGO, borderTint);
+                innerBorderGO.SetActive(isSelected);
             }
             else
             {
-                if (isSelected) img.color = new Color(0.7f, 0.7f, 0.2f, 1f);
-                else img.color = Color.gray;
-
-                // Hide list indicators in grid mode
-                Transform selBar2 = btnGO.transform.Find("ListSelectionBar");
-                if (selBar2 != null) selBar2.gameObject.SetActive(false);
-                Transform hoverBar2 = btnGO.transform.Find("ListHoverBar");
-                if (hoverBar2 != null) hoverBar2.gameObject.SetActive(false);
-
-                float hoverW = EffectiveGridHoverBorderWidth();
-                float selW = EffectiveGridSelectedBorderWidth();
-                bool inward = EffectiveGridBorderInward();
-                float w = isSelected ? selW : hoverW;
-
-                // Inward border: use inside-edge GO (Outline only draws reliably outward on some Unity builds)
-                Transform innerBorderTr = btnGO.transform.Find("GridInnerBorder");
-                GameObject innerBorderGO = innerBorderTr != null ? innerBorderTr.gameObject : null;
-                bool useInner = inward && innerBorderGO != null;
-
-                if (useInner)
+                bool listOutlineInwardFallback = isListRow;
+                if (hoverBorder != null)
                 {
-                    if (outline != null) outline.enabled = false;
-                    if (hoverBorder != null)
-                    {
-                        hoverBorder.hoverBorderGO = innerBorderGO;
-                        hoverBorder.isSelected = isSelected;
-                    }
-                    SetBorderThickness(innerBorderGO, w);
-                    innerBorderGO.SetActive(isSelected);
+                    hoverBorder.hoverBorderGO = null;
+                    hoverBorder.hoverIndicatorUsesSeparateSelectionVisual = false;
+                    hoverBorder.isSelected = isSelected;
+                    hoverBorder.borderSize = w;
+                    hoverBorder.inward = listOutlineInwardFallback;
+                    hoverBorder.ApplyBorderSettings();
                 }
-                else
+                if (outline != null)
                 {
-                    if (hoverBorder != null)
-                    {
-                        // Ensure list-mode hover bar does not leak into grid mode.
-                        hoverBorder.hoverBorderGO = null;
-                        hoverBorder.isSelected = isSelected;
-                        hoverBorder.borderSize = w;
-                        hoverBorder.inward = false;
-                        hoverBorder.ApplyBorderSettings();
-                    }
-                    if (outline != null)
-                    {
-                        outline.effectColor = Color.yellow;
-                        if (outline.enabled != isSelected) outline.enabled = isSelected;
+                    outline.effectColor = borderTint;
+                    if (outline.enabled != isSelected) outline.enabled = isSelected;
+                    if (!listOutlineInwardFallback)
                         outline.effectDistance = new Vector2(w, -w);
-                    }
-                    if (innerBorderGO != null) innerBorderGO.SetActive(false);
                 }
+                if (innerBorderGO != null) innerBorderGO.SetActive(false);
             }
         }
 

@@ -66,6 +66,29 @@ namespace VPB
             catch { return false; }
         }
 
+        /// <summary>List + grid share border width config; inward edge strip uses same toggle as grid flush cells (list rows treated as flush).</summary>
+        private Color EffectiveGalleryGridBorderColor()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null) return VPBConfig.Instance.GetGalleryGridBorderColor();
+            }
+            catch { }
+            return new Color(1f, 1f, 0f, 1f);
+        }
+
+        private bool EffectiveGridBorderInwardForGalleryCell()
+        {
+            try
+            {
+                if (VPBConfig.Instance == null) return false;
+                if (!VPBConfig.Instance.GalleryGridBorderInwardWhenSquare) return false;
+                if (layoutMode == GalleryLayoutMode.List || settingsListViewActive) return true;
+                return EffectiveGridThumbnailPadding() <= 0.01f;
+            }
+            catch { return false; }
+        }
+
         /// <summary>
         /// Splits a search query into lowercase terms (whitespace separated), removing empties.
         /// </summary>

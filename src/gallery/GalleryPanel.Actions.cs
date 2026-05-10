@@ -1423,10 +1423,18 @@ namespace VPB
                     if (btn.name.StartsWith("FileButton_"))
                     {
                         var diag = btn.GetComponent<UIDraggableItem>();
-                        if (diag != null && diag.FileEntry != null)
+                        var rgvItem = btn.GetComponent<RecyclingGridItem>();
+                        FileEntry feForVisuals = null;
+                        try
                         {
-                            UpdateFileButtonVisuals(btn, diag.FileEntry);
+                            if (settingsListViewActive && rgvItem != null && currentFilteredFiles != null
+                                && rgvItem.index >= 0 && rgvItem.index < currentFilteredFiles.Count)
+                                feForVisuals = currentFilteredFiles[rgvItem.index];
+                            else if (diag != null) feForVisuals = diag.FileEntry;
                         }
+                        catch { feForVisuals = diag != null ? diag.FileEntry : null; }
+                        if (feForVisuals != null)
+                            UpdateFileButtonVisuals(btn, feForVisuals);
                     }
                     
                     var ratingHandler = btn.GetComponent<RatingHandler>();
@@ -1443,10 +1451,18 @@ namespace VPB
                     if (btn.name.StartsWith("FileButton_"))
                     {
                         var diag = btn.GetComponent<UIDraggableItem>();
-                        if (diag != null && diag.FileEntry != null)
+                        var rgvItem = btn.GetComponent<RecyclingGridItem>();
+                        FileEntry feForVisuals = null;
+                        try
                         {
-                            UpdateFileButtonVisuals(btn, diag.FileEntry);
+                            if (settingsListViewActive && rgvItem != null && currentFilteredFiles != null
+                                && rgvItem.index >= 0 && rgvItem.index < currentFilteredFiles.Count)
+                                feForVisuals = currentFilteredFiles[rgvItem.index];
+                            else if (diag != null) feForVisuals = diag.FileEntry;
                         }
+                        catch { feForVisuals = diag != null ? diag.FileEntry : null; }
+                        if (feForVisuals != null)
+                            UpdateFileButtonVisuals(btn, feForVisuals);
                     }
                     
                     var ratingHandler = btn.GetComponent<RatingHandler>();

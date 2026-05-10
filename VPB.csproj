@@ -431,6 +431,7 @@
     <Compile Include="src\gallery\QuickFilterSettings.cs" />
     <Compile Include="src\gallery\QuickFiltersUI.cs" />
     <Compile Include="src\gallery\UIColorPicker.cs" />
+    <Compile Include="src\gallery\VPBUiPickers.cs" />
     <Compile Include="src\gallery\GalleryPanel.HubCompat.cs" />
     <Compile Include="src\gallery\HubStubs.cs" />
     <Compile Include="src\RatingsManager.cs" />
