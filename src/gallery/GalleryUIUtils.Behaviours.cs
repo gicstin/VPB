@@ -436,67 +436,255 @@ namespace VPB
         /// <summary>List layout: hover uses <see cref="hoverBorderGO"/> only; selection is a separate Graphic.
         /// Exit always hides hover GO (pool reuse never gets PointerExit). Grid inward border keeps GO when selected.</summary>
         public bool hoverIndicatorUsesSeparateSelectionVisual = false;
-        // When set, show/hide this GO on hover instead of using the Outline component.
+        // When set, show/hide this GO on hover instead of using the rim / Outline.
         // Used in list mode to avoid the Outline filling the entire semi-transparent row.
         public GameObject hoverBorderGO;
 
-        private Outline outline;
+        private GameObject rimRoot;
+        private Image rimL;
+        private Image rimR;
+        private Image rimT;
+        private Image rimB;
+
+        /// <summary>True while pointer hovers so we combine with <see cref="isSelected"/> for rim visibility.</summary>
+        private bool hovering;
 
         public void ApplyBorderSettings()
         {
-            if (outline == null) return;
-            float s = borderSize;
-            if (s < 0f) s = 0f;
-            outline.effectDistance = inward ? new Vector2(-s, s) : new Vector2(s, -s);
-            outline.effectColor = hoverColor;
+            if (hoverBorderGO != null)
+            {
+                DestroyRimImmediate();
+                StripLegacyOutlineOffTargetGraphic();
+                return;
+            }
+
+            EnsureRim();
+            StripLegacyOutlineOffTargetGraphic();
+            RebuildRimLayout();
+            ApplyRimTint();
+            RefreshRimActive();
         }
 
         void Awake()
         {
             if (targetGraphic == null) targetGraphic = GetComponent<Graphic>();
-            if (targetGraphic != null)
+
+            var sel = GetComponent<Selectable>();
+            if (sel != null)
             {
-                outline = targetGraphic.gameObject.GetComponent<Outline>();
-                if (outline == null)
-                {
-                    outline = targetGraphic.gameObject.AddComponent<Outline>();
-                }
-                ApplyBorderSettings();
-                outline.enabled = false;
+                sel.transition = Selectable.Transition.None;
+                sel.navigation = new Navigation { mode = Navigation.Mode.None };
             }
+
+            if (hoverBorderGO == null)
+            {
+                EnsureRim();
+                StripLegacyOutlineOffTargetGraphic();
+                RebuildRimLayout();
+                ApplyRimTint();
+                RefreshRimActive();
+            }
+            else DestroyRimImmediate();
+        }
+
+        void OnDestroy()
+        {
+            DestroyRimImmediate();
         }
 
         void OnEnable()
         {
             if (hoverBorderGO != null)
             {
-                // List row: never mirror selection on hover bar (yellow bar owns selection).
                 if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
                 else hoverBorderGO.SetActive(isSelected);
+                return;
             }
-            else if (outline != null) outline.enabled = isSelected;
+            RefreshRimActive();
         }
 
         void OnDisable()
         {
             if (hoverBorderGO != null) hoverBorderGO.SetActive(false);
-            else if (outline != null) outline.enabled = false;
+            else if (rimRoot != null) rimRoot.SetActive(false);
+            hovering = false;
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (hoverBorderGO != null) hoverBorderGO.SetActive(true);
-            else if (outline != null) outline.enabled = true;
+            hovering = true;
+            if (hoverBorderGO != null)
+            {
+                hoverBorderGO.SetActive(true);
+                return;
+            }
+            RefreshRimActive();
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
+            hovering = false;
             if (hoverBorderGO != null)
             {
                 if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
                 else if (!isSelected) hoverBorderGO.SetActive(false);
+                return;
             }
-            else if (outline != null && !isSelected) outline.enabled = false;
+            RefreshRimActive();
+        }
+
+        private void RefreshRimActive()
+        {
+            if (hoverBorderGO != null) return;
+            if (rimRoot == null) return;
+            bool show = hovering || isSelected;
+            if (rimRoot.activeSelf != show) rimRoot.SetActive(show);
+        }
+
+        private void StripLegacyOutlineOffTargetGraphic()
+        {
+            if (targetGraphic == null) return;
+            try
+            {
+                Outline o = targetGraphic.GetComponent<Outline>();
+                if (o != null) UnityEngine.Object.Destroy(o);
+                if (gameObject != targetGraphic.gameObject)
+                {
+                    Outline o2 = gameObject.GetComponent<Outline>();
+                    if (o2 != null) UnityEngine.Object.Destroy(o2);
+                }
+            }
+            catch { }
+        }
+
+        private void DestroyRimImmediate()
+        {
+            if (rimRoot == null) return;
+            try { UnityEngine.Object.Destroy(rimRoot); }
+            finally
+            {
+                rimRoot = null;
+                rimL = rimR = rimT = rimB = null;
+            }
+        }
+
+        private Image CreateRimPiece(string name)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(rimRoot.transform, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.localScale = Vector3.one;
+            Image img = go.AddComponent<Image>();
+            img.color = hoverColor;
+            img.raycastTarget = false;
+            return img;
+        }
+
+        /// <summary>Place <see cref="rimRoot"/> rendered after backdrop so rims sit behind Text/Icon when possible.</summary>
+        private void InsertRimAfterTargetGraphic()
+        {
+            if (targetGraphic == null || rimRoot == null) return;
+            Transform tgfx = targetGraphic.transform;
+            if (tgfx.parent != transform) return;
+            int idx = Mathf.Clamp(tgfx.GetSiblingIndex() + 1, 0, transform.childCount);
+            rimRoot.transform.SetSiblingIndex(idx);
+        }
+
+        private void EnsureRim()
+        {
+            if (hoverBorderGO != null) return;
+            if (targetGraphic == null) return;
+
+            if (rimRoot != null)
+            {
+                InsertRimAfterTargetGraphic();
+                return;
+            }
+
+            rimRoot = new GameObject("HoverRim");
+            rimRoot.transform.SetParent(transform, false);
+            RectTransform rr = rimRoot.AddComponent<RectTransform>();
+            rr.anchorMin = Vector2.zero;
+            rr.anchorMax = Vector2.one;
+            rr.offsetMin = Vector2.zero;
+            rr.offsetMax = Vector2.zero;
+            rr.localScale = Vector3.one;
+
+            rimL = CreateRimPiece("L");
+            rimR = CreateRimPiece("R");
+            rimT = CreateRimPiece("T");
+            rimB = CreateRimPiece("B");
+
+            InsertRimAfterTargetGraphic();
+        }
+
+        private void RebuildRimLayout()
+        {
+            if (rimL == null || rimR == null || rimT == null || rimB == null) return;
+
+            float t = borderSize;
+            if (t < 1f) t = 1f;
+
+            // Match old Outline: outward = expand past rect, inward = shrink inside rect.
+            var prt = rimRoot.GetComponent<RectTransform>();
+            if (prt != null)
+            {
+                if (inward)
+                {
+                    prt.offsetMin = Vector2.one * t;
+                    prt.offsetMax = Vector2.one * (-t);
+                }
+                else
+                {
+                    prt.offsetMin = Vector2.one * (-t);
+                    prt.offsetMax = Vector2.one * t;
+                }
+            }
+
+            void layoutV(Image img, float anchorX, float pivotX, float posX)
+            {
+                RectTransform rt = img.rectTransform;
+                rt.anchorMin = new Vector2(anchorX, 0f);
+                rt.anchorMax = new Vector2(anchorX, 1f);
+                rt.pivot = new Vector2(pivotX, 0.5f);
+                rt.anchoredPosition = new Vector2(posX, 0f);
+                rt.sizeDelta = new Vector2(t, 0f);
+            }
+
+            void layoutH(Image img, float anchorY, float pivotY, float posY)
+            {
+                RectTransform rt = img.rectTransform;
+                rt.anchorMin = new Vector2(0f, anchorY);
+                rt.anchorMax = new Vector2(1f, anchorY);
+                rt.pivot = new Vector2(0.5f, pivotY);
+                rt.anchoredPosition = new Vector2(0f, posY);
+                rt.sizeDelta = new Vector2(0f, t);
+            }
+
+            layoutV(rimL, 0f, 0f, t * 0.5f);
+            layoutV(rimR, 1f, 1f, -t * 0.5f);
+            layoutH(rimB, 0f, 0f, t * 0.5f);
+            layoutH(rimT, 1f, 1f, -t * 0.5f);
+        }
+
+        private void ApplyRimTint()
+        {
+            if (rimL != null) rimL.color = hoverColor;
+            if (rimR != null) rimR.color = hoverColor;
+            if (rimT != null) rimT.color = hoverColor;
+            if (rimB != null) rimB.color = hoverColor;
+        }
+    }
+
+    /// <summary>
+    /// Re-applies <see cref="UI.ApplyGalleryPaneHoverPolicy"/> every frame so dynamic UI and Unity defaults
+    /// cannot bring back ColorTint hover fill.
+    /// </summary>
+    public sealed class GalleryPaneChromeEnforcer : MonoBehaviour
+    {
+        private void LateUpdate()
+        {
+            UI.ApplyGalleryPaneHoverPolicy(gameObject);
         }
     }
 

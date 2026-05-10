@@ -190,10 +190,7 @@ namespace VPB
                      }
                 };
 
-                UIHoverColor hover = handleGO.AddComponent<UIHoverColor>();
-                hover.targetText = t;
-                hover.normalColor = t.color;
-                hover.hoverColor = Color.green;
+                handleGO.AddComponent<UIHoverBorder>();
 
                 AddHoverDelegate(handleGO);
                 handleGO.SetActive(false);
@@ -265,10 +262,8 @@ namespace VPB
                      }
                 };
 
-                UIHoverColor hover = handleGO.AddComponent<UIHoverColor>();
-                hover.targetText = t;
-                hover.normalColor = t.color;
-                hover.hoverColor = Color.green;
+                // Border-only hover (no fill/text color change)
+                // UIHoverBorder already added above.
 
                 AddHoverDelegate(handleGO);
                 handleGO.SetActive(false);
@@ -327,11 +322,7 @@ namespace VPB
                  this.isResizing = isResizing;
             };
 
-            // Hover Effect
-            UIHoverColor hover = handleGO.AddComponent<UIHoverColor>();
-            hover.targetText = t;
-            hover.normalColor = t.color;
-            hover.hoverColor = Color.green;
+            // Border-only hover (UIHoverBorder already added)
             
             AddHoverDelegate(handleGO); // Ensure tracking works here too
         }

@@ -25,6 +25,79 @@ namespace VPB
         public static readonly Color PopupRowActiveBackdrop = new Color(0.22f, 0.26f, 0.32f, 0.78f);
         public static readonly Color PopupText = new Color(1f, 1f, 1f, 1f);
         public static readonly Color PopupMutedText = new Color(0.72f, 0.74f, 0.78f, 1f);
+
+        /// <summary>
+        /// Kills Unity <see cref="Selectable"/> ColorTint hover/press (the gray “fill” on neutral buttons).
+        /// Keeps <see cref="ColorBlock.disabledColor"/> so disabled chrome still dims.
+        /// </summary>
+        public static void NeutralizeSelectableColorTint(Selectable sel)
+        {
+            if (sel == null) return;
+            try
+            {
+                ColorBlock cb = sel.colors;
+                Color dis = cb.disabledColor;
+                cb.normalColor = Color.white;
+                cb.highlightedColor = Color.white;
+                cb.pressedColor = Color.white;
+                // Older Unity ColorBlock has no selectedColor (VaM stack).
+                cb.disabledColor = dis;
+                cb.colorMultiplier = 1f;
+                cb.fadeDuration = 0f;
+                sel.colors = cb;
+                sel.transition = Selectable.Transition.None;
+                sel.navigation = new Navigation { mode = Navigation.Mode.None };
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Gallery pane: no ColorTint fill on any <see cref="Selectable"/>; buttons get
+        /// <see cref="UIHoverBorder"/>. Run once at init and continuously via <see cref="GalleryPaneChromeEnforcer"/>
+        /// so tabs/redraws cannot restore default hover fill.
+        /// </summary>
+        public static void ApplyGalleryPaneHoverPolicy(GameObject root)
+        {
+            if (root == null) return;
+            try
+            {
+                Color border = new Color(1f, 1f, 0f, 1f);
+                try { if (VPBConfig.Instance != null) border = VPBConfig.Instance.GetGalleryGridBorderColor(); } catch { }
+
+                var sels = root.GetComponentsInChildren<Selectable>(true);
+                for (int i = 0; i < sels.Length; i++)
+                {
+                    var s = sels[i];
+                    if (s == null) continue;
+                    NeutralizeSelectableColorTint(s);
+                    if (s is Button)
+                    {
+                        var hb = s.GetComponent<UIHoverBorder>();
+                        if (hb == null) hb = s.gameObject.AddComponent<UIHoverBorder>();
+                        // Global default for buttons that don't override (file rows override per-row already)
+                        hb.hoverColor = border;
+                        hb.ApplyBorderSettings();
+                    }
+                }
+
+                // Also apply color to non-Button hover borders (resize handles, input fields, etc).
+                var hbs = root.GetComponentsInChildren<UIHoverBorder>(true);
+                for (int i = 0; i < hbs.Length; i++)
+                {
+                    var hb = hbs[i];
+                    if (hb == null) continue;
+                    hb.hoverColor = border;
+                    hb.ApplyBorderSettings();
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Obsolete name — use <see cref="ApplyGalleryPaneHoverPolicy"/>.</summary>
+        public static void EnforceBorderHoverForAllButtons(GameObject root)
+        {
+            ApplyGalleryPaneHoverPolicy(root);
+        }
         
         private static List<string> BuildSceneLoadUidAllowList(FileEntry entry, List<string> movedUids)
         {

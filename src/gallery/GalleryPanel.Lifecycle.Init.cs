@@ -2337,6 +2337,12 @@ namespace VPB
             SubscribeLocaleChanged();
             RefreshLocalizedUi();
 
+            // Aggressive: kill ColorTint on all Selectables + border on buttons; re-run every LateUpdate via enforcer
+            // so UI rebuilt after init cannot restore default hover fill.
+            UI.ApplyGalleryPaneHoverPolicy(backgroundBoxGO);
+            if (backgroundBoxGO.GetComponent<GalleryPaneChromeEnforcer>() == null)
+                backgroundBoxGO.AddComponent<GalleryPaneChromeEnforcer>();
+
             // Default lastAppliedPackageRefreshTime was DateTime.MinValue, so the first Show() always saw
             // pkgRefreshTime > lastApplied, set packagesChanged, cleared creator/category caches, and
             // UpdateLayout rebuilt them synchronously on the main thread (~seconds). Align to the current

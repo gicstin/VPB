@@ -1274,10 +1274,10 @@ namespace VPB
             Text clearText = clearBtn.GetComponentInChildren<Text>();
             clearText.color = new Color(0.6f, 0.6f, 0.6f);
 
-            UIHoverColor hover = clearBtn.AddComponent<UIHoverColor>();
-            hover.targetText = clearText;
-            hover.normalColor = clearText.color;
-            hover.hoverColor = Color.red;
+            // Border-only hover (avoid text color fill)
+            var clearHoverBorder = clearBtn.AddComponent<UIHoverBorder>();
+            clearHoverBorder.hoverColor = new Color(1f, 0.2f, 0.2f, 1f);
+            clearHoverBorder.borderSize = 2f;
 
             // ESC key handling to clear and refocus
             Button clearBtnComponent = clearBtn.GetComponent<Button>();
@@ -2118,7 +2118,6 @@ namespace VPB
             bool inwardCell = EffectiveGridBorderInwardForGalleryCell();
             Color borderTint = EffectiveGalleryGridBorderColor();
 
-            Outline outline = btnGO.GetComponent<Outline>();
             UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
             if (hoverBorder != null)
             {
@@ -2131,7 +2130,7 @@ namespace VPB
 
             if (useInner)
             {
-                if (outline != null) outline.enabled = false;
+                try { var oldO = btnGO.GetComponent<Outline>(); if (oldO != null) Destroy(oldO); } catch { }
                 if (hoverBorder != null)
                 {
                     hoverBorder.hoverBorderGO = innerBorderGO;
@@ -2153,13 +2152,6 @@ namespace VPB
                     hoverBorder.borderSize = w;
                     hoverBorder.inward = listOutlineInwardFallback;
                     hoverBorder.ApplyBorderSettings();
-                }
-                if (outline != null)
-                {
-                    outline.effectColor = borderTint;
-                    if (outline.enabled != isSelected) outline.enabled = isSelected;
-                    if (!listOutlineInwardFallback)
-                        outline.effectDistance = new Vector2(w, -w);
                 }
                 if (innerBorderGO != null) innerBorderGO.SetActive(false);
             }
