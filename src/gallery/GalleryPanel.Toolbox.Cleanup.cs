@@ -1164,8 +1164,8 @@ namespace VPB
 
             if (layoutMode != GalleryLayoutMode.List)
             {
-                layoutMode = GalleryLayoutMode.List;
-                try { UpdateLayout(); } catch { }
+                // Must use SetLayoutMode so RecyclingGridView config switches to list row mode.
+                try { SetLayoutMode(GalleryLayoutMode.List, persistConfig: false, keepInternalSettingsMode: true); } catch { }
             }
         }
 
@@ -1176,8 +1176,7 @@ namespace VPB
             cleanupTemporaryLayoutSessionActive = false;
             if (layoutMode != cleanupTemporaryPrevLayoutMode)
             {
-                layoutMode = cleanupTemporaryPrevLayoutMode;
-                try { UpdateLayout(); } catch { }
+                try { SetLayoutMode(cleanupTemporaryPrevLayoutMode, persistConfig: false, keepInternalSettingsMode: true); } catch { }
             }
         }
 

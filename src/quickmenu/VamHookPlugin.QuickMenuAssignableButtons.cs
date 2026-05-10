@@ -1679,7 +1679,7 @@ namespace VPB
             };
             var labels = new List<string>
             {
-                VPBTranslation.T("hook.qmbutton.random_current", "Random from current"),
+                VPBTranslation.T("hook.qmbutton.random_current", "Random: Gallery Filter"),
                 VPBTranslation.T("hook.qmbutton.random_scenes", "Random: Scenes"),
                 VPBTranslation.T("hook.qmbutton.random_subscenes", "Random: SubScenes"),
                 VPBTranslation.T("hook.qmbutton.random_clothing", "Random: Clothing"),
@@ -1700,7 +1700,7 @@ namespace VPB
                 m_QmIconHexSkin ?? m_QmIconRandom,
             };
 
-            float w = 240f;
+            float w = 300f;
             float h = 40f;
             float y = 20f;
             float gap = 42f;
@@ -1741,7 +1741,7 @@ namespace VPB
             m_QuickMenuAssignRandomPopupButtons.Add(cancelBtn);
 
             float totalH = 20f + (n + 1) * gap + 10f;
-            m_QuickMenuAssignRandomPopupRT.sizeDelta = new Vector2(260f, totalH);
+            m_QuickMenuAssignRandomPopupRT.sizeDelta = new Vector2(w + 20f, totalH);
             QuickMenuUpdateAssignRandomPopupVisibility();
         }
 
@@ -1785,7 +1785,7 @@ namespace VPB
                 m_QmIconCategoryPlugins,
             };
 
-            float w = 230f;
+            float w = 260f;
             float h = 40f;
             float y = 20f;
             float gap = 42f;
@@ -1827,7 +1827,7 @@ namespace VPB
             m_QuickMenuAssignCategoryPopupButtons.Add(cancelBtn);
 
             float totalH = 20f + (n + 1) * gap + 10f;
-            m_QuickMenuAssignCategoryPopupRT.sizeDelta = new Vector2(250f, totalH);
+            m_QuickMenuAssignCategoryPopupRT.sizeDelta = new Vector2(w + 20f, totalH);
             QuickMenuUpdateAssignCategoryPopupVisibility();
         }
 
@@ -2271,6 +2271,12 @@ namespace VPB
             public void OnPointerEnter(PointerEventData eventData)
             {
                 if (owner == null) return;
+                // Only one expandable submenu open at a time
+                owner.m_QmAssignRandomPinned = false;
+                owner.m_QmAssignRandomHoverMain = false;
+                owner.m_QmAssignRandomHoverPopup = false;
+                owner.QuickMenuCancelAssignRandomHide();
+                owner.QuickMenuUpdateAssignRandomPopupVisibility();
                 owner.m_QmAssignCategoryPinned = true;
                 owner.m_QmAssignCategoryHoverMain = true;
                 owner.QuickMenuCancelAssignCategoryHide();
@@ -2306,6 +2312,12 @@ namespace VPB
             public void OnPointerEnter(PointerEventData eventData)
             {
                 if (owner == null) return;
+                // Only one expandable submenu open at a time
+                owner.m_QmAssignCategoryPinned = false;
+                owner.m_QmAssignCategoryHoverMain = false;
+                owner.m_QmAssignCategoryHoverPopup = false;
+                owner.QuickMenuCancelAssignCategoryHide();
+                owner.QuickMenuUpdateAssignCategoryPopupVisibility();
                 owner.m_QmAssignRandomPinned = true;
                 owner.m_QmAssignRandomHoverMain = true;
                 owner.QuickMenuCancelAssignRandomHide();

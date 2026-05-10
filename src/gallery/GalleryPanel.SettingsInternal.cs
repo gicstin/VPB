@@ -848,8 +848,11 @@ namespace VPB
             catch { }
             settingsListViewActive = true;
             EnsureInternalSettingsSession();
-            // Settings list view: always minimum row height (no +/- scaling).
-            internalSettingsListRowHeightSession = 80f;
+            // Settings list view: always minimum row height (no +/- scaling),
+            // but still respect InnerPaneScale so text/controls remain readable.
+            float paneScale = 1f;
+            try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
+            internalSettingsListRowHeightSession = 80f * Mathf.Clamp(paneScale, 0.01f, 100f);
 
             if (layoutMode != GalleryLayoutMode.List)
                 SetLayoutMode(GalleryLayoutMode.List, false, true);
@@ -1016,18 +1019,22 @@ namespace VPB
             b.transition = Selectable.Transition.None;
             b.navigation = new Navigation { mode = Navigation.Mode.None };
 
+            float paneScale = 1f;
+            try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
+            paneScale = Mathf.Clamp(paneScale, 0.01f, 100f);
+
             LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = width;
-            le.minWidth = width;
-            le.preferredHeight = 32f;
-            le.minHeight = 32f;
+            le.preferredWidth = width * paneScale;
+            le.minWidth = width * paneScale;
+            le.preferredHeight = 32f * paneScale;
+            le.minHeight = 32f * paneScale;
             le.flexibleWidth = 0f;
 
             GameObject tgo = new GameObject("Text");
             tgo.transform.SetParent(go.transform, false);
             Text t = tgo.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 18;
+            t.fontSize = Mathf.Max(11, Mathf.RoundToInt(18f * paneScale));
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleCenter;
             t.text = label;
@@ -1042,10 +1049,33 @@ namespace VPB
 
             AddTooltipPlain(btnGO, def.Tooltip ?? def.Label ?? "");
 
+            float paneScale = 1f;
+            try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
+            paneScale = Mathf.Clamp(paneScale, 0.01f, 100f);
+
             Transform listRowTr = btnGO.transform.Find("ListRow");
             if (listRowTr == null) return;
             Transform detailsTr = listRowTr.Find("Details");
             if (detailsTr == null) return;
+
+            // Scale row label text ("ListRow/Name") for settings rows; base list UI scales elsewhere,
+            // but settings rows rebuild controls and were skipping label font scaling.
+            try
+            {
+                Transform nameTr = listRowTr.Find("Name");
+                Text nameText = nameTr != null ? nameTr.GetComponent<Text>() : null;
+                if (nameText != null)
+                {
+                    nameText.resizeTextForBestFit = false;
+                    nameText.fontSize = Mathf.Max(12, Mathf.RoundToInt(28f * paneScale));
+                }
+                LayoutElement nameLe = nameTr != null ? nameTr.GetComponent<LayoutElement>() : null;
+                if (nameLe != null)
+                {
+                    nameLe.minHeight = 32f * paneScale;
+                }
+            }
+            catch { }
 
             for (int i = 0; i < detailsTr.childCount; i++)
             {
@@ -1064,10 +1094,10 @@ namespace VPB
             hlg.childControlWidth = true;
             hlg.childForceExpandHeight = false;
             hlg.childForceExpandWidth = false;
-            hlg.spacing = 6f;
+            hlg.spacing = 6f * paneScale;
             LayoutElement cle = controls.AddComponent<LayoutElement>();
             cle.flexibleWidth = 1f;
-            cle.minHeight = 32f;
+            cle.minHeight = 32f * paneScale;
 
             if (def.ControlType == InternalSettingControlType.Toggle && def.GetBool != null && def.SetBool != null)
             {
@@ -1119,10 +1149,10 @@ namespace VPB
                 GameObject swatch = new GameObject("SettingsBorderColorSwatch");
                 swatch.transform.SetParent(controls.transform, false);
                 LayoutElement swle = swatch.AddComponent<LayoutElement>();
-                swle.preferredWidth = 72f;
-                swle.minWidth = 48f;
-                swle.preferredHeight = 28f;
-                swle.minHeight = 28f;
+                swle.preferredWidth = 72f * paneScale;
+                swle.minWidth = 48f * paneScale;
+                swle.preferredHeight = 28f * paneScale;
+                swle.minHeight = 28f * paneScale;
                 swle.flexibleWidth = 0f;
                 Image swImg = swatch.AddComponent<Image>();
                 swImg.color = def.GetColor();
@@ -1159,10 +1189,10 @@ namespace VPB
                 GameObject sliderHost = new GameObject("SettingsSliderHost");
                 sliderHost.transform.SetParent(controls.transform, false);
                 LayoutElement sle = sliderHost.AddComponent<LayoutElement>();
-                sle.preferredWidth = 320f;
-                sle.minWidth = 120f;
-                sle.preferredHeight = 32f;
-                sle.minHeight = 32f;
+                sle.preferredWidth = 320f * paneScale;
+                sle.minWidth = 120f * paneScale;
+                sle.preferredHeight = 32f * paneScale;
+                sle.minHeight = 32f * paneScale;
                 sle.flexibleWidth = 1f;
 
                 Slider slider = sliderHost.AddComponent<Slider>();
@@ -1201,17 +1231,17 @@ namespace VPB
                 var handleImg = handle.AddComponent<Image>();
                 handleImg.color = Color.white;
                 RectTransform handleRT = handle.GetComponent<RectTransform>();
-                handleRT.anchorMin = new Vector2(0, 0); handleRT.anchorMax = new Vector2(0, 1); handleRT.sizeDelta = new Vector2(20, 0);
+                handleRT.anchorMin = new Vector2(0, 0); handleRT.anchorMax = new Vector2(0, 1); handleRT.sizeDelta = new Vector2(20f * paneScale, 0);
                 slider.handleRect = handleRT;
                 slider.targetGraphic = handleImg;
 
                 GameObject inputGO = new GameObject("SettingsValueInput");
                 inputGO.transform.SetParent(controls.transform, false);
                 LayoutElement ile = inputGO.AddComponent<LayoutElement>();
-                ile.preferredWidth = 78f;
-                ile.minWidth = 78f;
-                ile.preferredHeight = 32f;
-                ile.minHeight = 32f;
+                ile.preferredWidth = 78f * paneScale;
+                ile.minWidth = 78f * paneScale;
+                ile.preferredHeight = 32f * paneScale;
+                ile.minHeight = 32f * paneScale;
                 Image inputBg = inputGO.AddComponent<Image>();
                 inputBg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
                 InputField input = inputGO.AddComponent<InputField>();
@@ -1222,7 +1252,7 @@ namespace VPB
                 tgo.transform.SetParent(inputGO.transform, false);
                 Text it = tgo.AddComponent<Text>();
                 it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                it.fontSize = 18;
+                it.fontSize = Mathf.Max(11, Mathf.RoundToInt(18f * paneScale));
                 it.color = Color.white;
                 it.alignment = TextAnchor.MiddleCenter;
                 RectTransform itRT = tgo.GetComponent<RectTransform>();
@@ -1259,18 +1289,18 @@ namespace VPB
             {
                 if (string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
                 {
-                    cle.minHeight = 40f;
+                    cle.minHeight = 40f * paneScale;
                     GameObject btnRow = new GameObject("SettingsTextAreaButtons");
                     btnRow.transform.SetParent(controls.transform, false);
                     HorizontalLayoutGroup bh = btnRow.AddComponent<HorizontalLayoutGroup>();
                     bh.childAlignment = TextAnchor.MiddleRight;
-                    bh.spacing = 6f;
+                    bh.spacing = 6f * paneScale;
                     bh.childControlWidth = true;
                     bh.childControlHeight = true;
                     bh.childForceExpandWidth = false;
                     bh.childForceExpandHeight = false;
                     LayoutElement ble = btnRow.AddComponent<LayoutElement>();
-                    ble.minHeight = 32f;
+                    ble.minHeight = 32f * paneScale;
 
                     CreateMiniButton(btnRow.transform, "EDIT…", 96f, new Color(0.25f, 0.5f, 0.8f, 1f), () =>
                     {
@@ -1279,15 +1309,15 @@ namespace VPB
                     return;
                 }
 
-                cle.minHeight = 96f;
+                cle.minHeight = 96f * paneScale;
                 GameObject taHost = new GameObject("SettingsTextAreaHost");
                 taHost.transform.SetParent(controls.transform, false);
                 LayoutElement tle = taHost.AddComponent<LayoutElement>();
                 tle.flexibleWidth = 1f;
-                tle.preferredWidth = 320f;
-                tle.minWidth = 120f;
-                tle.preferredHeight = 72f;
-                tle.minHeight = 72f;
+                tle.preferredWidth = 320f * paneScale;
+                tle.minWidth = 120f * paneScale;
+                tle.preferredHeight = 72f * paneScale;
+                tle.minHeight = 72f * paneScale;
 
                 Image taBg = taHost.AddComponent<Image>();
                 taBg.color = new Color(0.16f, 0.16f, 0.18f, 1f);
@@ -1310,7 +1340,7 @@ namespace VPB
                 textGo.transform.SetParent(taHost.transform, false);
                 Text taTxt = textGo.AddComponent<Text>();
                 taTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                taTxt.fontSize = 16;
+                taTxt.fontSize = Mathf.Max(11, Mathf.RoundToInt(16f * paneScale));
                 taTxt.color = new Color(0.95f, 0.95f, 0.97f, 1f);
                 taTxt.alignment = TextAnchor.UpperLeft;
                 taTxt.supportRichText = false;
@@ -1319,8 +1349,8 @@ namespace VPB
                 RectTransform taTxtRt = textGo.GetComponent<RectTransform>();
                 taTxtRt.anchorMin = Vector2.zero;
                 taTxtRt.anchorMax = Vector2.one;
-                taTxtRt.offsetMin = new Vector2(6, 6);
-                taTxtRt.offsetMax = new Vector2(-6, -6);
+                taTxtRt.offsetMin = new Vector2(6f * paneScale, 6f * paneScale);
+                taTxtRt.offsetMax = new Vector2(-6f * paneScale, -6f * paneScale);
                 inf.textComponent = taTxt;
                 inf.text = def.GetString() ?? "";
 
