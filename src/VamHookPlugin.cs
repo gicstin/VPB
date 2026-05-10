@@ -1674,6 +1674,7 @@ namespace VPB
                 m_QmIconCleanup = UI.LoadIconSprite("vpb_icons/cleanup.png", tint);
                 m_QmIconReplace = UI.LoadIconSprite("vpb_icons/gallery_replace.png", tint);
                 m_QmIconAdd     = UI.LoadIconSprite("vpb_icons/gallery_add.png", tint);
+                m_QmIconTargetAtom = UI.LoadIconSprite("vpb_icons/gallery_target.png", tint);
                 m_QmIconCompressCache = UI.LoadIconSprite("vpb_icons/cache_texture.png", tint);
                 m_QmIconAutoHideOff = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", tint);
                 m_QmIconAutoHideOn  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  tint);
@@ -1768,6 +1769,8 @@ namespace VPB
                     var drop = go.AddComponent<QuickMenuAssignDropTargetHandler>();
                     drop.owner = this;
                     drop.slotIdx = idxCopy;
+
+                    QuickMenuAttachTargetAtomDragSource(go, idxCopy);
 
                     btn.onClick.AddListener(() =>
                     {

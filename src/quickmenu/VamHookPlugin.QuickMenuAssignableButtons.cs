@@ -53,6 +53,7 @@ namespace VPB
             OpenCategoryAll,
             CoreSettingsButton,
             CorePageButton,
+            TargetAtom,
         }
 
         private const int QuickMenuGridCols = 4;
@@ -95,6 +96,7 @@ namespace VPB
         private Text m_QmTooltipText;
         private Image m_QmTooltipBackdrop;
         private string m_QmTooltipCurrent;
+        private int m_QmTooltipHoverSlotIdx = -1;
 
         private float m_QmFpsLastLabelUpdateTime = -999f;
         private string m_QmFpsCachedLabel = "";
@@ -145,6 +147,7 @@ namespace VPB
         private Sprite m_QmIconHexSubScene;
         private Sprite m_QmIconHexHair;
         private Sprite m_QmIconHexClothing;
+        private Sprite m_QmIconTargetAtom;
 
         private GameObject m_QuickMenuAssignRandomPopupRoot;
         private RectTransform m_QuickMenuAssignRandomPopupRT;
@@ -399,6 +402,12 @@ namespace VPB
                 case QuickMenuAssignableAction.OpenCategoryAll: return VPBTranslation.T("hook.qmbutton.open_category_all", "Open Category: All");
                 case QuickMenuAssignableAction.CoreSettingsButton: return VPBTranslation.T("hook.qmbutton.core_settings", "Core: Settings");
                 case QuickMenuAssignableAction.CorePageButton: return VPBTranslation.T("hook.qmbutton.core_page", "Core: Page");
+                case QuickMenuAssignableAction.TargetAtom:
+                {
+                    string cur = QuickMenuGetCurrentTargetPersonLabel();
+                    if (string.IsNullOrEmpty(cur)) cur = VPBTranslation.T("hook.qmtarget.none", "None");
+                    return VPBTranslation.T("hook.qmbutton.target_atom_tip", "Target Atom\nLeft Click: cycle person\nDrag: point at person to target\n\nCurrent: ") + cur;
+                }
                 case QuickMenuAssignableAction.None:
                 default:
                     if (idx >= 0 && idx <= 3)
@@ -516,6 +525,7 @@ namespace VPB
                 case QuickMenuAssignableAction.OpenCategoryAppearance: return "open_category_appearance";
                 case QuickMenuAssignableAction.OpenCategoryPlugins: return "open_category_plugins";
                 case QuickMenuAssignableAction.OpenCategoryAll: return "open_category_all";
+                case QuickMenuAssignableAction.TargetAtom: return "target_atom";
                 case QuickMenuAssignableAction.None:
                 default:
                     return "";
@@ -558,6 +568,7 @@ namespace VPB
                 case "open_category_appearance": return QuickMenuAssignableAction.OpenCategoryAppearance;
                 case "open_category_plugins": return QuickMenuAssignableAction.OpenCategoryPlugins;
                 case "open_category_all": return QuickMenuAssignableAction.OpenCategoryAll;
+                case "target_atom": return QuickMenuAssignableAction.TargetAtom;
                 default: return QuickMenuAssignableAction.None;
             }
         }
@@ -717,6 +728,7 @@ namespace VPB
                 if (owner == null) return;
                 try
                 {
+                    owner.m_QmTooltipHoverSlotIdx = slotIdx;
                     _msg = owner.QuickMenuGetTooltipForSlot(slotIdx);
                     if (!string.IsNullOrEmpty(_msg)) owner.QuickMenuSetTooltip(_msg);
                 }
@@ -728,6 +740,7 @@ namespace VPB
                 if (owner == null) return;
                 try
                 {
+                    if (owner.m_QmTooltipHoverSlotIdx == slotIdx) owner.m_QmTooltipHoverSlotIdx = -1;
                     owner.QuickMenuClearTooltip(_msg);
                 }
                 catch { }
@@ -1117,6 +1130,9 @@ namespace VPB
                 case QuickMenuAssignableAction.OpenCategoryAll:
                     icon = m_QmIconCategoryAll ?? m_QmIconOpenCategory;
                     break;
+                case QuickMenuAssignableAction.TargetAtom:
+                    icon = m_QmIconTargetAtom;
+                    break;
                 case QuickMenuAssignableAction.None:
                 default:
                     if (m_QuickMenuEditMode) icon = m_QmIconAssignEmpty;
@@ -1309,6 +1325,11 @@ namespace VPB
                 case QuickMenuAssignableAction.OpenCategoryAppearance: QuickMenuOpenGalleryCategory("Appearance"); break;
                 case QuickMenuAssignableAction.OpenCategoryPlugins: QuickMenuOpenGalleryCategory("Plugins"); break;
                 case QuickMenuAssignableAction.OpenCategoryAll: QuickMenuOpenGalleryCategory("All"); break;
+                case QuickMenuAssignableAction.TargetAtom:
+                {
+                    QuickMenuCyclePersonTarget(+1);
+                    break;
+                }
                 case QuickMenuAssignableAction.None:
                 default:
                     break;
@@ -1533,6 +1554,7 @@ namespace VPB
                 QuickMenuAssignableAction.Redo,
                 QuickMenuAssignableAction.Hub,
                 QuickMenuAssignableAction.Cleanup,
+                QuickMenuAssignableAction.TargetAtom,
                 QuickMenuAssignableAction.ReplaceAddToggle,
                 QuickMenuAssignableAction.CompressCache,
                 QuickMenuAssignableAction.AutoHideGallery,
@@ -1553,6 +1575,7 @@ namespace VPB
                 VPBTranslation.T("hook.qmbutton.redo", "Redo"),
                 VPBTranslation.T("hook.qmbutton.hub", "Hub"),
                 VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup"),
+                VPBTranslation.T("hook.qmbutton.target_atom", "Target Atom"),
                 VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add"),
                 VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache"),
                 VPBTranslation.T("hook.qmbutton.autohide", "Auto-Hide"),
@@ -1967,8 +1990,208 @@ namespace VPB
                 case QuickMenuAssignableAction.OpenCategoryPlugins: return m_QmIconCategoryPlugins ?? m_QmIconOpenCategory;
                 case QuickMenuAssignableAction.CoreSettingsButton: return m_QmIconEditPlus ?? m_QmIconEditOff;
                 case QuickMenuAssignableAction.CorePageButton: return (m_QmIconPages != null && m_QmIconPages.Length > 0) ? m_QmIconPages[0] : m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.TargetAtom: return m_QmIconTargetAtom ?? m_QmIconAssignEmpty;
                 default: return m_QmIconAssignEmpty;
             }
+        }
+
+        private static bool QuickMenuTryGetPersonIsMale(Atom person, out bool isMale)
+        {
+            isMale = false;
+            if (person == null) return false;
+            try
+            {
+                // Prefer DAZCharacter name heuristic (used elsewhere in VPB).
+                if (person.type == "Person")
+                {
+                    isMale = VPB.src.util.AtomGenderUtils.IsMale(person);
+                    return true;
+                }
+                return false;
+            }
+            catch { return false; }
+        }
+
+        private static string QuickMenuFormatPersonLabel(Atom person)
+        {
+            if (person == null) return "";
+            string name = "";
+            try { name = person.name; } catch { name = ""; }
+            if (string.IsNullOrEmpty(name))
+            {
+                try { name = person.uid; } catch { name = ""; }
+            }
+
+            bool isMale;
+            if (QuickMenuTryGetPersonIsMale(person, out isMale))
+                return (isMale ? "Male: " : "Female: ") + name;
+            return "Person: " + name;
+        }
+
+        private string QuickMenuGetCurrentTargetPersonLabel()
+        {
+            var p = QuickMenuGetTargetPanel();
+            if (p == null) return "";
+            try
+            {
+                Atom a = p.SelectedTargetAtom;
+                if (a == null) return "";
+                if (!SceneUtils.IsPersonLikeAtom(a)) return "";
+                return QuickMenuFormatPersonLabel(a);
+            }
+            catch { return ""; }
+        }
+
+        private void QuickMenuCyclePersonTarget(int delta)
+        {
+            if (delta == 0) return;
+            var p = QuickMenuGetTargetPanel();
+            if (p == null) return;
+
+            List<Atom> persons = null;
+            try
+            {
+                persons = new List<Atom>();
+                var atoms = SuperController.singleton != null ? SuperController.singleton.GetAtoms() : null;
+                if (atoms != null)
+                {
+                    for (int i = 0; i < atoms.Count; i++)
+                    {
+                        var a = atoms[i];
+                        if (a == null) continue;
+                        try { if (SceneUtils.IsPersonLikeAtom(a)) persons.Add(a); } catch { }
+                    }
+                }
+            }
+            catch { persons = null; }
+
+            if (persons == null || persons.Count == 0) return;
+
+            string curUid = null;
+            try { curUid = p.QuickMenu_GetSelectedTargetPersonUid(); } catch { curUid = null; }
+
+            int curIdx = -1;
+            if (!string.IsNullOrEmpty(curUid))
+            {
+                for (int i = 0; i < persons.Count; i++)
+                {
+                    Atom a = persons[i];
+                    if (a == null) continue;
+                    try { if (a.uid == curUid) { curIdx = i; break; } } catch { }
+                }
+            }
+
+            int nextIdx;
+            if (curIdx < 0) nextIdx = 0;
+            else
+            {
+                int n = persons.Count;
+                nextIdx = ((curIdx + delta) % n + n) % n;
+            }
+
+            Atom next = persons[nextIdx];
+            if (next == null) return;
+            try { p.QuickMenu_SetSelectedTargetPersonUid(next.uid); } catch { }
+
+            // If user still hovering TargetAtom slot, refresh tooltip text immediately.
+            try
+            {
+                int hoverIdx = m_QmTooltipHoverSlotIdx;
+                if (hoverIdx >= 0 && hoverIdx < QuickMenuGridSlotCount && QuickMenuGetSlotAction(hoverIdx) == QuickMenuAssignableAction.TargetAtom)
+                    QuickMenuSetTooltip(QuickMenuGetTooltipForSlot(hoverIdx));
+            }
+            catch { }
+        }
+
+        private void QuickMenuAttachTargetAtomDragSource(GameObject slotButtonGO, int slotIdx)
+        {
+            if (slotButtonGO == null) return;
+            var h = slotButtonGO.GetComponent<QuickMenuTargetAtomDragSourceHandler>();
+            if (h == null) h = slotButtonGO.AddComponent<QuickMenuTargetAtomDragSourceHandler>();
+            h.owner = this;
+            h.slotIdx = slotIdx;
+        }
+
+        private GameObject m_QmTargetAtomDragGlyphGO;
+        private SpriteRenderer m_QmTargetAtomDragGlyphRenderer;
+        private Atom m_QmTargetAtomDragHoverAtom;
+        private Camera m_QmTargetAtomDragCam;
+
+        private void QuickMenuTargetAtomGlyphDestroy()
+        {
+            try { if (m_QmTargetAtomDragGlyphGO != null) Destroy(m_QmTargetAtomDragGlyphGO); } catch { }
+            m_QmTargetAtomDragGlyphGO = null;
+            m_QmTargetAtomDragGlyphRenderer = null;
+            m_QmTargetAtomDragHoverAtom = null;
+            m_QmTargetAtomDragCam = null;
+        }
+
+        private void QuickMenuTargetAtomGlyphEnsure()
+        {
+            if (m_QmTargetAtomDragGlyphGO != null && m_QmTargetAtomDragGlyphRenderer != null) return;
+
+            QuickMenuTargetAtomGlyphDestroy();
+
+            var go = new GameObject("VPB_QM_TargetAtomGlyph");
+            go.hideFlags = HideFlags.HideAndDontSave;
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = m_QmIconTargetAtom;
+            sr.color = new Color(1f, 0f, 0f, 0.9f);
+            sr.sortingOrder = 9999;
+            go.transform.localScale = Vector3.one * 0.12f;
+            m_QmTargetAtomDragGlyphGO = go;
+            m_QmTargetAtomDragGlyphRenderer = sr;
+        }
+
+        private static Color QuickMenuTargetAtomColorForPerson(Atom personOrNull)
+        {
+            if (personOrNull == null) return new Color(1f, 0f, 0f, 0.9f); // red
+            bool isMale;
+            if (QuickMenuTryGetPersonIsMale(personOrNull, out isMale))
+            {
+                if (isMale) return new Color(0.2f, 0.5f, 1f, 0.9f);  // blue
+                return new Color(1f, 0.3f, 0.7f, 0.9f);               // pink
+            }
+            return new Color(1f, 0f, 0f, 0.9f); // red (unknown)
+        }
+
+        private void QuickMenuTargetAtomDragUpdate(PointerEventData eventData)
+        {
+            if (eventData == null) return;
+            if (m_QmTargetAtomDragGlyphGO == null || m_QmTargetAtomDragGlyphRenderer == null) return;
+
+            Camera cam = m_QmTargetAtomDragCam;
+            if (cam == null) try { cam = m_QuickMenuCanvas != null ? m_QuickMenuCanvas.worldCamera : null; } catch { cam = null; }
+            if (cam == null) cam = eventData.pressEventCamera;
+            if (cam == null) cam = eventData.enterEventCamera;
+            if (cam == null) cam = Camera.main;
+            if (cam == null) return;
+
+            string hitMsg;
+            RaycastHit hit = default(RaycastHit);
+            Atom atom = null;
+            try { atom = SceneUtils.RaycastAtom(eventData.position, cam, out hitMsg, out hit); } catch { atom = null; }
+            if (atom != null && !SceneUtils.IsPersonLikeAtom(atom)) atom = null;
+            m_QmTargetAtomDragHoverAtom = atom;
+
+            Ray ray = cam.ScreenPointToRay(eventData.position);
+            Vector3 pos = (hit.collider != null) ? hit.point : ray.GetPoint(1.4f);
+            m_QmTargetAtomDragGlyphGO.transform.position = pos;
+
+            Vector3 look = pos - cam.transform.position;
+            if (look.sqrMagnitude > 0.0001f)
+                m_QmTargetAtomDragGlyphGO.transform.rotation = Quaternion.LookRotation(look.normalized, Vector3.up);
+
+            m_QmTargetAtomDragGlyphRenderer.color = QuickMenuTargetAtomColorForPerson(atom);
+        }
+
+        private void QuickMenuTargetAtomDragCommit()
+        {
+            var p = QuickMenuGetTargetPanel();
+            if (p == null) return;
+            Atom atom = m_QmTargetAtomDragHoverAtom;
+            if (atom == null) return;
+            try { p.QuickMenu_SetSelectedTargetPersonUid(atom.uid); } catch { }
         }
 
         private void QuickMenuRebuildSavePopupButtons(GalleryPanel panel)
@@ -2169,6 +2392,61 @@ namespace VPB
                 if (owner == null) return;
                 owner.QuickMenuTryAssignDraggedActionToSlot(slotIdx);
                 owner.QuickMenuSetDropTargetHighlight(slotIdx, false);
+            }
+        }
+
+        private class QuickMenuTargetAtomDragSourceHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+        {
+            public VamHookPlugin owner;
+            public int slotIdx;
+            private string _lastTooltip;
+
+            public void OnBeginDrag(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                if (owner.m_QuickMenuEditMode) return;
+                if (slotIdx < 0 || slotIdx >= QuickMenuGridSlotCount) return;
+                var a = owner.QuickMenuGetSlotAction(slotIdx);
+                if (a != QuickMenuAssignableAction.TargetAtom) return;
+
+                owner.m_QmTargetAtomDragCam = eventData != null ? (eventData.pressEventCamera ?? Camera.main) : Camera.main;
+                owner.QuickMenuTargetAtomGlyphEnsure();
+                owner.QuickMenuTargetAtomDragUpdate(eventData);
+                _lastTooltip = null;
+            }
+
+            public void OnDrag(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                if (owner.m_QmTargetAtomDragGlyphGO == null) return;
+                owner.QuickMenuTargetAtomDragUpdate(eventData);
+
+                Atom a = owner.m_QmTargetAtomDragHoverAtom;
+                string msg;
+                if (a != null)
+                    msg = "Release to select " + QuickMenuFormatPersonLabel(a);
+                else
+                    msg = VPBTranslation.T("hook.qmbutton.target_atom_drag", "Drag over Person. Release to select.");
+
+                if (_lastTooltip != msg)
+                {
+                    _lastTooltip = msg;
+                    owner.QuickMenuSetTooltip(msg);
+                }
+            }
+
+            public void OnEndDrag(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                if (owner.m_QmTargetAtomDragGlyphGO != null)
+                {
+                    owner.QuickMenuTargetAtomDragUpdate(eventData);
+                    owner.QuickMenuTargetAtomDragCommit();
+                }
+                owner.QuickMenuTargetAtomGlyphDestroy();
+                if (!string.IsNullOrEmpty(_lastTooltip))
+                    owner.QuickMenuClearTooltip(_lastTooltip);
+                _lastTooltip = null;
             }
         }
     }
