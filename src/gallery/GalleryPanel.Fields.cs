@@ -1060,6 +1060,9 @@ namespace VPB
         private HashSet<string> selectedFilePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private string selectionAnchorPath = null;
         private string selectionAnchorIdentityKey = null;
+        private float keyboardNavigationNextRepeatRealtime = 0f;
+        private const float KeyboardNavigationInitialRepeatDelay = 0.32f;
+        private const float KeyboardNavigationRepeatInterval = 0.07f;
         private bool lastHistoryQueryFailed = false;
         private string lastHistoryQueryRejectReason = null;
         private bool lastHistoryQueryHadNameFilter = false;

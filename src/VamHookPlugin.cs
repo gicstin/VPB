@@ -1659,7 +1659,15 @@ namespace VPB
                 m_QmIconEditOff  = UI.LoadIconSprite("vpb_icons/settings_off.png", tint);
                 m_QmIconAssignEmpty = UI.LoadIconSprite("vpb_icons/button_placeholder.png", tint);
                 m_QmIconSave   = UI.LoadIconSprite("vpb_icons/gallery_save.png", tint);
-                m_QmIconRandom = UI.LoadIconSprite("vpb_icons/random.png", tint);
+                // Random icon: dice (only action using dice icons).
+                m_QmIconRandom = UI.LoadIconSprite("vpb_icons/dice_1.png", tint) ?? UI.LoadIconSprite("vpb_icons/random.png", tint);
+                m_QmIconHexAppearance = UI.LoadIconSprite("vpb_icons/hexagon_a.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexPose = UI.LoadIconSprite("vpb_icons/hexagon_p.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexScene = UI.LoadIconSprite("vpb_icons/hexagon_s.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexSkin = UI.LoadIconSprite("vpb_icons/hexagon_k.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexSubScene = UI.LoadIconSprite("vpb_icons/hexagon_l.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexHair = UI.LoadIconSprite("vpb_icons/hexagon_h.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexClothing = UI.LoadIconSprite("vpb_icons/hexagon_c.png", tint) ?? m_QmIconRandom;
                 m_QmIconUndo   = UI.LoadIconSprite("vpb_icons/undo.png", tint);
                 m_QmIconRedo   = UI.LoadIconSprite("vpb_icons/redo.png", tint);
                 m_QmIconHub    = UI.LoadIconSprite("vpb_icons/hub.png", tint);
@@ -1806,7 +1814,13 @@ namespace VPB
                         {
                             QuickMenuChangePage(-1);
                             for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
+                            return;
                         }
+
+                        if (m_QuickMenuEditMode) return;
+
+                        var act = QuickMenuGetSlotAction(idxCopy);
+                        QuickMenuExecuteAssignmentRightClick(act);
                     };
 
                     var a0 = QuickMenuGetSlotAction(i);
@@ -1856,6 +1870,20 @@ namespace VPB
                 var catHover = m_QuickMenuAssignCategoryPopupRoot.AddComponent<QuickMenuAssignCategoryPopupHoverHandler>();
                 if (catHover != null) catHover.owner = this;
                 m_QuickMenuAssignCategoryPopupRoot.SetActive(false);
+
+                m_QuickMenuAssignRandomPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero);
+                m_QuickMenuAssignRandomPopupRoot.name = "VPB_QM_AssignPopup_Random";
+                m_QuickMenuAssignRandomPopupRT = m_QuickMenuAssignRandomPopupRoot.GetComponent<RectTransform>();
+                if (m_QuickMenuAssignRandomPopupRT != null)
+                {
+                    m_QuickMenuAssignRandomPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignRandomPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignRandomPopupRT.pivot = new Vector2(0f, 0f);
+                }
+                var rndHover = m_QuickMenuAssignRandomPopupRoot.AddComponent<QuickMenuAssignRandomPopupHoverHandler>();
+                if (rndHover != null) rndHover.owner = this;
+                m_QuickMenuAssignRandomPopupRoot.SetActive(false);
+
                 QuickMenuRebuildAssignPopupButtons();
 
                 // Initial visuals (icons / showhide state)

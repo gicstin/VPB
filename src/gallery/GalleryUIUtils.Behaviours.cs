@@ -1234,6 +1234,40 @@ namespace VPB
             UpdateVisibleItems('C');
         }
 
+        /// <summary>Scrolls only as much as needed to keep the row containing <paramref name="index"/> visible.</summary>
+        public void EnsureItemVisible(int index)
+        {
+            if (content == null || viewport == null || itemsCount == 0 || index < 0) return;
+            index = Mathf.Min(index, itemsCount - 1);
+
+            float effectiveItemHeight = itemHeight + spacingY;
+            if (effectiveItemHeight <= 0.1f) return;
+
+            int row = index / Mathf.Max(1, colCount);
+            float rowTopY = row * effectiveItemHeight;
+            float rowBottomY = rowTopY + itemHeight + spacingY;
+
+            float vh = viewport.rect.height;
+            if (vh <= 0.01f) vh = 800f;
+            float ch = Mathf.Max(content.rect.height, content.sizeDelta.y);
+            float maxScrollY = Mathf.Max(0f, ch - vh);
+            if (maxScrollY <= 0.01f) return;
+
+            float scrollTopY = GetContentScrollTopYForVisibility();
+            float targetScrollY = scrollTopY;
+            if (rowTopY < scrollTopY)
+                targetScrollY = rowTopY;
+            else if (rowBottomY > scrollTopY + vh)
+                targetScrollY = rowBottomY - vh;
+            else
+                return;
+
+            targetScrollY = Mathf.Clamp(targetScrollY, 0f, maxScrollY);
+            if (_scrollRect != null)
+                _scrollRect.verticalNormalizedPosition = 1f - targetScrollY / maxScrollY;
+            UpdateVisibleItems('V');
+        }
+
         /// <summary>Jump scroll to the first row (Unity: vertical normalized 1 = top).</summary>
         public void ScrollToTopImmediate()
         {

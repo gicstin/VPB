@@ -2778,6 +2778,32 @@ namespace VPB
                 return true;
             }
 
+            // Fallback: some VaM builds/store variants expose bool names that don't match the file path exactly.
+            // Best-effort scan for any bool whose suffix matches the provided path.
+            try
+            {
+                string p0 = path.Replace('\\', '/');
+                string p1 = p0;
+                while (p1.StartsWith("/")) p1 = p1.Substring(1);
+                foreach (var n in geometry.GetBoolParamNames())
+                {
+                    if (string.IsNullOrEmpty(n)) continue;
+                    if (!(n.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase) || n.StartsWith("hair:", StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    if (n.EndsWith(path, StringComparison.OrdinalIgnoreCase) || n.EndsWith(p0, StringComparison.OrdinalIgnoreCase) || n.EndsWith(p1, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var p = geometry.GetBoolJSONParam(n);
+                        if (p != null)
+                        {
+                            LogUtil.Log($"{logPrefix} found param by suffix match: {n}, setting to true.");
+                            p.val = true;
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+
             LogUtil.Log($"{logPrefix} param not found: {paramName}");
             return false;
         }

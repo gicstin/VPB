@@ -690,13 +690,39 @@ namespace VPB
                 return;
             }
 
+            bool arrowHeld =
+                Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.DownArrow) ||
+                Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.RightArrow);
+            bool arrowPressed =
+                Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.DownArrow) ||
+                Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.RightArrow);
+
+            if (!arrowHeld)
+            {
+                keyboardNavigationNextRepeatRealtime = 0f;
+                return;
+            }
+
+            if (arrowPressed)
+            {
+                keyboardNavigationNextRepeatRealtime = Time.unscaledTime + KeyboardNavigationInitialRepeatDelay;
+            }
+            else if (Time.unscaledTime >= keyboardNavigationNextRepeatRealtime)
+            {
+                keyboardNavigationNextRepeatRealtime = Time.unscaledTime + KeyboardNavigationRepeatInterval;
+            }
+            else
+            {
+                return;
+            }
+
             int move = 0;
-            if (Input.GetKeyDown(KeyCode.UpArrow)) move = -1;
-            else if (Input.GetKeyDown(KeyCode.DownArrow)) move = 1;
+            if (Input.GetKey(KeyCode.UpArrow) && !Input.GetKey(KeyCode.DownArrow)) move = -1;
+            else if (Input.GetKey(KeyCode.DownArrow) && !Input.GetKey(KeyCode.UpArrow)) move = 1;
 
             int moveH = 0;
-            if (Input.GetKeyDown(KeyCode.LeftArrow)) moveH = -1;
-            else if (Input.GetKeyDown(KeyCode.RightArrow)) moveH = 1;
+            if (Input.GetKey(KeyCode.LeftArrow) && !Input.GetKey(KeyCode.RightArrow)) moveH = -1;
+            else if (Input.GetKey(KeyCode.RightArrow) && !Input.GetKey(KeyCode.LeftArrow)) moveH = 1;
 
             if (move == 0 && moveH == 0) return;
             
@@ -728,7 +754,7 @@ namespace VPB
             }
             else // Grid
             {
-                 int cols = gridColumnCount;
+                 int cols = GridColumnCount;
                  if (cols < 1) cols = 4; // Fallback
 
                  if (move != 0) newIndex += move * cols;
@@ -794,6 +820,7 @@ namespace VPB
                 selectedPath = historyBrowseForNav ? GetSelectionIdentityKey(newFile, true) : newFile.Path;
                 selectedHubItem = null;
                 SetHoverPath(newFile);
+                if (recyclingGrid != null) recyclingGrid.EnsureItemVisible(newIndex);
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
             }

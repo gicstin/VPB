@@ -384,6 +384,34 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/hexagon_a.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/hexagon_c.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/hexagon_h.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/hexagon_k.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/hexagon_l.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/hexagon_p.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/hexagon_s.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/history.png",
         "IsDirectory":  false
     },

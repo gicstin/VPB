@@ -27,6 +27,13 @@ namespace VPB
             CloseAll,
             Save,
             Random,
+            RandomScenes,
+            RandomSubScenes,
+            RandomClothing,
+            RandomHair,
+            RandomPose,
+            RandomAppearance,
+            RandomSkin,
             Undo,
             Redo,
             Hub,
@@ -131,6 +138,23 @@ namespace VPB
         private Sprite m_QmIconCategoryAll;
         private Sprite[] m_QmIconPages; // 10 icons: page_0..page_9
 
+        private Sprite m_QmIconHexAppearance;
+        private Sprite m_QmIconHexPose;
+        private Sprite m_QmIconHexScene;
+        private Sprite m_QmIconHexSkin;
+        private Sprite m_QmIconHexSubScene;
+        private Sprite m_QmIconHexHair;
+        private Sprite m_QmIconHexClothing;
+
+        private GameObject m_QuickMenuAssignRandomPopupRoot;
+        private RectTransform m_QuickMenuAssignRandomPopupRT;
+        private readonly List<GameObject> m_QuickMenuAssignRandomPopupButtons = new List<GameObject>(16);
+        private RectTransform m_QmAssignOpenRandomButtonRT;
+        private bool m_QmAssignRandomHoverMain;
+        private bool m_QmAssignRandomHoverPopup;
+        private bool m_QmAssignRandomPinned;
+        private int m_QmAssignRandomHideRequestSerial;
+
         private Vector2 m_QmLastAnchorCenter = new Vector2(float.NaN, float.NaN);
         private bool m_QmLastAnchorIsVR = false;
         private const float QuickMenuAssignCategoryHoverHideDelaySec = 0.45f;
@@ -138,6 +162,53 @@ namespace VPB
         private static bool QuickMenuIsVrActive()
         {
             return XrUtils.IsVrActive();
+        }
+
+        private void QuickMenuUpdateAssignRandomPopupVisibility()
+        {
+            if (m_QuickMenuAssignRandomPopupRoot == null || m_QuickMenuAssignPopupRT == null || m_QuickMenuAssignRandomPopupRT == null) return;
+            bool show = (m_QuickMenuAssignPopupRoot != null && m_QuickMenuAssignPopupRoot.activeSelf) && m_QmAssignRandomPinned;
+            if (show)
+            {
+                var mainPos = m_QuickMenuAssignPopupRT.anchoredPosition;
+                float x = mainPos.x + m_QuickMenuAssignPopupRT.sizeDelta.x;
+                float y = mainPos.y + (m_QuickMenuAssignPopupRT.sizeDelta.y - m_QuickMenuAssignRandomPopupRT.sizeDelta.y) * 0.5f;
+                m_QuickMenuAssignRandomPopupRT.anchoredPosition = new Vector2(x, y);
+                QuickMenuClampRectToScreen(m_QuickMenuAssignRandomPopupRT);
+            }
+            m_QuickMenuAssignRandomPopupRoot.SetActive(show);
+        }
+
+        private void QuickMenuCancelAssignRandomHide()
+        {
+            unchecked { m_QmAssignRandomHideRequestSerial++; }
+        }
+
+        private void QuickMenuScheduleAssignRandomHide()
+        {
+            unchecked { m_QmAssignRandomHideRequestSerial++; }
+            int serial = m_QmAssignRandomHideRequestSerial;
+            StartCoroutine(QuickMenuAssignRandomHideDelayed(serial));
+        }
+
+        private IEnumerator QuickMenuAssignRandomHideDelayed(int serial)
+        {
+            float end = 0f;
+            try { end = Time.unscaledTime + QuickMenuAssignCategoryHoverHideDelaySec; }
+            catch { end = 0f; }
+
+            while (true)
+            {
+                if (serial != m_QmAssignRandomHideRequestSerial) yield break;
+                float now = 0f;
+                try { now = Time.unscaledTime; } catch { now = end + 1f; }
+                if (now >= end) break;
+                yield return null;
+            }
+
+            if (serial != m_QmAssignRandomHideRequestSerial) yield break;
+            if (!m_QmAssignRandomHoverMain && !m_QmAssignRandomHoverPopup)
+                QuickMenuUpdateAssignRandomPopupVisibility();
         }
 
         private Vector2 QuickMenuGetAnchorCenter(bool isVR)
@@ -302,6 +373,13 @@ namespace VPB
                 case QuickMenuAssignableAction.CloseAll: return (idx >= 0 && idx <= 3) ? VPBTranslation.T("hook.qmtooltip.core_locked_close_all", "Close All (core locked)") : VPBTranslation.T("hook.qmbutton.close_all", "Close All");
                 case QuickMenuAssignableAction.Save: return VPBTranslation.T("hook.qmtooltip.save_methods", "Save (choose method)");
                 case QuickMenuAssignableAction.Random: return VPBTranslation.T("hook.qmbutton.random", "Random");
+                case QuickMenuAssignableAction.RandomScenes: return VPBTranslation.T("hook.qmbutton.random_scenes", "Random: Scenes");
+                case QuickMenuAssignableAction.RandomSubScenes: return VPBTranslation.T("hook.qmbutton.random_subscenes", "Random: SubScenes");
+                case QuickMenuAssignableAction.RandomClothing: return VPBTranslation.T("hook.qmbutton.random_clothing_tip", "Left Click: Random Clothing\nRight Click: Remove All Clothing");
+                case QuickMenuAssignableAction.RandomHair: return VPBTranslation.T("hook.qmbutton.random_hair_tip", "Left Click: Random Hair\nRight Click: Remove All Hair");
+                case QuickMenuAssignableAction.RandomPose: return VPBTranslation.T("hook.qmbutton.random_pose", "Random: Pose");
+                case QuickMenuAssignableAction.RandomAppearance: return VPBTranslation.T("hook.qmbutton.random_appearance", "Random: Appearance");
+                case QuickMenuAssignableAction.RandomSkin: return VPBTranslation.T("hook.qmbutton.random_skin", "Random: Skin");
                 case QuickMenuAssignableAction.Undo: return VPBTranslation.T("hook.qmbutton.undo", "Undo");
                 case QuickMenuAssignableAction.Redo: return VPBTranslation.T("hook.qmbutton.redo", "Redo");
                 case QuickMenuAssignableAction.Hub: return VPBTranslation.T("hook.qmbutton.hub", "Hub");
@@ -414,6 +492,13 @@ namespace VPB
                 case QuickMenuAssignableAction.CloseAll: return "close_all";
                 case QuickMenuAssignableAction.Save: return "save";
                 case QuickMenuAssignableAction.Random: return "random";
+                case QuickMenuAssignableAction.RandomScenes: return "random_scenes";
+                case QuickMenuAssignableAction.RandomSubScenes: return "random_subscenes";
+                case QuickMenuAssignableAction.RandomClothing: return "random_clothing";
+                case QuickMenuAssignableAction.RandomHair: return "random_hair";
+                case QuickMenuAssignableAction.RandomPose: return "random_pose";
+                case QuickMenuAssignableAction.RandomAppearance: return "random_appearance";
+                case QuickMenuAssignableAction.RandomSkin: return "random_skin";
                 case QuickMenuAssignableAction.Undo: return "undo";
                 case QuickMenuAssignableAction.Redo: return "redo";
                 case QuickMenuAssignableAction.Hub: return "hub";
@@ -449,6 +534,13 @@ namespace VPB
                 case "close_all": return QuickMenuAssignableAction.CloseAll;
                 case "save": return QuickMenuAssignableAction.Save;
                 case "random": return QuickMenuAssignableAction.Random;
+                case "random_scenes": return QuickMenuAssignableAction.RandomScenes;
+                case "random_subscenes": return QuickMenuAssignableAction.RandomSubScenes;
+                case "random_clothing": return QuickMenuAssignableAction.RandomClothing;
+                case "random_hair": return QuickMenuAssignableAction.RandomHair;
+                case "random_pose": return QuickMenuAssignableAction.RandomPose;
+                case "random_appearance": return QuickMenuAssignableAction.RandomAppearance;
+                case "random_skin": return QuickMenuAssignableAction.RandomSkin;
                 case "undo": return QuickMenuAssignableAction.Undo;
                 case "redo": return QuickMenuAssignableAction.Redo;
                 case "hub": return QuickMenuAssignableAction.Hub;
@@ -940,6 +1032,27 @@ namespace VPB
                 case QuickMenuAssignableAction.Random:
                     icon = m_QmIconRandom;
                     break;
+                case QuickMenuAssignableAction.RandomScenes:
+                    icon = m_QmIconHexScene ?? m_QmIconRandom;
+                    break;
+                case QuickMenuAssignableAction.RandomSubScenes:
+                    icon = m_QmIconHexSubScene ?? m_QmIconRandom;
+                    break;
+                case QuickMenuAssignableAction.RandomClothing:
+                    icon = m_QmIconHexClothing ?? m_QmIconRandom;
+                    break;
+                case QuickMenuAssignableAction.RandomHair:
+                    icon = m_QmIconHexHair ?? m_QmIconRandom;
+                    break;
+                case QuickMenuAssignableAction.RandomPose:
+                    icon = m_QmIconHexPose ?? m_QmIconRandom;
+                    break;
+                case QuickMenuAssignableAction.RandomAppearance:
+                    icon = m_QmIconHexAppearance ?? m_QmIconRandom;
+                    break;
+                case QuickMenuAssignableAction.RandomSkin:
+                    icon = m_QmIconHexSkin ?? m_QmIconRandom;
+                    break;
                 case QuickMenuAssignableAction.Undo:
                     icon = m_QmIconUndo;
                     break;
@@ -1114,6 +1227,13 @@ namespace VPB
                     if (p != null) p.QuickMenu_LoadRandom();
                     break;
                 }
+                case QuickMenuAssignableAction.RandomScenes: QuickMenuExecuteRandomInCategory("Scenes", preservePersonTarget: false, preserveUi: false); break;
+                case QuickMenuAssignableAction.RandomSubScenes: QuickMenuExecuteRandomInCategory("SubScenes", preservePersonTarget: false, preserveUi: false); break;
+                case QuickMenuAssignableAction.RandomClothing: QuickMenuExecuteRandomInCategory("Clothing", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomHair: QuickMenuExecuteRandomInCategory("Hair", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomPose: QuickMenuExecuteRandomInCategory("Pose", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomAppearance: QuickMenuExecuteRandomInCategory("Appearance", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomSkin: QuickMenuExecuteRandomInCategory("Skin", preservePersonTarget: true, preserveUi: true); break;
                 case QuickMenuAssignableAction.Undo:
                 {
                     var p = QuickMenuGetTargetPanel();
@@ -1195,6 +1315,27 @@ namespace VPB
             }
         }
 
+        private void QuickMenuExecuteAssignmentRightClick(QuickMenuAssignableAction action)
+        {
+            switch (action)
+            {
+                case QuickMenuAssignableAction.RandomHair:
+                {
+                    var p = QuickMenuGetTargetPanel();
+                    if (p != null) p.QuickMenu_RemoveAllHair();
+                    break;
+                }
+                case QuickMenuAssignableAction.RandomClothing:
+                {
+                    var p = QuickMenuGetTargetPanel();
+                    if (p != null) p.QuickMenu_RemoveAllClothing();
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
         private void QuickMenuOpenGalleryCategory(string categoryName)
         {
             if (string.IsNullOrEmpty(categoryName)) return;
@@ -1215,6 +1356,14 @@ namespace VPB
                 }
             }
             catch { }
+        }
+
+        private void QuickMenuExecuteRandomInCategory(string categoryName, bool preservePersonTarget, bool preserveUi)
+        {
+            if (string.IsNullOrEmpty(categoryName)) return;
+            var p = QuickMenuGetTargetPanel();
+            if (p == null) return;
+            p.QuickMenu_LoadRandomFromCategory(categoryName, preserveUi: preserveUi, preserveTarget: preservePersonTarget);
         }
 
         private void QuickMenuOpenCompressCache()
@@ -1260,10 +1409,16 @@ namespace VPB
             m_QmAssignCategoryHoverMain = false;
             m_QmAssignCategoryHoverPopup = false;
             m_QmAssignCategoryPinned = false;
+            m_QmAssignRandomHoverMain = false;
+            m_QmAssignRandomHoverPopup = false;
+            m_QmAssignRandomPinned = false;
             m_QmAssignPalettePinned = false;
             QuickMenuCancelAssignCategoryHide();
+            QuickMenuCancelAssignRandomHide();
             if (m_QuickMenuAssignCategoryPopupRoot != null && m_QuickMenuAssignCategoryPopupRoot.activeSelf)
                 m_QuickMenuAssignCategoryPopupRoot.SetActive(false);
+            if (m_QuickMenuAssignRandomPopupRoot != null && m_QuickMenuAssignRandomPopupRoot.activeSelf)
+                m_QuickMenuAssignRandomPopupRoot.SetActive(false);
             if (m_QuickMenuAssignPopupRoot != null && m_QuickMenuAssignPopupRoot.activeSelf)
                 m_QuickMenuAssignPopupRoot.SetActive(false);
         }
@@ -1374,7 +1529,6 @@ namespace VPB
                 QuickMenuAssignableAction.BringFront,
                 QuickMenuAssignableAction.CloseAll,
                 QuickMenuAssignableAction.Save,
-                QuickMenuAssignableAction.Random,
                 QuickMenuAssignableAction.Undo,
                 QuickMenuAssignableAction.Redo,
                 QuickMenuAssignableAction.Hub,
@@ -1395,7 +1549,6 @@ namespace VPB
                 VPBTranslation.T("hook.qmbutton.bring_front", "Bring Front"),
                 VPBTranslation.T("hook.qmbutton.close_all", "Close All"),
                 VPBTranslation.T("hook.qmbutton.save", "Save"),
-                VPBTranslation.T("hook.qmbutton.random", "Random"),
                 VPBTranslation.T("hook.qmbutton.undo", "Undo"),
                 VPBTranslation.T("hook.qmbutton.redo", "Redo"),
                 VPBTranslation.T("hook.qmbutton.hub", "Hub"),
@@ -1434,6 +1587,25 @@ namespace VPB
                 m_QuickMenuAssignPopupButtons.Add(btnGo);
             }
 
+            var openRndBtn = UI.CreateUIButton(
+                m_QuickMenuAssignPopupRoot,
+                w,
+                h,
+                VPBTranslation.T("hook.qmbutton.random_menu", "Random >"),
+                font,
+                10f,
+                y + gap * n,
+                AnchorPresets.bottomLeft,
+                () => { }
+            );
+            m_QuickMenuAssignPopupButtons.Add(openRndBtn);
+            m_QmAssignOpenRandomButtonRT = openRndBtn != null ? openRndBtn.GetComponent<RectTransform>() : null;
+            QuickMenuAddLeftIconAndKeepLabel(openRndBtn, m_QmIconHexScene ?? m_QmIconRandom);
+            var openRndBtnComp = openRndBtn != null ? openRndBtn.GetComponent<Button>() : null;
+            if (openRndBtnComp != null) openRndBtnComp.interactable = true;
+            var openRndHover = openRndBtn != null ? openRndBtn.AddComponent<QuickMenuAssignOpenRandomHoverHandler>() : null;
+            if (openRndHover != null) openRndHover.owner = this;
+
             var openCatBtn = UI.CreateUIButton(
                 m_QuickMenuAssignPopupRoot,
                 w,
@@ -1441,7 +1613,7 @@ namespace VPB
                 VPBTranslation.T("hook.qmbutton.open_category", "Open Category >"),
                 font,
                 10f,
-                y + gap * n,
+                y + gap * (n + 1),
                 AnchorPresets.bottomLeft,
                 () => { }
             );
@@ -1454,11 +1626,100 @@ namespace VPB
             var openCatHover = openCatBtn != null ? openCatBtn.AddComponent<QuickMenuAssignOpenCategoryHoverHandler>() : null;
             if (openCatHover != null) openCatHover.owner = this;
 
+            QuickMenuRebuildAssignRandomPopupButtons();
             QuickMenuRebuildAssignCategoryPopupButtons();
 
             // Resize popup to fit
-            float totalH = 20f + (n + 1) * gap + 10f;
+            float totalH = 20f + (n + 2) * gap + 10f;
             m_QuickMenuAssignPopupRT.sizeDelta = new Vector2(260f, totalH);
+        }
+
+        private void QuickMenuRebuildAssignRandomPopupButtons()
+        {
+            if (m_QuickMenuAssignRandomPopupRoot == null) return;
+            foreach (var b in m_QuickMenuAssignRandomPopupButtons)
+            {
+                try { if (b != null) DestroyImmediate(b); } catch { }
+            }
+            m_QuickMenuAssignRandomPopupButtons.Clear();
+
+            var actions = new List<QuickMenuAssignableAction>
+            {
+                QuickMenuAssignableAction.Random,
+                QuickMenuAssignableAction.RandomScenes,
+                QuickMenuAssignableAction.RandomSubScenes,
+                QuickMenuAssignableAction.RandomClothing,
+                QuickMenuAssignableAction.RandomHair,
+                QuickMenuAssignableAction.RandomPose,
+                QuickMenuAssignableAction.RandomAppearance,
+                QuickMenuAssignableAction.RandomSkin,
+            };
+            var labels = new List<string>
+            {
+                VPBTranslation.T("hook.qmbutton.random_current", "Random from current"),
+                VPBTranslation.T("hook.qmbutton.random_scenes", "Random: Scenes"),
+                VPBTranslation.T("hook.qmbutton.random_subscenes", "Random: SubScenes"),
+                VPBTranslation.T("hook.qmbutton.random_clothing", "Random: Clothing"),
+                VPBTranslation.T("hook.qmbutton.random_hair", "Random: Hair"),
+                VPBTranslation.T("hook.qmbutton.random_pose", "Random: Pose"),
+                VPBTranslation.T("hook.qmbutton.random_appearance", "Random: Appearance"),
+                VPBTranslation.T("hook.qmbutton.random_skin", "Random: Skin"),
+            };
+            var icons = new List<Sprite>
+            {
+                m_QmIconRandom,
+                m_QmIconHexScene ?? m_QmIconRandom,
+                m_QmIconHexSubScene ?? m_QmIconRandom,
+                m_QmIconHexClothing ?? m_QmIconRandom,
+                m_QmIconHexHair ?? m_QmIconRandom,
+                m_QmIconHexPose ?? m_QmIconRandom,
+                m_QmIconHexAppearance ?? m_QmIconRandom,
+                m_QmIconHexSkin ?? m_QmIconRandom,
+            };
+
+            float w = 240f;
+            float h = 40f;
+            float y = 20f;
+            float gap = 42f;
+            int font = 22;
+
+            int n = Mathf.Min(actions.Count, labels.Count);
+            for (int i = 0; i < n; i++)
+            {
+                int iCopy = i;
+                var btnGo = UI.CreateUIButton(m_QuickMenuAssignRandomPopupRoot, w, h, labels[iCopy], font, 10f, y + gap * iCopy, AnchorPresets.bottomLeft, () =>
+                {
+                    int idx = m_QuickMenuAssignPopupTargetIdx;
+                    if (idx >= 0 && idx < QuickMenuGridSlotCount)
+                        QuickMenuSetAssignment(idx, actions[iCopy]);
+                    QuickMenuHideAssignPopup();
+                });
+                try
+                {
+                    if (btnGo != null)
+                    {
+                        var spr = iCopy < icons.Count ? icons[iCopy] : null;
+                        QuickMenuAddLeftIconAndKeepLabel(btnGo, spr);
+                    }
+                }
+                catch { }
+                QuickMenuAttachAssignDragSource(btnGo, actions[iCopy]);
+                m_QuickMenuAssignRandomPopupButtons.Add(btnGo);
+            }
+
+            var cancelBtn = UI.CreateUIButton(m_QuickMenuAssignRandomPopupRoot, w, h, "< Cancel", font, 10f, y + gap * n, AnchorPresets.bottomLeft, () =>
+            {
+                m_QmAssignRandomPinned = false;
+                m_QmAssignRandomHoverMain = false;
+                m_QmAssignRandomHoverPopup = false;
+                QuickMenuUpdateAssignRandomPopupVisibility();
+            });
+            QuickMenuAddLeftIconAndKeepLabel(cancelBtn, m_QmIconCloseAll);
+            m_QuickMenuAssignRandomPopupButtons.Add(cancelBtn);
+
+            float totalH = 20f + (n + 1) * gap + 10f;
+            m_QuickMenuAssignRandomPopupRT.sizeDelta = new Vector2(260f, totalH);
+            QuickMenuUpdateAssignRandomPopupVisibility();
         }
 
         private void QuickMenuRebuildAssignCategoryPopupButtons()
@@ -1681,6 +1942,13 @@ namespace VPB
                 case QuickMenuAssignableAction.CloseAll: return m_QmIconCloseAll;
                 case QuickMenuAssignableAction.Save: return m_QmIconSave;
                 case QuickMenuAssignableAction.Random: return m_QmIconRandom;
+                case QuickMenuAssignableAction.RandomScenes: return m_QmIconHexScene ?? m_QmIconRandom;
+                case QuickMenuAssignableAction.RandomSubScenes: return m_QmIconHexSubScene ?? m_QmIconRandom;
+                case QuickMenuAssignableAction.RandomClothing: return m_QmIconHexClothing ?? m_QmIconRandom;
+                case QuickMenuAssignableAction.RandomHair: return m_QmIconHexHair ?? m_QmIconRandom;
+                case QuickMenuAssignableAction.RandomPose: return m_QmIconHexPose ?? m_QmIconRandom;
+                case QuickMenuAssignableAction.RandomAppearance: return m_QmIconHexAppearance ?? m_QmIconRandom;
+                case QuickMenuAssignableAction.RandomSkin: return m_QmIconHexSkin ?? m_QmIconRandom;
                 case QuickMenuAssignableAction.Undo: return m_QmIconUndo;
                 case QuickMenuAssignableAction.Redo: return m_QmIconRedo;
                 case QuickMenuAssignableAction.Hub: return m_QmIconHub;
@@ -1806,6 +2074,41 @@ namespace VPB
             {
                 if (owner == null) return;
                 owner.m_QmAssignCategoryHoverPopup = false;
+            }
+        }
+
+        private class QuickMenuAssignOpenRandomHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+        {
+            public VamHookPlugin owner;
+            public void OnPointerEnter(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.m_QmAssignRandomPinned = true;
+                owner.m_QmAssignRandomHoverMain = true;
+                owner.QuickMenuCancelAssignRandomHide();
+                owner.QuickMenuUpdateAssignRandomPopupVisibility();
+            }
+            public void OnPointerExit(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.m_QmAssignRandomHoverMain = false;
+            }
+        }
+
+        private class QuickMenuAssignRandomPopupHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+        {
+            public VamHookPlugin owner;
+            public void OnPointerEnter(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.m_QmAssignRandomHoverPopup = true;
+                owner.QuickMenuCancelAssignRandomHide();
+                owner.QuickMenuUpdateAssignRandomPopupVisibility();
+            }
+            public void OnPointerExit(PointerEventData eventData)
+            {
+                if (owner == null) return;
+                owner.m_QmAssignRandomHoverPopup = false;
             }
         }
 
