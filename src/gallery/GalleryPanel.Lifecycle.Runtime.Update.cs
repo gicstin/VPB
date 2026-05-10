@@ -140,6 +140,7 @@ namespace VPB
                     if (collapseTriggerGO != null) collapseTriggerGO.SetActive(showTrigger && string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase));
                     if (collapseTriggerLeftGO != null) collapseTriggerLeftGO.SetActive(showTrigger && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase));
                     if (collapseTriggerTopGO != null) collapseTriggerTopGO.SetActive(showTrigger && string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase));
+                    ApplyFixedCollapseTriggerVisuals();
 
                     if (isCollapsed)
                     {
@@ -305,20 +306,6 @@ namespace VPB
                         bgRT.anchorMax = desiredMax;
                         bgRT.offsetMin = Vector2.zero;
                         bgRT.offsetMax = Vector2.zero;
-                        
-                        if (collapseTriggerGO != null)
-                        {
-                            Image img = collapseTriggerGO.GetComponent<Image>();
-                            if (img != null) 
-                            {
-                                img.color = isCollapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
-                                img.raycastTarget = isCollapsed;
-                            }
-                        }
-                        if (collapseHandleText != null)
-                        {
-                            collapseHandleText.gameObject.SetActive(isCollapsed);
-                        }
 
                         UpdateSideButtonsVisibility();
                     }

@@ -36,13 +36,10 @@ namespace VPB
         private GameObject tboxHideBtn;
         private GameObject tboxUnhideBtn;
         private GameObject tboxScanWhitelistTemporaryBtn;
-        private GameObject tboxScanWhitelistAddFolderBtn;
-        private GameObject tboxScanWhitelistRemoveFolderBtn;
         private GameObject tboxLoadBtn;
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
-        private GameObject tboxJsonParserBenchBtn;
         private GameObject tboxOpenHubBtn;
         private GameObject tboxSceneImportBtn;
         private GameObject tboxSelectAllBtn;
@@ -151,8 +148,6 @@ namespace VPB
             one(tboxUnhideBtn);
             one(tboxHideBtn);
             one(tboxScanWhitelistTemporaryBtn);
-            one(tboxScanWhitelistAddFolderBtn);
-            one(tboxScanWhitelistRemoveFolderBtn);
             one(tboxAutoInstallBtn);
             one(tboxDeleteBtn);
             one(tboxRemoveHistoryBtn);
@@ -173,7 +168,6 @@ namespace VPB
             one(tboxUnloadBtn);
             one(tboxLoadDepsBtn);
             one(tboxCacheTexturesBtn);
-            one(tboxJsonParserBenchBtn);
             one(tboxOpenHubBtn);
             one(tboxCopyPkgNamesBtn);
             one(tboxSceneImportBtn);
@@ -196,8 +190,6 @@ namespace VPB
             d(tboxUnhideBtn);
             d(tboxHideBtn);
             d(tboxScanWhitelistTemporaryBtn);
-            d(tboxScanWhitelistAddFolderBtn);
-            d(tboxScanWhitelistRemoveFolderBtn);
             d(tboxAutoInstallBtn);
             d(tboxDeleteBtn);
             d(tboxRemoveHistoryBtn);
@@ -218,7 +210,6 @@ namespace VPB
             d(tboxUnloadBtn);
             d(tboxLoadDepsBtn);
             d(tboxCacheTexturesBtn);
-            d(tboxJsonParserBenchBtn);
             d(tboxOpenHubBtn);
             d(tboxCopyPkgNamesBtn);
             d(tboxSceneImportBtn);
@@ -318,8 +309,6 @@ namespace VPB
                 if (vis(tboxUnhideBtn)) ltr.Add(tboxUnhideBtn);
                 if (vis(tboxHideBtn)) ltr.Add(tboxHideBtn);
                 if (vis(tboxScanWhitelistTemporaryBtn)) ltr.Add(tboxScanWhitelistTemporaryBtn);
-                if (vis(tboxScanWhitelistAddFolderBtn)) ltr.Add(tboxScanWhitelistAddFolderBtn);
-                if (vis(tboxScanWhitelistRemoveFolderBtn)) ltr.Add(tboxScanWhitelistRemoveFolderBtn);
                 if (vis(tboxAutoInstallBtn)) ltr.Add(tboxAutoInstallBtn);
                 if (vis(tboxDeleteBtn)) ltr.Add(tboxDeleteBtn);
                 if (vis(tboxRemoveHistoryBtn)) ltr.Add(tboxRemoveHistoryBtn);
@@ -340,7 +329,6 @@ namespace VPB
                 if (vis(tboxUnloadBtn)) ltr.Add(tboxUnloadBtn);
                 if (vis(tboxLoadDepsBtn)) ltr.Add(tboxLoadDepsBtn);
                 if (vis(tboxCacheTexturesBtn)) ltr.Add(tboxCacheTexturesBtn);
-                if (vis(tboxJsonParserBenchBtn)) ltr.Add(tboxJsonParserBenchBtn);
                 if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
                 if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
                 if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
@@ -999,39 +987,6 @@ namespace VPB
             }
             catch { }
 
-            // JSON meta.json bench (SimpleJSON vs BMH): handler in GalleryPanel.JsonBench.cs
-            tboxJsonParserBenchBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                "", tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxBenchmarkJsonParsersSelected
-            );
-            tboxJsonParserBenchBtn.name = "Tbox_JsonParserBench";
-            TboxConfigureActionButtonFlex(tboxJsonParserBenchBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(
-                tboxJsonParserBenchBtn,
-                "gallery.tooltip.tbox_json_parser_bench",
-                "Developer Mode: benchmark library meta.json with SimpleJSON vs Boyer-Moore-Horspool"
-            );
-            try
-            {
-                var parserIcon = UI.LoadIconSprite("vpb_icons/fps.png", Color.white);
-                if (parserIcon != null) UI.AddIconToButton(tboxJsonParserBenchBtn, parserIcon, padding: 6f);
-                else
-                {
-                    Text t = tboxJsonParserBenchBtn.GetComponentInChildren<Text>(true);
-                    if (t != null) t.text = "JSON";
-                }
-            }
-            catch { }
-
-            try
-            {
-                if (tboxJsonParserBenchBtn != null)
-                    tboxJsonParserBenchBtn.SetActive(VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode && !cleanupModeActive);
-            }
-            catch { }
-
             tboxOpenHubBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -1450,28 +1405,6 @@ namespace VPB
                 }
             }
             catch { }
-
-            tboxScanWhitelistAddFolderBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.scan_wl_add", "+W"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxScanWhitelistAddFolderForSelection
-            );
-            tboxScanWhitelistAddFolderBtn.name = "Tbox_ScanWlAddFolder";
-            TboxConfigureActionButtonFlex(tboxScanWhitelistAddFolderBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxScanWhitelistAddFolderBtn, "gallery.tooltip.tbox_scan_wl_add_folder",
-                "Add the selected packages' folders to the VaM scan whitelist. Packages in whitelisted folders are scanned by VaM on startup.");
-
-            tboxScanWhitelistRemoveFolderBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.scan_wl_remove", "-W"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxScanWhitelistRemoveFolderForSelection
-            );
-            tboxScanWhitelistRemoveFolderBtn.name = "Tbox_ScanWlRemoveFolder";
-            TboxConfigureActionButtonFlex(tboxScanWhitelistRemoveFolderBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxScanWhitelistRemoveFolderBtn, "gallery.tooltip.tbox_scan_wl_remove_folder",
-                "Remove the selected packages' folders from the VaM scan whitelist. VaM will no longer scan these folders on startup.");
 
             tboxDisableAutoInstallBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -2068,18 +2001,6 @@ namespace VPB
             else if (IsSettingsPanelOpen())
                 RefreshTboxConditionalActionButtons();
 
-            // JSON bench is dev-only; RefreshTboxConditionalActionButtons does not run when selection is empty.
-            try
-            {
-                bool benchVisible = !cleanupModeActive && VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode;
-                if (tboxJsonParserBenchBtn != null && tboxJsonParserBenchBtn.activeSelf != benchVisible)
-                {
-                    tboxJsonParserBenchBtn.SetActive(benchVisible);
-                    RefreshTboxFlexButtonLayout();
-                }
-            }
-            catch { }
-
             // Keep grid / side tab scrollers above the footer while tbox height animates.
             try
             {
@@ -2100,7 +2021,6 @@ namespace VPB
         private void RefreshTboxConditionalActionButtons()
         {
             int copyN = 0, deleteN = 0, hideN = 0, unhideN = 0, aiN = 0, noAiN = 0, scanWlTemporaryN = 0;
-            int scanWlAddN = 0, scanWlRemoveN = 0;
             bool anyPkgInstalled = false;     // in AddonPackages
             bool anyPkgNotInstalled = false;  // in AllPackages
 
@@ -2155,13 +2075,10 @@ namespace VPB
                 show(tboxHideBtn, false);
                 show(tboxUnhideBtn, false);
                 show(tboxScanWhitelistTemporaryBtn, false);
-                show(tboxScanWhitelistAddFolderBtn, false);
-                show(tboxScanWhitelistRemoveFolderBtn, false);
                 show(tboxLoadBtn, false);
                 show(tboxUnloadBtn, false);
                 show(tboxLoadDepsBtn, false);
                 show(tboxCacheTexturesBtn, false);
-                show(tboxJsonParserBenchBtn, false);
                 show(tboxOpenHubBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
                 show(tboxSceneImportBtn, false);
@@ -2205,13 +2122,10 @@ namespace VPB
             show(tboxHideBtn, !isCleanup);
             show(tboxUnhideBtn, !isCleanup);
             show(tboxScanWhitelistTemporaryBtn, !isCleanup);
-            show(tboxScanWhitelistAddFolderBtn, false);
-            show(tboxScanWhitelistRemoveFolderBtn, false);
             show(tboxLoadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxUnloadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxLoadDepsBtn, !isCleanup);
             show(tboxCacheTexturesBtn, !isCleanup);
-            show(tboxJsonParserBenchBtn, !isCleanup && VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode);
             show(tboxOpenHubBtn, !isCleanup);
             // Non-settings mode must explicitly re-show buttons hidden by Settings mode.
             // Otherwise, once Settings hides them, they stay inactive forever.
@@ -2243,15 +2157,12 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxHideBtn, false);
                 SetTboxButtonEnabledVisual(tboxUnhideBtn, false);
                 SetTboxButtonEnabledVisual(tboxScanWhitelistTemporaryBtn, false);
-                SetTboxButtonEnabledVisual(tboxScanWhitelistAddFolderBtn, false);
-                SetTboxButtonEnabledVisual(tboxScanWhitelistRemoveFolderBtn, false);
                 SetTboxButtonEnabledVisual(tboxAutoInstallBtn, false);
                 SetTboxButtonEnabledVisual(tboxDisableAutoInstallBtn, false);
                 SetTboxButtonEnabledVisual(tboxLoadBtn, false);
                 SetTboxButtonEnabledVisual(tboxUnloadBtn, false);
                 SetTboxButtonEnabledVisual(tboxLoadDepsBtn, false);
                 SetTboxButtonEnabledVisual(tboxCacheTexturesBtn, false);
-                SetTboxButtonEnabledVisual(tboxJsonParserBenchBtn, false);
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, false);
 
                 try { RefreshTboxGridRateControlState(); } catch { }
@@ -2282,30 +2193,6 @@ namespace VPB
                     if (hasAnyAiFlag) noAiN++;
                     if (missingAnyAiFlag) aiN++;
                     if (scanWlEnabled && !uidWlAny) scanWlTemporaryN++;
-                    // Scan whitelist add/remove counts (only when feature is enabled)
-                    if (ScanWhitelistManager.Instance.IsEnabled)
-                    {
-                        try
-                        {
-                            var pkg = FileManager.GetPackage(uid, ensureInstalled: false);
-                            if (pkg != null)
-                            {
-                                string normPath = (pkg.Path ?? "").Replace('\\', '/');
-                                if (normPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    string folder = ScanWhitelistManager.FolderFromVarPath(normPath);
-                                    if (!string.IsNullOrEmpty(folder))
-                                    {
-                                        bool folderWhitelisted = ScanWhitelistManager.Instance.IsPathWhitelisted(normPath);
-                                        if (folderWhitelisted) scanWlRemoveN++;
-                                        else scanWlAddN++;
-                                    }
-                                }
-
-                            }
-                        }
-                        catch { }
-                    }
 
                     // Fast install-state summary for Load/Unload buttons.
                     // Use the resolved disk FileEntry (already computed by TryGetTboxResolvablePackageState) and
@@ -2389,10 +2276,6 @@ namespace VPB
             }
             if (tboxScanWhitelistTemporaryBtn != null)
                 SetTboxButtonEnabledVisual(tboxScanWhitelistTemporaryBtn, scanWlTemporaryN > 0);
-            if (tboxScanWhitelistAddFolderBtn != null)
-                SetTboxButtonEnabledVisual(tboxScanWhitelistAddFolderBtn, scanWlAddN > 0);
-            if (tboxScanWhitelistRemoveFolderBtn != null)
-                SetTboxButtonEnabledVisual(tboxScanWhitelistRemoveFolderBtn, scanWlRemoveN > 0);
             if (tboxAutoInstallBtn != null)
             {
                 SetTboxButtonEnabledVisual(tboxAutoInstallBtn, showAi);
@@ -2407,10 +2290,6 @@ namespace VPB
             // Load/LoadDeps should always be available (requested); Unload still reflects install state.
             if (tboxLoadBtn != null)     SetTboxButtonEnabledVisual(tboxLoadBtn, true);
             if (tboxLoadDepsBtn != null) SetTboxButtonEnabledVisual(tboxLoadDepsBtn, true);
-            if (tboxJsonParserBenchBtn != null)
-                SetTboxButtonEnabledVisual(
-                    tboxJsonParserBenchBtn,
-                    VPBConfig.Instance != null && VPBConfig.Instance.IsDevMode && selectedFiles != null && selectedFiles.Count > 0);
             bool hasAnyPkg = anyPkgInstalled || anyPkgNotInstalled;
             if (tboxUnloadBtn != null)   SetTboxButtonEnabledVisual(tboxUnloadBtn, hasAnyPkg && anyPkgInstalled);
 

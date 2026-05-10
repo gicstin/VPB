@@ -1127,9 +1127,19 @@ namespace VPB
             footerAutoHideBtn = UI.CreateUIButton(rightSection, 40, 40, "A", 20, 0, 0, AnchorPresets.middleCenter, ToggleAutoHideMode);
             footerAutoHideBtnImage = footerAutoHideBtn.GetComponent<Image>();
             footerAutoHideBtnText = footerAutoHideBtn.GetComponentInChildren<Text>();
+            footerAutoHideLeftOffSprite  = UI.LoadIconSprite("vpb_icons/auto_hide_left_off.png",  UI.BarIconGlyphTint);
+            footerAutoHideLeftOnSprite   = UI.LoadIconSprite("vpb_icons/auto_hide_left_on.png",   UI.BarIconGlyphTint);
+            footerAutoHideRightOffSprite = UI.LoadIconSprite("vpb_icons/auto_hide_right_off.png", UI.BarIconGlyphTint);
+            footerAutoHideRightOnSprite  = UI.LoadIconSprite("vpb_icons/auto_hide_right_on.png",  UI.BarIconGlyphTint);
+            footerAutoHideTopOffSprite   = UI.LoadIconSprite("vpb_icons/auto_hide_top_off.png",   UI.BarIconGlyphTint);
+            footerAutoHideTopOnSprite    = UI.LoadIconSprite("vpb_icons/auto_hide_top_on.png",    UI.BarIconGlyphTint);
             footerAutoHideOffSprite = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", UI.BarIconGlyphTint);
             footerAutoHideOnSprite  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  UI.BarIconGlyphTint);
-            { Sprite init = footerAutoHideOffSprite ?? footerAutoHideOnSprite; if (init != null) { UI.AddIconToButton(footerAutoHideBtn, init); footerAutoHideIconImage = footerAutoHideBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+            {
+                GetFooterAutoHideSpritesForCurrentDock(out Sprite initOff, out Sprite initOn);
+                Sprite init = initOff ?? initOn;
+                if (init != null) { UI.AddIconToButton(footerAutoHideBtn, init); footerAutoHideIconImage = footerAutoHideBtn.transform.Find("Icon")?.GetComponent<Image>(); }
+            }
 
             // --- Context Actions (Category-aware) ---
 
@@ -1148,9 +1158,9 @@ namespace VPB
             AddTooltip(paginationLastBtn, "gallery.tooltip.page_last", "Last Page");
 
             AddHoverDelegate(gridSizeMinusBtn);
-            AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease Columns");
+            AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease columns (Ctrl+scroll wheel over gallery)");
             AddHoverDelegate(gridSizePlusBtn);
-            AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase Columns");
+            AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase columns (Ctrl+scroll wheel over gallery)");
             AddHoverDelegate(footerSpringScrollToggleBtn);
             AddHoverDelegate(footerMenuGateBtn);
             AddHoverDelegate(footerHoldToLaunchToggleBtn);
@@ -2161,6 +2171,35 @@ namespace VPB
             }
         }
 
+        private void GetFooterAutoHideSpritesForCurrentDock(out Sprite offSprite, out Sprite onSprite)
+        {
+            offSprite = footerAutoHideOffSprite;
+            onSprite = footerAutoHideOnSprite;
+            if (VPBConfig.Instance == null) return;
+            string side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
+            try
+            {
+                if (VPBConfig.Instance.DesktopFixedEnforceDockSide)
+                    side = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedEnforcedDockSide);
+            }
+            catch { }
+            if (string.Equals(side, "Left", StringComparison.OrdinalIgnoreCase))
+            {
+                offSprite = footerAutoHideLeftOffSprite ?? offSprite;
+                onSprite = footerAutoHideLeftOnSprite ?? onSprite;
+            }
+            else if (string.Equals(side, "Top", StringComparison.OrdinalIgnoreCase))
+            {
+                offSprite = footerAutoHideTopOffSprite ?? offSprite;
+                onSprite = footerAutoHideTopOnSprite ?? onSprite;
+            }
+            else
+            {
+                offSprite = footerAutoHideRightOffSprite ?? offSprite;
+                onSprite = footerAutoHideRightOnSprite ?? onSprite;
+            }
+        }
+
         private void UpdateFooterAutoHideState()
         {
             if (VPBConfig.Instance == null) return;
@@ -2180,7 +2219,8 @@ namespace VPB
 
             if (footerAutoHideIconImage != null)
             {
-                Sprite target = VPBConfig.Instance.DesktopFixedAutoCollapse ? footerAutoHideOnSprite : footerAutoHideOffSprite;
+                GetFooterAutoHideSpritesForCurrentDock(out Sprite dockOff, out Sprite dockOn);
+                Sprite target = VPBConfig.Instance.DesktopFixedAutoCollapse ? dockOn : dockOff;
                 if (target != null) footerAutoHideIconImage.sprite = target;
             }
 
@@ -2340,6 +2380,7 @@ namespace VPB
 
             UpdateSideButtonPositions();
             UpdateFooterDockButtonState();
+            UpdateFooterAutoHideState();
         }
 
         private void UpdateFooterDockButtonState()
@@ -2713,6 +2754,7 @@ namespace VPB
             VPBConfig.Instance.DesktopFixedDockSide = next;
             VPBConfig.Instance.Save(true, true);
             UpdateFooterDockButtonState();
+            UpdateFooterAutoHideState();
             UpdateLayout();
         }
 
@@ -2735,6 +2777,28 @@ namespace VPB
         }
 
         public bool IsCollapsed => isCollapsed;
+
+        /// <summary>Raycast + tint on dock-specific hover strip. Must run after dock changes — strips not touched by last SetCollapsed keep default raycast=true and block toolbar.</summary>
+        private void ApplyFixedCollapseTriggerVisuals()
+        {
+            if (VPBConfig.Instance == null) return;
+            string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
+            GameObject activeTrigger = string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) ? collapseTriggerLeftGO
+                : (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase) ? collapseTriggerTopGO : collapseTriggerGO);
+            Text activeText = string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) ? collapseHandleLeftText
+                : (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase) ? collapseHandleTopText : collapseHandleText);
+
+            if (activeTrigger != null)
+            {
+                Image img = activeTrigger.GetComponent<Image>();
+                if (img != null)
+                {
+                    img.color = isCollapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
+                    img.raycastTarget = isCollapsed;
+                }
+            }
+            if (activeText != null) activeText.gameObject.SetActive(isCollapsed);
+        }
 
         public void SetCollapsed(bool collapsed)
         {
@@ -2759,22 +2823,7 @@ namespace VPB
                 rt.anchoredPosition = collapsed ? off : Vector2.zero;
             }
 
-            string dock = VPBConfig.Instance != null ? VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide) : "Right";
-            GameObject activeTrigger = string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) ? collapseTriggerLeftGO
-                : (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase) ? collapseTriggerTopGO : collapseTriggerGO);
-            Text activeText = string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) ? collapseHandleLeftText
-                : (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase) ? collapseHandleTopText : collapseHandleText);
-
-            if (activeTrigger != null)
-            {
-                Image img = activeTrigger.GetComponent<Image>();
-                if (img != null)
-                {
-                    img.color = collapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
-                    img.raycastTarget = collapsed;
-                }
-            }
-            if (activeText != null) activeText.gameObject.SetActive(collapsed);
+            ApplyFixedCollapseTriggerVisuals();
             
             UpdateSideButtonsVisibility();
             UpdateLayout();
@@ -2957,6 +3006,11 @@ namespace VPB
             RebuildGridLayout();
         }
 
+        internal void ApplyCtrlScrollToGridColumns(int delta)
+        {
+            AdjustGridColumns(delta);
+        }
+
         private void ScrollGalleryToTop()
         {
             if (recyclingGrid != null)
@@ -2995,6 +3049,9 @@ namespace VPB
             bool hadSettingsPanel = IsSettingsPanelOpen();
             if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
                 ExitInternalSettingsMode(true);
+            if (type == ContentType.Creator && VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideCreatorSideButtons
+                && leftActiveContent != ContentType.Creator && rightActiveContent != ContentType.Creator)
+                return;
             if (type == ContentType.UserTags)
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
@@ -3073,6 +3130,9 @@ namespace VPB
             bool hadSettingsPanel = IsSettingsPanelOpen();
             if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
                 ExitInternalSettingsMode(true);
+            if (type == ContentType.Creator && VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideCreatorSideButtons
+                && leftActiveContent != ContentType.Creator && rightActiveContent != ContentType.Creator)
+                return;
             if (type == ContentType.UserTags)
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;

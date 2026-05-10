@@ -847,6 +847,12 @@ namespace VPB
         private Image footerAutoHideIconImage;
         private Sprite footerAutoHideOffSprite;
         private Sprite footerAutoHideOnSprite;
+        private Sprite footerAutoHideLeftOffSprite;
+        private Sprite footerAutoHideLeftOnSprite;
+        private Sprite footerAutoHideRightOffSprite;
+        private Sprite footerAutoHideRightOnSprite;
+        private Sprite footerAutoHideTopOffSprite;
+        private Sprite footerAutoHideTopOnSprite;
         private Image footerShowHiddenIconImage;
         private Sprite footerShowHiddenOffSprite;
         private Sprite footerShowHiddenOnSprite;

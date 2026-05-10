@@ -116,7 +116,7 @@ namespace VPB
 
 			public bool preprocessed;
             public volatile bool working;
-			/// <summary>TurboJPEG decode denominator (1,2,4,8) from gallery grid columns; non-thumbs ignore.</summary>
+			/// <summary>TurboJPEG decode denominator (1,2,4,8); grid-derived thumbs use up to 4; non-thumbs ignore.</summary>
 			public int turboJpegScaleDenom = 1;
 			/// <summary>When true (hover preview), skip TurboJPEG and gallery pixel cache; decode JPEG via Unity <see cref="Texture2D.LoadImage"/>; separate RAM cache tier.</summary>
 			public bool thumbnailUnityDecodeOnly;
@@ -629,9 +629,7 @@ namespace VPB
 					bool useTurboJpeg = false;
 					try
 					{
-						var st = Settings.Instance;
-						useTurboJpeg = st != null && st.TurboJpegEnabled != null && st.TurboJpegEnabled.Value
-							&& TurboJpegNative.ShouldAttemptTurboDecode() && isJpeg;
+						useTurboJpeg = TurboJpegNative.ShouldAttemptTurboDecode() && isJpeg;
 					}
 					catch { useTurboJpeg = false; }
 					if (isThumbnail && thumbnailUnityDecodeOnly) useTurboJpeg = false;
@@ -1130,8 +1128,7 @@ namespace VPB
         {
             try
             {
-                var st = Settings.Instance;
-                return st != null && st.TurboJpegEnabled != null && st.TurboJpegEnabled.Value && TurboJpegNative.ShouldAttemptTurboDecode();
+                return TurboJpegNative.ShouldAttemptTurboDecode();
             }
             catch
             {

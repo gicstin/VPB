@@ -90,6 +90,7 @@ namespace VPB
             public string InitialGalleryCategory;
             public string GalleryDefaultLeftSidePanel;
             public string GalleryDefaultRightSidePanel;
+            public bool GalleryHideCreatorSideButtons;
             public bool PluginGalleryGridThumbnails;
             public bool GalleryListNamesLegacyFileName;
             public string GalleryHoverPreviewMode;
@@ -432,6 +433,18 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "lists.hideCreatorSideButtons", GroupKey = "lists",
+                Label = VPBTranslation.T("settings.gallery_hide_creator_side_buttons", "Hide creator side buttons"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_hide_creator_side_buttons", "Hides side-rail Creator buttons. Use title-bar creator control only. Closes open creator side lists."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryHideCreatorSideButtons,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryHideCreatorSideButtons = v;
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "lists.pluginThumbs", GroupKey = "lists", Label = VPBTranslation.T("settings.plugin_gallery_grid_thumbnails", "Plugin thumbnails in grid"),
                 Tooltip = VPBTranslation.T("settings.tip.plugin_gallery_grid_thumbnails", "Use sister-image thumbnails for plugin files in grid."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.PluginGalleryGridThumbnails,
@@ -451,20 +464,6 @@ namespace VPB
                     if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
                     else RefreshFiles(true);
                     VPBConfig.Instance.TriggerChange();
-                }
-            });
-            defs.Add(new InternalSettingDefinition {
-                Key = "lists.turboJpegEnabled", GroupKey = "lists", Label = VPBTranslation.T("settings.turbo_jpeg_enabled", "TurboJPEG for JPEG images"),
-                Tooltip = VPBTranslation.T("settings.tip.turbo_jpeg_enabled", "When ON, JPEGs decode with libjpeg-turbo (turbojpeg.dll in BepInEx/plugins). Grid thumbnails use scaled integer decode (faster, less memory). Hover preview always uses full-resolution Unity decode, not TurboJPEG. PNG and non-JPEG formats unchanged. Refresh gallery after toggling."),
-                ControlType = InternalSettingControlType.Toggle,
-                GetBool = () => Settings.Instance != null && Settings.Instance.TurboJpegEnabled != null && Settings.Instance.TurboJpegEnabled.Value,
-                SetBool = v => {
-                    if (Settings.Instance != null && Settings.Instance.TurboJpegEnabled != null)
-                    {
-                        Settings.Instance.TurboJpegEnabled.Value = v;
-                        Settings.SaveConfig();
-                    }
-                    try { TurboJpegNative.ResetSessionGiveUp(); } catch { }
                 }
             });
 
@@ -715,6 +714,7 @@ namespace VPB
                 InitialGalleryCategory = VPBConfig.Instance.InitialGalleryCategory,
                 GalleryDefaultLeftSidePanel = VPBConfig.Instance.GalleryDefaultLeftSidePanel,
                 GalleryDefaultRightSidePanel = VPBConfig.Instance.GalleryDefaultRightSidePanel,
+                GalleryHideCreatorSideButtons = VPBConfig.Instance.GalleryHideCreatorSideButtons,
                 PluginGalleryGridThumbnails = VPBConfig.Instance.PluginGalleryGridThumbnails,
                 GalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName,
                 GalleryHoverPreviewMode = VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode),
@@ -1359,6 +1359,7 @@ namespace VPB
             VPBConfig.Instance.InitialGalleryCategory = b.InitialGalleryCategory;
             VPBConfig.Instance.GalleryDefaultLeftSidePanel = b.GalleryDefaultLeftSidePanel;
             VPBConfig.Instance.GalleryDefaultRightSidePanel = b.GalleryDefaultRightSidePanel;
+            VPBConfig.Instance.GalleryHideCreatorSideButtons = b.GalleryHideCreatorSideButtons;
             VPBConfig.Instance.PluginGalleryGridThumbnails = b.PluginGalleryGridThumbnails;
             VPBConfig.Instance.GalleryListNamesLegacyFileName = b.GalleryListNamesLegacyFileName;
             VPBConfig.Instance.GalleryHoverPreviewMode = b.GalleryHoverPreviewMode;

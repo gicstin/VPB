@@ -168,11 +168,27 @@
         "IsDirectory":  false
     },
     {
-        "RelativePath":  "BepInEx/plugins/vpb_icons/auto_hide_off.png",
+        "RelativePath":  "BepInEx/plugins/vpb_icons/auto_hide_left_off.png",
         "IsDirectory":  false
     },
     {
-        "RelativePath":  "BepInEx/plugins/vpb_icons/auto_hide_on.png",
+        "RelativePath":  "BepInEx/plugins/vpb_icons/auto_hide_left_on.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/auto_hide_right_off.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/auto_hide_right_on.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/auto_hide_top_off.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/auto_hide_top_on.png",
         "IsDirectory":  false
     },
     {

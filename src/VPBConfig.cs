@@ -320,6 +320,8 @@ namespace VPB
         public string GalleryDefaultLeftSidePanel = "None";
         /// <summary>Which list opens on the right when a gallery pane is created: None, Category, or Creator.</summary>
         public string GalleryDefaultRightSidePanel = "None";
+        /// <summary>When true, gallery hides side-rail Creator buttons; creator filtering uses title-bar control only. Side creator panes stay closed.</summary>
+        public bool GalleryHideCreatorSideButtons = false;
         /// <summary>When true, BA migration prompt has been dismissed and will not appear again.</summary>
         public bool BaMigrationPromptDismissed = false;
 
@@ -546,6 +548,7 @@ namespace VPB
             GalleryListNamesLegacyFileName = false;
             GalleryDefaultLeftSidePanel = "None";
             GalleryDefaultRightSidePanel = "None";
+            GalleryHideCreatorSideButtons = false;
             GalleryGridLabelsEnabled = true;
             GalleryGridLabelFontSize = 18f;
             GalleryGridLabelsAutoHideAtHighDensity = false;
@@ -641,6 +644,8 @@ namespace VPB
                             GalleryDefaultLeftSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultLeftSidePanel"].Value);
                         if (node["GalleryDefaultRightSidePanel"] != null)
                             GalleryDefaultRightSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultRightSidePanel"].Value);
+                        if (node["GalleryHideCreatorSideButtons"] != null)
+                            GalleryHideCreatorSideButtons = node["GalleryHideCreatorSideButtons"].AsBool;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                         if (node["DesktopFixedAutoHideSeconds"] != null) DesktopFixedAutoHideSeconds = node["DesktopFixedAutoHideSeconds"].AsFloat;
@@ -886,6 +891,7 @@ namespace VPB
                 node["InitialGalleryCategory"] = InitialGalleryCategory;
                 node["GalleryDefaultLeftSidePanel"] = GalleryDefaultLeftSidePanel;
                 node["GalleryDefaultRightSidePanel"] = GalleryDefaultRightSidePanel;
+                node["GalleryHideCreatorSideButtons"].AsBool = GalleryHideCreatorSideButtons;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
                 node["DesktopFixedAutoHideSeconds"].AsFloat = Mathf.Clamp(DesktopFixedAutoHideSeconds, 0.1f, 10f);

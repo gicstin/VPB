@@ -2147,6 +2147,7 @@ namespace VPB
             // Main Content Area
             GameObject scrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
             scrollRect = scrollGO.GetComponent<ScrollRect>();
+            try { GalleryViewportCtrlScrollColumns.TryAttach(this, scrollRect); } catch { }
             contentScrollRT = scrollGO.GetComponent<RectTransform>();
             contentScrollRT.offsetMin = new Vector2(20, 110);
             contentScrollRT.offsetMax = new Vector2(-230, -65); // Default top margin (Quick Filters hidden)

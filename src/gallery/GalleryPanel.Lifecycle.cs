@@ -59,6 +59,22 @@ namespace VPB
             bool showRightSide = !isCollapsed && (mode == "Both" || mode == "Right");
             if (fixedMode && !string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) showRightSide = false;
 
+            bool hideCreatorRail = VPBConfig.Instance.GalleryHideCreatorSideButtons;
+            if (hideCreatorRail)
+            {
+                bool cleared = false;
+                if (leftActiveContent == ContentType.Creator) { leftActiveContent = null; cleared = true; }
+                if (rightActiveContent == ContentType.Creator) { rightActiveContent = null; cleared = true; }
+                if (cleared) SyncActiveContentTypeFromSidePanels();
+            }
+
+            bool showLeftCreatorBtn = showLeftSide && !hideCreatorRail;
+            bool showRightCreatorBtn = showRightSide && !hideCreatorRail;
+            if (leftCreatorBtnImage != null && leftCreatorBtnImage.gameObject.activeSelf != showLeftCreatorBtn)
+                leftCreatorBtnImage.gameObject.SetActive(showLeftCreatorBtn);
+            if (rightCreatorBtnImage != null && rightCreatorBtnImage.gameObject.activeSelf != showRightCreatorBtn)
+                rightCreatorBtnImage.gameObject.SetActive(showRightCreatorBtn);
+
             // Keep History side buttons on the same purple family as active side-tab buttons.
             Color historyBackdrop = ColorHistoryAccent;
             if (rightHistoryBtnImage != null) rightHistoryBtnImage.color = historyBackdrop;

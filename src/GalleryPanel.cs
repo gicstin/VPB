@@ -44,6 +44,11 @@ namespace VPB
             string rs = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel);
             ContentType? l = SidePanelStringToContentType(ls);
             ContentType? r = SidePanelStringToContentType(rs);
+            if (VPBConfig.Instance.GalleryHideCreatorSideButtons)
+            {
+                if (l == ContentType.Creator) l = null;
+                if (r == ContentType.Creator) r = null;
+            }
             if (l.HasValue && r.HasValue && l.Value == r.Value)
                 r = null;
 

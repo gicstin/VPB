@@ -109,7 +109,7 @@ namespace VPB
             return buf != null && len >= 3 && buf[0] == 0xFF && buf[1] == 0xD8 && buf[2] == 0xFF;
         }
 
-        /// <summary>Maps gallery grid column count (1–12) to TurboJPEG integer scale denominator 1, 2, 4, or 8 (more columns → smaller decode).</summary>
+        /// <summary>Maps gallery grid column count (1–12) to TurboJPEG integer scale denominator 1, 2, or 4 (more columns → smaller decode; 8+ cols share denom 4).</summary>
         internal static int ScaleDenomFromGridColumns(int gridColumnCount)
         {
             int c = gridColumnCount;
@@ -117,8 +117,7 @@ namespace VPB
             if (c > 12) c = 12;
             if (c <= 4) return 1;
             if (c <= 7) return 2;
-            if (c <= 10) return 4;
-            return 8;
+            return 4;
         }
 
         /// <summary>Clamp to supported integer-scale denominators for <c>tjDecompress2</c>.</summary>
