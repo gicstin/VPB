@@ -164,14 +164,17 @@ namespace VPB
                 }
 
                 var localScenes = CollectLocalSceneDeleteItemsFromSelection(selectedFiles, true);
+                var localPresets = CollectLocalPresetDeleteItemsFromSelection(selectedFiles);
 
                 var uids = CollectUniquePackageUidsFromSelection(selectedFiles);
 
                 string baseDir = Directory.GetCurrentDirectory();
                 string deletedPkgDir = Path.Combine(baseDir, DeletedPackagesFolderName);
                 string deletedSceneDir = Path.Combine(baseDir, DeletedLocalScenesFolderName);
+                string deletedPresetDir = Path.Combine(baseDir, LocalPresetDeleteSupport.DeletedLocalPresetsFolderName);
                 EnsureDeletedPackagesDirectory(deletedPkgDir);
                 EnsureDeletedLocalScenesDirectory(deletedSceneDir);
+                LocalPresetDeleteSupport.EnsureDeletedLocalPresetsDirectory(deletedPresetDir);
 
                 string currentScenePkg = null;
                 try { currentScenePkg = VamHookPlugin.CurrentScenePackageUid; }
@@ -201,10 +204,10 @@ namespace VPB
                     }
                 }
 
-                if (toDelete.Count == 0 && localScenes.Count == 0)
+                if (toDelete.Count == 0 && localScenes.Count == 0 && localPresets.Count == 0)
                 {
                     if (uids.Count == 0)
-                        ShowTemporaryStatus("Nothing to delete (no packages or local scenes in selection).");
+                        ShowTemporaryStatus("Nothing to delete (no packages, local scenes, or local presets in selection).");
                     else
                         ShowTemporaryStatus(blocked.Count > 0 ? "Nothing to delete (blocked)." : "Nothing to delete.");
                     return;
@@ -217,6 +220,8 @@ namespace VPB
                     summaryLines.Add($"Move {toDelete.Count} package(s) into '{DeletedPackagesFolderName}'.");
                 if (localScenes.Count > 0)
                     summaryLines.Add($"Move {localScenes.Count} local scene(s) (JSON and preview image if present) into '{DeletedLocalScenesFolderName}'.");
+                if (localPresets.Count > 0)
+                    summaryLines.Add($"Move {localPresets.Count} local preset(s) into '{LocalPresetDeleteSupport.DeletedLocalPresetsFolderName}'.");
 
                 string msg =
                     string.Join("\n", summaryLines.ToArray()) + "\n\n" +
@@ -227,12 +232,14 @@ namespace VPB
 
                 DisplayConfirm("Delete", msg, () =>
                 {
-                    int pm = 0, pf = 0, sm = 0, sf = 0;
+                    int pm = 0, pf = 0, sm = 0, sf = 0, prm = 0, prf = 0;
                     if (toDelete.Count > 0)
                         PerformDeleteMove(toDelete, deletedPkgDir, out pm, out pf);
                     if (localScenes.Count > 0)
                         PerformLocalScenesDeleteMove(localScenes, deletedSceneDir, out sm, out sf);
-                    ShowCombinedDeleteStatus(pm, pf, sm, sf);
+                    if (localPresets.Count > 0)
+                        PerformLocalPresetsDeleteMove(localPresets, deletedPresetDir, out prm, out prf);
+                    ShowCombinedDeleteStatus(pm, pf, sm, sf, prm, prf);
                 });
             }
             catch (Exception ex)
@@ -242,15 +249,16 @@ namespace VPB
             }
         }
 
-        private void ShowCombinedDeleteStatus(int pkgMoved, int pkgFailed, int sceneMoved, int sceneFailed)
+        private void ShowCombinedDeleteStatus(int pkgMoved, int pkgFailed, int sceneMoved, int sceneFailed, int presetMoved, int presetFailed)
         {
-            int ok = pkgMoved + sceneMoved;
-            int fail = pkgFailed + sceneFailed;
+            int ok = pkgMoved + sceneMoved + presetMoved;
+            int fail = pkgFailed + sceneFailed + presetFailed;
             if (ok == 0 && fail == 0) return;
 
             var parts = new List<string>();
             if (pkgMoved > 0) parts.Add(pkgMoved + " package(s)");
             if (sceneMoved > 0) parts.Add(sceneMoved + " local scene(s)");
+            if (presetMoved > 0) parts.Add(presetMoved + " local preset(s)");
 
             if (fail == 0)
             {

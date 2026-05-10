@@ -2174,47 +2174,57 @@ namespace VPB
             {
                 copyN = CollectUniquePackageUidsFromSelection(selectedFiles).Count
                     + CollectUniqueLocalSceneGalleryRelativePathsFromSelection(selectedFiles).Count;
-                try { deleteN = GetTboxDeleteEligiblePackageCount() + GetTboxDeleteEligibleLocalSceneCount(); } catch { deleteN = 0; }
+                try { deleteN = GetTboxDeleteEligiblePackageCount() + GetTboxDeleteEligibleLocalSceneCount() + GetTboxDeleteEligibleLocalPresetCount(); } catch { deleteN = 0; }
 
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < selectedFiles.Count; i++)
                 {
                     var f = selectedFiles[i];
                     if (f == null) continue;
-                    if (!TryGetTboxResolvablePackageState(f, out string uid, out FileEntry diskFe, out bool hidden, out bool fiAi, out bool uidAl, out bool uidWl))
-                        continue;
-                    if (!seen.Add(uid)) continue;
-                    if (hidden) unhideN++;
-                    else hideN++;
-                    bool scanWlEnabled = ScanWhitelistManager.Instance.IsEnabled;
-                    bool uidWlAny = scanWlEnabled && ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid);
-                    bool hasAnyAiFlag = fiAi || uidAl || (scanWlEnabled && uidWl);
-                    bool missingAnyAiFlag = !fiAi || !uidAl || (scanWlEnabled && !uidWl);
-                    if (hasAnyAiFlag) noAiN++;
-                    if (missingAnyAiFlag) aiN++;
-                    if (scanWlEnabled && !uidWlAny) scanWlTemporaryN++;
-
-                    // Fast install-state summary for Load/Unload buttons.
-                    // Use the resolved disk FileEntry (already computed by TryGetTboxResolvablePackageState) and
-                    // infer from its path prefix; avoids any rescans or heavy indexing work.
-                    try
+                    if (TryGetTboxResolvablePackageState(f, out string uid, out FileEntry diskFe, out bool hidden, out bool fiAi, out bool uidAl, out bool uidWl))
                     {
-                        // Local scenes (Saves/scene JSON) do not participate in load/unload.
-                        if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
-                            continue;
+                        if (!seen.Add(uid)) continue;
+                        if (hidden) unhideN++;
+                        else hideN++;
+                        bool scanWlEnabled = ScanWhitelistManager.Instance.IsEnabled;
+                        bool uidWlAny = scanWlEnabled && ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid);
+                        bool hasAnyAiFlag = fiAi || uidAl || (scanWlEnabled && uidWl);
+                        bool missingAnyAiFlag = !fiAi || !uidAl || (scanWlEnabled && !uidWl);
+                        if (hasAnyAiFlag) noAiN++;
+                        if (missingAnyAiFlag) aiN++;
+                        if (scanWlEnabled && !uidWlAny) scanWlTemporaryN++;
 
-                        string p = null;
-                        try { p = diskFe != null ? (diskFe.Path ?? diskFe.Uid) : null; } catch { p = null; }
-                        if (!string.IsNullOrEmpty(p))
+                        // Fast install-state summary for Load/Unload buttons.
+                        // Use the resolved disk FileEntry (already computed by TryGetTboxResolvablePackageState) and
+                        // infer from its path prefix; avoids any rescans or heavy indexing work.
+                        try
                         {
-                            p = p.Replace('\\', '/');
-                            int internalSep = p.IndexOf(":/", StringComparison.Ordinal);
-                            if (internalSep >= 0) p = p.Substring(0, internalSep);
-                            if (p.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgInstalled = true;
-                            else if (p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgNotInstalled = true;
+                            // Local scenes (Saves/scene JSON) do not participate in load/unload.
+                            if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
+                                continue;
+
+                            string p = null;
+                            try { p = diskFe != null ? (diskFe.Path ?? diskFe.Uid) : null; } catch { p = null; }
+                            if (!string.IsNullOrEmpty(p))
+                            {
+                                p = p.Replace('\\', '/');
+                                int internalSep = p.IndexOf(":/", StringComparison.Ordinal);
+                                if (internalSep >= 0) p = p.Substring(0, internalSep);
+                                if (p.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgInstalled = true;
+                                else if (p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) anyPkgNotInstalled = true;
+                            }
                         }
+                        catch { }
+                        continue;
                     }
-                    catch { }
+
+                    if (TryGetTboxResolvableLocalPresetHideState(f, out string presetKey, out bool presetHidden))
+                    {
+                        if (!seen.Add(presetKey)) continue;
+                        if (presetHidden) unhideN++;
+                        else hideN++;
+                        continue;
+                    }
                 }
 
                 // Temporary whitelist should account for selected packages + their dependencies.
@@ -2335,7 +2345,6 @@ namespace VPB
             {
                 FileEntry f = selectedFiles[i];
                 if (f == null) continue;
-                if (string.IsNullOrEmpty(TryGetPackageUidForEntry(f))) continue;
                 try
                 {
                     RatingsManager.Instance.SetRating(f, ratingValue);
@@ -2377,7 +2386,8 @@ namespace VPB
                     // Allow rating for packages and local Custom Scenes (Saves/scene JSON).
                     // RatingsManager.SetRating(FileEntry, ...) supports both.
                     if (!string.IsNullOrEmpty(TryGetPackageUidForEntry(f)) ||
-                        LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
+                        LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false) ||
+                        TryGetTboxResolvableLocalPresetHideState(f, out _, out _))
                         eligible.Add(f);
                 }
             }
@@ -2691,6 +2701,29 @@ namespace VPB
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Local custom presets live on disk (not inside .var) and use VaM-native .hide markers.
+        /// Keep separate from <see cref="TryGetTboxResolvablePackageState"/> so autoinstall/load logic stays package-only.
+        /// </summary>
+        private bool TryGetTboxResolvableLocalPresetHideState(FileEntry f, out string key, out bool hidden)
+        {
+            key = null;
+            hidden = false;
+            if (f == null) return false;
+
+            string p = null;
+            try { p = f.Path ?? f.Uid; } catch { p = null; }
+            if (string.IsNullOrEmpty(p)) return false;
+            p = p.Replace('\\', '/');
+            if (p.IndexOf(":/", StringComparison.Ordinal) >= 0) return false; // inside .var
+
+            if (!LocalPresetDeleteSupport.IsAllowedLocalPresetRelativePath(p)) return false;
+
+            key = p;
+            try { hidden = f.IsHidden(); } catch { hidden = false; }
+            return true;
         }
 
         // ─────────────────────────────────────────────────────────────────────────

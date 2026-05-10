@@ -398,6 +398,7 @@
     <Compile Include="src\gallery\GalleryPanel.Toolbox.Cleanup.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeletePackages.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalScenes.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalPresets.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.AutoInstallHide.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.LoadUnloadCache.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />

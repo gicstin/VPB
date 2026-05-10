@@ -176,6 +176,14 @@ namespace VPB
 		public static bool IsGalleryHideBadgeVisible(FileEntry entry)
 		{
 			if (entry == null) return false;
+			// Loose system files (Custom/, Saves/, etc.) use adjacent "<file>.hide" markers.
+			// This includes local custom presets under Custom\...
+			try
+			{
+				if (entry is SystemFileEntry sfe && !sfe.isVar)
+					return sfe.IsHidden();
+			}
+			catch { }
 			if (IsLocalSceneJsonHidden(entry)) return true;
 			if (!IsPackageVarHidden(entry)) return false;
 			if (!TryGetPackageForEntry(entry, out VarPackage pkg)) return false;
@@ -195,6 +203,12 @@ namespace VPB
 			try
 			{
 				if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages) return false;
+			}
+			catch { }
+			try
+			{
+				if (entry is SystemFileEntry sfe && !sfe.isVar && sfe.IsHidden())
+					return true;
 			}
 			catch { }
 			return IsPackageVarHidden(entry) || IsLocalSceneJsonHidden(entry);
