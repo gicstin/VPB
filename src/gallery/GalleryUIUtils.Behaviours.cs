@@ -610,6 +610,12 @@ namespace VPB
             rr.offsetMax = Vector2.zero;
             rr.localScale = Vector3.one;
 
+            // Parent may have HorizontalLayoutGroup/VerticalLayoutGroup with childControlWidth/Height
+            // that would squash the rim to ~0px (e.g. CategoryQuickSwitchChrome). Rim must always
+            // fill parent via its stretched anchors, so opt out of any layout group sizing.
+            var rimLe = rimRoot.AddComponent<LayoutElement>();
+            rimLe.ignoreLayout = true;
+
             rimL = CreateRimPiece("L");
             rimR = CreateRimPiece("R");
             rimT = CreateRimPiece("T");

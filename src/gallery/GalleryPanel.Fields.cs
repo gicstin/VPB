@@ -675,6 +675,7 @@ namespace VPB
         private RectTransform _titleSearchPopupPanelRT;
         private InputField _titleSearchPopupField;
         private bool _titleSearchPopupOpen;
+        private float _titleSearchPopupProximityAwayTimer;
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
         private List<GameObject> tboxPersonAtomBtns = new List<GameObject>();
@@ -812,10 +813,11 @@ namespace VPB
         private RectTransform _titleBarSettingsBtnRT;
         private RectTransform _titleBarQfToggleBtnRT;
         private RectTransform _titleBarFileSortTypeBtnRT;
-        private RectTransform _titleBarFileSortDirBtnRT;
         private RectTransform _titleBarRatingSortToggleBtnRT;
         private RectTransform _titleBarRefreshBtnRT;
         private RectTransform _titleBarFpsRT;
+        private RectTransform _titleBarMinimizeBtnRT;
+        private RectTransform _titleBarCloseBtnRT;
 
         // Fixed desktop dock "Top": side rail buttons live on footer bar (pagination).
         private GameObject _footerSideButtonsGroupGO;
@@ -1095,6 +1097,10 @@ namespace VPB
         // Define colors for different content types
         public static readonly Color ColorCategory = new Color(0.5f, 0.15f, 0.15f, 1f); // Darker Red
         public static readonly Color ColorCreator = new Color(0.15f, 0.45f, 0.15f, 1f); // Darker Green
+        /// <summary>Title bar search field backdrop when empty (grey chip).</summary>
+        public static readonly Color ColorTitleSearchBackdropIdle = new Color(0.15f, 0.15f, 0.15f, 1f);
+        /// <summary>Title bar search when query non-empty; blue accent paired with <see cref="ColorCreator"/> tone.</summary>
+        public static readonly Color ColorTitleSearchFilterActive = new Color(0.15f, 0.30f, 0.52f, 1f);
         public static readonly Color ColorPath = new Color(0.15f, 0.35f, 0.6f, 1f); // Darker Blue
         public static readonly Color ColorHistory = new Color(0.38f, 0.28f, 0.52f, 1f);
         /// <summary>Side-tab / chrome accent for History (slightly brighter than <see cref="ColorHistory"/>).</summary>
@@ -1170,8 +1176,8 @@ namespace VPB
         
         private Text fileSortBtnText; // NEW
         private Text fileSortTypeText; // Sort Type button text (Az/Dt/Sz/Rt)
-        private Text fileSortDirText; // Sort Direction button text (↑/↓)
-        private Image fileSortDirIconImage; // Icon image on the sort-direction button (swapped asc/desc)
+        private Text fileSortDirText; // Unused (combined sort button); kept for CommitSortTypeChange / UpdateSortButtonText signature
+        private Image fileSortDirIconImage; // Asc/desc glyph on combined file-sort button
         private Sprite fileSortDirAscSprite;
         private Sprite fileSortDirDescSprite;
         private Image ratingSortIconImage; // Icon image on the star toggle (swapped on/off)

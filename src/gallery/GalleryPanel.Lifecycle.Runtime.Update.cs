@@ -587,7 +587,9 @@ namespace VPB
 
             if (IsVisible && titleSearchInput != null)
             {
-                try { ApplyTitleBarResponsiveLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f); } catch { }
+                float iscale = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+                try { ApplyTitleBarResponsiveLayout(iscale); } catch { }
+                try { TickTitleSearchPopupProximityDismiss(iscale); } catch { }
             }
 
             // Pointer Dot Logic

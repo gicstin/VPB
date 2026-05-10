@@ -35,6 +35,10 @@ namespace VPB
             {
                 _suppressTitleBarSearchValueChanged = false;
             }
+            if (input == titleSearchInput)
+            {
+                try { SyncTitleBarSearchBackdrop(); } catch { }
+            }
         }
 
         /// <summary>Keeps title bar search aligned: package name filter in browse mode, settings row filter while settings side is open.</summary>

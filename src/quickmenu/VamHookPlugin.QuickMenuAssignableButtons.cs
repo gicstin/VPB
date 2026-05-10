@@ -984,8 +984,9 @@ namespace VPB
                 Image bg = (m_QuickMenuGridBackdropImages != null && idx < m_QuickMenuGridBackdropImages.Length) ? m_QuickMenuGridBackdropImages[idx] : null;
                 if (bg != null)
                 {
-                    Color normal = new Color(0f, 0f, 0f, 0.35f);
-                    Color hover  = new Color(0f, 0f, 0f, 0.55f);
+                    // Edit-mode exit affordance: green slot background so user finds toggle fast.
+                    Color normal = m_QuickMenuEditMode ? new Color(0.10f, 0.55f, 0.18f, 0.75f) : new Color(0f, 0f, 0f, 0.35f);
+                    Color hover  = m_QuickMenuEditMode ? new Color(0.12f, 0.70f, 0.22f, 0.90f) : new Color(0f, 0f, 0f, 0.55f);
                     bg.color = normal;
                     var hh = bg.GetComponent<QuickMenuSquareHover>();
                     if (hh != null) { hh.normal = normal; hh.hover = hover; }
@@ -1655,6 +1656,7 @@ namespace VPB
             // Resize popup to fit
             float totalH = 20f + (n + 2) * gap + 10f;
             m_QuickMenuAssignPopupRT.sizeDelta = new Vector2(260f, totalH);
+            try { UI.ApplyGalleryPaneHoverPolicy(m_QuickMenuAssignPopupRoot); } catch { }
         }
 
         private void QuickMenuRebuildAssignRandomPopupButtons()
@@ -1743,6 +1745,7 @@ namespace VPB
             float totalH = 20f + (n + 1) * gap + 10f;
             m_QuickMenuAssignRandomPopupRT.sizeDelta = new Vector2(w + 20f, totalH);
             QuickMenuUpdateAssignRandomPopupVisibility();
+            try { UI.ApplyGalleryPaneHoverPolicy(m_QuickMenuAssignRandomPopupRoot); } catch { }
         }
 
         private void QuickMenuRebuildAssignCategoryPopupButtons()
@@ -1829,6 +1832,7 @@ namespace VPB
             float totalH = 20f + (n + 1) * gap + 10f;
             m_QuickMenuAssignCategoryPopupRT.sizeDelta = new Vector2(w + 20f, totalH);
             QuickMenuUpdateAssignCategoryPopupVisibility();
+            try { UI.ApplyGalleryPaneHoverPolicy(m_QuickMenuAssignCategoryPopupRoot); } catch { }
         }
 
         private void QuickMenuUpdateAssignCategoryPopupVisibility()
@@ -2246,6 +2250,7 @@ namespace VPB
             float totalH = 20f + n * gap + 10f;
             if (totalH < 120f) totalH = 120f;
             m_QuickMenuAssignPopupRT.sizeDelta = new Vector2(300f, totalH);
+            try { UI.ApplyGalleryPaneHoverPolicy(m_QuickMenuAssignPopupRoot); } catch { }
         }
 
         private class QuickMenuSquareHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler

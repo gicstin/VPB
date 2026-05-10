@@ -31,7 +31,7 @@ namespace VPB
             cqRootRT.anchorMax = new Vector2(0, 0.5f);
             cqRootRT.pivot = new Vector2(0, 0.5f);
             cqRootRT.anchoredPosition = new Vector2(60, 0);
-            cqRootRT.sizeDelta = new Vector2(380, 44);
+            cqRootRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 44);
             _categoryQuickChromeRootGO = cqRoot;
             _categoryQuickChromeRootRT = cqRootRT;
 
@@ -84,8 +84,8 @@ namespace VPB
             var titleLe = titleGO.GetComponent<LayoutElement>();
             if (titleLe == null) titleLe = titleGO.AddComponent<LayoutElement>();
             titleLe.flexibleWidth = 1f;
-            titleLe.preferredWidth = 220f;
-            titleLe.minWidth = 140f;
+            titleLe.preferredWidth = 168f;
+            titleLe.minWidth = 100f;
             titleLe.preferredHeight = 44f;
 
             // Ensure title text reads like label (no arrow dependency).
@@ -131,7 +131,7 @@ namespace VPB
             outerRT.anchorMax = new Vector2(0, 1);
             outerRT.pivot = new Vector2(0, 1);
             outerRT.anchoredPosition = new Vector2(60, -68);
-            outerRT.sizeDelta = new Vector2(380f, 340f);
+            outerRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 340f);
 
             _categoryQuickMenuOuterRT = outerRT;
             var outerImg = _categoryQuickMenuOuterGO.AddComponent<Image>();
@@ -236,12 +236,12 @@ namespace VPB
             float y = 0f;
             _categoryQuickChromeRootRT.anchoredPosition = new Vector2(leftInset, y);
             _categoryQuickChromeRootRT.localScale = new Vector3(paneScale, paneScale, 1f);
-            _categoryQuickChromeRootRT.sizeDelta = new Vector2(380f, 44f);
+            _categoryQuickChromeRootRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 44f);
             if (_categoryQuickMenuOuterRT != null)
             {
                 _categoryQuickMenuOuterRT.anchoredPosition = new Vector2(leftInset, -((44f * paneScale) + (24f * paneScale)));
                 _categoryQuickMenuOuterRT.localScale = new Vector3(paneScale, paneScale, 1f);
-                _categoryQuickMenuOuterRT.sizeDelta = new Vector2(380f, 340f);
+                _categoryQuickMenuOuterRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 340f);
             }
         }
 

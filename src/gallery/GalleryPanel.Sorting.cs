@@ -487,6 +487,28 @@ namespace VPB
                 fileSortTypeMenuRoot.SetActive(false);
         }
 
+        private static GameObject CreateFileSortMenuSeparator(GameObject parent)
+        {
+            GameObject wrap = new GameObject("SortMenuSep");
+            wrap.transform.SetParent(parent.transform, false);
+            LayoutElement leW = wrap.AddComponent<LayoutElement>();
+            leW.preferredHeight = 10f;
+            leW.flexibleWidth = 1f;
+
+            GameObject line = new GameObject("Line");
+            line.transform.SetParent(wrap.transform, false);
+            RectTransform rt = line.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 0.5f);
+            rt.anchorMax = new Vector2(1f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = new Vector2(4f, -0.5f);
+            rt.offsetMax = new Vector2(-4f, 0.5f);
+            Image img = line.AddComponent<Image>();
+            img.color = new Color(1f, 1f, 1f, 0.14f);
+            img.raycastTarget = false;
+            return wrap;
+        }
+
         private void RebuildFileSortTypeMenuOptions()
         {
             if (fileSortTypeMenuPanelGO == null) return;
@@ -496,6 +518,66 @@ namespace VPB
                 UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
 
             SortState current = GetSortState("Files");
+
+            void AppendDirRow(SortDirection dir, Sprite rowIcon)
+            {
+                bool isCurrent = current.Direction == dir;
+                string label = (isCurrent ? "\u2713  " : "    ")
+                    + (dir == SortDirection.Ascending
+                        ? VPBTranslation.T("gallery.sort.ascending", "Ascending")
+                        : VPBTranslation.T("gallery.sort.descending", "Descending"));
+
+                GameObject row = UI.CreateUIButton(
+                    fileSortTypeMenuPanelGO, 248, 36, label, 14, 0, 0,
+                    AnchorPresets.middleCenter,
+                    () =>
+                    {
+                        CommitSortDirectionChange("Files", dir, fileSortTypeText, fileSortDirText);
+                        CloseFileSortTypeMenu();
+                    });
+
+                Image rowImg = row.GetComponent<Image>();
+                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
+
+                Text rowT = row.GetComponentInChildren<Text>();
+                if (rowT != null)
+                {
+                    rowT.color = UI.PopupText;
+                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
+                    rowT.alignment = TextAnchor.MiddleLeft;
+                    VPBUiFont.ApplyTo(rowT);
+                    RectTransform textRt = rowT.rectTransform;
+                    textRt.anchorMin = new Vector2(0f, 0f);
+                    textRt.anchorMax = new Vector2(1f, 1f);
+                    textRt.offsetMin = new Vector2(rowIcon != null ? 34f : 6f, 0f);
+                    textRt.offsetMax = new Vector2(-6f, 0f);
+                }
+
+                if (rowIcon != null)
+                {
+                    GameObject iconGo = new GameObject("DirGlyph");
+                    iconGo.transform.SetParent(row.transform, false);
+                    Image ig = iconGo.AddComponent<Image>();
+                    ig.sprite = rowIcon;
+                    ig.color = UI.PopupText;
+                    ig.preserveAspect = true;
+                    ig.raycastTarget = false;
+                    RectTransform irt = iconGo.GetComponent<RectTransform>();
+                    irt.anchorMin = new Vector2(0f, 0.5f);
+                    irt.anchorMax = new Vector2(0f, 0.5f);
+                    irt.pivot = new Vector2(0f, 0.5f);
+                    irt.anchoredPosition = new Vector2(10f, 0f);
+                    irt.sizeDelta = new Vector2(22f, 22f);
+                }
+
+                LayoutElement le = row.AddComponent<LayoutElement>();
+                le.preferredHeight = 38f;
+                le.flexibleWidth = 1f;
+            }
+
+            AppendDirRow(SortDirection.Ascending, fileSortDirAscSprite);
+            AppendDirRow(SortDirection.Descending, fileSortDirDescSprite);
+            CreateFileSortMenuSeparator(fileSortTypeMenuPanelGO);
 
             foreach (SortType sortType in FileSortDropdownOrder)
             {
@@ -532,16 +614,10 @@ namespace VPB
             }
         }
 
-        // Overload: Old method for backward compatibility
-        private void ToggleSortDirection(string context, Text buttonText)
-        {
-            ToggleSortDirection(context, buttonText, null);
-        }
-
-        private void ToggleSortDirection(string context, Text typeText, Text dirText)
+        private void CommitSortDirectionChange(string context, SortDirection dir, Text typeText, Text dirText)
         {
             var state = GetSortState(context);
-            state.Direction = (state.Direction == SortDirection.Ascending) ? SortDirection.Descending : SortDirection.Ascending;
+            state.Direction = dir;
             SaveSortState(context, state);
             UpdateSortButtonText(typeText, dirText, state);
 

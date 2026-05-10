@@ -1762,6 +1762,12 @@ namespace VPB
                     hover.normal = normalBackdrop;
                     hover.hover = new Color(0.35f, 0.35f, 0.35f, 0.75f);
 
+                    var qmHb = go.AddComponent<UIHoverBorder>();
+                    Color qmBorderCol = new Color(1f, 1f, 0f, 1f);
+                    try { if (VPBConfig.Instance != null) qmBorderCol = VPBConfig.Instance.GetGalleryGridBorderColor(); } catch { }
+                    qmHb.hoverColor = qmBorderCol;
+                    qmHb.ApplyBorderSettings();
+
                     var tip = go.AddComponent<QuickMenuTooltipHoverHandler>();
                     tip.owner = this;
                     tip.slotIdx = idxCopy;
