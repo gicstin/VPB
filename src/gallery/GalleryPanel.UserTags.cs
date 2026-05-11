@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
@@ -21,30 +22,16 @@ namespace VPB
         private readonly List<UserTagEditorRowVisual> _userTagEditorRowVisuals = new List<UserTagEditorRowVisual>(1024);
         private Color _userTagEditorRowBaseCol = new Color(0.2f, 0.2f, 0.22f, 1f);
         private Color _userTagEditorRowSelCol = new Color(0.28f, 0.38f, 0.32f, 1f);
+        private static readonly Color UserTagEditorNewTagChromeBaseCol = new Color(0.07f, 0.07f, 0.09f, 1f);
+        private static readonly Color UserTagEditorNewTagChromeOkPulseCol = new Color(0.11f, 0.38f, 0.20f, 1f);
+        private static readonly Color UserTagEditorNewTagChromeBadPulseCol = new Color(0.48f, 0.10f, 0.12f, 1f);
+        private const float UserTagEditorNewTagFlashHoldSec = 0.2f;
+        private const float UserTagEditorNewTagFlashFadeSec = 0.28f;
 
         private void RefreshFilesThenUpdateTabs(bool keepScroll)
         {
             RefreshFiles(keepScroll, false, false, null);
             try { UpdateTabs(); } catch { }
-        }
-
-        internal static List<string> ParseGalleryUserTagPaste(string pasted)
-        {
-            var result = new List<string>();
-            if (string.IsNullOrEmpty(pasted)) return result;
-            char[] splitChars = new[] { ',', ';', '\t', '\n', '\r' };
-            string[] parts = pasted.Split(splitChars, StringSplitOptions.RemoveEmptyEntries);
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < parts.Length; i++)
-            {
-                string n = VpbLocalDatabase.NormalizeGalleryUserTagName(parts[i]);
-                if (!string.IsNullOrEmpty(n) && seen.Add(n))
-                {
-                    result.Add(n);
-                    if (result.Count >= VpbLocalDatabase.GalleryUserTagPasteMaxUniqueNames) break;
-                }
-            }
-            return result;
         }
 
         /// <summary>SQLite row identity for <c>gallery_item_user_tag</c>: vars use pkg_uid + internal path; loose Custom/Saves files use <see cref="VpbLocalDatabase.GalleryUserTagLoosePkgUid"/> + normalized path.</summary>
@@ -1779,6 +1766,8 @@ namespace VPB
                 _userTagEditorRowsParent = null;
                 _userTagEditorFilterInput = null;
                 _userTagEditorNewTagInput = null;
+                _userTagEditorNewTagInputChrome = null;
+                UserTagEditorStopNewTagChromeFlash();
                 _userTagEditorSortIconImage = null;
                 _userTagEditorTitleText = null;
                 _userTagEditorMergeModalGo = null;
@@ -1796,6 +1785,8 @@ namespace VPB
                 _userTagEditorRowsParent = null;
                 _userTagEditorFilterInput = null;
                 _userTagEditorNewTagInput = null;
+                _userTagEditorNewTagInputChrome = null;
+                UserTagEditorStopNewTagChromeFlash();
                 _userTagEditorSortIconImage = null;
                 _userTagEditorTitleText = null;
                 _userTagEditorMergeModalGo = null;
@@ -1984,7 +1975,8 @@ namespace VPB
             GameObject newInGo = new GameObject("NewTagInput");
             newInGo.transform.SetParent(newTagBlock.transform, false);
             Image nBg = newInGo.AddComponent<Image>();
-            nBg.color = new Color(0.07f, 0.07f, 0.09f, 1f);
+            nBg.color = UserTagEditorNewTagChromeBaseCol;
+            _userTagEditorNewTagInputChrome = nBg;
             LayoutElement nLe = newInGo.AddComponent<LayoutElement>();
             nLe.flexibleWidth = 1f;
             nLe.minHeight = 160f * s;
@@ -2026,15 +2018,16 @@ namespace VPB
             _userTagEditorNewTagInput.placeholder = nphT;
             _userTagEditorNewTagInput.lineType = InputField.LineType.MultiLineNewline;
             _userTagEditorNewTagInput.characterLimit = 0;
+            FixMultilineHomeEndBehavior(_userTagEditorNewTagInput);
 
             string userTagEditorInfoWisdom =
                 VPBTranslation.T(
                     "gallery.usertags.editor_paste_hint",
-                    "Separate tags with comma, semicolon, tab, or line breaks. Paste from spreadsheets or plain lists.")
+                    "Create-tag button: one tag per line (newline split). Blank lines ignored; trim line ends. Other fields may still use comma / tab / semicolon where noted.")
                 + "\n"
                 + VPBTranslation.T(
                     "gallery.usertags.editor_tag_rules_hint",
-                    "Each tag: 1–30 characters; letters, digits, single spaces, hyphen (-), underscore (_). Other punctuation rejected.")
+                    "Each tag: 1–512 characters; unicode / emoji / punctuation / spaces allowed. No line breaks inside name; control chars rejected (tab allowed). Names fold lowercase for dedupe.")
                 + "\n"
                 + VPBTranslation.T(
                     "gallery.usertags.editor_limits_hint",
@@ -2073,7 +2066,7 @@ namespace VPB
             Sprite sprExp = UI.LoadIconSprite("vpb_icons/file_export.png", Color.white);
             Sprite sprInfo = UI.LoadIconSprite("vpb_icons/info_square.png", Color.white);
             GameObject createTagsBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprPlus, UserTagEditorOnCreateTagsClicked, createCol, 10f * s);
-            AddTooltipPlain(createTagsBtn, VPBTranslation.T("gallery.usertags.editor_create_tags_tip", "Create tag rows from the text field (comma / line separated)."));
+            AddTooltipPlain(createTagsBtn, VPBTranslation.T("gallery.usertags.editor_create_tags_tip", "Create tag rows: one tag per line (newline split). Blank lines skipped; trim line ends."));
             GameObject removeSelBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprMinus, UserTagEditorRemoveSelectedFromDb, removeCol, 10f * s);
             AddTooltipPlain(removeSelBtn, VPBTranslation.T("gallery.usertags.editor_remove_selected_tip", "Delete selected tag(s) from the database for all items (cannot undo)."));
             GameObject mergeBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprMerge, UserTagEditorOpenMergeDialog, mergeCol, 10f * s);
@@ -2403,31 +2396,219 @@ namespace VPB
             }
         }
 
+        /// <summary>Cave wire multiline Home/End fixer once.</summary>
+        private static void FixMultilineHomeEndBehavior(InputField field)
+        {
+            if (field == null) return;
+            GameObject go = field.gameObject;
+            if (go.GetComponent<MultilineInputFieldHomeEndFix>() == null)
+                go.AddComponent<MultilineInputFieldHomeEndFix>();
+        }
+
+        private void UserTagEditorStopNewTagChromeFlash()
+        {
+            if (_userTagEditorNewTagFlashCo != null)
+            {
+                try { StopCoroutine(_userTagEditorNewTagFlashCo); } catch { }
+                _userTagEditorNewTagFlashCo = null;
+            }
+        }
+
+        private IEnumerator UserTagEditorNewTagChromeFlashRoutine(Color flashCol, float holdSec, float fadeSec)
+        {
+            if (_userTagEditorNewTagInputChrome == null) yield break;
+            Color baseCol = UserTagEditorNewTagChromeBaseCol;
+            _userTagEditorNewTagInputChrome.color = flashCol;
+            float t = 0f;
+            while (t < holdSec)
+            {
+                t += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            t = 0f;
+            while (t < fadeSec)
+            {
+                t += Time.unscaledDeltaTime;
+                float u = fadeSec > 0.0001f ? Mathf.Clamp01(t / fadeSec) : 1f;
+                _userTagEditorNewTagInputChrome.color = Color.Lerp(flashCol, baseCol, u);
+                yield return null;
+            }
+            _userTagEditorNewTagInputChrome.color = baseCol;
+            _userTagEditorNewTagFlashCo = null;
+        }
+
+        private void UserTagEditorFlashNewTagChromeOk()
+        {
+            if (_userTagEditorNewTagInputChrome == null) return;
+            UserTagEditorStopNewTagChromeFlash();
+            _userTagEditorNewTagFlashCo = StartCoroutine(UserTagEditorNewTagChromeFlashRoutine(UserTagEditorNewTagChromeOkPulseCol, UserTagEditorNewTagFlashHoldSec, UserTagEditorNewTagFlashFadeSec));
+        }
+
+        private void UserTagEditorFlashNewTagChromeBad()
+        {
+            if (_userTagEditorNewTagInputChrome == null) return;
+            UserTagEditorStopNewTagChromeFlash();
+            _userTagEditorNewTagFlashCo = StartCoroutine(UserTagEditorNewTagChromeFlashRoutine(UserTagEditorNewTagChromeBadPulseCol, UserTagEditorNewTagFlashHoldSec + 0.15f, UserTagEditorNewTagFlashFadeSec));
+        }
+
+        /// <summary>Cave show every bad line; optional ack runs after Confirm.</summary>
+        private void ShowTagValidationErrors(List<KeyValuePair<string, string>> invalidLines, int validCount, UnityAction onAck)
+        {
+            if (invalidLines == null || invalidLines.Count == 0)
+            {
+                if (onAck != null) onAck();
+                return;
+            }
+            string body = GalleryUserTagEditorText.FormatTagValidationErrorBody(invalidLines);
+            string msg;
+            if (validCount > 0)
+            {
+                msg = VPBTranslation.T("gallery.usertags.editor_invalid_mixed_intro", "These lines were rejected:") + "\n\n" + body + "\n\n"
+                    + string.Format(VPBTranslation.T("gallery.usertags.editor_invalid_confirm_creates_valid", "Confirm creates {0} valid tag(s). Cancel stops (nothing created)."), validCount);
+            }
+            else
+                msg = VPBTranslation.T("gallery.usertags.editor_invalid_none_intro", "Nothing created. Rejected lines:") + "\n\n" + body;
+            string title = VPBTranslation.T("gallery.usertags.editor_validation_title", "Tag validation");
+            UnityAction ack = onAck != null ? onAck : delegate { };
+            DisplayConfirm(title, msg, ack);
+        }
+
+        private void ShowTagDbRejectedPopup(List<string> names)
+        {
+            if (names == null || names.Count == 0) return;
+            var sb = new StringBuilder(names.Count * 32);
+            sb.AppendLine(VPBTranslation.T("gallery.usertags.editor_db_refused_head", "Database did not add these (full vocabulary cap or DB error). Full names:"));
+            for (int i = 0; i < names.Count; i++)
+            {
+                sb.Append("\n• «");
+                sb.Append(names[i] ?? "");
+                sb.Append("»");
+            }
+            DisplayConfirm(
+                VPBTranslation.T("gallery.usertags.editor_db_refused_title", "Tag create blocked"),
+                sb.ToString(),
+                delegate { });
+        }
+
+        private static string UserTagEditorBuildPathRiskDialogBody(List<KeyValuePair<string, string>> taggedHuman)
+        {
+            var sb = new StringBuilder(Math.Min(taggedHuman.Count, 512) * 48 + 128);
+            sb.AppendLine(VPBTranslation.T("gallery.usertags.editor_path_risk_intro", "These tag names contain characters unsafe in Windows file names. Export / external tools may stumble. Please rename if that bites."));
+            sb.AppendLine();
+            sb.AppendLine(VPBTranslation.T("gallery.usertags.editor_path_risk_bad_chars_label", "Characters that trip file rules:"));
+            for (int i = 0; i < taggedHuman.Count; i++)
+            {
+                sb.Append("\n• «");
+                sb.Append(taggedHuman[i].Key ?? "");
+                sb.Append("» → ");
+                sb.Append(taggedHuman[i].Value ?? "");
+            }
+            sb.Append("\n\n");
+            sb.Append(VPBTranslation.T("gallery.usertags.editor_path_risk_confirm", "Confirm creates them anyway. Cancel aborts this batch."));
+            return sb.ToString();
+        }
+
         private void UserTagEditorOnCreateTagsClicked()
         {
             string raw = _userTagEditorNewTagInput != null ? _userTagEditorNewTagInput.text : "";
-            List<string> parts = ParseGalleryUserTagPaste(raw);
-            if (parts.Count == 0)
+            List<string> lines = GalleryUserTagEditorText.ParseMultilineTags(raw);
+            if (lines.Count == 0)
             {
                 ShowTemporaryStatus(
-                    VPBTranslation.T(
-                        "gallery.usertags.editor_no_names",
-                        "No valid tag names. Use 1–30 characters: letters, digits, spaces, - and _."),
-                    2f);
+                    VPBTranslation.T("gallery.usertags.editor_no_lines", "No non-empty lines (paste list: one tag per line; blank lines ignored)."),
+                    2.4f);
+                UserTagEditorFlashNewTagChromeBad();
                 return;
             }
-            int ok = 0;
-            for (int i = 0; i < parts.Count; i++)
+
+            var validNorm = new List<string>(lines.Count);
+            var invalidRows = new List<KeyValuePair<string, string>>(4);
+            for (int i = 0; i < lines.Count; i++)
             {
-                if (VpbLocalDatabase.TryEnsureGalleryUserTagInVocabulary(parts[i], out string norm) && !string.IsNullOrEmpty(norm))
-                    ok++;
+                string ln = lines[i];
+                if (!GalleryUserTagEditorText.ValidateTagName(ln, out string norm, out string err))
+                    invalidRows.Add(new KeyValuePair<string, string>(ln, err));
+                else
+                    validNorm.Add(norm);
             }
-            if (_userTagEditorNewTagInput != null) _userTagEditorNewTagInput.text = "";
+
+            if (invalidRows.Count > 0)
+            {
+                UserTagEditorFlashNewTagChromeBad();
+                int vc = validNorm.Count;
+                if (vc == 0)
+                {
+                    if (invalidRows.Count >= GalleryUserTagEditorText.RejectPopupMinBadLineCount)
+                        ShowTagValidationErrors(invalidRows, 0, null);
+                    else
+                        ShowTemporaryStatus(GalleryUserTagEditorText.FormatTagValidationErrorBody(invalidRows), 5f);
+                    return;
+                }
+                ShowTagValidationErrors(invalidRows, vc, delegate { UserTagEditorRunPathWarningThenMaybeCreate(validNorm, true); });
+                return;
+            }
+
+            UserTagEditorRunPathWarningThenMaybeCreate(validNorm, false);
+        }
+
+        private void UserTagEditorRunPathWarningThenMaybeCreate(List<string> validNormalized, bool hadInvalidLinesInBatch)
+        {
+            if (validNormalized == null || validNormalized.Count == 0) return;
+            var pathRows = new List<KeyValuePair<string, string>>(8);
+            for (int i = 0; i < validNormalized.Count; i++)
+            {
+                string n = validNormalized[i];
+                if (VpbLocalDatabase.GalleryUserTagNameHasFilesystemRisk(n, out string human))
+                    pathRows.Add(new KeyValuePair<string, string>(n, human));
+            }
+            if (pathRows.Count > 0)
+            {
+                string msg = UserTagEditorBuildPathRiskDialogBody(pathRows);
+                string title = VPBTranslation.T("gallery.usertags.editor_path_risk_title", "File-name character warning");
+                List<string> copy = new List<string>(validNormalized);
+                DisplayConfirm(title, msg, delegate { UserTagEditorFinalizeCreateTagRows(copy, hadInvalidLinesInBatch); });
+                return;
+            }
+            UserTagEditorFinalizeCreateTagRows(validNormalized, hadInvalidLinesInBatch);
+        }
+
+        private void UserTagEditorFinalizeCreateTagRows(List<string> validNormalized, bool hadInvalidLinesInBatch)
+        {
+            CreateTagRows(validNormalized, !hadInvalidLinesInBatch, out int created, out List<string> dbRejected);
+            if (dbRejected != null && dbRejected.Count > 0)
+            {
+                UserTagEditorFlashNewTagChromeBad();
+                ShowTagDbRejectedPopup(dbRejected);
+            }
+            else if (created > 0)
+                UserTagEditorFlashNewTagChromeOk();
+
+            if (created > 0)
+                ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.editor_created_n", "Created {0} tag(s)."), created), 2f);
+        }
+
+        /// <summary>Cave push normalized names into SQLite vocabulary; list db rejects honest.</summary>
+        private void CreateTagRows(IList<string> validNormalized, bool clearFieldWhenBatchClean, out int created, out List<string> dbRejected)
+        {
+            created = 0;
+            dbRejected = new List<string>();
+            if (validNormalized == null || validNormalized.Count == 0) return;
+            for (int i = 0; i < validNormalized.Count; i++)
+            {
+                string nm = validNormalized[i];
+                if (VpbLocalDatabase.TryEnsureGalleryUserTagInVocabulary(nm, out string norm) && !string.IsNullOrEmpty(norm))
+                    created++;
+                else
+                    dbRejected.Add(nm);
+            }
+
+            if (clearFieldWhenBatchClean && dbRejected.Count == 0 && created > 0 && _userTagEditorNewTagInput != null)
+                _userTagEditorNewTagInput.text = "";
+
             InvalidateTags();
             userTagsCached = false;
             RebuildUserTagEditorRows();
             try { UpdateTabs(); } catch { }
-            ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.editor_created_n", "Created {0} tag(s)."), ok), 2f);
         }
 
         private void UserTagEditorRemoveSelectedFromDb()
@@ -2507,7 +2688,7 @@ namespace VPB
                 ShowTemporaryStatus(
                     VPBTranslation.T(
                         "gallery.usertags.editor_merge_invalid",
-                        "Choose tag row(s) and enter valid merge target (1–30 chars: letters, digits, spaces, - _)."),
+                        "Choose tag row(s) and enter valid merge target (1–512 chars; unicode / punctuation ok; no line breaks or control chars except tab)."),
                     2.5f);
                 return;
             }
@@ -2611,7 +2792,7 @@ namespace VPB
                 ShowTemporaryStatus(
                     VPBTranslation.T(
                         "gallery.usertags.editor_rename_invalid",
-                        "Enter valid new name (1–30 chars: letters, digits, spaces, - _). Renamed tags must stay valid length."),
+                        "Enter valid new name (1–512 chars; unicode / punctuation ok; no line breaks or control chars except tab). Renamed tags must stay valid length."),
                     2.5f);
                 return;
             }
@@ -2642,7 +2823,7 @@ namespace VPB
                 ShowTemporaryStatus(
                     VPBTranslation.T(
                         "gallery.usertags.editor_rename_invalid",
-                        "Enter valid new name (1–30 chars: letters, digits, spaces, - _). Renamed tags must stay valid length."),
+                        "Enter valid new name (1–512 chars; unicode / punctuation ok; no line breaks or control chars except tab). Renamed tags must stay valid length."),
                     2.5f);
                 return;
             }
@@ -2840,7 +3021,7 @@ namespace VPB
                 return;
             }
 
-            int nLinks = UserTagEditorApplyImportedAssignments(tagToItemKeys, itemKeyToTags, out int nUnassigned);
+            int nLinks = UserTagEditorApplyImportedAssignments(tagToItemKeys, itemKeyToTags, out int nUnassigned, out List<string> skippedInvalidTags);
             InvalidateTags();
             userTagsCached = false;
             try { RefreshFilesThenUpdateTabs(true); } catch { }
@@ -2860,15 +3041,44 @@ namespace VPB
                     nLinks);
             }
             ShowTemporaryStatus(importMsg, 2.8f);
+            UserTagEditorNotifyImportSkippedTags(skippedInvalidTags);
+        }
+
+        /// <summary>Cave no silent drop on import: list tag names YAML had but Normalize rejected.</summary>
+        private void UserTagEditorNotifyImportSkippedTags(List<string> skippedInvalidTags)
+        {
+            if (skippedInvalidTags == null || skippedInvalidTags.Count == 0) return;
+            var rows = new List<KeyValuePair<string, string>>(skippedInvalidTags.Count);
+            for (int i = 0; i < skippedInvalidTags.Count; i++)
+            {
+                string raw = skippedInvalidTags[i] ?? "";
+                rows.Add(new KeyValuePair<string, string>(
+                    raw,
+                    VPBTranslation.T("gallery.usertags.editor_import_skip_reason", "Rejected by current tag rules (length / control chars / line breaks).")));
+            }
+            string body = GalleryUserTagEditorText.FormatTagValidationErrorBody(rows);
+            string title = VPBTranslation.T("gallery.usertags.editor_import_skipped_title", "Import skipped tag name(s)");
+            string msg = string.Format(
+                    VPBTranslation.T("gallery.usertags.editor_import_skipped_intro", "{0} tag name(s) from file not imported:"),
+                    skippedInvalidTags.Count)
+                + "\n\n"
+                + body;
+            if (skippedInvalidTags.Count >= GalleryUserTagEditorText.RejectPopupMinBadLineCount)
+                DisplayConfirm(title, msg, delegate { });
+            else
+                ShowTemporaryStatus(msg, 5f);
         }
 
         /// <summary>Merges tag→items and item→tags maps (one usually empty), applies DB assignments.</summary>
         private int UserTagEditorApplyImportedAssignments(
             Dictionary<string, List<string>> tagToItemKeys,
             Dictionary<string, List<string>> itemKeyToTags,
-            out int unassignedTagsEnsured)
+            out int unassignedTagsEnsured,
+            out List<string> skippedInvalidTagNames)
         {
             unassignedTagsEnsured = 0;
+            var skippedDistinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            skippedInvalidTagNames = new List<string>();
             var rowTags = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
             if (tagToItemKeys != null)
@@ -2876,7 +3086,12 @@ namespace VPB
                 foreach (var kv in tagToItemKeys)
                 {
                     string nt = VpbLocalDatabase.NormalizeGalleryUserTagName(kv.Key);
-                    if (string.IsNullOrEmpty(nt)) continue;
+                    if (string.IsNullOrEmpty(nt))
+                    {
+                        if (!string.IsNullOrEmpty(kv.Key) && skippedDistinct.Add(kv.Key))
+                            skippedInvalidTagNames.Add(kv.Key);
+                        continue;
+                    }
                     List<string> items = kv.Value;
                     if (items != null)
                     {
@@ -2917,8 +3132,15 @@ namespace VPB
                     if (tags == null) continue;
                     for (int i = 0; i < tags.Count; i++)
                     {
-                        string ntag = VpbLocalDatabase.NormalizeGalleryUserTagName(tags[i]);
-                        if (!string.IsNullOrEmpty(ntag)) set.Add(ntag);
+                        string rawTag = tags[i];
+                        string ntag = VpbLocalDatabase.NormalizeGalleryUserTagName(rawTag);
+                        if (string.IsNullOrEmpty(ntag))
+                        {
+                            if (!string.IsNullOrEmpty(rawTag) && skippedDistinct.Add(rawTag))
+                                skippedInvalidTagNames.Add(rawTag);
+                            continue;
+                        }
+                        set.Add(ntag);
                     }
                 }
             }

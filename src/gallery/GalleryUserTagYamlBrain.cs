@@ -49,7 +49,8 @@ namespace VPB
             var sb = new StringBuilder(4096);
             sb.AppendLine("# VPB user tags — tag → items. Item line = category<TAB>pkg_uid<TAB>internal_path. Tag with no items = unassigned (vocabulary only).");
             sb.AppendLine("vpb_user_tags_format: tag_to_items");
-            sb.AppendLine("version: 1");
+            sb.AppendLine("version: 2");
+            sb.AppendLine("# version 2: tag mapping keys always double-quoted (unicode / punctuation / colon safe).");
             sb.AppendLine(TagFirstRoot + ":");
             if (tagToItems == null || tagToItems.Count == 0) return sb.ToString();
 
@@ -60,7 +61,7 @@ namespace VPB
                 string tag = tagNames[ti];
                 if (string.IsNullOrEmpty(tag)) continue;
                 sb.Append("  ");
-                sb.Append(YamlQuoteKeyIfNeeded(tag));
+                sb.Append(YamlDoubleQuotedScalar(tag));
                 sb.AppendLine(":");
                 List<string> items = tagToItems[tag];
                 if (items == null) continue;
@@ -82,7 +83,8 @@ namespace VPB
             var sb = new StringBuilder(4096);
             sb.AppendLine("# VPB user tags — item → tags. Item key = category<TAB>pkg_uid<TAB>internal_path");
             sb.AppendLine("vpb_user_tags_format: item_to_tags");
-            sb.AppendLine("version: 1");
+            sb.AppendLine("version: 2");
+            sb.AppendLine("# version 2: list tag scalars always double-quoted (unicode / punctuation / colon safe).");
             sb.AppendLine(ItemFirstRoot + ":");
             if (itemToTags == null || itemToTags.Count == 0) return sb.ToString();
 
@@ -104,7 +106,7 @@ namespace VPB
                     string t = sorted[ti];
                     if (string.IsNullOrEmpty(t)) continue;
                     sb.Append("    - ");
-                    sb.AppendLine(YamlQuoteKeyIfNeeded(t));
+                    sb.AppendLine(YamlDoubleQuotedScalar(t));
                 }
             }
             return sb.ToString();
@@ -371,13 +373,41 @@ namespace VPB
         }
 
         /// <summary>At column 0: "Key:" or "key: rest" — onlyKey true when nothing after colon.</summary>
+        /// <summary>First top-level ':' outside quotes — so key can be "a:b:c". Cave fix old naive IndexOf(':').</summary>
+        private static int IndexOfYamlKeyValueColon(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return -1;
+            bool inDq = false;
+            bool inSq = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (inDq)
+                {
+                    if (c == '\\' && i + 1 < s.Length) { i++; continue; }
+                    if (c == '"') inDq = false;
+                    continue;
+                }
+                if (inSq)
+                {
+                    if (c == '\'' && i + 1 < s.Length && s[i + 1] == '\'') { i++; continue; }
+                    if (c == '\'') inSq = false;
+                    continue;
+                }
+                if (c == '"') { inDq = true; continue; }
+                if (c == '\'') { inSq = true; continue; }
+                if (c == ':') return i;
+            }
+            return -1;
+        }
+
         private static bool TryParseIndentKeyLine(string ln, int expectIndent, out string keyPart, out bool onlyKey)
         {
             keyPart = null;
             onlyKey = false;
             if (CountLeadingSpaces(ln) != expectIndent) return false;
             string s = ln.Substring(expectIndent).TrimEnd();
-            int colon = s.IndexOf(':');
+            int colon = IndexOfYamlKeyValueColon(s);
             if (colon < 0) return false;
             string after = colon + 1 < s.Length ? s.Substring(colon + 1).Trim() : "";
             keyPart = s.Substring(0, colon).Trim();
@@ -439,6 +469,22 @@ namespace VPB
                         case 't': sb.Append('\t'); i++; continue;
                         case '\\': sb.Append('\\'); i++; continue;
                         case '"': sb.Append('"'); i++; continue;
+                        case 'u':
+                            if (i + 6 <= inner.Length)
+                            {
+                                string hex = inner.Substring(i + 2, 4);
+                                int code;
+                                if (int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, CultureInfo.InvariantCulture, out code)
+                                    && code >= 0 && code <= 0xFFFF)
+                                {
+                                    sb.Append((char)code);
+                                    i += 5;
+                                    continue;
+                                }
+                            }
+                            sb.Append('\\').Append('u');
+                            i++;
+                            continue;
                         default: sb.Append(c); i++; continue;
                     }
                 }
@@ -473,21 +519,5 @@ namespace VPB
             return sb.ToString();
         }
 
-        private static string YamlQuoteKeyIfNeeded(string key)
-        {
-            if (string.IsNullOrEmpty(key)) return YamlDoubleQuotedScalar("");
-            bool safe = true;
-            for (int i = 0; i < key.Length; i++)
-            {
-                char c = key[i];
-                if (c <= ' ' || c == ':' || c == '#' || c == '"' || c == '\'' || c == '\\' || c == '[' || c == ']' || c == '{' || c == '}')
-                {
-                    safe = false;
-                    break;
-                }
-            }
-            if (safe) return key;
-            return YamlDoubleQuotedScalar(key);
-        }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using MVR.FileManagement;
 
@@ -79,7 +80,7 @@ namespace VPB
             }
         }
 
-        internal const int GalleryUserTagNameMaxLength = 30;
+        internal const int GalleryUserTagNameMaxLength = 512;
         internal const int GalleryUserTagVocabularyMaxCount = 10000;
         internal const int GalleryUserTagMaxPerItem = 100;
         internal const int GalleryUserTagPasteMaxUniqueNames = 10000;
@@ -102,38 +103,55 @@ namespace VPB
         }
 
         /// <summary>
-        /// Normalize gallery user tag: trim, lowercase, collapse whitespace to single spaces (tabs/newlines → space, never stored as tab),
-        /// allow letters, digits, <c>-</c>/<c>_</c>, single internal spaces; reject other characters; length 1–<see cref="GalleryUserTagNameMaxLength"/>.
+        /// Normalize gallery user tag: trim ends, lowercase for stable dedupe, allow unicode/emoji/punctuation/spaces/slashes;
+        /// reject null, line breaks, most control chars (tab allowed); length 1–<see cref="GalleryUserTagNameMaxLength"/>.
         /// </summary>
         internal static string NormalizeGalleryUserTagName(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return "";
             string s = raw.Trim().ToLowerInvariant();
-            if (s.Length == 0) return "";
-            var sb = new StringBuilder(s.Length);
-            bool prevSpace = false;
+            if (s.Length == 0 || s.Length > GalleryUserTagNameMaxLength) return "";
             for (int i = 0; i < s.Length; i++)
             {
                 char c = s[i];
-                if (char.IsWhiteSpace(c))
-                {
-                    if (!prevSpace && sb.Length > 0) { sb.Append(' '); prevSpace = true; }
-                    continue;
-                }
-                if (!IsGalleryUserTagAllowedNonSpaceChar(c))
-                    return "";
-                sb.Append(c);
-                prevSpace = false;
+                if (c == '\0') return "";
+                if (c == '\n' || c == '\r') return "";
+                if (c == '\t') continue;
+                if (char.IsControl(c)) return "";
             }
-            string r = sb.ToString().Trim();
-            if (r.Length == 0 || r.Length > GalleryUserTagNameMaxLength) return "";
-            return r;
+            return s;
         }
 
-        private static bool IsGalleryUserTagAllowedNonSpaceChar(char c)
+        /// <summary>Cave say: some chars bad for Windows file names; DB still store, cave warn honest.</summary>
+        internal static bool GalleryUserTagNameHasFilesystemRisk(string normalizedName, out string distinctBadCharsHuman)
         {
-            if (c == '-' || c == '_') return true;
-            return char.IsLetter(c) || char.IsDigit(c);
+            distinctBadCharsHuman = "";
+            if (string.IsNullOrEmpty(normalizedName)) return false;
+            char[] invalid = Path.GetInvalidFileNameChars();
+            var distinct = new List<char>(8);
+            for (int i = 0; i < normalizedName.Length; i++)
+            {
+                char c = normalizedName[i];
+                if (Array.IndexOf(invalid, c) < 0) continue;
+                bool already = false;
+                for (int d = 0; d < distinct.Count; d++)
+                {
+                    if (distinct[d] == c) { already = true; break; }
+                }
+                if (!already) distinct.Add(c);
+            }
+            if (distinct.Count == 0) return false;
+            var sb = new StringBuilder(distinct.Count * 3);
+            for (int i = 0; i < distinct.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                char c = distinct[i];
+                if (c == ' ') sb.Append("(space)");
+                else if (c < 32) sb.Append("(ctrl 0x").Append(((int)c).ToString("X2")).Append(")");
+                else { sb.Append("'").Append(c).Append("'"); }
+            }
+            distinctBadCharsHuman = sb.ToString();
+            return true;
         }
 
         private static void BumpMetaSchemaVersionAfterUserTagTables(VpbSqlite3.Connection conn)
@@ -1248,16 +1266,19 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
-                    string likePat = normPrefix + " %";
-                    using (var sel = conn.Prepare("SELECT tag_id, name FROM gallery_user_tag WHERE name=? OR name LIKE ?"))
+                    // Cave avoid SQL LIKE: % and _ inside tag name must not act wildcard.
+                    using (var sel = conn.Prepare("SELECT tag_id, name FROM gallery_user_tag"))
                     {
-                        sel.BindText(1, normPrefix);
-                        sel.BindText(2, likePat);
                         while (sel.Step() == VpbSqlite3.SqliteRow)
                         {
                             long tid = sel.ColumnInt64(0);
                             string nm = sel.ColumnText(1) ?? "";
-                            if (!string.IsNullOrEmpty(nm))
+                            if (string.IsNullOrEmpty(nm)) continue;
+                            if (string.Equals(nm, normPrefix, StringComparison.OrdinalIgnoreCase))
+                                rows.Add(new KeyValuePair<long, string>(tid, nm));
+                            else if (nm.Length > normPrefix.Length
+                                && nm.StartsWith(normPrefix, StringComparison.OrdinalIgnoreCase)
+                                && nm[normPrefix.Length] == ' ')
                                 rows.Add(new KeyValuePair<long, string>(tid, nm));
                         }
                     }

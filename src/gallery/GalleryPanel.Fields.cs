@@ -557,6 +557,8 @@ namespace VPB
         private Transform _userTagEditorRowsParent;
         private InputField _userTagEditorFilterInput;
         private InputField _userTagEditorNewTagInput;
+        private Image _userTagEditorNewTagInputChrome;
+        private Coroutine _userTagEditorNewTagFlashCo;
         private Image _userTagEditorSortIconImage;
         private Text _userTagEditorTitleText;
         private GameObject _userTagEditorMergeModalGo;
