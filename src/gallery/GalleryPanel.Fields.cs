@@ -535,8 +535,22 @@ namespace VPB
         private bool _leftUserTagVirtHooked;
         private bool _rightUserTagVirtHooked;
 
-        /// <summary>Pick-list selection tint for virtualized User Tags rows.</summary>
-        private static readonly Color UserTagPickListAccent = new Color(0.45f, 0.38f, 0.55f, 1f);
+        private enum UserTagSelectionState { Off, On, Mixed }
+        private readonly Dictionary<string, UserTagSelectionState> _userTagSelectionStates = new Dictionary<string, UserTagSelectionState>(StringComparer.OrdinalIgnoreCase);
+        private int _userTagSelectionRowCount = 0;
+        private string _userTagPulseTag = null;
+        private float _userTagPulseUntil = 0f;
+        private FileEntry _userTagDragHoverFile = null;
+        private string _userTagDropPulseKey = null;
+        private float _userTagDropPulseUntil = 0f;
+        private Coroutine _userTagVisualPulseCoroutine;
+
+        private static readonly Color UserTagStateOnColor = new Color(0.20f, 0.50f, 0.25f, 1f);
+        private static readonly Color UserTagStateMixedColor = new Color(0.36f, 0.38f, 0.22f, 1f);
+        private static readonly Color UserTagStatePulseColor = new Color(0.72f, 0.62f, 0.25f, 1f);
+        private static readonly Color UserTagFilterActiveColor = new Color(0.18f, 0.38f, 0.62f, 1f);
+        private static readonly Color UserTagDropGlowColor = new Color(0.35f, 0.95f, 0.55f, 1f);
+        private const float UserTagVisualPulseSeconds = 0.45f;
 
         /// <summary>Dim overlay on gallery pane + centered panel for <see cref="GalleryPanel.ShowUserTagListEditor"/>.</summary>
         private GameObject _userTagEditorRoot;
@@ -924,6 +938,12 @@ namespace VPB
         private GameObject gridSizePlusBtn;
         private GameObject footerScrollTopBtn;
         private GameObject footerScrollBottomBtn;
+        private GameObject footerScrollStepUpBtn;
+        private GameObject footerScrollStepDownBtn;
+        private GameObject leftUserTagScrollStepUpBtn;
+        private GameObject leftUserTagScrollStepDownBtn;
+        private GameObject rightUserTagScrollStepUpBtn;
+        private GameObject rightUserTagScrollStepDownBtn;
         private GameObject footerSpringScrollToggleBtn;
         private Image footerSpringScrollToggleBtnImage;
         private Image footerSpringScrollToggleIconImage;

@@ -66,10 +66,6 @@ namespace VPB
                     ContentType subType2 = InferCategorySubPaneTypeFromTitle(t2);
                     UpdateTabs(subType2, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
-                if (leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf && leftActiveContent == ContentType.UserTags && leftSubTabContainerGO != null)
-                    UpdateTabs(ContentType.UserTagsApplied, leftSubTabContainerGO, leftSubActiveTabButtons, true);
-                if (rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf && rightActiveContent == ContentType.UserTags && rightSubTabContainerGO != null)
-                    UpdateTabs(ContentType.UserTagsApplied, rightSubTabContainerGO, rightSubActiveTabButtons, false);
             }
             catch { }
             UpdateSideButtonsVisibility();
@@ -163,15 +159,14 @@ namespace VPB
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if (((splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub || leftActiveContent == ContentType.CleanupCategories))
-                     || leftActiveContent == ContentType.UserTags) && leftSubTabScrollGO != null)
+                if ((splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub || leftActiveContent == ContentType.CleanupCategories))
+                    && leftSubTabScrollGO != null)
                 {
                     // Split Layout
                     leftSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
-                    if (leftActiveContent == ContentType.UserTags) subType = ContentType.UserTagsApplied;
-                    else if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
                     else if (leftActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (leftActiveContent == ContentType.Category)
                         subType = InferCategorySubPaneTypeFromTitle(titleText != null ? titleText.text : "");
@@ -181,23 +176,10 @@ namespace VPB
                     if (leftSubSortBtn != null)
                         leftSubSortBtn.SetActive(!sceneSourceLeft);
                     if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(sceneSourceLeft);
-                    if (leftActiveContent == ContentType.UserTags && leftSubClearBtn != null)
-                        leftSubClearBtn.SetActive(false);
                     if (leftActiveContent == ContentType.CleanupCategories)
                     {
                         if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
                         if (leftSubClearBtn != null) leftSubClearBtn.SetActive(false);
-                    }
-                    else if (leftActiveContent == ContentType.UserTags)
-                    {
-                        if (leftSubSearchInput != null)
-                        {
-                            leftSubSearchInput.gameObject.SetActive(true);
-                            if (leftSubSearchInput.text != userTagAppliedFilter) leftSubSearchInput.text = userTagAppliedFilter ?? "";
-                            if (leftSubSearchInput.placeholder is Text phUt)
-                                phUt.text = GetContentTypePlaceholder(ContentType.UserTagsApplied);
-                        }
-                        ApplyLeftSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
                     }
                     else
                     {
@@ -294,15 +276,14 @@ namespace VPB
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if (((splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub || rightActiveContent == ContentType.CleanupCategories))
-                     || rightActiveContent == ContentType.UserTags) && rightSubTabScrollGO != null)
+                if ((splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub || rightActiveContent == ContentType.CleanupCategories))
+                    && rightSubTabScrollGO != null)
                 {
                     // Split Layout
                     rightSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
-                    if (rightActiveContent == ContentType.UserTags) subType = ContentType.UserTagsApplied;
-                    else if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
+                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
                     else if (rightActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (rightActiveContent == ContentType.Category)
                         subType = InferCategorySubPaneTypeFromTitle(titleText != null ? titleText.text : "");
@@ -317,26 +298,10 @@ namespace VPB
                         srt.anchorMax = new Vector2(1, 0.5f);
                     }
                     if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(sceneSourceRight);
-                    if (rightActiveContent == ContentType.UserTags && rightSubClearBtn != null)
-                        rightSubClearBtn.SetActive(false);
                     if (rightActiveContent == ContentType.CleanupCategories)
                     {
                         if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
                         if (rightSubClearBtn != null) rightSubClearBtn.SetActive(false);
-                    }
-                    else if (rightActiveContent == ContentType.UserTags)
-                    {
-                        if (rightSubSearchInput != null)
-                        {
-                            rightSubSearchInput.gameObject.SetActive(true);
-                            if (rightSubSearchInput.text != userTagAppliedFilter) rightSubSearchInput.text = userTagAppliedFilter ?? "";
-                            if (rightSubSearchInput.placeholder is Text phUt)
-                                phUt.text = GetContentTypePlaceholder(ContentType.UserTagsApplied);
-                            RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
-                            rt.anchorMin = new Vector2(1, 0.5f);
-                            rt.anchorMax = new Vector2(1, 0.5f);
-                        }
-                        ApplyRightSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
                     }
                     else
                     {

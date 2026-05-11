@@ -94,6 +94,8 @@ namespace VPB
             public string InitialGalleryCategory;
             public string GalleryDefaultLeftSidePanel;
             public string GalleryDefaultRightSidePanel;
+            public float GalleryScrollButtonStepViewportFraction;
+            public bool GalleryScrollButtonsEnabled;
             public bool GalleryHideCreatorSideButtons;
             public bool PluginGalleryGridThumbnails;
             public bool GalleryListNamesLegacyFileName;
@@ -416,7 +418,7 @@ namespace VPB
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.defaultLeft", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_default_left_panel", "Left side list (default)"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list opens on the left for new panes."),
-                ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator" },
+                ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator", "Tags" },
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel),
                 SetString = v => {
                     VPBConfig.Instance.GalleryDefaultLeftSidePanel = v;
@@ -428,7 +430,7 @@ namespace VPB
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.defaultRight", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_default_right_panel", "Right side list (default)"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list opens on the right for new panes."),
-                ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator" },
+                ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator", "Tags" },
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel),
                 SetString = v => {
                     VPBConfig.Instance.GalleryDefaultRightSidePanel = v;
@@ -436,6 +438,20 @@ namespace VPB
                     if (!IsSettingsPanelOpen()) ApplySidePanelDefaultsFromConfig();
                     VPBConfig.Instance.TriggerChange();
                 }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "lists.scrollButtons", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_scroll_buttons", "VR scroll buttons"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_scroll_buttons", "Shows large up/down scroll buttons on gallery and tag lists in VR mode."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryScrollButtonsEnabled,
+                SetBool = v => { VPBConfig.Instance.GalleryScrollButtonsEnabled = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "lists.scrollStep", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_scroll_button_step", "Scroll button step"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_scroll_button_step", "How far big up/down scroll buttons move, measured in visible panel heights."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryScrollButtonStepViewportFraction,
+                SetFloat = v => { VPBConfig.Instance.GalleryScrollButtonStepViewportFraction = Mathf.Clamp(v, 0.10f, 2.00f); VPBConfig.Instance.TriggerChange(); },
+                Min = 0.10f, Max = 2.00f, Step = 0.05f, Decimals = 2,
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.GalleryScrollButtonsEnabled
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.hideCreatorSideButtons", GroupKey = "lists",
@@ -731,6 +747,8 @@ namespace VPB
                 InitialGalleryCategory = VPBConfig.Instance.InitialGalleryCategory,
                 GalleryDefaultLeftSidePanel = VPBConfig.Instance.GalleryDefaultLeftSidePanel,
                 GalleryDefaultRightSidePanel = VPBConfig.Instance.GalleryDefaultRightSidePanel,
+                GalleryScrollButtonStepViewportFraction = VPBConfig.Instance.GalleryScrollButtonStepViewportFraction,
+                GalleryScrollButtonsEnabled = VPBConfig.Instance.GalleryScrollButtonsEnabled,
                 GalleryHideCreatorSideButtons = VPBConfig.Instance.GalleryHideCreatorSideButtons,
                 PluginGalleryGridThumbnails = VPBConfig.Instance.PluginGalleryGridThumbnails,
                 GalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName,
@@ -1451,6 +1469,8 @@ namespace VPB
             VPBConfig.Instance.InitialGalleryCategory = b.InitialGalleryCategory;
             VPBConfig.Instance.GalleryDefaultLeftSidePanel = b.GalleryDefaultLeftSidePanel;
             VPBConfig.Instance.GalleryDefaultRightSidePanel = b.GalleryDefaultRightSidePanel;
+            VPBConfig.Instance.GalleryScrollButtonStepViewportFraction = b.GalleryScrollButtonStepViewportFraction;
+            VPBConfig.Instance.GalleryScrollButtonsEnabled = b.GalleryScrollButtonsEnabled;
             VPBConfig.Instance.GalleryHideCreatorSideButtons = b.GalleryHideCreatorSideButtons;
             VPBConfig.Instance.PluginGalleryGridThumbnails = b.PluginGalleryGridThumbnails;
             VPBConfig.Instance.GalleryListNamesLegacyFileName = b.GalleryListNamesLegacyFileName;

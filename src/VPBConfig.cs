@@ -353,18 +353,22 @@ namespace VPB
             return n;
         }
 
-        /// <summary>Which list opens on the left when a gallery pane is created: None, Category, or Creator.</summary>
+        /// <summary>Which list opens on the left when a gallery pane is created: None, Category, Creator, or Tags.</summary>
         public string GalleryDefaultLeftSidePanel = "None";
-        /// <summary>Which list opens on the right when a gallery pane is created: None, Category, or Creator.</summary>
+        /// <summary>Which list opens on the right when a gallery pane is created: None, Category, Creator, or Tags.</summary>
         public string GalleryDefaultRightSidePanel = "None";
+        /// <summary>Big scroll button step in viewport heights.</summary>
+        public float GalleryScrollButtonStepViewportFraction = 0.65f;
+        /// <summary>When true, show big VR up/down scroll buttons on gallery and tag lists.</summary>
+        public bool GalleryScrollButtonsEnabled = true;
         /// <summary>When true, gallery hides side-rail Creator buttons; creator filtering uses title-bar control only. Side creator panes stay closed.</summary>
         public bool GalleryHideCreatorSideButtons = false;
         /// <summary>When true, BA migration prompt has been dismissed and will not appear again.</summary>
         public bool BaMigrationPromptDismissed = false;
 
-        private static readonly string[] s_GallerySidePanelCanonical = { "None", "Category", "Creator" };
+        private static readonly string[] s_GallerySidePanelCanonical = { "None", "Category", "Creator", "Tags" };
 
-        /// <summary>Maps user/config values to None, Category, or Creator.</summary>
+        /// <summary>Maps user/config values to None, Category, Creator, or Tags.</summary>
         public static string NormalizeGallerySidePanel(string value)
         {
             if (string.IsNullOrEmpty(value)) return "None";
@@ -613,6 +617,8 @@ namespace VPB
             GalleryCategoryQuickOrder = "";
             GalleryCategoryQuickSwitchHidden = "";
             BaMigrationPromptDismissed = false;
+            GalleryScrollButtonStepViewportFraction = 0.65f;
+            GalleryScrollButtonsEnabled = true;
 
             try
             {
@@ -685,6 +691,10 @@ namespace VPB
                             GalleryDefaultLeftSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultLeftSidePanel"].Value);
                         if (node["GalleryDefaultRightSidePanel"] != null)
                             GalleryDefaultRightSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultRightSidePanel"].Value);
+                        if (node["GalleryScrollButtonStepViewportFraction"] != null)
+                            GalleryScrollButtonStepViewportFraction = Mathf.Clamp(node["GalleryScrollButtonStepViewportFraction"].AsFloat, 0.10f, 2.00f);
+                        if (node["GalleryScrollButtonsEnabled"] != null)
+                            GalleryScrollButtonsEnabled = node["GalleryScrollButtonsEnabled"].AsBool;
                         if (node["GalleryHideCreatorSideButtons"] != null)
                             GalleryHideCreatorSideButtons = node["GalleryHideCreatorSideButtons"].AsBool;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
@@ -948,6 +958,8 @@ namespace VPB
                 node["InitialGalleryCategory"] = InitialGalleryCategory;
                 node["GalleryDefaultLeftSidePanel"] = GalleryDefaultLeftSidePanel;
                 node["GalleryDefaultRightSidePanel"] = GalleryDefaultRightSidePanel;
+                node["GalleryScrollButtonStepViewportFraction"].AsFloat = Mathf.Clamp(GalleryScrollButtonStepViewportFraction, 0.10f, 2.00f);
+                node["GalleryScrollButtonsEnabled"].AsBool = GalleryScrollButtonsEnabled;
                 node["GalleryHideCreatorSideButtons"].AsBool = GalleryHideCreatorSideButtons;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;

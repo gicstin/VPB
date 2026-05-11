@@ -84,6 +84,8 @@ namespace VPB
                 return ContentType.Category;
             if (string.Equals(normalized, "Creator", StringComparison.OrdinalIgnoreCase))
                 return ContentType.Creator;
+            if (string.Equals(normalized, "Tags", StringComparison.OrdinalIgnoreCase))
+                return ContentType.UserTags;
             return null;
         }
 

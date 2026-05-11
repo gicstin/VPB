@@ -1379,24 +1379,48 @@ namespace VPB
 
         private void EnsureScrollbarJumpButtonsExist()
         {
-            if (footerScrollTopBtn != null) return;
+            if (!ShouldShowGalleryScrollStepButtons())
+            {
+                SetGalleryScrollStepButtonsActive(false);
+                return;
+            }
+            if (footerScrollTopBtn != null && footerScrollBottomBtn != null && footerScrollStepUpBtn != null && footerScrollStepDownBtn != null) return;
             if (scrollRect == null) return;
             Transform sb = null;
             try { sb = scrollRect.gameObject != null ? scrollRect.gameObject.transform.Find("Scrollbar") : null; }
             catch { sb = null; }
             if (sb == null) return;
 
-            footerScrollTopBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "↑", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToTop);
-            footerScrollTopBtn.name = "ScrollbarScrollTop";
-            { var s = UI.LoadIconSprite("vpb_icons/scroll_top.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollTopBtn, s); }
-            footerScrollBottomBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "↓", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToBottom);
-            footerScrollBottomBtn.name = "ScrollbarScrollBottom";
-            { var s = UI.LoadIconSprite("vpb_icons/scroll_bottom.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollBottomBtn, s); }
-
-            AddHoverDelegate(footerScrollTopBtn);
-            AddTooltip(footerScrollTopBtn, "gallery.tooltip.scroll_top", "Jump to top of list");
-            AddHoverDelegate(footerScrollBottomBtn);
-            AddTooltip(footerScrollBottomBtn, "gallery.tooltip.scroll_bottom", "Jump to bottom of list");
+            if (footerScrollTopBtn == null)
+            {
+                footerScrollTopBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "↑", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToTop);
+                footerScrollTopBtn.name = "ScrollbarScrollTop";
+                { var s = UI.LoadIconSprite("vpb_icons/scroll_top.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollTopBtn, s); }
+                AddHoverDelegate(footerScrollTopBtn);
+                AddTooltip(footerScrollTopBtn, "gallery.tooltip.scroll_top", "Jump to top of list");
+            }
+            if (footerScrollBottomBtn == null)
+            {
+                footerScrollBottomBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "↓", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToBottom);
+                footerScrollBottomBtn.name = "ScrollbarScrollBottom";
+                { var s = UI.LoadIconSprite("vpb_icons/scroll_bottom.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollBottomBtn, s); }
+                AddHoverDelegate(footerScrollBottomBtn);
+                AddTooltip(footerScrollBottomBtn, "gallery.tooltip.scroll_bottom", "Jump to bottom of list");
+            }
+            if (footerScrollStepUpBtn == null)
+            {
+                footerScrollStepUpBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "▲", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryStepUp);
+                footerScrollStepUpBtn.name = "ScrollbarScrollStepUp";
+                AddHoverDelegate(footerScrollStepUpBtn);
+                AddTooltip(footerScrollStepUpBtn, "gallery.tooltip.scroll_step_up", "Scroll up");
+            }
+            if (footerScrollStepDownBtn == null)
+            {
+                footerScrollStepDownBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "▼", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryStepDown);
+                footerScrollStepDownBtn.name = "ScrollbarScrollStepDown";
+                AddHoverDelegate(footerScrollStepDownBtn);
+                AddTooltip(footerScrollStepDownBtn, "gallery.tooltip.scroll_step_down", "Scroll down");
+            }
 
             HookScrollbarJumpButtonsSmartVisibility();
             UpdateScrollbarJumpButtonsVisibility();
@@ -1422,6 +1446,11 @@ namespace VPB
         {
             if (footerScrollTopBtn == null || footerScrollBottomBtn == null) return;
             if (scrollRect == null) return;
+            if (!ShouldShowGalleryScrollStepButtons())
+            {
+                SetGalleryScrollStepButtonsActive(false);
+                return;
+            }
 
             bool scrollable = false;
             try
@@ -1438,6 +1467,8 @@ namespace VPB
             {
                 footerScrollTopBtn.SetActive(false);
                 footerScrollBottomBtn.SetActive(false);
+                if (footerScrollStepUpBtn != null) footerScrollStepUpBtn.SetActive(false);
+                if (footerScrollStepDownBtn != null) footerScrollStepDownBtn.SetActive(false);
                 return;
             }
 
@@ -1470,6 +1501,23 @@ namespace VPB
 
             footerScrollTopBtn.SetActive(showTop);
             footerScrollBottomBtn.SetActive(showBottom);
+            if (footerScrollStepUpBtn != null) footerScrollStepUpBtn.SetActive(showTop);
+            if (footerScrollStepDownBtn != null) footerScrollStepDownBtn.SetActive(showBottom);
+        }
+
+        private bool ShouldShowGalleryScrollStepButtons()
+        {
+            return XrUtils.IsVrActive()
+                && VPBConfig.Instance != null
+                && VPBConfig.Instance.GalleryScrollButtonsEnabled;
+        }
+
+        private void SetGalleryScrollStepButtonsActive(bool active)
+        {
+            if (footerScrollTopBtn != null) footerScrollTopBtn.SetActive(active);
+            if (footerScrollBottomBtn != null) footerScrollBottomBtn.SetActive(active);
+            if (footerScrollStepUpBtn != null) footerScrollStepUpBtn.SetActive(active);
+            if (footerScrollStepDownBtn != null) footerScrollStepDownBtn.SetActive(active);
         }
 
         private static bool BoundsOverlapY(RectTransform commonRoot, RectTransform a, RectTransform b)
@@ -1514,6 +1562,8 @@ namespace VPB
 
             var topRt = footerScrollTopBtn.GetComponent<RectTransform>();
             var botRt = footerScrollBottomBtn.GetComponent<RectTransform>();
+            var upRt = footerScrollStepUpBtn != null ? footerScrollStepUpBtn.GetComponent<RectTransform>() : null;
+            var downRt = footerScrollStepDownBtn != null ? footerScrollStepDownBtn.GetComponent<RectTransform>() : null;
             if (topRt == null || botRt == null) return;
 
             // Pin jump buttons to scrollbar top/bottom ends (not relative to spring button).
@@ -1524,20 +1574,39 @@ namespace VPB
             topRt.sizeDelta = botRt.sizeDelta = new Vector2(btnSz, btnSz);
             topRt.anchoredPosition = new Vector2(0f, -gap);
             botRt.anchoredPosition = new Vector2(0f, gap);
+            if (upRt != null)
+            {
+                upRt.anchorMin = upRt.anchorMax = new Vector2(0.5f, 1f);
+                upRt.pivot = new Vector2(0.5f, 1f);
+                upRt.sizeDelta = new Vector2(btnSz, btnSz);
+                upRt.anchoredPosition = new Vector2(0f, -(btnSz + gap * 2f));
+            }
+            if (downRt != null)
+            {
+                downRt.anchorMin = downRt.anchorMax = new Vector2(0.5f, 0f);
+                downRt.pivot = new Vector2(0.5f, 0f);
+                downRt.sizeDelta = new Vector2(btnSz, btnSz);
+                downRt.anchoredPosition = new Vector2(0f, btnSz + gap * 2f);
+            }
 
             int fs = Mathf.RoundToInt(22f * paneS);
-            foreach (var go in new[] { footerScrollTopBtn, footerScrollBottomBtn })
+            foreach (var go in new[] { footerScrollTopBtn, footerScrollBottomBtn, footerScrollStepUpBtn, footerScrollStepDownBtn })
             {
+                if (go == null) continue;
                 var tx = go.GetComponentInChildren<Text>(true);
                 if (tx != null && tx.gameObject.activeSelf) tx.fontSize = fs;
             }
 
             SyncScrollbarJumpButtonCollider(footerScrollTopBtn);
             SyncScrollbarJumpButtonCollider(footerScrollBottomBtn);
+            SyncScrollbarJumpButtonCollider(footerScrollStepUpBtn);
+            SyncScrollbarJumpButtonCollider(footerScrollStepDownBtn);
 
             int si = springScrollButtonGO.transform.GetSiblingIndex();
             footerScrollTopBtn.transform.SetSiblingIndex(si);
-            footerScrollBottomBtn.transform.SetSiblingIndex(si + 2);
+            if (footerScrollStepUpBtn != null) footerScrollStepUpBtn.transform.SetSiblingIndex(si + 1);
+            if (footerScrollStepDownBtn != null) footerScrollStepDownBtn.transform.SetSiblingIndex(si + 3);
+            footerScrollBottomBtn.transform.SetSiblingIndex(si + 4);
 
             UpdateScrollbarJumpButtonsVisibility();
         }
@@ -3027,6 +3096,41 @@ namespace VPB
             else if (scrollRect != null)
                 scrollRect.verticalNormalizedPosition = 0f;
             UpdateScrollbarJumpButtonsVisibility();
+        }
+
+        private void ScrollGalleryStepUp()
+        {
+            ScrollRectByConfiguredStep(scrollRect, 1f);
+            UpdateScrollbarJumpButtonsVisibility();
+        }
+
+        private void ScrollGalleryStepDown()
+        {
+            ScrollRectByConfiguredStep(scrollRect, -1f);
+            UpdateScrollbarJumpButtonsVisibility();
+        }
+
+        private void ScrollRectByConfiguredStep(ScrollRect sr, float direction)
+        {
+            if (sr == null) return;
+            float scrollablePx = 0f;
+            float viewportH = 0f;
+            try
+            {
+                if (sr.content != null && sr.viewport != null)
+                {
+                    viewportH = sr.viewport.rect.height;
+                    scrollablePx = Mathf.Max(0f, sr.content.rect.height - viewportH);
+                }
+            }
+            catch { scrollablePx = 0f; viewportH = 0f; }
+            if (scrollablePx <= 0.5f || viewportH <= 0.5f) return;
+
+            float step = VPBConfig.Instance != null ? VPBConfig.Instance.GalleryScrollButtonStepViewportFraction : 0.65f;
+            step = Mathf.Clamp(step, 0.10f, 2.00f);
+            float delta = (viewportH * step) / scrollablePx;
+            sr.verticalNormalizedPosition = Mathf.Clamp01(sr.verticalNormalizedPosition + Mathf.Sign(direction) * delta);
+            try { if (recyclingGrid != null && sr == scrollRect) recyclingGrid.Refresh(); } catch { }
         }
 
         private void SyncActiveContentTypeFromSidePanels()

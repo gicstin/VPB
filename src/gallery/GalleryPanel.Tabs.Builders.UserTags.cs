@@ -9,6 +9,11 @@ namespace VPB
     {
         private void BuildUserTagsTabs(GameObject container, List<GameObject> trackedButtons, bool isLeft)
         {
+            renderTagsPanel(container, trackedButtons, isLeft);
+        }
+
+        private void renderTagsPanel(GameObject container, List<GameObject> trackedButtons, bool isLeft)
+        {
             EnsureUserTagSideTabBulkBlock(container.transform, isLeft);
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             Transform utBulk = container.transform.Find("VPB_UserTagBulkBlock_v3");
@@ -21,6 +26,7 @@ namespace VPB
             if (utBulk != null) utBulk.SetAsFirstSibling();
 
             if (!userTagsCached) CacheUserTagsSideTab();
+            CacheAppliedUserTagsForSelection();
 
             string sigNew = ComputeUserTagVirtDataSignature();
             bool dataSigChanged = !string.Equals(_userTagVirtViewSig, sigNew, StringComparison.Ordinal);
@@ -51,7 +57,7 @@ namespace VPB
                 ScrollRect srReset = isLeft ? _leftUserTagVirtScroll : _rightUserTagVirtScroll;
                 if (srReset != null) srReset.verticalNormalizedPosition = 1f;
             }
-            UpdateUserTagVirtualVisible(isLeft, UserTagPickListAccent, container.transform);
+            UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, container.transform);
             SyncUserTagAvailTitleCount(isLeft);
             SyncUserTagApplyBtnCount(isLeft);
         }
