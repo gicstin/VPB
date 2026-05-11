@@ -90,10 +90,8 @@ namespace VPB
             if (entry.SortState != null)
             {
                 SaveSortState("Files", entry.SortState);
-                if (fileSortBtnText != null)
-                {
-                    UpdateSortButtonText(fileSortBtnText, entry.SortState);
-                }
+                if (fileSortTypeText != null)
+                    UpdateSortButtonText(fileSortTypeText, fileSortDirText, entry.SortState);
                 SyncRatingSortToggleState();
             }
 

@@ -829,6 +829,7 @@ namespace VPB
         private RectTransform _titleBarSettingsBtnRT;
         private RectTransform _titleBarQfToggleBtnRT;
         private RectTransform _titleBarFileSortTypeBtnRT;
+        private RectTransform _titleBarFileSortDirBtnRT;
         private RectTransform _titleBarRatingSortToggleBtnRT;
         private RectTransform _titleBarRefreshBtnRT;
         private RectTransform _titleBarFpsRT;
@@ -1198,8 +1199,8 @@ namespace VPB
         
         private Text fileSortBtnText; // NEW
         private Text fileSortTypeText; // Sort Type button text (Az/Dt/Sz/Rt)
-        private Text fileSortDirText; // Unused (combined sort button); kept for CommitSortTypeChange / UpdateSortButtonText signature
-        private Image fileSortDirIconImage; // Asc/desc glyph on combined file-sort button
+        private Text fileSortDirText; // Optional; null when direction shown as icon only
+        private Image fileSortDirIconImage; // Asc/desc glyph on file-sort direction button
         private Sprite fileSortDirAscSprite;
         private Sprite fileSortDirDescSprite;
         private Image ratingSortIconImage; // Icon image on the star toggle (swapped on/off)

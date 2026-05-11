@@ -331,7 +331,10 @@ namespace VPB
             fileSortDirAscSprite = UI.LoadIconSprite("vpb_icons/sort_asc.png", UI.BarIconGlyphTint);
             fileSortDirDescSprite = UI.LoadIconSprite("vpb_icons/sort_desc.png", UI.BarIconGlyphTint);
 
-            // File sort: direction icon only (field + dir in menu); left-click menu; right-click cycle field
+            const float fileSortChip = 40f;
+            const float fileSortGap = 8f;
+
+            // File sort: type button (abbrev + type menu / RMB cycle); separate direction button (↑/↓ icon)
             GameObject fileSortTypeBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.sort.az", "Az"), 16, 0, 0, AnchorPresets.middleCenter, null);
             fileSortTypeBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             fileSortTypeBtn.GetComponentInChildren<Text>().color = Color.white;
@@ -339,17 +342,32 @@ namespace VPB
             fileSortTypeRT.anchorMin = new Vector2(0.5f, 0.5f);
             fileSortTypeRT.anchorMax = new Vector2(0.5f, 0.5f);
             fileSortTypeRT.pivot = new Vector2(0.5f, 0.5f);
-            fileSortTypeRT.anchoredPosition = new Vector2(108, 0); // To the right of search
+            fileSortTypeRT.anchoredPosition = new Vector2(108, 0);
             _titleBarFileSortTypeBtnRT = fileSortTypeRT;
 
             fileSortTypeText = fileSortTypeBtn.GetComponentInChildren<Text>();
             if (fileSortTypeText != null)
-                fileSortTypeText.gameObject.SetActive(false);
+            {
+                fileSortTypeText.gameObject.SetActive(true);
+                try { VPBUiFont.ApplyTo(fileSortTypeText); } catch { }
+            }
+
+            GameObject fileSortDirBtn = UI.CreateUIButton(titleBarGO, 40, 40, "", 16, 0, 0, AnchorPresets.middleCenter, ToggleFileSortDirection);
+            fileSortDirBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
+            Text fileSortDirBtnLabel = fileSortDirBtn.GetComponentInChildren<Text>();
+            if (fileSortDirBtnLabel != null)
+                fileSortDirBtnLabel.gameObject.SetActive(false);
+            RectTransform fileSortDirRT = fileSortDirBtn.GetComponent<RectTransform>();
+            fileSortDirRT.anchorMin = new Vector2(0.5f, 0.5f);
+            fileSortDirRT.anchorMax = new Vector2(0.5f, 0.5f);
+            fileSortDirRT.pivot = new Vector2(0.5f, 0.5f);
+            fileSortDirRT.anchoredPosition = new Vector2(108f + fileSortChip * 0.5f + fileSortGap + fileSortChip * 0.5f, 0f);
+            _titleBarFileSortDirBtnRT = fileSortDirRT;
 
             {
                 const float iconPad = 4f;
                 GameObject dirIconGo = new GameObject("DirIcon");
-                dirIconGo.transform.SetParent(fileSortTypeBtn.transform, false);
+                dirIconGo.transform.SetParent(fileSortDirBtn.transform, false);
                 Sprite initial = fileSortDirAscSprite ?? fileSortDirDescSprite;
                 Image dirImg = dirIconGo.AddComponent<Image>();
                 dirImg.sprite = initial;
@@ -382,7 +400,8 @@ namespace VPB
             });
             fileSortTypeEt.triggers.Add(fileSortPointerClick);
 
-            AddTooltip(fileSortTypeBtn, "gallery.tooltip.sort_cycle_field", "Sort: left-click menu (field + direction), right-click cycle field");
+            AddTooltip(fileSortTypeBtn, "gallery.tooltip.sort_cycle_field", "Sort field: left-click menu, right-click cycle field");
+            AddTooltip(fileSortDirBtn, "gallery.tooltip.sort_toggle_dir", "Toggle sort direction (↑/↓)");
             SetupFileSortTypeMenu();
 
             // Keep fileSortBtnText for compatibility with existing code
@@ -493,6 +512,7 @@ namespace VPB
             { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) { var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(40f * s, 40f * s); } if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(16 * s); t.resizeTextMinSize = Mathf.RoundToInt(10 * s); } }); }
             { var rt = titleSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 40f * s); }); }
             { var rt = fileSortTypeRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
+            { var rt = fileSortDirRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
             { var rt = ratingSortToggleRT; var t = ratingSortToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(18 * s); }); }
             { var rt = refreshRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
             { var rt = titleBarSettingsRT; var t = titleBarSettingsBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }

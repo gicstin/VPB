@@ -22,7 +22,7 @@ namespace VPB
         private const float TitleSearchPopupVicinityInflateScreenPx = 18f;
 
         /// <summary>
-        /// Order: category — sectionGap — settings, language, presets, creator — search — sort (dir icon), ★, ⟳ — sectionGap — FPS, minimise, close.
+        /// Order: category — sectionGap — settings, language, presets, creator — search — sort type, sort dir, ★, ⟳ — sectionGap — FPS, minimise, close.
         /// Sizes scale with inner pane factor <paramref name="paneScale"/>.
         /// </summary>
         private void ApplyTitleBarResponsiveLayout(float paneScale)
@@ -60,8 +60,8 @@ namespace VPB
             // Left pack after section: settings, lang, presets, creator (four 40-squares, three gaps inside)
             float lpSpan = chip * 4f + g * 3f;
 
-            // Compact search worst-case: chip + gaps into sort icon + ★ + ⟳ (sort same width as chip)
-            float midMin = chip * 4f + g * 3f;
+            // Compact search worst-case: chip + gaps into sort type + sort dir + ★ + ⟳
+            float midMin = chip * 5f + g * 4f;
 
             bool flushLeftInset = CategoryQuickSwitchFlushLeftEdge();
             float leftInset = flushLeftInset ? 0f : 60f * s;
@@ -108,7 +108,7 @@ namespace VPB
             float rightPackLeftFace = xc - fpsWRead * 0.5f;
             float boundaryRefreshRight = rightPackLeftFace - sec;
 
-            // —— Refresh, ★, sort dir icon: coords from FPS boundary (apply center shift later).
+            // —— Refresh, ★, sort dir, sort type: coords from FPS boundary (apply center shift later).
             float rSweep = boundaryRefreshRight;
             xc = rSweep - halfChip;
             float xfRefresh = xc;
@@ -117,7 +117,10 @@ namespace VPB
             float xfStar = xc;
             rSweep = xc - halfChip - g;
             xc = rSweep - halfChip;
-            float xfSort = xc;
+            float xfSortDir = xc;
+            rSweep = xc - halfChip - g;
+            xc = rSweep - halfChip;
+            float xfSortType = xc;
             rSweep = xc - halfChip - g;
 
             float searchAvailRightBoundary = rSweep;
@@ -183,7 +186,8 @@ namespace VPB
             float stripCenterShift = slackLeftSticky * 0.5f;
             xlPackStart = xlSticky - stripCenterShift;
 
-            xfSort -= stripCenterShift;
+            xfSortType -= stripCenterShift;
+            xfSortDir -= stripCenterShift;
             xfStar -= stripCenterShift;
             xfRefresh -= stripCenterShift;
 
@@ -219,7 +223,9 @@ namespace VPB
             if (_titleBarRatingSortToggleBtnRT != null)
                 _titleBarRatingSortToggleBtnRT.anchoredPosition = new Vector2(xfStar, 0f);
             if (_titleBarFileSortTypeBtnRT != null)
-                _titleBarFileSortTypeBtnRT.anchoredPosition = new Vector2(xfSort, 0f);
+                _titleBarFileSortTypeBtnRT.anchoredPosition = new Vector2(xfSortType, 0f);
+            if (_titleBarFileSortDirBtnRT != null)
+                _titleBarFileSortDirBtnRT.anchoredPosition = new Vector2(xfSortDir, 0f);
 
             float xl = xlPackStart;
             if (_titleBarSettingsBtnRT != null)
