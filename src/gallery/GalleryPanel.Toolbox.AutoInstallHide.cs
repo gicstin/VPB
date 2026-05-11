@@ -216,14 +216,11 @@ namespace VPB
                 if (ok > 0 && !IsHubMode)
                 {
                     try { RemoveCurrentGalleryEntriesMatchingHideFilter(); } catch { }
-                    // When "show hidden" is on, rows stay in the list so Remove… skips grid refresh; rebind for H badge.
-                    bool showHidden = false;
-                    try { showHidden = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages; } catch { }
-                    if (showHidden)
-                    {
-                        try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
-                        try { RefreshSelectionVisuals(); } catch { }
-                    }
+                }
+                if (ok > 0)
+                {
+                    try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                    try { RefreshSelectionVisuals(); } catch { }
                 }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
 
@@ -265,6 +262,7 @@ namespace VPB
                 try
                 {
                     lastFilteredFiles.RemoveAll(f => f != null && !string.IsNullOrEmpty(f.Path) && removedPaths.Contains(f.Path));
+                    InvalidateGalleryPreHideFileListSnapshot();
                 }
                 catch { }
             }
@@ -381,7 +379,11 @@ namespace VPB
                     return;
                 }
 
-                try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                if (ok > 0)
+                {
+                    try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                    try { RefreshSelectionVisuals(); } catch { }
+                }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
 
                 if (ok == 0)

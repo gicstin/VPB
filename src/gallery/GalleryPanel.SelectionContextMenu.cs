@@ -306,10 +306,10 @@ namespace VPB
                 if (vis(tboxSettingsCancelBtn)) ltr.Add(tboxSettingsCancelBtn);
                 if (vis(tboxSettingsSaveBtn)) ltr.Add(tboxSettingsSaveBtn);
                 if (vis(tboxDisableAutoInstallBtn)) ltr.Add(tboxDisableAutoInstallBtn);
+                if (vis(tboxAutoInstallBtn)) ltr.Add(tboxAutoInstallBtn);
                 if (vis(tboxUnhideBtn)) ltr.Add(tboxUnhideBtn);
                 if (vis(tboxHideBtn)) ltr.Add(tboxHideBtn);
                 if (vis(tboxScanWhitelistTemporaryBtn)) ltr.Add(tboxScanWhitelistTemporaryBtn);
-                if (vis(tboxAutoInstallBtn)) ltr.Add(tboxAutoInstallBtn);
                 if (vis(tboxDeleteBtn)) ltr.Add(tboxDeleteBtn);
                 if (vis(tboxRemoveHistoryBtn)) ltr.Add(tboxRemoveHistoryBtn);
                 if (vis(tboxCleanupBtn)) ltr.Add(tboxCleanupBtn);

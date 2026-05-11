@@ -5,88 +5,52 @@ using System.IO;
 namespace VPB
 {
 	/// <summary>
-	/// Package-level .hide markers under AddonPackagesFilePrefs, same path layout as legacy .fav.
-	/// Presence is resolved via a prescan of all <c>*.hide</c> files under that tree (see
-	/// <see cref="RebuildHideMarkerCache"/>) and <see cref="HashSet{T}.Contains"/> on normalized full paths,
-	/// avoiding per-entry <see cref="File.Exists"/> / <see cref="FileManager.FileExists"/> calls.
-	/// Invalidate when the game FileManager runs Refresh; gallery post-filter rebuilds before bulk checks.
+	/// Package-level .hide markers under <c>AddonPackagesFilePrefs</c>, same path layout as legacy .fav.
+	/// Package hide <b>detection</b> matches <see cref="GalleryPanel"/> toolbox: <c>TryGetPackageUidForEntry</c> →
+	/// <c>ResolveVarPathForUid</c> → <c>FileManager.GetFileEntry(path, true)</c> → sidecar <c>File.Exists</c>
+	/// (same as <c>TryGetTboxResolvablePackageState</c> / hide-unhide buttons).
 	/// </summary>
 	public static class PackageHidePrefs
 	{
-		// Cached once — Directory.GetCurrentDirectory() never changes at runtime.
 		private static string s_prefsDirCached;
 
-		/// <summary>Full paths of existing .hide sidecars; null after <see cref="InvalidateHideMarkerCache"/>.</summary>
-		private static HashSet<string> s_hideMarkerFullPaths;
+		/// <summary>Per-UID result for <see cref="IsPackageVarHidden"/> — hot path when gallery strips hidden rows (thousands of <c>File.Exists</c> + <c>GetFileEntry</c> otherwise).</summary>
+		private static Dictionary<string, bool> s_varHiddenByUid;
+
+		/// <summary>Per scene-json .hide path for <see cref="IsLocalSceneJsonHidden"/>.</summary>
+		private static Dictionary<string, bool> s_localSceneHiddenByMarkerPath;
 
 		public static void InvalidateHideMarkerCache()
 		{
-			s_hideMarkerFullPaths = null;
+			s_varHiddenByUid = null;
+			s_localSceneHiddenByMarkerPath = null;
 		}
 
-		/// <summary>Enumerates all <c>*.hide</c> under AddonPackagesFilePrefs into an in-memory set.</summary>
 		public static void RebuildHideMarkerCache()
 		{
-			var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			try
-			{
-				string root = GetAddonPackagesFilePrefsDir();
-				if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
-				{
-					// Prefer SQLite-cached marker enumeration to avoid recursive Directory.GetFiles on every rebuild.
-					string sig = "0";
-					try { sig = Directory.GetLastWriteTimeUtc(root).ToBinary().ToString(); } catch { sig = "0"; }
-					string cacheKey = "markers:hide|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/'));
-
-					var cached = new List<VpbLocalDatabase.SystemFileRow>();
-					bool hit = false;
-					try { hit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached); } catch { hit = false; }
-
-					string[] paths;
-					if (hit && cached.Count > 0)
-					{
-						paths = new string[cached.Count];
-						for (int i = 0; i < cached.Count; i++) paths[i] = cached[i].Path;
-					}
-					else
-					{
-						// .NET 3.5: use GetFiles (EnumerateFiles is 4.0+).
-						paths = Directory.GetFiles(root, "*.hide", SearchOption.AllDirectories);
-						try
-						{
-							var rows = new List<VpbLocalDatabase.SystemFileRow>(paths.Length);
-							for (int i = 0; i < paths.Length; i++)
-							{
-								string p = paths[i];
-								if (string.IsNullOrEmpty(p)) continue;
-								var r = new VpbLocalDatabase.SystemFileRow();
-								try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
-								r.LastWriteBinaryOrInvalid = long.MinValue;
-								r.SizeOrInvalid = long.MinValue;
-								rows.Add(r);
-							}
-							if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
-						}
-						catch { }
-					}
-					for (int i = 0; i < paths.Length; i++)
-					{
-						try
-						{
-							set.Add(Path.GetFullPath(paths[i]));
-						}
-						catch { }
-					}
-				}
-			}
-			catch { }
-			s_hideMarkerFullPaths = set;
+			InvalidateHideMarkerCache();
 		}
 
-		private static void EnsureHideMarkerCache()
+		private static void UncacheVarHiddenUid(string uid)
 		{
-			if (s_hideMarkerFullPaths == null)
-				RebuildHideMarkerCache();
+			if (string.IsNullOrEmpty(uid) || s_varHiddenByUid == null) return;
+			try { s_varHiddenByUid.Remove(uid); } catch { }
+		}
+
+		private static void InvalidateVarHiddenCacheForFileEntry(FileEntry entry)
+		{
+			try
+			{
+				string u = TryGetPackageUidForToolbox(entry);
+				if (!string.IsNullOrEmpty(u)) UncacheVarHiddenUid(u);
+			}
+			catch { }
+		}
+
+		private static void UncacheLocalSceneHiddenPath(string hidePath)
+		{
+			if (string.IsNullOrEmpty(hidePath) || s_localSceneHiddenByMarkerPath == null) return;
+			try { s_localSceneHiddenByMarkerPath.Remove(hidePath); } catch { }
 		}
 
 		public static string GetAddonPackagesFilePrefsDir()
@@ -95,6 +59,105 @@ namespace VPB
 			try { s_prefsDirCached = Path.Combine(Directory.GetCurrentDirectory(), "AddonPackagesFilePrefs"); }
 			catch { }
 			return s_prefsDirCached;
+		}
+
+		private static bool PackageVarHideMarkerExists(string hidePath)
+		{
+			if (string.IsNullOrEmpty(hidePath)) return false;
+			try { return File.Exists(Path.GetFullPath(hidePath)); }
+			catch { return false; }
+		}
+
+		/// <summary>Same UID extraction as <c>GalleryPanel.TryGetPackageUidForEntry</c> (hide toolbox).</summary>
+		private static string TryGetPackageUidForToolbox(FileEntry f)
+		{
+			if (f is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
+				return vfe.Package.Uid;
+
+			if (f is PackageListEntry ple && ple.Package != null && !string.IsNullOrEmpty(ple.Package.Uid))
+				return ple.Package.Uid;
+
+			if (f is MissingPackageListEntry mp && !string.IsNullOrEmpty(mp.RequestedUid))
+				return mp.RequestedUid;
+
+			string p = f.Path ?? "";
+			if (string.IsNullOrEmpty(p)) return null;
+
+			int internalSep = p.IndexOf(":/", StringComparison.Ordinal);
+			if (internalSep >= 0) p = p.Substring(0, internalSep);
+
+			p = p.Replace('\\', '/');
+			if (!p.EndsWith(".var", StringComparison.OrdinalIgnoreCase)) return null;
+
+			int slash = p.LastIndexOf('/');
+			string file = (slash >= 0) ? p.Substring(slash + 1) : p;
+			if (file.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+				file = file.Substring(0, file.Length - 4);
+
+			return string.IsNullOrEmpty(file) ? null : file;
+		}
+
+		/// <summary>Same as <c>GalleryPanel.Toolbox.DeletePackages.ResolveVarPathForUid</c>.</summary>
+		private static string ResolveVarPathForUidToolbox(string uid)
+		{
+			try
+			{
+				var pkg = FileManager.GetPackageForDependency(uid, false);
+				if (pkg != null && !string.IsNullOrEmpty(pkg.Path))
+				{
+					string p = pkg.Path.Replace('\\', '/');
+					if (File.Exists(p)) return p;
+
+					if (p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
+					{
+						string mapped = "AddonPackages/" + p.Substring("AllPackages/".Length);
+						if (File.Exists(mapped)) return mapped;
+					}
+				}
+			}
+			catch { }
+
+			try
+			{
+				string candidate = "AddonPackages/" + uid + ".var";
+				if (File.Exists(candidate)) return candidate;
+			}
+			catch { }
+
+			return null;
+		}
+
+		/// <summary>
+		/// Disk <see cref="FileEntry"/> for package row — same resolution as toolbox hide/unhide
+		/// (<c>TryGetTboxResolvablePackageState</c> package branch). Returns false for local scenes / non-packages.
+		/// </summary>
+		private static bool TryGetToolboxDiskFileEntryForPackageGalleryRow(FileEntry f, out FileEntry diskFe)
+		{
+			diskFe = null;
+			if (f == null) return false;
+			try
+			{
+				if (LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out _, false))
+					return false;
+			}
+			catch { return false; }
+
+			string uid = TryGetPackageUidForToolbox(f);
+			if (string.IsNullOrEmpty(uid)) return false;
+
+			string path = ResolveVarPathForUidToolbox(uid);
+			if (string.IsNullOrEmpty(path)) return false;
+
+			try
+			{
+				diskFe = FileManager.GetFileEntry(path, true);
+				return diskFe != null;
+			}
+			catch
+			{
+				diskFe = null;
+				return false;
+			}
 		}
 
 		/// <summary>Builds the absolute path to this entry's .hide sidecar, e.g.
@@ -125,8 +188,6 @@ namespace VPB
 			catch { return false; }
 		}
 
-		/// <summary>Builds the absolute path to a VarPackage's .hide sidecar, e.g.
-		/// <c>…/AddonPackagesFilePrefs/&lt;uid&gt;/AddonPackages/author.pkg.1.var.hide</c>.</summary>
 		private static bool TryBuildPackageVarHidePath(VarPackage pkg, out string hidePath)
 		{
 			hidePath = null;
@@ -145,39 +206,50 @@ namespace VPB
 		/// <summary>True when this entry has a .hide sidecar (ignores the "show hidden" toggle).</summary>
 		public static bool IsPackageVarHidden(FileEntry entry)
 		{
-			EnsureHideMarkerCache();
-			if (!TryBuildPackageVarHidePath(entry, out string hidePath)) return false;
-			try
-			{
-				return s_hideMarkerFullPaths.Contains(Path.GetFullPath(hidePath));
-			}
-			catch { return false; }
-		}
-
-		private static bool TryGetPackageForEntry(FileEntry entry, out VarPackage pkg)
-		{
-			pkg = null;
 			if (entry == null) return false;
-			try
+
+			string uidKey = null;
+			try { uidKey = TryGetPackageUidForToolbox(entry); } catch { uidKey = null; }
+			if (!string.IsNullOrEmpty(uidKey))
 			{
-				if (entry is VarFileEntry vfe && vfe.Package != null) pkg = vfe.Package;
-				else if (entry is SystemFileEntry sfe && sfe.isVar && sfe.package != null) pkg = sfe.package;
-				else if (entry is PackageListEntry ple && ple.Package != null) pkg = ple.Package;
+				if (s_varHiddenByUid != null && s_varHiddenByUid.TryGetValue(uidKey, out bool cached))
+					return cached;
+				bool v = ComputeIsPackageVarHidden(entry);
+				if (s_varHiddenByUid == null)
+					s_varHiddenByUid = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+				s_varHiddenByUid[uidKey] = v;
+				return v;
 			}
-			catch { pkg = null; }
-			return pkg != null;
+
+			return ComputeIsPackageVarHidden(entry);
 		}
 
-		/// <summary>
-		/// True when the gallery should show the "H" badge.
-		/// Local scenes still use adjacent <c>scene.json.hide</c>, while package rows only show "H"
-		/// when the package is hidden and not excluded from VaM's scan whitelist.
-		/// </summary>
+		/// <summary>Prefer marker path from <paramref name="entry"/> (no <c>GetFileEntry</c>); disk resolve only when needed.</summary>
+		private static bool ComputeIsPackageVarHidden(FileEntry entry)
+		{
+			string hpFromEntry = null;
+			if (TryBuildPackageVarHidePath(entry, out string hpEntry))
+			{
+				hpFromEntry = hpEntry;
+				if (PackageVarHideMarkerExists(hpEntry))
+					return true;
+			}
+
+			if (TryGetToolboxDiskFileEntryForPackageGalleryRow(entry, out FileEntry diskFe)
+			    && TryBuildPackageVarHidePath(diskFe, out string hideDisk))
+			{
+				if (!string.IsNullOrEmpty(hpFromEntry)
+				    && string.Equals(hpFromEntry, hideDisk, StringComparison.OrdinalIgnoreCase))
+					return false;
+				if (PackageVarHideMarkerExists(hideDisk))
+					return true;
+			}
+			return false;
+		}
+
 		public static bool IsGalleryHideBadgeVisible(FileEntry entry)
 		{
 			if (entry == null) return false;
-			// Loose system files (Custom/, Saves/, etc.) use adjacent "<file>.hide" markers.
-			// This includes local custom presets under Custom\...
 			try
 			{
 				if (entry is SystemFileEntry sfe && !sfe.isVar)
@@ -185,19 +257,9 @@ namespace VPB
 			}
 			catch { }
 			if (IsLocalSceneJsonHidden(entry)) return true;
-			if (!IsPackageVarHidden(entry)) return false;
-			if (!TryGetPackageForEntry(entry, out VarPackage pkg)) return false;
-			try
-			{
-				if (ScanWhitelistManager.Instance.IsEnabled
-					&& ScanWhitelistManager.Instance.IsPackageScanExcluded(pkg.Uid, pkg.Path ?? ""))
-					return false;
-			}
-			catch { }
-			return true;
+			return IsPackageVarHidden(entry);
 		}
 
-		/// <summary>True when the gallery should omit this entry (hidden marker present and user is not showing hidden packages).</summary>
 		public static bool IsExcludedByGalleryHideFilter(FileEntry entry)
 		{
 			try
@@ -214,7 +276,6 @@ namespace VPB
 			return IsPackageVarHidden(entry) || IsLocalSceneJsonHidden(entry);
 		}
 
-		/// <summary>Adjacent <c>scene.json.hide</c> next to a disk <c>Saves/scene</c> JSON (not AddonPackagesFilePrefs).</summary>
 		public static bool TryBuildLocalSceneJsonHidePath(FileEntry entry, out string hidePath)
 		{
 			hidePath = null;
@@ -224,12 +285,17 @@ namespace VPB
 			return true;
 		}
 
-		/// <summary>True when a <c>.hide</c> sidecar exists beside this local scene JSON.</summary>
 		public static bool IsLocalSceneJsonHidden(FileEntry entry)
 		{
 			if (!TryBuildLocalSceneJsonHidePath(entry, out string hp)) return false;
-			try { return File.Exists(hp); }
-			catch { return false; }
+			if (s_localSceneHiddenByMarkerPath != null && s_localSceneHiddenByMarkerPath.TryGetValue(hp, out bool cached))
+				return cached;
+			bool exists = false;
+			try { exists = File.Exists(hp); } catch { }
+			if (s_localSceneHiddenByMarkerPath == null)
+				s_localSceneHiddenByMarkerPath = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+			s_localSceneHiddenByMarkerPath[hp] = exists;
+			return exists;
 		}
 
 		public static bool TryEnsureLocalSceneJsonHidden(FileEntry entry)
@@ -237,6 +303,7 @@ namespace VPB
 			try
 			{
 				if (!TryBuildLocalSceneJsonHidePath(entry, out string hp)) return false;
+				UncacheLocalSceneHiddenPath(hp);
 				if (File.Exists(hp)) return true;
 				File.WriteAllText(hp, string.Empty);
 				return File.Exists(hp);
@@ -249,6 +316,7 @@ namespace VPB
 			try
 			{
 				if (!TryBuildLocalSceneJsonHidePath(entry, out string hp)) return false;
+				UncacheLocalSceneHiddenPath(hp);
 				if (!File.Exists(hp)) return false;
 				File.Delete(hp);
 				return true;
@@ -256,99 +324,75 @@ namespace VPB
 			catch { return false; }
 		}
 
-		/// <summary>
-		/// Ensures a .hide sidecar exists for this package (same marker VaM and other tools use).
-		/// If one already exists, succeeds without overwriting.
-		/// </summary>
+		private static FileEntry ResolveToolboxTargetForPackageHideOps(FileEntry entry)
+		{
+			if (entry == null) return null;
+			if (TryGetToolboxDiskFileEntryForPackageGalleryRow(entry, out FileEntry diskFe))
+				return diskFe;
+			return entry;
+		}
+
 		public static bool TryEnsureVpbPackageHidden(FileEntry entry)
 		{
 			try
 			{
-				if (!TryBuildPackageVarHidePath(entry, out string hidePath)) return false;
+				FileEntry target = ResolveToolboxTargetForPackageHideOps(entry);
+				if (!TryBuildPackageVarHidePath(target, out string hidePath)) return false;
+				InvalidateVarHiddenCacheForFileEntry(entry);
+				try { InvalidateVarHiddenCacheForFileEntry(target); } catch { }
 				try { File.Delete(hidePath + ".vpb"); } catch { }
 
-				EnsureHideMarkerCache();
-				string fullHide;
-				try { fullHide = Path.GetFullPath(hidePath); }
-				catch { return false; }
-				if (s_hideMarkerFullPaths.Contains(fullHide)) return true;
+				if (PackageVarHideMarkerExists(hidePath)) return true;
 
 				string dir = Path.GetDirectoryName(hidePath);
 				if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
 				File.WriteAllText(hidePath, string.Empty);
-				try { s_hideMarkerFullPaths.Add(fullHide); } catch { }
-				return true;
+				return PackageVarHideMarkerExists(hidePath);
 			}
 			catch { return false; }
 		}
 
-		/// <summary>Write .hide sidecar for a package looked up directly from FileManager (no FileEntry wrapper needed).</summary>
 		public static bool TryEnsureVpbPackageHidden(VarPackage pkg)
 		{
 			try
 			{
 				if (!TryBuildPackageVarHidePath(pkg, out string hidePath)) return false;
+				try { if (pkg != null && !string.IsNullOrEmpty(pkg.Uid)) UncacheVarHiddenUid(pkg.Uid); } catch { }
 				try { File.Delete(hidePath + ".vpb"); } catch { }
-				EnsureHideMarkerCache();
-				string fullHide;
-				try { fullHide = Path.GetFullPath(hidePath); }
-				catch { return false; }
-				if (s_hideMarkerFullPaths != null && s_hideMarkerFullPaths.Contains(fullHide)) return true;
+				if (PackageVarHideMarkerExists(hidePath)) return true;
 				string dir = Path.GetDirectoryName(hidePath);
 				if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
 				File.WriteAllText(hidePath, string.Empty);
-				try { if (s_hideMarkerFullPaths != null) s_hideMarkerFullPaths.Add(fullHide); } catch { }
-				return true;
+				return PackageVarHideMarkerExists(hidePath);
 			}
 			catch { return false; }
 		}
 
-		/// <summary>
-		/// Removes the .hide sidecar for this package (and VPB companion) and updates the marker cache.
-		/// </summary>
 		public static bool TryRemovePackageVarHide(FileEntry entry)
 		{
 			try
 			{
-				if (!TryBuildPackageVarHidePath(entry, out string hidePath)) return false;
-				EnsureHideMarkerCache();
-				string fullHide;
-				try { fullHide = Path.GetFullPath(hidePath); }
-				catch { return false; }
-
-				bool onDisk = false;
-				try { onDisk = File.Exists(hidePath); } catch { }
-				bool inCache = s_hideMarkerFullPaths != null && s_hideMarkerFullPaths.Contains(fullHide);
-				if (!onDisk && !inCache) return false;
-
-				if (onDisk)
-				{
-					try { File.Delete(hidePath); } catch { return false; }
-				}
+				FileEntry target = ResolveToolboxTargetForPackageHideOps(entry);
+				if (!TryBuildPackageVarHidePath(target, out string hidePath)) return false;
+				InvalidateVarHiddenCacheForFileEntry(entry);
+				try { InvalidateVarHiddenCacheForFileEntry(target); } catch { }
+				if (!PackageVarHideMarkerExists(hidePath)) return false;
+				try { File.Delete(hidePath); } catch { return false; }
 				try { File.Delete(hidePath + ".vpb"); } catch { }
-				try { if (s_hideMarkerFullPaths != null) s_hideMarkerFullPaths.Remove(fullHide); } catch { }
 				return true;
 			}
 			catch { return false; }
 		}
 
-		/// <summary>Remove .hide sidecar for a package looked up directly from FileManager.</summary>
 		public static bool TryRemovePackageVarHide(VarPackage pkg)
 		{
 			try
 			{
 				if (!TryBuildPackageVarHidePath(pkg, out string hidePath)) return false;
-				EnsureHideMarkerCache();
-				string fullHide;
-				try { fullHide = Path.GetFullPath(hidePath); }
-				catch { return false; }
-				bool onDisk = false;
-				try { onDisk = File.Exists(hidePath); } catch { }
-				bool inCache = s_hideMarkerFullPaths != null && s_hideMarkerFullPaths.Contains(fullHide);
-				if (!onDisk && !inCache) return false;
-				if (onDisk) { try { File.Delete(hidePath); } catch { return false; } }
+				try { if (pkg != null && !string.IsNullOrEmpty(pkg.Uid)) UncacheVarHiddenUid(pkg.Uid); } catch { }
+				if (!PackageVarHideMarkerExists(hidePath)) return false;
+				try { File.Delete(hidePath); } catch { return false; }
 				try { File.Delete(hidePath + ".vpb"); } catch { }
-				try { if (s_hideMarkerFullPaths != null) s_hideMarkerFullPaths.Remove(fullHide); } catch { }
 				return true;
 			}
 			catch { return false; }

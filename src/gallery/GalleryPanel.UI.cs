@@ -2177,6 +2177,12 @@ namespace VPB
             VPBConfig.Instance.GalleryShowHiddenPackages = !VPBConfig.Instance.GalleryShowHiddenPackages;
             VPBConfig.Instance.Save();
             UpdateFooterShowHiddenPackagesState();
+            try
+            {
+                if (TryFastApplyGalleryShowHiddenToggle(true))
+                    return;
+            }
+            catch { }
             try { RefreshFiles(true); } catch { }
         }
 
@@ -2203,7 +2209,8 @@ namespace VPB
             {
                 var del = footerShowHiddenPackagesBtn.GetComponent<UIHoverDelegate>();
                 if (del != null) del.OnHoverChange = null;
-                string modeText = VPBConfig.Instance.GalleryShowHiddenPackages ? "Hide Hidden" : "Show Hidden";
+                // True = gallery list includes .hide-marked packages; false = omit them (stricter filter).
+                string modeText = VPBConfig.Instance.GalleryShowHiddenPackages ? "Show Hidden" : "Hide Hidden";
                 AddTooltipPlain(footerShowHiddenPackagesBtn, modeText);
             }
         }

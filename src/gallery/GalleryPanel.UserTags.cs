@@ -1107,6 +1107,7 @@ namespace VPB
 
             RemoveFileEntriesFromLists(currentFilteredFiles, removeRefs);
             RemoveFileEntriesFromLists(lastFilteredFiles, removeRefs);
+            InvalidateGalleryPreHideFileListSnapshot();
             RemoveFileEntriesFromLists(topSearchBaseFiles, removeRefs);
             RemoveFileEntriesFromLists(filterSearchBaseFiles, removeRefs);
             RemoveFileEntriesFromLists(selectedFiles, removeRefs);

@@ -2650,7 +2650,7 @@ namespace VPB
                 }
             }
 
-            // List: star + badge strip. Grid: thumbnail + GridLabel only (badges/star hidden — fewer canvases per cell).
+            // List: star + full badge strip. Grid: thumbnail + GridLabel; only Hide "H" badge (others off — fewer canvases).
             Transform ratingTr = btnGO.transform.Find("Rating");
             if (isListMode)
             {
@@ -2686,8 +2686,9 @@ namespace VPB
 
                 Transform tAi = FindGalleryBadgeTransform(btnGO.transform, "AutoInstallBadge");
                 if (tAi != null) tAi.gameObject.SetActive(false);
+                bool showHideBadgeGrid = PackageHidePrefs.IsGalleryHideBadgeVisible(file);
                 Transform tH = FindGalleryBadgeTransform(btnGO.transform, "HidePackageBadge");
-                if (tH != null) tH.gameObject.SetActive(false);
+                if (tH != null) tH.gameObject.SetActive(showHideBadgeGrid);
                 Transform tW = FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
                 if (tW != null) tW.gameObject.SetActive(false);
                 Transform tT = FindGalleryBadgeTransform(btnGO.transform, "UserTagsBadge");

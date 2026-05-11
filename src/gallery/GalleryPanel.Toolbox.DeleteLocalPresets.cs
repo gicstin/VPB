@@ -253,6 +253,7 @@ namespace VPB
                         p = p.Replace('\\', '/');
                         return movedRelativePaths.Contains(p);
                     });
+                    InvalidateGalleryPreHideFileListSnapshot();
                 }
             }
             catch { }

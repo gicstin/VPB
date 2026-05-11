@@ -1098,6 +1098,11 @@ namespace VPB
         private float pendingHistoryUndoUntilRealtime = 0f;
         private List<FileEntry> lastFilteredFiles = new List<FileEntry>();
 
+        /// <summary>Post-drain file list before hide-strip (same as <see cref="lastFilteredFiles"/> after full refresh). Used to toggle &quot;show hidden&quot; without re-running <see cref="GalleryPanel.RefreshFilesRoutine"/>.</summary>
+        private List<FileEntry> galleryFilesPreHideSnapshot = new List<FileEntry>();
+
+        private bool galleryPreHideSnapshotValid = false;
+
         /// <summary>Refuse select-all (toolbar and Ctrl+A) when the filtered gallery has more than this many items.</summary>
         private const int SelectAllSafetyMaxItemCount = 1000;
         public FileEntry selectedFile

@@ -1985,6 +1985,8 @@ namespace VPB
                 return;
             }
 
+            InvalidateGalleryPreHideFileListSnapshot();
+
             // ── Update grid ───────────────────────────────────────────────────────────────
             recyclingGrid.SetItemCount(currentFilteredFiles.Count);
 
@@ -3736,6 +3738,18 @@ namespace VPB
             lastFilteredFiles.Clear();
             lastFilteredFiles.AddRange(files);
 
+            try
+            {
+                galleryFilesPreHideSnapshot.Clear();
+                galleryFilesPreHideSnapshot.AddRange(files);
+                galleryPreHideSnapshotValid = true;
+            }
+            catch
+            {
+                galleryFilesPreHideSnapshot.Clear();
+                galleryPreHideSnapshotValid = false;
+            }
+
             // Promote to class member for RecyclingGridView — one copy pass from lastFilteredFiles (same snapshot as files)
             currentFilteredFiles.Clear();
             currentFilteredFiles.AddRange(lastFilteredFiles);
@@ -4213,6 +4227,88 @@ namespace VPB
             }
         }
 
+        /// <summary>Call when <see cref="lastFilteredFiles"/> / grid list mutates without completing <see cref="RefreshFilesRoutine"/>.</summary>
+        private void InvalidateGalleryPreHideFileListSnapshot()
+        {
+            galleryPreHideSnapshotValid = false;
+        }
+
+        /// <summary>Rebuilds file list for show-hidden toggle from last full drain snapshot — skips package scan, sort on worker, and <see cref="UpdateLayout"/>.</summary>
+        private bool TryFastApplyGalleryShowHiddenToggle(bool keepScroll)
+        {
+            if (IsHubMode) return false;
+            try { if (Gallery.IsSuppressed()) return false; } catch { return false; }
+            if (refreshCoroutine != null) return false;
+            try { if (_refreshHistoryLightCo != null) return false; } catch { }
+            if (!hasLoadedContent) return false;
+            if (recyclingGrid == null || currentFilteredFiles == null || scrollRect == null) return false;
+            if (!galleryPreHideSnapshotValid) return false;
+            if (IsFilterActive) return false;
+            if (currentPackageFilterMode != PackageFilterMode.None) return false;
+            try { if (cleanupModeActive) return false; } catch { }
+            try { if (_userTagAvailFilterMode) return false; } catch { }
+            try
+            {
+                if (nameFilterTerms != null && nameFilterTerms.Length > 0) return false;
+            }
+            catch { return false; }
+            if (activeContentType == ContentType.History) return false;
+            if (galleryFilesPreHideSnapshot == null || galleryFilesPreHideSnapshot.Count == 0) return false;
+
+            bool showHidden = false;
+            try { showHidden = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages; } catch { }
+            bool keepHiddenForSort = FilesSortKeepsHiddenInList();
+
+            float targetScrollNormalizedPos = 1f;
+            if (keepScroll && hasLoadedContent)
+                targetScrollNormalizedPos = scrollRect.verticalNormalizedPosition;
+
+            try
+            {
+                currentFilteredFiles.Clear();
+                if (showHidden || keepHiddenForSort)
+                    currentFilteredFiles.AddRange(galleryFilesPreHideSnapshot);
+                else
+                {
+                    var snap = galleryFilesPreHideSnapshot;
+                    for (int i = 0; i < snap.Count; i++)
+                    {
+                        var e = snap[i];
+                        if (!PackageHidePrefs.IsExcludedByGalleryHideFilter(e))
+                            currentFilteredFiles.Add(e);
+                    }
+                }
+
+                SortState st = GetSortState("Files");
+                ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
+                if (activeContentType != ContentType.History)
+                    GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
+
+                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                recyclingGrid.Refresh();
+
+                if (keepScroll)
+                {
+                    if (targetScrollNormalizedPos >= 0.999f)
+                        ScrollGalleryToTop();
+                    else
+                    {
+                        scrollRect.verticalNormalizedPosition = Mathf.Clamp01(targetScrollNormalizedPos);
+                        recyclingGrid.Refresh();
+                    }
+                }
+
+                UpdatePaginationText();
+                try { RefreshSelectionVisuals(); } catch { }
+                try { UpdateSelectionContextMenu(); } catch { }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private IEnumerator PostFilesListHideAndSortFollowupRoutine(string groupId, bool keepScroll, bool scrollToBottom, float targetScrollNormalizedPos)
         {
             yield return null;
@@ -4220,28 +4316,35 @@ namespace VPB
 
             if (groupId != currentLoadingGroupId || currentFilteredFiles == null) yield break;
 
-            try { PackageHidePrefs.RebuildHideMarkerCache(); } catch { }
-
             bool showHidden = false;
             try { showHidden = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages; } catch { }
             bool keepHiddenForSort = FilesSortKeepsHiddenInList();
 
             if (!showHidden && !keepHiddenForSort)
             {
-                for (int i = currentFilteredFiles.Count - 1; i >= 0; i--)
+                int n = currentFilteredFiles.Count;
+                int w = 0;
+                for (int r = 0; r < n; r++)
                 {
                     if (groupId != currentLoadingGroupId) yield break;
                     try
                     {
-                        if (PackageHidePrefs.IsExcludedByGalleryHideFilter(currentFilteredFiles[i]))
+                        var fe = currentFilteredFiles[r];
+                        if (!PackageHidePrefs.IsExcludedByGalleryHideFilter(fe))
                         {
-                            currentFilteredFiles.RemoveAt(i);
+                            if (w != r) currentFilteredFiles[w] = fe;
+                            w++;
                         }
                     }
                     catch { }
 
-                    if (i % 2000 == 0)
+                    if ((r & 2047) == 2047)
                         yield return null;
+                }
+                if (w < n)
+                {
+                    try { currentFilteredFiles.RemoveRange(w, n - w); }
+                    catch { }
                 }
             }
 
@@ -4566,6 +4669,7 @@ namespace VPB
             catch { }
 
             filterBaseAnchorKey = null;
+            InvalidateGalleryPreHideFileListSnapshot();
             RefreshRecycleGridAfterFilterChange();
             try { UpdateTabs(); } catch { }
             try { UpdatePaginationText(); } catch { }
@@ -4576,6 +4680,8 @@ namespace VPB
         public void ClearPackageFilter()
         {
             if (_filterStack.Count == 0) return;
+
+            InvalidateGalleryPreHideFileListSnapshot();
 
             // Drain the stack; keep the bottom (outermost) frame for restoration
             FilterFrame bottom = _filterStack.Pop();
