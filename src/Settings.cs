@@ -88,6 +88,7 @@ namespace VPB
         public ConfigEntry<float> UiTransparencyValue;
         public ConfigEntry<bool> ShowSceneLoadingOverlay;
         public ConfigEntry<bool> AutoPageEnabled;
+        public ConfigEntry<bool> HideOldVersions;
         public ConfigEntry<bool> LoadDependenciesWithPackage;
         public ConfigEntry<bool> ForceLatestDependencies;
         public ConfigEntry<string> ForceLatestDependencyPackageGroups;
@@ -134,6 +135,7 @@ namespace VPB
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
             ShowSceneLoadingOverlay = config.Bind<bool>("UI", "ShowSceneLoadingOverlay", false, "Show VPB full-screen loading overlay during scene loads.");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
+            HideOldVersions = config.Bind<bool>("UI", "HideOldVersions", false, "Hide older versions of VAR packages in the gallery; show only the newest version per Creator.Package family.");
             LoadDependenciesWithPackage = config.Bind<bool>("Settings", "LoadDependenciesWithPackage", true, "When loading a package, also load all its dependencies.");
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
             ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");

@@ -34,7 +34,11 @@ namespace VPB
         /// <summary>Local "used" counter (scene launches + clothing applies).</summary>
         UsageCount = 16,
         /// <summary>Show only items with zero local usage.</summary>
-        UnusedOnly = 17
+        UnusedOnly = 17,
+        /// <summary>Family first added: MIN(first_scanned) across all .var versions sharing creator.packageName.</summary>
+        DateAdded = 18,
+        /// <summary>Family last updated: first_scanned of the highest-N .var version in creator.packageName.</summary>
+        DateUpdated = 19
     }
 
     public enum SortDirection
@@ -87,6 +91,8 @@ namespace VPB
         public void SortFiles(List<FileEntry> files, SortState state)
         {
             if (files == null || state == null) return;
+
+            ApplyHideOldVersionsFilter(files);
 
             switch (state.Type)
             {
@@ -150,7 +156,76 @@ namespace VPB
                 case SortType.UsageCount:
                     SortByUsageCount(files, state.Direction);
                     break;
+                case SortType.DateAdded:
+                {
+                    var fam = BuildFamilyScanTimes(files);
+                    LogFamilyScanTimesSummary("DateAdded", state.Direction, files, fam);
+                    SortByPrecomputedDateTime(files, f => GetFamilyMinScanned(f, fam), state.Direction);
+                    LogSortedHeadSample("DateAdded", state.Direction, files, f => GetFamilyMinScanned(f, fam));
+                    break;
+                }
+                case SortType.DateUpdated:
+                {
+                    var fam = BuildFamilyScanTimes(files);
+                    LogFamilyScanTimesSummary("DateUpdated", state.Direction, files, fam);
+                    SortByPrecomputedDateTime(files, f => GetFamilyHighestVersionScanned(f, fam), state.Direction);
+                    LogSortedHeadSample("DateUpdated", state.Direction, files, f => GetFamilyHighestVersionScanned(f, fam));
+                    break;
+                }
             }
+        }
+
+        /// <summary>Triple-check logging for the new family-aware sorts. Flip to false to silence.</summary>
+        private static bool LogFamilySortDiagnostics = true;
+
+        private static void LogFamilyScanTimesSummary(string label, SortDirection dir, List<FileEntry> files, Dictionary<string, FamilyScanTimes> fam)
+        {
+            if (!LogFamilySortDiagnostics) return;
+            try
+            {
+                int rowCount = files != null ? files.Count : 0;
+                int famCount = fam != null ? fam.Count : 0;
+                LogUtil.LogWarning("[VPB] SORT_" + label + " dir=" + dir + " rows=" + rowCount + " families=" + famCount);
+
+                if (fam == null || famCount == 0) return;
+                bool descending = dir == SortDirection.Descending;
+                IEnumerable<KeyValuePair<string, FamilyScanTimes>> ordered = descending
+                    ? fam.OrderByDescending(kv => label == "DateAdded" ? kv.Value.MinScanned : kv.Value.HighestVersionScanned)
+                    : fam.OrderBy(kv => label == "DateAdded" ? kv.Value.MinScanned : kv.Value.HighestVersionScanned);
+
+                int shown = 0;
+                foreach (var kv in ordered)
+                {
+                    if (shown++ >= 15) break;
+                    var v = kv.Value;
+                    LogUtil.LogWarning("[VPB] SORT_" + label + " family=" + kv.Key
+                        + " min=" + (v.MinScanned == DateTime.MinValue ? "n/a" : v.MinScanned.ToString("yyyy-MM-dd HH:mm:ss"))
+                        + " highestV=" + v.HighestVersion
+                        + " highestVScanned=" + (v.HighestVersionScanned == DateTime.MinValue ? "n/a" : v.HighestVersionScanned.ToString("yyyy-MM-dd HH:mm:ss")));
+                }
+                if (famCount > shown) LogUtil.LogWarning("[VPB] SORT_" + label + " ... (" + (famCount - shown) + " more families)");
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] SORT_" + label + " summary log failed: " + ex.Message); }
+        }
+
+        private static void LogSortedHeadSample(string label, SortDirection dir, List<FileEntry> files, Func<FileEntry, DateTime> getKey)
+        {
+            if (!LogFamilySortDiagnostics) return;
+            try
+            {
+                if (files == null || files.Count == 0) return;
+                int take = Math.Min(10, files.Count);
+                LogUtil.LogWarning("[VPB] SORT_" + label + " head dir=" + dir + " sample(top " + take + "):");
+                for (int i = 0; i < take; i++)
+                {
+                    var f = files[i];
+                    string uid = f is VarFileEntry vfe ? vfe.GetRowPackageUid() : (f != null ? f.Name : "(null)");
+                    DateTime k = DateTime.MinValue;
+                    try { k = getKey(f); } catch { }
+                    LogUtil.LogWarning("[VPB] SORT_" + label + "   [" + i + "] " + uid + " key=" + (k == DateTime.MinValue ? "n/a" : k.ToString("yyyy-MM-dd HH:mm:ss")));
+                }
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] SORT_" + label + " head sample log failed: " + ex.Message); }
         }
 
         private static void SortByUsageCount(List<FileEntry> files, SortDirection dir)
@@ -272,6 +347,9 @@ namespace VPB
             if (files == null || state == null) return false;
             if (files.Count < 2) return true;
 
+            ApplyHideOldVersionsFilter(files);
+            if (files.Count < 2) return true;
+
             switch (state.Type)
             {
                 case SortType.Name:
@@ -317,6 +395,22 @@ namespace VPB
                         return res;
                     });
                     return true;
+                case SortType.DateAdded:
+                case SortType.DateUpdated:
+                {
+                    var fam = BuildFamilyScanTimes(files);
+                    bool asc = state.Direction == SortDirection.Ascending;
+                    bool useMin = state.Type == SortType.DateAdded;
+                    files.Sort((a, b) =>
+                    {
+                        DateTime ka = useMin ? GetFamilyMinScanned(a, fam) : GetFamilyHighestVersionScanned(a, fam);
+                        DateTime kb = useMin ? GetFamilyMinScanned(b, fam) : GetFamilyHighestVersionScanned(b, fam);
+                        int res = asc ? ka.CompareTo(kb) : kb.CompareTo(ka);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    return true;
+                }
                 default:
                     return false;
             }
@@ -343,6 +437,192 @@ namespace VPB
             }
             catch { }
             return DateTime.MinValue;
+        }
+
+        private struct FamilyScanTimes
+        {
+            public DateTime MinScanned;
+            public int HighestVersion;
+            public DateTime HighestVersionScanned;
+        }
+
+        /// <summary>Family key "creator.packageName" derived from uid prefix (uid format: "Creator.Package.N").</summary>
+        private static string ComputeFamilyKey(FileEntry file)
+        {
+            if (file == null) return null;
+            string uid = null;
+            if (file is VarFileEntry vfe)
+            {
+                uid = vfe.GetRowPackageUid();
+            }
+            else if (file is PackageListEntry ple)
+            {
+                uid = ple.GetPackageUidForGalleryUserTags();
+                if (string.IsNullOrEmpty(uid) && ple.Package != null) uid = ple.Package.Uid;
+            }
+            if (string.IsNullOrEmpty(uid)) return null;
+            int lastDot = uid.LastIndexOf('.');
+            if (lastDot <= 0) return uid;
+            return uid.Substring(0, lastDot);
+        }
+
+        /// <summary>Per-row indexed first_scanned, with VarPackage fallback. Returns DateTime.MinValue when unknown.</summary>
+        private static DateTime GetIndexedFirstScannedForFile(FileEntry file)
+        {
+            if (file == null) return DateTime.MinValue;
+            DateTime dt;
+            if (file is VarFileEntry vfe)
+            {
+                if (vfe.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+                try
+                {
+                    if (vfe.Package != null && vfe.Package.FirstScannedBinary != long.MinValue && vfe.Package.FirstScannedBinary != 0L)
+                        return DateTime.FromBinary(vfe.Package.FirstScannedBinary);
+                }
+                catch { }
+                return DateTime.MinValue;
+            }
+            if (file is PackageListEntry ple)
+            {
+                if (ple.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+                try
+                {
+                    if (ple.Package != null && ple.Package.FirstScannedBinary != long.MinValue && ple.Package.FirstScannedBinary != 0L)
+                        return DateTime.FromBinary(ple.Package.FirstScannedBinary);
+                }
+                catch { }
+            }
+            return DateTime.MinValue;
+        }
+
+        /// <summary>Highest VAR version (N from "Creator.Package.N") for this row's uid; 0 when unknown.</summary>
+        private static int GetUidVersionNumber(FileEntry file)
+        {
+            if (file == null) return 0;
+            string uid = null;
+            if (file is VarFileEntry vfe) uid = vfe.GetRowPackageUid();
+            else if (file is PackageListEntry ple)
+            {
+                uid = ple.GetPackageUidForGalleryUserTags();
+                if (string.IsNullOrEmpty(uid) && ple.Package != null) uid = ple.Package.Uid;
+            }
+            if (string.IsNullOrEmpty(uid)) return 0;
+            int lastDot = uid.LastIndexOf('.');
+            if (lastDot < 0 || lastDot >= uid.Length - 1) return 0;
+            int v;
+            return int.TryParse(uid.Substring(lastDot + 1), out v) ? v : 0;
+        }
+
+        /// <summary>Build per-family (creator.package) scan-time lookup over the current file list. One pass, no I/O.</summary>
+        private static Dictionary<string, FamilyScanTimes> BuildFamilyScanTimes(List<FileEntry> files)
+        {
+            var map = new Dictionary<string, FamilyScanTimes>(StringComparer.OrdinalIgnoreCase);
+            if (files == null) return map;
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey)) continue;
+                DateTime scanned = GetIndexedFirstScannedForFile(f);
+                int version = GetUidVersionNumber(f);
+
+                FamilyScanTimes fst;
+                if (!map.TryGetValue(famKey, out fst))
+                {
+                    fst = new FamilyScanTimes { MinScanned = scanned, HighestVersion = version, HighestVersionScanned = scanned };
+                    map[famKey] = fst;
+                }
+                else
+                {
+                    if (scanned < fst.MinScanned || fst.MinScanned == DateTime.MinValue) fst.MinScanned = scanned;
+                    if (version > fst.HighestVersion)
+                    {
+                        fst.HighestVersion = version;
+                        fst.HighestVersionScanned = scanned;
+                    }
+                    map[famKey] = fst;
+                }
+            }
+            return map;
+        }
+
+        private static DateTime GetFamilyMinScanned(FileEntry file, Dictionary<string, FamilyScanTimes> fam)
+        {
+            string k = ComputeFamilyKey(file);
+            if (k == null || fam == null) return DateTime.MinValue;
+            return fam.TryGetValue(k, out FamilyScanTimes fst) ? fst.MinScanned : DateTime.MinValue;
+        }
+
+        /// <summary>
+        /// Date to render on the gallery row's Date subtitle. Prefers first_scanned (when VPB first indexed this uid,
+        /// i.e. when the user got this version of the package) over file mtime, because .var mtimes are commonly
+        /// preserved from the creator's original build date and don't reflect when the user actually obtained it.
+        /// Falls back to <see cref="FileEntry.LastWriteTime"/> when first_scanned is unknown.
+        /// </summary>
+        public static DateTime ResolveDisplayDateForRow(FileEntry file)
+        {
+            if (file == null) return DateTime.MinValue;
+            DateTime dt;
+            if (file is VarFileEntry vfe && vfe.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+            if (file is PackageListEntry ple && ple.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+            return file.LastWriteTime;
+        }
+
+        /// <summary>
+        /// Drop VAR rows whose uid version is less than the family's highest version.
+        /// No-op when <c>Settings.HideOldVersions</c> is off. Mutates the list in place.
+        /// Non-VAR entries (scenes, JSONs) are left untouched.
+        /// </summary>
+        public static void ApplyHideOldVersionsFilter(List<FileEntry> files)
+        {
+            if (files == null || files.Count < 2) return;
+            bool enabled = false;
+            try { enabled = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { enabled = false; }
+            if (!enabled) return;
+
+            // First pass: per family, track the highest version number seen in this list.
+            var highest = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                if (!(f is VarFileEntry) && !(f is PackageListEntry)) continue;
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey)) continue;
+                int v = GetUidVersionNumber(f);
+                int existing;
+                if (!highest.TryGetValue(famKey, out existing) || v > existing) highest[famKey] = v;
+            }
+            if (highest.Count == 0) return;
+
+            int removed = 0;
+            int kept = 0;
+            for (int i = files.Count - 1; i >= 0; i--)
+            {
+                var f = files[i];
+                if (!(f is VarFileEntry) && !(f is PackageListEntry)) continue;
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey)) continue;
+                int v = GetUidVersionNumber(f);
+                int top;
+                if (!highest.TryGetValue(famKey, out top)) continue;
+                if (v < top)
+                {
+                    files.RemoveAt(i);
+                    removed++;
+                }
+                else kept++;
+            }
+            if (LogFamilySortDiagnostics)
+            {
+                try { LogUtil.LogWarning("[VPB] HIDE_OLD_VERSIONS removed=" + removed + " kept=" + kept + " families=" + highest.Count); } catch { }
+            }
+        }
+
+        private static DateTime GetFamilyHighestVersionScanned(FileEntry file, Dictionary<string, FamilyScanTimes> fam)
+        {
+            string k = ComputeFamilyKey(file);
+            if (k == null || fam == null) return DateTime.MinValue;
+            return fam.TryGetValue(k, out FamilyScanTimes fst) ? fst.HighestVersionScanned : DateTime.MinValue;
         }
 
         /// <summary>Creation time for sorting: .var package time, on-disk file creation, or <see cref="DateTime.MinValue"/> if unknown.</summary>

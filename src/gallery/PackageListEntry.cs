@@ -14,6 +14,9 @@ namespace VPB
         private string _deferredPackageUid;
         private string _deferredVarPathHint;
 
+        /// <summary>Per-uid <c>pkg.first_scanned</c> from SQLite; avoids resolving <see cref="Package"/> for DateAdded/DateUpdated sort.</summary>
+        private long _galleryIndexedFirstScannedTicks = long.MinValue;
+
         public VarPackage Package
         {
             get { EnsurePackageResolved(); return _packageStore; }
@@ -47,6 +50,7 @@ namespace VPB
                 Exists = true;
                 LastWriteTime = pkg.LastWriteTime;
                 base.Size = pkg.Size;
+                _galleryIndexedFirstScannedTicks = pkg.FirstScannedBinary;
             }
             else
             {
@@ -63,11 +67,18 @@ namespace VPB
         /// SQLite fast path: listing fields come from the local index; <see cref="Package"/> is resolved lazily when package state is needed.
         /// </summary>
         public PackageListEntry(string packageUid, string indexedVarPathHint, DateTime lastWriteTime, long size, long packageCreationTicksOrMin)
+            : this(packageUid, indexedVarPathHint, lastWriteTime, size, packageCreationTicksOrMin, long.MinValue)
+        {
+        }
+
+        /// <summary>SQLite fast path with first_scanned for DateAdded/DateUpdated sort.</summary>
+        public PackageListEntry(string packageUid, string indexedVarPathHint, DateTime lastWriteTime, long size, long packageCreationTicksOrMin, long firstScannedTicksOrMin)
         {
             if (string.IsNullOrEmpty(packageUid))
                 throw new ArgumentException("packageUid must not be null or empty.", "packageUid");
             _deferredPackageUid = packageUid;
             _deferredVarPathHint = indexedVarPathHint ?? "";
+            _galleryIndexedFirstScannedTicks = firstScannedTicksOrMin;
             Package = null;
 
             // Ratings are keyed by FileEntry.Uid. For packages on disk that is the package path.
@@ -78,6 +89,21 @@ namespace VPB
             Exists = true;
             LastWriteTime = lastWriteTime;
             base.Size = size;
+        }
+
+        internal bool TryGetGalleryIndexedFirstScanned(out DateTime dt)
+        {
+            dt = DateTime.MinValue;
+            if (_galleryIndexedFirstScannedTicks == long.MinValue || _galleryIndexedFirstScannedTicks == 0L) return false;
+            try
+            {
+                dt = DateTime.FromBinary(_galleryIndexedFirstScannedTicks);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private void EnsurePackageResolved()

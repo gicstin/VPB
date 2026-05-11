@@ -755,6 +755,13 @@ namespace VPB
 			protected set;
 		} = long.MinValue;
 
+		/// <summary>
+		/// First time VPB's gallery index saw this VAR uid, as <see cref="DateTime.ToBinary"/> (UTC).
+		/// Set once at first scan; preserved across index rebuilds via SQLite snapshot+restore.
+		/// <see cref="long.MinValue"/> when unknown. Populated from <c>pkg.first_scanned</c> column when reading rows from the gallery index.
+		/// </summary>
+		public long FirstScannedBinary { get; set; } = long.MinValue;
+
 		private static long NormalizeZipHeaderTimeBinary(long binaryOrMin)
 		{
 			if (binaryOrMin == long.MinValue) return long.MinValue;

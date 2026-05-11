@@ -2910,11 +2910,11 @@ namespace VPB
                     Text t = dateTr.GetComponent<Text>();
                     if (t != null)
                     {
-                        // Use 2-digit year (e.g. 25-09-15 instead of 2025-09-15).
+                        // Prefer when we first indexed this uid (= when user actually got it / got the update)
+                        // over file mtime which is often the creator's original build date carried by the .var.
                         try
                         {
-                            DateTime dt = file.LastWriteTime;
-                            // Hide invalid ZIP/DOS default timestamps like 1979-12-31.
+                            DateTime dt = GallerySortManager.ResolveDisplayDateForRow(file);
                             if (dt.Year < 1980) t.text = "Unknown";
                             else t.text = dt.ToString("yy-MM-dd");
                         }

@@ -209,7 +209,9 @@ namespace VPB
 
         private static readonly SortType[] FileSortDropdownOrder =
         {
-            SortType.Name, SortType.Date, SortType.DateCreated, SortType.Size, SortType.Rating,
+            SortType.Name, SortType.Date, SortType.DateCreated,
+            SortType.DateAdded, SortType.DateUpdated,
+            SortType.Size, SortType.Rating,
             SortType.UsageCount,
             SortType.UnusedOnly,
             SortType.Deps, SortType.Dependents, SortType.Missing,
@@ -223,6 +225,8 @@ namespace VPB
                 case SortType.Name: return VPBTranslation.T("gallery.sort.full.name", "Alphabetical (name)");
                 case SortType.Date: return VPBTranslation.T("gallery.sort.full.date", "Date modified");
                 case SortType.DateCreated: return VPBTranslation.T("gallery.sort.full.date_created", "Date created");
+                case SortType.DateAdded: return VPBTranslation.T("gallery.sort.full.date_added", "Date added (New)");
+                case SortType.DateUpdated: return VPBTranslation.T("gallery.sort.full.date_updated", "Date updated");
                 case SortType.Size: return VPBTranslation.T("gallery.sort.full.size", "File size");
                 case SortType.Rating: return VPBTranslation.T("gallery.sort.full.rating", "Rating");
                 case SortType.UsageCount: return VPBTranslation.T("gallery.sort.full.usage_count", "Usage count");
@@ -530,6 +534,47 @@ namespace VPB
                 le.preferredHeight = 38f;
                 le.flexibleWidth = 1f;
             }
+
+            AppendHideOldVersionsMenuRow();
+        }
+
+        // Bottom-of-menu toggle: applies globally to the Files gallery view (not a sort mode itself).
+        private void AppendHideOldVersionsMenuRow()
+        {
+            bool on = false;
+            try { on = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { }
+            string label = (on ? "\u2713  " : "    ") + VPBTranslation.T("gallery.sort.full.hide_old_versions", "Hide old versions (keep newest only)");
+
+            GameObject row = UI.CreateUIButton(
+                fileSortTypeMenuPanelGO, 248, 36, label, 14, 0, 0,
+                AnchorPresets.middleCenter,
+                () =>
+                {
+                    try
+                    {
+                        if (Settings.Instance != null && Settings.Instance.HideOldVersions != null)
+                            Settings.Instance.HideOldVersions.Value = !Settings.Instance.HideOldVersions.Value;
+                    }
+                    catch { }
+                    CloseFileSortTypeMenu();
+                    try { RefreshFiles(); } catch { }
+                });
+
+            Image rowImg = row.GetComponent<Image>();
+            rowImg.color = on ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
+
+            Text rowT = row.GetComponentInChildren<Text>();
+            if (rowT != null)
+            {
+                rowT.color = UI.PopupText;
+                rowT.fontStyle = on ? FontStyle.Bold : FontStyle.Normal;
+                rowT.alignment = TextAnchor.MiddleLeft;
+                VPBUiFont.ApplyTo(rowT);
+            }
+
+            LayoutElement le = row.AddComponent<LayoutElement>();
+            le.preferredHeight = 38f;
+            le.flexibleWidth = 1f;
         }
 
         private void ToggleFileSortDirection()
@@ -581,7 +626,9 @@ namespace VPB
         {
             if (context == "Files")
             {
-                return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
+                return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated
+                    || type == SortType.DateAdded || type == SortType.DateUpdated
+                    || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
                     || type == SortType.UsageCount
                     || type == SortType.UnusedOnly
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
@@ -736,6 +783,8 @@ namespace VPB
                 case SortType.Name: symbol = "Az"; break;
                 case SortType.Date: symbol = "Dt"; break;
                 case SortType.DateCreated: symbol = "Dc"; break;
+                case SortType.DateAdded: symbol = "Nw"; break;
+                case SortType.DateUpdated: symbol = "Up"; break;
                 case SortType.Size: symbol = "Sz"; break;
                 case SortType.Count: symbol = "#"; break;
                 case SortType.Score: symbol = "Sc"; break;
@@ -767,6 +816,8 @@ namespace VPB
                     case SortType.Name: symbol = "Az"; break;
                     case SortType.Date: symbol = "Dt"; break;
                     case SortType.DateCreated: symbol = "Dc"; break;
+                    case SortType.DateAdded: symbol = "Nw"; break;
+                    case SortType.DateUpdated: symbol = "Up"; break;
                     case SortType.Size: symbol = "Sz"; break;
                     case SortType.Count: symbol = "#"; break;
                     case SortType.Score: symbol = "Sc"; break;
