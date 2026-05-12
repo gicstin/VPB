@@ -460,6 +460,13 @@ namespace VPB
                 uid = ple.GetPackageUidForGalleryUserTags();
                 if (string.IsNullOrEmpty(uid) && ple.Package != null) uid = ple.Package.Uid;
             }
+            else if (file is SystemFileEntry sfe)
+            {
+                // Loose files have no version family. Treat each path as its own singleton family so
+                // DateAdded/DateUpdated key off the file's own date instead of collapsing to DateTime.MinValue.
+                string p = sfe.Path ?? "";
+                return p.Length == 0 ? null : "sys:" + p;
+            }
             if (string.IsNullOrEmpty(uid)) return null;
             int lastDot = uid.LastIndexOf('.');
             if (lastDot <= 0) return uid;
@@ -491,6 +498,19 @@ namespace VPB
                         return DateTime.FromBinary(ple.Package.FirstScannedBinary);
                 }
                 catch { }
+            }
+            if (file is SystemFileEntry sfe)
+            {
+                // No first_scanned persistence for loose files. Mirror BA's LocalRVGE: prefer ctime
+                // (when did this file land on disk), fall back to mtime. Gives loose .vap meaningful
+                // per-file dates instead of all collapsing to MinValue.
+                try
+                {
+                    DateTime ct = FileStat.GetCreationTimeOrMin(sfe.Path);
+                    if (ct != DateTime.MinValue) return ct;
+                }
+                catch { }
+                return sfe.LastWriteTime;
             }
             return DateTime.MinValue;
         }
@@ -565,6 +585,17 @@ namespace VPB
             DateTime dt;
             if (file is VarFileEntry vfe && vfe.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
             if (file is PackageListEntry ple && ple.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+            // Loose files: match the DateAdded/DateUpdated sort key (ctime preferred over mtime)
+            // so the displayed subtitle agrees with the visible sort order.
+            if (file is SystemFileEntry sfe)
+            {
+                try
+                {
+                    DateTime ct = FileStat.GetCreationTimeOrMin(sfe.Path);
+                    if (ct != DateTime.MinValue) return ct;
+                }
+                catch { }
+            }
             return file.LastWriteTime;
         }
 
